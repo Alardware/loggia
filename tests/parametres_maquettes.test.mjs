@@ -58,9 +58,13 @@ test('l’installation tient en cinq lignes, la configuration en pied de panneau
   }
   assert.ok(APROPOS.includes("{tr('La configuration Loggia s’exporte en un fichier JSON.')}"));
   assert.ok(APROPOS.includes("telechargerConfig(j, 'loggia-config')"), 'l’export complet a disparu');
-  assert.ok(APROPOS.includes('await importConfigComplete(await f.text());'), 'l’import complet a disparu');
+  // L'import vit dans son composant depuis le 03/10 (lire, montrer,
+  // sauvegarder, remplacer) ; son comportement est épinglé par
+  // tests/import_export.test.mjs, ici seulement sa place.
+  assert.ok(PAR.includes('try { await importConfigComplete(lu); }'), 'l’import complet a disparu');
+  assert.ok(PAR.includes("<input ref={fichier} aria-label={tr('Importer un fichier de configuration')}"), 'le champ de fichier a perdu son nom');
   // L'import reste un geste d'administrateur.
-  assert.ok(/\{isAdmin && \(\s*<>\s*<input aria-label=\{tr\('Importer un fichier de configuration'\)\}/.test(APROPOS), 'l’import s’offre à tous');
+  assert.ok(APROPOS.includes('{isAdmin && <ImportConfigBtn />}'), 'l’import s’offre à tous');
   // Sans entité de suivi, pas de pastille « à jour » : on ne l'a pas vérifié.
   assert.ok(PAR.includes('const droite = inst.aJour === null ? null : inst.aJour'), 'la pastille rassurerait sans savoir');
 });
@@ -184,7 +188,7 @@ test('le code reste à côté du libellé, et chaque télécommande n’apparaî
 
 test('le sommaire ne prétend plus que tout est propre à l’appareil', () => {
   assert.ok(!PAR.includes("tr('Réglages propres à cet appareil')"));
-  assert.ok(PAR.includes("{tr('Réglages de Loggia')} · {users.length > 1 ? tr('{n} profils du foyer'"));
+  assert.ok(PAR.includes("{tr('Réglages de Loggia')} · {trN(users.length, '{n} profil du foyer', '{n} profils du foyer')}"));
 });
 
 test('une pastille garde sa police, même posée dans un titre en italique', () => {
@@ -214,9 +218,16 @@ test('la pastille Ko-fi passe sous la zone rouge, sans changer de dessin', () =>
 
 test('l’écoute des interrupteurs se coupe, et s’ouvre pour un temps compté', () => {
   // Comme l'appairage de zigbee2mqtt : un bouton, puis un compte à rebours.
+  // La durée vit dans la page ; le serveur la BORNE seulement (ECOUTE_MAX_S, et
+  // le schéma de la commande). Sa copie serveur, que rien ne lisait, est partie
+  // (lot 15 de l'audit du 03/10) : on épingle ce qui compte vraiment.
   const serveur = lire('custom_components', 'loggia', 'interrupteurs.py');
-  const s = Number((serveur.match(/^ECOUTE_S = (\d+)$/m) || [])[1]);
-  assert.ok(INTER.includes('const ECOUTE_S = ' + s + ';'), 'la page et le serveur ne comptent plus la même durée');
+  const ws = lire('custom_components', 'loggia', 'websocket_api.py');
+  const borne = Number((serveur.match(/^ECOUTE_MAX_S = (\d+)$/m) || [])[1]);
+  const schema = Number((ws.match(/vol\.Required\("duree"\): vol\.All\(vol\.Coerce\(int\), vol\.Range\(min=0, max=(\d+)\)\)/) || [])[1]);
+  const s = Number((INTER.match(/^const ECOUTE_S = (\d+);$/m) || [])[1]);
+  assert.equal(s, 300, 'l’écoute ne dure plus les cinq minutes que dit son bouton');
+  assert.ok(borne > 0 && schema > 0 && s <= borne && s <= schema, 'le serveur rognerait la durée que la page annonce');
   assert.ok(INTER.includes("h.callWS({ type: 'loggia/interrupteurs/ecouter', duree })"));
   assert.ok(INTER.includes("<button onClick={() => ecouter(ECOUTE_S)} style={btnPrimaire}>") && INTER.includes("{tr('Écouter 5 min')}"));
   assert.ok(INTER.includes("<button onClick={() => ecouter(0)}") && INTER.includes("{tr('Arrêter l’écoute')}<span style={{ ...MONO, fontWeight: 700 }}>{mmss(reste)}</span>"));
@@ -260,8 +271,13 @@ test('les puces de navigation choisies sont en bleu plein, texte blanc', () => {
 
 test('la consigne se lit entre les deux boutons des cartes climat', () => {
   // Carte du thermostat et carte du fil pilote : « − 19 °C + ».
-  assert.equal((APP.match(/<span aria-label=\{tr\('Consigne'\)\}/g) || []).length, 2);
-  assert.equal((APP.match(/const consigne = decMax\(Number\(target\), 1\) \+ ' °' \+ uT;/g) || []).length, 2);
+  // Le mot « Consigne » est un texte masqué devant le chiffre, plus un
+  // `aria-label` sur un <span> sans rôle — interdit, et qui cachait « 19 °C »
+  // sous « Consigne » (lot 13 de l'audit du 03/10).
+  assert.equal(APP.split("<span className=\"o-vh\">{tr('Consigne') + ' '}</span>{consigne}</span>").length - 1, 2);
+  assert.ok(!APP.includes("<span aria-label={tr('Consigne')}"), 'la consigne cache de nouveau son chiffre sous un aria-label');
+  // Sans consigne lisible : « — », jamais un 20 ou un 19 inventé (audit du 03/10).
+  assert.equal((APP.match(/const consigne = target != null \? decMax\(Number\(target\), 1\) \+ ' °' \+ uT : '—';/g) || []).length, 2);
   // Le sous-titre dit l'état ; il ne répète plus la valeur.
   assert.ok(!APP.includes("tr('Chauffe') + ' · ' + consigne"), 'la consigne est dite deux fois');
 });

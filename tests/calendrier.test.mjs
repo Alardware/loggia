@@ -35,7 +35,8 @@ test('sans plage, l’agenda garde la fenêtre du rail', () => {
   // Les deux valeurs par défaut du rail. Les perdre ferait charger un mois
   // entier à une carte qui montre trois lignes.
   assert.match(c, /plage \? plage\.debut :/, 'la fenêtre par défaut a disparu');
-  assert.match(c, /plage \? plage\.fin : new Date\(debut\.getTime\(\) \+ 7 \* 864e5\)/,
+  // Sept jours de calendrier, et non sept fois 24 h (tests/heure_hiver.test.mjs).
+  assert.match(c, /plage \? plage\.fin : \(\(\) => \{ const f = new Date\(debut\); f\.setDate\(f\.getDate\(\) \+ 7\); return f; \}\)\(\)/,
     'les sept jours du rail ont changé');
   assert.match(c, /plage \? tous : tous\.slice\(0, 8\)/,
     'le plafond de huit événements ne s’applique plus au rail seul');
@@ -79,7 +80,9 @@ test('la grille tient six semaines, quel que soit le mois', () => {
   // 42 cases : un mois qui commence un dimanche en occupe six. Une grille
   // qui change de hauteur ferait sauter la liste qui est dessous.
   assert.match(c, /length: 42/, 'la grille n’a plus six semaines fixes');
-  assert.match(c, /42 \* 864e5/, 'la plage lue ne couvre plus la grille entière');
+  // Six semaines de CALENDRIER : six fois 7 × 24 h finissaient à 23 h la
+  // veille dès que la grille passait l'heure d'hiver (tests/heure_hiver.test.mjs).
+  assert.match(c, /jourPlus\(new Date\(debutMs\), 42\)/, 'la plage lue ne couvre plus la grille entière');
 });
 
 test('la carte du rail ouvre le mois', () => {
@@ -93,4 +96,24 @@ test('la carte du rail ouvre le mois', () => {
   // sur la fiche d'entité universelle.
   assert.match(src, /if \(d === 'calendar'\) \{ setCalPop\(id\); return; \}/,
     'le calendrier ne route plus vers sa feuille');
+});
+
+test('le choix des agendas se masque à un compte ordinaire (03/10)', () => {
+  const c = corps('function FeuilleCalendrier(');
+  // `loggia_agendas` reste réservée aux administrateurs (store.py, épinglé par
+  // tests/python/test_store.py) : un compte Home Assistant ordinaire se
+  // verrait refuser chaque case, et son choix reviendrait au rechargement. Le
+  // geste se masque — sur un `false` EXPLICITE seulement : un compte inconnu
+  // laisse le serveur trancher.
+  assert.match(c, /const ordinaire = compteOrdinaire\(hass\);/,
+    'la feuille ne distingue plus un compte ordinaire');
+  const bouton = c.indexOf("aria-label={tr('Choisir les agendas')}");
+  assert.notEqual(bouton, -1, 'le bouton du choix des agendas a disparu');
+  const garde = c.lastIndexOf('{!ordinaire && tousCals.length > 1 && (', bouton);
+  assert.ok(garde >= 0 && bouton - garde < 200,
+    'le bouton « Choisir les agendas » s’affiche à un compte qui ne pourra rien enregistrer');
+  assert.match(c, /\{reglages && !ordinaire && \(/,
+    'la liste des agendas peut encore s’ouvrir à un compte ordinaire');
+  // La LECTURE reste à tous : le choix de l'administrateur s'applique partout.
+  assert.match(c, /cfgVal\('loggia_agendas', null\)/, 'la feuille ne lit plus le choix enregistré');
 });

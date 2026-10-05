@@ -136,5 +136,5 @@ test('la démo répond comme le serveur', () => {
   const demo = lire('src', 'demo.js');
   assert.ok(demo.includes("if (msg && msg.type === 'loggia/robots/etat') return Promise.resolve(robotsDemo(states));"));
   assert.ok(demo.includes("if (msg && msg.type === 'loggia/robots/config') return Promise.resolve({ config: robotsPatch(msg.patch) });"));
-  assert.ok(demo.includes('if (Array.isArray(p.plannings)) ROB_CFG.plannings = p.plannings;'), 'la liste est REMPLACÉE, comme côté serveur');
+  assert.ok(demo.includes('if (Array.isArray(p.plannings)) ROB_CFG().plannings = p.plannings;'), 'la liste est REMPLACÉE, comme côté serveur');
 });

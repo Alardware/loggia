@@ -69,7 +69,10 @@ export function JournalReglages({ hass, cardSt }) {
       // Le serveur rend les gels qui restent : pas besoin d'attendre le sondage.
       setEtat(e => (e ? { ...e, gels: (r && r.gels) || {} } : e));
     } catch (e) {
-      setErr((e && (e.message || e.code)) || tr('Impossible de rendre la main.'));
+      // « Unauthorized », « socle des regles indisponible » s'affichaient tels
+      // quels (audit du 03/10) : un refus de Home Assistant se dit dans la
+      // langue de l'écran, le reste par le repli de la vue.
+      setErr(e && e.code === 'unauthorized' ? tr('Réservé aux administrateurs.') : tr('Impossible de rendre la main.'));
     }
   };
 

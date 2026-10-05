@@ -7,7 +7,7 @@ Loggia est un tableau de bord libre et gratuit pour Home Assistant. Il lit les z
 Key facts / À savoir :
 
 - Author / auteur : Guillaume Alard, a private individual; a personal, non-commercial project. Nothing is sold; donations are voluntary (Ko-fi).
-- Languages / langues : French and English interface. The legal pages are in French.
+- Languages / langues : the interface speaks seven languages — French, English, German, Dutch, Italian, Spanish and Polish (`fr`, `en`, `de`, `nl`, `it`, `es`, `pl`). The legal pages are in French.
 - Installation : through HACS as a custom repository (category "Integration"), or by copying `custom_components/loggia/`. Requires Home Assistant 2024.7 or newer.
 - The demo needs JavaScript. Without it, the page shows a short description and these same links.
 - Privacy : the site sets no cookie, runs no analytics and loads nothing from third parties. The host (GitHub Pages) logs visitor IP addresses for security. Installed, Loggia runs on the user's own Home Assistant, with no telemetry.
@@ -17,7 +17,7 @@ Key facts / À savoir :
 ## Demo
 
 - [Démonstration en ligne](https://alardware.github.io/loggia/): the playable demo (French by default)
-- [English demo](https://alardware.github.io/loggia/?lang=en): same demo, English interface
+- [English demo](https://alardware.github.io/loggia/?lang=en): same demo, English interface; `?lang=` takes any of the seven codes above, and the fictional home then names its rooms and devices in that language
 - [Light mode](https://alardware.github.io/loggia/?mode=light): same demo, light theme
 
 ## Source and documentation

@@ -36,6 +36,23 @@
        de police, en feuille BLOQUANTE, pour rien (23/09). -->
   <link rel="stylesheet" href="./fonts/fonts.css" />
   <link rel="stylesheet" href="./fonts/uicons-regular-rounded.css" />
+  <!-- Les deux polices de l'écran partent AVEC la page (lot 14 de l'audit du
+       03/10). Une police n'est demandée qu'au premier glyphe qui l'emploie,
+       donc après le premier rendu de React : celle des icônes (225 Ko,
+       `font-display: block` — rien plutôt qu'un carré vide) arrivait des
+       secondes après l'écran. Démo à froid, Slow 4G, en anglais, paquet servi
+       sans compression comme par Home Assistant : icônes visibles à 15,7 s, à
+       11,5 s avec ces deux lignes et le préchargement du boot
+       (vite.config.js), l'écran entier d'un coup. Sur un lien lent elles
+       partagent la bande avec le boot : sans elles, l'Accueil se dessine plus
+       tôt (10,4 s) mais SANS icônes jusqu'à 14,1 s. Mêmes adresses que dans
+       les deux feuilles ; `crossorigin` parce qu'une police se charge
+       toujours en CORS, et qu'un préchargement sans lui serait téléchargé une
+       seconde fois. Manrope : le seul fichier « latin », qui porte toutes les
+       graisses ; le latin étendu et Newsreader partent quand un glyphe les
+       demande. -->
+  <link rel="preload" href="./fonts/uicons-regular-rounded.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="./fonts/xn7gYHE41ni1AdIRggexSg.woff2" as="font" type="font/woff2" crossorigin />
 </head>
 <body>
   <div id="root"></div>

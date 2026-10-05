@@ -19,15 +19,18 @@
  * Chargée à la demande par `FicheRobot` (App.jsx) ; elle emporte le plan du
  * logement (`vacplan.jsx`), demandé seulement si une carte existe.
  */
-import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
-import { tr, locale } from './i18n.js';
-import { Fi, Bascule, Gauge, BottomSheet, useEtatServeur, CroixFeuille, TitreFeuille } from './ui.jsx';
+import { useState, useEffect, useRef, useMemo, useId, Suspense } from 'react';
+import { lazyRecharge } from './recharge.js';
+import { tr, trN, trSens, locale, comparerTextes } from './i18n.js';
+import { Fi, Bascule, Gauge, BottomSheet, useEtatServeur, CroixFeuille, TitreFeuille, NomFeuille, nomCarte } from './ui.jsx';
 import { LOGGIA_INDEX, loggiaEnt, vacRooms, vacOption } from './state.js';
 import { commanderService } from './actions.js';
 import { useLoggia, useEntities } from './runtime.js';
 import { CamLive } from './camera.jsx';
 import { premierJourSemaine } from './horloge.js';
-import { petitesCapitales } from './styles.js';
+import { petitesCapitales, LISERE } from './styles.js';
+import { ongletVoisin } from './choix.js';
+import { estRefus, raisonEchec } from './refus.js';
 import {
   decrireSoeurs, phaseRobot, motEtatRobot, enCharge, batterieRobot, actionPrincipale, serviceRetour, commandeZones,
   zonesTondeuse, piecesUsure, alerteEntretien, compteursRobot, sessionsRobot, motIssue, resumeSemaine, dureeLisible,
@@ -35,10 +38,14 @@ import {
   prochainPassage, etiquetteProchain, dansLaPlage, capteurPluie,
 } from './robots.js';
 
-const VacPlan = lazy(() => import('./vacplan.jsx'));
+/* Par `lazyRecharge` (audit du 03/10) : un plan qu'une mise à jour HACS a
+ * retiré pendant que la page restait ouverte recharge la page une fois, au
+ * lieu de faire tomber tout l'écran. */
+const VacPlan = lazyRecharge(() => import('./vacplan.jsx'));
 
 const FOND = 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';
-const PANNEAU = { background: FOND, border: 'none', borderRadius: 'var(--o-radius,18px)', padding: '18px 20px', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', boxSizing: 'border-box', minWidth: 0 };
+// Le liseré du réglage (04/10), comme les panneaux de Paramètres.
+const PANNEAU = { background: FOND, border: LISERE, borderRadius: 'var(--o-radius,18px)', padding: '18px 20px', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', boxSizing: 'border-box', minWidth: 0 };
 const TITRE_SECTION = { fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' };
 const PETITES_CAPITALES = petitesCapitales(10.5);
 const BOUTON_DOUX = { padding: '9px 14px', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text1)', fontFamily: 'inherit' };
@@ -140,17 +147,22 @@ function OngletAccueil({ domaine, robot, zones, nChoisies, basculerZone, peutCho
   const passage = prochain ? { ...prochain, nom: tr('Prochain passage'), vers: 'planning' } : derniere ? { ...derniere, nom: tr('Dernier passage'), vers: 'historique' } : null;
   const action = actionPrincipale(domaine, robot.etat, peutChoisir ? nChoisies : 0);
   const enRoute = robot.phase === 'travail' || robot.phase === 'pause' || robot.phase === 'retour';
+  /* `unavailable`, la définition de RoomMachineCard (05/10) : le panneau de
+   * tête porte son liseré (ADR 0048), et le point de « Injoignable » ne
+   * rougit plus — un seul signal. `unknown` reste « absent » sans liseré,
+   * comme la carte. */
+  const mort = robot.etat === 'unavailable';
   const sousEtat = zones.length
-    ? (zones.length > 1 ? tr('{n} zones', { n: zones.length }) : tr('{n} zone', { n: zones.length })) + (peutChoisir ? ' · ' + (nChoisies > 1 ? tr('{n} sélectionnées', { n: nChoisies }) : tr('{n} sélectionnée', { n: nChoisies })) : '')
+    ? trN(zones.length, '{n} zone', '{n} zones') + (peutChoisir ? ' · ' + trN(nChoisies, '{n} sélectionnée', '{n} sélectionnées') : '')
     : null;
   return (
     <div className="rb-accueil">
-      <div className="rb-a-hero" style={PANNEAU}>
+      <div className={'rb-a-hero' + (mort ? ' o-panne' : '')} style={PANNEAU}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
           {robot.batterie != null && <Anneau pct={robot.batterie} phase={robot.phase} />}
           <div style={{ minWidth: 0 }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 999, fontSize: 12.5, fontWeight: 700, background: 'var(--o-s2)', color: 'var(--o-text1)' }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: robot.phase === 'erreur' || robot.phase === 'absent' ? 'var(--o-bad)' : enRoute ? 'var(--o-ok)' : 'var(--o-text3)' }} />{motEtatRobot(domaine, robot.etat, { enCharge: robot.charge })}
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: robot.phase === 'erreur' || (robot.phase === 'absent' && !mort) ? 'var(--o-bad)' : enRoute ? 'var(--o-ok)' : 'var(--o-text3)' }} />{motEtatRobot(domaine, robot.etat, { enCharge: robot.charge })}
             </span>
             {sousEtat && <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 9 }}>{sousEtat}</div>}
           </div>
@@ -190,7 +202,7 @@ function OngletAccueil({ domaine, robot, zones, nChoisies, basculerZone, peutCho
             <div style={{ ...PANNEAU, padding: '14px 16px' }}>
               <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Cette semaine')}</div>
               <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-.01em', marginTop: 5 }}>{resume.surface != null ? resume.surface + ' ' + uniteSurface : dureeLisible(resume.dureeMin)}</div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 3 }}>{resume.n > 1 ? tr('{n} sessions', { n: resume.n }) : tr('{n} session', { n: resume.n })}</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 3 }}>{trN(resume.n, '{n} session', '{n} sessions')}</div>
             </div>
           )}
         </div>
@@ -235,7 +247,7 @@ function OngletZones({ domaine, robot, zones, nChoisies, basculerZone, peutChois
         {peutChoisir && !enRoute && (
           <button type="button" onClick={lancer} disabled={!nChoisies}
             style={{ padding: '15px 12px', borderRadius: 14, border: 'none', cursor: nChoisies ? 'pointer' : 'default', fontSize: 14.5, fontWeight: 800, fontFamily: 'inherit', background: 'var(--rb-fond)', color: '#fff', opacity: nChoisies ? 1 : .45 }}>
-            {nChoisies ? travail + ' · ' + (nChoisies > 1 ? tr('{n} zones', { n: nChoisies }) : tr('{n} zone', { n: nChoisies })) : tr('Sélectionne une zone')}
+            {nChoisies ? travail + ' · ' + trN(nChoisies, '{n} zone', '{n} zones') : tr('Sélectionne une zone')}
           </button>
         )}
         {camera}
@@ -284,7 +296,9 @@ function OngletHistorique({ domaine, sessions, resume, uniteSurface = 'm²', cha
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{jourLong(s.debut)} {heure(s.debut)} · {dureeLisible(s.dureeMin)}</div>
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              {s.surface != null && <div style={{ fontSize: 14, fontWeight: 800 }}>{s.surface} m²</div>}
+              {/* L'unite DU capteur, comme le resume au-dessus : « m² » ecrit en
+                * dur affichait « 500 m² » pour des pieds carres (audit du 03/10). */}
+              {s.surface != null && <div style={{ fontSize: 14, fontWeight: 800 }}>{s.surface} {uniteSurface}</div>}
               <div style={{ fontSize: 12, fontWeight: 700, color: s.issue === 'termine' ? 'var(--o-text2)' : s.issue === 'en_cours' ? 'var(--o-ok)' : s.issue === 'erreur' ? 'var(--o-bad)' : 'var(--o-warn)' }}>{motIssue(s.issue)}</div>
             </div>
           </div>
@@ -354,7 +368,11 @@ function LigneReglage({ hass, r }) {
   if (r.type === 'bascule') commande = <Bascule on={r.actif} nom={r.nom} cb={() => appel('switch', r.actif ? 'turn_off' : 'turn_on', {})} />;
   else if (r.type === 'choix') {
     const i = r.options.indexOf(r.valeur);
-    commande = <PasAPas valeur={vacOption(r.valeur)} peutMoins={i > 0} peutPlus={i >= 0 && i < r.options.length - 1}
+    // L'option se dit dans la langue de l'écran : `vacOption` rend un mot du
+    // catalogue, ou l'identifiant mis en forme (audit du 03/10). Par `trSens` :
+    // « medium » a sa clé à sens, « Moyen · réglage » — la nue est le niveau
+    // de CO₂, « Fair » en anglais (relecture du 03/10).
+    commande = <PasAPas valeur={trSens(vacOption(r.valeur))} peutMoins={i > 0} peutPlus={i >= 0 && i < r.options.length - 1}
       moins={() => appel('select', 'select_option', { option: r.options[i - 1] })} plus={() => appel('select', 'select_option', { option: r.options[i + 1] })} />;
   } else {
     const v = r.valeur;
@@ -384,7 +402,7 @@ function PageReglages({ hass, domaine, robot, reglages, fiche, retour, onFiche =
         {vitesses.length > 1 && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, padding: '13px 18px', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
             <span><span style={{ display: 'block', fontSize: 14.5, fontWeight: 700 }}>{tr('Puissance')}</span><span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 }}>{tr('Niveau d’aspiration')}</span></span>
-            <PasAPas valeur={iv >= 0 ? vacOption(a.fan_speed) : '—'} peutMoins={iv > 0} peutPlus={iv >= 0 && iv < vitesses.length - 1} moins={() => regler(vitesses[iv - 1])} plus={() => regler(vitesses[iv + 1])} />
+            <PasAPas valeur={iv >= 0 ? trSens(vacOption(a.fan_speed)) : '—'} peutMoins={iv > 0} peutPlus={iv >= 0 && iv < vitesses.length - 1} moins={() => regler(vitesses[iv - 1])} plus={() => regler(vitesses[iv + 1])} />
           </div>
         )}
         {reglages.principaux.map(r => <LigneReglage key={r.id} hass={hass} r={r} />)}
@@ -493,7 +511,7 @@ function OngletPlanning({ hass, domaine, robot, zones, planning }) {
   const [feuille, setFeuille] = useState(null); // { p, neuf }
   const cfg = (etat && etat.config) || { plannings: [], robots: {} };
   const tous = cfg.plannings || [];
-  const miens = tous.filter(p => p.robot === robot.id).sort((a, b) => String(a.heure).localeCompare(String(b.heure)));
+  const miens = tous.filter(p => p.robot === robot.id).sort((a, b) => comparerTextes(String(a.heure), String(b.heure)));
   const reglages = { ...REGLAGES_NEUFS, ...((cfg.robots || {})[robot.id] || {}) };
   const aDesAires = domaine === 'lawn_mower' && zones.length > 0;
   const pluieNative = domaine === 'lawn_mower' ? capteurPluie(robot.soeurs) : null;
@@ -507,7 +525,10 @@ function OngletPlanning({ hass, domaine, robot, zones, planning }) {
       const r = await h.callWS({ type: 'loggia/robots/config', patch });
       if (vivant.current && r && r.config) { setEtat(e => (e ? { ...e, config: r.config } : e)); setErr(''); }
     } catch (e) {
-      setErr(e && e.code === 'unauthorized' ? tr('Réservé aux administrateurs.') : ((e && (e.message || e.code)) || tr('Enregistrement impossible.')));
+      // Un planning de trop se dit par son code, dans la langue de l'écran ;
+      // le motif du composant n'en sort qu'en dernier recours, dans une phrase
+      // traduite (audit du 03/10, refus.js).
+      setErr(e && e.code === 'unauthorized' ? tr('Réservé aux administrateurs.') : estRefus(e) ? raisonEchec(e) : tr('Enregistrement impossible.'));
     }
   };
   const poserPlannings = (liste) => enregistrer({ plannings: liste }, c => ({ ...c, plannings: liste }));
@@ -530,13 +551,18 @@ function OngletPlanning({ hass, domaine, robot, zones, planning }) {
         {miens.length === 0 && <div style={{ ...PANNEAU, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Aucun passage planifié. Loggia lance le robot à l’heure dite, même écran éteint.')}</div>}
         {miens.map(p => {
           const retenu = p.actif && dansLaPlage(reglages.calme, p.heure);
+          const zonesTxt = resumeZones(p, { domaine, aDesAires });
           return (
             <div key={p.id} style={{ ...PANNEAU, padding: '14px 16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <button type="button" onClick={() => setFeuille({ p, neuf: false })} aria-label={tr('Modifier le passage') + ' ' + p.heure}
+                {/* Son nom est ce qu'il affiche, l'heure puis les zones (lot 13
+                  * de l'audit du 03/10) : « Modifier le passage 09:00 » taisait
+                  * les zones, et ses mots ne sont pas sur la carte (WCAG 2.5.3).
+                  * Ce qu'il fait, la feuille le dit en titre. */}
+                <button type="button" onClick={() => setFeuille({ p, neuf: false })} aria-label={nomCarte(p.heure, zonesTxt)} aria-haspopup="dialog"
                   style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit', color: 'inherit', opacity: p.actif ? 1 : .55 }}>
                   <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{p.heure}</div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)', marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{resumeZones(p, { domaine, aDesAires })}</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)', marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{zonesTxt}</div>
                 </button>
                 <Bascule on={!!p.actif} nom={tr('Passage de {h}', { h: p.heure })} cb={() => poserPlanning({ ...p, actif: !p.actif })} />
               </div>
@@ -606,7 +632,7 @@ export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', o
 
   const vac = domaine === 'vacuum' && resolved && resolved.vacuum && resolved.vacuum.available && resolved.vacuum.main === idRobot ? resolved.vacuum : null;
   const idCarte = domaine === 'vacuum' ? ((vac && vac.map) || (entVac.map && S[entVac.map] ? entVac.map : null) || (robot.soeurs.find(s => s.domaine === 'image') || {}).id || null) : null;
-  const idSurface = (vac && vac.area_cleaned) || (robot.soeurs.find(s => s.domaine === 'sensor' && (s.classe === 'area' || /^(m²|m2|ft²)$/.test(s.unite || '')) && !/total/.test(s.texte)) || {}).id || null;
+  const idSurface = (vac && vac.area_cleaned) || (robot.soeurs.find(s => s.domaine === 'sensor' && (s.classe === 'area' || /^(m²|m2|ft²|sq ft)$/.test(s.unite || '')) && !/total/.test(s.texte)) || {}).id || null;
   // L'unite reelle du capteur (m² ou ft² selon l'installation), jamais supposee.
   const uniteSurface = (idSurface && S[idSurface] && S[idSurface].attributes && S[idSurface].attributes.unit_of_measurement) || 'm²';
   const idCam = domaine === 'vacuum' && entVac.camera && S[entVac.camera] ? entVac.camera : null;
@@ -685,12 +711,15 @@ export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', o
     ...(usure.length || compteurs.length ? [['entretien', tr('Entretien'), 'wrench-simple']] : []),
   ];
   const [onglet, setOnglet] = useState('accueil');
+  /* Ce qui relie chaque onglet à son panneau (audit du 03/10). Avant le
+   * retour anticipé ci-dessous : un hook ne se saute jamais. */
+  const idOnglets = useId();
   const actuel = onglet === 'reglages' || onglets.some(o => o[0] === onglet) ? onglet : 'accueil';
 
   if (!idRobot || !robot.st) {
     return (
       <div className="o-panne" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 6px 6px 14px', borderRadius: 30 }}>
-        <div style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Ce robot ne répond plus.')}</div>
+        <NomFeuille><div style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Ce robot ne répond plus.')}</div></NomFeuille>
         <CroixFeuille />
       </div>
     );
@@ -720,12 +749,32 @@ export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', o
     sous: [dureeLisible(finie.dureeMin), finie.surface != null ? finie.surface + ' ' + uniteSurface : null, motIssue(finie.issue)].filter(Boolean).join(' · '),
   } : null;
 
+  /* Les onglets suivent le motif ARIA en entier (audit du 03/10). Avant, le
+   * rôle « tab » promettait à un lecteur d'écran une barre où l'on circule
+   * aux flèches, et rien ne tenait la promesse : chaque onglet était un arrêt
+   * de Tab, aucun ne désignait de panneau. Désormais l'onglet actif est le
+   * SEUL arrêt (`tabIndex` itinérant) ; ← →, Début et Fin déplacent le focus
+   * ET ouvrent l'onglet, comme le ferait un clic. Le voisin est déjà monté
+   * (les clés ne bougent pas) : on le focalise avant même le rendu qui
+   * l'active. La roue des réglages reste hors de la barre — une page, pas un
+   * onglet. */
+  const avecOnglets = actuel !== 'reglages' && onglets.length > 1;
+  const allerOnglet = (e, i) => {
+    const j = ongletVoisin(onglets.length, i, e.key);
+    if (j < 0) return;
+    e.preventDefault();
+    const voisin = document.getElementById(idOnglets + '-t-' + onglets[j][0]);
+    if (voisin) voisin.focus();
+    setOnglet(onglets[j][0]);
+  };
+
   return (
     <div className={'rb-fiche ' + (domaine === 'lawn_mower' ? 'rb-tondeuse' : 'rb-aspirateur')} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* L'en-tête des fiches : le nom, l'épingle, la roue des réglages — et la croix, la même partout. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 19, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{actuel === 'reglages' ? tr('Réglages') : robot.nom}</div>
+          {/* Le nom NOMME aussi la feuille, réglages compris (audit du 03/10). */}
+          <NomFeuille><div style={{ fontSize: 19, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{actuel === 'reglages' ? tr('Réglages') : robot.nom}</div></NomFeuille>
           {actuel === 'reglages' && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{robot.nom}</div>}
         </div>
         {actuel !== 'reglages' && epingle}
@@ -736,10 +785,12 @@ export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', o
         <CroixFeuille />
       </div>
 
-      {actuel !== 'reglages' && onglets.length > 1 && (
+      {avecOnglets && (
         <div role="tablist" aria-label={robot.nom} className="rb-onglets" style={{ '--rb-n': onglets.length }}>
-          {onglets.map(([id, nom, icone]) => (
-            <button key={id} type="button" role="tab" aria-selected={actuel === id} onClick={() => setOnglet(id)} className="rb-onglet"
+          {onglets.map(([id, nom, icone], i) => (
+            <button key={id} id={idOnglets + '-t-' + id} type="button" role="tab" aria-selected={actuel === id}
+              aria-controls={actuel === id ? idOnglets + '-p-' + id : undefined} tabIndex={actuel === id ? 0 : -1}
+              onClick={() => setOnglet(id)} onKeyDown={(e) => allerOnglet(e, i)} className="rb-onglet"
               style={{ background: actuel === id ? 'var(--o-accent-fond)' : 'transparent', color: actuel === id ? '#fff' : 'var(--o-text2)' }}>
               <Fi i={icone} size={15} /><span>{nom}</span>
             </button>
@@ -747,12 +798,21 @@ export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', o
         </div>
       )}
 
-      {actuel === 'accueil' && <OngletAccueil domaine={domaine} robot={robot} zones={zones} nChoisies={nChoisies} basculerZone={basculerZone} peutChoisir={peutChoisir} lancer={lancer} rentrer={rentrer}
-        resume={brut ? resume : null} uniteSurface={uniteSurface} derniere={derniere} prochain={prochain} alerte={alerteEntretien(usure)} aUneCarte={!!idCarte} allerA={setOnglet} />}
-      {actuel === 'zones' && <OngletZones domaine={domaine} robot={robot} zones={zones} nChoisies={nChoisies} basculerZone={basculerZone} peutChoisir={peutChoisir} lancer={lancer} carte={idCarte ? planDe() : null} camera={camera} />}
-      {actuel === 'planning' && <OngletPlanning hass={hass} domaine={domaine} robot={robot} zones={zonesPlanifiables} planning={planning} />}
-      {actuel === 'historique' && <OngletHistorique domaine={domaine} sessions={sessions} resume={resume} uniteSurface={uniteSurface} chargee={!!brut} erreur={histoErreur} />}
-      {actuel === 'entretien' && <OngletEntretien hass={hass} pieces={usure} compteurs={compteurs} />}
+      {/* Le panneau de l'onglet actif, nommé par lui (audit du 03/10). Seul
+        * l'actif porte `aria-controls` : les autres panneaux ne sont pas
+        * montés, et un renvoi vers un identifiant absent ne mène nulle part —
+        * même règle que l'en-tête replié d'une règle (`RegleEntete`, ui.jsx).
+        * La page des réglages reste dehors : la roue l'ouvre, pas la barre. */}
+      {actuel !== 'reglages' && (
+        <div role={avecOnglets ? 'tabpanel' : undefined} id={idOnglets + '-p-' + actuel} aria-labelledby={avecOnglets ? idOnglets + '-t-' + actuel : undefined}>
+          {actuel === 'accueil' && <OngletAccueil domaine={domaine} robot={robot} zones={zones} nChoisies={nChoisies} basculerZone={basculerZone} peutChoisir={peutChoisir} lancer={lancer} rentrer={rentrer}
+            resume={brut ? resume : null} uniteSurface={uniteSurface} derniere={derniere} prochain={prochain} alerte={alerteEntretien(usure)} aUneCarte={!!idCarte} allerA={setOnglet} />}
+          {actuel === 'zones' && <OngletZones domaine={domaine} robot={robot} zones={zones} nChoisies={nChoisies} basculerZone={basculerZone} peutChoisir={peutChoisir} lancer={lancer} carte={idCarte ? planDe() : null} camera={camera} />}
+          {actuel === 'planning' && <OngletPlanning hass={hass} domaine={domaine} robot={robot} zones={zonesPlanifiables} planning={planning} />}
+          {actuel === 'historique' && <OngletHistorique domaine={domaine} sessions={sessions} resume={resume} uniteSurface={uniteSurface} chargee={!!brut} erreur={histoErreur} />}
+          {actuel === 'entretien' && <OngletEntretien hass={hass} pieces={usure} compteurs={compteurs} />}
+        </div>
+      )}
       {actuel === 'reglages' && <PageReglages hass={hass} domaine={domaine} robot={robot} reglages={reglages} fiche={fiche} retour={() => setOnglet('accueil')} onFiche={onFiche ? () => onFiche(idRobot) : null} />}
     </div>
   );

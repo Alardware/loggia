@@ -6,6 +6,8 @@
  * tete et l'ordre de la grille. Pas de React, pas de Home Assistant : le
  * dashboard lui passe des objets deja lus, les tests aussi. */
 
+import { comparerTextes } from './i18n.js';
+
 /** Les filtres, dans l'ordre des puces — « Tous » et « Favoris » a part.
  *
  * Sept familles, pas onze (retour user du 17/09 : « trop de filtres, sur
@@ -114,7 +116,7 @@ export function trierObjets(objets, ordrePieces = []) {
   return (objets || []).slice().sort((a, b) =>
     rangPiece(a.piece) - rangPiece(b.piece)
     || rangFiltre(a) - rangFiltre(b)
-    || String(a.nom || '').localeCompare(String(b.nom || '')));
+    || comparerTextes(String(a.nom || ''), String(b.nom || '')));
 }
 
 /**

@@ -58,7 +58,6 @@ function langueProbable() {
   if (demo) {
     // Lu par la barre latérale : la démo n'a pas de serveur à nommer.
     window.__loggiaDemo = true;
-    if (DEMO_SEULE) document.title = 'Loggia — démonstration';
     /* La langue de la maison factice, lue ICI et pas dans `demo.js` : une ligne
      * plus bas, le magasin mémoire remplace `localStorage`, et le `?lang=` de
      * l'URL n'y est écrit qu'après. La démonstration nomme ses pièces dans
@@ -102,6 +101,14 @@ function langueProbable() {
   if (CHARGEURS[probable]) {
     try { window.__loggiaCatalogue = { code: probable, cat: (await CHARGEURS[probable]()).default }; }
     catch { /* reseau : le francais couvre tout */ }
+  }
+  /* Le titre de l'onglet de la démo, dans la langue de la démo (audit du
+   * 03/10) : posé avant le catalogue, il restait en français pour chaque
+   * visiteur. `tr` n'existe pas ici — l'amorce ne charge pas i18n.js —, le
+   * catalogue déposé juste au-dessus se lit donc directement. */
+  if (DEMO_SEULE) {
+    const cat = window.__loggiaCatalogue && window.__loggiaCatalogue.cat;
+    document.title = (cat && cat['Loggia — démonstration']) || 'Loggia — démonstration';
   }
   await import('./boot.jsx');
 })();

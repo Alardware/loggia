@@ -13,22 +13,37 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, dirname, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(RACINE, 'src');
 
-/** Les fichiers source, avec leur contenu. */
-function sources() {
-  return readdirSync(SRC)
-    .filter(f => /\.(js|jsx)$/.test(f))
+/**
+ * Les fichiers source, avec leur contenu — `src/` ENTIER, sous-dossiers compris.
+ *
+ * Lot 15 de l'audit du 03/10 : la lecture s'arrêtait à la racine, et les onze
+ * vues de `src/views/` (Paramètres, Interrupteurs, Volets…) comme les
+ * catalogues de `src/langues/` échappaient à tout ce fichier — un identifiant
+ * d'entité ou une adresse écrits là passaient. Le nom est le chemin depuis
+ * `src/` (« views/volets.jsx ») : les listes de moteurs plus bas ne nomment
+ * que la racine, elles n'en changent pas.
+ */
+function sources(dossier = SRC) {
+  const out = [];
+  for (const f of readdirSync(dossier)) {
+    const p = join(dossier, f);
+    if (statSync(p).isDirectory()) { out.push(...sources(p)); continue; }
+    if (!/\.(js|jsx)$/.test(f)) continue;
+    const nom = relative(SRC, p).split(sep).join('/');
     // demo.js est la maison de démonstration : ses identifiants sont INVENTÉS
     // et publics par construction — c'est tout son objet. L'exempter ici ne
     // troue pas le filet : il ne s'exécute que derrière `?demo`.
-    .filter(f => f !== 'demo.js')
-    .map(f => ({ nom: f, texte: readFileSync(join(SRC, f), 'utf8') }));
+    if (nom === 'demo.js') continue;
+    out.push({ nom, texte: readFileSync(p, 'utf8') });
+  }
+  return out;
 }
 
 /**
@@ -73,7 +88,13 @@ const ENTITE_LITTERALE = new RegExp(
 test('aucun identifiant d’entité n’est écrit en dur dans le code exécuté', () => {
   const fautes = [];
   sources().forEach(({ nom, texte }) => {
-    const trouves = sansCommentaires(texte).match(ENTITE_LITTERALE) || [];
+    /* Un nom de SERVICE n'est pas une entité (lot 15 de l'audit du 03/10) :
+     * `'light.turn_on'`, que la vue des Interrupteurs écrit pour ses gestes,
+     * vaut chez tout le monde. Les trois verbes de bascule seulement, les seuls
+     * écrits en chaîne aujourd'hui : un autre service s'ajoutera ici sciemment,
+     * et `'light.salon_turn_on'` reste une entité. */
+    const trouves = (sansCommentaires(texte).match(ENTITE_LITTERALE) || [])
+      .filter(s => !/^['"`][a-z_]+\.(?:turn_on|turn_off|toggle)['"`]$/.test(s));
     // Un domaine seul suivi d'un point (`'light.'`) est un préfixe de filtre,
     // pas une entité : il vaut pour toutes les lampes de n'importe qui.
     // `*.biblio*` est le préfixe RÉSERVÉ aux entités fictives de la
@@ -149,6 +170,18 @@ test('les moteurs sont indépendants de React et du navigateur', () => {
   assert.deepEqual(fautes, [], 'dépendances à l’interface :\n  ' + fautes.join('\n  '));
 });
 
+test('le filet lit src/ en entier, sous-dossiers compris', () => {
+  // Lot 15 de l'audit du 03/10. Sans ce compte, une lecture redevenue plate
+  // laisserait les tests ci-dessus verts en ne regardant plus les vues.
+  const noms = sources().map(s => s.nom);
+  for (const n of ['App.jsx', 'views/parametres.jsx', 'views/interrupteurs.jsx', 'langues/en.js']) {
+    assert.ok(noms.includes(n), n + ' échappe au filet');
+  }
+  assert.ok(!noms.includes('demo.js'), 'la maison de démonstration, inventée par construction, est relue');
+  const vues = readdirSync(join(SRC, 'views')).filter(f => /\.(js|jsx)$/.test(f));
+  assert.equal(noms.filter(n => n.startsWith('views/')).length, vues.length, 'une vue échappe au filet');
+});
+
 test('le paquet livre ne traine pas les bundles des compilations passees', () => {
   // Chaque compilation depose des bundles au hash different. La retenue de
   // `pack_frontend.py` ne portait que sur la famille `index-*` ; toutes les
@@ -207,22 +240,32 @@ test('le paquet livre ne traine pas les bundles d’un module disparu', () => {
   const fichiers = readdirSync(dossier);
 
   /* Ce que l’index.html du paquet finit par demander, de proche en proche —
-   * même parcours qu’`atteignables()` dans pack_frontend.py. */
+   * même parcours que `parcourir()` dans pack_frontend.py.
+   *
+   * Puis ce que demande la page d’AVANT (audit du 03/10) : son entrée est
+   * l’autre `index-*.js` du paquet, celui que la page du jour n’atteint pas.
+   * `pack_frontend.py` la protège entière, y compris un module que le build
+   * du jour ne produit plus — il n’est pas mort tant qu’elle le réclame. */
   const vus = new Set();
-  const aVoir = [...readFileSync(html, 'utf8').matchAll(/assets\/([A-Za-z0-9._-]+)/g)].map(m => m[1]);
-  while (aVoir.length) {
-    const f = aVoir.pop();
-    if (vus.has(f)) continue;
-    vus.add(f);
-    const p = join(dossier, f);
-    if (!/\.(js|css)$/.test(f) || !existsSync(p)) continue;
-    aVoir.push(...[...readFileSync(p, 'utf8')
-      .matchAll(/["'/]([A-Za-z0-9._-]+\.(?:js|css|jpg|jpeg|png|webp|svg|woff2?))/g)].map(m => m[1]));
-  }
+  const fermer = depart => {
+    const aVoir = [...depart];
+    while (aVoir.length) {
+      const f = aVoir.pop();
+      if (vus.has(f)) continue;
+      vus.add(f);
+      const p = join(dossier, f);
+      if (!/\.(js|css)$/.test(f) || !existsSync(p)) continue;
+      aVoir.push(...[...readFileSync(p, 'utf8')
+        .matchAll(/["'/]([A-Za-z0-9._-]+\.(?:js|css|jpg|jpeg|png|webp|svg|woff2?))/g)].map(m => m[1]));
+    }
+  };
+  fermer([...readFileSync(html, 'utf8').matchAll(/assets\/([A-Za-z0-9._-]+)/g)].map(m => m[1]));
+  const precedente = fichiers.filter(f => /^index-.+\.js$/.test(f) && !vus.has(f));
+  fermer(precedente);
 
-  /* La génération d’AVANT est volontairement hors de ce parcours : c’est elle
-   * que `GARDE = 2` protège. On ne condamne donc un fichier que si AUCUN
-   * vivant de même extension ne partage son début de nom.
+  /* Un fichier hors des deux pages n’est le reste d’un module DISPARU que si
+   * AUCUN fichier vu de même extension ne partage son début de nom — c’est le
+   * message le plus utile quand le balayage de la règle 3 cesse de marcher.
    *
    * Toutes les coupures du nom sont essayées, pas la seule dernière : un hash
    * Vite peut contenir un tiret. `demo-B6-lYSYp.js` (vivant) et
@@ -254,6 +297,20 @@ test('le paquet livre ne traine pas les bundles d’un module disparu', () => {
     'des fichiers du paquet livré en réclament d’autres qui n’y sont pas (404 chez l’utilisateur) : ' +
     [...pendantes].join(', '));
 
+  /* Le filet N-1 lui-même (audit du 03/10). Sur les huit derniers passages
+   * d’une release à la suivante, sept avaient fait perdre à la page d’avant
+   * 10 à 17 de ses 28 fichiers, dont son `boot` et son entrée : la retenue
+   * tirait au sort entre générations à dates égales, et la règle 4 rasait le
+   * reste. Le paquet porte donc la page d’avant, ENTIÈRE (les renvois
+   * ci-dessus), et rien que les deux pages : ce qu’aucune n’atteint ne sert
+   * personne. */
+  assert.equal(precedente.length, 1,
+    'le paquet livré devrait porter UNE page d’avant (une seconde entrée index-*.js), il en porte ' +
+    precedente.length + ' — relancer `python scripts/pack_frontend.py` dans un clone qui a les tags (`git fetch --tags`)');
+  const orphelins = fichiers.filter(f => !vus.has(f));
+  assert.deepEqual(orphelins, [],
+    'des fichiers du paquet livré ne sont atteints ni par la page du jour ni par celle d’avant : ' + orphelins.join(', '));
+
   /* Et le mécanisme qui le tient, pas seulement le résultat du jour.
    *
    * La règle 2 garde les `GARDE` dernières générations DE CHAQUE FAMILLE, en
@@ -270,8 +327,13 @@ test('le paquet livre ne traine pas les bundles d’un module disparu', () => {
     'la règle 4 a disparu de pack_frontend.py : les renvois morts reviendront à la prochaine rotation');
   assert.match(pack4.slice(pack4.indexOf('def renvois_morts')), /while True:/,
     'la règle 4 ne boucle plus jusqu’au point fixe : retirer un fichier peut en condamner un autre');
-  assert.ok(pack4.includes('troues = renvois_morts(assets_dst, reference)'),
-    'la règle 4 n’est plus appelée');
+  assert.ok(pack4.includes('troues = renvois_morts(assets_dst, gardes)'),
+    'la règle 4 n’est plus appelée, ou plus avec les deux pages protégées');
+  /* La page N-1 est NOMMÉE (audit du 03/10), et ce qu’elle atteint est
+   * protégé de toutes les règles : sans cela, la 2 la tire au sort à dates
+   * égales et la 4 rase ce que le sort a troué. */
+  assert.ok(pack4.includes('origine, precedents = generation_precedente('),
+    'la page N-1 n’est plus cherchée : le filet de l’ADR 0072 redevient un tirage au sort');
   assert.ok(pack4.indexOf('troues = renvois_morts') > pack4.indexOf('efface += retenir('),
     'la règle 4 doit passer APRÈS la rétention, qui vient peut-être de retirer ce qu’une génération gardée réclamait');
 });

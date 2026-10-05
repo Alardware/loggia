@@ -13,7 +13,9 @@ import {
 } from 'react';
 import { cvName, RegleEntete, usePli , useEtatServeur, ListeChoix } from '../ui.jsx';
 import { ZONE_REGLAGES, CAPITALES, TITRE_PANNEAU } from './parcommun.jsx';
-import { tr, locale } from '../i18n.js';
+import { tr, trN, locale, comparerTextes } from '../i18n.js';
+import { raisonEchec } from '../refus.js';
+import { puce } from '../styles.js';
 import { uniteTemp, deCelsius } from '../unites.js';
 
 /* Au niveau du module, et non dans le composant.
@@ -76,7 +78,9 @@ export function PresenceReglages({ hass, cardSt }) {
       const r = await h.callWS({ type: 'loggia/presence/config', patch });
       if (vivant.current && r && r.config) setEtat(e => (e ? { ...e, config: r.config } : e));
     } catch (e) {
-      setErr((e && (e.message || e.code)) || tr('Enregistrement impossible.'));
+      // Un refus se dit comme tel et nomme sa clé ; une panne reste une panne
+      // (audit du 03/10, refus.js). Il s'affichait en « Unauthorized ».
+      setErr(raisonEchec(e, 'loggia_presence'));
     }
   };
 
@@ -84,13 +88,13 @@ export function PresenceReglages({ hass, cardSt }) {
     if (!hass || !hass.states) return [];
     return Object.keys(hass.states).filter(id => id.indexOf('person.') === 0)
       .map(id => ({ id, nom: cvName(hass.states[id], id) }))
-      .sort((a, b) => a.nom.localeCompare(b.nom));
+      .sort((a, b) => comparerTextes(a.nom, b.nom));
   }, [hass]);
   const alarmes = useMemo(() => {
     if (!hass || !hass.states) return [];
     return Object.keys(hass.states).filter(id => id.indexOf('alarm_control_panel.') === 0)
       .map(id => ({ id, nom: cvName(hass.states[id], id) }))
-      .sort((a, b) => a.nom.localeCompare(b.nom));
+      .sort((a, b) => comparerTextes(a.nom, b.nom));
   }, [hass]);
   /* Les interrupteurs de Home Assistant (input_boolean) : le mode invité en
    * désigne un (ADR 0016). Il appartient à Home Assistant, pas à Loggia. */
@@ -98,7 +102,7 @@ export function PresenceReglages({ hass, cardSt }) {
     if (!hass || !hass.states) return [];
     return Object.keys(hass.states).filter(id => id.indexOf('input_boolean.') === 0)
       .map(id => ({ id, nom: cvName(hass.states[id], id) }))
-      .sort((a, b) => a.nom.localeCompare(b.nom));
+      .sort((a, b) => comparerTextes(a.nom, b.nom));
   }, [hass]);
   /* Les capteurs qui trahissent une présence : par device_class, jamais par
    * nom — le miroir de `presence.INDICES` côté serveur. */
@@ -133,7 +137,6 @@ export function PresenceReglages({ hass, cardSt }) {
   const simu = cfg.simulation || {};
   const label = { fontSize: 12, fontWeight: 700 };
   const ligne = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 };
-  const puce = (on) => ({ padding: '6px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text2)' });
   const champ = { padding: '8px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 };
 
 
@@ -266,14 +269,22 @@ export function PresenceReglages({ hass, cardSt }) {
           </div>
           <div style={{ marginTop: 8 }}>
             <Rangee nom={tr('Mouvements et ouvertures')}
-              desc={capteurs.length === 0 ? tr('Aucun capteur de mouvement ni d’ouverture trouvé.') : (capteurs.length > 1 ? tr('{n} capteurs trouvés dans Home Assistant', { n: capteurs.length }) : tr('{n} capteur trouvé dans Home Assistant', { n: 1 }))}
+              desc={capteurs.length === 0 ? tr('Aucun capteur de mouvement ni d’ouverture trouvé.') : trN(capteurs.length, '{n} capteur trouvé dans Home Assistant', '{n} capteurs trouvés dans Home Assistant')}
               on={ind.actif !== false} cb={() => enregistrer({ indices: { actif: ind.actif === false } })} />
             <Rangee nom={tr('Gestes manuels')} desc={tr('Une lampe ou un volet touché à la main compte aussi.')}
               on={ind.mains !== false} cb={() => enregistrer({ indices: { mains: ind.mains === false } })} />
           </div>
           {etat.indices && etat.indices.dernier && (
             <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 8 }}>
-              {tr('Dernier indice')} : {etat.indices.dernier.genre} · {etat.indices.dernier.nom} · {new Date(etat.indices.dernier.ts * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}
+              {/* Le genre arrive du serveur en français — « mouvement »,
+                * « ouverture », « main » (presence.py) — et s'affichait tel
+                * quel : « Last clue : mouvement » (audit du 03/10). Les trois
+                * mots sont au catalogue ; un genre inconnu sort tel qu'il est. */}
+              {/* Libellé et valeur par un gabarit (audit du 03/10) : l'espace
+                * avant les deux-points est française, « {a}: {b} » ailleurs. Le
+                * genre — « mouvement », « ouverture », « main » — est un mot du
+                * serveur : il passe par `tr`, comme au journal. */}
+              {tr('{a} : {b}', { a: tr('Dernier indice'), b: tr(etat.indices.dernier.genre || '') })} · {etat.indices.dernier.nom} · {new Date(etat.indices.dernier.ts * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}
             </div>
           )}
         </div>

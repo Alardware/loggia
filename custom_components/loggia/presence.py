@@ -63,6 +63,14 @@ INDICES = {"motion": "mouvement", "occupancy": "mouvement", "presence": "mouveme
            "door": "ouverture", "window": "ouverture", "opening": "ouverture",
            "garage_door": "ouverture"}
 
+# Le motif du journal, par genre d'indice — ceux d'INDICES, et « main » —
+# ecrit EN ENTIER : c'est sa cle au catalogue de l'ecran (ADR 0070).
+# Recompose a partir du genre, il n'etait ecrit nulle part, ni donc traduit,
+# et le journal le montrait en francais dans les sept langues (relecture du
+# 03/10). Un genre inconnu se dit « mouvement », comme dans `_sur_indice`.
+MOTIFS_INDICE = {"mouvement": "mouvement : {nom}", "ouverture": "ouverture : {nom}",
+                 "main": "main : {nom}"}
+
 DEFAUT: dict[str, Any] = {
     "actif": False,
     "delai_depart": 5,
@@ -282,7 +290,8 @@ class LoggiaPresence:
         if not self._indice_note:
             self._indice_note = True
             await self.regles.noter("presence", "depart", "reporter", n=0,
-                                    motif=(genre + " : {nom}", {"nom": self._nom(haid)}))
+                                    motif=(MOTIFS_INDICE.get(genre, "mouvement : {nom}"),
+                                           {"nom": self._nom(haid)}))
         await self._async_armer_depart(relance=True)
 
     def _declarer(self) -> None:
@@ -430,7 +439,8 @@ class LoggiaPresence:
                 # main de quelqu'un n'a pas ete eteinte, et n'est pas a rallumer.
                 partis = await self._async_service("light", "turn_off", allumees,
                                                    regle="depart", quoi="eteindre",
-                                                   motif="maison vide", tenir=True)
+                                                   motif="maison vide", tenir=True,
+                                                   jusqu_a_relacher=True)
                 self.eteintes = {haid: "on" for haid in partis}
 
         chauffage = d.get("chauffage") or {}
@@ -452,7 +462,8 @@ class LoggiaPresence:
                 partis = await self._async_service("climate", "set_temperature", cibles,
                                                    {"temperature": consigne},
                                                    regle="depart", quoi="baisser",
-                                                   motif="maison vide", tenir=True)
+                                                   motif="maison vide", tenir=True,
+                                                   jusqu_a_relacher=True)
                 self.consignes = {haid: avant[haid] for haid in partis if haid in avant}
 
         alarme = d.get("alarme") or {}
@@ -545,11 +556,12 @@ class LoggiaPresence:
 
     async def _async_service(self, domaine: str, service: str, cibles: list, extra=None, *,
                              regle: str = "", quoi: str = "", motif: str = "",
-                             tenir: bool = False) -> list:
+                             tenir: bool = False, jusqu_a_relacher: bool = False) -> list:
         """Commande par le socle : il ecarte ce qu'une main tient, et note."""
         return await self.regles.agir("presence", regle, domaine, service, cibles, extra,
                                       quoi=quoi or service, motif=motif,
-                                      priorite=PRIORITE, tenir=tenir, simuler=self._simule())
+                                      priorite=PRIORITE, tenir=tenir,
+                                      jusqu_a_relacher=jusqu_a_relacher, simuler=self._simule())
 
     def _simule(self) -> bool:
         """Observer sans agir : la regle note, rien ne bouge."""
@@ -570,7 +582,11 @@ class LoggiaPresence:
 
     # ── Ce que l'interface lit et ecrit ────────────────────────────────────
     async def async_config(self) -> dict[str, Any]:
-        brut = await self.store.async_get_shared(CLE, None)
+        return self._config_de(await self.store.async_get_shared(CLE, None))
+
+    def _config_de(self, brut: Any) -> dict[str, Any]:
+        """La configuration, defauts compris. Synchrone : `async_enregistrer`
+        la rebatit sous le verrou du magasin (lot 15 de l'audit du 03/10)."""
         cfg = {}
         for k, v in DEFAUT.items():
             if isinstance(v, dict):
@@ -620,9 +636,8 @@ class LoggiaPresence:
             "journal": await self.regles.journal(limite=40, module="presence"),
         }
 
-    async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:
-        cfg = await self.async_config()
-        simulait = bool((cfg.get("simulation") or {}).get("actif"))
+    def _poser_patch(self, cfg: dict[str, Any], patch: dict[str, Any]) -> None:
+        """Le patch de l'ecran, pose sur `cfg`. Synchrone : sous le verrou."""
         for k, v in (patch or {}).items():
             if k not in cfg:
                 continue
@@ -634,10 +649,28 @@ class LoggiaPresence:
                         cfg[k][kk] = vv
             else:
                 cfg[k] = v
-        await self.store.async_set_shared(CLE, cfg)
+
+    async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:
+        # D'un seul tenant, sous le verrou du magasin (lot 15 de l'audit du
+        # 03/10 ; voir store.async_modifier_shared).
+        simulait = False
+
+        def changer(brut: Any) -> dict[str, Any]:
+            nonlocal simulait
+            cfg = self._config_de(brut)
+            simulait = bool((cfg.get("simulation") or {}).get("actif"))
+            self._poser_patch(cfg, patch)
+            return cfg
+
+        cfg = await self.store.async_modifier_shared(CLE, changer)
         self.cfg = cfg
         if bool((cfg.get("simulation") or {}).get("actif")) != simulait:
             self._repartir_de_zero()
+        # Coupee, la regle rend ce qu'elle tenait : ses tenues n'ont plus
+        # d'echeance (le depart tient jusqu'au retour), un retour qui ne
+        # viendra plus les laisserait jusqu'au redemarrage (03/10).
+        if not cfg.get("actif"):
+            self.regles.relacher("presence")
         await self._async_reabonner()
         return cfg
 

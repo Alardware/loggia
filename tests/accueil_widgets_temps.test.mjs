@@ -106,7 +106,9 @@ test('le dessin : les surfaces du rail, rien sans source, l’heure calée sur l
   assert.ok(vue.includes('{(mode || temp) && ('), 'pas de météo : pas de ligne sous les aiguilles');
   assert.ok(vue.includes('pas - (Date.now() % pas)'), 'le premier battement tombe sur la seconde ronde');
   assert.ok(vue.includes('stroke="var(--o-accent)"') && vue.includes("transform={'rotate(' + a.secondes + ')'}"), 'la trotteuse à l’accent du thème');
-  for (const r of ['.o-w-temps { container-type: inline-size; }', '.o-w-tuile-chiffre { font-size: clamp(30px, 15.5cqw, 54px); }', '@container (max-width: 290px) {', '.o-w-pm { width: 20px; height: 20px; font-size: 11px !important; }']) {
+  for (const r of ['.o-w-temps { container-type: inline-size; }', '.o-w-tuile-chiffre { font-size: clamp(30px, 15.5cqw, 54px); }']) {
     assert.ok(css.includes(r), r + ' manque à index.css');
   }
+  // Le calendrier parti, ses règles le suivent (lot 15 de l'audit du 03/10).
+  for (const r of ['.o-w-mois-heure', '.o-w-pm', '.o-w-j1', '.o-w-j3', '.o-w-ville']) assert.ok(!css.includes(r), r + ' : une règle pour un widget retiré');
 });

@@ -101,7 +101,7 @@ test('les styles partagés vivent une fois, dans styles.js', () => {
   for (const [f, attendu] of [
     ['src/cartemeteo.jsx', "import { CARTE_RAIL } from './styles.js';"],
     ['src/widgetsrail.jsx', "import { CARTE_RAIL, petitesCapitales } from './styles.js';"],
-    ['src/ficherobot.jsx', "import { petitesCapitales } from './styles.js';"],
+    ['src/ficherobot.jsx', "import { petitesCapitales, LISERE } from './styles.js';"],
     ['src/views/journal.jsx', "import { puce } from '../styles.js';"],
     ['src/views/veilles.jsx', "import { puce } from '../styles.js';"],
   ]) {

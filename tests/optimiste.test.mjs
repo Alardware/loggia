@@ -24,7 +24,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -33,12 +33,27 @@ const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8').replace(/\r\n/g,
 const APP = lire('src', 'App.jsx');
 const VOL = lire('src', 'views', 'volets.jsx');
 const PAR = lire('src', 'views', 'parametres.jsx');
+const OPT = lire('src', 'optimiste.js');
+/* Le filet lit TOUT `src/`, vues comprises (lot 15 de l'audit du 03/10) : il
+ * ne lisait qu'App.jsx, et Paramètres tenait ses automatisations hors de sa
+ * vue — dans un état qui n'expirait pas. Les langues sont des catalogues. */
+const parcourir = (rep, out = []) => {
+  for (const n of readdirSync(rep)) {
+    const p = join(rep, n);
+    if (statSync(p).isDirectory()) parcourir(p, out); else if (/\.(js|jsx)$/.test(n)) out.push(p);
+  }
+  return out;
+};
+const SOURCES = parcourir(join(RACINE, 'src')).filter(p => !/[\\/]langues[\\/]/.test(p))
+  .map(p => [p.slice(RACINE.length + 1).split('\\').join('/'), readFileSync(p, 'utf8').replace(/\r\n/g, '\n')]);
+const TOUT = SOURCES.map(([, t]) => t).join('\n');
 const compter = (s, motif) => s.split(motif).length - 1;
 
 test('le filet de securite est un SEUL mecanisme, et il expire', () => {
-  assert.ok(APP.includes('function useOptimiste(reel, delai = OPTIMISTE_MS) {'), 'le hook a change de forme');
-  const i = APP.indexOf('function useOptimiste(');
-  const hook = APP.slice(i, APP.indexOf('\n}\n', i));
+  // Son propre module depuis le lot 15 de l'audit du 03/10 : les vues l'importent.
+  assert.ok(OPT.includes('export function useOptimiste(reel, delai = OPTIMISTE_MS) {'), 'le hook a change de forme');
+  const i = OPT.indexOf('export function useOptimiste(');
+  const hook = OPT.slice(i, OPT.indexOf('\n}\n', i));
   // Le minuteur : sans lui, un etat reel qui ne bouge jamais fige l'affichage.
   assert.match(hook, /minuteur\.current = setTimeout\(\(\) => setOv\(null\), delai\)/,
     'l’etat optimiste ne s’efface plus tout seul : un affichage faux tiendrait jusqu’au changement de page');
@@ -64,13 +79,14 @@ test('le filet de securite est un SEUL mecanisme, et il expire', () => {
 test('plus aucune carte ne tient son propre etat optimiste', () => {
   // La recette d'avant, recopiee dans quatorze cartes : elle ne doit plus
   // exister nulle part, sinon le defaut revient par la fenetre.
-  assert.equal(compter(APP, 'useEffect(() => { setOv(null); }'), 0, 'un clear fait main est revenu');
-  for (const setter of ['setOvOn', 'setOvBri', 'setOvVol', 'setVolOv', 'setOvPortion']) {
-    assert.equal(compter(APP, 'useEffect(() => { ' + setter + '(null); }'), 0, setter + ' garde son clear fait main');
+  // Partout dans src/, vues comprises (lot 15 de l'audit du 03/10).
+  assert.equal(compter(TOUT, 'useEffect(() => { setOv(null); }'), 0, 'un clear fait main est revenu');
+  for (const setter of ['setOvOn', 'setOvBri', 'setOvVol', 'setVolOv', 'setOvPortion', 'setLevelLocal', 'setAutoOv']) {
+    assert.equal(compter(TOUT, 'useEffect(() => { ' + setter + '(null); }'), 0, setter + ' garde son clear fait main');
   }
   // Les deux minuteurs faits main (lampe, tuile piece) sont partis avec.
-  assert.equal(compter(APP, 'ovRevertRef'), 0, 'le filet fait main de la lampe est revenu');
-  assert.equal(compter(APP, 'ovBriRef'), 0, 'le filet fait main de la luminosite est revenu');
+  assert.equal(compter(TOUT, 'ovRevertRef'), 0, 'le filet fait main de la lampe est revenu');
+  assert.equal(compter(TOUT, 'ovBriRef'), 0, 'le filet fait main de la luminosite est revenu');
   // Et tout le monde passe par le hook : au moins un par famille touchee.
   assert.ok(compter(APP, 'useOptimiste(') >= 18, 'des cartes ont perdu leur filet');
 });
@@ -90,21 +106,25 @@ test('aucune signature ne lit une valeur declaree APRES elle', () => {
    * NI le lint NI les tests ne l'ont vu : `const` hisse sa declaration sans
    * l'initialiser, donc la syntaxe est valide et les tests lisent du TEXTE.
    * Seul l'ecran l'a dit. Ce test met ce regard-la dans la suite. */
-  const lignes = APP.split('\n');
+  // Tout src/ : Paramètres et les vues posent leurs signatures eux aussi
+  // (lot 15 de l'audit du 03/10).
   const fautes = [];
-  for (let i = 0; i < lignes.length; i++) {
-    const m = lignes[i].match(/useOptimiste\(([^;]*)\);/);
-    if (!m) continue;
-    // `z.target` lit une PROPRIETE : le `target` local d'apres est un autre nom.
-    const sig = m[1].replace(/\.\w+/g, '');
-    const noms = new Set((sig.match(/\b[a-zA-Z_]\w*\b/g) || [])
-      .filter(n => ['join', 'true', 'false', 'null', 'undefined'].indexOf(n) < 0));
-    for (const nom of noms) {
-      for (let k = i + 1; k < Math.min(i + 80, lignes.length); k++) {
-        if (/^function /.test(lignes[k])) break;
-        if (new RegExp('^\\s*const ' + nom + '\\b').test(lignes[k])) {
-          fautes.push('l.' + (i + 1) + ' lit « ' + nom + ' », déclaré l.' + (k + 1));
-          break;
+  for (const [chemin, texte] of SOURCES) {
+    const lignes = texte.split('\n');
+    for (let i = 0; i < lignes.length; i++) {
+      const m = lignes[i].match(/useOptimiste\(([^;]*)\);/);
+      if (!m) continue;
+      // `z.target` lit une PROPRIETE : le `target` local d'apres est un autre nom.
+      const sig = m[1].replace(/\.\w+/g, '');
+      const noms = new Set((sig.match(/\b[a-zA-Z_]\w*\b/g) || [])
+        .filter(n => ['join', 'true', 'false', 'null', 'undefined'].indexOf(n) < 0));
+      for (const nom of noms) {
+        for (let k = i + 1; k < Math.min(i + 80, lignes.length); k++) {
+          if (/^(export )?function /.test(lignes[k])) break;
+          if (new RegExp('^\\s*const ' + nom + '\\b').test(lignes[k])) {
+            fautes.push(chemin + ' l.' + (i + 1) + ' lit « ' + nom + ' », déclaré l.' + (k + 1));
+            break;
+          }
         }
       }
     }
@@ -118,7 +138,7 @@ test('la luminosite garde sa fenetre courte : 4 s, pas 6', () => {
   // L'echo Zigbee rejoue l'ancienne valeur ; attendre six secondes ferait
   // revenir la vieille luminosite sous le doigt.
   assert.ok(APP.includes('const [ovBri, setOvBri] = useOptimiste(bri, 4000);'), 'la fenetre de la luminosite a change');
-  assert.ok(APP.includes('const OPTIMISTE_MS = 6000;'), 'le delai commun a change');
+  assert.ok(OPT.includes('const OPTIMISTE_MS = 6000;'), 'le delai commun a change');
 });
 
 test('« ferme » ne se tranche plus sur un zero pile', () => {
@@ -158,7 +178,11 @@ test('le seuil se regle, et il se regle dans la page des volets', () => {
   assert.ok(VOL.includes('export function VoletsAffichage({ cardSt })'), 'le reglage a disparu');
   assert.ok(VOL.includes('const SEUILS = [0, 1, 2, 5];'), 'les choix du seuil ont change');
   // La puce choisie : bleu plein, texte blanc — la norme de « Séjour ».
-  assert.ok(VOL.includes("background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)'"), 'la puce choisie ne suit plus la norme');
+  // Elle vient de styles.js depuis le lot 15 de l’audit du 03/10 : plus de
+  // copie ici.
+  const STY = lire('src', 'styles.js');
+  assert.ok(VOL.includes("import { puceHaute as puce } from '../styles.js';") && VOL.includes('style={puce(seuil === n)}'), 'la puce du seuil ne vient plus de styles.js');
+  assert.ok(STY.includes("background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text2)'") && STY.includes("export const puceHaute = (on) => ({ ...puce(on), padding: '7px 12px', ...(on ? null : { color: 'var(--o-text1)' }) });"), 'la puce choisie ne suit plus la norme');
   // Le defaut ne s'ecrit pas : une configuration propre ne porte que les choix.
   assert.ok(VOL.includes('cfgSet({ loggia_coverseuil: n === SEUIL_DEF ? null : n })'), 'le defaut s’ecrirait dans la configuration');
   // Un miroir React, sinon la puce ne s'allume qu'au prochain rendu venu d'ailleurs.

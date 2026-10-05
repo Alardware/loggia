@@ -472,6 +472,48 @@ export function langue() {
   return _code;
 }
 
+/**
+ * Un libellé COURT, pour une place étroite — la barre du bas du téléphone
+ * (audit du 03/10) : « Bezpieczeństwo » et « Dispositivos » débordaient de
+ * leur case et chevauchaient leurs voisins, sur tous les écrans.
+ *
+ * `trCourt('Sécurité · court')` : la clé est écrite EN ENTIER à l'appel, pour
+ * que le test des clés orphelines la trouve. Absente du catalogue (le français,
+ * une langue sans forme courte) → le libellé ordinaire, `tr('Sécurité')`.
+ */
+export function trCourt(cle) {
+  const court = _cat ? _cat[cle] : null;
+  return court || tr(cle.replace(/ · court$/, ''));
+}
+
+/**
+ * Un mot à deux sens, dit dans le sens voulu (audit du 03/10).
+ *
+ * La clé EST le texte français, et « Froid » en porte deux : le mode d'une
+ * climatisation et ce qu'on ressent sous 16 °C ; « Sec » aussi, le mode qui
+ * déshumidifie et un air sec. Une clé n'a qu'une traduction : l'allemand,
+ * qui les avait rendues en modes, écrivait « Kühlen » (refroidir) sous 16 °C
+ * et « Trocknen » (sécher) sur la jauge d'humidité ; l'anglais, « Cool » deux
+ * paliers de suite.
+ *
+ * `trSens('Froid · ressenti')` : le sens est écrit dans la clé, EN ENTIER à
+ * l'appel comme pour `trCourt`, et chaque catalogue le traduit. Absent du
+ * catalogue de la langue, c'est l'anglais du MÊME sens qui sort, avant le mot
+ * nu, qui dirait l'autre. Le mot nu ne reste que pour le français, qui n'a pas
+ * de catalogue (« Froid »), et pour une clé absente partout.
+ *
+ * Une TABLE qui mêle les deux sortes de mots passe tout par ici : les options
+ * du robot (`VAC_MOTS`, state.js), où « Moyen · réglage » côtoie « Arrêt »,
+ * leurs clés écrites en entier dans la table (relecture du 03/10). Un mot SANS
+ * sens suit alors `tr` : lu au catalogue, « Arrêt » perdait le mot que Home
+ * Assistant donne lui-même (`CLES_HA`).
+ */
+export function trSens(cle) {
+  if (typeof cle !== 'string' || cle.indexOf(' · ') < 0) return tr(cle);
+  const v = _cat ? (_cat[cle] || (CATALOGUES.en ? CATALOGUES.en[cle] : null)) : null;
+  return v || tr(cle.replace(/ · [^·]+$/, ''));
+}
+
 /** Le texte dans la langue active. Absent partout → le francais d'origine.
  *
  * `params` remplace les reperes `{nom}` : `tr('{n} appareils', { n: 4 })`. Les
@@ -545,7 +587,13 @@ export function formePlurielle(formes, n, code) {
  * ont besoin. Une langue qui en demande davantage, comme le polonais, le
  * regle au CATALOGUE : la valeur y devient un objet de formes que
  * `formePlurielle` departage par `Intl.PluralRules` (ADR 0071), sans qu'un
- * seul appelant change. `n` est passe aux reperes. */
+ * seul appelant change. `n` est passe aux reperes.
+ *
+ * Les deux gabarits arrivent NUS : les cles, jamais leur traduction (audit
+ * du 03/10). Deja passes par `tr`, sans nombre, l'objet de formes etait
+ * tranche en « other » avant que `n` n'arrive — « 3 ikon » au lieu de
+ * « 3 ikony », « 5 innej osoby » au lieu de « 5 innych osób ». Huit appels
+ * l'ecrivaient ainsi ; `tests/pluriels_nus.test.mjs` le refuse. */
 export function trN(n, un, plusieurs, params) {
   const p = Object.assign({ n }, params || {});
   return tr(n === 1 ? un : plusieurs, p);
@@ -570,7 +618,13 @@ export function trHA(cle) {
 }
 
 /* Le tri alphabetique depend de la langue : en suedois « a trema » vient apres
- * « z ». Les listes triaient toutes sur 'fr' en dur. */
+ * « z », en polonais « s accent aigu » apres « s ». Les listes triaient toutes
+ * sur 'fr' en dur.
+ *
+ * Audit du 03/10 : cette fonction n'avait qu'un appelant. Huit listes gardaient
+ * leur 'fr', une vingtaine d'autres appelaient `localeCompare` SANS langue — donc
+ * dans celle du NAVIGATEUR, pas celle de l'ecran. C'est desormais le seul
+ * `localeCompare` de `src/` (tests/tri_langue.test.mjs). */
 export function comparerTextes(a, b) {
   return String(a == null ? '' : a).localeCompare(String(b == null ? '' : b), langue());
 }

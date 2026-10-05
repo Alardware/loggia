@@ -23,10 +23,17 @@ test('le catalogue anglais est sain : des cles non vides, des valeurs non vides'
   }
 });
 
+/* Les formes « · court » de la barre du bas sont FACULTATIVES (ADR 0140) : le
+ * polonais, traduit par un Polonais, garde ses mots entiers — `trCourt` retombe
+ * alors sur le libelle ordinaire de la langue, jamais sur l'anglais. Une forme
+ * presente, elle, passe tous les controles ci-dessous. */
+const facultative = (k) => k.endsWith(' · court');
+
 for (const code of Object.keys(CHARGEURS).filter(c => c !== 'en')) {
   test(`${code} : les memes cles que l’anglais, toutes traduites, reperes intacts`, async () => {
     const cat = (await CHARGEURS[code]()).default;
     const cles = Object.keys(cat);
+    const clesEn = Object.keys(en).filter(k => !facultative(k) || k in cat);
     const manquantes = clesEn.filter(k => !(k in cat));
     const enTrop = cles.filter(k => !(k in en));
     assert.deepEqual(manquantes, [], code + ' : cles manquantes');

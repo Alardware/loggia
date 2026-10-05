@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useMemo, useCallback, useId, createContext, useContext, cloneElement, lazy, Suspense, Fragment } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, useId, createContext, useContext, cloneElement, Suspense, Fragment } from 'react';
+import { lazyRecharge } from './recharge.js';
 import { formatEcran, vueFormat, patchFormat, echangerPartout, ordonnerSelon, ordreDuFormat, vuePiecesDe, poserVuePieces } from './disposition.js';
 import { fondre, nonLues as journalNonLues, marquerLues } from './journal.js';
 // Les deux fonds animes tirent three.js : 448 Ko a analyser, pour un decor. En
@@ -6,20 +7,27 @@ import { fondre, nonLues as journalNonLues, marquerLues } from './journal.js';
 // a coupe les effets. En differe, il n'est paye que si le fond s'affiche.
 // La table des conditions, elle, est de la donnee pure et reste immediate.
 import { WX_PRESETS } from './wxpresets.js';
-import { lisibleSurLavis } from './contraste.js';
+import { lisibleSurLavis, versHex } from './contraste.js';
+import { enPanne, sansAccents } from './outils.js';
 import { LAVIS, SAFE_NOLOOK, applyTheme, lav, readLook, signatureHaTheme } from './theme.js';
-import { uniteTemp, versCelsius, deCelsius, uniteVent, versKmh } from './unites.js';
+import { uniteTemp, versCelsius, deCelsius, uniteVent, versKmh, wattsDe, kwhDe, facteurWatts, facteurKwh, moyenneTemperatures } from './unites.js';
+import { consigneClimat, plageClimat, pasConsigne } from './consigne.js';
 // Le mode clair, lu sur la racine : les couleurs d'appareils s'y assombrissent.
 const estClair = () => typeof document !== 'undefined' && document.documentElement.classList.contains('loggia-light');
-const WeatherGL = lazy(() => import('./wx3d.jsx'));
+/* Tout module chargé à la demande passe par `lazyRecharge` (recharge.js,
+ * audit du 03/10) : un fichier qu'une mise à jour HACS a retiré pendant que
+ * la page restait ouverte la recharge une fois, au lieu de faire tomber tout
+ * l'écran sur « Loggia n'a pas pu s'afficher ». Le fond météo est un DÉCOR :
+ * introuvable même après le rechargement, il ne rend rien. */
+const WeatherGL = lazyRecharge(() => import('./wx3d.jsx'), { decor: true });
 // Vue chargee a la demande : personne n'atterrit sur Meteo en ouvrant le
 // dashboard, son code n'a donc pas a etre analyse au demarrage.
 /* Systeme : on l'ouvre pour regarder l'etat des machines, pas au demarrage. */
-const SystemeContent = lazy(() => import('./views/systeme.jsx'));
+const SystemeContent = lazyRecharge(() => import('./views/systeme.jsx'));
 // Parametres : 1300 lignes ou l'on n'arrive que volontairement. Le formulaire
 // d'entites vient du meme morceau — il ne s'ouvre qu'en mode edition.
-const ParametresContent = lazy(() => import('./views/parametres.jsx').then(m => ({ default: m.ParametresContent })));
-const ViewEntSheet = lazy(() => import('./views/parametres.jsx').then(m => ({ default: m.ViewEntSheet })));
+const ParametresContent = lazyRecharge(() => import('./views/parametres.jsx').then(m => ({ default: m.ParametresContent })));
+const ViewEntSheet = lazyRecharge(() => import('./views/parametres.jsx').then(m => ({ default: m.ViewEntSheet })));
 import { useDiscovery, report as discoveryReport, DISCOVERY_VERSION, buildIndex as discoveryBuildIndex, capabilities as discoveryCapabilities, pickSibling, siblingsOf, cameraModes } from './discovery.js';
 import { DOMAINES_ROBOT } from './robots.js';
 import {
@@ -35,7 +43,9 @@ import { mergedProfile as profileOf, profiles as profileTable } from './profiles
 import { deviceCard, presentableDevices, presentationSummary, cleCamera } from './present.js';
 import { healthReport, healthText } from './health.js';
 import { probe as configProbe, reportLive as configReportLive, migrateFromLocalStorage, completerDepuisLocal, collectLocal, createConfig, brancherVidage, doitRelire, CONFIG_VERSION } from './config.js';
-import { poserEnAttente, purgerEnAttente, renvoyerEnAttente } from './enattente.js';
+import { compteDe, poserEnAttente, purgerEnAttente, renvoyerEnAttente } from './enattente.js';
+import { lotPiece, lotSansPiece, grilleAvecPiece, grilleSansPiece } from './ecrirepiece.js';
+import { ecrireRegle, estRefus, raisonEchec, texteRefus } from './refus.js';
 import { resolveAll, report as resolveReport } from './resolve.js';
 import { LoggiaContext, buildRuntime, useLoggia, useEntities } from './runtime.js';
 import { isViewAvailable, viewReason } from './views.js';
@@ -43,12 +53,13 @@ import {
   REDUCE_MOTION, Fi, Anim, useTilt, editBtn, HIDDEN_VIEWS, readViewsCfg, HX_TOKENS,
   userBg, personPicture, LOOK_DEF, cvInp, cvName, cvEstTpl, cvKey, cvId, TplForm, lireFondPhoto, FlipText,
   BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur, ListeChoix, ChampSuggere, CroixFeuille, TitreFeuille,
-  useIdTitreFeuille
+  useIdTitreFeuille, NomFeuille, Barriere, Surface, nomCarte, Bascule
 } from './ui.jsx';
 import { WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
 import { CarteMeteo } from './cartemeteo.jsx';
 import { BarreConfort } from './barreconfort.jsx';
 import { HorlogeRail, Co2Rail } from './widgetsrail.jsx';
+import { bornesRail } from './railcolonne.js';
 import { CarteAgenda, FeuilleAgenda } from './agendarail.jsx';
 import { CarteRappels, BandeauCollecte, useTodos, marquerFait, ajouterTache, useRelecture } from './rappelsrail.jsx';
 import { listesTodo } from './todos.js';
@@ -62,10 +73,13 @@ import { entreeFavorite, memeFavori, basculerFavori, appelPourJouer, phraseAlexa
 import { integrationDe, telecommandePour, appelPourTouche } from './telecommande.js';
 import { marqueDe } from './marques.js';
 import { WIDGETS_OPTION, STYLES_WIDGETS, NOMS_STYLES, styleDe, prochainSoleil } from './horloge.js';
-import { indiceConfort, verdictMesure, capteurBruit, echelleMesure, jaugeMesure, cleMesure, barresPile } from './confort.js';
+import { indiceConfort, verdictMesure, capteurBruit, echelleMesure, jaugeMesure, cleMesure, barresPile, mesuresFiche } from './confort.js';
 import { pilesMaison } from './piles.js';
 import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbook, useDerniersEvenements } from './historique.jsx';
+import { armerReleve } from './releve.js';
+import { useOptimiste, useDemandes, enVol } from './optimiste.js';
 import { sysKeys } from './sysconf.js';
+import { consoJourKwh, autosuffisance, resumeEnergie } from './bilan.js';
 import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
 import { colonnesCam, camDispoDe, poserCamDispo, camDisposDe, camSerre, CAM_AUTO } from './camdispo.js';
@@ -73,49 +87,55 @@ import { decalageServeur, resteMinuteur, decompte } from './minuteur.js';
 import { disposer, poser, premiereLibre, hauteur as hauteurCarte, cellulePointee, colonnesPour, nettoyer } from './placement.js';
 import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from './objets.js';
 import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, tuileAlarme, estSirene, ICONES_ARMEMENT, pointsAttention, niveauMax, resumeAttention, couleurNiveau, niveauPile, animationNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
-import { CARTE_RAIL, CARTE_MAISON, ICONE_CARTE, NOM_CARTE, SOUS_CARTE } from './styles.js';
-import { fmtWatts, relTime } from './format.js';
+import { CARTE_RAIL, CARTE_MAISON, ICONE_CARTE, NOM_CARTE, SOUS_CARTE, LISERE } from './styles.js';
+import { fmtWatts, relTime, minutesDepuisHeure, nombre } from './format.js';
 import { voletMode, voletDays, croqHaids, croqMeals, hueScripts, notifIds, roomHidden, plantsCfg } from './lectures.js';
 import { PinModal } from './pinmodal.jsx';
+import { reposerFocus, titreDeVue } from './focus.js';
 import { AmbientOverlay } from './ecranveille.jsx';
 import { Ico } from './icones.jsx';
 import { ambiancePiece, ambiancesParPiece } from './ambiance.js';
-import { evenementCamera, detecteursDe, reduireDerniers, depuis } from './evenement.js';
-import { plageSemaine } from './agenda.js';
-import { GESTES_SCENARIO as GESTES_SCN, FAMILLES as FAMILLES_SCN, PORTEES as PORTEES_SCN, NOMS_INTEGRES, NOMS_FAMILLES, NOMS_GESTES, NOMS_PORTEES, NOMS_CONDITIONS, ICONES_FAMILLES, TEINTES_SCENARIO, ICONES_SCENARIO, nomScenario, teinteScenario, resumeScenario, nombreActions, nombreCibles, libelleDernier, scenariosVisibles, scenariosAccueil, bordsDefilement, actionVide, scenarioVide, versEnregistrement } from './scenarios.js';
+import { evenementCamera, detecteursDe, reduireDerniers, depuis, heureJournal } from './evenement.js';
+import { plageSemaine, jourPlus, ecartJours, lireCalendriers, garderDansFenetre, cleJour } from './agenda.js';
+import { GESTES_SCENARIO as GESTES_SCN, FAMILLES as FAMILLES_SCN, PORTEES as PORTEES_SCN, NOMS_INTEGRES, NOMS_FAMILLES, NOMS_GESTES, NOMS_PORTEES, NOMS_CONDITIONS, ICONES_FAMILLES, TEINTES_SCENARIO, ICONES_SCENARIO, nomScenario, teinteScenario, resumeScenario, nombreActions, nombreCibles, libelleDernier, scenariosVisibles, scenariosAccueil, bordsDefilement, actionVide, scenarioVide, versEnregistrement, rangerScenarios } from './scenarios.js';
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
 /* Aspirateur : on l'ouvre pour regarder le robot, pas au demarrage. */
 // La fiche d'un robot — aspirateur ou tondeuse (ADR 0042, en feuille depuis le
 // 18/09) : une seule, chargee a la demande par `FicheRobot`.
-const FicheRobotContent = lazy(() => import('./ficherobot.jsx'));
+const FicheRobotContent = lazyRecharge(() => import('./ficherobot.jsx'));
 /* L'assistant : sa popup tire l'orbe, qui tire Three.js. Rien de tout cela
  * ne se telecharge tant qu'on ne lui a pas parle. */
-const AssistantSheet = lazy(() => import('./views/assistant.jsx'));
+const AssistantSheet = lazyRecharge(() => import('./views/assistant.jsx'));
 /* L'orbe seule, pour la miniature de l'appui long. Meme module que celui de
  * la popup : le paquet n'est telecharge qu'une fois, quel que soit celui des
  * deux qui le demande en premier. */
-const OrbeMini = lazy(() => import('./orbe.jsx'));
+// Un décor, comme le fond météo : introuvable même après le rechargement,
+// elle ne rend rien.
+const OrbeMini = lazyRecharge(() => import('./orbe.jsx'), { decor: true });
 import {
   LOGGIA_INDEX, LOGGIA_RESOLVED, setLoggiaState, readLS, cfgVal, cfgSet, getHass, loggiaEnt, estPersonnelle,
   feederScript, enHaids, medPlayers, normRooms, secAlarm, switchLightsCfg, LOGGIA_CONFIG_KEYS, droitsDe, usersSig,
-  vacSensors, iconesCfg
+  vacSensors, iconesCfg, compteOrdinaire
 } from './state.js';
 // L'accueil de premiere installation ne sert qu'une fois : son code n'a pas a
 // peser dans le bundle de chaque ouverture.
-const Onboarding = lazy(() => import('./Onboarding.jsx'));
+const Onboarding = lazyRecharge(() => import('./Onboarding.jsx'));
 import { VACUUM_STATE_FR } from './resolve.js';
 import energyHomeImg from './assets/energy/home.webp';
 import energySolarImg from './assets/energy/solar.webp';
 import energyEvImg from './assets/energy/ev-car-home.webp';
 import energyBatImg from './assets/energy/battery.webp';
-import { tr, trN, trHA, preparerLangue, locale, nomProfil } from './i18n.js';
+import { tr, trN, trHA, preparerLangue, locale, nomProfil, trCourt, trSens, comparerTextes } from './i18n.js';
 // Decimales a la francaise partout : un Americain ou un Polonais lisait un
-// nombre ecrit dans une convention qui n'est pas la sienne. `toLocaleString`
-// choisit lui-meme la virgule ou le point, selon la langue active.
-const dec = (n, d) => Number(n).toLocaleString(locale(), { minimumFractionDigits: d, maximumFractionDigits: d });
+// nombre ecrit dans une convention qui n'est pas la sienne. `nombre`
+// (format.js) choisit la virgule ou le point selon la langue active : UNE
+// fonction pour tout l'ecran, testee (tests/nombres_langue). Les `toFixed` et
+// les arrondis faits a la main qui restaient posaient encore le point en
+// francais (audit du 03/10).
+const dec = (n, d) => nombre(n, d);
 // Meme chose, sans forcer les decimales a zero : 21 reste « 21 », pas « 21,0 ».
-const decMax = (n, d) => Number(n).toLocaleString(locale(), { maximumFractionDigits: d });
+const decMax = (n, d) => nombre(n, d, 0);
 
 /* ── Briques d'affichage, au niveau du module ────────────────────────────────
  *
@@ -281,9 +301,12 @@ const BANDEAU_ALERTE = { position: 'fixed', top: 0, left: 0, right: 0, zIndex: 4
 /* Le libellé d'une entrée de menu → l'identifiant de sa vue. « Caméras » en est
  * parti le 23/09 (plan, M4) : la vue n'a jamais existé — les caméras vivent sur
  * l'Accueil et dans Sécurité. La table promettait une route que la recherche
- * filtrait déjà (`BUILT` ne la connaît pas), donc silencieusement inerte. */
-const LABEL_VIEW = { 'Accueil': 'accueil', 'Pièces': 'pieces', 'Lumières': 'lumieres', 'Scénarios': 'scenes', 'Climat': 'climat', 'Volets': 'volets', 'Énergie': 'energie', 'Croquettes': 'croquettes', 'Médias': 'medias', 'Objets': 'objets', 'Sécurité': 'securite', 'Système': 'systeme', 'Paramètres': 'parametres' };
-const BUILT = new Set(['accueil', 'pieces', 'lumieres', 'scenes', 'climat', 'volets', 'energie', 'croquettes', 'medias', 'objets', 'securite', 'systeme', 'parametres']);
+ * filtrait déjà (`BUILT` ne la connaît pas), donc silencieusement inerte.
+ * « Croquettes » la suit le 04/10 : « il n'y a plus de vue spéciale pour un
+ * appareil, c'est la carte plus sa popup » — ses repas s'activent dans la
+ * fiche du distributeur (FicheDistributeur). */
+const LABEL_VIEW = { 'Accueil': 'accueil', 'Pièces': 'pieces', 'Lumières': 'lumieres', 'Scénarios': 'scenes', 'Climat': 'climat', 'Volets': 'volets', 'Énergie': 'energie', 'Médias': 'medias', 'Objets': 'objets', 'Sécurité': 'securite', 'Système': 'systeme', 'Paramètres': 'parametres' };
+const BUILT = new Set(['accueil', 'pieces', 'lumieres', 'scenes', 'climat', 'volets', 'energie', 'medias', 'objets', 'securite', 'systeme', 'parametres']);
 
 /* ── Profils et notifications AU TACTILE (24/09) ──────────────────────────
  *
@@ -352,6 +375,10 @@ function FeuilleNotifications({ notifs, onClose }) {
 
 function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAutorisees = null, editMode = false, onToggleEdit = null,
   tactile = false, users = [], userIdx = 0, onSwitchUser = null, notifs = [], onLireNotifs = null }) {
+  /* `ha` nul, c'est l'attente du premier tic du pont (lot 14) : un état NEUTRE,
+   * « Connexion… » en gris, partout où la barre dit l'état de Home Assistant.
+   * Les quatre autres endroits disaient « En ligne » en vert pendant ce temps,
+   * même quand Home Assistant était injoignable (relecture du lot 14). */
   const [profilsOuverts, setProfilsOuverts] = useState(false);
   const [notifsOuvertes, setNotifsOuvertes] = useState(false);
   const profilActif = users[userIdx] || users[0] || { name: 'Administrateur', role: 'Admin' };
@@ -427,7 +454,7 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
             reste apres le renommage. Servi depuis le meme dossier que le reste
             du frontend, donc sans requete vers l'exterieur. */}
         <img src="./logo.png" alt="" width={38} height={38} style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, display: 'block' }} />
-        <div className="o-side-text" style={{ lineHeight: 1.15 }}><div style={{ fontSize: 15, fontWeight: 800 }}>Loggia</div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', color: ha && !ha.online ? 'var(--o-bad)' : 'var(--o-ok)' }}>{ha ? (ha.online ? ha.devCount + ' ' + tr('APPAREILS EN LIGNE') : tr('HORS LIGNE')) : tr('CONNEXION…')}</div></div>
+        <div className="o-side-text" style={{ lineHeight: 1.15 }}><div style={{ fontSize: 15, fontWeight: 800 }}>Loggia</div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', color: !ha ? 'var(--o-text3)' : !ha.online ? 'var(--o-bad)' : 'var(--o-ok)' }}>{ha ? (ha.online ? ha.devCount + ' ' + tr('APPAREILS EN LIGNE') : tr('HORS LIGNE')) : tr('CONNEXION…')}</div></div>
       </div>
       {/* Les vues passent avant les reglages : « Système » et « Paramètres »
           ferment la liste, comme tout ce qui ne sert pas au quotidien. */}
@@ -478,15 +505,26 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
         * ligne de menu, et son mot change quand il est actif.
         *
         * Le crayon du bandeau du haut n'existe pas quand ce bandeau est masqué
-        * (aperçu tactile) : c'est la seule porte qui reste. */}
+        * (aperçu tactile) : c'est la seule porte qui reste.
+        *
+        * SON NOM, rail replié (audit du 03/10) : sur ordinateur, `is-closed`
+        * passe `.o-side-text` en `display: none` — le mot sort de l'arbre
+        * d'accessibilité, et le crayon est `aria-hidden`. Il restait « bouton
+        * bascule, enfoncé », sans dire quoi ; les entrées de la liste, elles,
+        * portaient déjà leur `aria-label`. L'étiquette ne se pose QUE replié :
+        * déplié, le nom vient du mot affiché, et une étiquette fixe le
+        * contredirait quand il devient « Quitter l’édition » — qui le dit à voix
+        * haute (commande vocale) ne trouverait plus le bouton. Replié, rien ne
+        * s'affiche : « Mode édition » et `aria-pressed` disent le mode ET son
+        * état. */}
       {onToggleEdit && (
-        <button onClick={onToggleEdit} aria-pressed={editMode}
+        <button onClick={onToggleEdit} aria-label={open ? undefined : tr('Mode édition')} aria-pressed={editMode}
           style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 13px', marginBottom: 14, borderRadius: 16, cursor: 'pointer', fontSize: 13, fontWeight: editMode ? 700 : 600, border: 'none', background: 'transparent', color: editMode ? 'var(--o-accent-soft)' : 'var(--o-text1)', textAlign: 'left', fontFamily: 'inherit' }}>
           <Fi i="pencil" color={editMode ? 'var(--o-accent-soft)' : undefined} /><span className="o-side-text">{editMode ? tr('Quitter l’édition') : tr('Mode édition')}</span>
         </button>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 14, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 16, background: `rgba(${ha ? ha.alarmRgb : 'var(--o-text3-rgb)'},.16)` }}><svg width="16" height="16" viewBox="0 0 24 24" fill={`rgb(${ha ? ha.alarmRgb : 'var(--o-text3-rgb)'})`}><path d="M12 2l8 3v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V5z" /></svg><span className="o-side-text" style={{ fontSize: 12, fontWeight: 700, color: `rgb(${ha ? ha.alarmRgb : 'var(--o-text3-rgb)'})` }}><FlipText text={ha ? ha.alarmTxt : 'Alarme · …'} /></span></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 16, background: `rgba(${ha ? ha.alarmRgb : 'var(--o-text3-rgb)'},.16)` }}><svg width="16" height="16" viewBox="0 0 24 24" fill={`rgb(${ha ? ha.alarmRgb : 'var(--o-text3-rgb)'})`}><path d="M12 2l8 3v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V5z" /></svg><span className="o-side-text" style={{ fontSize: 12, fontWeight: 700, color: `rgb(${ha ? ha.alarmRgb : 'var(--o-text3-rgb)'})` }}><FlipText text={ha ? ha.alarmTxt : tr('Alarme') + ' · …'} /></span></div>
         {/* LA CARTE COMPTE (maquette 1a), au tactile seulement : l'identité et
           * la cloche dans un seul bloc, parce que les notifications
           * s'adressent à CELUI qui est connecté. Elles avaient une ligne à
@@ -498,7 +536,7 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
         {tactile && (users.length > 0 || notifs.length > 0) ? (
           <div style={{ display: 'flex', alignItems: 'stretch', gap: 6, padding: 6, borderRadius: 18, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
             <button onClick={() => setProfilsOuverts(true)} aria-haspopup="dialog"
-              aria-label={nomProfil(profilActif.name) + ' · ' + (ha && !ha.online ? tr('Home Assistant · Hors ligne') : tr('Home Assistant · En ligne'))}
+              aria-label={nomProfil(profilActif.name) + ' · ' + (!ha ? tr('Connexion…') : !ha.online ? tr('Home Assistant · Hors ligne') : tr('Home Assistant · En ligne'))}
               style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, padding: 6, minHeight: 44, borderRadius: 13, border: 'none', background: 'transparent', color: 'var(--o-text)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
               <span style={{ width: 32, height: 32, borderRadius: '50%', background: userBg(profilActif), flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff' }}>{(nomProfil(profilActif.name) || '?').charAt(0).toUpperCase()}</span>
               <span className="o-side-text" style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }}>
@@ -510,13 +548,15 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
                   * la seule liaison qu'elle puisse décrire est celle-là. Le
                   * point ne porte donc pas l'information tout seul. */}
                 <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', color: ha && !ha.online ? 'var(--o-bad)' : 'var(--o-text3)' }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: ha && !ha.online ? 'var(--o-bad)' : 'var(--o-ok)' }} />
-                  {ha && !ha.online ? tr('Hors ligne') : tr('En ligne')}
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: !ha ? 'var(--o-text3)' : !ha.online ? 'var(--o-bad)' : 'var(--o-ok)' }} />
+                  {!ha ? tr('Connexion…') : !ha.online ? tr('Hors ligne') : tr('En ligne')}
                 </span>
               </span>
             </button>
+            {/* Le nombre des NON LUES, celui de la pastille, et ses deux
+              * gabarits nus (audit du 03/10) : voir la cloche du bandeau. */}
             <button onClick={() => { setNotifsOuvertes(true); marquerVues(); }} aria-haspopup="dialog"
-              aria-label={tr('Notifications') + (nonVues ? ' · ' + trN(notifs.length, tr('{n} non lue'), tr('{n} non lues')) : '')}
+              aria-label={tr('Notifications') + (nonVues ? ' · ' + trN(nbNonVues, '{n} non lue', '{n} non lues') : '')}
               style={{ width: 44, minHeight: 44, flexShrink: 0, borderRadius: 14, border: 'none', background: 'var(--o-s2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
               <Fi i="bell" size={15} />
               {nonVues && (
@@ -525,7 +565,7 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
             </button>
           </div>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 4px 0' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: ha && !ha.online ? 'var(--o-bad)' : 'var(--o-ok)', boxShadow: ha && !ha.online ? '0 0 7px var(--o-bad)' : '0 0 7px var(--o-ok)', animation: ha && !ha.online ? 'pulse 1.2s infinite' : 'none' }} /><div className="o-side-text" style={{ lineHeight: 1.2 }}><div style={{ fontSize: 12, fontWeight: 700, color: ha && !ha.online ? 'var(--o-bad)' : undefined }}>{ha && !ha.online ? tr('Home Assistant · Hors ligne') : tr('Home Assistant · En ligne')}</div><div style={{ fontSize: 10, color: 'var(--o-text3)', fontWeight: 600 }}>{haHost()}</div></div></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 4px 0' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: !ha ? 'var(--o-text3)' : !ha.online ? 'var(--o-bad)' : 'var(--o-ok)', boxShadow: !ha ? 'none' : !ha.online ? '0 0 7px var(--o-bad)' : '0 0 7px var(--o-ok)', animation: ha && !ha.online ? 'pulse 1.2s infinite' : 'none' }} /><div className="o-side-text" style={{ lineHeight: 1.2 }}><div style={{ fontSize: 12, fontWeight: 700, color: ha && !ha.online ? 'var(--o-bad)' : undefined }}>{!ha ? tr('Connexion…') : !ha.online ? tr('Home Assistant · Hors ligne') : tr('Home Assistant · En ligne')}</div><div style={{ fontSize: 10, color: 'var(--o-text3)', fontWeight: 600 }}>{haHost()}</div></div></div>
         )}
       </div>
     </aside>
@@ -543,8 +583,7 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
 }
 
 /* ── Recherche globale (⌘K / Ctrl+K / clic barre) : pièces, vues (natives + custom), scènes rapides ── */
-const srNorm = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); // insensible accents/casse
-const IS_MAC = (() => { try { return srNorm(navigator.platform || '').indexOf('mac') >= 0 || /iphone|ipad/.test(srNorm(navigator.platform || '')); } catch { return false; } })();
+const IS_MAC = (() => { try { return sansAccents(navigator.platform || '').indexOf('mac') >= 0 || /iphone|ipad/.test(sansAccents(navigator.platform || '')); } catch { return false; } })();
 // Nombre qui « roule » vers sa valeur (rAF, easeOutCubic). Re-anime à chaque changement de cible.
 // <Num v={23.4} d={1} suffix="°" /> : chiffre animé, tabular-nums pour éviter le tremblement de largeur.
 function Num({ v, d = 0, prefix = '', suffix = '', fallback = '—', fmt }) {
@@ -562,7 +601,7 @@ function kbSlider(label, value, commit, { min = 0, max = 100, step = 5, unit = '
     role: 'slider', tabIndex: 0, 'aria-label': label,
     'aria-valuemin': min, 'aria-valuemax': max,
     'aria-valuenow': value == null ? undefined : Math.round(value * 10) / 10,
-    'aria-valuetext': value == null ? undefined : (Math.round(value * 10) / 10) + (unit ? ' ' + unit : ''),
+    'aria-valuetext': value == null ? undefined : decMax(value, 1) + (unit ? ' ' + unit : ''),
     onKeyDown: (e) => {
       let d;
       if (e.key === 'ArrowRight' || e.key === 'ArrowUp') d = step;
@@ -611,57 +650,10 @@ function useFlash() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- * Un etat optimiste qui EXPIRE.
- *
- * Une carte n'attend pas Home Assistant pour changer d'aspect : elle montre
- * tout de suite ce qu'on vient de lui demander, sinon le doigt arrive avant
- * l'image. Ce mensonge utile ne se vidait que si l'etat REEL bougeait —
- * `useEffect(() => setOv(null), [reel])`, recopie dans quatorze cartes.
- *
- * Quand l'etat reel ne bouge jamais, il tenait indefiniment : commande
- * refusee, volet qui bute a 1 %, echo Zigbee qui rejoue l'ancienne valeur. La
- * carte disait « Ferme » pendant que la maison disait « ouvert », et SEUL un
- * changement de page le revelait — le composant mourait, l'etat optimiste avec
- * lui, et la verite reapparaissait. L'utilisateur croyait alors que le RETOUR
- * mentait, alors que c'etait l'affichage d'avant (retour du 27/09 : « si je
- * ferme mes volets et que je change de page et que je reviens la carte est
- * ouvert alors que le volet est bien ferme »).
- *
- * Deux cartes sur quatorze avaient un filet. C'est desormais le meme pour
- * toutes : passe ce delai, la carte redit ce que la maison dit, quoi qu'il
- * arrive. Un affichage en retard se corrige tout seul ; un affichage faux, non.
- *
- * `reel` est une SIGNATURE : passer plusieurs valeurs se fait en les joignant,
- * comme le faisait le tableau de dependances qu'il remplace.
+ * Le filet des etats optimistes, `useOptimiste`, vit dans `optimiste.js`
+ * depuis le lot 15 de l'audit du 03/10 : Parametres, charge a part, tenait
+ * le sien sans minuteur. Un seul hook, importe partout.
  * ───────────────────────────────────────────────────────────────────────────── */
-const OPTIMISTE_MS = 6000;
-function useOptimiste(reel, delai = OPTIMISTE_MS) {
-  const [ov, setOv] = useState(null);
-  const minuteur = useRef(0);
-  useEffect(() => () => clearTimeout(minuteur.current), []);
-  /* L'etat reel a REPONDU : le filet n'a plus de raison d'attendre.
-   *
-   * Mais « je ne sais pas » n'est pas une reponse. Une carte de piece rend
-   * `null` quand la liste de ses plafonniers est momentanement vide ; l'effet
-   * se declenchait quand meme et jetait l'optimiste. L'affichage retombait
-   * alors sur un compteur lui aussi vide — donc ETEINT —, puis remontait tout
-   * seul des que la liste revenait. Repete, cela fait clignoter la bascule
-   * (retour du 01/10 : « le toggle change d'etat plusieurs fois de suite »,
-   * alors que la lampe, elle, reste allumee).
-   *
-   * On n'efface donc que sur une VALEUR. Le minuteur reste le filet : un
-   * optimiste qui n'obtient jamais de reponse expire quand meme. */
-  useEffect(() => {
-    if (reel == null) return;
-    clearTimeout(minuteur.current); setOv(null);
-  }, [reel]);
-  const poser = useCallback((v) => {
-    setOv(v);
-    clearTimeout(minuteur.current);
-    minuteur.current = setTimeout(() => setOv(null), delai);
-  }, [delai]);
-  return [ov, poser];
-}
 
 // <ActionBtn onClick style>label</ActionBtn> : ripple au clic + « ✓ » 900 ms qui remplace le label (commande envoyée)
 // <Shiny on>texte</Shiny> : sweep lumineux discret (background-clip:text) sur un badge ACTIF uniquement.
@@ -729,8 +721,8 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(0);
   const listRef = useRef(null);
-  const nq = srNorm(q.trim());
-  const match = (label) => !nq || srNorm(label).indexOf(nq) >= 0;
+  const nq = sansAccents(q.trim());
+  const match = (label) => !nq || sansAccents(label).indexOf(nq) >= 0;
   const results = [];
   rooms.forEach(r => { if (!match(r)) return; const p = PIECES.find(x => x.name === r); results.push({ group: tr('Pièces'), label: r, icon: p ? p.icon : <Fi i="home" color="var(--o-accent)" size={20} />, act: (close) => { onNav('room:' + r); close(); } }); });
   NAV.forEach(g => g.items.forEach(it => { const vid = LABEL_VIEW[it.label]; if (BUILT.has(vid) && isViewAvailable(avail, vid) && match(it.label)) results.push({ group: tr('Vues'), label: tr(it.label), icon: it.svg, act: (close) => { onNav(vid); close(); } }); }));
@@ -791,6 +783,11 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
       {(close) => (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+          {/* La recherche n'a pas de titre à l'écran : son champ porte le mot, mais
+            * une feuille nommée par un champ annoncerait ce qu'on y tape. Le nom
+            * vit dans un élément CACHÉ, que `aria-labelledby` lit quand même
+            * (audit du 03/10). */}
+          <NomFeuille><span hidden>{tr('Rechercher')}</span></NomFeuille>
           <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 14, padding: '11px 14px' }}>
             <Ico name="search" size={16} color="var(--o-text2)" />
             <input
@@ -807,7 +804,7 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
           <CroixFeuille />
           </div>
           <div ref={listRef} style={{ maxHeight: '52vh', overflowY: 'auto', margin: '0 -8px', padding: '0 8px' }}>
-            {!results.length && <div style={{ padding: '26px 8px', textAlign: 'center', fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>Aucun résultat pour « {q} »</div>}
+            {!results.length && <div style={{ padding: '26px 8px', textAlign: 'center', fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Aucun résultat pour « {q} »', { q })}</div>}
             {results.map((r, i) => {
               const head = r.group !== lastGroup; lastGroup = r.group;
               return (
@@ -908,6 +905,34 @@ function Header() {
   }, [notifOpen, userOpen]);
   // Auto-hide barre (porté de V1) : masquée en défilant vers le bas, réapparaît en remontant.
   const [hidden, setHidden] = useState(false);
+  /* L'en-tête publie sa hauteur et son état (04/10) : la colonne du rail de
+   * l'Accueil colle 16 px SOUS lui, et remonte à 16 px du bord quand il se
+   * masque (index.css, `.o-rail-cell`). Même motif que `--o-navh` de la
+   * barre du bas — au montage, par ResizeObserver et au redimensionnement (un
+   * ResizeObserver ne tire pas sur une taille émulée). En `useLayoutEffect` :
+   * l'en-tête est monté PAR VUE, la mesure doit précéder la première peinture,
+   * et le nettoyage la retire au démontage — sinon une vue sans en-tête
+   * hériterait de 73 px de vide. Au doigt, l'en-tête est en `display: none` :
+   * la mesure vaut 0.
+   * En mouvement réduit, l'en-tête ne glisse plus (relecture du 04/10) : la
+   * colonne saute d'un coup (index.css), et l'en-tête qui glissait encore
+   * 0,3 s recouvrait jusqu'à 58 px de sa première carte pendant 150 ms. */
+  const hdrRef = useRef(null);
+  useLayoutEffect(() => {
+    const el = hdrRef.current;
+    const racine = document.documentElement;
+    const poser = () => { try { racine.style.setProperty('--o-hdrh', Math.round(el ? el.getBoundingClientRect().height : 0) + 'px'); } catch { /* sans style sur la racine : le repli à 0 */ } };
+    poser();
+    let ro = null;
+    try { ro = new ResizeObserver(poser); if (el) ro.observe(el); } catch { /* sans ResizeObserver : le redimensionnement suffit */ }
+    window.addEventListener('resize', poser);
+    return () => { window.removeEventListener('resize', poser); if (ro) ro.disconnect(); try { racine.style.removeProperty('--o-hdrh'); } catch { /* rien à retirer */ } };
+  }, []);
+  useLayoutEffect(() => {
+    const racine = document.documentElement;
+    racine.classList.toggle('loggia-hdr-cache', hidden);
+    return () => racine.classList.remove('loggia-hdr-cache');
+  }, [hidden]);
   useEffect(() => {
     let last = 0;
     const onScroll = () => {
@@ -924,12 +949,22 @@ function Header() {
     <>
     {/* hors du <header> : son transform (auto-hide) ferait de lui le containing block du position:fixed du sheet */}
     {searchOpen && <SearchSheet onClose={() => setSearchOpen(false)} onNav={onNav} customViews={customViews} rooms={rooms} droits={droits} />}
-    <header className="loggia-hdr" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 'calc(14px + var(--o-safe-top,0px)) 28px 14px', borderBottom: '1px solid var(--o-s1)', position: 'sticky', top: 0, background: 'var(--o-header)', backdropFilter: 'blur(12px)', zIndex: 40, transform: hidden ? 'translateY(-100%)' : 'translateY(0)', transition: 'transform .3s ease', willChange: 'transform' }}>
+    <header ref={hdrRef} className="loggia-hdr" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 'calc(14px + var(--o-safe-top,0px)) 28px 14px', borderBottom: '1px solid var(--o-s1)', position: 'sticky', top: 0, background: 'var(--o-header)', backdropFilter: 'blur(12px)', zIndex: 40, transform: hidden ? 'translateY(-100%)' : 'translateY(0)', transition: REDUCE_MOTION ? 'none' : 'transform .3s ease', willChange: 'transform' }}>
       <button onClick={onToggleNav} title={tr('Afficher / masquer le menu')} style={{ width: 42, height: 42, borderRadius: 14, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0 }}><Ico name="menu-burger" size={20} /></button>
-      <div className="o-hdr-search" role="button" tabIndex={0} aria-label={tr('Rechercher (Ctrl+K)')} onClick={() => setSearchOpen(true)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSearchOpen(true); } }} style={{ flex: 1, maxWidth: 420, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 14, padding: '10px 14px', cursor: 'pointer' }}>
+      {/* Sa largeur minimale vit dans index.css (`.o-hdr-search`) : elle
+        * dépend de la place de l'en-tête, pas de celle de l'écran.
+        *
+        * Son NOM vient de ce qu'il affiche (lot 13 de l'audit du 03/10) :
+        * « Rechercher une pièce, une scène… Ctrl K ». L'étiquette « Rechercher
+        * (Ctrl+K) » le remplaçait, et qui le cherche à la voix par les mots
+        * affichés ne le trouvait pas (WCAG 2.5.3). Elle reste en infobulle,
+        * comme celles des boutons voisins : le raccourci s'y lit encore quand
+        * l'en-tête étroit cache sa touche. `aria-keyshortcuts` le donne au
+        * lecteur d'écran, `aria-haspopup` dit qu'une feuille s'ouvre. */}
+      <div className="o-hdr-search" role="button" tabIndex={0} title={tr('Rechercher (Ctrl+K)')} aria-haspopup="dialog" aria-keyshortcuts={IS_MAC ? 'Meta+K' : 'Control+K'} onClick={() => setSearchOpen(true)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSearchOpen(true); } }} style={{ flex: 1, maxWidth: 420, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 14, padding: '10px 14px', cursor: 'pointer' }}>
         <Ico name="search" size={16} color="var(--o-text2)" />
         <span style={{ flex: 1, minWidth: 0, fontSize: 14, color: 'var(--o-text2)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tr('Rechercher une pièce, une scène…')}</span>
-        <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', background: 'var(--o-bd2)', border: '1px solid var(--o-bd2)', borderRadius: 10, padding: '2px 7px' }}>{IS_MAC ? '⌘K' : 'Ctrl K'}</span>
+        <span className="o-hdr-kbd" style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', background: 'var(--o-bd2)', border: '1px solid var(--o-bd2)', borderRadius: 10, padding: '2px 7px' }}>{IS_MAC ? '⌘K' : tr('Ctrl K') /* « Strg K » sur un clavier allemand, comme « Rechercher (Ctrl+K) » (audit du 03/10) */}</span>
       </div>
       <div style={{ flex: 1 }} />
       {/* Chip « n allumées » : l'état lumineux de la maison, d'un regard, où
@@ -944,14 +979,24 @@ function Header() {
             l'assistant n'existerait tout simplement pas. Elle s'efface des que
             la barre du bas parait — voir `.o-hdr-assist` dans index.css. */}
         {onAssistant && <BoutonAssistant onAssistant={onAssistant} onDictee={onDictee} hass={hassCtx} sens="bas" variante="entete" />}
+        {/* Sa place, vide, le temps de la première réponse (lot 14 de l'audit
+          * du 03/10) : le micro paraissait une image après, et poussait la
+          * date de 50 px. Même classe : au doigt, la règle la retire aussi. */}
+        {!onAssistant && ctx.assistantAttendu && <span className="o-hdr-assist" aria-hidden="true" style={{ width: 42, height: 42, flexShrink: 0 }} />}
         {peutEditer && <button onClick={onToggleEdit} title={editMode ? tr('Quitter le mode édition') : tr('Mode édition')} style={editBtn}><Ico name="edit" size={17} /></button>}
         <button onClick={onToggleTheme} title={tr('Changer de thème')} style={hbtn}><Ico name="brightness" size={18} /></button>
         {/* La cloche annonce ce qu'elle porte (plan M7) : le point rouge des
           * non-lues ne se voit pas d'un lecteur d'écran, et « Notifications »
-          * seul ne disait pas s'il y avait quelque chose à lire. */}
+          * seul ne disait pas s'il y avait quelque chose à lire.
+          *
+          * Le nombre dit est celui des NON LUES (audit du 03/10) : `notifs`
+          * garde aussi les lues depuis que « lu » vit dans le journal (01/10),
+          * et la cloche annonçait « 7 non lues » pour deux. Ses deux gabarits
+          * vont nus à `trN` : traduits d'abord, sans nombre, un objet de
+          * formes polonais serait tranché en « other ». */}
         <button ref={clocheRef} onClick={() => { setNotifOpen(o => { const n = !o; if (n) marquerVues(); return n; }); setUserOpen(false); }}
-          aria-label={tr('Notifications') + (nonVues ? ' · ' + trN(notifs.length, tr('{n} non lue'), tr('{n} non lues')) : '')}
-          aria-expanded={notifOpen} title={tr('Notifications')} style={{ ...hbtn, position: 'relative' }}><span className={bellRing && !REDUCE_MOTION ? 'o-bellring' : undefined} style={{ display: 'inline-flex' }}><Ico name="bell" size={18} /></span>{nonVues && <span className="o-livedot" aria-hidden="true" style={{ position: 'absolute', top: 8, right: 9, width: 8, height: 8, borderRadius: '50%', background: 'var(--o-bad)', border: '2px solid var(--o-bg2)' }} />}</button>
+          aria-label={tr('Notifications') + (nonVues ? ' · ' + trN(nbNonVues, '{n} non lue', '{n} non lues') : '')}
+          aria-expanded={notifOpen} title={tr('Notifications')} style={{ ...hbtn, position: 'relative' }}><span className={bellRing && !REDUCE_MOTION ? 'o-bellring' : undefined} style={{ display: 'inline-flex' }}><Ico name="bell" size={18} /></span>{nonVues && <span className="o-livedot" aria-hidden="true" style={{ position: 'absolute', top: 8, right: 9, width: 8, height: 8, borderRadius: '50%', background: 'var(--o-bad)', border: '2px solid var(--o-bg2)', '--o-point-r': 4 }} />}</button>
         <button ref={profilRef} aria-label={tr('Profil')} aria-expanded={userOpen} onClick={() => { setUserOpen(o => !o); setNotifOpen(false); }} title={tr('Profil')} style={{ width: 44, height: 44, borderRadius: '50%', marginLeft: 4, background: curBg, border: '2px solid rgba(255,255,255,.15)', cursor: 'pointer', flexShrink: 0 }} />
         {notifOpen && (
           <div style={{ ...menu, right: 52, width: 'min(304px, calc(100vw - 32px))' }}>
@@ -995,7 +1040,8 @@ function Header() {
  * en section par les titres, et un bloc stylé n'en est pas un. `margin` et
  * `fontWeight` annulent ce que le navigateur donne à un h2 — rien ne bouge à l'œil. */
 const sectionTitle = { margin: 0, fontWeight: 400, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' };
-const card = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none' };
+// Carte de pièce : le liseré du réglage (04/10), comme toutes les cartes.
+const card = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: LISERE };
 
 /* Le thème est sorti dans `src/theme.js` (27/09, audit point 9) : les couleurs,
  * les quatorze préréglages, la pose sur la racine et la garde de contraste.
@@ -1087,13 +1133,14 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
   if (chip) {
     // Pièce COMPACTE, direction « teinte pièce » (choix 31/08) : la couleur de
     // la pièce baigne la carte (son lavis en dégradé), icône NUE sans boîte,
-    // température forte à droite, switch 44×25. Une rangée de 88 px.
+    // switch 44×25 en haut, nom puis « 22,1° · état » en bas (maquette 1b,
+    // 03/10). Une rangée de 88 px.
     const n = lights ? lights.filter(l => l.on).length : (p.status.kind === 'active' ? p.status.n : 0);
     // La ligne d'etat (ADR 0029) : un probleme, sinon l'activite, sinon le calme.
     const amb = lights ? ambiancePiece({ lumieres: n, ...(ambiance || {}), co2: p.live && p.live.co2 }) : null;
     const on = ov != null ? ov : (realOn != null ? realOn : n > 0);
     const canToggle = !!(mains && mains.length && onToggleLights);
-    const temp = p.live && p.live.temp != null ? (Math.round(p.live.temp * 10) / 10).toLocaleString(locale()) + '°' : null;
+    const temp = p.live && p.live.temp != null ? decMax(p.live.temp, 1) + '°' : null;
     const etat = amb ? amb.texte : '—';
     return (
       /* Comme la carte standard (plan M7) : pas de `role="button"` autour de
@@ -1101,33 +1148,38 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
        * d'ecran. La correction avait ete posee sur les deux autres gabarits et
        * oubliee ici — repere par l'audit du 23/09. */
       <div className="o-piece o-piecechip"
-        style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden',
+        style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 4, padding: '11px 14px', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden',
           background: `linear-gradient(160deg,${p.bg},rgba(0,0,0,0) 65%), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
-          border: 'none',
+          border: LISERE,
           boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
         <span ref={flashRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: 'var(--o-radius,18px)', pointerEvents: 'none' }} />
         {/* Le bouton de surface : il couvre la pastille et passe sous
           * l'interrupteur, qui est positionne et donc peint apres lui. */}
-        <button type="button" onClick={onOpen} aria-label={tr('Ouvrir la pièce {piece}', { piece: p.name })}
+        {/* `o-surface` (lot 13 de l'audit du 03/10) : l'anneau de focus se
+          * trace en dedans — la carte rogne ce qui dépasse, il ne se voyait pas. */}
+        <button type="button" className="o-surface" onClick={onOpen} aria-label={nomCarte(p.name, temp, amb && amb.texte)}
           style={{ position: 'absolute', inset: 0, border: 'none', background: 'transparent', padding: 0, margin: 0, borderRadius: 'var(--o-radius,18px)', cursor: 'pointer' }} />
-        <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>{cloneElement(p.icon, { size: 24 })}</span>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Maquette 1b (03/10) : l'icone et l'interrupteur tiennent la ligne
+          * du haut ; le nom et « 20,4° · Tout eteint » ont toute la largeur en
+          * bas. Sur une seule ligne, le nom n'avait plus que 24 a 59 px au
+          * telephone (« Cuis… », « Sall… ») — audit du 03/10. */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 25 }}>
+          <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>{cloneElement(p.icon, { size: 24 })}</span>
+          {canToggle && (
+            <span role="switch" aria-checked={on} aria-label={tr('Lumières') + ' ' + p.name} tabIndex={0}
+              onClick={e => { e.stopPropagation(); doToggle(); }}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
+              style={{ width: 44, height: 25, borderRadius: 14, position: 'relative', zIndex: 1, cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,var(--o-lampe),var(--o-lampe-b))' : 'var(--o-bd1)', transition: 'background .25s' }}>
+              <span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
+            </span>
+          )}
+        </div>
+        <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
           <div style={{ fontSize: 12, fontWeight: 600, color: amb ? amb.couleur : 'var(--o-text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {/* Chip étroite (mobile 2 col) : la température quitte la droite et
-              * revient ici, le nom garde sa place — bascule par container query. */}
-            {temp && <span className="o-chip-temp-i"><span style={{ color: p.tc, fontWeight: 800 }}>{temp}</span> · </span>}{amb && amb.icone ? <Fi i={amb.icone} size={11} style={{ marginRight: 4 }} /> : null}{etat}
+            {temp && <><span style={{ color: p.tc, fontWeight: 800 }}>{temp}</span> · </>}{amb && amb.icone ? <Fi i={amb.icone} size={11} style={{ marginRight: 4 }} /> : null}{etat}
           </div>
         </div>
-        {temp && <span className="o-chip-temp-d" style={{ fontSize: 19, fontWeight: 800, color: p.tc, flexShrink: 0 }}>{temp}</span>}
-        {canToggle && (
-          <span role="switch" aria-checked={on} aria-label={tr('Lumières') + ' ' + p.name} tabIndex={0}
-            onClick={e => { e.stopPropagation(); doToggle(); }}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
-            style={{ width: 44, height: 25, borderRadius: 14, position: 'relative', zIndex: 1, cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,var(--o-lampe),var(--o-lampe-b))' : 'var(--o-bd1)', transition: 'background .25s' }}>
-            <span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
-          </span>
-        )}
       </div>
     );
   }
@@ -1137,6 +1189,13 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
     const amb = lights ? ambiancePiece({ lumieres: n, ...(ambiance || {}), co2: p.live && p.live.co2 }) : null;
     const on = ov != null ? ov : (realOn != null ? realOn : n > 0);
     const canToggle = !!(mains && mains.length && onToggleLights);
+    /* Relecture du lot 13 : les deux tuiles RENDUES de l'Accueil se nomment
+     * comme les autres cartes, de ce qu'elles affichent — « Salon, 20,4°,
+     * Tout est éteint » —, et non plus « Ouvrir la pièce Salon », qui taisait
+     * l'état. La température se calcule comme celle de la `chip` ; jamais
+     * `etat`, qui vaut « — » sans ambiance. Elles changent de vue : pas
+     * d'`aria-haspopup`. */
+    const temp = p.live && p.live.temp != null ? decMax(p.live.temp, 1) + '°' : null;
     return (
       /* La carte n'est PLUS un `role="button"` qui englobe tout (23/09, plan
        * M7). Un rôle bouton rend sa descendance présentationnelle : les deux
@@ -1156,10 +1215,10 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
         boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))',
         transition: 'box-shadow .3s ease, background .3s ease' }}>
         {/* Le bouton de surface : il couvre la carte, passe SOUS les contrôles
-          * du pied (positionnés, donc peints après lui) et porte le nom du
-          * geste. `inset: 0` plutôt qu'un `onClick` sur la carte : un bouton
+          * du pied (positionnés, donc peints après lui) et porte le nom de
+          * la carte. `inset: 0` plutôt qu'un `onClick` sur la carte : un bouton
           * réel se tabule, s'annonce et répond à Entrée comme à l'Espace. */}
-        <button type="button" onClick={onOpen} aria-label={tr('Ouvrir la pièce {piece}', { piece: p.name })}
+        <button type="button" className="o-surface" onClick={onOpen} aria-label={nomCarte(p.name, temp, amb && amb.texte)}
           style={{ position: 'absolute', inset: 0, border: 'none', background: 'transparent', padding: 0, margin: 0, borderRadius: 14, cursor: 'pointer' }} />
         {/* calque de flash séparé : ne touche ni au transform du tilt ni au box-shadow de la carte */}
         <span ref={flashRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: 14, pointerEvents: 'none' }} />
@@ -1225,14 +1284,21 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
       </div>
     );
   }
+  /* La variante d'origine, sans `compact` ni `chip` (lot 13 de l'audit du
+   * 03/10). Plus rien ne la rend — l'Accueil et la bibliothèque passent l'un
+   * ou l'autre —, mais elle suit la règle de nom des cartes : sans commande
+   * dedans, elle reste un bouton, et son nom est ce qu'elle affiche — la pièce,
+   * son état, sa température —, lu dans les MÊMES textes (`statut`). Elle
+   * change de vue, elle n'ouvre pas de fiche : pas d'`aria-haspopup`. */
+  const statut = p.status.kind === 'active' ? trN(p.status.n, '{n} actif', '{n} actifs') : p.status.kind === 'repos' ? tr('Repos') : p.status.kind === 'ext' ? tr('Extérieur') : null;
   return (
-    <div className="o-piece" onClick={onOpen} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }} style={{ ...card, borderRadius: 'var(--o-radius,18px)', padding: 20, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))', cursor: onOpen ? 'pointer' : 'default' }}>
+    <div className="o-piece" onClick={onOpen} role="button" tabIndex={0} aria-label={nomCarte(p.name, statut, p.temp)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }} style={{ ...card, borderRadius: 'var(--o-radius,18px)', padding: 20, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))', cursor: onOpen ? 'pointer' : 'default' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div style={{ width: p.box, height: p.box, borderRadius: p.rad, background: p.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{p.icon}</div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
-          {p.status.kind === 'active' && <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-warn)' }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-warn)', boxShadow: '0 0 7px rgba(var(--o-warn-rgb),.8)' }} />{p.status.n > 1 ? tr('{n} actifs', { n: p.status.n }) : tr('{n} actif', { n: p.status.n })}</span>}
-          {p.status.kind === 'repos' && <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-text3)' }} />{tr('Repos')}</span>}
-          {p.status.kind === 'ext' && <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)' }}>{tr('Extérieur')}</span>}
+          {p.status.kind === 'active' && <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-warn)' }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-warn)', boxShadow: '0 0 7px rgba(var(--o-warn-rgb),.8)' }} />{statut}</span>}
+          {p.status.kind === 'repos' && <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-text3)' }} />{statut}</span>}
+          {p.status.kind === 'ext' && <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)' }}>{statut}</span>}
           {p.badge && <span className="o-piece-badge-top" style={{ fontSize: 11, fontWeight: 700, color: p.bc, background: p.bbg, padding: '3px 9px', borderRadius: 999 }}>{p.badge}</span>}
         </div>
       </div>
@@ -1255,12 +1321,19 @@ const echelleFiche = (cle, suffixe = '') => {
   const e = echelleMesure(cle);
   return { min: e.de, max: e.a, grad: 'linear-gradient(90deg,' + e.bandes.map(b => b.c + ' ' + b.de + '% ' + b.a + '%').join(',') + ')', ticks: e.reperes.map(r => r.v + suffixe), tickV: e.reperes.map(r => r.v) };
 };
-const COMFORT = {
+/* Une FONCTION, appelée au rendu de la fiche (relecture du 03/10). Objet du
+ * module, la table se bâtissait une seule fois, à l'import : ses quatre titres
+ * gardaient la langue du démarrage. Passer à l'allemand sans recharger
+ * laissait « Qualité de l'air » en français ; de même au premier démarrage,
+ * quand Home Assistant ne parle pas la langue du navigateur. L'ancien nom,
+ * `COMFORT`, est aussi un mot des catalogues (« COMFORT INDEX ») : devenu
+ * fonction, tests/listes_fonctions l'y aurait vu mentionné sans appel. */
+const FICHE_CONFORT = () => ({
   temp: { key: 'temp', label: tr('Température'), ico: 'thermometer-half', ...echelleFiche('temp', '°'), verdict: v => verdictMesure('temp', v) },
   hum: { key: 'hum', label: tr('Humidité'), ico: 'humidity', ...echelleFiche('hum', '%'), verdict: v => verdictMesure('hum', v) },
-  co2: { key: 'co2', label: "Qualité de l'air", ico: 'leaf', ...echelleFiche('co2'), verdict: v => verdictMesure('co2', v) },
+  co2: { key: 'co2', label: tr("Qualité de l'air"), ico: 'leaf', ...echelleFiche('co2'), verdict: v => verdictMesure('co2', v) },
   bruit: { key: 'bruit', label: tr('Bruit'), ico: 'volume', ...echelleFiche('bruit'), verdict: v => verdictMesure('bruit', v) },
-};
+});
 const cf_pct = (v, m) => Math.max(0, Math.min(100, (v - m.min) / (m.max - m.min) * 100));
 // `v` est TOUJOURS en Celsius (c'est ce que verdictMesure/indiceConfort et l'échelle de la
 // barre attendent) : seule la température se reconvertit vers l'unité réelle à l'affichage.
@@ -1317,17 +1390,21 @@ function RoomComfortModal({ piece, hass, onClose, bruitId = null }) {
   // `vals.temp` est converti en Celsius tout de suite : verdictMesure, indiceConfort et
   // l'échelle de la barre (14-30) raisonnent tous en Celsius. Seul `uniteT` (affichage) suit
   // l'unité réelle du capteur.
-  const tempBrut = live && live.temp != null ? live.temp : parseNum(piece.temp);
+  // Une pièce réelle ne lit que ses capteurs : une mesure absente reste null,
+  // et la fiche la tait comme la barre. Les chaînes de `piece` ne servent
+  // qu'à l'écran d'avant la connexion (`mesuresFiche`, audit du 03/10).
+  const mesures = mesuresFiche(live, piece);
   const uniteT = uniteTemp(live && live.tempId && hass && hass.states && hass.states[live.tempId] ? hass.states[live.tempId].attributes : null, hass);
   const vals = {
-    temp: versCelsius(tempBrut, uniteT),
-    hum: live && live.hum != null ? live.hum : parseNum(piece.hum),
-    co2: live && live.co2 != null ? live.co2 : parseNum(piece.badge),
+    temp: versCelsius(mesures.temp, uniteT),
+    hum: mesures.hum,
+    co2: mesures.co2,
     // Le bruit ne vit pas dans la configuration des pièces : la vue le trouve dans la zone (ADR 0039).
     bruit: bruitId && hass && hass.states && hass.states[bruitId] ? parseNum(hass.states[bruitId].state) : null,
   };
   const ids = { temp: live && live.tempId, hum: live && live.humId, co2: live && live.co2Id, bruit: bruitId };
-  const metrics = [COMFORT.temp, COMFORT.hum, COMFORT.co2, COMFORT.bruit].filter(m => vals[m.key] != null);
+  const table = FICHE_CONFORT();
+  const metrics = [table.temp, table.hum, table.co2, table.bruit].filter(m => vals[m.key] != null);
   const verdicts = metrics.map(m => ({ m, vd: m.verdict(vals[m.key]) }));
   const worst = verdicts.reduce((a, b) => (cf_rank[b.vd.c] || 0) > (cf_rank[a.vd.c] || 0) ? b : a, verdicts[0]);
   // Le mot de la fiche est celui de la barre : l'indice de confort (ADR 0039).
@@ -1366,7 +1443,7 @@ function RoomComfortModal({ piece, hass, onClose, bruitId = null }) {
       {() => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ width: 38, height: 38, borderRadius: 14, background: piece.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{piece.icon}</span>
-          <span style={{ flex: 1, fontSize: 19, fontWeight: 700, color: 'var(--o-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{piece.name}</span>
+          <NomFeuille><span style={{ flex: 1, fontSize: 19, fontWeight: 700, color: 'var(--o-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{piece.name}</span></NomFeuille>
           <CroixFeuille />
         </div>
         <div style={{ textAlign: 'center', margin: '16px 0 2px' }}>
@@ -1481,7 +1558,7 @@ function OutdoorModal({ piece, hass, mode, label, weatherTemp, sunset, onClose }
       {() => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ width: 38, height: 38, borderRadius: 14, background: piece.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{piece.icon}</span>
-          <span style={{ flex: 1, fontSize: 19, fontWeight: 700, color: 'var(--o-text)' }}>{tr('Extérieur')}</span>
+          <NomFeuille><span style={{ flex: 1, fontSize: 19, fontWeight: 700, color: 'var(--o-text)' }}>{tr('Extérieur')}</span></NomFeuille>
           <CroixFeuille />
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '8px 0 2px' }}>
@@ -1492,7 +1569,7 @@ function OutdoorModal({ piece, hass, mode, label, weatherTemp, sunset, onClose }
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', margin: '14px 0 4px' }}>
           {chip('humidity', hum != null ? Math.round(hum) + ' %' : null)}
           {chip('wind', wind != null ? Math.round(wind) + ' ' + vUnite : null)}
-          {chip('sunset', sunset ? 'Coucher ' + sunset : null)}
+          {chip('sunset', sunset ? tr('Coucher') + ' ' + sunset : null)}
         </div>
         <div style={{ ...hd, margin: '18px 0 10px' }}>{tr('RECOMMANDATIONS')}</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1590,7 +1667,7 @@ function roomEntitiesBrutes(hass, roomName) {
   const LT_ORDER = { plafonnier: 0, lampadaire: 1, ampoule: 2, veilleuse: 3 };
   try {
     discoverLights(hass).filter(l => rmNorm(l.room) === target)
-      .sort((a, b) => (LT_ORDER[lightType(a)] - LT_ORDER[lightType(b)]) || a.name.localeCompare(b.name))
+      .sort((a, b) => (LT_ORDER[lightType(a)] - LT_ORDER[lightType(b)]) || comparerTextes(a.name, b.name))
       .forEach(l => out.push(l.id));
   } catch {}
   // 2) chauffage : toutes les zones de la pièce — poêle (climate.*) ET radiateurs fil pilote (switch + input_*),
@@ -1626,7 +1703,7 @@ function roomEntitiesBrutes(hass, roomName) {
       candidats.push({ id, rang, appareil: m.deviceId || null });
     });
     const parAppareil = new Set();
-    candidats.sort((x, y) => x.rang - y.rang || x.id.localeCompare(y.id)).forEach(c => {
+    candidats.sort((x, y) => x.rang - y.rang || comparerTextes(x.id, y.id)).forEach(c => {
       if (c.appareil) { if (parAppareil.has(c.appareil)) return; parAppareil.add(c.appareil); }
       out.push(c.id);
     });
@@ -1647,9 +1724,29 @@ const ROOM_SENSOR_CLASSES = ['carbon_dioxide', 'pm25', 'pm10', 'aqi', 'illuminan
 // aux cartes de l'Accueil, qui changent d'etat sous les yeux.
 const RM_CARD = { ...CARTE_MAISON, transition: 'all .3s' };
 const RM_ICO = (bg, col) => ({ ...ICONE_CARTE, background: bg, color: col });
-const RM_BTN = { flex: 1, padding: '9px 6px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12, cursor: 'pointer' };
+// `position: relative` sur CHAQUE bouton, jamais sur sa rangée (relecture du
+// lot 13) : peint après la surface d'une carte (`Surface`, ui.jsx), il reçoit
+// son clic, et ce qui l'entoure — l'écart de 8 px, un coin arrondi, la
+// consigne entre − et + — retombe sur elle : un appui y ouvre la fiche, comme
+// quand la carte était un bouton. Sans décalage, rien ne bouge à l'œil.
+const RM_BTN = { position: 'relative', flex: 1, padding: '9px 6px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12, cursor: 'pointer' };
 const RM_NAME = NOM_CARTE;
 const RM_SUB = SOUS_CARTE;
+
+/* LA TOUCHE D'UN BOUTON N'EST PAS CELLE DE SA CARTE (audit du 03/10).
+ *
+ * Une carte qui s'ouvre est un bouton : Entrée et Espace ouvrent sa fiche.
+ * Mais la touche d'un bouton INTÉRIEUR — « Fermer » d'un volet, « Pause »
+ * d'un lecteur, − / + d'un thermostat, « Renvoyer au dock » — remonte
+ * jusqu'à elle. Ces boutons n'arrêtaient que le CLIC : au clavier, la carte
+ * prenait la touche, appelait `preventDefault` — le bouton ne s'activait
+ * donc plus — et ouvrait la fiche. À la souris tout marchait ; au clavier,
+ * l'appareil ne recevait rien.
+ *
+ * D'où `if (e.target !== e.currentTarget) return;` en tête du gestionnaire
+ * de toute carte qui contient un contrôle : le motif du mode édition
+ * (ADR 0068). Une carte sans contrôle intérieur n'en a pas besoin — la
+ * touche ne peut venir que d'elle. tests/clavier.test.mjs refuse l'oubli. */
 
 /* ── Les pieces d'une carte au gabarit ──────────────────────────────────────
  *
@@ -1710,7 +1807,9 @@ function RmJauge({ v, couleur, grade = null, actif = true, label = '', onCommit,
 }
 
 /* Ce qu'un capteur binaire dit, selon sa `device_class` — en mots, pas en
- * « on / off ». Le troisieme champ : ce qui est un DANGER quand c'est vrai. */
+ * « on / off ». Le troisieme champ : ce qui est un DANGER quand c'est vrai.
+ * Un capteur de froid dit ce qu'on RESSENT (`trSens`, audit du 03/10) : la
+ * clé nue « Froid » est le mode d'une climatisation, « Kühlen » en allemand. */
 const BIN_ETATS = () => ({
   smoke: [tr('Fumée détectée'), tr('Aucune fumée'), true], gas: [tr('Gaz détecté'), tr('Pas de gaz'), true],
   carbon_monoxide: [tr('Monoxyde détecté'), tr('Pas de monoxyde'), true], moisture: [tr('Fuite détectée'), tr('Aucune fuite'), true],
@@ -1719,7 +1818,7 @@ const BIN_ETATS = () => ({
   door: [tr('Ouverte'), tr('Fermée'), false], window: [tr('Ouverte'), tr('Fermée'), false], garage_door: [tr('Ouverte'), tr('Fermée'), false], opening: [tr('Ouvert'), tr('Fermé'), false],
   lock: [tr('Déverrouillé'), tr('Verrouillé'), false], connectivity: [tr('Connecté'), tr('Déconnecté'), false], battery: [tr('Pile faible'), tr('Pile en forme'), true],
   plug: [tr('Branché'), tr('Débranché'), false], power: [tr('Sous tension'), tr('Hors tension'), false], vibration: [tr('Vibration'), tr('Calme'), false], sound: [tr('Bruit'), tr('Silence'), false],
-  light: [tr('Lumière'), tr('Sombre'), false], cold: [tr('Froid'), tr('Normal'), false], heat: [tr('Chaud'), tr('Normal'), true], tamper: [tr('Sabotage'), tr('Intact'), true],
+  light: [tr('Lumière'), tr('Sombre'), false], cold: [trSens('Froid · ressenti'), tr('Normal'), false], heat: [tr('Chaud'), tr('Normal'), true], tamper: [tr('Sabotage'), tr('Intact'), true],
 });
 
 /* L'illustration d'un ouvrant, en filigrane de sa carte — posee comme celle
@@ -1756,11 +1855,18 @@ function IlluOuvrant({ type, ouvert }) {
  * « c'est quoi ce petit carre partout ? pour les capteurs remplace-le par la
  * batterie ») : l'icone au niveau et le pourcentage, rouge sous 20 %, ambre
  * sous 50 %. Sans capteur de pile, rien du tout — plus de carre. */
-function PileRepere({ n }) {
+function PileRepere({ n, onOuvrir = null }) {
   const ico = n < 12 ? 'battery-empty' : n < 37 ? 'battery-quarter' : n < 62 ? 'battery-half' : n < 87 ? 'battery-three-quarters' : 'battery-full';
   const col = n < 20 ? 'var(--o-bad)' : n < 50 ? 'var(--o-warn)' : 'var(--o-text3)';
   return (
-    <span title={tr('Pile') + ' ' + n + ' %'} style={{ display: 'flex', alignItems: 'center', gap: 4, height: 26, fontSize: 11, fontWeight: 700, color: col, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+    /* Positionné, il passe AU-DESSUS de la surface de la carte (relecture du
+     * lot 13, 04/10) : dessous, c'est elle qui prenait le survol, et la bulle
+     * « Pile 80 % » ne s'affichait plus. Son clic suit donc celui de la
+     * surface — la fiche —, sans quoi le repère deviendrait un coin mort ; le
+     * clavier, lui, passe déjà par elle. Ni `none` (la bulle se perdrait) ni
+     * `auto` : en édition, l'inertie héritée de la grille le couvre aussi. */
+    /* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- le clavier ouvre la fiche par la surface */
+    <span title={tr('Pile') + ' ' + n + ' %'} onClick={onOuvrir || undefined} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 4, height: 26, fontSize: 11, fontWeight: 700, color: col, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
       <Fi i={ico} size={13} />{n} %
     </span>
   );
@@ -1792,8 +1898,10 @@ function JaugeMesure({ jauge }) {
       </div>
       <div style={{ position: 'relative', height: 13, marginTop: 4, fontSize: 10, fontWeight: 700, lineHeight: 1, color: 'var(--o-text2)', fontVariantNumeric: 'tabular-nums' }}>
         {jauge.reperes.map(r => {
-          const demi = String(r.v).length * 3;
-          return <span key={r.v} style={{ position: 'absolute', left: 'clamp(' + demi + 'px, ' + r.pos + '%, calc(100% - ' + demi + 'px))', transform: 'translateX(-50%)', whiteSpace: 'nowrap' }}>{r.v}</span>;
+          /* `t` : le chiffre dans l'unite du capteur (°F aux Etats-Unis) ; `v`
+           * reste la cle, dans le repere de la table (audit du 03/10). */
+          const demi = String(r.t).length * 3;
+          return <span key={r.v} style={{ position: 'absolute', left: 'clamp(' + demi + 'px, ' + r.pos + '%, calc(100% - ' + demi + 'px))', transform: 'translateX(-50%)', whiteSpace: 'nowrap' }}>{r.t}</span>;
         })}
       </div>
     </div>
@@ -1857,10 +1965,16 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   const puissance = (() => {
     if (dom !== 'switch' && dom !== 'input_boolean') return null;
     const sid = pickSibling(LOGGIA_INDEX, S, id, { domain: 'sensor', deviceClass: 'power' });
-    const n = sid && S[sid] ? parseFloat(S[sid].state) : NaN;
-    return isNaN(n) ? null : n;
+    /* En WATTS, quelle que soit l'unité du capteur (audit du 03/10) : le seuil
+     * de veille de `modePrise` et `fmtW` ci-dessous comptent en watts. Une
+     * prise qui publie 1,25 kW se lisait « 1 W » — « En veille » sur un
+     * radiateur qui chauffe. */
+    return sid && S[sid] ? wattsDe(S[sid]) : null;
   })();
-  const fmtW = (w) => w >= 1000 ? dec(Math.round(w / 100) / 10, 1) + ' kW' : Math.round(w) + ' W';
+  /* L'unité se choisit APRÈS l'arrondi (05/10), comme `fmtWatts` : 999,6 W
+   * s'écrivait « 1000 W » à côté de 1000 W en « 1,0 kW ». Une décimale en kW,
+   * pas les deux de `fmtWatts` : le sous-titre d'une prise est court. */
+  const fmtW = (w) => Math.round(w) >= 1000 ? dec(Math.round(w / 100) / 10, 1) + ' kW' : Math.round(w) + ' W';
   const fmtN = (n) => decMax(Math.round(n * 10) / 10, 1);
   /* LA PRISE DIT CE QU'ELLE ALIMENTE (26/09).
    *
@@ -1895,14 +2009,23 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   // user du 14/09, deux fois : « pourquoi pas la couleur sur la carte »).
   const direct = dom === 'camera' && !mort && (s === 'streaming' || s === 'recording' || s === 'idle');
   let sub, couleur = 'var(--o-text3)', teinte = 'accent';
+  // Un capteur DATÉ (05/10, suite « dates partout ») : `texteDate`, la règle
+  // de la tuile et de la pastille. `parseFloat` y lisait l'année, « 2 026 |
+  // Passage facteur | Mesure ».
+  const dateTxt = dom === 'sensor' && !mort ? texteDate(st) : null;
   // Le capteur : sa mesure (en grand, en haut a droite) et, dessous, sa JAUGE
   // quand la table de confort la connait (CO2, temperature, humidite, bruit)
   // ou ses cinq barres quand c'est une pile (retour user du 19/09).
-  let mesure = null, avis = null, jauge = null, barres = null;
+  let mesure = null, avis = null, jauge = null, barres = null, subLu = null, ligneVerdict = null;
   if (mort) sub = tr('Indisponible');
   else if (dom === 'lock') { sub = s === 'locked' ? tr('Verrouillée') : s === 'unlocked' ? tr('Déverrouillée') : s === 'locking' ? tr('Verrouillage…') : s === 'unlocking' ? tr('Déverrouillage…') : s === 'jammed' ? tr('Bloquée') : String(s); teinte = 'ok'; couleur = actif ? 'var(--o-ok)' : 'var(--o-warn2)'; }
   else if (dom === 'camera') { sub = direct ? tr('En direct') : String(s); couleur = 'var(--o-accent-soft)'; }
-  else if (dom === 'binary_sensor') { sub = etatsBin ? (s === 'on' ? etatsBin[0] : etatsBin[1]) : (s === 'on' ? tr('Détecté') : 'RAS'); couleur = danger ? 'var(--o-bad)' : 'var(--o-warn)'; teinte = danger ? 'bad' : 'or'; }
+  else if (dom === 'binary_sensor') { sub = etatsBin ? (s === 'on' ? etatsBin[0] : etatsBin[1]) : (s === 'on' ? tr('Détecté') : tr('RAS')); couleur = danger ? 'var(--o-bad)' : 'var(--o-warn)'; teinte = danger ? 'bad' : 'or'; }
+  // Une date n'est pas une mesure : ni le coin chiffré (22 px n'ont pas la
+  // place d'un « 15 janv. 2027, 14:00 »), ni jauge, ni « Mesure ». Elle se dit
+  // sur la ligne d'état, où elle passe à la ligne au lieu de s'y couper (la
+  // mise en page cède, pas les mots) ; le nom de la carte la lit en clair.
+  else if (dateTxt != null) { sub = <span style={{ whiteSpace: 'normal' }}>{dateTxt}</span>; subLu = dateTxt; }
   else if (dom === 'sensor') {
     // La mesure en grand en haut a droite (le gabarit) ; dessous, le verdict
     // de la table de confort et sa jauge. Plus de puces soeurs (retour user du
@@ -1915,12 +2038,26 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
     if (cle) {
       // jaugeMesure (confort.js) attend du Celsius : un capteur de temperature en
       // Fahrenheit y entrait brut, et finissait toujours « TROP CHAUD » au rouge.
-      jauge = jaugeMesure(cle, cle === 'temp' ? versCelsius(n, uniteTemp(a, hass)) : n);
-      sub = (cle === 'co2' ? tr('Qualité d’air') : MESURES_NOMS()[a.device_class]) + ' · ' + jauge.verdict.t.toLocaleUpperCase(locale());
+      // Son unite repart avec elle pour les CHIFFRES des reperes : sans elle, la
+      // carte d'un capteur en °F ecrivait 15 · 17 · 23 · 26 · 29 sous « 72 °F »
+      // (audit du 03/10). Le trait et le mot, eux, restent calcules en Celsius.
+      const uniteJauge = uniteTemp(a, hass);
+      jauge = jaugeMesure(cle, cle === 'temp' ? versCelsius(n, uniteJauge) : n, uniteJauge);
+      // Le nom lit le verdict tel que la table l'écrit, « Bon » : en
+      // capitales, une synthèse vocale épelle un mot court (« B-O-N », eSpeak
+      // de NVDA). L'écran garde ses capitales — relecture du lot 13.
+      const libMesure = cle === 'co2' ? tr('Qualité d’air') : MESURES_NOMS()[a.device_class];
+      sub = libMesure + ' · ' + jauge.verdict.t.toLocaleUpperCase(locale());
+      subLu = libMesure + ' · ' + jauge.verdict.t;
       couleur = jauge.verdict.c;
       // Le CO2 allume sa carte, comme avant : lavis, icone et valeur dans la
       // couleur de son palier.
       if (cle === 'co2') { avis = jauge.verdict; teinte = TEINTE_PALIER[couleur] || 'or'; }
+      // La ligne d'une mesure à verdict se dessine en deux morceaux, libellé
+      // et verdict (05/10) : voir `ligneVerdict` plus bas. Toute mesure, et
+      // non plus le seul CO₂ : la température, l'humidité et le bruit
+      // coupaient leur verdict aussi (suite, 05/10).
+      ligneVerdict = [libMesure, jauge.verdict.t.toLocaleUpperCase(locale())];
     } else if (a.device_class === 'battery' && !isNaN(n)) {
       barres = barresPile(n);
       const faible = niveauPile(n) != null;
@@ -1951,26 +2088,46 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   // et repere dans sa teinte.
   const allume = !mort && (danger || direct || (actif && dom !== 'sensor' && dom !== 'binary_sensor' && dom !== 'camera')) || avis != null;
   const ouvrable = !!onOpen && !mort;
+  // Ce que la carte affiche, dans son ordre : la mesure d'un capteur (en grand,
+  // en haut à droite), puis la ligne d'état. Le nom du bouton de surface n'en
+  // dit ni plus ni moins (lot 13 de l'audit du 03/10).
+  const valeur = mesure ? mesure.v + (mesure.u ? ' ' + mesure.u : '') : null;
+  // « Voir le flux » d'une caméra : la seule commande que porte le texte.
+  const voirFlux = dom === 'camera' && !mort;
   return (
-    /* Ouvrable, la carte EST un bouton (rôle, tabulation, Entrée et Espace) ;
-     * sinon elle n'est rien de tout cela. La règle ne sait pas lire un rôle
-     * conditionnel. Non ouvrable, plus de `tabIndex` du tout : -1 n'apportait
-     * rien à un bloc qui ne fait rien. */
-    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : undefined} aria-label={ouvrable ? tr('Ouvrir') + ' ' + nom : undefined}
-      onKeyDown={ouvrable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(id); } } : undefined} onClick={ouvrable ? () => onOpen(id) : undefined}
+    /* LA CARTE N'EST PLUS UN BOUTON (lot 13 de l'audit du 03/10, ADR 0074).
+     *
+     * Un rôle bouton rend sa descendance présentationnelle : la bascule d'une
+     * prise, d'une serrure, d'une vanne ou d'une sirène, et « Voir le flux »
+     * d'une caméra, disparaissaient d'un lecteur d'écran (`nested-interactive`,
+     * six cartes sur Objets dans la démonstration). Et la carte se nommait
+     * « Ouvrir Porte d'entrée » : le nom taisait l'état, et prenait le verbe
+     * d'une commande (WCAG 2.5.3).
+     *
+     * Le geste « ouvrir la fiche » passe donc par le bouton de SURFACE
+     * (`Surface`, ui.jsx), premier enfant, frère des commandes, nommé de ce
+     * que la carte affiche : « Porte d'entrée, Verrouillée ». Ce qui est
+     * positionné passe au-dessus de lui : la bascule et « Voir le flux »
+     * reçoivent leurs clics. Le DÉCOR positionné — la plaque, le texte qui
+     * passe devant le filigrane — le laisse filer (`pointerEvents: 'none'`) :
+     * un clic sur le nom, l'icône ou la jauge ouvre la fiche, comme avant.
+     * Jamais `pointerEvents: 'auto'` dessous : en édition, la grille rend la
+     * carte inerte par un `none` hérité, qu'un `auto` percerait. */
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')}
       style={{ ...RM_CARD, position: 'relative', cursor: ouvrable ? 'pointer' : 'default',
         // Le lavis dit « ça travaille ». Une prise en veille ne travaille pas :
         // elle garde la surface ordinaire, et c'est ce qui la distingue.
         ...((allume && LAVIS && (!carteDePrise || priseVive)) ? { background: `linear-gradient(180deg,transparent 28%,${lavisBase}${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` } : null),
-        border: 'none' }}>
+        border: LISERE }}>
+      {ouvrable && <Surface onClick={() => onOpen(id)} label={nomCarte(nom, valeur, subLu || sub)} />}
       {ouvrant && <IlluOuvrant type={a.device_class === 'window' ? 'fenetre' : 'porte'} ouvert={ouvert} />}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         {/* La plaque, et l'animation de l'appareil QUAND IL TRAVAILLE : le
           * tambour tourne, la sirène tremble, la lueur respire, les témoins du
           * NAS clignotent. Rien ne bouge en veille — et `prefers-reduced-motion`
-          * coupe tout, comme partout. */}
-        <span style={{ ...RM_ICO(allume ? icoFond : 'var(--o-s1)', allume ? icoTexte : 'var(--o-text3)'), position: 'relative' }}>
+          * coupe tout, comme partout. Positionnée, elle passerait devant la
+          * surface : elle laisse filer le clic (lot 13 de l'audit du 03/10). */}
+        <span style={{ ...RM_ICO(allume ? icoFond : 'var(--o-s1)', allume ? icoTexte : 'var(--o-text3)'), position: 'relative', pointerEvents: 'none' }}>
           {/* `Ico` et non `Fi` : l'électroménager n'existe pas dans la fonte,
             * il est dessiné dans `icones.jsx`. Pour un nom de la fonte, les
             * deux rendent la même chose. */}
@@ -1982,20 +2139,37 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
             ? <span style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginTop: 4, fontSize: 22, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: avis != null ? couleur : 'var(--o-text)' }}>{mesure.v}{mesure.u ? <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)' }}>{mesure.u}</span> : null}</span>
           : dom === 'camera'
             ? <span aria-hidden="true" style={{ color: direct ? icoTexte : 'var(--o-text3)', display: 'flex', alignItems: 'center', height: 26 }}><Fi i="video-camera" size={15} /></span>
-            : pile != null ? <PileRepere n={pile} /> : null}
+            : pile != null ? <PileRepere n={pile} onOuvrir={ouvrable ? () => onOpen(id) : null} /> : null}
       </div>
-      <div style={{ marginTop: 14, position: 'relative' }}>
+      {/* Le texte passe devant le filigrane d'un ouvrant (positionné), et
+        * laisse alors filer le clic vers la surface, jauges comprises. Celui
+        * d'une caméra porte « Voir le flux » : il reste dans le flux, sous la
+        * surface, et seul le bouton se positionne (lot 13 de l'audit du 03/10). */}
+      <div style={voirFlux ? { marginTop: 14 } : { marginTop: 14, position: 'relative', pointerEvents: 'none' }}>
         {/* Ce que la prise alimente, au-dessus de son nom — et seulement quand
           * on le sait : « PRISE » écrit au-dessus d'une prise n'apprend rien. */}
         {etiquetteType && (
           <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: allume ? icoTexte : 'var(--o-text3)', marginBottom: 3 }}>{etiquetteType}</div>
         )}
         <div style={RM_NAME}>{nom}</div>
-        <div style={{ ...RM_SUB, color: couleur }}>{sub}</div>
+        {/* La ligne d'une mesure à verdict (05/10) : depuis le lot 16, le mot
+          * du palier du CO₂ dit une qualité, et au téléphone (cartes de 141 à
+          * 176 px) « Qualité d'air · X » ne tenait plus — c'est le VERDICT que
+          * l'ellipse coupait (« SCHLECHT », « SCARSA » dès 360 px, « WYSOKI »,
+          * « DUSZNO »). La température, l'humidité et le bruit aussi, et plus
+          * souvent (suite, 05/10, mesuré dans la démo) : « Température · TROP
+          * FROID », « UN PEU CHAUD », « TROP CHAUD » perdaient leur fin dès
+          * 390 px en français ; à 320 px, 12 lignes sur 28 en français, 20 en
+          * polonais. Une seule rangée pour toutes, celle du CO₂.
+          * La mise en page cède, pas les mots : le libellé se réduit, le
+          * verdict garde sa largeur, séparateur compris (`pre` garde son
+          * espace de tête) ; il ne s'ellipse que s'il ne tient pas SEUL dans
+          * la ligne. Le nom accessible reste `subLu`. */}
+        {ligneVerdict ? <div style={{ ...RM_SUB, color: couleur, display: 'flex' }}><span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{ligneVerdict[0]}</span><span style={{ flexShrink: 0, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'pre' }}>{' · ' + ligneVerdict[1]}</span></div> : <div style={{ ...RM_SUB, color: couleur }}>{sub}</div>}
         {jauge && !mort && <JaugeMesure jauge={jauge} />}
         {barres && !mort && <JaugePile barres={barres} />}
-        {dom === 'camera' && !mort && (
-          <button onClick={(e) => { e.stopPropagation(); if (onOpen) onOpen(id); }} className="o-rmbtn" style={{ ...RM_BTN, marginTop: 11, width: '100%' }}>{tr('Voir le flux')}</button>
+        {voirFlux && (
+          <button type="button" onClick={(e) => { e.stopPropagation(); if (onOpen) onOpen(id); }} aria-label={tr('Voir le flux') + ' ' + nom} aria-haspopup="dialog" className="o-rmbtn" style={{ ...RM_BTN, marginTop: 11, width: '100%', position: 'relative' }}>{tr('Voir le flux')}</button>
         )}
       </div>
     </div>
@@ -2014,7 +2188,7 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
   const [ov, setOv] = useOptimiste(realOn);
   const on = ov != null ? ov : realOn;
   const bri = a.brightness != null ? Math.round(a.brightness / 255 * 100) : 100;
-  const color = a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : null;
+  const color = a.rgb_color ? versHex(a.rgb_color) : null;
   const mort = !st || st.state === 'unavailable';
   const accent = (rgb && color) ? color : 'var(--o-lampe)';
   // L'icone et la jauge : la meme couleur, rendue lisible sur le lavis qu'elle pose.
@@ -2036,14 +2210,31 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
   const grade = (rgb && color) ? color : 'linear-gradient(90deg,var(--o-lampe),var(--o-lampe-b))';
   // Une entité qui n'existe plus le dit en clair : « Éteint » ferait chercher l'interrupteur.
   const sub = mort ? tr('Entité absente · vérifie l’appairage') : on ? (adjustable ? tr('{n} % de luminosité', { n: briAff }) : tr('Allumé')) : tr('Éteint');
+  // Le geste « ouvrir » : la fiche de la lampe quand elle se règle, sinon celle
+  // de l'appareil ; sans l'une ni l'autre, la carte ne s'ouvre pas.
+  const ouvre = (adjustable && onOpen) ? () => onOpen({ id, name: a.friendly_name || id, on, bri, color, rgb, ct, dimmable, lc: st && st.last_changed })
+    : onFiche ? () => onFiche(id) : null;
   return (
-    <button ref={flashRef} className={'o-light-card o-rmcard o-cvdense' + (mort ? ' o-panne' : '')} onClick={() => { if (adjustable && onOpen) onOpen({ id, name: a.friendly_name || id, on, bri, color, rgb, ct, dimmable, lc: st && st.last_changed }); else if (onFiche) onFiche(id); }}
-      style={{ ...RM_CARD, alignItems: 'stretch', textAlign: 'left', width: '100%', cursor: (adjustable || onFiche) ? 'pointer' : 'default', overflow: 'hidden',
+    /* LA LAMPE N'EST PLUS UN `button` (lot 13 de l'audit du 03/10, ADR 0074).
+     *
+     * Un bouton qui contient un interrupteur et une glissière : les deux
+     * disparaissaient d'un lecteur d'écran (`nested-interactive`, six lampes
+     * sur Objets dans la démonstration). Elle devient un `div` au même
+     * dessin : les classes restent (la CSS, l'enfoncement au doigt et le
+     * retour haptique lisent `.o-light-card`), et `lineHeight: 'normal'`
+     * reprend ce que le `button` imposait à son texte. Le geste « ouvrir »
+     * passe par le bouton de SURFACE, nommé de ce que la carte affiche :
+     * « Plafonnier, 60 % de luminosité ». La bascule et la glissière,
+     * positionnées, passent au-dessus de lui ; l'icône et le texte, non : un
+     * clic sur eux ouvre la fiche, comme avant. */
+    <div ref={flashRef} className={'o-light-card o-rmcard o-cvdense' + (mort ? ' o-panne' : '')}
+      style={{ ...RM_CARD, position: 'relative', alignItems: 'stretch', textAlign: 'left', lineHeight: 'normal', width: '100%', cursor: (adjustable || onFiche) ? 'pointer' : 'default', overflow: 'hidden',
         // Le lavis est une COUCHE posée sur la surface, jamais la surface elle-même :
         // sinon le bas de carte restait un alpha .22 sur le fond de page — faux-transparent
         // en mode opaque, et un rendu différent d'un matériau à l'autre (retour user 29/08).
         background: on && LAVIS ? `linear-gradient(180deg,transparent 28%,${hx(accent, lav(.22))}), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))',
-        border: 'none' }}>
+        border: LISERE }}>
+      {ouvre && <Surface onClick={ouvre} label={nomCarte(nom, sub)} />}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         {/* Sans halo (retour 31/08) : il noyait le carré de l'icône en rond. */}
         <span style={RM_ICO(on ? hx(accent, .3) : 'var(--o-s1)', on ? accentLu : 'var(--o-text3)')}><GlypheCarte id={id} size={19}><LightIcon type={ltype} size={19} /></GlypheCarte></span>
@@ -2057,7 +2248,7 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
           * quand la lampe ne se règle pas. */}
         <RmJauge v={adjustable ? briAff : (on ? 100 : 0)} couleur={accentLu} grade={grade} actif={adjustable} label={tr('Luminosité') + ' ' + nom} onCommit={poseBri} />
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -2093,21 +2284,36 @@ function RoomMachineCard({ id, hass, onOpen, label = null, extra = null }) {
     if (en ? (f & 2) : (f & 1)) btns.push([en ? 'pause' : 'play', en ? 'pause' : 'start_mowing', en ? tr('Pause') : tr('Lancer la tonte')]);
     if (f & 4) btns.push(['home', 'dock', tr('Renvoyer au dock')]);
   }
+  // Ce que la carte AFFICHE, son nom et la ligne dessous : la surface les
+  // reprend tels quels pour se nommer (lot 13 de l'audit du 03/10).
+  const nom = label || a.friendly_name || id;
+  const etatAff = mort ? tr('Indisponible') : etat;
   return (
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + (label || a.friendly_name || id)}
-      onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }}
-      onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default' }}>
+    /* Plus de `role="button"` autour de Démarrer, Dock et Localiser (lot 13 de
+     * l'audit du 03/10) : un rôle bouton rend sa descendance
+     * présentationnelle — un lecteur d'écran perdait les commandes, et
+     * axe-core les comptait en `nested-interactive` sur Objets. « Ouvrir la
+     * fiche » passe par la surface (ADR 0074), FRÈRE des boutons, sous le nom
+     * que la carte affiche : « Aspirateur, Sur la base », plus « Ouvrir
+     * Aspirateur ». */
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default' }}>
+      {onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(nom, etatAff)} />}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO(actif ? 'rgba(var(--o-ok-rgb),.16)' : 'var(--o-s1)', actif ? 'var(--o-ok)' : 'var(--o-text3)')}><GlypheCarte id={id} size={17}><Ico name={dom === 'vacuum' ? 'vacuum' : 'mower'} size={17} color={actif ? 'var(--o-ok)' : 'var(--o-text3)'} /></GlypheCarte></span>
         {bat != null && <span style={{ fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: bat < 20 ? 'var(--o-bad)' : bat < 50 ? 'var(--o-warn)' : 'var(--o-text2)' }}>{Math.round(bat)}%</span>}
       </div>
       <div>
-        <div style={RM_NAME}>{label || a.friendly_name || id}</div>
-        <div style={{ ...RM_SUB, color: actif ? 'var(--o-ok)' : 'var(--o-text3)' }}>{mort ? tr('Indisponible') : etat}</div>
+        <div style={RM_NAME}>{nom}</div>
+        <div style={{ ...RM_SUB, color: actif ? 'var(--o-ok)' : 'var(--o-text3)' }}>{etatAff}</div>
         {btns.length > 0 && !mort && (
+          /* Les boutons SEULS sont positionnés (RM_BTN), pas la rangée : peints
+           * après la surface, ils reçoivent leurs clics, et l'écart entre eux
+           * la laisse recevoir les siens — un appui y ouvre la fiche (relecture
+           * du lot 13). Leur nom nomme l'appareil, « Pause Tondeuse » ;
+           * l'infobulle garde le geste. */
           <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
             {btns.map(([gi, svc, lbl2], bi) => (
-              <button key={svc} title={lbl2} aria-label={lbl2} onClick={(e) => { e.stopPropagation(); call(svc); }} className="o-rmbtn"
+              <button key={svc} title={lbl2} aria-label={lbl2 + ' ' + nom} onClick={(e) => { e.stopPropagation(); call(svc); }} className="o-rmbtn"
                 style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '9px 6px', ...(bi === 0 ? { background: 'var(--o-accent-fond)', border: '1px solid transparent', color: '#fff' } : {}) }}><Fi i={gi} size={13} /></button>
             ))}
           </div>
@@ -2126,22 +2332,32 @@ function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onRempli = null, onO
   // (audit 18/09). Le service, lui, n'a pas de garde-fou.
   const verrou = useRef(0);
   const distribuer = () => { const t = Date.now(); if (t < verrou.current) return; verrou.current = t + 2500; onFeed(); };
+  /* Ni la compacte ni la standard ne sont plus un `role="button"` autour de
+   * Distribuer (lot 13 de l'audit du 03/10) : un rôle bouton rend sa
+   * descendance présentationnelle, la commande disparaissait d'un lecteur
+   * d'écran, et axe-core la comptait en `nested-interactive`. La surface
+   * (ADR 0074) porte « ouvrir la fiche » sous le nom que la carte affiche —
+   * « Distributeur, Réservoir 38 % · … », plus « Ouvrir Distributeur » — et
+   * les boutons, positionnés, passent au-dessus d'elle en nommant l'appareil. */
   // Compacte 1×1 : gabarit CvCard dense — réservoir à droite, ration en mini.
   if (chip) {
+    const ligne = prochaine || sub;
     return (
-      <div className={'o-piece o-cvdense' + (mort ? ' o-panne' : '')} role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + nom}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
-        onClick={onOpen} style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
+      <div className={'o-piece o-cvdense' + (mort ? ' o-panne' : '')}
+        style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: LISERE, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
+        {onOpen && <Surface onClick={() => onOpen()} label={nomCarte(nom, ligne)} />}
         <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-lampe-rgb),.14)', color: 'var(--o-lampe)' }}><Fi i="paw" size={15} /></span>
           <div className="o-cvtxt" style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{prochaine || sub || '—'}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ligne || '—'}</div>
           </div>
           {pct != null && <span style={{ fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums', flexShrink: 0, color: pct < 25 ? 'var(--o-bad)' : 'var(--o-text2)' }}>{pct}%</span>}
           {onFeed && (
-            <button aria-label={tr('Distribuer une ration')} onClick={(e) => { e.stopPropagation(); distribuer(); }}
-              style={{ width: 38, height: 26, borderRadius: 10, border: 'none', background: 'var(--o-accent-fond)', color: '#fff', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            /* Le bouton SEUL est positionné, pas la rangée : le nom et le
+             * réservoir restent sous la surface, un appui dessus ouvre la fiche. */
+            <button aria-label={tr('Distribuer une ration') + ' ' + nom} onClick={(e) => { e.stopPropagation(); distribuer(); }}
+              style={{ position: 'relative', width: 38, height: 26, borderRadius: 10, border: 'none', background: 'var(--o-accent-fond)', color: '#fff', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Ico name="bowl-rice" color="#fff" size={14} />
             </button>
           )}
@@ -2152,22 +2368,26 @@ function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onRempli = null, onO
   // Standard (maquettes du 14/09) : patte orange, RESERVOIR en repere, le bac
   // et le dernier repas en sous-titre, Distribuer et Rempli au pied.
   const orange = 'var(--o-orange)';
+  const ligne = sub || prochaine;
   return (
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + nom}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
-      onClick={onOpen} style={{ ...RM_CARD, cursor: 'pointer', border: 'none',
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')}
+      style={{ ...RM_CARD, position: 'relative', cursor: 'pointer', border: LISERE,
         ...(LAVIS ? { background: 'linear-gradient(180deg,transparent 28%,rgba(var(--o-orange-rgb),' + lav(.14) + ')), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))' } : null) }}>
+      {onOpen && <Surface onClick={() => onOpen()} label={nomCarte(nom, ligne)} />}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO('rgba(var(--o-orange-rgb),.16)', orange)}><Fi i="paw" size={17} /></span>
         {pct != null && <span style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: pct < 25 ? 'var(--o-bad)' : orange, marginTop: 4 }}>{pct} %</span>}
       </div>
       <div style={{ marginTop: 14 }}>
         <div style={RM_NAME}>{nom}</div>
-        <div style={{ ...RM_SUB, color: orange }}>{sub || prochaine || '—'}</div>
+        <div style={{ ...RM_SUB, color: orange }}>{ligne || '—'}</div>
         {(onFeed || onRempli) && (
+          // Les boutons au-dessus de la surface (RM_BTN), pas leur rangée,
+          // comme ceux de la machine : l'écart entre Distribuer et Rempli
+          // ouvre la fiche (relecture du lot 13).
           <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
-            {onFeed && <button className="o-rmbtn" onClick={(e) => { e.stopPropagation(); distribuer(); }} style={RM_BTN}>{tr('Distribuer')}</button>}
-            {onRempli && <button className="o-rmbtn" onClick={(e) => { e.stopPropagation(); onRempli(); }} style={RM_BTN}>{tr('Rempli')}</button>}
+            {onFeed && <button className="o-rmbtn" aria-label={tr('Distribuer') + ' ' + nom} onClick={(e) => { e.stopPropagation(); distribuer(); }} style={RM_BTN}>{tr('Distribuer')}</button>}
+            {onRempli && <button className="o-rmbtn" aria-label={tr('Rempli') + ' ' + nom} onClick={(e) => { e.stopPropagation(); onRempli(); }} style={RM_BTN}>{tr('Rempli')}</button>}
           </div>
         )}
         {extra}
@@ -2187,17 +2407,27 @@ function RoomPlantCard({ mort = false, nom, sub, hum, verdict, verdictCol, lux, 
   const filigrane = img && PLANT_ART[img] && (
     <span aria-hidden="true" style={{ position: 'absolute', right: 6, bottom: -10, width: 120, height: 120, backgroundImage: `url("${PLANT_ART[img]}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.14, pointerEvents: 'none' }} />
   );
+  /* Sans commande, la plante reste un bouton entier — rien à y enfermer.
+   * Son NOM change (lot 13 de l'audit du 03/10) : ce qu'elle affiche,
+   * « Monstera, À arroser bientôt », et non plus « Ouvrir Monstera », qui
+   * taisait le verdict (WCAG 2.5.3) ; `aria-haspopup` dit la fiche qu'elle
+   * ouvre. Sans verdict ni lieu, le tiret de l'écran ne se lit pas. */
+  /* Relecture du lot 13 : l'humidité s'affiche en chiffres (« 38% ») et le
+   * verdict n'en porte aucun — le nom la dit aussi, à sa place dans chaque
+   * gabarit : après le verdict en compacte, avant lui en standard. */
+  const humLue = hum != null ? Math.round(hum) + ' %' : null;
   // Compacte 1×1 : gabarit CvCard dense — l'humidité à la couleur du verdict.
   if (chip) {
+    const ligne = verdict || sub;
     return (
-      <div className={'o-piece o-cvdense' + (mort ? ' o-panne' : '')} role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + nom}
+      <div className={'o-piece o-cvdense' + (mort ? ' o-panne' : '')} role="button" tabIndex={0} aria-label={nomCarte(nom, ligne, humLue)} aria-haspopup="dialog"
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
-        onClick={onOpen} style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
+        onClick={onOpen} style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: LISERE, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
         <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {portrait(34)}
           <div className="o-cvtxt" style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: verdictCol || 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{verdict || sub || '—'}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: verdictCol || 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ligne || '—'}</div>
           </div>
           {hum != null && <span style={{ fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums', flexShrink: 0, color: verdictCol || 'var(--o-text2)' }}>{Math.round(hum)}%</span>}
         </div>
@@ -2214,10 +2444,12 @@ function RoomPlantCard({ mort = false, nom, sub, hum, verdict, verdictCol, lux, 
       </div>
     </div>
   );
+  // Le même nom que la compacte : ce que la carte affiche.
+  const ligne = verdict || sub;
   return (
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + nom}
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={0} aria-label={nomCarte(nom, humLue, ligne)} aria-haspopup="dialog"
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
-      onClick={onOpen} style={{ ...RM_CARD, cursor: 'pointer', position: 'relative', overflow: 'hidden', border: 'none',
+      onClick={onOpen} style={{ ...RM_CARD, cursor: 'pointer', position: 'relative', overflow: 'hidden', border: LISERE,
         ...(LAVIS ? { background: 'linear-gradient(180deg,transparent 28%,rgba(' + rgb + ',' + lav(.14) + ')), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))' } : null) }}>
       {filigrane}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -2226,7 +2458,7 @@ function RoomPlantCard({ mort = false, nom, sub, hum, verdict, verdictCol, lux, 
       </div>
       <div style={{ position: 'relative', marginTop: 14 }}>
         <div style={RM_NAME}>{nom}</div>
-        <div style={{ ...RM_SUB, color: verdictCol || 'var(--o-text3)' }}>{verdict || sub || '—'}</div>
+        <div style={{ ...RM_SUB, color: verdictCol || 'var(--o-text3)' }}>{ligne || '—'}</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px 14px', marginTop: 10 }}>
           {hum != null && jauge('raindrops', verdictCol || 'var(--o-ok)', hum, tr('Humidité') + ' ' + Math.round(hum) + ' %')}
           {lux != null && jauge('brightness', 'var(--o-warn)', lux / 10, tr('Luminosité') + ' ' + Math.round(lux) + ' lx')}
@@ -2285,16 +2517,27 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
   // reste en haut à droite, la glissière montre la position.
   const sub = mort ? tr('Indisponible') : mouvement === 'opening' ? tr('Ouverture…') : mouvement === 'closing' ? tr('Fermeture…') : ferme ? tr('Fermé') : coverOuvert(pos) ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });
   const poser = (v) => { setOv(v); commander(hass, id, 'set_position', v); };
+  /* La carte n'est plus un `role="button"` qui englobe ses commandes (lot 13
+   * de l'audit du 03/10, ADR 0074). Ce rôle rendait la glissière et les trois
+   * boutons présentationnels — un lecteur d'écran ne les voyait plus —, et son
+   * nom, « Ouvrir Volet salon », taisait l'état et prenait celui du bouton
+   * « Ouvrir », qui LÈVE le volet (WCAG 2.5.3). La fiche s'ouvre par la
+   * surface (`Surface`, ui.jsx), qui dit ce que la carte affiche : « Volet
+   * salon, Ouvert à 60 % » ; les boutons, eux, nomment l'appareil. */
   return (
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + nom} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : volet ouvert = lavis VIOLET, gradué par la position — le bleu accent restait trop proche des autres cartes.
       ...(!ferme && LAVIS ? {
         background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-purple-rgb),${lav(.10 + pos * .0012)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
       } : null),
-      // Sans bordure, comme la carte lumière : l'ombre et le lavis suffisent.
-      border: 'none' }}>
+      // Le liseré du réglage, comme toute carte (04/10).
+      border: LISERE }}>
+      {onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(nom, sub)} />}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={{ ...RM_ICO(!ferme ? 'rgba(var(--o-purple-rgb),.16)' : 'var(--o-s1)', !ferme ? 'var(--o-purple)' : 'var(--o-text3)'), position: 'relative', overflow: 'hidden' }}>
+        {/* Positionnée pour son store, l'icône passerait AU-DESSUS de la
+          * surface et garderait le clic : elle le laisse passer, et un appui
+          * sur elle ouvre la fiche, comme avant (lot 13 de l'audit du 03/10). */}
+        <span style={{ ...RM_ICO(!ferme ? 'rgba(var(--o-purple-rgb),.16)' : 'var(--o-s1)', !ferme ? 'var(--o-purple)' : 'var(--o-text3)'), position: 'relative', overflow: 'hidden', pointerEvents: 'none' }}>
           {/* store qui descend dans le chip : hauteur = part fermée, suit la position en douceur */}
           <span aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: 0, height: (100 - pos) + '%', background: 'linear-gradient(180deg,rgba(var(--o-purple-rgb),.34),rgba(var(--o-purple-rgb),.14))', transition: REDUCE_MOTION ? 'none' : 'height .7s cubic-bezier(.22,.61,.36,1)', pointerEvents: 'none' }} />
           <GlypheCarte id={id} size={18}><Ico name={(a.device_class === 'garage' || a.device_class === 'gate') ? 'garage' : 'blinds'} size={18} /></GlypheCarte></span>
@@ -2305,10 +2548,15 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
         <div style={{ ...RM_SUB, color: !ferme && !mort ? 'var(--o-purple)' : 'var(--o-text3)' }}>{sub}</div>
         <RmJauge v={pos} couleur="var(--o-purple)" grade="linear-gradient(90deg,rgba(var(--o-purple-rgb),.75),var(--o-purple))" actif={!mort} label={tr('Position') + ' ' + nom} onCommit={poser} />
         {/* Les mêmes trois gestes que la carte compacte : ouvrir, stop, fermer — la glissière règle le reste. */}
+        {/* Les boutons SEULS sont positionnés (RM_BTN), pas la rangée : peints
+          * après la surface, ils reçoivent leurs clics, et l'écart entre deux
+          * ouvre la fiche (relecture du lot 13). Leur nom commence par
+          * le mot de leur bulle et nomme le volet : « Ouvrir Volet salon » est
+          * ce bouton-ci, plus jamais la carte (lot 13 de l'audit du 03/10). */}
         <div style={{ display: 'flex', gap: 8, marginTop: 9 }}>
-          <button aria-label={tr('Ouvrir')} title={tr('Ouvrir')} onClick={(e) => { e.stopPropagation(); setOv(100); commander(hass, id, 'open'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 6px' }}><Fi i="angle-up" size={14} /></button>
-          <button aria-label={tr('Stop')} title={tr('Stop')} onClick={(e) => { e.stopPropagation(); commander(hass, id, 'stop'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 6px' }}><Fi i="square" size={12} /></button>
-          <button aria-label={tr('Fermer')} title={tr('Fermer')} onClick={(e) => { e.stopPropagation(); setOv(0); commander(hass, id, 'close'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 6px' }}><Fi i="angle-down" size={14} /></button>
+          <button aria-label={tr('Ouvrir') + ' ' + nom} title={tr('Ouvrir')} onClick={(e) => { e.stopPropagation(); setOv(100); commander(hass, id, 'open'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 6px' }}><Fi i="angle-up" size={14} /></button>
+          <button aria-label={tr('Stop') + ' ' + nom} title={tr('Stop')} onClick={(e) => { e.stopPropagation(); commander(hass, id, 'stop'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 6px' }}><Fi i="square" size={12} /></button>
+          <button aria-label={tr('Fermer') + ' ' + nom} title={tr('Fermer')} onClick={(e) => { e.stopPropagation(); setOv(0); commander(hass, id, 'close'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 6px' }}><Fi i="angle-down" size={14} /></button>
         </div>
       </div>
     </div>
@@ -2326,6 +2574,9 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
 // Bornes de REPLI du cadran du radiateur fil pilote : une entite qui publie
 // les siennes fait foi.
 const RM_TMIN = 5, RM_TMAX = 30;
+// Un bouton ± sans consigne a regler garde sa place — la carte garde son
+// gabarit — mais s'efface et ne repond plus (audit du 03/10).
+const RM_INERTE = { opacity: .4, cursor: 'default' };
 function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
@@ -2333,16 +2584,22 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
   // propose pas de consigne en Celsius sur un thermostat regle en Fahrenheit) :
   // seul le symbole affiche etait fige en dur.
   const uT = uniteTemp(a, hass);
-  const realTarget = a.temperature != null ? a.temperature : 20;
+  /* Pas de consigne inventee (audit du 03/10). En `heat_cool`, et a l'arret
+   * chez bien des integrations, `temperature` vaut null : la carte retombait
+   * sur 20, et le « + » ENVOYAIT 20,5 — une consigne que personne n'avait
+   * choisie. Rien de lisible = « — » et des boutons inertes, comme la
+   * compacte ; `src/consigne.js` dit pourquoi la plage ne se pilote pas ici. */
+  const realTarget = consigneClimat(a);
   const etatSt = st && st.state;
   const [ov, setOv] = useOptimiste([realTarget, etatSt].join('|'));
   const target = ov != null ? ov : realTarget;
+  const reglable = target != null;
   const mode = st ? st.state : 'off';
   const off = mode === 'off';
   const mort = !st || st.state === 'unavailable';
   const heating = a.hvac_action === 'heating';
   const cooling = a.hvac_action === 'cooling';
-  const all = a.hvac_modes || ['off', 'heat'];
+  const all = modesClimat(a, ['off', 'heat']);
   // Bascule optimiste, comme la lampe : arrêt ↔ le mode de marche de l'entité.
   const [ovOn, setOvOn] = useOptimiste(etatSt);
   const marche = ovOn != null ? ovOn : !off;
@@ -2353,20 +2610,26 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
   // l'installation d'essai monte a 35, la ou le code plafonnait a 30. Le pas
   // aussi lui appartient. On affiche ce qui a ete envoye, pas ce qui a ete
   // demande — sinon la consigne affichee mentirait des qu'elle est bornee.
-  const setT = (d) => { const v = commander(hass, id, 'set_temperature', target + d, 'temperature'); if (v != null) setOv(v); };
+  // Sans consigne lisible, rien ne part : un « + » sur du vide n'est pas 20,5.
+  const setT = (d) => { if (!reglable) return; const v = commander(hass, id, 'set_temperature', target + d, 'temperature'); if (v != null) setOv(v); };
   // Nom SOUS l'icône, état en sous-titre (maquettes du 14/09) : « Chauffe ·
   // consigne 19,0 °C ». Le gros chiffre vit dans la fiche.
   // La consigne, entre les deux boutons qui la bougent : « 19 °C », « 19,5 °C ».
-  const consigne = decMax(Number(target), 1) + ' °' + uT;
+  const consigne = target != null ? decMax(Number(target), 1) + ' °' + uT : '—';
   const sub = mort ? tr('Indisponible') : !marche ? tr('Éteint') : heating ? tr('Chauffe') : cooling ? tr('Refroidit') : tr('Au repos');
+  /* Plus de `role="button"` autour de l'interrupteur et des − / + (lot 13 de
+   * l'audit du 03/10, ADR 0074) : la fiche s'ouvre par la surface, nommée de
+   * ce que la carte affiche (« Thermostat salon, Chauffe »). Voir la carte du
+   * volet, juste au-dessus. */
   return (
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + nom} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : la carte rougeoie pendant la chauffe, pas au simple mode.
       ...(heating && LAVIS ? {
         background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-bad-rgb),${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
       } : null),
-      // Sans bordure, comme lumière et volet.
-      border: 'none' }}>
+      // Le liseré du réglage, comme lumière et volet (04/10).
+      border: LISERE }}>
+      {onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(nom, sub)} />}
       {/* Allumé = ROUGE (retour d'essai) : l'ambre warn2 rendait jaune. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO(marche && !mort ? 'rgba(var(--o-bad-rgb),.14)' : 'var(--o-s1)', marche && !mort ? 'var(--o-bad)' : 'var(--o-text3)')}><GlypheCarte id={id} size={17}><Fi i={heating ? 'flame' : 'thermometer-half'} size={17} /></GlypheCarte></span>
@@ -2375,10 +2638,18 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
       <div style={{ marginTop: 14 }}>
         <div style={RM_NAME}>{nom}</div>
         <div style={{ ...RM_SUB, color: (heating || cooling) && !mort ? 'var(--o-bad)' : 'var(--o-text3)' }}>{sub}</div>
+        {/* − et + SEULS sont positionnés (RM_BTN), pas leur rangée : la
+          * consigne et les écarts restent sous la surface, un appui sur « 19 °C »
+          * ouvre la fiche, comme avant (relecture du lot 13). − et + reçoivent
+          * leurs clics, et nomment le thermostat. La consigne se LIT : un
+          * `aria-label` sur un <span> sans rôle est interdit (ARIA 1.2) et,
+          * honoré ou non selon le lecteur, il cachait « 19 °C » sous
+          * « Consigne ». Le mot passe en texte masqué, le chiffre reste ce que
+          * l'on voit (lot 13 de l'audit du 03/10). */}
         <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
-          <button aria-label={tr('Baisser la consigne')} onClick={(e) => { e.stopPropagation(); setT(-0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px' }}>−</button>
-          <span aria-label={tr('Consigne')} style={{ flex: '0 0 auto', minWidth: 58, alignSelf: 'center', textAlign: 'center', fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', color: marche ? 'var(--o-text)' : 'var(--o-text2)' }}>{consigne}</span>
-          <button aria-label={tr('Monter la consigne')} onClick={(e) => { e.stopPropagation(); setT(0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px' }}>+</button>
+          <button aria-label={tr('Baisser la consigne') + ' ' + nom} disabled={!reglable} onClick={(e) => { e.stopPropagation(); setT(-0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px', ...(reglable ? null : RM_INERTE) }}>−</button>
+          <span style={{ flex: '0 0 auto', minWidth: 58, alignSelf: 'center', textAlign: 'center', fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', color: marche ? 'var(--o-text)' : 'var(--o-text2)' }}><span className="o-vh">{tr('Consigne') + ' '}</span>{consigne}</span>
+          <button aria-label={tr('Monter la consigne') + ' ' + nom} disabled={!reglable} onClick={(e) => { e.stopPropagation(); setT(0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px', ...(reglable ? null : RM_INERTE) }}>+</button>
         </div>
       </div>
     </div>
@@ -2409,10 +2680,19 @@ function zoneModes(S, zone) {
   if (!zone) return [];
   if (estClimate(zone)) {
     const st = S && S[zone.haid];
-    const m = st && st.attributes && st.attributes.hvac_modes;
-    return Array.isArray(m) ? m.filter(x => typeof x === 'string' && x) : [];
+    return modesClimat(st && st.attributes, []);
   }
   return pilotOptions(S, zone.modeEnt);
+}
+
+/** Les modes HVAC d'un `climate`, filtrés : des mots, rien d'autre. Une
+ * seule règle pour la carte, la fiche, l'Accueil et zoneModes (lot 16,
+ * 05/10) : carte et fiche lisaient `hvac_modes` brut — une chaîne faisait
+ * tomber la vue (`all.map`), un `null` dessinait une puce vide. Une liste
+ * vide reste vide ; seule une non-liste prend le repli. */
+function modesClimat(attrs, repli) {
+  const m = attrs && attrs.hvac_modes;
+  return Array.isArray(m) ? m.filter(x => typeof x === 'string' && x) : repli;
 }
 
 /** Un `climate` se pilote par ses modes HVAC ; le reste par son `input_select`. */
@@ -2421,12 +2701,29 @@ function estClimate(zone) {
     || String(zone.haid || '').indexOf('climate.') === 0);
 }
 
-/** Le mot affiche pour un mode. Home Assistant traduit les modes HVAC dans
- * toutes ses langues ; les options d'un `input_select` sont deja des mots
- * choisis par l'utilisateur, on ne les touche pas. */
+/** Le mot d'un mode HVAC, pour les deux fiches qui en montrent — le fil
+ * pilote et le thermostat (audit du 03/10). Celui de Home Assistant d'abord :
+ * il traduit les modes dans toutes ses langues, et c'est le mot que
+ * l'utilisateur lit partout ailleurs. Sans lui — la démo, une langue choisie
+ * dont les ressources n'ont pas encore répondu —, celui de Loggia.
+ *
+ * La fiche du thermostat avait sa table à elle, sans Home Assistant, et sa
+ * clé « Froid » servait aussi la jauge de température (16 °C) et le blanc de
+ * 6 500 K, « Sec » la jauge d'humidité : l'allemand, qui les avait traduites
+ * en modes, écrivait « Kühlen » sous 16 °C. Ici « Froid » et « Sec » ne sont
+ * plus que des modes ; la sensation a ses clés (`trSens`, confort.js). */
+function motModeClimat(mode) {
+  const ha = trHA('component.climate.entity_component._.state.' + mode);
+  if (ha) return ha;
+  const loggia = { off: tr('Arrêt'), heat: tr('Chauffage'), cool: tr('Froid'), auto: tr('Auto'), heat_cool: tr('Auto'), dry: tr('Sec'), fan_only: tr('Ventil') };
+  return Object.prototype.hasOwnProperty.call(loggia, mode) ? loggia[mode] : mode;
+}
+
+/** Le mot affiche pour un mode. Les options d'un `input_select` sont deja des
+ * mots choisis par l'utilisateur, on ne les touche pas. */
 function zoneModeLabel(zone, mode) {
   if (!estClimate(zone)) return mode;
-  return trHA('component.climate.entity_component._.state.' + mode) || mode;
+  return motModeClimat(mode);
 }
 
 /* La FAMILLE d'un mode, devinee sur son nom, pour choisir une couleur et une
@@ -2445,13 +2742,18 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
   const z = readZone(S, zone);
   const uT = uniteTemp(null, hass);
   const [ov, setOv] = useOptimiste([z.target, z.mode].join('|'));
-  const target = ov != null ? ov : (z.target != null ? z.target : Math.round(deCelsius(19, uT)));
+  /* Pas de 19 invente (audit du 03/10) : un `input_number` absent ou
+   * indisponible laisse la consigne VIDE — « — » et des boutons inertes —
+   * au lieu d'afficher 19 et d'envoyer 19,5 au premier « + ». Sans entite
+   * de consigne, rien a regler non plus : l'appel partait vers personne. */
+  const target = ov != null ? ov : (z.target != null ? z.target : null);
+  const reglable = target != null && !!zone.tempCible;
   const off = z.mode === 'off';
-  const heating = !off && z.current != null && z.current < target;
+  const heating = !off && z.current != null && target != null && z.current < target;
   const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
   // Bornes de repli en Celsius (RM_TMIN/RM_TMAX), reconverties vers l'unite reelle :
   // aucune entite ne borne un input_number, rien d'autre ne protege ce cadran.
-  const setT = (d) => { const v = Math.max(deCelsius(RM_TMIN, uT), Math.min(deCelsius(RM_TMAX, uT), Math.round((target + d) * 2) / 2)); setOv(v); call('input_number', 'set_value', { entity_id: zone.tempCible, value: v }); };
+  const setT = (d) => { const v = pasConsigne(target, d, deCelsius(RM_TMIN, uT), deCelsius(RM_TMAX, uT)); if (v == null || !reglable) return; setOv(v); call('input_number', 'set_value', { entity_id: zone.tempCible, value: v }); };
   const options = zoneModes(S, zone);
   const poserMode = (m) => {
     if (estClimate(zone)) commander(hass, zone.haid, 'set_hvac_mode', m);
@@ -2467,14 +2769,21 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
   const nom = titre || zone.name;
   const mort = !!(estClimate(zone) && (!S || !S[zone.haid] || S[zone.haid].state === 'unavailable'));
   // La consigne, entre les deux boutons qui la bougent : « 19 °C », « 19,5 °C ».
-  const consigne = decMax(Number(target), 1) + ' °' + uT;
+  const consigne = target != null ? decMax(Number(target), 1) + ' °' + uT : '—';
   const sub = !marche ? tr('Éteint') : heating ? tr('Chauffe') : tr('Au repos');
   return (
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + nom} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(zone.id); } }} onClick={() => onOpen && onOpen(zone.id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
+    /* Même structure que le thermostat (lot 13 de l'audit du 03/10, ADR
+     * 0074) : la surface ouvre la fiche de la zone et dit ce que la carte
+     * affiche (« Chambre, Au repos ») ; l'interrupteur, déjà positionné, et les
+     * boutons − / + — eux seuls, pas leur rangée (relecture du lot 13) —
+     * passent au-dessus d'elle. La pastille AUTO et la consigne, du texte,
+     * restent dessous : un appui sur elles ouvre la fiche, comme avant. */
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
       ...(heating && marche && LAVIS ? {
         background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-bad-rgb),${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
       } : null),
-      border: 'none' }}>
+      border: LISERE }}>
+      {onOpen && <Surface onClick={() => onOpen(zone.id)} label={nomCarte(nom, sub)} />}
       {/* Climat = ROUGE, comme le thermostat : l'ambre rendait jaune. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO(marche ? 'rgba(var(--o-bad-rgb),.14)' : 'var(--o-s1)', marche ? 'var(--o-bad)' : 'var(--o-text3)')}><GlypheCarte id={'zone:' + zone.id} size={17}><Fi i={heating && marche ? 'flame' : 'thermometer-half'} size={17} /></GlypheCarte></span>
@@ -2487,9 +2796,9 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
         <div style={RM_NAME}>{nom}</div>
         <div style={{ ...RM_SUB, color: heating && marche ? 'var(--o-bad)' : 'var(--o-text3)' }}>{sub}</div>
         <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
-          <button aria-label={tr('Baisser la consigne')} onClick={(e) => { e.stopPropagation(); setT(-0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px' }}>−</button>
-          <span aria-label={tr('Consigne')} style={{ flex: '0 0 auto', minWidth: 58, alignSelf: 'center', textAlign: 'center', fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', color: marche ? 'var(--o-text)' : 'var(--o-text2)' }}>{consigne}</span>
-          <button aria-label={tr('Monter la consigne')} onClick={(e) => { e.stopPropagation(); setT(0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px' }}>+</button>
+          <button aria-label={tr('Baisser la consigne') + ' ' + nom} disabled={!reglable} onClick={(e) => { e.stopPropagation(); setT(-0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px', ...(reglable ? null : RM_INERTE) }}>−</button>
+          <span style={{ flex: '0 0 auto', minWidth: 58, alignSelf: 'center', textAlign: 'center', fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', color: marche ? 'var(--o-text)' : 'var(--o-text2)' }}><span className="o-vh">{tr('Consigne') + ' '}</span>{consigne}</span>
+          <button aria-label={tr('Monter la consigne') + ' ' + nom} disabled={!reglable} onClick={(e) => { e.stopPropagation(); setT(0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px', ...(reglable ? null : RM_INERTE) }}>+</button>
         </div>
       </div>
     </div>
@@ -2501,51 +2810,59 @@ function RoomPilotSheet({ zone, hass, onClose }) {
   const z = readZone(S, zone);
   const uT = uniteTemp(null, hass);
   const [ov, setOv] = useOptimiste([z.target, z.mode, z.auto].join('|'));
-  const target = ov != null ? ov : (z.target != null ? z.target : Math.round(deCelsius(19, uT)));
+  // Meme regle que la carte (audit du 03/10) : pas de 19 invente, ni au
+  // cadran ni dans l'appel du premier « + ».
+  const target = ov != null ? ov : (z.target != null ? z.target : null);
+  const reglable = target != null && !!zone.tempCible;
   const off = z.mode === 'off';
-  const heating = !off && z.current != null && z.current < target;
+  const heating = !off && z.current != null && target != null && z.current < target;
   const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
   const tMinReel = deCelsius(RM_TMIN, uT), tMaxReel = deCelsius(RM_TMAX, uT);
-  const setT = (d) => { const v = Math.max(tMinReel, Math.min(tMaxReel, Math.round((target + d) * 2) / 2)); setOv(v); call('input_number', 'set_value', { entity_id: zone.tempCible, value: v }); };
+  const setT = (d) => { const v = pasConsigne(target, d, tMinReel, tMaxReel); if (v == null || !reglable) return; setOv(v); call('input_number', 'set_value', { entity_id: zone.tempCible, value: v }); };
   // La température vécue : le capteur de la zone s'il existe (état numérique, requête légère),
   // sinon l'attribut current_temperature du climate.
   const ptsTemp = useHistorique24(hass, zone.tempSensor || (estClimate(zone) ? zone.haid : null), zone.tempSensor ? null : 'current_temperature');
-  const pct = Math.max(0, Math.min(1, (target - tMinReel) / (tMaxReel - tMinReel)));
+  const pct = target == null ? 0 : Math.max(0, Math.min(1, (target - tMinReel) / (tMaxReel - tMinReel)));
   const R = 54, ARC = 2 * Math.PI * R * 0.75;
-  const col = off ? 'var(--o-text3)' : 'var(--o-warn)';
+  /* Même définition que RoomPilotCard (05/10). Thermostat mort, la fiche
+   * disait « AU REPOS » en ambre et ses puces de mode (`hvac_modes` survit à
+   * la panne) envoyaient `set_hvac_mode` dans le vide. Le liseré fait le tour
+   * du cadran. */
+  const mort = !!(estClimate(zone) && (!S || !S[zone.haid] || S[zone.haid].state === 'unavailable'));
+  const col = off || mort ? 'var(--o-text3)' : 'var(--o-warn)';
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text2)' }}><Fi i="thermometer-half" size={13} color="var(--o-orange)" />{zone.name.toUpperCase()}</span>
+          <NomFeuille><span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text2)' }}><Fi i="thermometer-half" size={13} color="var(--o-orange)" />{zone.name.toUpperCase()}</span></NomFeuille>
           {estClimate(zone) && <BoutonEpingle id={zone.haid} />}
           {zone.autoEnt && <span onClick={() => call('input_boolean', z.auto ? 'turn_off' : 'turn_on', { entity_id: zone.autoEnt })} role="switch" tabIndex={0} aria-label={z.auto ? tr('Désactiver la programmation automatique') : tr('Activer la programmation automatique')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('input_boolean', z.auto ? 'turn_off' : 'turn_on', { entity_id: zone.autoEnt }); } }} aria-checked={!!z.auto} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}><span style={{ fontSize: 12, fontWeight: 700, color: z.auto ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>{tr('Auto')}</span><span style={{ width: 42, height: 24, borderRadius: 14, background: z.auto ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: z.auto ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} /></span></span>}
           <CroixFeuille />
         </div>
-        <div style={{ position: 'relative', width: 230, height: 230, margin: '10px auto 0' }}>
+        <div className={mort ? 'o-panne' : undefined} style={{ position: 'relative', width: 230, height: 230, margin: '10px auto 0', borderRadius: mort ? '50%' : undefined }}>
           <svg width="230" height="230" viewBox="0 0 130 130" style={{ position: 'absolute', inset: 0, transform: 'rotate(135deg)' }}>
             <circle cx="65" cy="65" r={R} fill="none" stroke="var(--o-bd1)" strokeWidth="10" strokeLinecap="round" strokeDasharray={`${ARC} 999`} />
             <circle cx="65" cy="65" r={R} fill="none" stroke={col} strokeWidth="10" strokeLinecap="round" strokeDasharray={`${ARC * pct} 999`} style={{ transition: 'stroke-dasharray .35s' }} />
           </svg>
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ fontSize: 46, fontWeight: 800, letterSpacing: '-.02em', color: off ? 'var(--o-text3)' : 'var(--o-text)', lineHeight: 1 }}>{target.toFixed(1)}<span style={{ fontSize: 25 }}>°</span></div>
-            {z.current != null && <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 5 }}>actuel {z.current}°</div>}
-            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', marginTop: 6, color: off ? 'var(--o-text3)' : heating ? 'var(--o-warn2)' : 'var(--o-warn)' }}>{off ? tr('ÉTEINT') : heating ? tr('CHAUFFE') : tr('AU REPOS')}</div>
+            <div style={{ fontSize: 46, fontWeight: 800, letterSpacing: '-.02em', color: off ? 'var(--o-text3)' : 'var(--o-text)', lineHeight: 1 }}>{target != null ? <>{dec(target, 1)}<span style={{ fontSize: 25 }}>°</span></> : '—'}</div>
+            {z.current != null && <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 5 }}>{tr('actuel {n}°', { n: decMax(z.current, 1) })}</div>}
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', marginTop: 6, textTransform: 'uppercase', color: off || mort ? 'var(--o-text3)' : heating ? 'var(--o-warn2)' : 'var(--o-warn)' }}>{mort ? tr('Indisponible') : off ? tr('ÉTEINT') : heating ? tr('CHAUFFE') : tr('AU REPOS')}</div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, margin: '10px 0 18px' }}>
-          <button onClick={() => setT(-0.5)} style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 19, fontWeight: 700, cursor: 'pointer' }}>−</button>
+          <button aria-label={tr('Baisser la consigne')} disabled={!reglable} onClick={() => setT(-0.5)} style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 19, fontWeight: 700, cursor: 'pointer', ...(reglable ? null : RM_INERTE) }}>−</button>
           <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', textAlign: 'center', lineHeight: 1.35 }}>{tr('± par')}<br />{tr('pas de 0,5°')}</span>
-          <button onClick={() => setT(0.5)} style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 19, fontWeight: 700, cursor: 'pointer' }}>+</button>
+          <button aria-label={tr('Monter la consigne')} disabled={!reglable} onClick={() => setT(0.5)} style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 19, fontWeight: 700, cursor: 'pointer', ...(reglable ? null : RM_INERTE) }}>+</button>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          {zoneModes(S, zone).map((opt) => { const on = z.modeBrut === opt; return (
+          {!mort && zoneModes(S, zone).map((opt) => { const on = z.modeBrut === opt; return (
             <button key={opt} onClick={() => { if (estClimate(zone)) commander(hass, zone.haid, 'set_hvac_mode', opt); else call('input_select', 'select_option', { entity_id: zone.modeEnt, option: opt }); }} style={{ flex: 1, padding: '12px 8px', borderRadius: 14, cursor: 'pointer', fontWeight: 700, fontSize: 12, border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>{zoneModeLabel(zone, opt)}</button>
           ); })}
         </div>
         {/* Préréglage du thermostat (Turbo, Comfort, Overnight…) : le sélecteur
           * de la fiche native — les noms viennent de l'entité. */}
-        {estClimate(zone) && (() => { const at = (S && S[zone.haid] && S[zone.haid].attributes) || {}; return Array.isArray(at.preset_modes) && at.preset_modes.length > 0 && (
+        {estClimate(zone) && !mort && (() => { const at = (S && S[zone.haid] && S[zone.haid].attributes) || {}; return Array.isArray(at.preset_modes) && at.preset_modes.length > 0 && (
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
             <MenuDeroulant icone="settings-sliders" etiquette={tr('Préréglage')} valeur={at.preset_mode && at.preset_mode !== 'unknown' ? at.preset_mode : null}
               options={at.preset_modes.slice(0, 10)} surChoix={(p) => commander(hass, zone.haid, 'set_preset_mode', p)} />
@@ -2668,7 +2985,7 @@ function FeuilleHistorique({ entrees, onRestaurer, onOublier, onClose }) {
       {(close) => (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-            <span style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 800, letterSpacing: '-.01em' }}>{tr('Historique des mises en page')}</span>
+            <NomFeuille><span style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 800, letterSpacing: '-.01em' }}>{tr('Historique des mises en page')}</span></NomFeuille>
             {entrees.length > 0 && (
               <button onClick={() => { onOublier(); close(); }} style={editBtn(false)}>{tr('Tout oublier')}</button>
             )}
@@ -2753,6 +3070,9 @@ function PhraseAlexa({ id, cible, hass, onGarder }) {
     <div style={{ marginTop: 14 }}>
       <label htmlFor={'o-alexa-' + id} style={{ display: 'block', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '0 2px 7px' }}>{tr('DIRE À ALEXA')}</label>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* `control-has-associated-label` ne suit pas `htmlFor` : l'étiquette
+          * est juste au-dessus et désigne le champ par son identifiant (05/10). */}
+        {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
         <input id={'o-alexa-' + id} value={texte} onChange={(e) => setTexte(e.target.value)} spellCheck={false}
           onKeyDown={(e) => { if (e.key === 'Enter') envoyer(); }}
           placeholder={tr('mets ma playlist du soir')}
@@ -2898,7 +3218,7 @@ function NavigateurMedias({ id, hass, onClose }) {
             </button>
           )}
           <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: 'block', fontSize: 15, fontWeight: 800, letterSpacing: '-.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{niveau.titre}</span>
+            <NomFeuille><span style={{ display: 'block', fontSize: 15, fontWeight: 800, letterSpacing: '-.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{niveau.titre}</span></NomFeuille>
             {pile.length > 1 && <span style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--o-text1)', opacity: .82, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pile.slice(0, -1).map(x => x.titre).join(' · ')}</span>}
           </span>
           <CroixFeuille />
@@ -3176,11 +3496,19 @@ function RoomMediaSheet({ id, hass, onClose }) {
   const [revFavoris, setRevFavoris] = useState(0);
   const S = (hass && hass.states) || null;
   const np = mpRead(S, id);
+  /* Même définition que RoomMediaCard (05/10). Mort, le lecteur disait « Rien
+   * en lecture », volume 0 %, et ses neuf commandes partaient dans le vide. Le
+   * liseré va sur la pochette, la tuile de l'appareil — comme l'image de
+   * CamSheet. */
+  const mort = !S || !S[id] || S[id].state === 'unavailable';
   const [, tick] = useState(0);
   useEffect(() => { if (!np.playing) return; const iv = setInterval(() => tick(n => n + 1), 1000); return () => clearInterval(iv); }, [np.playing]);
   const [artErr, setArtErr] = useState(null);
   useEffect(() => { if (!artErr) return; const t = setTimeout(() => setArtErr(null), 8000); return () => clearTimeout(t); }, [artErr]);
-  const artOk = np.art && np.art !== artErr;
+  /* Mort, pas de pochette (05/10) : le liseré impose `overflow: visible` à la
+   * tuile, l'image y perdrait ses coins arrondis — et le fond flouté parlerait
+   * d'un morceau que le lecteur ne joue plus. */
+  const artOk = !mort && np.art && np.art !== artErr;
   const [acc, setAcc] = useState(null);
   useEffect(() => { let alive = true; if (!artOk) { setAcc(null); return; } extractNpAccent(np.art).then(v => { if (alive) setAcc(v); }); return () => { alive = false; }; }, [np.art, artOk]);
   const accR = acc ? acc.join(',') : null;
@@ -3236,13 +3564,13 @@ function RoomMediaSheet({ id, hass, onClose }) {
           </>}
           <div style={{ position: 'relative', padding: '30px 22px 20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-              <span style={{ flex: 1, fontSize: 12, fontWeight: 800, color: tSub, letterSpacing: '.03em' }}>{(medPlayers().find(p => p.haid === id) || {}).name || (((S && S[id]) || {}).attributes || {}).friendly_name || id}</span>
+              <NomFeuille><span style={{ flex: 1, fontSize: 12, fontWeight: 800, color: tSub, letterSpacing: '.03em' }}>{(medPlayers().find(p => p.haid === id) || {}).name || (((S && S[id]) || {}).attributes || {}).friendly_name || id}</span></NomFeuille>
               <BoutonEpingle id={id} />
               {np.source && <span style={{ padding: '3px 10px', borderRadius: 999, background: 'rgba(255,255,255,.94)', color: '#15181f', fontSize: 11, fontWeight: 800 }}>{np.source}</span>}
               <CroixFeuille style={onArt ? { background: 'rgba(255,255,255,.16)', color: tMain } : null} />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div style={{ position: 'relative', width: 96, height: 96, flexShrink: 0, borderRadius: 18, overflow: 'hidden', background: 'linear-gradient(135deg,var(--o-purple),var(--o-accent) 65%,var(--o-ok))', boxShadow: '0 14px 32px rgba(0,0,0,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div className={mort ? 'o-panne' : undefined} style={{ position: 'relative', width: 96, height: 96, flexShrink: 0, borderRadius: 18, overflow: 'hidden', background: 'linear-gradient(135deg,var(--o-purple),var(--o-accent) 65%,var(--o-ok))', boxShadow: '0 14px 32px rgba(0,0,0,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {/* `onError` n'est pas une interaction : c'est le repli quand la pochette
                   * ne charge pas. La regle vise les clics poses sur un element inerte. */}
                 {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
@@ -3250,11 +3578,12 @@ function RoomMediaSheet({ id, hass, onClose }) {
                 {!artOk && <Fi i={/^(video|tvshow|movie|episode|channel)$/.test(np.mtype || '') ? 'tv-music' : 'music'} size={30} color="rgba(255,255,255,.92)" />}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 19, fontWeight: 800, color: tMain, lineHeight: 1.25, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{np.title || (np.playing ? tr('En lecture') : np.on ? tr('En pause') : tr('Rien en lecture'))}</div>
+                <div style={{ fontSize: 19, fontWeight: 800, color: mort ? 'var(--o-text3)' : tMain, lineHeight: 1.25, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{mort ? tr('Indisponible') : np.title || (np.playing ? tr('En lecture') : np.on ? tr('En pause') : tr('Rien en lecture'))}</div>
                 <div style={{ fontSize: 13, color: tSub, fontWeight: 600, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[np.artist, np.album].filter(Boolean).join(' · ') || '—'}</div>
               </div>
             </div>
-            {/* progression */}
+            {/* progression — et tout ce qui commande le lecteur, absent s'il est mort */}
+            {!mort && <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: tDim, minWidth: 32 }}>{fmtT(showPos)}</span>
               {/* Un curseur pour le clavier aussi (ADR 0068), par l'aide de la
@@ -3305,6 +3634,7 @@ function RoomMediaSheet({ id, hass, onClose }) {
                 justifyContent: 'center', gap: 9, fontSize: 13, fontWeight: 700 }}>
               <Fi i="folder" size={14} />{tr('Parcourir')}
             </button>
+            </>}
           </div>
         </div>
       </>)}
@@ -3339,13 +3669,23 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
   // 14/09) — et 15 px, pas 18 : « trop gros » (meme jour).
   const btn = { ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '7px 6px', lineHeight: 1 };
   return (
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={onOpen ? 0 : -1} aria-label={tr('Ouvrir') + ' ' + nom} onKeyDown={(e) => { if (onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen && onOpen(id)} style={{ ...RM_CARD, cursor: onOpen ? 'pointer' : 'default',
+    /* La carte n'est plus un `role="button"` qui englobe ses commandes (lot 13
+     * de l'audit du 03/10, ADR 0074). Un rôle bouton rend sa descendance
+     * présentationnelle : la bascule, le volume et les trois boutons de
+     * lecture disparaissaient d'un lecteur d'écran (`nested-interactive`).
+     * « Ouvrir » passe par la `Surface`, frère des commandes, qui porte ce que
+     * la carte AFFICHE — « Enceinte salon, En pause » — et non plus « Ouvrir
+     * Enceinte salon », qui taisait l'état (WCAG 2.5.3). `position: relative`
+     * pour qu'elle couvre la carte ; rien ne bouge à l'œil. */
+    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : un lecteur EN LECTURE lave sa surface de rose, comme la
       // lumière de son or — l'activité se voit avant de lire le titre.
       ...(np.playing && LAVIS ? {
         background: `linear-gradient(180deg,transparent 28%,${hx(RM_ROSE, lav(.14))}), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
       } : null),
-      border: 'none' }}>
+      border: LISERE }}>
+      {/* Le nom est `texte`, la ligne d'état affichée sous le nom : la même variable. */}
+      {onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(nom, texte)} />}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={{ ...RM_ICO(marche ? hx(RM_ROSE, .18) : 'var(--o-s1)', marche ? RM_ROSE : 'var(--o-text3)'), overflow: 'hidden' }}>
           {/* `onError` n'est pas une interaction : c'est le repli quand la pochette
@@ -3359,10 +3699,17 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
         <div style={RM_NAME}>{nom}</div>
         <div style={{ ...RM_SUB, color: marche && np.title ? RM_ROSE : 'var(--o-text3)' }}>{texte}</div>
         {vol != null && <RmJauge v={volAff} couleur={RM_ROSE} actif={!mort} label={tr('Volume') + ' ' + nom} onCommit={poserVol} />}
+        {/* Les boutons SEULS sont positionnés (`btn` hérite de RM_BTN), pas la
+          * rangée : peints après la surface, ils reçoivent leurs clics, et
+          * l'écart entre deux ouvre la fiche (relecture du lot 13). Leur nom dit
+          * l'appareil : trois lecteurs sur Objets, c'étaient trois « Piste
+          * suivante » qu'une synthèse vocale ne distinguait pas. « Lire » et non
+          * « Lecture » : c'est un geste, et « Lecture » est l'ÉTAT écrit sur la
+          * carte (« Playing » en anglais). Lot 13 de l'audit du 03/10. */}
         <div style={{ display: 'flex', gap: 8, marginTop: vol != null ? 9 : 11 }}>
-          <button aria-label={tr('Piste précédente')} title={tr('Piste précédente')} onClick={(e) => { e.stopPropagation(); call('media_previous_track', null, np.ctl); }} className="o-rmbtn" style={btn}><Fi i="angle-double-left" size={15} /></button>
-          <button aria-label={np.playing ? tr('Mettre en pause') : tr('Lecture')} title={np.playing ? tr('Mettre en pause') : tr('Lecture')} onClick={(e) => { e.stopPropagation(); call('media_play_pause', null, np.ctl); }} className="o-rmbtn" style={btn}><Fi i={np.playing ? 'pause' : 'play'} size={14} /></button>
-          <button aria-label={tr('Piste suivante')} title={tr('Piste suivante')} onClick={(e) => { e.stopPropagation(); call('media_next_track', null, np.ctl); }} className="o-rmbtn" style={btn}><Fi i="angle-double-right" size={15} /></button>
+          <button aria-label={tr('Piste précédente') + ' ' + nom} title={tr('Piste précédente')} onClick={(e) => { e.stopPropagation(); call('media_previous_track', null, np.ctl); }} className="o-rmbtn" style={btn}><Fi i="angle-double-left" size={15} /></button>
+          <button aria-label={(np.playing ? tr('Mettre en pause') : tr('Lire')) + ' ' + nom} title={np.playing ? tr('Mettre en pause') : tr('Lire')} onClick={(e) => { e.stopPropagation(); call('media_play_pause', null, np.ctl); }} className="o-rmbtn" style={btn}><Fi i={np.playing ? 'pause' : 'play'} size={14} /></button>
+          <button aria-label={tr('Piste suivante') + ' ' + nom} title={tr('Piste suivante')} onClick={(e) => { e.stopPropagation(); call('media_next_track', null, np.ctl); }} className="o-rmbtn" style={btn}><Fi i="angle-double-right" size={15} /></button>
         </div>
       </div>
     </div>
@@ -3399,9 +3746,16 @@ const FicheLibelle = ({ children, droite = null }) => (
     {droite}
   </div>
 );
-function FicheRangee({ titre, desc, droite, premiere = false }) {
+/* Hors ligne, le bloc de l'appareil porte le liseré de sa carte (ADR 0048,
+ * 05/10) — et le SEUL : « Indisponible » reste en text3. Une fiche sans bloc
+ * à elle (prise, serrure, capteur binaire, lumière, volet, plante,
+ * distributeur) prête ce rôle à la rangée de l'appareil (`panne`) : le fond
+ * et l'arrondi du bloc CONSIGNE du thermostat, pour que le liseré ait un
+ * bord où tourner. Vivante, la rangée ne change pas. */
+const FICHE_BLOC = { padding: '14px 16px', borderRadius: 14, background: 'var(--o-s1)' };
+function FicheRangee({ titre, desc, droite, premiere = false, panne = false }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, padding: '13px 0', borderTop: premiere ? 'none' : 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+    <div className={panne ? 'o-panne' : undefined} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, padding: '13px 0', borderTop: premiere || panne ? 'none' : 'var(--o-bw,1px) solid var(--o-bd3)', ...(panne ? FICHE_BLOC : null) }}>
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontSize: 13.5, fontWeight: 700 }}>{titre}</div>
         {desc ? <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{desc}</div> : null}
@@ -3413,6 +3767,8 @@ function FicheRangee({ titre, desc, droite, premiere = false }) {
 const FicheValeur = ({ children, couleur = 'var(--o-text)' }) => (
   <span style={{ fontSize: 14, fontWeight: 800, color: couleur, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{children}</span>
 );
+// Ce qu'une rangée montre À LA PLACE de sa commande quand l'appareil ne répond plus.
+const FicheIndispo = () => <FicheValeur couleur="var(--o-text3)">{tr('Indisponible')}</FicheValeur>;
 const FicheBouton = ({ children, onClick, icone = null, title = null }) => (
   <button onClick={onClick} title={title || undefined} aria-label={title || undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>{icone && <Fi i={icone} size={12} />}{children}</button>
 );
@@ -3451,7 +3807,11 @@ const RangeePile = ({ n }) => (n == null ? null : <FicheRangee titre={tr('Pile')
  *
  * Sans réponse du composant — trop ancien, pas encore redémarré —, pas de
  * rangée : un minuteur qui mourrait avec l'onglet ne se propose plus. */
-function RangeeMinuteur({ hass, id }) {
+/* `mort` (05/10) : l'appareil ne répond plus. « +30 min » programmerait
+ * l'extinction d'une entité morte — il part ; un minuteur DÉJÀ posé reste
+ * affiché avec sa croix, pour qu'on puisse l'annuler. Rien en cours : pas de
+ * rangée. */
+function RangeeMinuteur({ hass, id, mort = false }) {
   const { etat, setEtat } = useEtatServeur(hass, 'loggia/minuteurs/etat', 15000, '');
   const [decalage, setDecalage] = useState(0);
   const [erreur, setErreur] = useState('');
@@ -3459,6 +3819,7 @@ function RangeeMinuteur({ hass, id }) {
   const reste = resteMinuteur(etat, id, Date.now(), decalage);
   useSeconde(reste != null);
   if (!etat) return null;
+  if (mort && reste == null) return null;
   const agir = (msg) => hass.callWS(msg)
     .then(r => { setEtat(r); setErreur(''); })
     .catch(e => setErreur((e && e.code === 'unauthorized') ? tr('Ce compte ne pilote pas cet appareil.') : tr('Le minuteur n’a pas pu être enregistré.')));
@@ -3470,7 +3831,7 @@ function RangeeMinuteur({ hass, id }) {
       droite={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {/* Le décompte, à la seconde, en chiffres qui ne dansent pas. */}
         {reste != null && <span aria-live="off" aria-label={tr('Temps restant')}><FicheValeur>{decompte(reste)}</FicheValeur></span>}
-        <FicheBouton icone="clock" onClick={() => agir({ type: 'loggia/minuteurs/poser', entity_id: id, minutes: 30 })}>{tr('+{n} min', { n: 30 })}</FicheBouton>
+        {!mort && <FicheBouton icone="clock" onClick={() => agir({ type: 'loggia/minuteurs/poser', entity_id: id, minutes: 30 })}>{tr('+{n} min', { n: 30 })}</FicheBouton>}
         {reste != null ? <FicheBouton title={tr('Annuler le minuteur')} onClick={() => agir({ type: 'loggia/minuteurs/annuler', entity_id: id })}><Fi i="cross-small" size={12} /></FicheBouton> : null}
       </div>} />
   );
@@ -3488,6 +3849,10 @@ function RoomCoverSheet({ id, hass, onClose }) {
   const [ov, setOv] = useOptimiste(realPos);
   const pos = ov != null ? ov : realPos;
   const ferme = coverFerme(st, pos);
+  /* Même définition que RoomCoverCard (05/10). Morte, la fiche disait
+   * « Fermé », allumait la puce « Fermé » (sans position, `realPos` vaut 0)
+   * et laissait la jauge, les puces et Stop partir vers une entité morte. */
+  const mort = !st || st.state === 'unavailable';
   const call = (d, s2, data) => commanderService(hass, (data || {}).entity_id, d, s2, data || {});
   const cov = (svc, data) => call('cover', svc, { entity_id: id, ...(data || {}) });
   const poser = (v) => { setOv(v); cov('set_cover_position', { position: v }); };
@@ -3520,18 +3885,20 @@ function RoomCoverSheet({ id, hass, onClose }) {
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
-        <FicheEntete titre={nom} sous={[zone, etatTxt].filter(Boolean).join(' · ')} id={id} />
+        <FicheEntete titre={nom} sous={[zone, mort ? tr('Indisponible') : etatTxt].filter(Boolean).join(' · ')} id={id} />
+        {!mort && <>
         <FicheLibelle droite={<span style={{ fontSize: 18, fontWeight: 800, color: pos ? 'var(--o-purple)' : 'var(--o-text3)' }}>{pos} %</span>}>{tr('POSITION')}</FicheLibelle>
         <RmJauge v={pos} couleur="var(--o-purple)" grade="linear-gradient(90deg,rgba(var(--o-purple-rgb),.75),var(--o-purple))" label={tr('Position') + ' ' + nom} onCommit={poser} marge={0} />
         <div style={{ marginTop: 12 }}>
           <FichePuces options={chips} valeur={chip} onChoix={(c) => { if (c === 'ferme') { setOv(0); cov('close_cover'); } else if (c === 'ouvert') { setOv(100); cov('open_cover'); } else poser(50); }} />
         </div>
+        </>}
         <div style={{ marginTop: 14 }}>
           {plan && <FicheRangee premiere titre={tr('Auto lever / coucher')}
             desc={suit ? tr('Suit le soleil : ouverture à {a}, fermeture à {b}.', { a: prochaine('ouverture') || '—', b: prochaine('fermeture') || '—' }) : tr('Ne suit ni le lever ni le coucher du soleil.')}
             droite={<RmBascule on={suit} nom={tr('Auto lever / coucher')} onToggle={basculerPlan} />} />}
-          <FicheRangee premiere={!plan} titre={tr('Position')} desc={tr('Course mesurée par le moteur')} droite={<FicheValeur couleur="var(--o-purple)">{a.current_position != null ? Math.round(a.current_position) + ' %' : etatTxt}</FicheValeur>} />
-          <FicheRangee titre={tr('Stop')} desc={tr('Arrête le moteur là où il est')} droite={<FicheBouton icone="square" onClick={() => cov('stop_cover')}>{tr('Stop')}</FicheBouton>} />
+          <FicheRangee premiere={!plan} panne={mort} titre={tr('Position')} desc={tr('Course mesurée par le moteur')} droite={mort ? <FicheIndispo /> : <FicheValeur couleur="var(--o-purple)">{a.current_position != null ? Math.round(a.current_position) + ' %' : etatTxt}</FicheValeur>} />
+          {!mort && <FicheRangee titre={tr('Stop')} desc={tr('Arrête le moteur là où il est')} droite={<FicheBouton icone="square" onClick={() => cov('stop_cover')}>{tr('Stop')}</FicheBouton>} />}
           <RangeeDernier st={st} />
         </div>
       </>)}
@@ -3546,28 +3913,34 @@ function RoomClimateSheet({ id, hass, onClose }) {
   const st = S[id] || null;
   const a = (st && st.attributes) || {};
   const uT = uniteTemp(a, hass);
-  const realTarget = a.temperature != null ? a.temperature : 20;
+  // Meme regle que la carte (audit du 03/10) : pas de 20 invente. Sans
+  // consigne unique, la plage d'un `heat_cool` se montre, sans se piloter.
+  const realTarget = consigneClimat(a);
+  const plage = realTarget == null ? plageClimat(a) : null;
   const etatSt = st && st.state;
   const [ov, setOv] = useOptimiste([realTarget, etatSt].join('|'));
   const target = ov != null ? ov : realTarget;
+  const reglable = target != null;
   const cur = a.current_temperature;
   const mode = st ? st.state : 'off';
   const off = mode === 'off';
+  // Même définition que la carte (lot 16, 05/10) : la fiche qu'elle ouvre
+  // disait « Au repos », interrupteur allumé, sur un appareil en panne.
+  const mort = !st || st.state === 'unavailable';
   const heating = a.hvac_action === 'heating';
   const cooling = a.hvac_action === 'cooling';
-  const all = a.hvac_modes || ['off', 'heat'];
+  const all = modesClimat(a, ['off', 'heat']);
   const [ovOn, setOvOn] = useOptimiste(etatSt);
   const marche = ovOn != null ? ovOn : !off;
   const modeMarche = ['heat', 'auto', 'heat_cool', 'cool'].find(m => all.indexOf(m) >= 0) || all.find(m => m !== 'off') || 'heat';
   const basculer = () => { const nv = !marche; setOvOn(nv); commander(hass, id, 'set_hvac_mode', nv ? modeMarche : 'off'); };
   // Les bornes viennent de l'entite, pas d'une constante ; on affiche ce qui
-  // a ete envoye, pas ce qui a ete demande.
-  const setT = (d) => { const v = commander(hass, id, 'set_temperature', target + d, 'temperature'); if (v != null) setOv(v); };
+  // a ete envoye, pas ce qui a ete demande. Sans consigne lisible, rien ne part.
+  const setT = (d) => { if (!reglable) return; const v = commander(hass, id, 'set_temperature', target + d, 'temperature'); if (v != null) setOv(v); };
   const fmt = (t) => dec(Number(t), 1) + ' °' + uT;
   const nom = a.friendly_name || id;
   const zone = zoneDe(id);
-  const etatTxt = !marche ? tr('Éteint') : heating ? tr('Chauffe') : cooling ? tr('Refroidit') : tr('Au repos');
-  const MODE_FR = { off: tr('Arrêt'), heat: tr('Chauffage'), cool: tr('Froid'), auto: 'Auto', heat_cool: 'Auto', dry: tr('Sec'), fan_only: tr('Ventil') };
+  const etatTxt = mort ? tr('Indisponible') : !marche ? tr('Éteint') : heating ? tr('Chauffe') : cooling ? tr('Refroidit') : tr('Au repos');
   const presets = Array.isArray(a.preset_modes) ? a.preset_modes.slice(0, 8) : [];
   const ptsTemp = useHistorique24(hass, id, 'current_temperature');
   // Les ouvrants de la piece : une fenetre ouverte, et le radiateur chauffe la rue.
@@ -3580,23 +3953,29 @@ function RoomClimateSheet({ id, hass, onClose }) {
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
-        <FicheEntete titre={nom} sous={[zone, etatTxt, tr('consigne {t} °{u}', { t: dec(Number(target), 1), u: uT })].filter(Boolean).join(' · ')} id={id} />
-        <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, background: 'var(--o-s1)', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <FicheEntete titre={nom} sous={[zone, etatTxt, reglable ? tr('consigne {t} °{u}', { t: dec(Number(target), 1), u: uT }) : null].filter(Boolean).join(' · ')} id={id} />
+        {/* Hors ligne, le bloc de l'appareil porte le liseré de sa carte (ADR
+            0048, 05/10) : la carte soufflait en rouge, la fiche ne disait
+            « Indisponible » qu'en text3, le niveau du normal. Comme la tuile
+            de CamSheet et la fiche du robot : un liseré, aucune autre couleur. */}
+        <div className={mort ? 'o-panne' : undefined} style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, background: 'var(--o-s1)', display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{tr('CONSIGNE')}</div>
-            <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', color: marche ? 'var(--o-warn)' : 'var(--o-text3)', lineHeight: 1.1, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{fmt(target)}</div>
+            <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', color: marche && !mort ? 'var(--o-warn)' : 'var(--o-text3)', lineHeight: 1.1, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{reglable ? fmt(target) : '—'}</div>
+            {plage && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 3 }}>{tr('Plage {bas} – {haut}, réglée dans Home Assistant', { bas: fmt(plage.bas), haut: fmt(plage.haut) })}</div>}
             {cur != null && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 3 }}>{tr('Mesurée {t} dans la pièce', { t: fmt(cur) })}</div>}
           </div>
-          <button aria-label={tr('Baisser la consigne')} onClick={() => setT(-0.5)} style={rond}>−</button>
-          <button aria-label={tr('Monter la consigne')} onClick={() => setT(0.5)} style={rond}>+</button>
+          <button aria-label={tr('Baisser la consigne')} disabled={!reglable} onClick={() => setT(-0.5)} style={reglable ? rond : { ...rond, ...RM_INERTE }}>−</button>
+          <button aria-label={tr('Monter la consigne')} disabled={!reglable} onClick={() => setT(0.5)} style={reglable ? rond : { ...rond, ...RM_INERTE }}>+</button>
         </div>
-        <div style={{ marginTop: 12 }}>
+        {!mort && <div style={{ marginTop: 12 }}>
           {presets.length > 0
             ? <FichePuces options={presets.map(p => ({ id: p, nom: p }))} valeur={a.preset_mode && a.preset_mode !== 'unknown' ? a.preset_mode : null} onChoix={(p) => commander(hass, id, 'set_preset_mode', p)} />
-            : <FichePuces options={all.map(m => ({ id: m, nom: tr(MODE_FR[m]) || m }))} valeur={mode} onChoix={(m) => commander(hass, id, 'set_hvac_mode', m)} />}
-        </div>
+            : <FichePuces options={all.map(m => ({ id: m, nom: motModeClimat(m) }))} valeur={mode} onChoix={(m) => commander(hass, id, 'set_hvac_mode', m)} />}
+        </div>}
         <div style={{ marginTop: 14 }}>
-          <FicheRangee premiere titre={tr('Chauffe')} desc={tr('Coupe la zone sans toucher à la consigne')} droite={<RmBascule on={marche} nom={nom} onToggle={basculer} />} />
+          <FicheRangee premiere titre={tr('Chauffe')} desc={tr('Coupe la zone sans toucher à la consigne')}
+            droite={mort ? <FicheValeur couleur="var(--o-text3)">{tr('Indisponible')}</FicheValeur> : <RmBascule on={marche} nom={nom} onToggle={basculer} />} />
           {cur != null && <FicheRangee titre={tr('Température mesurée')} desc={tr('Relevée par le thermostat')} droite={<FicheValeur>{fmt(cur)}</FicheValeur>} />}
           {zone && <FicheRangee titre={tr('Fenêtre ouverte')} desc={ouverts.length ? ouverts.join(', ') : tr('Rien d’ouvert dans la pièce')} droite={<FicheValeur couleur={ouverts.length ? 'var(--o-bad)' : 'var(--o-ok)'}>{ouverts.length ? tr('oui') : tr('non')}</FicheValeur>} />}
           <RangeeDernier st={st} />
@@ -3614,12 +3993,17 @@ function RoomLightSheet({ light, hass, onClose }) {
   const st = hass && hass.states ? hass.states[light.id] : null;
   const a = (st && st.attributes) || {};
   const realOn = st ? st.state === 'on' : light.on;
+  /* Même définition que RoomLightCard (05/10). La fiche, ouverte puis
+   * l'ampoule partie (ou par une pastille), disait « Éteinte » — « Allumée »
+   * même, entité retirée, d'après l'instantané de l'ouverture — et laissait
+   * l'interrupteur, la jauge et les palettes commander une entité morte. */
+  const mort = !st || st.state === 'unavailable';
   const realBri = a.brightness != null ? Math.round(a.brightness / 255 * 100) : light.bri;
   const [ovOn, setOvOn] = useOptimiste(realOn);
   const [ovBri, setOvBri] = useOptimiste(realBri);
   const on = ovOn != null ? ovOn : realOn;
   const bri = ovBri != null ? ovBri : realBri;
-  const color = a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : light.color;
+  const color = a.rgb_color ? versHex(a.rgb_color) : light.color;
   const acc = (light.rgb && color) ? color : 'var(--o-lampe)';
   const toggle = () => { const v = !on; setOvOn(v); commander(hass, light.id, v ? 'turn_on' : 'turn_off'); };
   const poser = (v) => { setOvBri(v); setOvOn(v > 0); if (v > 0) commander(hass, light.id, 'set_brightness', v); else commander(hass, light.id, 'turn_off'); };
@@ -3627,7 +4011,7 @@ function RoomLightSheet({ light, hass, onClose }) {
   const shown = on ? bri : 0;
   const nom = light.name || light.id;
   const teinteTxt = a.color_mode === 'color_temp' ? tr('blanc') : (light.rgb && color) ? tr('teinte personnalisée') : '';
-  const sous = [on ? tr('Allumée') : tr('Éteinte'), on ? shown + ' %' : null, on ? teinteTxt : null].filter(Boolean).join(' · ');
+  const sous = mort ? tr('Indisponible') : [on ? tr('Allumée') : tr('Éteinte'), on ? shown + ' %' : null, on ? teinteTxt : null].filter(Boolean).join(' · ');
   // La palette porte des variables CSS : on lit leur valeur avant de l'envoyer.
   const hexDe = (c) => { if (c.indexOf('var(') === 0) { try { const v = getComputedStyle(document.documentElement).getPropertyValue(c.slice(4, -1)).trim(); if (v[0] === '#') return v; } catch { /* rien */ } return null; } return c; };
   const poserCouleur = (c) => { const h = hexDe(c); if (!h) return; const n = parseInt(h.slice(1), 16); commander(hass, light.id, 'set_color', [(n >> 16) & 255, (n >> 8) & 255, n & 255]); };
@@ -3637,11 +4021,11 @@ function RoomLightSheet({ light, hass, onClose }) {
     <BottomSheet onClose={onClose}>
       {() => (<>
         <FicheEntete titre={nom} sous={sous} id={light.id} />
-        {light.dimmable !== false && (<>
+        {light.dimmable !== false && !mort && (<>
           <FicheLibelle droite={<span style={{ fontSize: 18, fontWeight: 800, color: on ? 'var(--o-warn)' : 'var(--o-text3)' }}>{shown} %</span>}>{tr('LUMINOSITÉ')}</FicheLibelle>
           <RmJauge v={shown} couleur={acc} grade={(light.rgb && color) ? color : 'linear-gradient(90deg,var(--o-lampe),var(--o-lampe-b))'} label={tr('Luminosité') + ' ' + nom} onCommit={poser} marge={0} />
         </>)}
-        {(light.ct || light.rgb) && (
+        {(light.ct || light.rgb) && !mort && (
           <div style={{ marginTop: 16 }}>
             {light.ct && light.rgb && <FichePuces options={[{ id: 'blancs', nom: tr('Blancs') }, { id: 'couleurs', nom: tr('Couleurs') }]} valeur={onglet} onChoix={setOnglet} />}
             {/* Les deux palettes partagent la même case : la fiche garde la
@@ -3662,8 +4046,8 @@ function RoomLightSheet({ light, hass, onClose }) {
           </div>
         )}
         <div style={{ marginTop: 14 }}>
-          <FicheRangee premiere titre={tr('Allumée')} desc={tr('Bascule immédiate, réconciliée au prochain état')} droite={<RmBascule on={on} nom={nom} onToggle={toggle} />} />
-          <RangeeMinuteur hass={hass} id={light.id} />
+          <FicheRangee premiere panne={mort} titre={tr('Allumée')} desc={tr('Bascule immédiate, réconciliée au prochain état')} droite={mort ? <FicheIndispo /> : <RmBascule on={on} nom={nom} onToggle={toggle} />} />
+          <RangeeMinuteur hass={hass} id={light.id} mort={mort} />
           <RangeeDernier st={st} />
         </div>
       </>)}
@@ -3677,6 +4061,8 @@ function RoomSwitchSheet({ id, hass, onClose }) {
   const st = S[id] || null;
   const a = (st && st.attributes) || {};
   const realOn = !!st && st.state === 'on';
+  // Même définition que sa carte (RoomGenericCard, CvCard) : `enPanne` (05/10).
+  const mort = enPanne(id, st);
   const [ov, setOv] = useOptimiste(realOn);
   const on = ov != null ? ov : realOn;
   const basculer = () => { const nv = !on; setOv(nv); commanderService(hass, id, 'homeassistant', nv ? 'turn_on' : 'turn_off', { entity_id: id }); };
@@ -3690,12 +4076,12 @@ function RoomSwitchSheet({ id, hass, onClose }) {
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
-        <FicheEntete titre={nom} sous={[zone, on ? tr('Allumée') : tr('Éteinte'), puissance ? fmt(puissance) : null].filter(Boolean).join(' · ')} id={id} />
+        <FicheEntete titre={nom} sous={[zone, mort ? tr('Indisponible') : on ? tr('Allumée') : tr('Éteinte'), puissance ? fmt(puissance) : null].filter(Boolean).join(' · ')} id={id} />
         <div style={{ marginTop: 14 }}>
-          <FicheRangee premiere titre={tr('Alimentée')} desc={tr('Coupe la prise, pas l’appareil derrière')} droite={<RmBascule on={on} nom={nom} onToggle={basculer} />} />
+          <FicheRangee premiere panne={mort} titre={tr('Alimentée')} desc={tr('Coupe la prise, pas l’appareil derrière')} droite={mort ? <FicheIndispo /> : <RmBascule on={on} nom={nom} onToggle={basculer} />} />
           {puissance && <FicheRangee titre={tr('Puissance instantanée')} desc={tr('Mesurée par la prise')} droite={<FicheValeur couleur="var(--o-accent-soft)">{fmt(puissance)}</FicheValeur>} />}
           {energie && <FicheRangee titre={tr('Énergie')} desc={tr('Compteur de l’appareil')} droite={<FicheValeur>{fmt(energie)}</FicheValeur>} />}
-          <RangeeMinuteur hass={hass} id={id} />
+          <RangeeMinuteur hass={hass} id={id} mort={mort} />
           <RangeeDernier st={st} />
         </div>
       </>)}
@@ -3712,14 +4098,17 @@ function RoomBinarySheet({ id, hass, onClose }) {
   const zone = zoneDe(id);
   const e = BIN_ETATS()[a.device_class] || null;
   const on = !!st && st.state === 'on';
-  const releve = !st || st.state === 'unavailable' ? tr('Indisponible') : e ? (on ? e[0] : e[1]) : (on ? tr('Détecté') : 'RAS');
+  /* `enPanne`, comme sa carte (05/10) : un capteur `unknown` y est
+   * « Indisponible », la fiche disait « Fermée » ou « RAS ». */
+  const mort = enPanne(id, st);
+  const releve = mort ? tr('Indisponible') : e ? (on ? e[0] : e[1]) : (on ? tr('Détecté') : tr('RAS'));
   const danger = on && !!(e && e[2]);
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
         <FicheEntete titre={nom} sous={[zone, releve].filter(Boolean).join(' · ')} id={id} />
         <div style={{ marginTop: 14 }}>
-          <FicheRangee premiere titre={tr('Relevé')} desc={tr('Dernière valeur reçue')} droite={<FicheValeur couleur={danger ? 'var(--o-bad)' : 'var(--o-text)'}>{releve}</FicheValeur>} />
+          <FicheRangee premiere panne={mort} titre={tr('Relevé')} desc={tr('Dernière valeur reçue')} droite={mort ? <FicheIndispo /> : <FicheValeur couleur={danger ? 'var(--o-bad)' : 'var(--o-text)'}>{releve}</FicheValeur>} />
           {zone && <FicheRangee titre={tr('Pièce')} desc={tr('Zone déclarée dans Home Assistant')} droite={<FicheValeur couleur="var(--o-text2)">{zone}</FicheValeur>} />}
           <RangeePile n={pileDe(S, id)} />
           <RangeeDernier st={st} />
@@ -3741,13 +4130,18 @@ function RoomLockSheet({ id, hass, onClose }) {
   const basculer = () => { const nv = !locked; setOv(nv); commanderService(hass, id, 'lock', nv ? 'lock' : 'unlock', { entity_id: id }); };
   const nom = a.friendly_name || id;
   const zone = zoneDe(id);
-  const etat = s2 === 'locked' ? tr('Verrouillée') : s2 === 'unlocked' ? tr('Déverrouillée') : s2 === 'locking' ? tr('Verrouillage…') : s2 === 'unlocking' ? tr('Déverrouillage…') : s2 === 'jammed' ? tr('Bloquée') : tr('Indisponible');
+  /* `enPanne`, comme sa carte (05/10) : morte, la fiche disait bien
+   * « Indisponible », mais l'interrupteur restait et envoyait `lock.lock`
+   * dans le vide. Et `open` / `opening` — des états VIVANTS — tombaient sur
+   * « Indisponible » : ils ont leurs mots, ceux de CvCard. */
+  const mort = enPanne(id, st);
+  const etat = mort ? tr('Indisponible') : ({ locked: tr('Verrouillée'), unlocked: tr('Déverrouillée'), locking: tr('Verrouillage…'), unlocking: tr('Déverrouillage…'), jammed: tr('Bloquée'), open: tr('Ouverte'), opening: tr('Ouverture…') })[s2] || String(s2);
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
         <FicheEntete titre={nom} sous={[zone, etat].filter(Boolean).join(' · ')} id={id} />
         <div style={{ marginTop: 14 }}>
-          <FicheRangee premiere titre={tr('Verrouillée')} desc={tr('Le pêne bouge tout de suite ; l’état revient du moteur')} droite={<RmBascule on={locked} nom={nom} onToggle={basculer} />} />
+          <FicheRangee premiere panne={mort} titre={tr('Verrouillée')} desc={tr('Le pêne bouge tout de suite ; l’état revient du moteur')} droite={mort ? <FicheIndispo /> : <RmBascule on={locked} nom={nom} onToggle={basculer} />} />
           <RangeePile n={pileDe(S, id)} />
           <RangeeDernier st={st} />
         </div>
@@ -3790,17 +4184,27 @@ function RoomNav({ room, onNav, hass }) {
      * de l'effet ramenait l'utilisateur en haut de page. Or il se redeclenche
      * a chaque changement de configuration, `rooms` etant reconstruit.
      *
-     * On pose donc `scrollLeft` a la main : la barre bouge, la page reste. */
-    const cible = el.offsetLeft - (w.clientWidth - el.offsetWidth) / 2;
+     * On pose donc `scrollLeft` a la main : la barre bouge, la page reste.
+     *
+     * La position se mesure DANS la barre (audit du 03/10) : `offsetLeft`
+     * partait du corps de la page, barre laterale comprise — sur ordinateur, la
+     * puce choisie finissait coupee de 27 px a gauche, hors du cadre. */
+    const dansBarre = w.scrollLeft + el.getBoundingClientRect().left - w.getBoundingClientRect().left;
+    const cible = dansBarre - (w.clientWidth - el.offsetWidth) / 2;
     try { w.scrollTo({ left: Math.max(0, cible), behavior: REDUCE_MOTION ? 'auto' : 'smooth' }); }
     catch { w.scrollLeft = Math.max(0, cible); }
   }, [room]);
+  /* La piece choisie n'etait qu'un fond d'accent (audit du 03/10) : un
+   * lecteur d'ecran lisait une suite de boutons sans nom commun ni
+   * position. Le groupe porte le nom tr('Pièces') (cle existante, aucune
+   * traduction neuve, le polonais reste tel que relu) et la puce ouverte
+   * `aria-current="page"` : chaque piece est une vue, `room:` + son nom. */
   return (
-    <div ref={wrapRef} className="o-room-scroll" style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2, minWidth: 0 }}>
+    <div ref={wrapRef} className="o-room-scroll" role="group" aria-label={tr('Pièces')} style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2, minWidth: 0 }}>
       {list.map(r => {
         const on = r.name === room;
         return (
-          <button key={r.name} data-room-active={on ? '1' : undefined} onClick={() => onNav('room:' + r.name)} style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'background .18s, border-color .18s', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)' }}>
+          <button key={r.name} data-room-active={on ? '1' : undefined} aria-current={on ? 'page' : undefined} onClick={() => onNav('room:' + r.name)} style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'background .18s, border-color .18s', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)' }}>
             {r.icon ? <span style={{ display: 'flex', width: 15, height: 15, alignItems: 'center', justifyContent: 'center' }}>{cloneElement(r.icon, { size: 15, color: on ? '#fff' : 'var(--o-text3)' })}</span> : <Fi i="home" size={14} color={on ? '#fff' : 'var(--o-text3)'} />}
             <span style={{ fontSize: 12, fontWeight: on ? 800 : 700 }}>{r.name}</span>
             {r.temp != null && <span style={{ fontSize: 12, fontWeight: 600, color: on ? '#fff' : 'var(--o-text3)' }}>{dec(r.temp, 1)}°</span>}
@@ -4234,15 +4638,14 @@ function legendeIcone(cle) {
   const n = NOMS_DESSINS[cle];
   return n ? n[1] : '';
 }
-/** Sans accents, sans casse : « Réfrigérateur » se trouve en tapant « refri ». */
-const aplatiIcone = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-/** Ce que la recherche trouve : la clé, le nom du dessin, sa légende. */
+/** Ce que la recherche trouve : la clé, le nom du dessin, sa légende — sans
+ *  accents ni casse, « Réfrigérateur » se trouve en tapant « refri ». */
 function chercherIcones(q) {
-  const t = aplatiIcone(q).trim();
+  const t = sansAccents(q).trim();
   if (!t) return [];
-  return toutesLesIcones().filter(c => aplatiIcone(c).indexOf(t) >= 0
-    || aplatiIcone(nomIcone(c)).indexOf(t) >= 0
-    || aplatiIcone(legendeIcone(c)).indexOf(t) >= 0);
+  return toutesLesIcones().filter(c => sansAccents(c).indexOf(t) >= 0
+    || sansAccents(nomIcone(c)).indexOf(t) >= 0
+    || sansAccents(legendeIcone(c)).indexOf(t) >= 0);
 }
 /* Les dernières icônes choisies. Elles ne sont PAS de la configuration de la
  * maison : c'est une commodité de celui qui règle, ici et maintenant. Elle
@@ -4312,7 +4715,10 @@ function ChoixIcone({ valeur, onChoisir, suggerees }) {
     || (k === 'recent' ? recentes.length > 0 : iconesFamille(k).length > 0));
   const glisser = (sens) => {
     const el = bande.current;
-    if (el) el.scrollBy({ left: sens * el.clientWidth * 0.8, behavior: 'smooth' });
+    // Mouvement reduit (audit du 03/10) : la bande saute d'un coup quand le
+    // systeme demande moins d'animation, comme la barre des pieces et la
+    // rangee des scenarios — le glissement ecrit en dur ignorait la preference.
+    if (el) el.scrollBy({ left: sens * el.clientWidth * 0.8, behavior: REDUCE_MOTION ? 'auto' : 'smooth' });
   };
   const poser = (ic) => { onChoisir(ic); if (ic) setRecentes(noterIconeRecente(ic)); };
   // Les deux fleches de la bande : la HAUTEUR de la bande, pas celle d'un
@@ -4326,9 +4732,11 @@ function ChoixIcone({ valeur, onChoisir, suggerees }) {
       {/* On CHERCHE avant de feuilleter : « lave » trouve le lave-vaisselle,
         * dont la clé est `dishwasher`. La recherche passe devant la famille
         * ouverte et fouille toute la bibliothèque. */}
-      {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 42, padding: '0 12px', borderRadius: 12, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
         <Fi i="search" size={13} color="var(--o-text3)" />
+        {/* L'étiquette ICÔNE désigne ce champ par `htmlFor`, que la règle ne suit pas :
+          * la directive vise le champ, pas la div qui l'enveloppe (05/10). */}
+        {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
         <input id={id} value={q} onChange={(e) => setQ(e.target.value)} spellCheck={false} autoComplete="off"
           placeholder={tr('Rechercher : lave, lampe, volet…')}
           style={{ flex: 1, minWidth: 0, padding: 0, border: 'none', background: 'transparent', color: 'var(--o-text)', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }} />
@@ -4348,7 +4756,7 @@ function ChoixIcone({ valeur, onChoisir, suggerees }) {
             const on = !cherche && k === fam;
             const n = k === 'sug' ? suggerees.length : k === 'recent' ? recentes.length : iconesFamille(k).length;
             return (
-              <button key={k} aria-pressed={on} title={noms[k][0] + ' · ' + trN(n, tr('{n} icône'), tr('{n} icônes'))}
+              <button key={k} aria-pressed={on} title={noms[k][0] + ' · ' + trN(n, '{n} icône', '{n} icônes')}
                 onClick={() => { setFam(k); setQ(''); }}
                 style={{ flexShrink: 0, minWidth: 64, height: 56, padding: '0 8px', borderRadius: 12, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, fontFamily: 'inherit', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text2)' }}>
                 <Fi i={ico} size={16} />
@@ -4388,8 +4796,8 @@ function ChoixIcone({ valeur, onChoisir, suggerees }) {
         </span>
         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>
           {cherche
-            ? trN(liste.length, tr('{n} résultat'), tr('{n} résultats'))
-            : trN(liste.length, tr('{n} icône'), tr('{n} icônes')) + ' · ' + (fam === 'sug' ? tr('pour cette carte') : noms[fam][0])}
+            ? trN(liste.length, '{n} résultat', '{n} résultats')
+            : trN(liste.length, '{n} icône', '{n} icônes') + ' · ' + (fam === 'sug' ? tr('pour cette carte') : noms[fam][0])}
         </span>
       </div>
     </>
@@ -4434,6 +4842,11 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
   const classe = (S[brut] && S[brut].attributes && S[brut].attributes.device_class) || '';
   const domaine = domaineEdition(brut, { estLumiere: cvEstLumiere(brut), classe });
   const estPrise = estEntite && brut.indexOf('switch.') === 0;
+  /* Declarer une prise « lumiere » ecrit `loggia_switchlights`, la
+   * configuration de la maison (03/10) : un compte Home Assistant ordinaire
+   * ne pourrait jamais l'enregistrer, il voit le domaine sans le menu.
+   * L'icone, elle, reste a tous : `loggia_icones` est de l'apparence. */
+  const peutDeclarer = estPrise && !compteOrdinaire(hass);
   const [lumiere, setLumiere] = useState(estPrise && cvEstLumiere(brut));
   // L'icone choisie : `null` = celle que Loggia devine (26/09).
   const [monIcone, setMonIcone] = useState(() => iconeChoisie(brut));
@@ -4545,14 +4958,16 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
                 * éteints pour rien. Le menu ne montre que ce qui se choisit :
                 * une prise peut se déclarer lumière, le reste vient de Home
                 * Assistant et ne se discute pas. */}
-              {estPrise
+              {peutDeclarer
                 ? <ListeChoix value={domaineChoisi} label={tr('Domaine')} onChange={(v) => setLumiere(v === 'lumiere')} style={ligneMenu} options={optionsDomaine} />
                 : <div style={{ ...ligneMenu, cursor: 'default' }}>
                     <span style={{ display: 'inline-flex', flexShrink: 0 }}>{glypheDomaine(domActuel, false)}</span>
                     <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{domActuel ? domActuel.label : ''}</span>
                   </div>}
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' }}>
-                {estPrise ? tr('Une prise peut se déclarer lumière : elle prend alors la carte et le filtre des lampes.') : tr('Le domaine vient de Home Assistant.')}
+                {/* Une prise qu'un administrateur a declaree lumiere : Home
+                  * Assistant la dit `switch`, la phrase mentirait. */}
+                {peutDeclarer ? tr('Une prise peut se déclarer lumière : elle prend alors la carte et le filtre des lampes.') : estPrise && lumiere ? '' : tr('Le domaine vient de Home Assistant.')}
               </div>
             </>
           )}
@@ -4614,7 +5029,7 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
           <div style={{ display: 'flex', gap: 8, marginTop: 20, alignItems: 'center' }}>
             <button onClick={() => { ed.remove(id); close(); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)' }}><Fi i="cross-small" size={12} />{tr('Supprimer')}</button>
             <span style={{ flex: 1 }} />
-            <button onClick={() => valider(close)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 16px', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#06121f' }}><Fi i="plus" size={12} />{tr('Enregistrer')}</button>
+            <button onClick={() => valider(close)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 16px', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#fff' }}><Fi i="plus" size={12} />{tr('Enregistrer')}</button>
           </div>
         </div>
       )}
@@ -4638,16 +5053,22 @@ function BandeauEdition({ ed = null, onAjouter = null, toutes = null, ajouterLab
    * puis on glisse, au clavier on prend le focus puis les fleches (ADR 0068). */
   const tactile = useCoarse();
   const geste = tactile ? tr('Au doigt : maintiens une carte, puis glisse-la.') : tr('Au clavier : Tab jusqu’à une carte, puis les flèches.');
-  const btn = (accent) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', flexShrink: 0, background: accent ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: accent ? '#06121f' : 'var(--o-text1)', border: accent ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)' });
+  const btn = (accent) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', flexShrink: 0, background: accent ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: accent ? '#fff' : 'var(--o-text1)', border: accent ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)' });
   const peutTout = !!toutes || !!(ed && ed.edits > 0);
   const montreTout = !!toutes || !!ed;
+  /* « Entites de la vue » ecrit la configuration de la maison — pieces,
+   * cameras, alarme, energie, prises lumieres (03/10). Un compte Home
+   * Assistant ordinaire ne pourrait jamais l'enregistrer : il ne voit pas le
+   * bouton. Le reste du bandeau — ajouter, ranger, retirer une carte — est de
+   * l'agencement, et ne bouge pas. */
+  const ouvrirEnt = onEnt && !compteOrdinaire(ctx.hass) ? onEnt : null;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, flexWrap: 'wrap', background: 'rgba(var(--o-accent-rgb),.12)', border: '1px dashed rgba(var(--o-accent-rgb),.45)' }}>
       <Fi i="pencil" size={14} color="var(--o-accent-soft)" />
       <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1, minWidth: 200 }}>{texte || tr('Mode édition : attrape une carte pour la déplacer où tu veux, ou ajoute, renomme et retire une carte.')} <span style={{ color: 'var(--o-text3)' }}>{geste}</span></span>
       {onAjouter && <button onClick={onAjouter} style={btn(true)}><Fi i="plus" size={12} />{ajouterLabel || tr('Ajouter une carte')}</button>}
       {extra}
-      {onEnt && <button onClick={onEnt} style={btn(false)}><Fi i="list" size={12} />{entLabel || tr('Entités de la vue')}</button>}
+      {ouvrirEnt && <button onClick={ouvrirEnt} style={btn(false)}><Fi i="list" size={12} />{entLabel || tr('Entités de la vue')}</button>}
       {montreTout && <button onClick={toutes || (() => ed.reset())} disabled={!peutTout} title={tr('Rétablit la liste automatique : les cartes et leurs noms reviennent partout, l’ordre et les tailles sur ce type d’écran.')} style={{ ...btn(false), opacity: peutTout ? 1 : .5 }}><Fi i="apps" size={12} />{tr('Toutes les cartes')}</button>}
       {ctx.onToggleEdit && <button onClick={ctx.onToggleEdit} style={btn(false)}><Fi i="cross-small" size={12} />{tr('Terminer')}</button>}
     </div>
@@ -4693,16 +5114,35 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, taille =
   const brut = id.indexOf('dev:') === 0 ? id.slice(4) : id;
   const classe = (S[brut] && S[brut].attributes && S[brut].attributes.device_class) || '';
   const info = domaineInfo(domaineEdition(brut, { estLumiere: cvEstLumiere(brut), classe }));
+  /* Le GESTE au pointeur reste à la racine (lot 13 de l'audit du 03/10) :
+   * l'appui sur la surface y remonte, `dragStart` remonte jusqu'à la case
+   * `data-id`, et `dragEnd` tranche au relâcher entre un clic — la fiche — et
+   * un glisser. */
   const prise = {
     onPointerDown: (e) => ed.dragStart(id, e),
     onPointerMove: ed.dragMove,
     onPointerUp: () => { const clic = ed.dragEnd(); if (clic && onEdit) onEdit(id); },
     onPointerCancel: ed.dragEnd,
+  };
+  /* Le CLAVIER et le nom passent par la SURFACE (ADR 0074 ; lot 13 de l'audit
+   * du 03/10). La racine était elle-même un bouton (rôle ARIA) : ce rôle rend sa
+   * descendance présentationnelle, et Modifier, Supprimer et la taille
+   * disparaissaient d'un lecteur d'écran — 39 cartes `nested-interactive` sur
+   * Objets en édition, 10 sur Sécurité, 8 dans le Salon. La surface est leur
+   * SŒUR : la touche d'un bouton ne l'atteint plus (la garde reste, un
+   * gestionnaire en objet ne sait pas où on le pose — tests/clavier). Son
+   * clic ne compte que SANS pointeur (`detail` à 0) : l'activation d'un
+   * lecteur d'écran, que la racine n'entendait pas. Celui d'une souris ou
+   * d'un doigt, `dragEnd` l'a déjà tranché : il ne compte pas deux fois, et un
+   * glisser n'ouvre pas la fiche. */
+  const clavier = {
     onKeyDown: (e) => {
+      if (e.target !== e.currentTarget) return;
       if (e.key === 'ArrowLeft') { e.preventDefault(); ed.move(id, -1); }
       else if (e.key === 'ArrowRight') { e.preventDefault(); ed.move(id, 1); }
       else if ((e.key === 'Enter' || e.key === ' ') && onEdit) { e.preventDefault(); onEdit(id); }
     },
+    onClick: (e) => { if (e.detail === 0 && onEdit) onEdit(id); },
   };
   // Les boutons ne saisissent pas : leur appui ne remonte pas a la carte.
   const stop = (e) => e.stopPropagation();
@@ -4714,32 +5154,55 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, taille =
   const peutCompacter = taille && !!ed.basculerCompact && brut.indexOf('zone:') !== 0 && brut.indexOf('sect:') !== 0;
   if (plat) {
     return (
-      <div data-id={id} role="button" tabIndex={0} {...prise} aria-label={tr('Modifier ou déplacer') + ' ' + (nom || id)}
-        style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, borderRadius: 'var(--o-radius,18px)', outline: '1px dashed rgba(var(--o-accent-rgb),.45)', outlineOffset: 3, opacity: saisie ? .25 : 1, cursor: saisie ? 'grabbing' : 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}>
+      <div data-id={id} {...prise}
+        className="o-pointille" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, borderRadius: 'var(--o-radius,18px)', '--o-pointille': '.45', opacity: saisie ? .25 : 1, cursor: saisie ? 'grabbing' : 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}>
+        {/* La surface passe sous les deux boutons, `position: relative` : peints
+          * après elle, ils reçoivent leurs clics. Le texte de l'intertitre
+          * reste dessous — un clic sur lui est celui de la carte. */}
+        <Surface label={nomCarte(nom || id, tr('Modifier ou déplacer'))} popup={!!onEdit} {...clavier} style={{ cursor: 'inherit' }} />
         <div style={{ flex: 1, minWidth: 0 }}>{reste.children}</div>
-        <button data-drag-ui="1" onPointerDown={stop} onClick={() => onEdit && onEdit(id)} title={tr('Modifier')} aria-label={tr('Modifier') + ' ' + (nom || id)} style={{ ...bouton(false), ...petit }}><Fi i="pencil" size={12} /></button>
-        <button data-drag-ui="1" onPointerDown={stop} onClick={() => ed.remove(id)} title={tr('Supprimer')} aria-label={tr('Supprimer') + ' ' + (nom || id)} style={{ ...bouton(true), ...petit, marginRight: 8 }}><Fi i="cross-small" size={12} /></button>
+        <button data-drag-ui="1" onPointerDown={stop} onClick={() => onEdit && onEdit(id)} title={tr('Modifier')} aria-label={tr('Modifier') + ' ' + (nom || id)} style={{ ...bouton(false), ...petit, position: 'relative' }}><Fi i="pencil" size={12} /></button>
+        <button data-drag-ui="1" onPointerDown={stop} onClick={() => ed.remove(id)} title={tr('Supprimer')} aria-label={tr('Supprimer') + ' ' + (nom || id)} style={{ ...bouton(true), ...petit, marginRight: 8, position: 'relative' }}><Fi i="cross-small" size={12} /></button>
       </div>
     );
   }
-  const classes = [large ? 'o-cvw2' : '', compact ? 'o-cvrow1' : ''].filter(Boolean).join(' ') || undefined;
+  /* Le pointillé d'édition est une CLASSE (`o-pointille`, index.css), plus un
+   * style en ligne : en ligne, il battait `:focus-visible`, et la carte qui
+   * avait le focus ne se distinguait plus de ses voisines au clavier (audit
+   * du 03/10). Chaque forme garde l'opacité de son trait (`--o-pointille`). */
+  const classes = ['o-pointille', large ? 'o-cvw2' : '', compact ? 'o-cvrow1' : ''].filter(Boolean).join(' ');
   const lavis = 'linear-gradient(180deg,transparent 28%,rgba(' + info.rgb + ',.14)), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';
   const icone = (px) => (info.prise ? <PlugIcon size={px} /> : info.ico ? <Ico name={info.ico} size={px} /> : <Fi i={info.fi} size={px} />);
   const sousTitre = info.label + ' · ' + identifiantEdition(brut);
   const titre = tr('Attrape pour déplacer · clique pour modifier (flèches ← →)');
-  const racine = { ...RM_CARD, border: 'none', position: 'relative', cursor: saisie ? 'grabbing' : 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', opacity: saisie ? .25 : 1,
-    background: lavis, outline: '1px dashed rgba(var(--o-accent-rgb),.35)', outlineOffset: 3 };
+  /* La surface d'une carte (lot 13) : son nom est ce que la carte affiche,
+   * puis le geste — « Plafonnier, Lumière · plafonnier, Modifier ou
+   * déplacer » : le nom visible en tête (WCAG 2.5.3), là où la racine disait
+   * « Modifier ou déplacer Plafonnier ». Son titre, celui de la racine,
+   * devient sa description : les flèches. */
+  const surface = <Surface label={nomCarte(nom || id, sousTitre, tr('Modifier ou déplacer'))} popup={!!onEdit} title={titre} {...clavier} style={{ cursor: 'inherit' }} />;
+  const racine = { ...RM_CARD, border: LISERE, position: 'relative', cursor: saisie ? 'grabbing' : 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', opacity: saisie ? .25 : 1,
+    background: lavis, '--o-pointille': '.35' };
+  /* La bascule de taille garde UN nom, « Une rangée · Plafonnier », et dit
+   * son état par `aria-pressed` (vrai = compacte), comme la largeur d'une vue
+   * personnalisée : le nom suivait l'état, et une carte d'une rangée
+   * s'annonçait « Deux rangées, enfoncé » — le lot 13 avait réglé la
+   * largeur, pas la taille (relecture du lot 13, 04/10). L'infobulle garde
+   * le geste à venir. */
   const coin = peutCompacter ? (
     <button data-drag-ui="1" onPointerDown={stop} onClick={() => ed.basculerCompact(id)} aria-pressed={compact}
-      title={compact ? tr('Deux rangées') : tr('Une rangée')} aria-label={(compact ? tr('Deux rangées') : tr('Une rangée')) + ' · ' + (nom || id)}
+      title={compact ? tr('Deux rangées') : tr('Une rangée')} aria-label={tr('Une rangée') + ' · ' + (nom || id)}
       style={BOUTON_COIN}><Fi i="resize" size={13} /></button>
   ) : null;
   if (compact) {
     const serre = { padding: '4px 6px', fontSize: 11.5 };
     return (
-      <div data-id={id} role="button" tabIndex={0} {...prise} aria-label={tr('Modifier ou déplacer') + ' ' + (nom || id)} className={classes} title={titre}
+      <div data-id={id} {...prise} className={classes} title={titre}
         style={{ ...racine, minHeight: 0, height: '100%', boxSizing: 'border-box', gap: 6, padding: '8px 10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {surface}
+        {/* Les deux rangées portent des commandes : `position: relative`, elles
+          * passent au-dessus de la surface et reçoivent leurs clics. */}
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ ...RM_ICO('rgba(' + info.rgb + ',.16)', 'rgb(' + info.rgb + ')'), width: 32, height: 32, borderRadius: 11 }}>{icone(15)}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={RM_NAME}>{nom || id}</div>
@@ -4747,16 +5210,17 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, taille =
           </div>
           {coin}
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button data-drag-ui="1" onPointerDown={stop} onClick={() => onEdit && onEdit(id)} style={{ ...bouton(false), ...serre }}>{tr('Modifier')}</button>
-          <button data-drag-ui="1" onPointerDown={stop} onClick={() => ed.remove(id)} style={{ ...bouton(true), ...serre }}>{tr('Supprimer')}</button>
+        <div style={{ position: 'relative', display: 'flex', gap: 6 }}>
+          <button data-drag-ui="1" onPointerDown={stop} onClick={() => onEdit && onEdit(id)} aria-label={tr('Modifier') + ' ' + (nom || id)} style={{ ...bouton(false), ...serre }}>{tr('Modifier')}</button>
+          <button data-drag-ui="1" onPointerDown={stop} onClick={() => ed.remove(id)} aria-label={tr('Supprimer') + ' ' + (nom || id)} style={{ ...bouton(true), ...serre }}>{tr('Supprimer')}</button>
         </div>
       </div>
     );
   }
   return (
-    <div data-id={id} role="button" tabIndex={0} {...prise} aria-label={tr('Modifier ou déplacer') + ' ' + (nom || id)} className={classes} title={titre} style={racine}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+    <div data-id={id} {...prise} className={classes} title={titre} style={racine}>
+      {surface}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO('rgba(' + info.rgb + ',.16)', 'rgb(' + info.rgb + ')')}>{icone(17)}</span>
         {coin}
       </div>
@@ -4764,9 +5228,9 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, taille =
         <div style={RM_NAME}>{nom || id}</div>
         <div style={{ ...RM_SUB, color: 'rgb(' + info.rgb + ')' }}>{sousTitre}</div>
       </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <button data-drag-ui="1" onPointerDown={stop} onClick={() => onEdit && onEdit(id)} style={bouton(false)}>{tr('Modifier')}</button>
-        <button data-drag-ui="1" onPointerDown={stop} onClick={() => ed.remove(id)} style={bouton(true)}>{tr('Supprimer')}</button>
+      <div style={{ position: 'relative', display: 'flex', gap: 8, marginTop: 12 }}>
+        <button data-drag-ui="1" onPointerDown={stop} onClick={() => onEdit && onEdit(id)} aria-label={tr('Modifier') + ' ' + (nom || id)} style={bouton(false)}>{tr('Modifier')}</button>
+        <button data-drag-ui="1" onPointerDown={stop} onClick={() => ed.remove(id)} aria-label={tr('Supprimer') + ' ' + (nom || id)} style={bouton(true)}>{tr('Supprimer')}</button>
       </div>
     </div>
   );
@@ -4865,7 +5329,7 @@ function ComposeurCartes({ hass, dc = null, present = [], onToggle, onClose, pie
     const par = new Map();
     appareilsVisibles.forEach(a => { const g = a.piece || ''; if (!par.has(g)) par.set(g, []); par.get(g).push(a); });
     const cle = (g) => (piece && rmNorm(g) === rmNorm(piece)) ? '0' : g ? '1' + g.toLowerCase() : '2';
-    [...par.keys()].sort((a, b) => cle(a).localeCompare(cle(b), 'fr')).forEach(g => groupes.push({ nom: g, liste: par.get(g) }));
+    [...par.keys()].sort((a, b) => comparerTextes(cle(a), cle(b))).forEach(g => groupes.push({ nom: g, liste: par.get(g) }));
   }
   const iconeDe = (a) => {
     // La camera n'a plus de famille (17/09) : elle garde son icone.
@@ -4883,8 +5347,8 @@ function ComposeurCartes({ hass, dc = null, present = [], onToggle, onClose, pie
       {() => (
         <div style={{ padding: '0 0 8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <div style={{ fontSize: 15, fontWeight: 800 }}>{entete || tr('Ajouter une carte')}</div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{present.length > 1 ? tr('{n} cartes', { n: present.length }) : tr('{n} carte', { n: present.length })}</div>
+            <NomFeuille><div style={{ fontSize: 15, fontWeight: 800 }}>{entete || tr('Ajouter une carte')}</div></NomFeuille>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{trN(present.length, '{n} carte', '{n} cartes')}</div>
             <span style={{ flex: 1 }} />
             <CroixFeuille />
           </div>
@@ -5018,7 +5482,7 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
     const btn = { width: 30, height: 30, borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer', flexShrink: 0 };
     controle = (<>
       <button style={btn} aria-label={'− ' + label} onClick={() => !isNaN(v) && poser(v - pas)}>−</button>
-      <span style={{ minWidth: 44, textAlign: 'center', fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{isNaN(v) ? '—' : Math.round(v * 100) / 100}{a.unit_of_measurement ? ' ' + a.unit_of_measurement : ''}</span>
+      <span style={{ minWidth: 44, textAlign: 'center', fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{isNaN(v) ? '—' : decMax(v, 2)}{a.unit_of_measurement ? ' ' + a.unit_of_measurement : ''}</span>
       <button style={btn} aria-label={'+ ' + label} onClick={() => !isNaN(v) && poser(v + pas)}>+</button>
     </>);
   } else if (dom === 'select' || dom === 'input_select') {
@@ -5070,18 +5534,21 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
   } else if (dom === 'binary_sensor') {
     const on = !!st && st.state === 'on';
     const grave = ['smoke', 'gas', 'moisture', 'problem', 'safety', 'carbon_monoxide'].indexOf(a.device_class) >= 0;
-    controle = <span style={{ fontSize: 12, fontWeight: 800, color: on ? (grave ? 'var(--o-bad)' : 'var(--o-warn)') : 'var(--o-text3)' }}>{on ? tr('Détecté') : 'RAS'}</span>;
+    controle = <span style={{ fontSize: 12, fontWeight: 800, color: on ? (grave ? 'var(--o-bad)' : 'var(--o-warn)') : 'var(--o-text3)' }}>{on ? tr('Détecté') : tr('RAS')}</span>;
   } else {
     // sensor et le reste : la valeur, lisible. Une valeur VIDE ou inconnue ne
     // mérite pas sa ligne — le vide n'informe personne.
     const brut = st ? st.state : null;
     if (brut === '' || brut === 'unknown' || brut == null) return null;
     const n = parseFloat(brut);
-    const rel = /^\d{4}-\d\d-\d\dT/.test(String(brut)) ? relTime(brut) : null;
+    // Une date, une heure : `texteDate` (05/10, suite « dates partout »). Seul
+    // l'ISO à T passait par `relTime` : une date seule s'écrivait « 2 026 »,
+    // une heure « 07:30 » un « 7 ».
+    const rel = texteDate(st);
     const bat = a.device_class === 'battery' && !isNaN(n);
     controle = (
       <span style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: bat ? (n < 20 ? 'var(--o-bad)' : n < 50 ? 'var(--o-warn)' : 'var(--o-ok)') : 'var(--o-text)' }}>
-        {mort ? '—' : rel || (isNaN(n) ? String(brut) : Math.round(n * 100) / 100)}{!rel && a.unit_of_measurement ? ' ' + a.unit_of_measurement : ''}
+        {mort ? '—' : rel || (isNaN(n) ? String(brut) : decMax(n, 2))}{!rel && a.unit_of_measurement ? ' ' + a.unit_of_measurement : ''}
       </span>
     );
   }
@@ -5220,7 +5687,7 @@ function FicheMachineHero({ id, hass }) {
   const btns = [];
   if (dom === 'vacuum') {
     if (en ? (f & 4) : (f & 8192)) btns.push([en ? 'pause' : 'play', en ? 'pause' : 'start', en ? tr('Pause') : tr('Démarrer le nettoyage')]);
-    if ((f & 8) && (s === 'cleaning' || s === 'returning' || s === 'paused')) btns.push(['stop', 'stop', 'Stop']);
+    if ((f & 8) && (s === 'cleaning' || s === 'returning' || s === 'paused')) btns.push(['stop', 'stop', tr('Stop')]);
     if (f & 16) btns.push(['home', 'return_to_base', tr('Renvoyer au dock')]);
     if (f & 512) btns.push(['marker', 'locate', tr('Localiser')]);
   } else {
@@ -5344,7 +5811,11 @@ function FicheAppareil({ id, hass, onClose }) {
   const nomApp = (meta && meta.device) || cvName(S[id], id);
   const dm = devId && index && index.deviceMeta ? index.deviceMeta.get(devId) : null;
   // Les pilotables en tête — l'entité tapée d'abord ; le reste par catégorie du registre.
-  const pilotables = soeurs.filter(x => FICHE_PILOTABLES.indexOf(domDe(x.id)) >= 0 && !x.m.category)
+  // Un capteur DATÉ tapé arrive ici, pas sur la fiche 24 h (05/10, suite
+  // « dates partout ») : il prend la tête, en tuile, comme un pilotable —
+  // sans quoi sa date dormait dans une section repliée, ou parmi les
+  // diagnostics (« dernier démarrage »).
+  const pilotables = soeurs.filter(x => (FICHE_PILOTABLES.indexOf(domDe(x.id)) >= 0 && !x.m.category) || (x.id === id && domDe(id) === 'sensor'))
     .sort((a, b) => (a.id === id ? -1 : 0) - (b.id === id ? -1 : 0));
   const restantes = soeurs.filter(x => pilotables.indexOf(x) < 0);
   // Les épinglées quittent leur section : elles vivent en tête, pas en double.
@@ -5358,7 +5829,7 @@ function FicheAppareil({ id, hass, onClose }) {
   const principal = libres.filter(x => !x.m.category);
   const config = libres.filter(x => x.m.category === 'config');
   const diag = libres.filter(x => x.m.category === 'diagnostic');
-  const triNom = (a, b) => String(nomCourt(a)).localeCompare(String(nomCourt(b)), 'fr');
+  const triNom = (a, b) => comparerTextes(String(nomCourt(a)), String(nomCourt(b)));
   // Chaque section se replie d'un tap sur son titre. REPLIÉES par défaut :
   // la fiche s'ouvre sur l'essentiel (état, actions, épingles), le détail se
   // déplie à la demande. Les épingles, choisies par le foyer, restent visibles.
@@ -5382,7 +5853,7 @@ function FicheAppareil({ id, hass, onClose }) {
       {() => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 19, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nomApp}</div>
+            <NomFeuille><div style={{ fontSize: 19, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nomApp}</div></NomFeuille>
             {dm && (dm.manufacturer || dm.model) && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[dm.manufacturer, dm.model].filter(Boolean).join(' · ')}</div>}
           </div>
           {/* Épingler l'entité TAPÉE : elle vit en carte de tête, hors des
@@ -5427,16 +5898,36 @@ function FicheAppareil({ id, hass, onClose }) {
  * l'accueil, une fiche rouverte) — cinq minutes de mémoire évitent de refaire
  * le même GET à chaque navigation. */
 const HISTO_CACHE = new Map();
+/* La SEULE porte d'écriture, et elle purge (lot 15 de l'audit du 03/10).
+ * Aucune lecture ne sert une série de plus de cinq minutes, mais la Map la
+ * gardait jusqu'au rechargement : une tablette allumée des jours y entassait
+ * toutes les entités jamais ouvertes. La série « montrée » qu'un GET raté
+ * garde une demi-heure vit dans l'effet (`montree`), pas ici. */
+const HISTO_FRAIS_MS = 5 * 60000;
+function histoRanger(cle, entree, maintenant = Date.now()) {
+  for (const [k, e] of HISTO_CACHE) if (maintenant - e.t >= HISTO_FRAIS_MS) HISTO_CACHE.delete(k);
+  HISTO_CACHE.set(cle, entree);
+}
 function useHistorique24(hass, id, attribut = null) {
   const cle = id ? id + '|' + (attribut || '') : null;
   const enCache = cle && HISTO_CACHE.get(cle);
-  const [points, setPoints] = useState(enCache && Date.now() - enCache.t < 5 * 60000 ? enCache.serie : null);
+  const [points, setPoints] = useState(enCache && Date.now() - enCache.t < HISTO_FRAIS_MS ? enCache.serie : null);
   const api = hass && hass.callApi ? 1 : 0;
   useEffect(() => {
     if (!api || !id) return;
     let mort = false;
     const frais = HISTO_CACHE.get(cle);
-    if (frais && Date.now() - frais.t < 5 * 60000) setPoints(frais.serie);
+    const recent = !!frais && Date.now() - frais.t < HISTO_FRAIS_MS;
+    if (recent) setPoints(frais.serie);
+    /* La dernière série MONTRÉE pour cette entité, et l'heure où elle a été lue
+     * (audit du 03/10). Un GET raté la garde : HA qui redémarre ou un Wi-Fi qui
+     * saute changeaient la courbe en « Historique indisponible » jusqu'au
+     * sondage suivant, cinq minutes plus tard, alors que la série d'avant
+     * disait encore la journée. Une demi-heure au plus : au-delà, elle ne dit
+     * plus « les dernières 24 h », et l'erreur se dit. Sans série déjà montrée
+     * — une fiche ouverte pendant la panne —, l'erreur se dit aussi : une série
+     * du cache vieille d'une heure passerait pour la journée. */
+    let montree = recent ? frais : null;
     const lire = () => {
       const debut = new Date(Date.now() - 24 * 3600e3).toISOString();
       const q = 'history/period/' + debut + '?filter_entity_id=' + encodeURIComponent(id) + (attribut ? '' : '&minimal_response&no_attributes');
@@ -5447,11 +5938,13 @@ function useHistorique24(hass, id, attribut = null) {
           const serie = brut
             .map(p => ({ t: new Date(p.last_changed || p.last_updated || 0).getTime(), v: parseFloat(attribut ? (p.attributes ? p.attributes[attribut] : NaN) : p.state) }))
             .filter(p => !isNaN(p.v));
-          HISTO_CACHE.set(cle, { t: Date.now(), serie });
+          const lue = { t: Date.now(), serie };
+          histoRanger(cle, lue);
+          montree = lue;
           setPoints(serie);
-        }).catch(() => { if (!mort) setPoints('erreur'); });
+        }).catch(() => { if (!mort) setPoints(montree && Date.now() - montree.t < 30 * 60000 ? montree.serie : 'erreur'); });
     };
-    if (!frais || Date.now() - frais.t >= 5 * 60000) lire();
+    if (!recent) lire();
     const iv = setInterval(lire, 5 * 60000);
     return () => { mort = true; clearInterval(iv); };
   }, [api, id, attribut]);
@@ -5472,7 +5965,7 @@ function Courbe24({ points, couleur = 'var(--o-accent)', unite = '' }) {
     chemin = points.map((p, i) => (i ? 'L' : 'M') + X(p.t).toFixed(1) + ' ' + Y(p.v).toFixed(1)).join(' ');
     aire = chemin + ' L 100 40 L 0 40 Z';
   }
-  const fmt = (x) => Math.round(x * 10) / 10;
+  const fmt = (x) => decMax(x, 1);
   return (
     <div>
       <div style={{ position: 'relative', height: 110, borderRadius: 14, background: 'var(--o-s1)', overflow: 'hidden' }}>
@@ -5503,17 +5996,21 @@ function SensorSheet({ id, hass, onClose }) {
   const points = useHistorique24(hass, id);
   const n = st ? parseFloat(st.state) : NaN;
   const unite = a.unit_of_measurement || '';
+  /* `enPanne`, comme CvBigSensor qui l'ouvre (05/10) : la fiche écrivait
+   * « unavailable » ou « unknown » en 44 px, en anglais, à côté de l'unité. */
+  const mort = enPanne(id, st);
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ flex: 1, fontSize: 19, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</span>
+          <NomFeuille><span style={{ flex: 1, fontSize: 19, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</span></NomFeuille>
           <BoutonEpingle id={id} />
           <CroixFeuille />
         </div>
-        <div style={{ textAlign: 'center', margin: '16px 0 18px' }}>
-          <span style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums' }}>{isNaN(n) ? (st ? st.state : '—') : Math.round(n * 10) / 10}</span>
-          {unite && <span style={{ fontSize: 19, fontWeight: 700, color: 'var(--o-text2)', marginLeft: 6 }}>{unite}</span>}
+        <div className={mort ? 'o-panne' : undefined} style={{ textAlign: 'center', margin: '16px 0 18px', ...(mort ? FICHE_BLOC : null) }}>
+          <span style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums', color: mort ? 'var(--o-text3)' : undefined }}>{mort ? '—' : isNaN(n) ? (st ? st.state : '—') : decMax(n, 1)}</span>
+          {unite && !mort && <span style={{ fontSize: 19, fontWeight: 700, color: 'var(--o-text2)', marginLeft: 6 }}>{unite}</span>}
+          {mort && <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text3)', marginTop: 4 }}>{tr('Indisponible')}</div>}
         </div>
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '0 0 9px' }}>{tr('DERNIÈRES 24 H')}</div>
         <Courbe24 points={points} unite={unite} />
@@ -5553,12 +6050,16 @@ function useDomainCards(hass, { onNav = null } = {}) {
       const ct = modes.indexOf('color_temp') >= 0;
       const dimmable = rgb || ct || modes.indexOf('brightness') >= 0 || a.brightness != null;
       if (!dimmable) { setAppPop(id); return; } // rien à régler sur la lampe : l'appareil, alors
-      const color = a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : null;
+      const color = a.rgb_color ? versHex(a.rgb_color) : null;
       setLightPop({ id, name: a.friendly_name || id, on: !!st && st.state === 'on', bri: a.brightness != null ? Math.round(a.brightness / 255 * 100) : 100, color, rgb, ct, dimmable, lc: st && st.last_changed });
     } else if (d === 'climate') setClimPop(id);
     else if (d === 'cover') setCoverPop(id);
     else if (d === 'media_player') setMediaPop(id);
-    else if (d === 'sensor') setSensPop(id);
+    // Un capteur DATÉ n'a pas de courbe à montrer (05/10, suite « dates
+    // partout ») : sa fiche 24 h écrivait l'année en 44 px au-dessus d'une
+    // courbe d'années. Il ouvre son APPAREIL, comme une lampe sans réglage —
+    // sa fiche le met en tête, en tuile qui dit sa date.
+    else if (d === 'sensor' && texteDate(st) == null) setSensPop(id);
     else if (d === 'switch' && !cvEstLumiere(id)) setPrisePop(id);
     else if (d === 'lock') setLockPop(id);
     else if (d === 'binary_sensor') setBinPop(id);
@@ -5576,9 +6077,9 @@ function useDomainCards(hass, { onNav = null } = {}) {
   const appel = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
   /* Le distributeur : reservoir, prochaine ration, et le « distribuer » de
    * l'APPAREIL (un select `feed` dont START lance une ration) — le script
-   * maison ne reste qu'en repli. Le bac en grammes, les repas du jour, les
-   * jours de reserve ; le dernier repas d'apres le compteur du jour ; la
-   * portion, un nombre de l'appareil. */
+   * maison ne reste qu'en repli. Le bac en grammes et les repas du jour (les
+   * jours de reserve, c'est la fiche qui les divise) ; le dernier repas
+   * d'apres le compteur du jour ; la portion, un nombre de l'appareil. */
   const muet = (id) => !!id && (!S[id] || S[id].state === 'unavailable');
   const distributeur = () => {
     const croq = croqHaids();
@@ -5592,12 +6093,16 @@ function useDomainCards(hass, { onNav = null } = {}) {
     })();
     const ficheId = (loggiaEnt('feeder', null) || {}).haid || Object.keys(S).find(id => id.indexOf('number.') === 0 && /serving_size$/.test(id)) || null;
     const repas = croqMeals();
-    const jours = joursDeReserve(numDe(croq.reservoir, null), repas);
+    /* Le bac en grammes, pas ses jours (relecture du 04/10) : divisés ici par
+     * TOUS les repas de la configuration, ils comptaient les repas coupés —
+     * « Environ 8 jours de réserve » au-dessus de « 0 actifs », dans la même
+     * fiche. C'est elle qui divise, par les repas qu'elle montre allumés. */
+    const grammes = numDe(croq.reservoir, null);
     const dernier = (() => { const e = croq.distribuees && S[croq.distribuees]; return e && e.last_changed ? heureDe(e.last_changed) : null; })();
     const portion = (() => { const id = croq.portionWeight; const e = id && S[id]; if (!e) return null; const a = e.attributes || {}; return { id, valeur: numDe(id, 0), min: Number(a.min) || 0, max: Number(a.max) || 100, pas: Number(a.step) || 1 }; })();
     const onRempli = (croq.reservoir && String(croq.reservoir).indexOf('input_number.') === 0) ? () => appel('input_number', 'set_value', { entity_id: croq.reservoir, value: croqMax(S) }) : null;
     const sous = [tr('Réservoir {p} %', { p: pct }), dernier ? tr('dernier repas {h}', { h: dernier }) : (ration ? tr('prochaine ration {h}', { h: ration.time }) : null)].filter(Boolean).join(' · ');
-    return { pct, ration, feed, ficheId, repas, jours, dernier, portion, onRempli, sous, mort: muet(croq.reservoir) };
+    return { pct, ration, feed, ficheId, repas, grammes, dernier, portion, onRempli, sous, mort: muet(croq.reservoir) };
   };
   // Les plantes : leurs capteurs, reconnus a leur classe, et leur verdict.
   const plante = (base) => {
@@ -5657,7 +6162,7 @@ function useDomainCards(hass, { onNav = null } = {}) {
       {lockPop && <RoomLockSheet id={lockPop} hass={hass} onClose={() => setLockPop(null)} />}
       {binPop && <RoomBinarySheet id={binPop} hass={hass} onClose={() => setBinPop(null)} />}
       {robotPop && <FicheRobot id={robotPop} hass={hass} onClose={() => setRobotPop(null)} />}
-      {feederPop && (() => { const d = distributeur(); return <FicheDistributeur hass={hass} nom={tr('Distributeur de croquettes')} pct={d.pct} jours={d.jours} dernier={d.dernier} ration={d.ration} repas={d.repas} portion={d.portion} feed={d.feed} onRempli={d.onRempli} ficheId={d.ficheId} onClose={() => setFeederPop(false)} />; })()}
+      {feederPop && (() => { const d = distributeur(); return <FicheDistributeur hass={hass} nom={tr('Distributeur de croquettes')} pct={d.pct} grammes={d.grammes} dernier={d.dernier} ration={d.ration} repas={d.repas} portion={d.portion} feed={d.feed} onRempli={d.onRempli} ficheId={d.ficheId} mort={d.mort} onClose={() => setFeederPop(false)} />; })()}
       {plantPop && <FichePlante pl={plantPop} onClose={() => setPlantPop(null)} />}
     </>
   );
@@ -5694,7 +6199,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
   const addSection = () => ed.toggle('sect:' + Date.now().toString(36));
 
   const S0 = (hass && hass.states) || {};
-  const origineDe = (k) => k.indexOf('sect:') === 0 ? 'Section'
+  const origineDe = (k) => k.indexOf('sect:') === 0 ? tr('Section')
     : (k.indexOf(':') > 0 && k.indexOf('.') < 0) ? nomDeCle(S0, k)
       : ((S0[k] && S0[k].attributes && S0[k].attributes.friendly_name) || k);
   const nomDe = (k) => ed.labelOf(k) || origineDe(k);
@@ -5756,7 +6261,9 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
                   : tr('{n} lampe allumée', { n: lightsOn.length }))
                 : tr('Tout est éteint')}
               {live && live.temp != null ? ' · ' + dec(live.temp, 1) + ' °' + uniteTPiece : ''}
-              {live && live.hum != null ? ' · ' + Math.round(live.hum) + ' % HR' : ''}
+              {/* « HR » est l'abréviation FRANÇAISE de l'humidité relative — RH, rF,
+                * UR ailleurs : elle se traduit avec son nombre (audit du 03/10). */}
+              {live && live.hum != null ? ' · ' + tr('{n} % HR', { n: Math.round(live.hum) }) : ''}
               {live && live.co2 != null ? ' · ' + Math.round(live.co2) + ' ppm' : ''}
             </div>
           </div>
@@ -5783,7 +6290,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
                   : <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>
                       <Fi i="apps" size={16} color="var(--o-ok)" />{nomDe(bloc.titre)}
                     </div>)}
-                <div className="grid-roomdev grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 16 }}>
+                <div className="grid-roomdev grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', columnGap: 16, rowGap: 8 }}>
               {bloc.cartes.map(id => {
                 const zone = id.indexOf('zone:') === 0 ? climateZones(S).find(z => z.id === id.slice(5)) : null;
                 const lbl = roomLabelOf(room, id);
@@ -5797,7 +6304,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
               </div>)
             ))}
             </div>
-          : <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Aucun appareil détecté pour cette pièce.')}<br /><span style={{ fontSize: 12 }}>Loggia regroupe les entités dont le nom contient « {room} ».</span></div>}
+          : <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Aucun appareil détecté pour cette pièce.')}<br /><span style={{ fontSize: 12 }}>{tr('Loggia regroupe les entités dont le nom contient « {room} ».', { room })}</span></div>}
         {/* Pas de journal sous les appareils : retire le 14/09 (retour user).
           * Le journal vit dans la vue Securite, avec ses ouvrants et son alarme. */}
         {/* Les fiches des cartes (lumière, volet, climat…) : dc.card pose
@@ -5831,7 +6338,9 @@ function lancerScenario(h, id) {
     // Le composant dit ce qu'il a refusé ou raté ; le geste ne doit pas
     // avoir l'air d'avoir marché. Le rejet remonte à l'écoute globale
     // (toast) — aucun appelant ne l'attrape (audit 18/09).
-    return h.callWS({ type: 'loggia/scenarios/lancer', id }).then(r => {
+    // `scenario`, et non `id` : `id` est le numéro du message, que la
+    // bibliothèque de Home Assistant écrase avec le sien (audit du 03/10).
+    return h.callWS({ type: 'loggia/scenarios/lancer', scenario: id }).then(r => {
       if (r && (r.erreurs > 0 || (r.refusees > 0 && !r.n))) {
         const e = new Error(r.n ? tr('Scénario en partie exécuté — {n} commande(s) refusée(s)', { n: (r.erreurs || 0) + (r.refusees || 0) }) : tr('Scénario refusé — aucune cible autorisée ou joignable'));
         e.code = 'scenario_incomplet'; e.resultat = r;
@@ -5870,9 +6379,22 @@ function useScenarios(hass) {
     return r;
   };
   /* Ranger les scénarios : l'ordinateur écrit l'ordre du composant, les
-   * autres formats le leur. */
+   * autres formats le leur.
+   *
+   * L'ordinateur passait par `enregistrer`, donc par `loggia/scenarios/config`,
+   * réservée aux administrateurs : sur un compte ordinaire la flèche était
+   * refusée, la vue avalait le refus, et la carte revenait à sa place au
+   * sondage suivant (audit du 03/10). Ranger est de l'agencement (ADR 0125) :
+   * `rangerScenarios` passe par `loggia/scenarios/ordre`, ouverte à tout
+   * compte, et un refus remonte, nommé, au toast global (ADR 0046). */
   const ordonner = async (ids) => {
-    if (format === 'pc') return enregistrer({ ordre: ids });
+    if (format === 'pc') {
+      const h = hass && typeof hass.callWS === 'function' ? hass : null;
+      if (!h) throw new Error(tr('Home Assistant n’est pas joignable.'));
+      const r = await rangerScenarios(h, ids);
+      if (r && r.etat) { SCN_ETAT = r.etat; setEtat(r.etat); }
+      return r;
+    }
     const n = { ...ordres, [format]: ids };
     setOrdres(n);
     cfgSet({ loggia_scnordre: n });
@@ -5894,15 +6416,15 @@ const PUCE_SCN = { fontSize: 11, fontWeight: 700, padding: '4px 9px', borderRadi
  * l'icône ; compacte (88) sur l'Accueil, standard (184) dans la vue, où elle
  * dit aussi ce qu'elle fait. La teinte s'applique en entier — lavis, icône,
  * repère —, sans bordure. En cours : le lavis se renforce. */
-function CarteScenario({ s, noms = {}, compacte = false, enCours = false, onLancer, style = null, sansDernier = false }) {
+function CarteScenario({ s, noms = {}, compacte = false, enCours = false, onLancer, style = null, className = null, sansDernier = false }) {
   const t = teinteScenario(s);
   const nom = nomScenario(s);
   const cibles = nombreCibles(s);
   const lavis = enCours ? .28 : .12;
   const nActions = nombreActions(s);
   return (
-    <button type="button" onClick={(e) => { fxTap(e); if (onLancer) onLancer(s.id); }} aria-label={tr('Lancer {x}', { x: nom })}
-      style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%', height: compacte ? 88 : 184, padding: compacte ? '12px 13px' : '14px 15px', boxSizing: 'border-box', borderRadius: 'var(--o-radius,18px)', border: 'none', cursor: 'pointer', textAlign: 'left', overflow: 'hidden', transition: 'background .25s, box-shadow .25s', color: 'var(--o-text)',
+    <button type="button" onClick={(e) => { fxTap(e); if (onLancer) onLancer(s.id); }} aria-label={tr('Lancer {x}', { x: nom })} className={className}
+      style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%', height: compacte ? 88 : 184, padding: compacte ? '12px 13px' : '14px 15px', boxSizing: 'border-box', borderRadius: 'var(--o-radius,18px)', border: LISERE, cursor: 'pointer', textAlign: 'left', overflow: 'hidden', transition: 'background .25s, box-shadow .25s', color: 'var(--o-text)',
         background: `linear-gradient(180deg, rgba(${t.rgb},${lavis}), rgba(${t.rgb},${lavis})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
         boxShadow: enCours ? `0 10px 26px rgba(${t.rgb},.35)` : 'var(--o-shadow,0 6px 16px rgba(0,0,0,.26))', ...(style || {}) }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', width: '100%' }}>
@@ -5929,8 +6451,8 @@ function CarteScenario({ s, noms = {}, compacte = false, enCours = false, onLanc
          *
          * Mesuré : 1 pastille sur une carte de 141 px, 2 sur 176, 3 sur 236. */
         <div style={{ position: 'absolute', left: 15, right: 15, bottom: 14, display: 'flex', flexWrap: 'wrap', alignContent: 'flex-start', gap: 6, height: H_PUCE_SCN, overflow: 'hidden' }}>
-          <span style={PUCE_SCN}>{nActions > 1 ? tr('{n} actions', { n: nActions }) : tr('{n} action', { n: nActions })}</span>
-          {cibles != null && <span style={PUCE_SCN}>{cibles > 1 ? tr('{n} cibles', { n: cibles }) : tr('{n} cible', { n: cibles })}</span>}
+          <span style={PUCE_SCN}>{trN(nActions, '{n} action', '{n} actions')}</span>
+          {cibles != null && <span style={PUCE_SCN}>{trN(cibles, '{n} cible', '{n} cibles')}</span>}
           <span style={PUCE_SCN}>{s.lien ? tr('scène HA') : 'Loggia'}</span>
         </div>
       )}
@@ -5949,12 +6471,25 @@ function ScenariosAccueil({ hass, edit = false, onNav = null }) {
   const sc = useScenarios(hass);
   const liste = scenariosAccueil(sc.tous);
   const nScenarios = liste.length;
+  /* La rangée qu'on attend (lot 14 de l'audit du 03/10). Les scénarios
+   * viennent du composant APRÈS le premier dessin : leur rangée poussait les
+   * pièces et les caméras de 94 px à chaque chargement. Sa place reste VIDE
+   * le temps de la réponse — une réserve, pas une carte — quand ce navigateur
+   * l'a vue pleine la dernière fois (une installation sans scénario sur
+   * l'Accueil ne réserve rien). L'en-tête attend la réponse, caché :
+   * « Tous les scénarios » devenait « 9 scénarios » sous les yeux. */
+  const repondu = !!(sc.etat || sc.err);
+  const [rangeeVue] = useState(() => { try { return localStorage.getItem('loggia-scnrangee') === '1'; } catch { return false; } });
+  const pleine = sc.etat ? (nScenarios ? '1' : '0') : null;
+  useEffect(() => { if (pleine) { try { localStorage.setItem('loggia-scnrangee', pleine); } catch { /* stockage refusé : la rangée sautera, comme avant */ } } }, [pleine]);
   // Les flèches : seulement quand la rangée déborde, actives du côté où il
   // reste quelque chose. La mesure suit le défilement et la largeur.
   const rangee = useRef(null);
   const mesure = useRef(null);
   const [bords, setBords] = useState({ avant: false, apres: false });
-  useEffect(() => {
+  // Avant la peinture (lot 14 de l'audit du 03/10) : les flèches naissent avec
+  // la rangée, au lieu de pousser le lien de l'en-tête de 64 px une image après.
+  useLayoutEffect(() => {
     const el = rangee.current;
     if (!el) return undefined;
     const mesurer = () => setBords(b => { const n = bordsDefilement(el.scrollLeft, el.scrollWidth, el.clientWidth); return n.avant === b.avant && n.apres === b.apres ? b : n; });
@@ -5980,7 +6515,7 @@ function ScenariosAccueil({ hass, edit = false, onNav = null }) {
     }, 350);
   };
   const fleche = (active) => ({ width: 26, height: 26, borderRadius: 9, border: 'none', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: active ? 'pointer' : 'default', opacity: active ? 1 : .35 });
-  const compte = nScenarios > 1 ? tr('{n} scénarios', { n: nScenarios }) : tr('{n} scénario', { n: nScenarios });
+  const compte = trN(nScenarios, '{n} scénario', '{n} scénarios');
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
@@ -5990,7 +6525,7 @@ function ScenariosAccueil({ hass, edit = false, onNav = null }) {
            * section inerte (pointer-events none) pour qu'elle se saisisse ;
            * ce bouton, lui, doit rester cliquable (bug vu le 16/09 sur HA). */
           ? <button data-drag-ui="1" onClick={() => onNav('scenes')} style={{ pointerEvents: 'auto', padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12 }}>{tr('Gérer les scénarios')}</button>
-          : <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          : <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, visibility: repondu ? undefined : 'hidden' }}>
               {(bords.avant || bords.apres) && (<>
                 <button type="button" className="o-qscenes-fleche" onClick={() => glisser(-1)} disabled={!bords.avant} aria-label={tr('Scénarios précédents')} title={tr('Scénarios précédents')} style={fleche(bords.avant)}><Fi i="angle-small-left" size={13} /></button>
                 <button type="button" className="o-qscenes-fleche" onClick={() => glisser(1)} disabled={!bords.apres} aria-label={tr('Scénarios suivants')} title={tr('Scénarios suivants')} style={fleche(bords.apres)}><Fi i="angle-small-right" size={13} /></button>
@@ -6007,9 +6542,23 @@ function ScenariosAccueil({ hass, edit = false, onNav = null }) {
             </div>}
       </div>
       {nScenarios > 0 && (
-        <div ref={rangee} className="grid-qscenes">
+        <div ref={rangee} className="grid-qscenes" inert={edit ? '' : undefined}>
+          {/* En édition, la rangée est inerte au clavier aussi : la section ne
+            * l'est plus, pour laisser « Gérer les scénarios » joignable
+            * (relecture du lot 13 de l'audit du 03/10). */}
           {liste.map(s => <CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} />)}
         </div>
+      )}
+      {/* La réserve (voir `rangeeVue`) : rien ne s'y dessine, elle part à la
+        * réponse. `overflowX: scroll` lui donne la barre de 4 px de la rangée
+        * pleine au téléphone ; au-delà de 820 px, il n'y en a pas.
+        * Seulement quand une connexion existe : sans elle, aucune réponse
+        * ne viendra, la réserve partait à 4 s et la page remontait de 94 px
+        * (relecture du lot 14). Un refus du composant, connexion présente,
+        * garde ce court saut : rare, et une bande vide sous « Scénarios
+        * indisponibles » serait pire. */}
+      {!nScenarios && !repondu && rangeeVue && !!(hass && typeof hass.callWS === 'function') && (
+        <div className="grid-qscenes" aria-hidden="true" style={{ overflowX: 'scroll' }}><span style={{ height: 88 }} /></div>
       )}
     </>
   );
@@ -6118,7 +6667,7 @@ function CameraTile({ c, agrandir = true }) {
         <button type="button" aria-label={tr('Agrandir') + ' ' + (c.label || '')} onClick={() => setGrand(true)}
           style={{ position: 'absolute', inset: 0, zIndex: 2, border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }} />
       )}
-      <div className="o-livebadge" style={{ position: 'absolute', top: 13, left: 13, display: 'flex', alignItems: 'center', gap: 8, padding: '5px 11px', borderRadius: 999, background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(6px)', fontSize: 11, fontWeight: 800, letterSpacing: '.06em', color: '#fff' }}><span className="o-livedot" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-bad)' }} />{c.tag}</div>
+      <div className="o-livebadge" style={{ position: 'absolute', top: 13, left: 13, display: 'flex', alignItems: 'center', gap: 8, padding: '5px 11px', borderRadius: 999, background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(6px)', fontSize: 11, fontWeight: 800, letterSpacing: '.06em', color: '#fff' }}><span className="o-livedot" style={{ width: 7, height: 7, '--o-point-r': 3.5, borderRadius: '50%', background: 'var(--o-bad)' }} />{c.tag}</div>
       <div className="o-camheure" style={{ position: 'absolute', top: 13, right: 14, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.85)', textShadow: '0 1px 4px rgba(0,0,0,.5)' }}>{hhmm}</div>
       {/* Les classes portent les règles du téléphone (deux tuiles par ligne). */}
       <div className="o-campied" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '30px 16px 14px', background: 'linear-gradient(to top,rgba(0,0,0,.72),transparent)', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
@@ -6140,14 +6689,14 @@ function CvCamera({ id, hass, label = null }) {
   const vivant = !!(hass && hass.connection);
   const [grand, setGrand] = useState(false);
   return (
-    <div className={'o-piece' + (!online ? ' o-panne' : '')} style={{ position: 'relative', height: '100%', minHeight: 172, borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', background: 'linear-gradient(160deg,#16202e,#0b0f16)', border: 'none', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))' }}>
+    <div className={'o-piece' + (!online ? ' o-panne' : '')} style={{ position: 'relative', height: '100%', minHeight: 172, borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', background: 'linear-gradient(160deg,#16202e,#0b0f16)', border: LISERE, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))' }}>
       {vivant
         ? <CamLive hass={hass} haid={id} online={online} nom={nom} />
         : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text3)' }}><Fi i="video-camera" size={30} /></div>}
       {/* Toute la carte agrandit, comme la tuile de l'Accueil (20/09). */}
       <button type="button" aria-label={tr('Agrandir') + ' ' + nom} onClick={() => setGrand(true)}
         style={{ position: 'absolute', inset: 0, zIndex: 2, border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }} />
-      <div className="o-livebadge" style={{ position: 'absolute', top: 10, left: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '4px 9px', borderRadius: 999, background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(6px)', fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: '#fff' }}><span className="o-livedot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-bad)' }} />LIVE</div>
+      <div className="o-livebadge" style={{ position: 'absolute', top: 10, left: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '4px 9px', borderRadius: 999, background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(6px)', fontSize: 10, fontWeight: 800, letterSpacing: '.05em', color: '#fff' }}><span className="o-livedot" style={{ width: 6, height: 6, '--o-point-r': 3, borderRadius: '50%', background: 'var(--o-bad)' }} />LIVE</div>
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '24px 12px 10px', background: 'linear-gradient(to top,rgba(0,0,0,.72),transparent)', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8 }}>
         <span style={{ fontSize: 13, fontWeight: 800, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</span>
         <span style={{ width: 30, height: 30, borderRadius: 10, background: 'rgba(255,255,255,.16)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" /></svg></span>
@@ -6250,14 +6799,16 @@ function FichePlante({ pl, onClose }) {
   const presse = v.presse.map(p => M.presse[p]).join(', ');
   const sous = [pl.room, pl.hum != null ? tr('Sol {n} %', { n: Math.round(pl.hum) }) : null, presse || null].filter(Boolean).join(' · ');
   const fmt = (x, u, d = 0) => x == null ? '—' : (d ? dec(Number(x), d) : String(Math.round(x))) + u;
-  const ligne = (premiere, titre, cle, valeur) => { const [desc, couleur] = mot(cle); return <FicheRangee premiere={premiere} titre={titre} desc={desc} droite={<FicheValeur couleur={couleur}>{valeur}</FicheValeur>} />; };
+  const ligne = (premiere, titre, cle, valeur, panne = false) => { const [desc, couleur] = mot(cle); return <FicheRangee premiere={premiere} panne={panne} titre={titre} desc={desc} droite={<FicheValeur couleur={couleur}>{valeur}</FicheValeur>} />; };
   const pile = couleurPile(pl.bat);
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
         <FicheEntete titre={pl.name} sous={sous} />
         <div style={{ marginTop: 4 }}>
-          {ligne(true, tr('Humidité du sol'), 'hum', fmt(pl.hum, ' %'))}
+          {/* Le capteur d'humidité muet fait la carte en panne (`pl.mort`) : sa
+            * ligne porte le liseré, « Mesure absente » et « — » disent le reste (05/10). */}
+          {ligne(true, tr('Humidité du sol'), 'hum', fmt(pl.hum, ' %'), !!pl.mort)}
           {ligne(false, tr('Température'), 'temp', fmt(deCelsius(pl.temp, pl.uniteTemp || 'C'), ' °' + (pl.uniteTemp || 'C'), 1))}
           {ligne(false, tr('Lumière reçue'), 'lux', fmt(pl.lux, ' lx'))}
           {ligne(false, tr('Conductivité'), 'cond', fmt(pl.cond, ' µS/cm'))}
@@ -6274,26 +6825,63 @@ function FichePlante({ pl, onClose }) {
  * l'appareil entier. Pas de seuil d'alerte ni de rappel dans la fiche : le
  * capteur du reservoir se DESIGNE dans Regles > Veilles > Consommables (ADR
  * 0006), et c'est la veille qui previent — on ne dessine pas ici une bascule
- * qui ne ferait rien. */
-function FicheDistributeur({ hass, nom, pct, jours, dernier, ration, repas, portion, feed, onRempli, ficheId, onClose }) {
+ * qui ne ferait rien.
+ *
+ * Les repas s'activent ICI depuis le 04/10 : la vue Croquettes est partie
+ * (« il n'y a plus de vue speciale pour un appareil, c'est la carte plus sa
+ * popup ») et c'etait le seul endroit qui les basculait. Une ligne par repas,
+ * son interrupteur sur l'automatisation ou l'`input_boolean` qui le porte, par
+ * `homeassistant.turn_on/off` — le service du domaine `automation` echouait
+ * en silence sur un `input_boolean`. L'interrupteur montre tout de suite ce
+ * qu'on demande (`useDemandes`) : une demande par repas, lue sur la reponse de
+ * SA propre entite, qui expire si HA ne repond pas. Entite absente ou
+ * indisponible : pas d'interrupteur, on ne dessine pas une bascule qui ne
+ * ferait rien. « Distribuer » reste UNE portion. Les jours de réserve se
+ * comptent ICI, sur les repas allumés : la fabrique ne passe que le bac en
+ * grammes (relecture du 04/10). */
+/* `mort` (05/10) : le réservoir muet, la définition de la carte. Il disait
+ * « Réservoir 0 % » en rouge — un bac vide — et proposait « Rempli » sur
+ * l'entité morte. */
+function FicheDistributeur({ hass, nom, pct, grammes, dernier, ration, repas, portion, feed, onRempli, ficheId, onClose, mort = false }) {
   const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
   const valeurPortion = portion ? portion.valeur : null;
   const [ovPortion, setOvPortion] = useOptimiste(valeurPortion);
   const pv = ovPortion != null ? ovPortion : valeurPortion;
   const poserPortion = (v) => { if (!portion) return; const nv = Math.max(portion.min, Math.min(portion.max, v)); setOvPortion(nv); call('number', 'set_value', { entity_id: portion.id, value: nv }); };
   const [appareil, setAppareil] = useState(false);
-  const sous = [tr('Réservoir {p} %', { p: pct }), dernier ? tr('dernier repas {h}', { h: dernier }) : (ration ? tr('prochaine ration {h}', { h: ration.time }) : null)].filter(Boolean).join(' · ');
+  const S = (hass && hass.states) || {};
+  const [ovRepas, demanderRepas] = useDemandes();
+  const autoOn = (id) => { const e = S[id]; return e ? e.state === 'on' : true; };
+  const lignesRepas = repas.map(m => ({ ...m, mort: !!m.auto && (!S[m.auto] || S[m.auto].state === 'unavailable'),
+    on: enVol(ovRepas, m.id, S && S[m.auto], autoOn(m.auto)) }));
+  const actifs = lignesRepas.filter(m => m.on && !m.mort).length;
+  /* Les jours de réserve, sur les SEULS repas allumés (relecture du 04/10) :
+   * 760 g et deux repas de 45 g donnaient 8 jours avec les deux coupés, et 8
+   * encore avec un seul (il en reste 16). `m.on` suit la demande en vol, comme
+   * l'interrupteur, et c'est la règle de `prochaineRation` : une entité ABSENTE
+   * compte encore — mieux vaut sous-estimer la réserve que la gonfler. */
+  const jours = joursDeReserve(grammes, lignesRepas.filter(m => m.on));
+  const basculerRepas = (m) => {
+    demanderRepas(m.id, !m.on, S && S[m.auto], autoOn(m.auto));
+    call('homeassistant', m.on ? 'turn_off' : 'turn_on', { entity_id: m.auto });
+  };
+  const sous = [mort ? null : tr('Réservoir {p} %', { p: pct }), dernier ? tr('dernier repas {h}', { h: dernier }) : (ration ? tr('prochaine ration {h}', { h: ration.time }) : null)].filter(Boolean).join(' · ');
   const orange = 'var(--o-orange)';
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
         <FicheEntete titre={nom} sous={sous} id={ficheId || null} />
         <div style={{ marginTop: 4 }}>
-          <FicheRangee premiere titre={tr('Réservoir')} desc={jours == null ? tr('Ce qu’il reste dans le bac') : jours > 1 ? tr('Environ {n} jours de réserve', { n: jours }) : tr('Moins de deux jours de réserve')}
-            droite={<FicheValeur couleur={pct < 25 ? 'var(--o-bad)' : orange}>{pct} %</FicheValeur>} />
+          <FicheRangee premiere titre={tr('Réservoir')} panne={mort} desc={jours == null ? tr('Ce qu’il reste dans le bac') : jours > 1 ? tr('Environ {n} jours de réserve', { n: jours }) : tr('Moins de deux jours de réserve')}
+            droite={mort ? <FicheIndispo /> : <FicheValeur couleur={pct < 25 ? 'var(--o-bad)' : orange}>{pct} %</FicheValeur>} />
           {dernier && <FicheRangee titre={tr('Dernier repas')} desc={tr('D’après le compteur du jour')} droite={<FicheValeur>{dernier}</FicheValeur>} />}
           {ration && <FicheRangee titre={tr('Prochaine ration')} desc={tr('Programmée')} droite={<FicheValeur>{ration.time}</FicheValeur>} />}
-          <FicheRangee titre={tr('Repas par jour')} desc={repas.length ? tr('À {h}', { h: repas.map(m => m.time).join(', ') }) : tr('Aucun repas programmé')} droite={<FicheValeur>{repas.length}</FicheValeur>} />
+          <FicheRangee titre={tr('Repas par jour')} desc={repas.length ? trN(actifs, '{n} actif', '{n} actifs') : tr('Aucun repas programmé')} droite={<FicheValeur>{repas.length}</FicheValeur>} />
+          {lignesRepas.map(m => (
+            <FicheRangee key={m.id} titre={m.time} desc={[m.label, m.g > 0 ? m.g + ' g' : null].filter(Boolean).join(' · ')}
+              droite={!m.auto ? null : m.mort ? <FicheValeur couleur="var(--o-text3)">{tr('Indisponible')}</FicheValeur>
+                : <Bascule on={m.on} nom={tr('Repas de {h}', { h: m.time })} cb={() => basculerRepas(m)} />} />
+          ))}
           {portion && <FicheRangee titre={tr('Taille de la portion')} desc={tr('Ce que la vis distribue à chaque repas.')}
             droite={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <FicheBouton title={tr('Moins')} onClick={() => poserPortion(pv - portion.pas)}>−</FicheBouton>
@@ -6301,7 +6889,7 @@ function FicheDistributeur({ hass, nom, pct, jours, dernier, ration, repas, port
               <FicheBouton title={tr('Plus')} onClick={() => poserPortion(pv + portion.pas)}>+</FicheBouton>
             </div>} />}
           {feed && <FicheRangee titre={tr('Distribuer une portion')} desc={tr('Un repas en plus, hors programmation.')} droite={<FicheBouton icone="paw" onClick={feed}>{tr('Distribuer')}</FicheBouton>} />}
-          {onRempli && <FicheRangee titre={tr('Réservoir rempli')} desc={tr('Remet le niveau du bac à 100 %.')} droite={<FicheBouton icone="refresh" onClick={onRempli}>{tr('Rempli')}</FicheBouton>} />}
+          {onRempli && !mort && <FicheRangee titre={tr('Réservoir rempli')} desc={tr('Remet le niveau du bac à 100 %.')} droite={<FicheBouton icone="refresh" onClick={onRempli}>{tr('Rempli')}</FicheBouton>} />}
           {ficheId && <FicheRangee titre={tr('L’appareil')} desc={tr('Tout ce que le distributeur expose.')} droite={<FicheBouton icone="apps" onClick={() => setAppareil(true)}>{tr('Ouvrir')}</FicheBouton>} />}
         </div>
         {appareil && <FicheAppareil id={ficheId} hass={hass} onClose={() => setAppareil(false)} />}
@@ -6375,7 +6963,7 @@ function objetsDeLaMaison(hass, ajoutes = [], epinglesDehors = null) {
       nom: o.nom || (st && st.attributes && st.attributes.friendly_name) || o.id || cle,
       filtres: filtresObjet({ domaine, type, estLumiere: !!o.estLumiere, epingle: !!(o.id && epingles.has(o.id)), classe: (st && st.attributes && st.attributes.device_class) || '' }),
       actif: type === 'entite' ? objetActif({ domaine, etat, attributs: (st && st.attributes) || {} }) : !!o.actif,
-      absent: type === 'entite' ? (!st || etat === 'unavailable' || etat === 'unknown') : false,
+      absent: type === 'entite' ? enPanne(o.id, st) : false, // une scène jamais lancée n'est pas absente (05/10)
     });
   };
   // 1) chauffage : les zones, poele ou fil pilote — leurs entites de service sont prises.
@@ -6406,7 +6994,7 @@ function objetsDeLaMaison(hass, ajoutes = [], epinglesDehors = null) {
     if (d === 'sensor' && ROOM_SENSOR_CLASSES.indexOf(dc) < 0) return;
     candidats.push({ id, rang, appareil: m.deviceId || null });
   });
-  candidats.sort((x, y) => x.rang - y.rang || x.id.localeCompare(y.id)).forEach(c => {
+  candidats.sort((x, y) => x.rang - y.rang || comparerTextes(x.id, y.id)).forEach(c => {
     if (c.appareil) { if (parAppareil.has(c.appareil)) return; parAppareil.add(c.appareil); }
     entree(c.id, { id: c.id, estLumiere: c.id.indexOf('switch.') === 0 && cvEstLumiere(c.id) });
   });
@@ -6523,19 +7111,23 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
           {filtres.map(f => { const on = f.id === actuel;
             const n = f.id === 'tous' ? objets.length : objets.filter(o => o.filtres.indexOf(f.id) >= 0).length;
             return (
-            <button key={f.id} className="o-objfiltre" onClick={() => setChoix(f.id)} aria-pressed={on} aria-label={f.label + ' · ' + trN(n, tr('{n} appareil'), tr('{n} appareils'))} title={f.label} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, flexShrink: 0, whiteSpace: 'nowrap', padding: '8px 13px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>
+            <button key={f.id} className="o-objfiltre" onClick={() => setChoix(f.id)} aria-pressed={on} aria-label={f.label + ' · ' + trN(n, '{n} appareil', '{n} appareils')} title={f.label} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, flexShrink: 0, whiteSpace: 'nowrap', padding: '8px 13px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>
               {f.prise ? <PlugIcon size={13} /> : f.ico ? <Ico name={f.ico} size={14} /> : <Fi i={f.fi} size={13} />}<span className="o-objfiltre-mot">{f.label}</span>
-              {/* `currentColor` : la puce choisie passe en bleu plein avec un
-                * texte blanc — un jeton figé y deviendrait illisible. */}
-              <span className="o-objfiltre-nb" aria-hidden="true" style={{ fontWeight: 800, opacity: .55 }}>{n}</span>
+              {/* Discret par sa COULEUR, plus par une opacité (lot 15 de
+                * l’audit du 03/10) : `.55` tombait à 2,53:1 sur la puce choisie
+                * et à 4,35:1 sur les autres. Non choisie, le gris tertiaire du
+                * thème, que la garde de contraste tient à 4,5:1 sur les fonds
+                * `--o-s1` ; choisie, le blanc de la puce — le fond d'accent est
+                * calculé pour lui, aucun blanc atténué n'y tient 4,5:1. */}
+              <span className="o-objfiltre-nb" aria-hidden="true" style={{ fontWeight: 800, color: on ? 'inherit' : 'var(--o-text3)' }}>{n}</span>
             </button>); })}
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
           <h2 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, fontWeight: 400, color: 'var(--o-text2)' }}>{titreFiltre}</h2>
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{visibles.length > 1 ? tr('{n} appareils', { n: visibles.length }) : tr('{n} appareil', { n: visibles.length })}</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{trN(visibles.length, '{n} appareil', '{n} appareils')}</span>
         </div>
         {(visibles.length || edit)
-          ? <div ref={ed.gridRef} className="grid-objets grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gap: 16 }}>
+          ? <div ref={ed.gridRef} className="grid-objets grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', columnGap: 16, rowGap: 8 }}>
               {visibles.map(o => (edit
                 ? <EditableCard key={o.cle} ed={ed} id={o.cle} nom={nomDe(o)} onEdit={setCardEdit} hass={hass} />
                 : <div key={o.cle} className={((ed.estLarge(o.cle) ? 'o-cvw2 ' : '') + (ed.estCompact(o.cle) ? 'o-cvrow1' : '')) || undefined}>{carte(o)}</div>))}
@@ -6730,31 +7322,10 @@ function habillagePiece(nom, mdi) {
   };
 }
 
-/* Ecrire une piece dans `loggia_rooms` : la liste normalisee, la ligne de la
- * piece remplacee ou ajoutee (nom, icone, teinte, capteurs sous `haid`), en
- * UNE ecriture. Renommer emporte la grille de la piece (`loggia_roomlayout`)
- * avec elle — la taille et l'ordre de l'accueil suivent chez l'appelant. */
-function enregistrerPiece(avant, piece) {
-  const liste = normRooms(cfgVal('loggia_rooms', null)).map(r => ({ ...r }));
-  const i = avant ? liste.findIndex(r => r.room === avant) : -1;
-  const entree = { ...(i >= 0 ? liste[i] : {}), ...piece };
-  if (!entree.icon) delete entree.icon;
-  if (!entree.teinte) delete entree.teinte;
-  if (i >= 0) liste[i] = entree; else liste.push(entree);
-  const maj = { loggia_rooms: liste };
-  if (avant && avant !== piece.room) {
-    const all = { ...layoutsOf(ROOM_LAYOUT_KEY) };
-    if (all[avant]) { all[piece.room] = all[avant]; delete all[avant]; maj[ROOM_LAYOUT_KEY] = all; }
-  }
-  cfgSet(maj);
-}
-/* Retirer une piece : sa ligne de `loggia_rooms` et sa grille, en une ecriture. */
-function supprimerPiece(nom) {
-  const maj = { loggia_rooms: normRooms(cfgVal('loggia_rooms', null)).filter(r => r.room !== nom) };
-  const all = { ...layoutsOf(ROOM_LAYOUT_KEY) };
-  if (all[nom]) { delete all[nom]; maj[ROOM_LAYOUT_KEY] = Object.keys(all).length ? all : null; }
-  cfgSet(maj);
-}
+/* Ecrire ou retirer une piece : `ecrirepiece.js` (audit du 03/10). Sa ligne
+ * de `loggia_rooms` et sa place sur l'accueil y forment UN lot, que l'accueil
+ * envoie d'un bloc (`saveAccL`) : en deux envois, un compte ordinaire voyait
+ * la piece refusee et la grille acceptee. */
 
 /* La carte d'une piece en mode edition (retour user du 15/09 : « les cartes
  * pieces, je n'ai pas Modifier / Supprimer ») : le meme dessin que la carte
@@ -6763,8 +7334,17 @@ function supprimerPiece(nom) {
  * Compacte, elle tient sur une rangee de 88 px : l'icone, le nom et la taille
  * sur une ligne, Modifier et Supprimer serres sur la suivante.
  * Supprimer ecrit la configuration : il demande un second appui. Le glisser
- * reste a l'enveloppe (`debutPiece` ignore les boutons). */
-function CartePieceEdition({ p, compacte, onModifier, onSupprimer, onTaille }) {
+ * reste a l'enveloppe (`debutPiece` ignore les boutons), comme le focus, le
+ * nom et les flèches, à la SURFACE qu'elle pose sous la carte (lot 13 de
+ * l'audit du 03/10) : les rangées de boutons sont `position: relative`,
+ * peintes au-dessus d'elle.
+ *
+ * `reglable` (03/10) : Modifier et Supprimer ecrivent `loggia_rooms`,
+ * reservee aux administrateurs Home Assistant. Pour un compte ordinaire, la
+ * carte garde son dessin et son bouton de taille — ranger ses cartes est
+ * ouvert a tous —, pas ces deux boutons qu'il ne pourrait jamais
+ * enregistrer. */
+function CartePieceEdition({ p, compacte, onModifier, onSupprimer, onTaille, reglable = true }) {
   /* Au DOIGT, le conteneur de la carte glisse (`cursor: grab`, un gestionnaire
    * de pointeur sur la cellule). Sans arreter l'evenement ici, il capture le
    * pointeur avant le bouton, et l'appui ne devient jamais un clic : « le
@@ -6786,16 +7366,20 @@ function CartePieceEdition({ p, compacte, onModifier, onSupprimer, onTaille }) {
   const supprimer = () => { if (confirme) { setConfirme(false); onSupprimer(); } else setConfirme(true); };
   const rouge = confirme ? { background: 'rgba(var(--o-bad-rgb),.16)', borderColor: 'var(--o-bad)' } : {};
   const icone = <span style={RM_ICO('rgba(' + p.rgb + ',.16)', p.col)}>{cloneElement(p.icon, { size: 17 })}</span>;
+  /* La même bascule que la carte d'Objets : un nom constant, l'état dans
+   * `aria-pressed` (vrai = une rangée). Ici l'état était en plus inversé
+   * (`!compacte`) : une pièce en deux rangées s'annonçait « Une rangée,
+   * enfoncé » (relecture du lot 13, 04/10). */
   const taille = (
-    <button data-drag-ui="1" onPointerDown={stop} onClick={onTaille} aria-pressed={!compacte} title={compacte ? tr('Deux rangées') : tr('Une rangée')}
-      aria-label={(compacte ? tr('Deux rangées') : tr('Une rangée')) + ' · ' + p.name} style={BOUTON_COIN}><Fi i="resize" size={13} /></button>
+    <button data-drag-ui="1" onPointerDown={stop} onClick={onTaille} aria-pressed={compacte} title={compacte ? tr('Deux rangées') : tr('Une rangée')}
+      aria-label={tr('Une rangée') + ' · ' + p.name} style={BOUTON_COIN}><Fi i="resize" size={13} /></button>
   );
   const lavis = 'linear-gradient(180deg,transparent 28%,rgba(' + p.rgb + ',.14)), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';
   if (compacte) {
     const serre = { padding: '4px 6px', fontSize: 11.5 };
     return (
       <div style={{ ...RM_CARD, minHeight: 0, height: '100%', boxSizing: 'border-box', gap: 6, padding: '8px 10px', background: lavis }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ ...RM_ICO('rgba(' + p.rgb + ',.16)', p.col), width: 32, height: 32, borderRadius: 11 }}>{cloneElement(p.icon, { size: 15 })}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={RM_NAME}>{p.name}</div>
@@ -6803,16 +7387,18 @@ function CartePieceEdition({ p, compacte, onModifier, onSupprimer, onTaille }) {
           </div>
           {taille}
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button data-drag-ui="1" onPointerDown={stop} onClick={onModifier} style={{ ...boutonEdition(false), ...serre }}>{tr('Modifier')}</button>
-          <button data-drag-ui="1" onPointerDown={stop} onClick={supprimer} style={{ ...boutonEdition(true), ...serre, ...rouge }}>{confirme ? tr('Confirmer ?') : tr('Supprimer')}</button>
-        </div>
+        {reglable && (
+          <div style={{ position: 'relative', display: 'flex', gap: 6 }}>
+            <button data-drag-ui="1" onPointerDown={stop} onClick={onModifier} aria-label={tr('Modifier') + ' ' + p.name} style={{ ...boutonEdition(false), ...serre }}>{tr('Modifier')}</button>
+            <button data-drag-ui="1" onPointerDown={stop} onClick={supprimer} aria-label={(confirme ? tr('Confirmer ?') : tr('Supprimer')) + ' ' + p.name} style={{ ...boutonEdition(true), ...serre, ...rouge }}>{confirme ? tr('Confirmer ?') : tr('Supprimer')}</button>
+          </div>
+        )}
       </div>
     );
   }
   return (
     <div style={{ ...RM_CARD, height: '100%', boxSizing: 'border-box', background: lavis }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         {icone}
         {taille}
       </div>
@@ -6820,10 +7406,12 @@ function CartePieceEdition({ p, compacte, onModifier, onSupprimer, onTaille }) {
         <div style={RM_NAME}>{p.name}</div>
         <div style={{ ...RM_SUB, color: p.col }}>{sous}</div>
       </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <button data-drag-ui="1" onPointerDown={stop} onClick={onModifier} style={boutonEdition(false)}>{tr('Modifier')}</button>
-        <button data-drag-ui="1" onPointerDown={stop} onClick={supprimer} style={{ ...boutonEdition(true), ...rouge }}>{confirme ? tr('Confirmer ?') : tr('Supprimer')}</button>
-      </div>
+      {reglable && (
+        <div style={{ position: 'relative', display: 'flex', gap: 8, marginTop: 12 }}>
+          <button data-drag-ui="1" onPointerDown={stop} onClick={onModifier} aria-label={tr('Modifier') + ' ' + p.name} style={boutonEdition(false)}>{tr('Modifier')}</button>
+          <button data-drag-ui="1" onPointerDown={stop} onClick={supprimer} aria-label={(confirme ? tr('Confirmer ?') : tr('Supprimer')) + ' ' + p.name} style={{ ...boutonEdition(true), ...rouge }}>{confirme ? tr('Confirmer ?') : tr('Supprimer')}</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -6832,8 +7420,8 @@ function CartePieceEdition({ p, compacte, onModifier, onSupprimer, onTaille }) {
  * l'icone (grille), la teinte (puces), « Tuile compacte », puis les entites
  * de la carte — temperature, humidite, CO2, lumieres, les memes champs que
  * Parametres › Entites — « si besoin » (retour user du 15/09). Enregistrer
- * passe par `enregistrerPiece` ; la taille et l'ordre de l'accueil sont a
- * l'appelant, qui tient la grille. */
+ * passe par `lotPiece` ; la taille et l'ordre de l'accueil sont a
+ * l'appelant, qui tient la grille et l'envoie dans le meme lot. */
 function FichePiece({ nom = '', hass, compacte: compacteInit = false, onEnregistrer, onSupprimer, onClose }) {
   const existante = !!nom;
   const pieces = normRooms(cfgVal('loggia_rooms', null));
@@ -6919,7 +7507,7 @@ function FichePiece({ nom = '', hass, compacte: compacteInit = false, onEnregist
           <div style={{ display: 'flex', gap: 8, marginTop: 20, alignItems: 'center' }}>
             {existante && <button onClick={() => { onSupprimer(nom); close(); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)' }}><Fi i="cross-small" size={12} />{tr('Supprimer')}</button>}
             <span style={{ flex: 1 }} />
-            <button onClick={() => valider(close)} disabled={!valide} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 16px', borderRadius: 14, border: 'none', cursor: valide ? 'pointer' : 'default', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#06121f', opacity: valide ? 1 : .45 }}><Fi i="plus" size={12} />{tr('Enregistrer')}</button>
+            <button onClick={() => valider(close)} disabled={!valide} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 16px', borderRadius: 14, border: 'none', cursor: valide ? 'pointer' : 'default', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#fff', opacity: valide ? 1 : .45 }}><Fi i="plus" size={12} />{tr('Enregistrer')}</button>
           </div>
         </div>
       )}
@@ -6953,25 +7541,40 @@ function useAgenda(hass, seulement = null, plage = null, tick = 0) {
   useEffect(() => {
     if (!api || !sig) { setEvents([]); return; }
     let mort = false;
+    /* Une panne garde l'agenda, et se relit vite (audit du 03/10). Un
+     * redémarrage de HA ou un Wi-Fi coupé au mauvais moment faisait échouer
+     * chaque GET : la liste retombait vide et la carte disait « Rien de prévu »
+     * un quart d'heure durant. Quand AUCUN calendrier n'a répondu
+     * (`lireCalendriers` rend `null`), on garde ce qui était montré — tant que
+     * c'est encore dans la fenêtre — et l'on relit trente secondes plus tard ;
+     * un calendrier qui répond vide, lui, reste vide. Dix essais au plus, cinq
+     * minutes : un agenda seul et cassé pour de bon ne se relit pas deux fois
+     * par minute toute la journée, le sondage du quart d'heure reprend
+     * ensuite. Un rafraîchissement d'AFFICHAGE, rien n'est commandé chez HA :
+     * un minuteur d'onglet suffit, un seul à la fois, annulé au démontage. */
+    let reessai = null, essais = 0;
     const lire = async () => {
+      clearTimeout(reessai);
       const debut = plage ? plage.debut : (() => { const d = new Date(); d.setSeconds(0, 0); return d; })();
-      const fin = plage ? plage.fin : new Date(debut.getTime() + 7 * 864e5);
-      const q = '?start=' + encodeURIComponent(debut.toISOString()) + '&end=' + encodeURIComponent(fin.toISOString());
-      const tous = [];
-      for (const id of sig.split('|')) {
-        try {
-          const evs = await api('GET', 'calendars/' + id + q);
-          if (Array.isArray(evs)) evs.forEach(e => { if (e && e.summary && e.start) tous.push({ ...e, _cal: id }); });
-        } catch {} // un calendrier qui refuse ne prive pas les autres
-      }
+      // Sept jours de CALENDRIER : à l'automne, sept fois 24 h s'arrêtent une heure trop tôt.
+      const fin = plage ? plage.fin : (() => { const f = new Date(debut); f.setDate(f.getDate() + 7); return f; })();
+      const liste = sig.split('|');
+      const tous = await lireCalendriers(api, liste, debut, fin);
       if (mort) return;
-      const quand = (e) => new Date(e.start.dateTime || (e.start.date + 'T00:00:00')).getTime();
-      tous.sort((x, y) => quand(x) - quand(y));
+      if (tous === null) {
+        // Même liste, même objet : pas de nouveau rendu tant que rien n'est sorti de la fenêtre.
+        setEvents(avant => { const g = garderDansFenetre(avant, liste, debut, fin); return g.length === avant.length ? avant : g; });
+        // Le sondage parti pendant un réessai échoue aussi : un seul minuteur reste en attente.
+        clearTimeout(reessai);
+        if (essais++ < 10) reessai = setTimeout(lire, 30 * 1000);
+        return;
+      }
+      essais = 0;
       setEvents(plage ? tous : tous.slice(0, 8));
     };
     lire();
     const iv = setInterval(lire, 15 * 60000);
-    return () => { mort = true; clearInterval(iv); };
+    return () => { mort = true; clearInterval(iv); clearTimeout(reessai); };
   }, [apiPret, sig, plageDebutMs, plageFinMs, tick]);
   return events;
 }
@@ -6979,8 +7582,9 @@ function useAgenda(hass, seulement = null, plage = null, tick = 0) {
 /** Le jour d'un evenement, dit court : Aujourd'hui, Demain, sinon « mar. 2 ». */
 function jourAgenda(e) {
   const d = new Date(e.start.dateTime || (e.start.date + 'T00:00:00'));
-  const j0 = new Date(); j0.setHours(0, 0, 0, 0);
-  const diff = Math.floor((d.getTime() - j0.getTime()) / 864e5);
+  // Des jours de calendrier : le 25 octobre à 23 h 30 est « aujourd'hui » le 25,
+  // même si ce dimanche-là compte vingt-cinq heures.
+  const diff = ecartJours(new Date(), d);
   const jour = diff === 0 ? tr("Aujourd'hui") : diff === 1 ? tr('Demain')
     : d.toLocaleDateString(locale(), { weekday: 'short', day: 'numeric' });
   const heure = e.start.dateTime ? d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }) : tr('journée');
@@ -6991,23 +7595,37 @@ function jourAgenda(e) {
  * le nom, l'etat, et a droite le geste quand il existe (pause, dock, eteindre,
  * stop) ; la ligne elle-meme ouvre la fiche. Meme air que les lignes denses
  * du rail. Sans geste ni fiche, une ligne inerte. */
-function LigneMoment({ icone, rgb, nom, sous, onOpen = null, action = null, actionIcone = null, onAction = null }) {
+function LigneMoment({ icone, rgb, nom, sous, onOpen = null, fiche = false, action = null, actionIcone = null, onAction = null }) {
   const ouvre = onOpen ? () => onOpen() : null;
   return (
-    /* Role, tabulation, clic et touche tiennent tous a `ouvre` : ensemble ou
-     * pas du tout. La regle lit les attributs un par un. */
-    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */
-    <div role={ouvre ? 'button' : undefined} tabIndex={ouvre ? 0 : undefined} onClick={ouvre || undefined}
-      onKeyDown={ouvre ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ouvre(); } } : undefined}
-      style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', cursor: ouvre ? 'pointer' : 'default' }}>
+    /* La ligne n'est PLUS un `role="button"` qui englobe son geste (lot 13 de
+     * l'audit du 03/10, ADR 0074). Un rôle bouton rend sa descendance
+     * présentationnelle : « Mettre en pause », « Renvoyer au dock » et « Stop »
+     * disparaissaient d'un lecteur d'écran (`nested-interactive`). Le geste
+     * « ouvrir » passe par le bouton de SURFACE, frère du geste, et son nom est
+     * ce que la ligne affiche, nom puis état : « Robot, Nettoyage ». `fiche` :
+     * elle ouvre une fiche (le lecteur, le robot, le volet) ; sans, elle mène à
+     * une vue. Plus de touche à garder : deux boutons voisins ont chacun la
+     * leur, et Entrée sur « Pause » ne peut plus ouvrir la fiche.
+     *
+     * La classe rend l'enfoncement au press que la ligne tenait de
+     * `[role="button"]:active` (index.css) : la surface, transparente, ne le
+     * montrerait pas. */
+    <div className={ouvre ? 'o-ligne-moment' : undefined}
+      style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', cursor: ouvre ? 'pointer' : 'default' }}>
+      {ouvre && <Surface onClick={ouvre} label={nomCarte(nom, sous)} popup={fiche} />}
       <span style={{ ...RM_ICO('rgba(' + rgb + ',.16)', 'rgb(' + rgb + ')'), width: 34, height: 34, borderRadius: 11 }}>{icone ? <Ico name={icone} size={15} /> : <PlugIcon size={15} />}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
         <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sous}</div>
       </div>
+      {/* Le geste, `position: relative` : peint APRÈS la surface, donc
+        * au-dessus d'elle, il reçoit son clic. Son nom commence par son mot et
+        * nomme l'appareil — « Mettre en pause Lecteur salon », comme « Volets
+        * Salon » sur la carte de pièce. */}
       {action && onAction ? (
-        <button aria-label={action + ' · ' + nom} title={action} onClick={(e) => { e.stopPropagation(); onAction(); }}
-          style={{ width: 30, height: 30, borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i={actionIcone || 'power'} size={13} /></button>
+        <button type="button" aria-label={action + ' ' + nom} title={action} onClick={(e) => { e.stopPropagation(); onAction(); }}
+          style={{ position: 'relative', width: 30, height: 30, borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i={actionIcone || 'power'} size={13} /></button>
       ) : ouvre ? <Fi i="angle-right" size={10} color="var(--o-text3)" /> : null}
     </div>
   );
@@ -7106,7 +7724,7 @@ function CarteAttention({ points, onNav = null }) {
   const visibles = points.slice(0, 6);
   const reste = points.length - visibles.length;
   return (
-    <div style={{ background: `linear-gradient(180deg, rgba(${rgb},.10), transparent 60%), var(--o-surfA)`, borderRadius: 'var(--o-radius,18px)', padding: '13px 15px', boxShadow: 'var(--o-shadow)' }}>
+    <div style={{ background: `linear-gradient(180deg, rgba(${rgb},.10), transparent 60%), var(--o-surfA)`, border: LISERE, borderRadius: 'var(--o-radius,18px)', padding: '13px 15px', boxShadow: 'var(--o-shadow)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <span style={RM_ICO(`rgba(${rgb},.16)`, col)}><Fi i={niveau === 'danger' ? 'triangle-warning' : 'exclamation'} size={17} /></span>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -7198,15 +7816,20 @@ function FavorisAccueil({ hass, edit = false }) {
         : <div className="o-favrow" style={{ display: 'flex', gap: edit ? 16 : 10, overflowX: 'auto', scrollSnapType: 'x proximity' }}>
             {liste.map(x => (
               <div key={cvKey(x)} style={{ position: 'relative', flex: '0 0 auto', width: cvW(x) === 2 ? 466 : 225, height: cvRowsDe(x) === 1 ? 88 : 184, scrollSnapAlign: 'start' }}>
-                <div className="o-cvfit" style={{ height: '100%', pointerEvents: edit ? 'none' : 'auto' }}>
+                {/* Relecture du lot 13 de l'audit du 03/10, comme la carte d'une
+                  * vue : inerte au clavier aussi (l'interrupteur d'un favori se
+                  * tabulait sous la barre, Espace éteignait la lampe) ; et
+                  * chaque outil de la barre nomme la carte qu'il touche
+                  * (`nomCv`), sa bascule de largeur sous un nom fixe. */}
+                <div className="o-cvfit" inert={edit ? '' : undefined} style={{ height: '100%', pointerEvents: edit ? 'none' : 'auto' }}>
                   <CvTyped x={x} hass={hass} dc={dc} />
                 </div>
                 {edit && (
                   <EditBarre>
-                    <button onClick={() => (cvTypeDe(x) === 'chips' ? setChipsEdit(x) : setRetype(x))} title={cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')} style={EDIT_BTN}><Fi i="pencil" size={11} /></button>
-                    <button onClick={() => poser(eps.map(y => cvKey(y) === cvKey(x) ? cvAvecW(x) : y))} title={cvW(x) === 2 ? tr('Largeur simple') : tr('Largeur double')} aria-pressed={cvW(x) === 2}
+                    <button onClick={() => (cvTypeDe(x) === 'chips' ? setChipsEdit(x) : setRetype(x))} title={cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')} aria-label={(cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')) + ' · ' + nomCv(x, hass)} style={EDIT_BTN}><Fi i="pencil" size={11} /></button>
+                    <button onClick={() => poser(eps.map(y => cvKey(y) === cvKey(x) ? cvAvecW(x) : y))} title={cvW(x) === 2 ? tr('Largeur simple') : tr('Largeur double')} aria-label={tr('Largeur double') + ' · ' + nomCv(x, hass)} aria-pressed={cvW(x) === 2}
                       style={{ ...EDIT_BTN, ...(cvW(x) === 2 ? { background: 'var(--o-accent-fond)', color: '#fff' } : {}) }}><Fi i="arrows-h" size={11} /></button>
-                    <button onClick={() => poser(eps.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
+                    <button onClick={() => poser(eps.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} aria-label={tr('Retirer') + ' · ' + nomCv(x, hass)} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
                   </EditBarre>
                 )}
               </div>
@@ -7273,7 +7896,12 @@ function TuilesSecurite({ tuiles, onTuile = null }) {
         const col = t.alerte ? 'var(--o-warn)' : t.actif ? 'var(--o-accent-soft)' : 'var(--o-text)';
         const fond = t.alerte ? 'rgba(var(--o-warn-rgb),.16)' : t.actif ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)';
         return (
-          <button key={t.cle} type="button" className="sec-tuile" onClick={() => onTuile && onTuile(t)} aria-label={t.nom + ' · ' + t.valeur + ' ' + t.libelle}
+          /* Son nom est ce qu'elle affiche, par `nomCarte` comme toute carte
+           * (lot 13 de l'audit du 03/10) : « Portes, 3/4 fermées ». Le point
+           * médian collé en dur faisait une règle à part, et « Mouvement ·
+           * Aucun mouvement » finissait sur une espace — au repos, le libellé
+           * est vide. Aucune commande dedans : elle reste un bouton. */
+          <button key={t.cle} type="button" className="sec-tuile" onClick={() => onTuile && onTuile(t)} aria-label={nomCarte(t.nom, t.valeur + ' ' + t.libelle)}
             style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 12, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text)', textAlign: 'left', minWidth: 0 }}>
             <span className="sec-ico" style={{ ...RM_ICO(fond, col), width: 30, height: 30, borderRadius: 10 }}><Fi i={t.icone} size={14} /></span>
             <span style={{ minWidth: 0 }}>
@@ -7381,11 +8009,27 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
    */
   const [passe, setPasse] = useState([]);
   const [futur, setFutur] = useState([]);
-  const saveAccL = (n) => {
+  /* `avec` : ce qui doit partir DANS LE MEME LOT que la grille — la piece
+   * qu'on enregistre ou qu'on retire (audit du 03/10, `ecrirepiece.js`). Le
+   * composant prend un lot en entier ou le refuse en entier : la grille ne
+   * bouge jamais sans elle.
+   *
+   * Refusee, la grille revient aussi A L'ECRAN. `saveCfg` rend aux reglages
+   * communs leur valeur d'avant ; `accL`, etat propre a l'accueil, se reprend
+   * ici. Restee affichee, le geste suivant — une carte deplacee, acceptee,
+   * elle — l'aurait reecrite dans le commun avec la piece refusee : le meme
+   * defaut, un geste plus tard. Sauf si l'on a deja rebouge entre-temps : on
+   * ne defait pas ce qu'on n'a pas fait. */
+  const saveAccL = (n, avec) => {
     setPasse(p => [...p.slice(-19), accL]);
     setFutur([]);           // une nouvelle action coupe la branche refaite
     setAccL(n);
-    cfgSet({ loggia_accueil: n });
+    const avant = accL;
+    cfgSet({ loggia_accueil: n, ...avec }).then((pris) => {
+      if (pris !== false) return;
+      setAccL(cur => (cur === n ? avant : cur));
+      setPasse(p => (p[p.length - 1] === avant ? p.slice(0, -1) : p));
+    });
   };
   /* Le format est lu des ici : la grille qui suit en depend, et une `const`
    * n'existe pas avant sa ligne. */
@@ -7424,13 +8068,14 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
   };
   const grillePropre = formatGrille !== 'pc' && !!(accL.formats || {})[formatGrille];
   const grille = grillePropre ? accL.formats[formatGrille] : accL;
-  const saveGrille = (g) => {
-    if (formatGrille === 'pc') { saveAccL({ ...accL, ...g }); return; }
+  // `avec` suit la grille dans le meme envoi (voir `saveAccL`).
+  const saveGrille = (g, avec) => {
+    if (formatGrille === 'pc') { saveAccL({ ...accL, ...g }, avec); return; }
     // `grille` vaut l'agencement complet tant qu'aucune surcharge n'existe :
     // le recopier tel quel logerait un `formats` dans un format. On ne garde
     // que ce qu'une grille contient.
     const { formats: _ignore, ...base } = grille;
-    saveAccL({ ...accL, formats: { ...(accL.formats || {}), [formatGrille]: { ...base, ...g } } });
+    saveAccL({ ...accL, formats: { ...(accL.formats || {}), [formatGrille]: { ...base, ...g } } }, avec);
   };
   /* COMBIEN DE VIGNETTES DE CAMERA PAR LIGNE (20/09) : le meme raisonnement que la grille
    * — par type d'ecran, dans la maison (`loggia_camdispo`), pas dans le
@@ -7561,7 +8206,10 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
   const secFantome = useRef(null);
   const debutSec = (e, zone, id) => {
     if (!editMode) return;
-    if (e.target.closest && e.target.closest('button, [role="switch"], input')) return;
+    /* `:not(.o-surface)` (lot 13 de l'audit du 03/10) : la surface de la
+     * section EST la section — l'appui sur elle la saisit, comme avant sur la
+     * section elle-même. Les autres boutons gardent leur clic. */
+    if (e.target.closest && e.target.closest('button:not(.o-surface), [role="switch"], input')) return;
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
     const hote = e.currentTarget;
     if (e.pointerType === 'touch') {
@@ -7697,7 +8345,8 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
   const ordrePieces = (noms) => { const sauve = (grille.piecesOrdre || []).filter(n => noms.indexOf(n) >= 0); return [...sauve, ...noms.filter(n => sauve.indexOf(n) < 0)]; };
   const debutPiece = (e, id, noms) => {
     if (!editMode) return;
-    if (e.target.closest && e.target.closest('button, [role="switch"], input')) return;
+    // La surface de la tuile EST la tuile (lot 13) : son appui la saisit.
+    if (e.target.closest && e.target.closest('button:not(.o-surface), [role="switch"], input')) return;
     e.stopPropagation();
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
     const hote = e.currentTarget;
@@ -7763,25 +8412,19 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     e.preventDefault();
     deplacerPiece(id, noms, d[0], d[1]);
   };
-  /* La fiche d'une piece ecrit la configuration (`enregistrerPiece`) ; la
-   * taille et l'ordre vivent dans la grille de l'accueil, ici. Renommer les
-   * emporte ; retirer les efface. Une piece ajoutee prend la taille choisie
-   * et se range en dernier (`ordrePieces` complete l'ordre sauve). */
+  /* La fiche d'une piece ecrit la configuration (`lotPiece`) ; la taille et
+   * l'ordre vivent dans la grille de l'accueil, ici. Renommer les emporte ;
+   * retirer les efface. Une piece ajoutee prend la taille choisie et se range
+   * en dernier (`ordrePieces` complete l'ordre sauve).
+   *
+   * Les deux partent dans UN lot (audit du 03/10) : en deux envois, un compte
+   * ordinaire voyait la piece refusee et la grille acceptee — la carte perdait
+   * sa taille et sa place pour tout le foyer. Voir `ecrirepiece.js`. */
   const enregistrerPieceIci = (avant, piece, compacte) => {
-    enregistrerPiece(avant, piece);
-    const tailles = { ...(grille.tailles || {}) };
-    if (avant && avant !== piece.room) delete tailles[avant];
-    tailles[piece.room] = compacte ? 'c' : 's';
-    // Renommer emporte aussi la CELLULE : la carte ne saute pas ailleurs.
-    const places = { ...(grille.places || {}) };
-    if (avant && avant !== piece.room && places[avant]) { places[piece.room] = places[avant]; delete places[avant]; }
-    saveGrille({ tailles, places, piecesOrdre: (grille.piecesOrdre || []).map(n => n === avant ? piece.room : n) });
+    saveGrille(grilleAvecPiece(grille, avant, piece.room, compacte), lotPiece(avant, piece));
   };
   const retirerPiece = (nom) => {
-    supprimerPiece(nom);
-    const { [nom]: _retiree, ...tailles } = grille.tailles || {};
-    const { [nom]: _place, ...places } = grille.places || {};
-    saveGrille({ tailles, places, piecesOrdre: (grille.piecesOrdre || []).filter(n => n !== nom) });
+    saveGrille(grilleSansPiece(grille, nom), lotSansPiece(nom));
   };
   /** Enveloppe d'une section : drag + masque en édition, rien sinon. */
   const Sec = (zone, id, contenu) => {
@@ -7789,11 +8432,10 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     if (cache && !editMode) return null;
     const saisie = secDrag && secDrag.id === id;
     return (
-      /* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-static-element-interactions -- en édition, cette section est un objet qu'on saisit et déplace aux flèches ; ARIA n'a pas de rôle pour cela, le nom et le contrat clavier sont posés juste en dessous. Hors édition, ni focus ni gestionnaire. */
-      <div key={id} data-sec={id} data-zone={zone} tabIndex={editMode ? 0 : undefined}
-        role={editMode ? 'button' : undefined}
-        aria-label={editMode ? (ACC_NOMS()[id] || id) + ' · ' + tr('Déplacer avec les flèches') : undefined}
-        onKeyDown={editMode ? (e) => clavierSec(e, zone, id) : undefined}
+      /* En édition, la section se saisit au pointeur ; le focus, le nom et
+       * les flèches sont à sa SURFACE, son premier enfant. Hors édition, ni
+       * surface ni gestionnaire. */
+      <div key={id} data-sec={id} data-zone={zone}
         onPointerDown={editMode ? (e) => debutSec(e, zone, id) : undefined}
         onPointerMove={editMode ? mouvSec : undefined}
         onPointerUp={editMode ? finSec : undefined}
@@ -7806,33 +8448,52 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
           /* L'appui long qui saisit ne doit pas selectionner le texte ni
            * ouvrir le menu du telephone (retour 22/09). */
           ...(editMode ? { border: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.4)', padding: saisie ? '9px 11px' : '10px 12px', borderRadius: 18, cursor: 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', opacity: saisie ? .35 : 1 } : {}) }}>
+        {/* La SURFACE (ADR 0074 ; lot 13 de l'audit du 03/10). En édition, la
+          * section était elle-même un `role="button"` : ce rôle taisait le ×
+          * qui la masque, ses puces de style, les cartes des pièces et des
+          * favoris — onze sections `nested-interactive` sur l'Accueil de la
+          * démo. La surface prend le focus, le nom et les flèches, et passe
+          * SOUS tout ce qui suit, posé dans des conteneurs `position:
+          * relative` : ils reçoivent leurs clics, la section son geste. */}
+        {editMode && <Surface popup={false} label={nomCarte(ACC_NOMS()[id] || id, cache ? (estOption(id) ? tr('en option') : tr('masquée')) : null, tr('Déplacer avec les flèches'))}
+          onKeyDown={(e) => clavierSec(e, zone, id)} style={{ cursor: 'inherit' }} />}
         {cache
-          ? <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+          ? <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
               <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: 'var(--o-text3)' }}>{ACC_NOMS()[id]} · {estOption(id) ? tr('en option') : tr('masquée')}</span>
-              <button onClick={() => montreSec(id)} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12 }}>{estOption(id) ? tr('Ajouter') : tr('Réafficher')}</button>
+              <button onClick={() => montreSec(id)} aria-label={(estOption(id) ? tr('Ajouter') : tr('Réafficher')) + ' ' + (ACC_NOMS()[id] || id)} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12 }}>{estOption(id) ? tr('Ajouter') : tr('Réafficher')}</button>
             </div>
           : <>
               {/* Bandeau d'outils de la section, EN FLUX au-dessus d'elle :
                 * poignée, nom, masquage — rien ne recouvre plus le contenu. */}
               {editMode && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                   <Fi i="menu-burger" size={12} color="var(--o-text3)" />
                   <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ACC_NOMS()[id] || id}</span>
-                  <button onClick={() => cacheSec(id)} title={estOption(id) ? tr('Retirer') : tr('Masquer')} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
+                  <button onClick={() => cacheSec(id)} title={estOption(id) ? tr('Retirer') : tr('Masquer')} aria-label={(estOption(id) ? tr('Retirer') : tr('Masquer')) + ' ' + (ACC_NOMS()[id] || id)} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
                 </div>
               )}
               {/* Le STYLE d'un widget, sur sa propre ligne : a cote du nom il le
                 * tronquait dans un rail de 276 px. Le contenu etant inerte en
                 * edition, c'est ici que le choix se fait. */}
               {editMode && STYLES_WIDGETS[id] && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
                   {STYLES_WIDGETS[id].map(st => { const on = styleDe(grille.styles, id) === st; return (
                     <button key={st} onClick={() => choisirStyle(id, st)} aria-pressed={on} style={{ padding: '6px 11px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, flexShrink: 0, background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>{NOMS_STYLES()[st]}</button>); })}
                 </div>
               )}
               {/* Contenu inerte en édition — SAUF les sections qui portent
                 * leur propre édition par carte (pièces, favoris). */}
-              <div style={{ pointerEvents: editMode && id !== 'pieces' && id !== 'favoris' ? 'none' : 'auto' }}>{contenu}</div>
+              {/* En édition, AU-DESSUS de la surface (`position: relative`) : ce
+                * qui reste vivant — « Gérer les scénarios », le segment des
+                * pièces, « Ajouter une pièce », les favoris — garde ses clics ;
+                * le reste, inerte, laisse passer l'appui jusqu'à la section. */}
+              {/* Inerte au clavier et au lecteur d'écran aussi (relecture du lot 13
+                * de l'audit du 03/10) : `pointer-events` ne retire ni le focus
+                * ni l'arbre d'accessibilité — Tab menait à « Lancer Soirée »,
+                * Entrée le lançait en pleine édition. Les scénarios s'en
+                * écartent pour garder « Gérer les scénarios » joignable : leur
+                * rangée seule est inerte (ScenariosAccueil). */}
+              <div inert={editMode && id !== 'pieces' && id !== 'favoris' && id !== 'scenes' ? '' : undefined} style={{ ...(editMode ? { position: 'relative' } : {}), pointerEvents: editMode && id !== 'pieces' && id !== 'favoris' ? 'none' : 'auto' }}>{contenu}</div>
             </>}
       </div>
     );
@@ -7853,7 +8514,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     : (weatherRaw && WX_PRESETS[weatherRaw] ? weatherRaw : (WX3D_FROM_MODE[weatherMode] || 'partlycloudy'));
   const [wxHour, setWxHour] = useState(wxHourEq);
   useEffect(() => { const iv = setInterval(() => setWxHour(wxHourEq()), 60000); return () => clearInterval(iv); }, []);
-  const modes = [['sun', '☀️', tr('Soleil')], ['partly', '⛅', tr('Éclaircies')], ['clouds', '☁️', tr('Nuageux')], ['wind', '🌬️', tr('Vent')], ['rain', '🌧️', tr('Pluie')], ['snow', '❄️', tr('Neige')], ['storm', '⛈️', tr('Orage')], ['night', '🌙', 'Nuit']];
+  const modes = [['sun', '☀️', tr('Soleil')], ['partly', '⛅', tr('Éclaircies')], ['clouds', '☁️', tr('Nuageux')], ['wind', '🌬️', tr('Vent')], ['rain', '🌧️', tr('Pluie')], ['snow', '❄️', tr('Neige')], ['storm', '⛈️', tr('Orage')], ['night', '🌙', tr('Nuit')]];
   const a = accueil; // données live (null → démo)
   // Les pièces affichées sont CELLES DE LA CONFIGURATION.
   //
@@ -7874,9 +8535,11 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
   const pieces = noms.map(nom => {
     const r = a && a.rooms && a.rooms.find(x => x.name === nom);
     const p = habillagePiece(nom, r && r.icon);
-    if (!r) return (a && a.rooms && a.rooms.length) ? { ...p, live: { temp: null, hum: null, co2: null } } : p; // pièce sans capteurs → tirets ; pas de hass → démo
+    // Une pièce sans capteurs : des tirets, pas les valeurs de vitrine que
+    // l'habillage transporte depuis le modèle (audit du 03/10). Sans hass → démo.
+    if (!r) return (a && a.rooms && a.rooms.length) ? { ...p, temp: '—', hum: '—', badge: null, live: { temp: null, hum: null, co2: null } } : p;
     const out = { ...p };
-    out.temp = r.temp != null ? r.temp.toFixed(1) + '°' : '—';
+    out.temp = r.temp != null ? dec(r.temp, 1) + '°' : '—';
     out.hum = r.hum != null ? Math.round(r.hum) + '%' : '—';
     if (r.co2 != null) { const s = co2Style(r.co2); out.badge = Math.round(r.co2) + ' ppm'; out.bc = s.bc; out.bbg = s.bbg; }
     else out.badge = null;
@@ -7931,6 +8594,11 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
   // ── Layout PC (≥1180) : rail « En cours / Rappels » accolé à la zone Pièces+Caméras ──
   const wideXL = useWide(1440); // tablette paysage (1180-1439) : rail plus étroit, cartes pièces prioritaires
   const dashHass = a && a.hass;
+  /* Ce qu'un compte Home Assistant ordinaire ne pourrait jamais enregistrer,
+   * il ne le voit pas (03/10) : ajouter, modifier ou retirer une PIECE ecrit
+   * `loggia_rooms`. Sa taille, son ordre et sa place lui restent — c'est de
+   * l'agencement. */
+  const ordinaire = compteOrdinaire(dashHass);
   /* A SURVEILLER (ADR 0028) : ce qui merite l'attention, en tete de l'accueil
    * — et rien du tout quand tout va bien. Les etats de la maison, les cameras,
    * le CO2 des pieces, le diagnostic (`sante`, recalcule par App), plus deux
@@ -7959,10 +8627,57 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     if (!rs.length) return null;
     return rs.reduce((m, r) => (r.co2 > m.co2 ? r : m), rs[0]).name;
   })();
+  /* La colonne du rail défile seule (04/10, demande de l'utilisateur) : la
+   * cellule de la grille ne compte plus dans la hauteur de la page, la colonne
+   * colle sous l'en-tête et se borne à la fenêtre (index.css, `.o-rail-cell`).
+   * Ses deux bornes, la grille encore en dessous du bord et la fin du contenu
+   * principal, s'écrivent en variables CSS sur la cellule (`bornesRail`, dans
+   * railcolonne.js). AUCUN état React : le défilement ne refait jamais le
+   * rendu de l'Accueil, une image au plus par trame, et rien ne s'écrit au
+   * milieu de la page, où les deux valeurs ne changent pas. Une `ref` de
+   * rappel mémoïsée à vide, comme `poserGrillePieces` : React l'appelle quand
+   * la cellule arrive (passage en grand écran) et avec `null` quand elle part.
+   * Le ResizeObserver suit la cellule (le contenu principal qui grandit) et le
+   * corps (ce qui grandit AU-DESSUS de la grille la déplace sans la
+   * redimensionner) ; `resize` couvre les tailles émulées. */
+  const railFin = useRef(null);
+  const poserRail = useCallback((el) => {
+    if (railFin.current) { railFin.current(); railFin.current = null; }
+    if (!el) return;
+    let raf = 0;
+    let prec = {};
+    const lire = () => {
+      raf = 0;
+      const b = bornesRail(el.getBoundingClientRect(), window.innerHeight);
+      if (b.depart !== prec.depart) el.style.setProperty('--o-rail-depart', b.depart + 'px');
+      if (b.fin !== prec.fin) el.style.setProperty('--o-rail-fin', b.fin + 'px');
+      prec = b;
+    };
+    const demander = () => { if (!raf) raf = requestAnimationFrame(lire); };
+    lire();
+    window.addEventListener('scroll', demander, { passive: true });
+    window.addEventListener('resize', demander);
+    let ro = null;
+    try { ro = new ResizeObserver(demander); ro.observe(el); ro.observe(document.body); } catch { /* sans ResizeObserver : défilement et redimensionnement suffisent */ }
+    railFin.current = () => { cancelAnimationFrame(raf); window.removeEventListener('scroll', demander); window.removeEventListener('resize', demander); if (ro) ro.disconnect(); };
+  }, []);
   const voirMoment = () => {
     if (wide) {
       const el = document.querySelector('[data-sec="moment"]');
-      if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      /* La colonne qui défile (04/10) : on la fait défiler ELLE, pas la page —
+       * `scrollIntoView` emmenait aussi la fenêtre. Elle tient toujours à
+       * l'écran : si elle ne défile pas, la section est déjà sous les yeux.
+       * `offsetTop` se lit dans la colonne (sticky, donc positionnée) ; moins
+       * son rembourrage du haut, la section prend la place de la première
+       * carte. En édition, la colonne est dans le flux : le repli d'avant. */
+      const col = el && el.closest('.o-rail-col');
+      if (col && getComputedStyle(col).overflowY !== 'visible') {
+        if (col.scrollHeight > col.clientHeight + 1) col.scrollTo({ top: Math.max(0, el.offsetTop - 6), behavior: REDUCE_MOTION ? 'auto' : 'smooth' });
+        return;
+      }
+      // Mouvement reduit (audit du 03/10) : on saute au panneau sans glisser
+      // quand le systeme le demande ; le glissement ecrit en dur l'ignorait.
+      if (el && el.scrollIntoView) el.scrollIntoView({ behavior: REDUCE_MOTION ? 'auto' : 'smooth', block: 'start' });
       return;
     }
     setPageDemandee(1);
@@ -8186,7 +8901,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     const froid = st.state === 'cool' || ((st.attributes || {}).hvac_action === 'cooling');
     return { on, froid, onToggle: () => {
       // Rallumer : le premier mode que l'entité connaît, le chauffage d'abord.
-      const modes = (st.attributes || {}).hvac_modes || [];
+      const modes = modesClimat(st.attributes, []);
       const cible = on ? 'off' : (['heat', 'auto', 'heat_cool', 'cool'].find(mo => modes.indexOf(mo) >= 0) || 'heat');
       commanderService(dashHass, ex.clim, 'climate', 'set_hvac_mode', { entity_id: ex.clim, hvac_mode: cible });
     } };
@@ -8207,7 +8922,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
       const id = m.haid; if (!S0[id]) return;
       const np = mpRead(S0, id); if (!np.playing) return;
       momentRows.push(<LigneMoment key={id} icone="music-alt" rgb="var(--o-rose-rgb)" nom={m.name} sous={[np.title, np.artist].filter(Boolean).join(' · ') || tr('Lecture')}
-        onOpen={() => dc.ouvrir(id)} action={tr('Mettre en pause')} actionIcone="pause" onAction={() => commande(id, 'media_player', 'media_play_pause')} />);
+        onOpen={() => dc.ouvrir(id)} fiche action={tr('Mettre en pause')} actionIcone="pause" onAction={() => commande(id, 'media_player', 'media_play_pause')} />);
     });
     const meta = (a && a.index && a.index.entityMeta) || null;
     const ETIQ = { vacuum: { cleaning: tr('Nettoyage'), returning: tr('Retour à la base') }, lawn_mower: { mowing: tr('Tonte'), returning: tr('Retour à la base') } };
@@ -8222,11 +8937,11 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
       const sous = (ETIQ[dom] && ETIQ[dom][e.state]) || tr('En marche');
       const geste = dom === 'vacuum' ? [tr('Renvoyer au dock'), 'home', () => commande(id, 'vacuum', 'return_to_base')]
         : [tr('Renvoyer au dock'), 'home', () => commande(id, 'lawn_mower', 'dock')];
-      momentRows.push(<LigneMoment key={id} icone={dom === 'vacuum' ? 'vacuum' : 'mower'} rgb="var(--o-accent-rgb)" nom={nom} sous={sous} onOpen={() => dc.ouvrir(id)} action={geste[0]} actionIcone={geste[1]} onAction={geste[2]} />);
+      momentRows.push(<LigneMoment key={id} icone={dom === 'vacuum' ? 'vacuum' : 'mower'} rgb="var(--o-accent-rgb)" nom={nom} sous={sous} onOpen={() => dc.ouvrir(id)} fiche action={geste[0]} actionIcone={geste[1]} onAction={geste[2]} />);
     });
     if (mLv && mLv.active && (!a || aEnt(notifIds().dishwasher))) momentRows.push(<LigneMoment key="lv" icone="dishwasher" rgb="var(--o-accent-rgb)" nom={mLv.label} sous={[mLv.phase, mLv.valueText].filter(Boolean).join(' · ')} onOpen={onNav ? () => onNav('objets') : null} />);
     const chauffe = climateZones(S0).filter(z => estClimate(z) && z.haid && S0[z.haid] && ['heating', 'cooling'].indexOf((S0[z.haid].attributes || {}).hvac_action) >= 0);
-    if (chauffe.length) momentRows.push(<LigneMoment key="clim" icone="flame" rgb="var(--o-bad-rgb)" nom={chauffe.length > 1 ? tr('{n} zones chauffent', { n: chauffe.length }) : tr('{n} zone chauffe', { n: 1 })} sous={chauffe.map(z => z.name).join(' · ')} onOpen={onNav ? () => onNav('climat') : null} />);
+    if (chauffe.length) momentRows.push(<LigneMoment key="clim" icone="flame" rgb="var(--o-bad-rgb)" nom={trN(chauffe.length, '{n} zone chauffe', '{n} zones chauffent')} sous={chauffe.map(z => z.name).join(' · ')} onOpen={onNav ? () => onNav('climat') : null} />);
     voletCovers(S0).forEach(c => {
       const e = S0[c.haid]; if (!e) return;
       // Un volet EN MOUVEMENT seulement : a mi-course, il ne se passe rien.
@@ -8234,7 +8949,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
       if (!bouge) return;
       momentRows.push(<LigneMoment key={c.haid} icone="blinds" rgb="167,139,250" nom={c.name || (e.attributes || {}).friendly_name || c.haid}
         sous={e.state === 'opening' ? tr('Ouverture…') : tr('Fermeture…')}
-        onOpen={() => dc.ouvrir(c.haid)} action={tr('Stop')} actionIcone="stop" onAction={() => commande(c.haid, 'cover', 'stop_cover')} />);
+        onOpen={() => dc.ouvrir(c.haid)} fiche action={tr('Stop')} actionIcone="stop" onAction={() => commande(c.haid, 'cover', 'stop_cover')} />);
     });
   } catch {}
   const nEnCours = momentRows.length;
@@ -8254,9 +8969,15 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
         * ici, vides tant qu'il n'y a rien, et c'est leur texte qui change.
         *
         * Deux régions plutôt qu'une : sinon l'arrivée d'un point d'attention
-        * ferait répéter l'état de l'alarme, et réciproquement. */}
-      <div className="o-vh" role="status">{alarmeTuile ? tr('Alarme') + ' : ' + alarmeTuile.texte : ''}</div>
-      <div className="o-vh" role="status">{points.length ? tr('À surveiller') + ' : ' + resumeAttention(points) : ''}</div>
+        * ferait répéter l'état de l'alarme, et réciproquement.
+        *
+        * Le libellé et sa valeur passent par UN gabarit (audit du 03/10).
+        * Collés en dur par une espace et deux-points, ils imposaient la
+        * typographie française aux six autres langues : un lecteur d'écran
+        * anglais disait « Alarm : Armed ». « {a} : {b} » s'écrit « {a}: {b} »
+        * dans leurs catalogues. */}
+      <div className="o-vh" role="status">{alarmeTuile ? tr('{a} : {b}', { a: tr('Alarme'), b: alarmeTuile.texte }) : ''}</div>
+      <div className="o-vh" role="status">{points.length ? tr('{a} : {b}', { a: tr('À surveiller'), b: resumeAttention(points) }) : ''}</div>
       {/* Le fond météo attend que le tableau de bord soit peint.
         *
         * `WeatherGL` est chargé à la demande — mais il était monté dès le
@@ -8279,11 +9000,11 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
           <BandeauEdition extra={<>
             {/* Desactives plutot que masques : leur place ne bouge pas, et
               * l'on voit qu'il n'y a rien a annuler. */}
-            <button onClick={annuler} disabled={!passe.length} aria-label={tr('Défaire')} title={tr('Défaire') + ' (Ctrl+Z)'}
+            <button onClick={annuler} disabled={!passe.length} aria-label={tr('Défaire')} title={tr('Défaire') + ' (' + tr('Ctrl+Z') + ')'}
               style={{ ...editBtn(false), display: 'flex', alignItems: 'center', gap: 6, opacity: passe.length ? 1 : .45, cursor: passe.length ? 'pointer' : 'default' }}>
               <Fi i="undo" size={12} />{tr('Défaire')}
             </button>
-            <button onClick={refaire} disabled={!futur.length} aria-label={tr('Refaire')} title={tr('Refaire') + ' (Ctrl+Maj+Z)'}
+            <button onClick={refaire} disabled={!futur.length} aria-label={tr('Refaire')} title={tr('Refaire') + ' (' + tr('Ctrl+Maj+Z') + ')'}
               style={{ ...editBtn(false), display: 'flex', alignItems: 'center', gap: 6, opacity: futur.length ? 1 : .45, cursor: futur.length ? 'pointer' : 'default' }}>
               <Fi i="redo" size={12} />{tr('Refaire')}
             </button>
@@ -8328,7 +9049,11 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                 * dit deja le temps, la piece Exterieur le detaille. */}
               <div className="o-greet-ligne" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <span className="o-greet-name" style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 28, fontWeight: 500, lineHeight: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nomProfil(userName)}</span>
-                <div className="o-avatars" style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                {/* Leur hauteur, réservée tant que la découverte n'a pas répondu (lot 14
+                  * de l'audit du 03/10) : les personnes en viennent, et la ligne
+                  * grandissait de 6 px à leur arrivée, poussant toute la page.
+                  * `a.index` reste nul jusque-là. */}
+                <div className="o-avatars" style={{ display: 'flex', gap: 8, flexShrink: 0, minHeight: a && !a.index ? 34 : undefined }}>
                   {avatars.map((u, i) => {
                     const present = !u.dim;
                     return (
@@ -8346,7 +9071,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                 * d'elle — un flex ne coupe pas un item, il le renvoie a la
                 * ligne. La pastille s'aligne donc sur la PREMIERE ligne, et le
                 * texte garde sa colonne. */}
-              <span className="o-greet-facts" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}><span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 5, background: couleurAcc, boxShadow: '0 0 8px ' + couleurAcc, animation: animationNiveau(niveauMax(points)) }} /><span style={{ flex: 1, minWidth: 0 }}>{[points.length ? resumeAttention(points) : tr('Tout va bien'), ...faits.txt].join(' · ')}{a && a.inTemp != null ? ` · ${a.inTemp.toFixed(1)}°C` : ''}</span></span>
+              <span className="o-greet-facts" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}><span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 5, background: couleurAcc, boxShadow: '0 0 8px ' + couleurAcc, animation: animationNiveau(niveauMax(points)) }} /><span style={{ flex: 1, minWidth: 0 }}>{[points.length ? resumeAttention(points) : tr('Tout va bien'), ...faits.txt].join(' · ')}{a && a.inTemp != null ? ` · ${dec(a.inTemp, 1)} °${a.inTempUnite}` : ''}</span></span>
           </div>
           {(() => {
             /* Une metrique a zero ne dit rien : « 0 / 4 ouvrants ouverts »
@@ -8368,6 +9093,29 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
               app: voirMoment,
             };
             const libelles = { al: tr('Voir la sécurité'), ex: tr('Voir l’énergie'), air: tr('Voir la pièce la plus chargée'), ouv: tr('Voir la sécurité'), lum: tr('Voir les lumières'), med: tr('Voir les médias'), app: tr('Voir ce qui tourne') };
+            /* Le NOM d'une tuile (lot 13 de l'audit du 03/10) : ce qu'elle
+              * AFFICHE, valeur puis libellé, et la destination au bout —
+              * « Désarmée, ALARME, Voir la sécurité ». La destination seule
+              * taisait l'état (« Voir l’énergie » pour « ↑ 460 W EXPORT
+              * RÉSEAU »), et qui pilote à la voix nomme ce qu'il VOIT (WCAG
+              * 2.5.3). Les morceaux reprennent les expressions du dessin
+              * ci-dessous, `Num` compris (`String(Math.round(v))`, ou son
+              * `fmt`) ; un squelette n'a pas de texte, il ne dit rien. */
+            const vus = {
+              al: alarmeTuile ? [alarmeTuile.texte, tr('ALARME')] : [],
+              ex: a && a.metricExport ? [a.metricExport.sign + fmtWatts(a.metricExport.raw), a.metricExport.label] : [tr('EXPORT RÉSEAU')],
+              air: [a && a.maxCo2 != null ? String(Math.round(a.maxCo2)) + ' ppm' : null, tr('QUALITÉ AIR') + ' · ' + (a && a.maxCo2 != null ? airLabel(a.maxCo2) : tr('BON'))],
+              ouv: [ouvStat.ouverts + ' / ' + ouvStat.total, ouvStat.ouverts > 1 ? tr('OUVRANTS OUVERTS') : tr('OUVRANT OUVERT')],
+              lum: a ? [a.lightsOn + ' / ' + a.lightsTotal + ' ' + tr('prés.'), a.lightsOn > 1 ? tr('LUMIÈRES ALLUMÉES') : tr('LUMIÈRE ALLUMÉE')] : [],
+              med: [actifsStat.medias + ' / ' + actifsStat.mediasTotal, actifsStat.medias > 1 ? tr('MÉDIAS EN LECTURE') : tr('MÉDIA EN LECTURE')],
+              app: [String(nEnCours), tr('EN CE MOMENT')],
+            };
+            /* Lu, un libellé tout en capitales (« EXPORT RÉSEAU », la clé même
+              * du dessin) passe en casse de phrase : une synthèse vocale épelle
+              * volontiers un mot court en capitales (« B-O-N »). La valeur
+              * (« ↑ 460 W », « 2 / 6 prés. ») ne bouge pas. */
+            const enPhrase = (s) => (typeof s === 'string' && s === s.toUpperCase() && /\p{Lu}{2}/u.test(s) ? s.charAt(0) + s.slice(1).toLowerCase() : s);
+            Object.keys(libelles).forEach(k => { libelles[k] = nomCarte(...vus[k].map(enPhrase), libelles[k]); });
             const tuile = (extra) => ({ flexShrink: 0, background: 'none', border: 'none', color: 'inherit', font: 'inherit', textAlign: 'left', cursor: 'pointer', borderRadius: 10, padding: '4px 14px 4px 0', whiteSpace: 'nowrap', ...extra });
             const cases = [];
             /* L'ALARME d'abord (retour user du 16/09, ADR 0035) : son etat et
@@ -8385,7 +9133,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             if (!a || a.maxCo2 != null) cases.push(
               <button type="button" key="air" className="o-tuile-hero" onClick={clics.air} aria-label={libelles.air} style={tuile({ display: 'flex', alignItems: 'center', gap: 8 })}>
                 <Ico name="wind" color="var(--o-accent)" size={17} />
-                <div><div style={{ fontSize: 15, fontWeight: 800, color: 'var(--o-accent-soft)', lineHeight: 1.1 }}>{a ? (a.maxCo2 != null ? <Num v={a.maxCo2} /> : '—') : <Skel w={40} h={16} />}<span style={{ fontSize: 11, color: 'var(--o-text2)' }}> ppm</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{tr('QUALITÉ AIR')} · {a && a.maxCo2 != null ? tr(airLabel(a.maxCo2)) : tr('BON')}</div></div>
+                <div><div style={{ fontSize: 15, fontWeight: 800, color: 'var(--o-accent-soft)', lineHeight: 1.1 }}>{a ? (a.maxCo2 != null ? <Num v={a.maxCo2} /> : '—') : <Skel w={40} h={16} />}<span style={{ fontSize: 11, color: 'var(--o-text2)' }}> ppm</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{tr('QUALITÉ AIR')} · {a && a.maxCo2 != null ? airLabel(a.maxCo2) : tr('BON')}</div></div>
               </button>);
             /* Les OUVRANTS ont pris la place de la température (retour
               * 01/09) : la chaleur de la maison se lit sur chaque tuile pièce,
@@ -8470,11 +9218,10 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                 const saisie = pieceDrag && pieceDrag.id === p.name;
                 const cell = piecesOu[p.name] || { c: 1, r: 1 };
                 return (
-                  /* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-static-element-interactions -- même geste que les sections : en édition la tuile se saisit et se déplace aux flèches, et porte son nom. */
-                  <div key={p.name} data-piece={p.name} className={t === 'c' ? 'o-chiprow1' : undefined} tabIndex={editMode ? 0 : undefined}
-                    role={editMode ? 'button' : undefined}
-                    aria-label={editMode ? p.name + ' · ' + tr('Déplacer avec les flèches') : undefined}
-                    onKeyDown={editMode ? (e) => clavierPiece(e, p.name, inner.map(x => x.name)) : undefined}
+                  /* Même geste que les sections : en édition la tuile se saisit
+                   * au pointeur ; le focus, le nom et les flèches sont à sa
+                   * surface. */
+                  <div key={p.name} data-piece={p.name} className={[t === 'c' ? 'o-chiprow1' : '', editMode ? 'o-pointille' : '', saisie ? 'o-saisie' : ''].filter(Boolean).join(' ') || undefined}
                     onPointerDown={editMode ? (e) => debutPiece(e, p.name, inner.map(x => x.name)) : undefined}
                     onPointerMove={editMode ? mouvPiece : undefined}
                     onPointerUp={editMode ? finPiece : undefined}
@@ -8495,13 +9242,24 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                       * laisse par la puce au-dessus d'elle. */
                     style={{ position: 'relative', minWidth: 0, opacity: saisie ? .35 : 1, transition: 'opacity .15s',
                       gridColumn: cell.c, gridRow: cell.r + ' / span ' + hauteurCarte(t),
-                      ...(editMode ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.4)', outlineOffset: 2, borderRadius: 14, cursor: 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' } : {}) }}>
+                      /* Le pointillé, et le trait plein de la tuile saisie,
+                        * passent par les classes `o-pointille` et `o-saisie`
+                        * (index.css) : en ligne, ils battaient `:focus-visible`
+                        * et la tuile au focus ne se voyait plus au clavier
+                        * (audit du 03/10). */
+                      ...(editMode ? { '--o-pointille-ecart': '2px', borderRadius: 14, cursor: 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' } : {}) }}>
+                    {/* La SURFACE de la tuile en édition (lot 13 de l'audit du
+                      * 03/10) : le focus, le nom et les flèches, que portait
+                      * l'enveloppe en `role="button"` — un rôle qui taisait la
+                      * taille, Modifier et Supprimer de sa carte. */}
+                    {editMode && <Surface popup={false} label={nomCarte(p.name, tr('Déplacer avec les flèches'))}
+                      onKeyDown={(e) => clavierPiece(e, p.name, inner.map(x => x.name))} style={{ cursor: 'inherit' }} />}
                     {/* En édition, la carte d'édition — le même dessin que
                       * partout (retour user du 15/09) : taille en coin,
                       * Modifier, Supprimer. Sinon la tuile vivante. */}
                     {editMode ? (
                       <CartePieceEdition p={p} compacte={t === 'c'} onModifier={() => setPieceSheet({ nom: p.name, compacte: t === 'c' })} onSupprimer={() => retirerPiece(p.name)}
-                        onTaille={() => saveGrille({ tailles: { ...(grille.tailles || {}), [p.name]: t === 'c' ? 's' : 'c' } })} />
+                        onTaille={() => saveGrille({ tailles: { ...(grille.tailles || {}), [p.name]: t === 'c' ? 's' : 'c' } })} reglable={!ordinaire} />
                     ) : (
                       <div style={{ height: '100%' }}>
                         <PieceCard p={p} idx={i} compact chip={t === 'c'} lights={roomLightsOf(p.name)} mains={roomMainsOf(p.name)} onToggleLights={() => toggleRoomLights(p.name)} covers={roomCoversInfo(p.name)} clim={roomClimInfo(p.name)} ambiance={ambianceDe(p.name)} onOpen={() => onOpenRoom && onOpenRoom(p.name)} />
@@ -8516,7 +9274,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                 <div aria-hidden="true" style={{ gridColumn: pieceDrag.c, gridRow: pieceDrag.r + ' / span ' + hauteurCarte(piecesTailles[pieceDrag.id]),
                   borderRadius: 14, border: '2px dashed var(--o-accent)', background: 'rgba(var(--o-accent-rgb),.12)', pointerEvents: 'none' }} />
               )}
-              {editMode && (
+              {editMode && !ordinaire && (
                 <div style={{ gridColumn: piecesApres.c, gridRow: piecesApres.r + ' / span 1', minWidth: 0 }}>
                   <CarteAjout onClick={() => setPieceSheet({ nom: '', compacte: false })} label={tr('Ajouter une pièce')} />
                 </div>
@@ -8538,9 +9296,14 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             return (
               /* Role, tabulation, clic et touche tiennent tous a `clic` :
                * ensemble ou pas du tout. La regle lit les attributs un par un
-               * et ne suit pas le ternaire. */
+               * et ne suit pas le ternaire.
+               *
+               * Le nom aussi (lot 13 de l'audit du 03/10) : ce que la ligne
+               * affiche, par `nomCarte` comme toute carte — « 3 autres, Tout
+               * est dans Objets ». Elle ne porte aucune commande : elle garde
+               * son rôle, et mène à une vue (pas d'`aria-haspopup`). */
               /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */
-              <div key={k} role={clic ? 'button' : undefined} tabIndex={clic ? 0 : undefined}
+              <div key={k} role={clic ? 'button' : undefined} tabIndex={clic ? 0 : undefined} aria-label={clic ? nomCarte(label, desc, val) : undefined}
                 onClick={clic || undefined} onKeyDown={clic ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clic(); } } : undefined}
                 style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', cursor: clic ? 'pointer' : 'default' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -8681,12 +9444,19 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
           // Mobile et tablette : deux onglets, « Maison » et « En ce moment ».
           if (!wide) return <OngletsAccueil maison={renduMain} moment={renduRail} edit={editMode} demande={pageDemandee} onDemande={() => setPageDemandee(null)} />;
           return (
-            <div style={{ display: 'grid', gridTemplateColumns: wideXL ? '1fr 330px' : '1fr 276px', gap: wideXL ? 18 : 14 }}>
+            <div className="o-acc-grid" style={{ display: 'grid', gridTemplateColumns: wideXL ? '1fr 330px' : '1fr 276px', gap: wideXL ? 18 : 14 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
                 {renduMain}
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
-                {renduRail}
+              {/* Le rail : une CELLULE qui ne compte pas dans la hauteur de la
+                * rangée, et dedans la COLONNE collante qui défile seule
+                * (04/10). La page s'arrête avec le contenu principal. En
+                * édition, `o-rail-edit` rend la colonne au flux : glisser,
+                * flèches, × et « Ajouter » comme avant. */}
+              <div ref={poserRail} className={'o-rail-cell' + (editMode ? ' o-rail-edit' : '')}>
+                <div className="o-rail-col" style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+                  {renduRail}
+                </div>
               </div>
             </div>
           );
@@ -8762,7 +9532,7 @@ function discoverLights(hass, index) {
     const ct = modes.indexOf('color_temp') >= 0;
     const bri = (on && at.brightness != null) ? Math.max(1, Math.round(at.brightness / 255 * 100)) : (on ? 100 : 0);
     const rgb = at.rgb_color || null;
-    const color = rgb ? ('#' + rgb.map(x => Math.max(0, Math.min(255, x)).toString(16).padStart(2, '0')).join('')) : null;
+    const color = rgb ? versHex(rgb) : null;
     return { id, domain: 'light', name: at.friendly_name || id.replace('light.', '').replace(/_/g, ' '), room: pieceDe(id), on, bri, dimmable, rgb: rgbCap, ct, color, lc: st.last_changed };
   });
   const switches = switchLights().filter(id => S[id]).map(id => {
@@ -8799,8 +9569,13 @@ const LIGHT_PALETTE = ['var(--o-lampe)', 'var(--o-orange)', '#f472b6', 'var(--o-
  *
  * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
  * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
- * langue. Appelee au rendu, elle se dit dans la langue du moment. */
-const WHITE_TEMPS = () => [['Bougie', 2200, '#ffb46b'], ['Chaud', 2700, '#ffd9a0'], ['Neutre', 4000, '#fff1dd'], [tr('Froid'), 6500, '#eaf2ff']];
+ * langue. Appelee au rendu, elle se dit dans la langue du moment.
+ *
+ * Des noms de BLANCS (audit du 03/10) : le 6 500 K lisait la clé du mode
+ * de climatisation (« Kühlen · 6500 K » en allemand), et les trois autres
+ * n'étaient pas traduits du tout — « Bougie · 2200 K » au milieu d'une fiche
+ * anglaise, pour un lecteur d'écran. */
+const WHITE_TEMPS = () => [[tr('Bougie'), 2200, '#ffb46b'], [tr('Blanc chaud'), 2700, '#ffd9a0'], [tr('Blanc neutre'), 4000, '#fff1dd'], [tr('Blanc froid'), 6500, '#eaf2ff']];
 
 /* La vue Lumieres a disparu le 14/09/2026 : la vue Objets, filtre « Lumieres »,
  * dessine les memes lampes aux cartes de la piece. La route `lumieres` y mene. */
@@ -8926,7 +9701,9 @@ const HUE_ROOMS = () => [
   { id: 'Chambre enfant', label: tr('Enfant'), icon: 'teddy-bear' }, { id: 'Toute la maison', label: tr('Tout'), icon: 'home' },
 ];
 const HUE_CATS = () => Object.entries(HUE_SCENES).map(([id, c]) => ({ id, label: tr(c.label) }));
-const rgbHex = (c) => '#' + c.map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
+// Le nuancier des ambiances Hue garde son nom (ScenesContent n'est pas
+// retouché) ; le calcul est versHex de contraste.js (lot 15 de l'audit du 03/10).
+const rgbHex = versHex;
 // Lumières réglables en luminosité : le choix de l'utilisateur s'il en a fait
 // un, sinon toutes celles que Home Assistant déclare variables.
 function dimmableLights(hass) {
@@ -9068,10 +9845,19 @@ function ScenesContent({ hass }) {
           <ListeChoix value={cat} options={HUE_CATS()} onChange={setCat} label={tr('Collection de scènes')} />
         </QuickBox>
         <QuickBox label={tr('Luminosité')} className="o-qb-lumi">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} {...kbSlider(tr('Luminosité des scènes'), bri, setBri, { min: 5, max: 100, step: 5 })}>
-            <button onClick={() => setBri(bri - 5)} aria-label={tr('Baisser')} style={{ width: 24, height: 24, borderRadius: 11, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>−</button>
-            <span style={{ minWidth: 44, textAlign: 'center', fontSize: 12, fontWeight: 800, color: 'var(--o-warn)' }}>{bri} %</span>
-            <button onClick={() => setBri(bri + 5)} aria-label={tr('Monter')} style={{ width: 24, height: 24, borderRadius: 11, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>+</button>
+          {/* Le rôle « curseur » vit sur la VALEUR, plus sur la rangée (lot 13
+            * de l'audit du 03/10) : posé sur le conteneur, il enfermait − et +,
+            * et un curseur ne contient pas de bouton (`nested-interactive`) —
+            * les deux disparaissaient d'un lecteur d'écran. Au clavier : Tab
+            * jusqu'à « 60 % », puis les flèches, Page préc. / suiv., Début /
+            * Fin ; − et + gardent leur clic et disent ce qu'ils règlent
+            * (« Monter » se lisait « Move up » en anglais, le mot du mode
+            * édition). La valeur reste un `span` enfant direct de la rangée :
+            * `.o-qb-lumi > div > span` (index.css) la tient au téléphone. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={() => setBri(bri - 5)} aria-label={tr('Baisser la luminosité')} style={{ width: 24, height: 24, borderRadius: 11, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>−</button>
+            <span {...kbSlider(tr('Luminosité des scènes'), bri, setBri, { min: 5, max: 100, step: 5 })} style={{ minWidth: 44, textAlign: 'center', fontSize: 12, fontWeight: 800, color: 'var(--o-warn)' }}>{bri} %</span>
+            <button onClick={() => setBri(bri + 5)} aria-label={tr('Monter la luminosité')} style={{ width: 24, height: 24, borderRadius: 11, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>+</button>
           </div>
         </QuickBox>
         <span style={{ flex: 1 }} />
@@ -9119,7 +9905,10 @@ function ScenariosView({ hass, edit = false }) {
     if (i < 0 || j < 0 || j >= ids.length) return;
     ids.splice(j, 0, ids.splice(i, 1)[0]);
     // Sur ce type d'écran seulement : l'ordinateur au composant, les autres chez eux.
-    sc.ordonner(ids).catch(() => {});
+    // Sans `catch` (audit du 03/10) : il avalait le refus d'un compte
+    // ordinaire, et la carte revenait à sa place sans un mot. Le refus
+    // remonte à l'écoute globale, comme celui d'un scénario lancé.
+    sc.ordonner(ids);
   };
   const pieces = (sc.etat && sc.etat.pieces) || [];
   const liens = (sc.etat && sc.etat.liens) || [];
@@ -9140,7 +9929,10 @@ function ScenariosView({ hass, edit = false }) {
         <div className="grid-scenarios" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(205px,1fr))', gap: 12 }}>
           {liste.map((s, i) => (
             <div key={s.id} style={{ position: 'relative', minWidth: 0 }}>
-              <CarteScenario s={s} noms={sc.noms} enCours={sc.enCours === s.id} onLancer={sc.lancer} sansDernier={edit} style={edit ? { outline: '1px dashed rgba(var(--o-accent-rgb),.45)', outlineOffset: 3, opacity: s.masque ? .45 : 1 } : null} />
+              {/* Le pointillé d'édition passe par la classe `o-pointille` : en
+                * style en ligne, il cachait le focus du bouton au clavier
+                * (audit du 03/10). */}
+              <CarteScenario s={s} noms={sc.noms} enCours={sc.enCours === s.id} onLancer={sc.lancer} sansDernier={edit} className={edit ? 'o-pointille' : undefined} style={edit ? { '--o-pointille': '.45', opacity: s.masque ? .45 : 1 } : null} />
               {/* Les outils prennent la place du repere « dernier lancement » : en bas,
                 * ils mordaient sur les puces des cartes etroites (vu en demo, 16/09). */}
               {edit && (
@@ -9195,7 +9987,12 @@ function FicheScenario({ scenario = null, pieces = [], liens = [], onEnregistrer
   const envoyer = async (close, patch) => {
     setAttente(true); setErr('');
     try { await onEnregistrer(patch); close(); }
-    catch (e) { setErr((e && (e.message || e.code)) || tr('Enregistrement impossible.')); setAttente(false); }
+    /* Un refus du composant se dit par son code, dans la langue de l'écran :
+     * « trop de scenarios (24 au plus) » s'affichait tel quel, en français
+     * sans accents, dans les sept langues (audit du 03/10). Ce qui n'est pas
+     * un refus garde son texte, déjà traduit — « Home Assistant n'est pas
+     * joignable ». */
+    catch (e) { setErr(estRefus(e) ? raisonEchec(e) : ((e && e.message) || tr('Enregistrement impossible.'))); setAttente(false); }
   };
   const valider = (close) => {
     if (!valide || attente) return;
@@ -9296,7 +10093,7 @@ function FicheScenario({ scenario = null, pieces = [], liens = [], onEnregistrer
             {existant && scenario.integre && scenario.modifie && <button onClick={() => envoyer(close, { reinitialiser: scenario.id })} style={secondaire}>{tr('Remettre d’origine')}</button>}
             {existant && !scenario.integre && <button onClick={() => envoyer(close, { supprimer: scenario.id })} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)' }}><Fi i="cross-small" size={12} />{tr('Supprimer')}</button>}
             <span style={{ flex: 1 }} />
-            <button onClick={() => valider(close)} disabled={!valide || attente} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 16px', borderRadius: 14, border: 'none', cursor: valide && !attente ? 'pointer' : 'default', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#06121f', opacity: valide && !attente ? 1 : .45 }}><Fi i="plus" size={12} />{tr('Enregistrer')}</button>
+            <button onClick={() => valider(close)} disabled={!valide || attente} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 16px', borderRadius: 14, border: 'none', cursor: valide && !attente ? 'pointer' : 'default', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#fff', opacity: valide && !attente ? 1 : .45 }}><Fi i="plus" size={12} />{tr('Enregistrer')}</button>
           </div>
         </div>
       )}
@@ -9469,17 +10266,30 @@ function voletCovers(S) {
 function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
   const S = (hass && hass.states) || null;
   const derivedCovers = voletCovers(S).map(c => { const e = S && S[c.haid]; const a = e && e.attributes; const pos = a && a.current_position; return { ...c, pos: pos != null ? pos : (e && e.state === 'open' ? 100 : e && e.state === 'closed' ? 0 : 50) }; });
-  const [covers, setCovers] = useState(derivedCovers);
   const csig = derivedCovers.map(c => c.id + ':' + c.pos).join('|');
-  useEffect(() => { setCovers(derivedCovers); }, [csig]);
+  /* « Tout ouvrir / tout fermer » et le mode de l'installation passent par le
+   * filet commun (lot 15 de l'audit du 03/10) : recopiés dans un état local,
+   * ils ne se recalaient que si HA bougeait — un refus laissait « tous
+   * fermés » et le mode choisi allumé jusqu'au changement de page. */
+  const [ovPos, poserPos] = useOptimiste(csig);
+  const covers = ovPos != null ? derivedCovers.map(c => ({ ...c, pos: ovPos })) : derivedCovers;
   // Meme raison qu'au volet isole : aucun mode invente.
   const haMode = (S && S[voletMode()] && S[voletMode()].state) || null;
-  const [mode, setModeLocal] = useState(haMode);
+  const [ovModeHa, setModeLocal] = useOptimiste(haMode);
+  const mode = ovModeHa != null ? ovModeHa : haMode;
   /* Le mode que LOGGIA tient, quand c'est lui qui fait le planning. Tant que
    * la regle dort, on continue d'afficher l'`input_select` de l'installation :
    * c'est lui qui commande, et le remplacer par des boutons sans effet serait
    * mentir sur qui pilote. */
   const [modeLoggia, setModeLoggia] = useState(null);
+  /* Le mode DEMANDÉ, le temps de la réponse (audit du 03/10). Le choix
+   * s'écrivait droit dans `modeLoggia`, et le `catch` d'un refus recopiait
+   * l'état sur lui-même : le bouton restait allumé jusqu'au sondage suivant —
+   * quinze secondes —, puis revenait seul, sans un mot, pendant que les volets
+   * se fermaient le soir selon l'ancien mode. Il passe donc par le filet
+   * commun, qui expire, et qu'un échec efface tout de suite. */
+  const [ovMode, poserMode] = useOptimiste(modeLoggia);
+  const modeAffiche = ovMode != null ? ovMode : modeLoggia;
   const connecte = !!hass;
   useEffect(() => {
     if (!hass || typeof hass.callWS !== 'function') return undefined;
@@ -9499,14 +10309,23 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
     { id: 'nuit', label: tr('Fermeture nuit') },
     { id: 'manuel', label: tr('Manuel') },
   ];
+  /* Un refus — `loggia/volets/config` est réservé aux administrateurs de Home
+   * Assistant — remonte au toast global en NOMMANT la clé où le composant
+   * range ces règles (ADR 0046, 0125), et l'ancien mode revient sous le
+   * doigt. Rien n'est masqué : un compte ordinaire voit la barre, et apprend
+   * pourquoi son choix n'a pas pris.
+   *
+   * Le succès se lit dans la RÉPONSE : attendre le sondage ferait revenir
+   * l'ancien bouton quand le filet expire (6 s), jusqu'à la relecture
+   * suivante (15 s). */
   const pickModeLoggia = (m) => {
-    setModeLoggia(m);
-    if (hass && hass.callWS) {
-      hass.callWS({ type: 'loggia/volets/config', patch: { planning: { mode: m } } })
-        .catch(() => setModeLoggia(x => x));   // refus d'ecriture : l'etat suivant remettra le vrai
-    }
+    poserMode(m);
+    ecrireRegle(hass, 'loggia/volets/config', { planning: { mode: m } }, { cle: 'loggia_volets', annuler: () => poserMode(null) })
+      .then((r) => {
+        const p = r && r.config && r.config.planning;
+        if (p) setModeLoggia(p.actif ? (p.mode || 'auto') : null);
+      });
   };
-  useEffect(() => { setModeLocal(haMode); }, [haMode]);
 
   // Agencement : la découverte propose, l'utilisateur dispose.
   const nbEntites = Object.keys(S).length;
@@ -9538,8 +10357,8 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
   });
 
   const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
-  const allOpen = () => { setCovers(cs => cs.map(c => ({ ...c, pos: 100 }))); call('cover', 'open_cover', { entity_id: voletCovers(S).map(c => c.haid) }); };
-  const allClose = () => { setCovers(cs => cs.map(c => ({ ...c, pos: 0 }))); call('cover', 'close_cover', { entity_id: voletCovers(S).map(c => c.haid) }); };
+  const allOpen = () => { poserPos(100); call('cover', 'open_cover', { entity_id: voletCovers(S).map(c => c.haid) }); };
+  const allClose = () => { poserPos(0); call('cover', 'close_cover', { entity_id: voletCovers(S).map(c => c.haid) }); };
   const pickMode = (m) => { setModeLocal(m); call('input_select', 'select_option', { entity_id: voletMode(), option: m }); };
 
   // Le mode tel qu'il se DIT : son libellé dans la liste, ou rien. Un état que
@@ -9570,8 +10389,8 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
              * l'entité de mode est indisponible affichait « 2 volets ·
              * unavailable » — un mot de Home Assistant, en anglais, dans une
              * ligne qui se lit (vu chez l'utilisateur le 26/09). */
-            sous={(covers.length > 1 ? tr('{n} volets', { n: covers.length }) : tr('{n} volet', { n: covers.length })) + (nomDuMode ? ' · ' + String(nomDuMode).toLowerCase() : '')}
-            badge={openCount ? (openCount > 1 ? tr('{n} ouverts', { n: openCount }) : tr('{n} ouvert', { n: openCount })) : tr('tous fermés')}
+            sous={trN(covers.length, '{n} volet', '{n} volets') + (nomDuMode ? ' · ' + String(nomDuMode).toLowerCase() : '')}
+            badge={openCount ? trN(openCount, '{n} ouvert', '{n} ouverts') : tr('tous fermés')}
             rgb={openCount ? 'var(--o-ok-rgb)' : 'var(--o-text3-rgb)'} />}
 
       {!embarque && <ViewBar>
@@ -9582,7 +10401,7 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
         </BarGroup>
         {modeLoggia !== null ? (
           <BarGroup label={tr('Mode')}>
-            {MODES_LOGGIA().map(m => <button key={m.id} onClick={() => pickModeLoggia(m.id)} style={barBtn(modeLoggia === m.id)}>{m.label}</button>)}
+            {MODES_LOGGIA().map(m => <button key={m.id} onClick={() => pickModeLoggia(m.id)} style={barBtn(modeAffiche === m.id)}>{m.label}</button>)}
           </BarGroup>
         ) : (voletModes(S).length > 0 && voletMode() && (
           <BarGroup label={tr('Mode')}>
@@ -9610,7 +10429,7 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
                     <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)' }}>{String(nomDe(bloc.titre)).toUpperCase()}</span>
                     <span style={{ height: 1, flex: 1, background: 'var(--o-bd3)' }} />
                   </div>)}
-              <div className="grid-roomdev grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', gap: 16 }}>
+              <div className="grid-roomdev grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', columnGap: 16, rowGap: 8 }}>
                 {bloc.cartes.map(k => {
                   const compacte = ed.estCompact(k);
                   const carte = compacte ? dc.compact(k, ed.labelOf(k)) : dc.card(k, ed.labelOf(k));
@@ -9712,7 +10531,8 @@ function EnergyHouseSchema({ solarW = 47, homeW = 907, surplusW = 954, evW = 0, 
   const batCharge = batW > 0, batFlowW = Math.abs(batW || 0);
   // Pas de signe moins — le user l'a rejete sur l'import reseau, une fleche dit
   // le sens sans laisser croire a une valeur negative.
-  const fmtChipW = (v) => (v >= 1000 ? dec(v / 1000, 1) + ' kW' : Math.round(v) + ' W');
+  // Arrondi AVANT l'unité (05/10) : 999,6 W donnait « 1000 W ».
+  const fmtChipW = (v) => (Math.round(v) >= 1000 ? dec(v / 1000, 1) + ' kW' : Math.round(v) + ' W');
   const batTxt = (() => {
     const bouts = [];
     if (batSoc != null) bouts.push(batSoc + ' %');
@@ -9827,7 +10647,8 @@ function SunArc({ solarW = 0, gridW = 0, exportW = 0, homeW = 0, appW = null, so
   const Ct = [P0[0] + (C[0] - P0[0]) * t, P0[1] + (C[1] - P0[1]) * t];
   const day = s.day;
   const irr = day ? Math.max(0, Math.round(1090 * Math.pow(Math.max(0, Math.sin(s.elevation * RAD)), 1.15))) : 0; // irradiance ciel clair estimée
-  const fmtKW = (w) => Math.abs(w) >= 995 ? dec(w / 1000, 1) + ' kW' : Math.round(w) + ' W';
+  // Arrondi AVANT l'unité (05/10) : 994,6 W s'écrivait « 995 W », et 995 « 1,0 kW ».
+  const fmtKW = (w) => Math.abs(Math.round(w)) >= 995 ? dec(w / 1000, 1) + ' kW' : Math.round(w) + ' W';
   return (
     <svg viewBox="0 0 600 250" preserveAspectRatio="xMidYMid meet" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
       {/* arc complet estompé + segment parcouru brillant (style Helios) */}
@@ -9878,8 +10699,13 @@ function SunArc({ solarW = 0, gridW = 0, exportW = 0, homeW = 0, appW = null, so
         return <Chip icon="sun" x={cx} y={cy} color="var(--o-gold)" txt={irr + ' W/m²'} />;
       })()}
       {solarPresente && format !== 'mobile' && <Chip icon="panel" x={352} y={78} color="#ffa63c" txt={fmtKW(solarW)} live={solarW > 5} />}
-      <Chip icon="house" x={352} y={200} color="var(--o-cyan)" txt={fmtKW(homeW)} />
-      <Chip icon="pylon" x={478} y={168} color="var(--o-purple)" txt={(exportW > 5 ? '↑ ' : '↓ ') + fmtKW(exportW > 5 ? exportW : gridW)} live={(exportW > 5 ? exportW : gridW) > 5} />
+      {/* La maison et le pylône ne disent que ce qui se lit (audit du 03/10).
+        * Sans compteur, l'appel passe `null` et la pastille s'efface — comme
+        * celle des panneaux sans capteur de production. Elles affichaient
+        * « 0 W » et « ↓ 0 W » juste au-dessus des chiffres qui, eux, disaient
+        * « — » (ADR 0030). */}
+      {homeW != null && <Chip icon="house" x={352} y={200} color="var(--o-cyan)" txt={fmtKW(homeW)} />}
+      {gridW != null && <Chip icon="pylon" x={478} y={168} color="var(--o-purple)" txt={(exportW > 5 ? '↑ ' : '↓ ') + fmtKW(exportW > 5 ? exportW : gridW)} live={(exportW > 5 ? exportW : gridW) > 5} />}
     </svg>
   );
 }
@@ -10112,6 +10938,18 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   const S = (hass && hass.states) || null;
   const num = (id, def = 0) => { const e = S && S[id]; if (!e || e.state == null || e.state === 'unknown' || e.state === 'unavailable') return def; const n = parseFloat(e.state); return isNaN(n) ? def : n; };
   const avail = (id) => { const e = S && S[id]; return !!(e && e.state != null && e.state !== 'unknown' && e.state !== 'unavailable' && !isNaN(parseFloat(e.state))); };
+  /* Une puissance se lit en WATTS, une énergie en kWh, quelle que soit l'unité
+   * du capteur (audit du 03/10). Un compteur P1/DSMR publie 2,75 kW : `num` le
+   * rendait tel quel, le schéma disait « 3 W », les seuils « > 5 W » ne se
+   * franchissaient jamais et le solaire ne paraissait jamais actif. `num` reste
+   * pour ce qui n'a pas d'unité à ramener : les taux (%) et la devise. */
+  const numW = (id, def = 0) => { const w = avail(id) ? wattsDe(S[id]) : null; return w == null ? def : w; };
+  const numKwh = (id, def = 0) => { const k = avail(id) ? kwhDe(S[id]) : null; return k == null ? def : k; };
+  // L'historique arrive dans l'unité du capteur, sans ses attributs : il se
+  // ramène au même repère que la valeur du moment. Sinon une courbe en kW se
+  // tracerait mille fois trop bas à côté d'une courbe en W, sur l'échelle commune.
+  const uniteEn = (id) => (S && S[id] && S[id].attributes && S[id].attributes.unit_of_measurement) || '';
+  const ramener = (pts, f) => (f === 1 ? pts : pts.map(p => ({ t: p.t, v: p.v * f })));
   // Package énergie v3 prioritaire, repli sur les capteurs bruts si absent
   const EN = enHaids();
   // Vehicule electrique : sa puissance de charge suffit a tout piloter — le
@@ -10121,9 +10959,9 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   // `unavailable` des qu'on debranche : lier les deux faisait disparaitre le
   // calque, le cable et la pastille d'un bloc, par intermittence.
   const evBranche = !!EN.evNow;
-  const evW = avail(EN.evNow) ? Math.max(0, Math.round(num(EN.evNow))) : null;
+  const evW = avail(EN.evNow) ? Math.max(0, Math.round(numW(EN.evNow))) : null;
   const batPresente = !!(EN.batNow || EN.batSoc);
-  const batW = avail(EN.batNow) ? Math.round(num(EN.batNow)) : null;
+  const batW = avail(EN.batNow) ? Math.round(numW(EN.batNow)) : null;
   const batSoc = avail(EN.batSoc) ? Math.round(num(EN.batSoc)) : null;
 
   // Postes de consommation : la liste proposee, puis l'agencement.
@@ -10161,25 +10999,34 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   // consoNow = flux NET du compteur (négatif = export) — source unique du temps réel
   // réseau (cf. CONTEXTE de packages/energie.yaml). On dérive import/export du net BRUT en priorité :
   // aucune dépendance à la fraîcheur des templates du package.
-  const solarW = Math.round(avail(EN.solarNow) ? num(EN.solarNow) : num(EN.solarOutput));
-  const netRaw = avail(EN.consoNow) ? Math.round(num(EN.consoNow)) : null;
-  const gridDrawW = netRaw != null ? Math.max(0, netRaw) : Math.round(avail(EN.gridNow) ? num(EN.gridNow) : 0);
-  const surplusW = netRaw != null ? Math.max(0, -netRaw) : Math.round(avail(EN.injectionNow) ? num(EN.injectionNow) : Math.max(0, num(EN.surplusNow)));
-  const consoW = avail(EN.consoMaison) ? Math.round(num(EN.consoMaison)) : Math.max(0, gridDrawW + solarW - surplusW);
+  const solarW = Math.round(avail(EN.solarNow) ? numW(EN.solarNow) : numW(EN.solarOutput));
+  const netRaw = avail(EN.consoNow) ? Math.round(numW(EN.consoNow)) : null;
+  const gridDrawW = netRaw != null ? Math.max(0, netRaw) : Math.round(avail(EN.gridNow) ? numW(EN.gridNow) : 0);
+  const surplusW = netRaw != null ? Math.max(0, -netRaw) : Math.round(avail(EN.injectionNow) ? numW(EN.injectionNow) : Math.max(0, numW(EN.surplusNow)));
+  const consoW = avail(EN.consoMaison) ? Math.round(numW(EN.consoMaison)) : Math.max(0, gridDrawW + solarW - surplusW);
   const exporting = surplusW > 5;
   const importW = Math.max(0, gridDrawW);
   const gridNetW = exporting ? surplusW : importW;
   // Bilans / coûts du package
-  const prodJour = avail(EN.prodJour) ? num(EN.prodJour) : null;
+  const prodJour = avail(EN.prodJour) ? numKwh(EN.prodJour) : null;
   const autosuff = avail(EN.autosuffJour) ? Math.round(num(EN.autosuffJour)) : null;
   const tauxAutoconso = avail(EN.tauxAutoconso) ? Math.round(num(EN.tauxAutoconso)) : null;
   const ecoJour = avail(EN.ecoJour) ? num(EN.ecoJour) : null;
   // La devise suit l'entite, puis l'installation — jamais suppose en euros.
   const deviseJour = (EN.ecoJour && S[EN.ecoJour] && S[EN.ecoJour].attributes && S[EN.ecoJour].attributes.unit_of_measurement)
     || (hass && hass.config && hass.config.currency) || '€';
-  const hcToday = avail(EN.consoJourHc) ? num(EN.consoJourHc) : num(EN.consoHcToday);
-  const hpToday = avail(EN.consoJourHp) ? num(EN.consoJourHp) : num(EN.consoHpToday);
-  const totalToday = avail(EN.consoJour) ? num(EN.consoJour) : ((hcToday + hpToday) || num(EN.consoReseauToday));
+  /* Le total du jour n'existe que si un compteur se lit (audit du 03/10).
+   * `num()` rend 0 pour une entité muette : heures creuses + heures pleines
+   * valaient 0 kWh avec un Linky indisponible, `totalToday` n'était jamais
+   * nul, et le garde-fou de l'autosuffisance ne jouait pas. `numKwh(id, null)`
+   * dit « illisible » ; `consoJourKwh` (bilan.js) choisit le compteur et rend
+   * null quand aucun ne répond. */
+  const hcToday = avail(EN.consoJourHc) ? numKwh(EN.consoJourHc) : numKwh(EN.consoHcToday, null);
+  const hpToday = avail(EN.consoJourHp) ? numKwh(EN.consoJourHp) : numKwh(EN.consoHpToday, null);
+  /* Configuré mais muet n'est pas « non configuré » (relecture du 03/10). */
+  const hcMuet = !!(EN.consoJourHc || EN.consoHcToday) && hcToday == null;
+  const hpMuet = !!(EN.consoJourHp || EN.consoHpToday) && hpToday == null;
+  const totalToday = consoJourKwh({ jour: numKwh(EN.consoJour, null), hc: hcToday, hp: hpToday, reseau: numKwh(EN.consoReseauToday, null), hcMuet, hpMuet });
 
   /* ── Sources de puissance et cadrans, à droite du schéma ───────────────────
    *
@@ -10188,18 +11035,28 @@ function EnergieContent({ hass, edit = false, onEnt }) {
    * maison. Chacune n'est tracée que si son capteur existe.
    */
   const puissIds = [EN.consoNow || EN.gridNow, EN.solarNow || EN.solarOutput, EN.consoMaison].filter(Boolean);
-  const puissHist = useSysHist(hass, puissIds, 24, 0);
+  /* Relues, et pas seulement lues (audit du 03/10). La clé de relecture était
+   * figée à 0 : l'historique partait une fois, au montage, et sur une tablette
+   * ouverte au mur « les dernières 24 heures » s'arrêtaient à l'heure de
+   * l'arrivée sur la page. Un tour toutes les cinq minutes pour les DEUX
+   * onglets — puissance et consommation —, comme les courbes des fiches
+   * (`useHistorique24`) et le CO₂ du rail ; rien quand la page est cachée, le
+   * tour manqué au retour (releve.js). L'effet rend l'arrêt : quitter la vue
+   * coupe le minuteur. Le Système fait de même, chaque minute. */
+  const [tourEn, setTourEn] = useState(0);
+  useEffect(() => armerReleve(() => setTourEn(x => x + 1), 5 * 60000), []);
+  const puissHist = useSysHist(hass, puissIds, 24, tourEn);
   const puissSeries = [
     { id: EN.consoNow || EN.gridNow, nom: tr('Réseau'), couleur: 'var(--o-accent)' },
     { id: EN.solarNow || EN.solarOutput, nom: tr('Solaire'), couleur: 'var(--o-gold)' },
     { id: EN.consoMaison, nom: tr('Consommation'), couleur: 'var(--o-text2)' },
-  ].filter(s => s.id && puissHist[s.id]).map(s => ({ ...s, pts: puissHist[s.id] }));
+  ].filter(s => s.id && puissHist[s.id]).map(s => ({ ...s, pts: ramener(puissHist[s.id], facteurWatts(uniteEn(s.id))) }));
 
   /* Onglet CONSOMMATION : les mêmes 24 h, mais en kWh par heure. Les compteurs
    * du jour séparent souvent heures creuses et heures pleines — on garde cette
    * distinction quand elle existe, sinon le total réseau suffit. */
   const consoIds = [EN.consoJourHc, EN.consoJourHp, EN.consoJour, EN.prodJour].filter(Boolean);
-  const consoHist = useSysHist(hass, consoIds, 24, 0);
+  const consoHist = useSysHist(hass, consoIds, 24, tourEn);
   const aHcHp = !!(EN.consoJourHc && consoHist[EN.consoJourHc]) || !!(EN.consoJourHp && consoHist[EN.consoJourHp]);
   const consoSeries = [
     { id: EN.prodJour, nom: tr('Solaire'), couleur: 'var(--o-gold)' },
@@ -10207,20 +11064,19 @@ function EnergieContent({ hass, edit = false, onEnt }) {
       ? [{ id: EN.consoJourHc, nom: tr('Heures creuses'), couleur: 'var(--o-ok)' },
         { id: EN.consoJourHp, nom: tr('Heures pleines'), couleur: 'var(--o-accent)' }]
       : [{ id: EN.consoJour, nom: tr('Réseau'), couleur: 'var(--o-accent)' }]),
-  ].filter(s => s.id && consoHist[s.id]).map(s => ({ ...s, pts: consoHist[s.id] }));
+  ].filter(s => s.id && consoHist[s.id]).map(s => ({ ...s, pts: ramener(consoHist[s.id], facteurKwh(uniteEn(s.id))) }));
   const [ongletEn, setOngletEn] = useState('puissance');
 
   /* Autosuffisance : la part de la consommation couverte par le solaire. Le
    * capteur du package si l'installation en publie un, sinon les kWh du jour —
    * ce que produit la maison MOINS ce qu'elle renvoie au réseau, rapporté à
    * tout ce qu'elle a consommé. */
-  const injJour = avail(EN.injectionJour) ? num(EN.injectionJour) : null;
-  const autoPct = autosuff != null ? autosuff : (tauxAutoconso != null ? tauxAutoconso : (() => {
-    if (prodJour == null || totalToday == null) return null;
-    const solaireConsomme = Math.max(0, prodJour - (injJour || 0));
-    const conso = totalToday + solaireConsomme;
-    return conso > 0 ? Math.round(solaireConsomme / conso * 100) : null;
-  })());
+  const injJour = avail(EN.injectionJour) ? numKwh(EN.injectionJour) : null;
+  const injectionMuette = !!EN.injectionJour && injJour == null;
+  /* Sans production OU sans consommation lisible, pas de cadran (audit du
+   * 03/10) : `autosuffisance` (bilan.js) rend null — jamais « 100 % » sur un
+   * compteur muet. */
+  const autoPct = autosuff != null ? autosuff : (tauxAutoconso != null ? tauxAutoconso : autosuffisance(prodJour, totalToday, injJour, injectionMuette));
 
   /* Part bas-carbone : Electricity Maps (ou CO2 Signal) publie le pourcentage
    * d'énergies FOSSILES du réseau. Le solaire de la maison est bas-carbone par
@@ -10235,7 +11091,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
     return isNaN(v) ? null : v;
   })();
   const basCarbonePct = (() => {
-    if (fossilePct == null || totalToday == null) return null;
+    if (fossilePct == null || totalToday == null || injectionMuette) return null;
     const solaireConsomme = prodJour != null ? Math.max(0, prodJour - (injJour || 0)) : 0;
     const conso = totalToday + solaireConsomme;
     if (conso <= 0) return null;
@@ -10243,6 +11099,28 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   })();
   const solarActive = solarW > 5;
   const fmtW = fmtWatts;
+  /* L'en-tête ne dit que ce qui se lit (audit du 03/10). Il était bâti sur
+   * `consoW`, `solarW` et `gridNetW`, que `num()` met à 0 quand l'entité se
+   * tait : « Consommation 0 W » au-dessus de chiffres qui, eux, disaient
+   * « — ». Il suit maintenant les MÊMES conditions que ces chiffres — la
+   * consommation se lit au compteur réseau ou au capteur de la maison, le
+   * réseau à l'un de ses capteurs —, et sans rien de lisible il n'y a ni
+   * ligne ni pastille « PAS DE SURPLUS » : ce que rien ne mesure ne
+   * s'affirme pas (ADR 0030). Le schéma solaire (`SunArc`) reçoit les mêmes
+   * conditions pour ses pastilles maison et pylône. */
+  const consoLue = consoAvail || avail(EN.consoMaison);
+  const reseauLu = surplusAvail || consoAvail;
+  /* Les deux SENS du réseau ne se lisent pas aux mêmes capteurs (relecture du
+   * 03/10). Un capteur de surplus seul mesure l'export, pas l'achat : la nuit,
+   * sans surplus, l'en-tête écrivait « réseau 0 W » et le pylône « ↓ 0 W »
+   * alors que rien n'avait mesuré l'achat. L'achat se lit au compteur
+   * réseau ; l'export, à lui ou au capteur de surplus. */
+  const sensLu = exporting ? reseauLu : consoAvail;
+  const ligneEnTete = resumeEnergie({
+    conso: consoLue ? consoW : null,
+    solaire: solarAvail ? solarW : null,
+    reseau: sensLu ? gridNetW : null,
+  });
 
   return (
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -10250,10 +11128,10 @@ function EnergieContent({ hass, edit = false, onEnt }) {
       <div className="o-en-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
         <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Énergie')}</h1>
-        <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{tr('Consommation') + ' ' + fmtW(consoW) + ' · ' + tr('production solaire') + ' ' + fmtW(solarW) + ' · ' + tr('réseau') + ' ' + fmtW(gridNetW)}</div>
+        {ligneEnTete && <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{ligneEnTete}</div>}
         </div>
         <span style={{ flex: 1 }} />
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: exporting ? 'rgba(var(--o-ok-rgb),.14)' : 'var(--o-s2)', color: exporting ? 'var(--o-ok)' : 'var(--o-text2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: exporting ? 'var(--o-ok)' : 'var(--o-text3)' }} />{exporting ? tr('SURPLUS') + ' ' + fmtW(surplusW) : tr('PAS DE SURPLUS')}</span>
+        {reseauLu && <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: exporting ? 'rgba(var(--o-ok-rgb),.14)' : 'var(--o-s2)', color: exporting ? 'var(--o-ok)' : 'var(--o-text2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: exporting ? 'var(--o-ok)' : 'var(--o-text3)' }} />{exporting ? tr('SURPLUS') + ' ' + fmtW(surplusW) : tr('PAS DE SURPLUS')}</span>}
       </div>
 
       <div className="grid-ehero" style={{ display: 'grid', gridTemplateColumns: (puissSeries.length > 0 || autoPct != null || basCarbonePct != null) ? 'minmax(0,1.45fr) minmax(300px,1fr)' : 'minmax(0,1fr)', gap: 16, alignItems: 'stretch' }}>
@@ -10266,14 +11144,14 @@ function EnergieContent({ hass, edit = false, onEnt }) {
             {/* Scène type Helios : arc du jour (géoloc domicile), soleil + irradiance, chips de flux */}
             <div className="o-en-scene" style={{ position: 'relative', width: '100%', aspectRatio: '600 / 250', margin: '0 auto' }}>
               <EnergyHouseSchema solarW={solarW} homeW={consoW} surplusW={surplusW} evW={evW} evBranche={evBranche} batW={batW} batSoc={batSoc} batPresente={batPresente} solarPresente={solarAvail} format={formatEn} />
-              <SunArc solarW={solarW} gridW={importW} exportW={surplusW} homeW={consoW} appW={avail(EN.appTotal) ? Math.round(num(EN.appTotal)) : null} solarPresente={solarAvail} format={formatEn} />
+              <SunArc solarW={solarW} gridW={consoAvail || exporting ? importW : null} exportW={surplusW} homeW={consoLue ? consoW : null} appW={avail(EN.appTotal) ? Math.round(numW(EN.appTotal)) : null} solarPresente={solarAvail} format={formatEn} />
             </div>
           </div>
           <div className="o-en-kpis" style={{ display: 'flex', gap: 24, marginTop: 16, flexWrap: 'wrap' }}>
-            <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-accent-soft)' }}>{consoAvail ? <Num v={consoW} suffix=" W" /> : '—'}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-accent-fond)' }} />{tr('Conso maison')}</div></div>
+            <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-accent-soft)' }}>{consoLue ? <Num v={consoW} suffix=" W" /> : '—'}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-accent-fond)' }} />{tr('Conso maison')}</div></div>
             <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-gold)' }}>{solarAvail ? <Num v={solarW} suffix=" W" /> : '—'}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-gold)' }} />{tr('Production')}</div></div>
             {ecoJour != null && <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-ok)' }}><Num v={ecoJour} d={2} suffix={' ' + deviseJour} /></div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-ok)' }} />{tr('Économie du jour')}</div></div>}
-            <div style={{ marginLeft: 'auto', textAlign: 'right' }}><div style={{ fontSize: 25, fontWeight: 800, color: exporting ? 'var(--o-ok)' : 'var(--o-bad)' }}>{(surplusAvail || consoAvail) ? <Num v={exporting ? surplusW : importW} suffix=" W" /> : '—'}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><FlipText text={exporting ? '↑ ' + tr('Vente réseau') : '↓ ' + tr('Achat réseau')} /></div></div>
+            <div style={{ marginLeft: 'auto', textAlign: 'right' }}><div style={{ fontSize: 25, fontWeight: 800, color: exporting ? 'var(--o-ok)' : 'var(--o-bad)' }}>{sensLu ? <Num v={exporting ? surplusW : importW} suffix=" W" /> : '—'}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><FlipText text={exporting ? '↑ ' + tr('Vente réseau') : '↓ ' + tr('Achat réseau')} /></div></div>
           </div>
         </div></Anim>
 
@@ -10328,7 +11206,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
 
       <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Postes de consommation')}</div>
         <div ref={ed.gridRef} className="grid-edevices" style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12 }}>
-          {ed.ids.map((k) => { const d = posteDe(k); const di = ed.ids.indexOf(k); const w = Math.round(num(d.power)); const kwh = avail(d.kwh) ? num(d.kwh) : null; const on = w > 5;
+          {ed.ids.map((k) => { const d = posteDe(k); const di = ed.ids.indexOf(k); const w = Math.round(numW(d.power)); const kwh = avail(d.kwh) ? numKwh(d.kwh) : null; const on = w > 5;
             const carte = (
             <div style={{ position: 'relative', overflow: 'hidden', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 18, padding: '14px 15px' }}>
               {d.art && VIEW_ART[d.art] && <div aria-hidden="true" style={{ position: 'absolute', right: 6, bottom: -6, width: 92, height: 92, backgroundImage: `url("${VIEW_ART[d.art]}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.16, pointerEvents: 'none' }} />}
@@ -10338,7 +11216,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
               </div>
               <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name}</div>
               <div style={{ fontSize: 15, fontWeight: 800, marginTop: 3, color: on ? d.c : 'var(--o-text3)' }}>{avail(d.power) ? <Num v={w} fmt={fmtW} /> : '—'}</div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{kwh != null ? dec(kwh, 2) + ' kWh jour' : '—'}</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{kwh != null ? tr('{n} kWh jour', { n: dec(kwh, 2) }) : '—'}</div>
             </div>);
             if (!edit) return <Anim key={k} i={di} base={160} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
             return <EditableCard key={k} ed={ed} id={k} nom={d.name} onEdit={setCardEdit} hass={hass} taille={false}>{carte}</EditableCard>;
@@ -10356,9 +11234,9 @@ function EnergieContent({ hass, edit = false, onEnt }) {
         <>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
             <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Piles et batteries')}</div>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{piles.length > 1 ? tr('{n} capteurs', { n: piles.length }) : tr('{n} capteur', { n: piles.length })}</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{trN(piles.length, '{n} capteur', '{n} capteurs')}</span>
           </div>
-          <div className="o-piles grid-objets grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gap: 16 }}>
+          <div className="o-piles grid-objets grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', columnGap: 16, rowGap: 8 }}>
             {piles.map((p, i) => <Anim key={p.id} i={i} base={200}>{dc.card(p.id)}</Anim>)}
           </div>
         </>
@@ -10395,9 +11273,12 @@ const VAC_KEYS = [];   // le poll vient de vacKeys() : préfixe de domaine + ent
  *
  * La maison d'exemple garde sa raison d'etre : c'est l'ecran d'AVANT la
  * premiere connexion. Elle ne doit simplement plus servir de repli a une
- * erreur de route. Une vue inconnue revient donc a l'accueil. */
+ * erreur de route. Une vue inconnue revient donc a l'accueil.
+ *
+ * « croquettes » en est sortie le 04/10 avec sa vue : un onglet qui l'avait
+ * memorisee, ou `?vue=croquettes`, retombe ainsi sur l'accueil. */
 const VUES_RENDUES = new Set(['accueil', 'parametres', 'pieces', 'scenes', 'objets',
-  'energie', 'securite', 'systeme', 'lumieres', 'climat', 'volets', 'voletsplan', 'croquettes',
+  'energie', 'securite', 'systeme', 'lumieres', 'climat', 'volets', 'voletsplan',
   'medias', 'biblio']);
 const vueRendue = (v) => !!v && (VUES_RENDUES.has(v)
   || v.indexOf('room:') === 0 || v.indexOf('cv:') === 0);
@@ -10405,7 +11286,7 @@ const vueRendue = (v) => !!v && (VUES_RENDUES.has(v)
 const VIEW_TITLES = {
   pieces: tr('Pièces'), scenes: tr('Scénarios'), objets: tr('Objets'), energie: tr('Énergie'),
   securite: tr('Sécurité'), systeme: tr('Système'), lumieres: tr('Lumières'), climat: tr('Climat'),
-  volets: tr('Volets'), voletsplan: tr('Volets'), croquettes: tr('Croquettes'), medias: tr('Médias'),
+  volets: tr('Volets'), voletsplan: tr('Volets'), medias: tr('Médias'),
 };
 function ViewEmpty({ vid, reason, onNav }) {
   return (
@@ -10423,8 +11304,16 @@ function ViewEmpty({ vid, reason, onNav }) {
           <div>
             <div style={{ fontSize: 15, fontWeight: 700 }}>{tr('Cette vue reste vide')}</div>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 5, maxWidth: 520, lineHeight: 1.5 }}>
-              {reason || 'aucune entité correspondante trouvée'}.
-              {' '}Ajoute les appareils concernés dans Home Assistant, ou désigne les entités à utiliser dans Paramètres → Entités. La vue réapparaîtra d'elle-même.
+              {/* Le motif est une CLÉ du catalogue (`views.js`) : il se traduit
+                * ici, à l'affichage. Écrit tel quel, il restait en français dans
+                * les sept langues (audit du 03/10). */}
+              {tr(reason || 'aucune entité correspondante trouvée')}.
+              {/* La section Entités des Paramètres n'existe plus (audit du
+                  03/10) : chaque vue règle les siennes en mode édition. Une vue
+                  bloquée ne monte pas son bandeau — on nomme donc celles dont la
+                  fiche peut la débloquer : l'Accueil (énergie), Objets
+                  (distributeur). */}
+              {' '}{tr('Ajoute les appareils concernés dans Home Assistant, ou désigne les entités à utiliser : sur l’Accueil ou dans Objets, en mode édition, bouton « Entités de la vue ». La vue réapparaîtra d’elle-même.')}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -10449,130 +11338,6 @@ function croqMax(S) {
   return (m > 0) ? m : CROQ_MAX_DEFAUT;
 }
 const croqKeys = () => [...Object.values(croqHaids()), ...croqMeals().map(m => m.auto)].filter(Boolean);
-// Distributeur : purement configuré. Un distributeur de croquettes piloté par
-// automations n'a pas d'équivalent standard dans Home Assistant, il n'y a donc
-// rien à découvrir — sans configuration, la vue se déclare hors ligne.
-
-function CroquettesContent({ hass }) {
-  const S = (hass && hass.states) || null;
-  const num = (id, def = 0) => { const e = S && S[id]; if (!e || e.state == null || e.state === 'unknown' || e.state === 'unavailable') return def; const n = parseFloat(e.state); return isNaN(n) ? def : n; };
-  const reservoirOk = (() => { const e = S && S[croqHaids().reservoir]; return !!(e && e.state != null && e.state !== 'unknown' && e.state !== 'unavailable'); })();
-  const reservoirG = reservoirOk ? Math.round(num(croqHaids().reservoir, 0)) : null;
-  const portionW = num(croqHaids().portionWeight, 6);
-  const autoOn = (id) => { const e = S && S[id]; return e ? e.state === 'on' : true; };
-  const msig = croqMeals().map(m => autoOn(m.auto) ? 1 : 0).join('');
-  const [meals, setMeals] = useState(() => croqMeals().map(m => ({ ...m, on: autoOn(m.auto) })));
-  useEffect(() => { setMeals(croqMeals().map(m => ({ ...m, on: autoOn(m.auto) }))); }, [msig]);
-  const [levelLocal, setLevelLocal] = useState(null);
-  useEffect(() => { setLevelLocal(null); }, [reservoirG]); // toute variation confirmée du capteur reprend la main sur l'optimiste
-  const level = levelLocal != null ? levelLocal : (reservoirG == null ? 0 : Math.max(0, Math.min(100, Math.round(reservoirG / croqMax(S) * 100))));
-  const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
-  // Distribuer demande un script propre a l'installation : rien de standard.
-  // Sans lui, le geste ne fait rien plutot que d'appeler un script absent.
-  const dispense = (n) => { const sc = (loggiaEnt('feeder', null) || {}).script; if (sc) call('script', 'turn_on', { entity_id: sc, variables: { portions: n } }); };
-  const refill = () => { setLevelLocal(100); call('input_number', 'set_value', { entity_id: croqHaids().reservoir, value: croqMax(S) }); };
-  /* `homeassistant.turn_on/off` et non `automation.*` : ce qui active un repas
-   * est au choix une automatisation ou un `input_boolean` — la démo désigne le
-   * second, et le service du domaine `automation` échouait alors en silence. */
-  const toggleMeal = (m) => { setMeals(ms => ms.map(x => x.id === m.id ? { ...x, on: !x.on } : x)); call('homeassistant', m.on ? 'turn_off' : 'turn_on', { entity_id: m.auto }); };
-  const nowMin = (() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); })();
-  const mealMin = (t) => { const [h, mm] = t.split(':').map(Number); return h * 60 + mm; };
-  const upcoming = meals.filter(m => m.on && mealMin(m.time) > nowMin).sort((a, b) => mealMin(a.time) - mealMin(b.time))[0];
-  // ── Patron Atrium (21/08) : bandeau de réglages + carte Distributeur + repas du jour ──
-  // Ration = poids d'une portion du distributeur (entité number, réglable)
-  const setPortionWeight = (nv) => {
-    const v = Math.max(2, Math.min(30, nv));
-    call('number', 'set_value', { entity_id: croqHaids().portionWeight, value: v });
-  };
-  const remaining = meals.filter(m => m.on && mealMin(m.time) > nowMin);
-  const relTo = (t) => {
-    const dm = mealMin(t) - nowMin;
-    if (dm <= 0) return 'passé';
-    const h = Math.floor(dm / 60), mn = dm % 60;
-    return 'dans ' + (h ? h + ' h ' + String(mn).padStart(2, '0') : mn + ' min');
-  };
-
-  return (
-    <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
-        <div style={{ minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Croquettes')}</h1>
-          <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>
-            {upcoming ? 'Prochain repas ' + relTo(upcoming.time) : 'Plus de repas aujourd’hui'}
-            {reservoirG != null ? ' · réservoir à ' + level + ' %' : ''}
-          </div>
-        </div>
-        <span style={{ flex: 1 }} />
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: remaining.length ? 'rgba(var(--o-warn2-rgb),.14)' : 'var(--o-s2)', color: remaining.length ? 'var(--o-warn2)' : 'var(--o-text2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: remaining.length ? 'var(--o-warn2)' : 'var(--o-text3)' }} />{remaining.length ? remaining.length + ' REPAS RESTANT' + (remaining.length > 1 ? 'S' : '') : 'JOURNÉE TERMINÉE'}</span>
-      </div>
-
-      {/* réglages rapides : distribution manuelle, ration, remplissage */}
-      <div className="o-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-          <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15, whiteSpace: 'nowrap' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)' }}>{tr('Distribuer')}</span>
-            <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('hors programme')}</span>
-          </span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {[1, 2, 3].map(n => (
-              <button key={n} onClick={() => dispense(n)} style={{ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: 'var(--o-s1)', color: 'var(--o-text1)' }}>{Math.round(n * portionW)} g</button>
-            ))}
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('Ration')}</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} {...kbSlider(tr('Poids d’une portion'), portionW, setPortionWeight, { min: 2, max: 30, step: 1, unit: 'g' })}>
-            <button onClick={() => setPortionWeight(portionW - 1)} aria-label={tr('Baisser')} style={{ width: 24, height: 24, borderRadius: 11, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>−</button>
-            <span style={{ minWidth: 40, textAlign: 'center', fontSize: 12, fontWeight: 800, color: 'var(--o-warn)' }}>{Math.round(portionW)} g</span>
-            <button onClick={() => setPortionWeight(portionW + 1)} aria-label={tr('Monter')} style={{ width: 24, height: 24, borderRadius: 11, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>+</button>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('Réservoir')}</span>
-          <button onClick={refill} style={{ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: 'var(--o-s1)', color: 'var(--o-text1)' }}>{tr('Marquer rempli')}</button>
-        </div>
-        <span style={{ flex: 1 }} />
-      </div>
-
-      {/* carte Distributeur */}
-
-      {/* Repas du jour : une carte par repas, cliquable pour activer/désactiver */}
-      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Repas du jour')}</div>
-      <div className="grid-croqmeals" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(178px,1fr))', gap: 12 }}>
-        {meals.map(m => {
-          const passed = mealMin(m.time) <= nowMin;
-          const next = upcoming && upcoming.id === m.id;
-          return (
-            <button key={m.id} onClick={() => toggleMeal(m)} title={m.on ? tr('Désactiver {nom}', { nom: m.label }) : tr('Activer {nom}', { nom: m.label })}
-              style={{ textAlign: 'left', cursor: 'pointer', padding: '13px 15px', borderRadius: 18, background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid ' + (next ? 'rgba(var(--o-warn2-rgb),.5)' : 'var(--o-bd2)'), opacity: m.on ? 1 : .55, transition: 'border-color .2s, opacity .2s' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: m.on ? (next ? 'rgba(var(--o-warn2-rgb),.16)' : 'rgba(var(--o-ok-rgb),.14)') : 'var(--o-s1)' }}><Ico name="paw" size={15} color={m.on ? (next ? 'var(--o-warn2)' : 'var(--o-ok)') : 'var(--o-text3)'} /></span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 800 }}>{m.time}</div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.label}</div>
-                </div>
-                {next && <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--o-warn2)', flexShrink: 0 }} />}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 10 }}>
-                <span style={{ fontSize: 15, fontWeight: 800, color: !m.on ? 'var(--o-text3)' : passed ? 'var(--o-ok)' : next ? 'var(--o-warn2)' : 'var(--o-text)' }}>{m.g} g</span>
-                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)' }}>{!m.on ? tr('désactivé') : passed ? tr('distribué') : next ? relTo(m.time) : tr('programmé')}</span>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function CroquettesView({ hass }) {
-  return (
-    <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      <Header />
-      <CroquettesContent hass={hass} />
-    </main>
-  );
-}
 
 /* ════════════ VUE MÉDIAS (reproduction fidèle de "Loggia Médias.dc.html") ════════════ */
 // Vrais media_player (Apple TV + Echos Alexa + Soundbar).
@@ -10624,7 +11389,8 @@ const secBaseKeys = () => {
   const cams = loggiaEnt('cameras', null);
   const gens = peopleList();
   return [secAlarm(),
-    ...(Array.isArray(cams) ? cams.flatMap(c => [c.haid, c.motion, c.person, c.vehicle, c.sonnette, c.colis]) : []),
+    // Même garde que `cfg.cams` (05/10) : ces clés se calculent à chaque rendu.
+    ...(Array.isArray(cams) ? cams.filter(c => c && typeof c === 'object').flatMap(c => [c.haid, c.motion, c.person, c.vehicle, c.sonnette, c.colis]) : []),
     ...gens.map(x => x.haid)].filter(Boolean);
 };
 // Les etats qui valent « quelque chose se passe » : ceux d'un binary_sensor,
@@ -10664,7 +11430,7 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
   // Les cameras comptees comme sur l'Accueil : la liste de l'utilisateur
   // (`loggia_cameras`, une camera sans entite y compte comme hors ligne),
   // sinon celles de la resolution — memes chiffres des deux cotes.
-  const camsCfg = (() => { try { const c = cfgVal('loggia_cameras', null); return Array.isArray(c) && c.length ? c : null; } catch { return null; } })();
+  const camsCfg = (() => { try { const c = cfgVal('loggia_cameras', null); const l = Array.isArray(c) ? c.filter(x => x && typeof x === 'object') : []; return l.length ? l : null; } catch { return null; } })();
   const camsInfoSec = (camsCfg || camList).map(c => ({ nom: c.name || c.label, online: S[c.haid] ? S[c.haid].state !== 'unavailable' : c.online !== false }));
   const comptesSecVue = comptesSecurite(S, camsInfoSec);
   const tuilesSecVue = tuilesSecurite(comptesSecVue);
@@ -10906,7 +11672,7 @@ function CvTemplateCard({ def, hass }) {
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
         <span style={{ width: 40, height: 40, borderRadius: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text3)' }}><Fi i="brackets-curly" size={16} /></span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{def.name || 'Template'}</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{def.name || tr('Carte template') /* le repli de `nomCarte`, dans la langue de l'écran (audit du 03/10) */}</div>
           {err
             ? <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-bad)', marginTop: 4, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 96, overflow: 'auto' }}>{err}</div>
             : <div style={{ fontSize: 15, fontWeight: 700, marginTop: 4, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 132, overflowY: 'auto', lineHeight: 1.45, opacity: attente ? .45 : 1 }}>{attente ? '…' : (out === '' ? '—' : out)}</div>}
@@ -10916,7 +11682,10 @@ function CvTemplateCard({ def, hass }) {
   );
 }
 
-const FAN_FR = () => ({ quiet: tr('Silencieux'), normal: 'Normal', max: 'Max', max_plus: 'Max+', standard: 'Normal', strong: tr('Fort') });
+/* « Normal » d'une vitesse a sa clé à sens : la nue est l'état d'un capteur,
+ * « Normalnie » (un adverbe) en polonais, entre « Cichy » et « Mocny »
+ * (relecture du 03/10). */
+const FAN_FR = () => ({ quiet: tr('Silencieux'), normal: trSens('Normal · réglage'), max: 'Max', max_plus: 'Max+', standard: trSens('Normal · réglage'), strong: tr('Fort') });
 /* Sélecteur compact façon fiche native : un bouton qui dit la valeur courante,
  * un menu dépoli qui liste les autres. Partagé : vitesse d'aspiration,
  * préréglages de thermostat — partout où des chips feraient brouillon. */
@@ -10962,7 +11731,16 @@ function cvIcoEntite(dom, id, st, name) {
   if (dom === 'cover') return (dc === 'garage' || dc === 'gate') ? 'garage' : dc === 'window' ? 'window-alt' : 'blinds';
   if (dom === 'media_player') return dc === 'tv' ? 'screen' : 'tv-music';
   if (dom === 'valve') return 'water';
-  if (dom === 'lock') return 'lock';
+  /* Serrure : la pastille dit l'ÉTAT, le bouton le GESTE (relecture du lot 16,
+   * 05/10). Au téléphone le bouton passe en icône — le cadenas FERMÉ de
+   * « verrouiller » — et la pastille, toujours fermée, faisait d'une porte
+   * OUVERTE deux cadenas fermés : elle se lisait verrouillée. Seule `locked`
+   * garde le cadenas fermé ; tout état de HA où le pêne n'est pas tenu prend le
+   * cadenas ouvert : `unlocked`, `unlocking`, `locking` (pas encore fermée),
+   * `open`, `opening`, et `jammed` (coincée, rien ne garantit qu'elle tient).
+   * Un état inconnu ou absent garde l'icône du domaine : une panne a déjà son
+   * liseré (ADR 0048), un cadenas ouvert y affirmerait une porte ouverte. */
+  if (dom === 'lock') return ['unlocked', 'unlocking', 'locking', 'open', 'opening', 'jammed'].indexOf(s) >= 0 ? 'unlock' : 'lock';
   return CV_DOM_ICON[dom] || 'bolt';
 }
 function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
@@ -10978,14 +11756,15 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   const ico = dom === 'switch' ? (iconeChoisie(id) || (cvEstLumiere(id) ? 'bulb' : null)) : cvIcoEntite(dom, id, st, name); // null = prise, SVG maison
   const s = st ? st.state : null;
   const a = (st && st.attributes) || {};
-  const dead = !st || s === 'unavailable' || s === 'unknown';
+  // Une scène jamais lancée (`unknown`) n'est pas en panne : `enPanne` (05/10).
+  const dead = enPanne(id, st);
   // Alarme en cours d'armement : le temps restant, battu à la seconde.
   const cptAlarme = dom === 'alarm_control_panel' ? armCompte(st) : null;
   useSeconde(!!cptAlarme);
   const on = !dead && (dom === 'cover' ? (s === 'open' || s === 'opening') : dom === 'lock' ? s === 'unlocked' : dom === 'media_player' ? s === 'playing' : dom === 'climate' ? s !== 'off' : dom === 'vacuum' ? (s === 'cleaning' || s === 'returning') : dom === 'lawn_mower' ? (s === 'mowing' || s === 'returning') : dom === 'valve' ? s === 'open' : s === 'on');
   // Chaque domaine garde sa teinte des vues intégrées : lumière = sa couleur RGB ou l'or,
   // climat = le rouge de la vue Climatisation — l'accent bleu pour le reste.
-  const rgbHex = dom === 'light' && a.rgb_color ? '#' + a.rgb_color.map(v => v.toString(16).padStart(2, '0')).join('') : null;
+  const rgbHex = dom === 'light' && a.rgb_color ? versHex(a.rgb_color) : null;
   // Climat = ROUGE (retour d'essai 31/08) : l'ambre warn2 rendait jaune.
   const teinte = cvEstLumiere(id) ? (rgbHex || 'var(--o-lampe)') : dom === 'climate' ? 'var(--o-bad)' : dom === 'cover' ? 'var(--o-purple)' : null;
   const teinteLu = rgbHex ? lisibleSurLavis(rgbHex, estClair(), .28) : teinte;
@@ -10993,50 +11772,75 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   const togglable = ['light', 'switch', 'input_boolean', 'fan', 'humidifier', 'siren'].indexOf(dom) >= 0;
   // Presque tout s'ouvre : les domaines à fiche dédiée, et tout appareil du
   // registre via la fiche universelle. Seuls les capteurs texte restent muets.
-  const ouvrable = !dead && !!onOpen && ((dom === 'sensor' && !isNaN(parseFloat(s)))
+  // Un capteur qui porte une DATE ou une heure n'est pas une mesure :
+  // `parseFloat` y lisait l'année (« 2026 ») ou l'heure (« 7 »), et un tap
+  // ouvrait une courbe (05/10).
+  const dateTxt = dom === 'sensor' ? texteDate(st) : null;
+  const ouvrable = !dead && !!onOpen && ((dom === 'sensor' && dateTxt == null && !isNaN(parseFloat(s)))
     || ['light', 'climate', 'cover', 'media_player', 'vacuum', 'lawn_mower', 'fan', 'lock', 'switch', 'humidifier', 'valve', 'water_heater', 'siren', 'binary_sensor', 'input_boolean', 'alarm_control_panel'].indexOf(dom) >= 0);
-  const runnable = { scene: ['scene', 'turn_on', 'Activer'], script: ['script', 'turn_on', tr('Exécuter')], button: ['button', 'press', 'Appuyer'], input_button: ['input_button', 'press', 'Appuyer'], automation: ['automation', 'trigger', tr('Exécuter')] }[dom];
+  const runnable = { scene: ['scene', 'turn_on', tr('Activer')], script: ['script', 'turn_on', tr('Exécuter')], button: ['button', 'press', tr('Appuyer')], input_button: ['input_button', 'press', tr('Appuyer')], automation: ['automation', 'trigger', tr('Exécuter')] }[dom];
+  // L'icône du geste, montrée À LA PLACE du mot sur une carte étroite (05/10).
+  const icoRun = { button: 'cursor-finger', input_button: 'cursor-finger' }[dom] || 'play';
   let stateTxt;
   if (dead) stateTxt = tr('Indisponible');
   else if (dom === 'light') stateTxt = on ? (tr('Allumé') + (a.brightness ? ' · ' + Math.round(a.brightness / 255 * 100) + '%' : '')) : tr('Éteint');
   else if (togglable) stateTxt = on ? tr('Allumé') : tr('Éteint');
-  else if (dom === 'climate') stateTxt = (a.current_temperature != null ? a.current_temperature + '°' : '—') + (a.temperature != null ? ' → ' + a.temperature + '°' : '') + (s !== 'off' ? '' : ' · Éteint');
-  else if (dom === 'cover') stateTxt = s === 'opening' ? 'Ouverture…' : s === 'closing' ? 'Fermeture…' : on ? (tr('Ouvert') + (a.current_position != null && a.current_position < 100 ? ' · ' + a.current_position + '%' : '')) : tr('Fermé');
-  else if (dom === 'lock') stateTxt = s === 'locked' ? 'Verrouillée' : s === 'unlocked' ? 'Déverrouillée' : s;
+  else if (dom === 'climate') stateTxt = (a.current_temperature != null ? decMax(a.current_temperature, 1) + '°' : '—') + (a.temperature != null ? ' → ' + decMax(a.temperature, 1) + '°' : '') + (s !== 'off' ? '' : ' · ' + tr('Éteint'));
+  else if (dom === 'cover') stateTxt = s === 'opening' ? tr('Ouverture…') : s === 'closing' ? tr('Fermeture…') : on ? (tr('Ouvert') + (a.current_position != null && a.current_position < 100 ? ' · ' + a.current_position + '%' : '')) : tr('Fermé');
+  // Serrure : les sept états de HA, avec les mots de sa fiche — la pastille
+  // ouverte d'une serrure `jammed` s'écrivait « jammed », brut et en anglais
+  // dans toutes les langues (contre-relecture du lot 16, 05/10).
+  else if (dom === 'lock') stateTxt = ({ locked: tr('Verrouillée'), unlocked: tr('Déverrouillée'), locking: tr('Verrouillage…'), unlocking: tr('Déverrouillage…'), jammed: tr('Bloquée'), open: tr('Ouverte'), opening: tr('Ouverture…') })[s] || String(s);
   else if (dom === 'alarm_control_panel') stateTxt = s === 'disarmed' ? tr('Désarmée') : s === 'triggered' ? tr('ALERTE') : (s === 'arming' || s === 'pending') ? (cptAlarme ? tr('Activation dans {n} s', { n: cptAlarme.reste }) : tr('Activation en cours…')) : s === 'armed_home' ? tr('Maison') : s === 'armed_night' ? tr('Nuit') : tr('Armée');
   else if (dom === 'media_player') stateTxt = s === 'playing' ? (a.media_title || tr('Lecture')) : s === 'paused' ? tr('En pause') : s === 'off' ? tr('Éteint') : tr('Inactif');
-  else if (dom === 'binary_sensor') stateTxt = s === 'on' ? tr('Détecté') : 'RAS';
+  else if (dom === 'binary_sensor') stateTxt = s === 'on' ? tr('Détecté') : tr('RAS');
   else if (dom === 'vacuum' || dom === 'lawn_mower') stateTxt = ({ docked: tr('Sur la base'), cleaning: tr('Nettoyage'), mowing: tr('Tonte'), returning: tr('Retour à la base'), paused: tr('En pause'), idle: tr('Inactif'), error: tr('Erreur') })[s] || String(s);
   else if (dom === 'valve') stateTxt = s === 'open' ? tr('Ouvert') : s === 'closed' ? tr('Fermé') : String(s);
   else if (dom === 'person') stateTxt = s === 'home' ? tr('Présent') : tr('Absent');
+  else if (dom === 'sensor' && dateTxt != null) stateTxt = dateTxt;
   else if (dom === 'sensor') stateTxt = (isNaN(parseFloat(s)) ? s : parseFloat(s)) + (a.unit_of_measurement ? ' ' + a.unit_of_measurement : '');
-  else if (runnable || /^\d{4}-\d\d-\d\dT/.test(String(s))) stateTxt = relTime(s) || '—'; // scene/script/button : état = date de dernière exécution
+  // scene/script/button : état = date de dernière exécution. Un `event` aussi :
+  // jamais tiré (`unknown`, plus en panne), il dit « — », pas « unknown » (05/10).
+  else if (runnable || dom === 'event' || /^\d{4}-\d\d-\d\dT/.test(String(s))) stateTxt = relTime(s) || '—';
   else stateTxt = String(s);
+  /* Le sous-titre AFFICHÉ, une seule variable pour l'œil et pour le nom de la
+   * carte (lot 13 de l'audit du 03/10). Compacte climat : la consigne vit
+   * entre les boutons — le sous-titre ne garde que la température relevée. */
+  const sousTitre = dense && dom === 'climate' && a.current_temperature != null ? tr('actuel {n}°', { n: decMax(a.current_temperature, 1) }) : stateTxt;
   return (
-    /* Le role, l'index de tabulation, le clic et la touche sont tous
-     * conditionnes par `ouvrable` : ils arrivent ensemble ou pas du tout. La
-     * regle lit chaque attribut isolement et ne suit pas le ternaire — elle
-     * croit voir un tabIndex sans role, et un clic sans clavier. */
-    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */
-    <div className={'o-piece' + (dense ? ' o-cvdense' : '') + (dense && dom === 'climate' ? ' o-cvclim' : '') + (dead ? ' o-panne' : '')} role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : -1} aria-label={ouvrable ? 'Ouvrir ' + name : undefined}
-      onClick={ouvrable ? () => onOpen(id) : undefined}
-      onKeyDown={ouvrable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(id); } } : undefined}
-      style={{ position: 'relative', background: on ? `linear-gradient(180deg,${hx(teinte || 'var(--o-accent)', .12)},transparent), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', borderRadius: 'var(--o-radius,18px)', padding: dense ? '12px 14px' : 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, cursor: ouvrable ? 'pointer' : 'default', transition: 'all .25s', ...(dense ? { height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center' } : {}) }}>
-      <div className="o-cvrow" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: dense ? 9 : 11 }}>
-        <span style={{ width: dense ? 34 : 40, height: dense ? 34 : 40, borderRadius: dense ? 10 : 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? (teinte ? hx(teinte, .16) : 'rgba(var(--o-accent-rgb),.16)') : 'var(--o-s1)', color: on ? (teinteLu || 'var(--o-accent-soft)') : 'var(--o-text3)' }}>{/* `Ico` et non `Fi` : une icone CHOISIE peut etre un dessin, que `Fi`
+    /* La carte n'englobe plus ses commandes (lot 13 de l'audit du 03/10, motif
+     * de l'ADR 0074). Racine `role="button"`, elle rendait sa descendance
+     * présentationnelle : interrupteur, curseur, « Armer », « Verrouiller »,
+     * flèches d'un volet disparaissaient d'un lecteur d'écran
+     * (`nested-interactive`), et son nom « Ouvrir Volet salon » taisait l'état
+     * affiché tout en prenant celui du bouton « Ouvrir » du volet. Le geste
+     * « ouvrir la fiche » passe par la `Surface`, premier enfant, nommée de ce
+     * que la carte affiche (« Volet salon, Ouvert · 60% »). Chaque commande
+     * est positionnée : peinte après la surface, elle reçoit son clic. La
+     * rangée, elle, ne l'est plus : un clic sur l'icône, le nom, l'état ou la
+     * consigne ouvre la fiche, comme avant. */
+    <div className={'o-piece' + (dense ? ' o-cvdense' : '') + (dense && dom === 'climate' ? ' o-cvclim' : '') + (dead ? ' o-panne' : '') + ' o-cvcarte'}
+      style={{ position: 'relative', background: on ? `linear-gradient(180deg,${hx(teinte || 'var(--o-accent)', .12)},transparent), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: LISERE, borderRadius: 'var(--o-radius,18px)', padding: dense ? '12px 14px' : 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, cursor: ouvrable ? 'pointer' : 'default', transition: 'all .25s', ...(dense ? { height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center' } : {}) }}>
+      {ouvrable && <Surface onClick={() => onOpen(id)} label={nomCarte(name, sousTitre)} />}
+      <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center' }}>
+        <span className="o-cvpastille" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? (teinte ? hx(teinte, .16) : 'rgba(var(--o-accent-rgb),.16)') : 'var(--o-s1)', color: on ? (teinteLu || 'var(--o-accent-soft)') : 'var(--o-text3)' }}>{/* `Ico` et non `Fi` : une icone CHOISIE peut etre un dessin, que `Fi`
                   * aurait cherche dans la police et rendu vide. */}
           {ico ? <Ico name={ico} size={dense ? 15 : 17} /> : <PlugIcon size={dense ? 15 : 17} />}</span>
         <div className="o-cvtxt" style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
           <div style={{ fontSize: 12, fontWeight: 600, color: on ? (teinte ? teinteTxt : 'var(--o-accent-soft)') : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {/* Compacte climat : la consigne vit entre les boutons — le
-              * sous-titre ne garde que la température relevée. */}
-            {dense && dom === 'climate' && a.current_temperature != null ? tr('actuel {n}°', { n: a.current_temperature }) : stateTxt}
+            {sousTitre}
           </div>
         </div>
         {togglable && !dead && <span role="switch" aria-checked={on} tabIndex={0} aria-label={on ? tr('Éteindre {nom}', { nom: name }) : tr('Allumer {nom}', { nom: name })} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('homeassistant', on ? 'turn_off' : 'turn_on'); } }} onClick={(e) => { e.stopPropagation(); call('homeassistant', on ? 'turn_off' : 'turn_on'); }} style={{ width: 44, height: 25, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
-        {runnable && !dead && <button onClick={(e) => { e.stopPropagation(); call(runnable[0], runnable[1]); }} style={{ padding: '7px 12px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{runnable[2]}</button>}
-        {dom === 'lock' && !dead && <button onClick={(e) => { e.stopPropagation(); call('lock', s === 'locked' ? 'unlock' : 'lock'); }} style={{ padding: '7px 12px', borderRadius: 10, background: s === 'locked' ? 'rgba(var(--o-ok-rgb),.14)' : 'rgba(var(--o-warn2-rgb),.16)', border: 'none', color: s === 'locked' ? 'var(--o-ok)' : 'var(--o-warn2)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{s === 'locked' ? 'Déverrouiller' : 'Verrouiller'}</button>}
+        {/* Chaque commande dit son geste PUIS l'appareil (lot 13 de l'audit
+          * du 03/10) : hors de la carte-bouton, « Activer » ou « Pause » seuls
+          * ne disaient plus de quoi. Positionnée, elle passe sur la surface.
+          * Exécuter, la serrure et l'alarme portent leur mot ET leur icône
+          * (`o-cvact`) : sur une carte étroite, compacte ou standard, l'icône
+          * remplace le mot (index.css) et le nom garde sa place (05/10). */}
+        {runnable && !dead && <button className="o-cvact" aria-label={runnable[2] + ' ' + name} title={runnable[2]} onClick={(e) => { e.stopPropagation(); call(runnable[0], runnable[1]); }} style={{ position: 'relative', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}><span className="o-cvact-ico"><Ico name={icoRun} size={14} /></span><span className="o-cvact-mot">{runnable[2]}</span></button>}
+        {dom === 'lock' && !dead && <button className="o-cvact" aria-label={(s === 'locked' ? tr('Déverrouiller') : tr('Verrouiller')) + ' ' + name} title={s === 'locked' ? tr('Déverrouiller') : tr('Verrouiller')} onClick={(e) => { e.stopPropagation(); call('lock', s === 'locked' ? 'unlock' : 'lock'); }} style={{ position: 'relative', borderRadius: 10, background: s === 'locked' ? 'rgba(var(--o-ok-rgb),.14)' : 'rgba(var(--o-warn2-rgb),.16)', border: 'none', color: s === 'locked' ? 'var(--o-ok)' : 'var(--o-warn2)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}><span className="o-cvact-ico"><Ico name={s === 'locked' ? 'unlock' : 'lock'} size={14} /></span><span className="o-cvact-mot">{s === 'locked' ? tr('Déverrouiller') : tr('Verrouiller')}</span></button>}
         {/* Alarme : le geste attendu, comme la serrure — armer quand elle
           * dort, désarmer sinon. Si le panneau réclame un code, le bouton
           * ouvre la fiche plutôt que d'échouer en silence. */}
@@ -11053,11 +11857,11 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
             : s === 'triggered' ? ['rgba(var(--o-bad-rgb),.16)', 'var(--o-bad)']
               : ['rgba(var(--o-ok-rgb),.14)', 'var(--o-ok)'];
           return (
-            <button onClick={(e) => {
+            <button className="o-cvact" aria-label={(dormante ? tr('Armer') : tr('Désarmer')) + ' ' + name} title={dormante ? tr('Armer') : tr('Désarmer')} onClick={(e) => {
               e.stopPropagation();
               if (codeVoulu) { if (onOpen) onOpen(id); return; }
               call('alarm_control_panel', dormante ? svcArm : 'alarm_disarm');
-            }} style={{ padding: '7px 12px', borderRadius: 10, background: bg, border: 'none', color: col, fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{dormante ? tr('Armer') : tr('Désarmer')}</button>
+            }} style={{ position: 'relative', borderRadius: 10, background: bg, border: 'none', color: col, fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}><span className="o-cvact-ico"><Ico name={dormante ? (ICONES_ARMEMENT[svcArm] || ICONES_ARMEMENT.alarm_arm_away) : ICONES_ARMEMENT.alarm_disarm} size={14} /></span><span className="o-cvact-mot">{dormante ? tr('Armer') : tr('Désarmer')}</span></button>
           );
         })()}
         {/* Batterie des machines dans l'en-tête, comme la carte de référence. */}
@@ -11069,7 +11873,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
         {dense && !dead && (() => {
           // Pilules rectangulaires sans filet, le dessin de la maquette —
           // le même pour tous les minis de la compacte.
-          const mini = { width: 38, height: 26, borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, padding: 0 };
+          const mini = { position: 'relative', width: 38, height: 26, borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, padding: 0 };
           const miniAccent = { ...mini, background: 'var(--o-accent-fond)', color: '#fff' };
           // Climat : la consigne ENTRE les deux boutons, comme la maquette.
           if (dom === 'climate') {
@@ -11079,7 +11883,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
             return (
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', flexShrink: 0 }}>
                 <button style={mini} aria-label={'− ' + name} onClick={(e) => { e.stopPropagation(); bouge(-0.5); }}>−</button>
-                <span style={{ fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minWidth: 34, textAlign: 'center' }}>{base != null ? base + '°' : '—'}</span>
+                <span style={{ fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minWidth: 34, textAlign: 'center' }}>{base != null ? decMax(base, 1) + '°' : '—'}</span>
                 <button style={mini} aria-label={'+ ' + name} onClick={(e) => { e.stopPropagation(); bouge(0.5); }}>+</button>
               </span>
             );
@@ -11088,18 +11892,25 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
             <button style={mini} aria-label={tr('Ouvrir') + ' ' + name} onClick={(e) => { e.stopPropagation(); call('cover', 'open_cover'); }}><Fi i="angle-up" size={13} /></button>
             <button style={mini} aria-label={tr('Fermer') + ' ' + name} onClick={(e) => { e.stopPropagation(); call('cover', 'close_cover'); }}><Fi i="angle-down" size={13} /></button>
           </>);
-          if (dom === 'vacuum' || dom === 'lawn_mower') return (
-            <button style={miniAccent} title={on ? tr('Renvoyer au dock') : (dom === 'vacuum' ? tr('Démarrer le nettoyage') : tr('Lancer la tonte'))} onClick={(e) => { e.stopPropagation(); call(dom, on ? (dom === 'vacuum' ? 'return_to_base' : 'dock') : (dom === 'vacuum' ? 'start' : 'start_mowing')); }}><Fi i={on ? 'home' : 'play'} size={12} /></button>
-          );
+          if (dom === 'vacuum' || dom === 'lawn_mower') {
+            const geste = on ? tr('Renvoyer au dock') : (dom === 'vacuum' ? tr('Démarrer le nettoyage') : tr('Lancer la tonte'));
+            return (
+              <button style={miniAccent} title={geste} aria-label={geste + ' ' + name} onClick={(e) => { e.stopPropagation(); call(dom, on ? (dom === 'vacuum' ? 'return_to_base' : 'dock') : (dom === 'vacuum' ? 'start' : 'start_mowing')); }}><Fi i={on ? 'home' : 'play'} size={12} /></button>
+            );
+          }
           if (dom === 'media_player' && s !== 'off') return (
-            <button style={miniAccent} aria-label={s === 'playing' ? 'Pause' : tr('Lecture')} onClick={(e) => { e.stopPropagation(); commander(hass, id, 'play_pause'); }}><Fi i={s === 'playing' ? 'pause' : 'play'} size={12} /></button>
+            /* « Lire », le geste : « Lecture » est l'ÉTAT écrit sur la carte
+             * (« Playing » en anglais) — relecture du lot 13, comme la carte
+             * lecteur. Sans texte visible, rien ne change à l'écran ; le bouton
+             * standard, lui, garde le mot qu'il affiche. */
+            <button style={miniAccent} aria-label={(s === 'playing' ? tr('Pause') : tr('Lire')) + ' ' + name} onClick={(e) => { e.stopPropagation(); commander(hass, id, 'play_pause'); }}><Fi i={s === 'playing' ? 'pause' : 'play'} size={12} /></button>
           );
           return null;
         })()}
       </div>
       {/* Standard lumière : la luminosité en dessous — commit au relâcher. */}
       {!dense && dom === 'light' && !dead && (a.brightness != null || (a.supported_color_modes || []).indexOf('brightness') >= 0) && (
-        <div className="o-cvrange" role="presentation" style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10 }} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+        <div className="o-cvrange" role="presentation" style={{ position: 'relative', marginTop: 14, display: 'flex', alignItems: 'center', gap: 10 }} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
           <Fi i="bulb" size={13} color="var(--o-text3)" />
           {/* Le curseur s'appelait « {n} % de luminosité » avec un `n` VIDE :
             * le nom lu était donc « % de luminosité », et rien ne disait de
@@ -11115,9 +11926,9 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
       )}
       {!dense && dom === 'climate' && !dead && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
-          <button onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature - .5); }} style={{ flex: 1, padding: 8, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>−</button>
-          <span style={{ fontSize: 15, fontWeight: 800, minWidth: 52, textAlign: 'center' }}>{a.temperature != null ? a.temperature + '°' : '—'}</span>
-          <button onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature + .5); }} style={{ flex: 1, padding: 8, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>+</button>
+          <button aria-label={'− ' + name} onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature - .5); }} style={{ position: 'relative', flex: 1, padding: 8, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>−</button>
+          <span style={{ fontSize: 15, fontWeight: 800, minWidth: 52, textAlign: 'center' }}>{a.temperature != null ? decMax(a.temperature, 1) + '°' : '—'}</span>
+          <button aria-label={'+ ' + name} onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature + .5); }} style={{ position: 'relative', flex: 1, padding: 8, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>+</button>
         </div>
       )}
       {!dense && dom === 'cover' && !dead && (
@@ -11125,13 +11936,13 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
           {/* Trois flèches nues : sans nom, un lecteur d'écran n'annonçait que
             * « bouton » trois fois de suite (plan M7). */}
           {[['open_cover', 'angle-up', tr('Ouvrir')], ['stop_cover', 'square', tr('Stop')], ['close_cover', 'angle-down', tr('Fermer')]].map(([svc, gi, nom]) => (
-            <button key={svc} aria-label={nom} title={nom} onClick={(e) => { e.stopPropagation(); call('cover', svc); }} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={gi} size={14} /></button>
+            <button key={svc} aria-label={nom + ' ' + name} title={nom} onClick={(e) => { e.stopPropagation(); call('cover', svc); }} style={{ position: 'relative', flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={gi} size={14} /></button>
           ))}
         </div>
       )}
       {!dense && dom === 'media_player' && !dead && s !== 'off' && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <button onClick={(e) => { e.stopPropagation(); commander(hass, id, 'play_pause'); }} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontWeight: 700, fontSize: 12 }}><Fi i={s === 'playing' ? 'pause' : 'play'} size={13} />{s === 'playing' ? 'Pause' : tr('Lecture')}</button>
+          <button aria-label={(s === 'playing' ? tr('Pause') : tr('Lecture')) + ' ' + name} onClick={(e) => { e.stopPropagation(); commander(hass, id, 'play_pause'); }} style={{ position: 'relative', flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontWeight: 700, fontSize: 12 }}><Fi i={s === 'playing' ? 'pause' : 'play'} size={13} />{s === 'playing' ? tr('Pause') : tr('Lecture')}</button>
         </div>
       )}
       {/* Machines : les MÊMES contrôles que la fiche native Home Assistant,
@@ -11142,7 +11953,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
         if (dom === 'vacuum') {
           const enCours = s === 'cleaning';
           if (enCours ? (f & 4) : (f & 8192)) btns.push([enCours ? 'pause' : 'play', enCours ? 'pause' : 'start', enCours ? tr('Pause') : tr('Démarrer le nettoyage')]);
-          if ((f & 8) && (s === 'cleaning' || s === 'returning' || s === 'paused')) btns.push(['stop', 'stop', 'Stop']);
+          if ((f & 8) && (s === 'cleaning' || s === 'returning' || s === 'paused')) btns.push(['stop', 'stop', tr('Stop')]);
           if (f & 16) btns.push(['home', 'return_to_base', tr('Renvoyer au dock')]);
           if (f & 512) btns.push(['marker', 'locate', tr('Localiser')]);
         } else {
@@ -11156,8 +11967,8 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
         return btns.length > 0 && (
           <div style={{ display: 'flex', gap: 10, marginTop: 12, alignItems: 'center' }}>
             {btns.map(([gi, svc, lbl], bi) => (
-              <button key={svc} title={lbl} aria-label={lbl} onClick={(e) => { e.stopPropagation(); call(dom, svc); }}
-                style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0, border: bi === 0 ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)', background: bi === 0 ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: bi === 0 ? '#fff' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i={gi} size={14} /></button>
+              <button key={svc} title={lbl} aria-label={lbl + ' ' + name} onClick={(e) => { e.stopPropagation(); call(dom, svc); }}
+                style={{ position: 'relative', width: 40, height: 40, borderRadius: '50%', flexShrink: 0, border: bi === 0 ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)', background: bi === 0 ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: bi === 0 ? '#fff' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i={gi} size={14} /></button>
             ))}
             {dom === 'vacuum' && Array.isArray(a.fan_speed_list) && a.fan_speed_list.length > 1 && (
               <div style={{ marginLeft: 'auto' }}>
@@ -11170,10 +11981,13 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
       })()}
       {!dense && dom === 'valve' && !dead && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <button onClick={(e) => { e.stopPropagation(); call('valve', on ? 'close_valve' : 'open_valve'); }} style={{ flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>{on ? tr('Fermer') : tr('Ouvrir')}</button>
+          <button aria-label={(on ? tr('Fermer') : tr('Ouvrir')) + ' ' + name} onClick={(e) => { e.stopPropagation(); call('valve', on ? 'close_valve' : 'open_valve'); }} style={{ position: 'relative', flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>{on ? tr('Fermer') : tr('Ouvrir')}</button>
         </div>
       )}
-      {!dense && <Epingles pourId={id} hass={hass} />}
+      {/* Les épingles sont des lignes à commandes : positionnées, elles passent
+        * sur la surface (lot 13 de l'audit du 03/10). Vide, l'enveloppe ne
+        * mesure rien. */}
+      {!dense && <div style={{ position: 'relative' }}><Epingles pourId={id} hass={hass} /></div>}
     </div>
   );
 }
@@ -11183,7 +11997,8 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
  * entité admet plusieurs cartes, le sheet d'ajout les propose. Chaque entrée
  * typée de `cv.ents` s'écrit { t, id } ; la chaîne nue reste la compacte. */
 
-const CV_CADRE = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', borderRadius: 'var(--o-radius,18px)', padding: 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' };
+// Le liseré du réglage (04/10) : le cadre de toutes les cartes de vue perso.
+const CV_CADRE = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: LISERE, borderRadius: 'var(--o-radius,18px)', padding: 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' };
 
 /* Un switch n'est une lumière que s'il est déclaré interrupteur-lumière ;
  * sinon c'est une prise ou un appareil : icône prise, teinte accent — pas l'or. */
@@ -11239,31 +12054,48 @@ function CvClock() {
 
 /* Grand chiffre : la valeur en très grand, l'unité, le nom. Un binaire dit son
  * état en toutes lettres ; la richesse d'un capteur, c'est sa lisibilité. */
-function CvBigSensor({ id, hass }) {
+/* `onOpen` (lot 13 de l'audit du 03/10) : la carte EST alors le bouton qui
+ * ouvre la fiche — elle ne porte aucune commande à protéger —, nommée de ce
+ * qu'elle affiche, le nom puis la valeur. Une enveloppe de `CvTyped` la
+ * nommait « Ouvrir sensor.co2_sejour » : l'identifiant, épelé. Sans `onOpen`
+ * (bibliothèque), elle n'est rien de tout cela. Même chose pour la jauge et
+ * le graphique. En panne, le nom dit « Indisponible », comme `CvCard` — pas
+ * le tiret de l'écran, ni « — ppm » : l'unité ne suit qu'une vraie valeur
+ * (relecture du lot 13). */
+function CvBigSensor({ id, hass, onOpen = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
   const dom = String(id).split('.')[0];
   const brut = st ? st.state : null;
   const mort = !st || brut === 'unavailable' || brut === 'unknown';
+  // Une date, une heure (05/10, suite « dates partout ») : `texteDate`, pas
+  // l'année de `parseFloat` en 54 px — et un corps qui la laisse tenir.
+  const date = mort ? null : texteDate(st);
   let valeur, unite = '';
   if (mort) valeur = '—';
   else if (dom === 'binary_sensor') {
     const porte = ['door', 'window', 'garage_door', 'opening'].indexOf(a.device_class) >= 0;
-    valeur = brut === 'on' ? (porte ? tr('Ouvert') : tr('Détecté')) : (porte ? tr('Fermé') : 'RAS');
+    valeur = brut === 'on' ? (porte ? tr('Ouvert') : tr('Détecté')) : (porte ? tr('Fermé') : tr('RAS'));
   } else {
     const n = parseFloat(brut);
-    valeur = isNaN(n) ? brut : (Math.round(n * 10) / 10).toLocaleString(locale());
-    unite = a.unit_of_measurement || '';
+    valeur = date != null ? date : isNaN(n) ? brut : decMax(n, 1);
+    unite = date != null ? '' : a.unit_of_measurement || '';
   }
+  const nom = cvName(st, id);
   return (
-    <div className={'o-piece' + (mort ? ' o-panne' : '')} style={{ ...CV_CADRE, height: '100%', minHeight: 150, opacity: mort ? .55 : 1 }}>
+    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */
+    <div className={'o-piece' + (mort ? ' o-panne' : '')} role={onOpen ? 'button' : undefined} tabIndex={onOpen ? 0 : undefined}
+      aria-label={onOpen ? nomCarte(nom, mort ? tr('Indisponible') : (unite ? valeur + ' ' + unite : valeur)) : undefined} aria-haspopup={onOpen ? 'dialog' : undefined}
+      onClick={onOpen ? () => onOpen(id) : undefined}
+      onKeyDown={onOpen ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(id); } } : undefined}
+      style={{ ...CV_CADRE, height: '100%', minHeight: 150, opacity: mort ? .55 : 1, cursor: onOpen ? 'pointer' : undefined }}>
       <span style={{ width: 40, height: 40, borderRadius: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text3)' }}><Fi i={CV_DOM_ICON[cvDomain(id)] || 'bolt'} size={17} /></span>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0 }}>
-        <div style={{ fontSize: 'clamp(32px, 3vw + 12px, 54px)', fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1, fontVariantNumeric: 'tabular-nums', textAlign: 'center' }}>
+        <div style={{ fontSize: date != null ? 'clamp(20px, 1vw + 14px, 28px)' : 'clamp(32px, 3vw + 12px, 54px)', fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1, fontVariantNumeric: 'tabular-nums', textAlign: 'center' }}>
           {valeur}{unite && <span style={{ fontSize: '.42em', fontWeight: 700, color: 'var(--o-text2)', marginLeft: 6 }}>{unite}</span>}
         </div>
       </div>
-      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
     </div>
   );
 }
@@ -11271,7 +12103,7 @@ function CvBigSensor({ id, hass }) {
 /* Jauge : un arc de cercle. Le pourcentage vient de l'unité « % », sinon des
  * bornes min/max de l'entité — des °C entre min_temp et max_temp se jaugent
  * aussi bien qu'une batterie. */
-function CvGauge({ id, hass }) {
+function CvGauge({ id, hass, onOpen = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
   const n = st ? parseFloat(st.state) : NaN;
@@ -11288,19 +12120,27 @@ function CvGauge({ id, hass }) {
     const x1 = 60 + 44 * Math.cos(a1), y1 = 60 + 44 * Math.sin(a1);
     return `M ${x0} ${y0} A 44 44 0 ${240 * p > 180 ? 1 : 0} 1 ${x1} ${y1}`;
   };
+  const valeur = mort ? '—' : decMax(n, 1);
+  const unite = a.unit_of_measurement || '';
+  const nom = cvName(st, id);
   return (
-    <div className={'o-piece' + (mort ? ' o-panne' : '')} style={{ ...CV_CADRE, height: '100%', minHeight: 150, alignItems: 'center', opacity: mort ? .55 : 1 }}>
+    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */
+    <div className={'o-piece' + (mort ? ' o-panne' : '')} role={onOpen ? 'button' : undefined} tabIndex={onOpen ? 0 : undefined}
+      aria-label={onOpen ? nomCarte(nom, mort ? tr('Indisponible') : (unite ? valeur + ' ' + unite : valeur)) : undefined} aria-haspopup={onOpen ? 'dialog' : undefined}
+      onClick={onOpen ? () => onOpen(id) : undefined}
+      onKeyDown={onOpen ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(id); } } : undefined}
+      style={{ ...CV_CADRE, height: '100%', minHeight: 150, alignItems: 'center', opacity: mort ? .55 : 1, cursor: onOpen ? 'pointer' : undefined }}>
       <div style={{ position: 'relative', width: 120, height: 104, flexShrink: 0 }}>
         <svg width="120" height="120" viewBox="0 0 120 120" style={{ position: 'absolute', top: -4 }}>
           <path d={arc(1)} fill="none" stroke="var(--o-s1)" strokeWidth="9" strokeLinecap="round" />
           {!mort && pct > 0.005 && <path d={arc(pct)} fill="none" stroke={col} strokeWidth="9" strokeLinecap="round" style={{ transition: 'stroke .3s' }} />}
         </svg>
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingTop: 6 }}>
-          <span style={{ fontSize: 25, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{mort ? '—' : Math.round(n * 10) / 10}</span>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)' }}>{a.unit_of_measurement || ''}</span>
+          <span style={{ fontSize: 25, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{valeur}</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)' }}>{unite}</span>
         </div>
       </div>
-      <div style={{ marginTop: 'auto', width: '100%', textAlign: 'center', fontSize: 13, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</div>
+      <div style={{ marginTop: 'auto', width: '100%', textAlign: 'center', fontSize: 13, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
     </div>
   );
 }
@@ -11381,18 +12221,57 @@ function CvWeather({ id, hass }) {
 function chipTexte(id, st) {
   if (!st) return '—';
   const d = String(id).split('.')[0];
+  // Sans valeur, rien à dire — comme une entité absente (05/10). La pastille
+  // écrivait l'état BRUT, « unknown », « unavailable » en anglais ; pire, une
+  // alarme injoignable s'y disait « Armée », une serrure « Déverrouillée ».
+  if (st.state === 'unknown' || st.state === 'unavailable') return '—';
+  // Scène, bouton, événement : leur état est la date du dernier déclenchement,
+  // script et automatisation un on/off — elle dit ce que dit la tuile
+  // (`CvCard`) : « — » jamais déclenché, `relTime` sinon, pas l'ISO en clair.
+  if (['scene', 'script', 'button', 'input_button', 'automation', 'event'].indexOf(d) >= 0) return relTime(st.state) || '—';
+  // Une date, une heure (capteur horodaté, entité `datetime`) : `texteDate`.
+  const date = texteDate(st);
+  if (date != null) return date;
   const a = st.attributes || {};
   const s = st.state;
   if (d === 'light' || d === 'switch' || d === 'input_boolean' || d === 'fan') return a.brightness != null && s === 'on' ? Math.round(a.brightness / 255 * 100) + ' %' : '';
-  if (d === 'climate') return a.current_temperature != null ? a.current_temperature + '°' : (a.temperature != null ? a.temperature + '°' : '');
+  if (d === 'climate') return a.current_temperature != null ? decMax(a.current_temperature, 1) + '°' : (a.temperature != null ? decMax(a.temperature, 1) + '°' : '');
   if (d === 'cover') return a.current_position != null ? a.current_position + ' %' : (s === 'open' ? tr('Ouvert') : tr('Fermé'));
   if (d === 'media_player') return s === 'playing' ? (a.media_title || tr('Lecture')) : '';
   if (d === 'alarm_control_panel') return s === 'disarmed' ? tr('Désarmée') : s === 'triggered' ? tr('ALERTE') : tr('Armée');
   if (d === 'person' || d === 'device_tracker') return s === 'home' ? tr('Présent') : tr('Absent');
   if (d === 'binary_sensor') return '';
-  if (d === 'sensor') { const n = parseFloat(s); return (isNaN(n) ? String(s) : Math.round(n * 10) / 10) + (a.unit_of_measurement ? ' ' + a.unit_of_measurement : ''); }
+  if (d === 'sensor') { const n = parseFloat(s); return (isNaN(n) ? String(s) : decMax(n, 1)) + (a.unit_of_measurement ? ' ' + a.unit_of_measurement : ''); }
   if (d === 'lock') return s === 'locked' ? tr('Verrouillée') : tr('Déverrouillée');
   return String(s);
+}
+/* Un état qui est une DATE ou une HEURE, dit pour l'œil (05/10). `parseFloat`
+ * y lisait l'année ou l'heure : la tuile (`CvCard`) d'un capteur horodaté
+ * — prochaine alarme du téléphone, dernier passage du facteur — affichait
+ * « 2026 », la pastille « 2 026 », un capteur « 07:30 » disait « 7 ».
+ * Un horodatage (`device_class: timestamp`, ou un état ISO avec son heure)
+ * passe par `relTime` comme dans la fiche (`LigneEntite`) : passé relatif,
+ * futur en heure absolue. Une date seule (`device_class: date`) s'écrit par
+ * Intl dans la langue de l'écran, l'année si ce n'est pas celle-ci —
+ * `relTime` la lirait minuit UTC, « lun. 02:00 ». Une heure seule reste
+ * telle quelle. `null` : ni date ni heure, la valeur se lit comme avant. */
+function texteDate(st) {
+  if (!st) return null;
+  const s = String(st.state);
+  // L'espace vaut le T (05/10, suite « dates partout ») : un `input_datetime`,
+  // un capteur gabarit écrivent « 2026-10-05 07:30:00 », que la fiche lisait
+  // « 2 026 ». Remis en T avant `new Date` : sans fuseau, l'heure est LOCALE,
+  // et la forme à espace n'est pas garantie par la norme.
+  const iso = /^\d{4}-\d\d-\d\d[T ]\d/.test(s);
+  if ((st.attributes || {}).device_class === 'timestamp' || iso) return relTime(iso ? s.replace(' ', 'T') : s) || '—';
+  const j = /^(\d{4})-(\d\d)-(\d\d)$/.exec(s);
+  if (j) {
+    // Minuit LOCAL (`new Date(a, m, j)`), pas UTC : à l'ouest de Greenwich,
+    // `new Date('2026-10-12')` tombe la veille.
+    const q = new Date(+j[1], j[2] - 1, +j[3]);
+    return q.toLocaleDateString(locale(), { day: 'numeric', month: 'short', ...(q.getFullYear() !== new Date(Date.now()).getFullYear() ? { year: 'numeric' } : {}) });
+  }
+  return /^\d\d?:\d\d(:\d\d)?$/.test(s) ? s : null;
 }
 /* Une pastille est-elle « vive » ? Le même vocabulaire que les cartes : ce qui
  * est allumé, ouvert, en marche ou détecté attire l'œil. */
@@ -11428,8 +12307,16 @@ function CvChip({ id, hass, dc = null }) {
   const nom = cvName(st, id);
   return (
     <div style={{ height: '100%', display: 'flex', alignItems: 'center' }}>
+      {/* Son nom est déjà ce qu'elle affiche, le nom puis la valeur : il vient
+        * de son texte. Elle dit seulement ouvrir une fiche (lot 13 de l'audit
+        * du 03/10). */}
+      {/* Le liseré des autres cartes (relecture du 04/10) : `border: 'none'`
+        * en faisait la seule famille sans trait, et sous Atrium, dont le filet
+        * `calc(1px - --o-bw)` s'efface dès que Liserés est actif, la seule
+        * sans AUCUN contour. Le trait se prend dans les 48 px (border-box). */}
       <button onClick={(e) => { e.stopPropagation(); if (dc && dc.ouvrir) dc.ouvrir(id); }} title={nom}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', minWidth: 0, height: 48, padding: '0 14px', borderRadius: 14, border: 'none', cursor: 'pointer',
+        aria-haspopup={dc && dc.ouvrir ? 'dialog' : undefined}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', minWidth: 0, height: 48, padding: '0 14px', borderRadius: 14, border: LISERE, cursor: 'pointer',
           background: vif ? hx(col, .16) : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))',
           color: vif ? col : 'var(--o-text2)', boxShadow: 'var(--o-shadow,0 8px 20px rgba(0,0,0,.26))' }}>
         <Fi i={cvIcoEntite(d, id, st, nom) || 'bolt'} size={15} color={vif ? col : 'var(--o-text3)'} />
@@ -11474,9 +12361,11 @@ function CvChips({ x = null, hass, dc = null, demo = null }) {
           const st = { display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, padding: '7px 11px', borderRadius: 10, whiteSpace: 'nowrap', fontSize: 12, fontWeight: 800, border: 'none', background: c.vif ? hx(c.col, .14) : 'var(--o-s1)', color: c.vif ? c.col : 'var(--o-text2)' };
           const dedans = <>{<Fi i={c.ic} size={12} color={c.vif ? c.col : 'var(--o-text3)'} />}{c.txt}</>;
           // Chaque pastille ouvre la fiche de son entité — la vitrine de la
-          // bibliothèque est le seul cas sans fiche à ouvrir.
+          // bibliothèque est le seul cas sans fiche à ouvrir. Son nom dit
+          // l'entité PUIS la valeur affichée (lot 13 de l'audit du 03/10) :
+          // « 65 % » seul ne disait pas de quoi.
           return c.id
-            ? <button key={c.id} onClick={(e) => { e.stopPropagation(); ouvrir(c); }} title={cvName(S[c.id], c.id)} style={{ ...st, cursor: 'pointer' }}>{dedans}</button>
+            ? <button key={c.id} onClick={(e) => { e.stopPropagation(); ouvrir(c); }} title={cvName(S[c.id], c.id)} aria-label={nomCarte(cvName(S[c.id], c.id), c.txt)} aria-haspopup={dc && dc.ouvrir ? 'dialog' : undefined} style={{ ...st, cursor: 'pointer' }}>{dedans}</button>
             : <span key={i} style={st}>{dedans}</span>;
         })}
       </div>
@@ -11489,13 +12378,19 @@ function CvAgenda({ id, hass }) {
   const st = hass && hass.states ? hass.states[id] : null;
   return (
     <div className="o-piece" style={{ ...CV_CADRE, height: '100%', overflow: 'hidden' }}>
-      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{cvName(st, id)} · {tr('7 prochains jours')}</div>
+      {/* Relecture du 04/10 : à 184 px (rangées de 8), le titre sur deux lignes
+        * poussait le 3e événement hors du cadre (1366 px, tablette, téléphone).
+        * Une ligne, tronquée — et `flexShrink: 0`, sans quoi `overflow: hidden`
+        * ramène sa hauteur minimale à 0 et la colonne qui déborde l'écrase. */}
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)} · {tr('7 prochains jours')}</div>
       {events.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Rien de prévu')}</div>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {events.slice(0, 3).map((e, i) => {
           const { jour, heure } = jourAgenda(e);
           return (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 10, background: i === 0 ? 'rgba(var(--o-accent-rgb),.1)' : 'var(--o-s1)' }}>
+            /* Pastille à 4 px de haut et de bas (relecture du 04/10) : à 6, la
+             * 3e descendait à 187 px, coupée par le bord d'une carte de 184. */
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 10px', borderRadius: 10, background: i === 0 ? 'rgba(var(--o-accent-rgb),.1)' : 'var(--o-s1)' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.summary}</div>
                 <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text2)' }}>{jour}</div>
@@ -11720,16 +12615,21 @@ function CvAlarm({ id, hass, sans = false, message = null, label = null }) {
   useSeconde(!!cpt);
   // Le mode que le panneau prépare : son bouton portera le tour de progression.
   const svcVise = cpt ? armVise(st, null) : null;
-  const [txt, col] = s === 'disarmed' ? [tr('Désarmée'), 'var(--o-ok)']
+  /* `enPanne`, comme CvCard (05/10). Morte, l'alarme disait « Armée » en
+   * ambre — toute valeur inconnue l'était — et ses modes s'armaient dans le
+   * vide ; c'est elle aussi le bloc de l'appareil dans FicheAppareil. Un
+   * code en cours de saisie quand elle tombe ne part pas non plus. */
+  const mort = enPanne(id, st);
+  const [txt, col] = mort ? [tr('Indisponible'), 'var(--o-text3)'] : s === 'disarmed' ? [tr('Désarmée'), 'var(--o-ok)']
     : s === 'triggered' ? [tr('ALERTE'), 'var(--o-bad)']
       : (s === 'arming' || s === 'pending') ? [cpt ? tr('Activation dans {n} s', { n: cpt.reste }) : tr('Activation en cours…'), 'var(--o-warn2)']
         : s ? [tr('Armée'), 'var(--o-warn2)'] : ['—', 'var(--o-text3)'];
   // Les chips SUIVENT le panneau : `supported_features` dit quels armements
   // existent (Alarmo n'expose que les modes configurés). Proposer « Maison »
   // à un panneau qui l'ignore, c'est promettre un geste sans effet.
-  const CHIPS = armChips(aAl, s);
+  const CHIPS = mort ? [] : armChips(aAl, s);
   return (
-    <div className="o-piece o-carte-alarme" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
+    <div className={'o-piece o-carte-alarme' + (mort ? ' o-panne' : '')} style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
       {/* GABARIT MAISON — règle dure : icône hg SEULE, état hd, TITRE SOUS
         * L'ICÔNE avec de l'air. Jamais côte à côte, maquette ou pas. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -11738,8 +12638,15 @@ function CvAlarm({ id, hass, sans = false, message = null, label = null }) {
       </div>
       <div style={{ marginTop: 8, ...(sans ? { flex: 1, display: 'flex', flexDirection: 'column' } : {}) }}>
         <div style={RM_NAME}>{label || cvName(st, id)}</div>
+        {/* Le message se DIT aussi (audit du 03/10, règle de l'ADR 0107) : il
+          * arrive quand l'alarme s'arme sur un ouvrant resté ouvert, ou se
+          * déclenche — la carte est déjà à l'écran, et un encadré monté avec
+          * son texte ne s'annonçait pas. La région est donc toujours là, vide
+          * tant qu'il n'y a rien ; l'encadré reste pour l'œil. Poli : c'est un
+          * état, pas la réponse à un geste. */}
+        <div className="o-vh" role="status">{message && message.texte ? message.texte : ''}</div>
         {message && message.texte && (
-          <div role="status" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 8, padding: '8px 10px', borderRadius: 10, background: message.niveau === 'danger' ? 'rgba(var(--o-bad-rgb),.12)' : 'rgba(var(--o-warn-rgb),.12)', color: message.niveau === 'danger' ? 'var(--o-bad)' : 'var(--o-warn)', fontSize: 12, fontWeight: 700, lineHeight: 1.3 }}>
+          <div aria-hidden="true" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 8, padding: '8px 10px', borderRadius: 10, background: message.niveau === 'danger' ? 'rgba(var(--o-bad-rgb),.12)' : 'rgba(var(--o-warn-rgb),.12)', color: message.niveau === 'danger' ? 'var(--o-bad)' : 'var(--o-warn)', fontSize: 12, fontWeight: 700, lineHeight: 1.3 }}>
             <Fi i="triangle-warning" size={13} style={{ marginTop: 1, flexShrink: 0 }} />
             <span style={{ minWidth: 0 }}>{message.texte}</span>
           </div>
@@ -11754,7 +12661,7 @@ function CvAlarm({ id, hass, sans = false, message = null, label = null }) {
         {/* Version « seule » : les chips descendent au pied de la carte,
           * comme les boutons des cartes machines. */}
         {sans && <div style={{ flex: 1 }} />}
-        {demande ? (
+        {demande && !mort ? (
           <div style={{ display: 'flex', gap: 8, margin: '7px 0 6px', alignItems: 'center' }}>
             <input type="password" inputMode="numeric" autoFocus value={code} onChange={(e) => setCode(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') valider(); if (e.key === 'Escape') setDemande(null); }}
@@ -11803,7 +12710,7 @@ function CvAlarm({ id, hass, sans = false, message = null, label = null }) {
           if (!os.length && !camIds.length) return null;
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {os.length > 0 && ligne(tr('Ouvrants'), ouverts === 0 ? tr('{n} fermés', { n: os.length }) : ouverts > 1 ? tr('{n} ouverts', { n: ouverts }) : tr('{n} ouvert', { n: ouverts }), ouverts ? 'var(--o-warn)' : 'var(--o-ok)')}
+              {os.length > 0 && ligne(tr('Ouvrants'), ouverts === 0 ? tr('{n} fermés', { n: os.length }) : trN(ouverts, '{n} ouvert', '{n} ouverts'), ouverts ? 'var(--o-warn)' : 'var(--o-ok)')}
               {camIds.length > 0 && ligne(tr('Caméras'), tr('{n} en ligne', { n: cams }), 'var(--o-text2)')}
             </div>
           );
@@ -11820,7 +12727,10 @@ function CvJournal({ id, hass }) {
   const events = grouperJournal(useRoomLogbook(hass, useMemo(() => [id], [id])), (e) => (e.entity_id || '') + '|' + (e.state != null ? e.state : e.message));
   const S = (hass && hass.states) || {};
   const st = S[id];
-  const heure = (when) => { const ms = when < 1e12 ? when * 1000 : when; return new Date(ms).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); };
+  /* L'heure dit le jour quand ce n'est plus aujourd'hui (audit du 03/10) :
+   * « 16:00 » seul datait du jour un événement de lundi. Le crochet ne rend
+   * plus que les dernières 24 h et relit la minute : la ligne passe à
+   * « hier » au premier coup de minuit. */
   return (
     <div className="o-piece" style={{ ...CV_CADRE, height: '100%', overflow: 'hidden' }}>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</div>
@@ -11829,7 +12739,7 @@ function CvJournal({ id, hass }) {
       {events.slice(0, 3).map((e, i) => (
         <div key={(e.when || 0) + '|' + i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
           <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: 'var(--o-text1)' }}>{e.state != null ? etatJournal(id, e.state, S) : (e.message || '')}{e.n > 1 ? ' ·×' + e.n : ''}</span>
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)' }}>{heure(e.when)}</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', flexShrink: 0, whiteSpace: 'nowrap' }}>{heureJournal(e.when)}</span>
         </div>
       ))}
     </div>
@@ -11839,7 +12749,7 @@ function CvJournal({ id, hass }) {
 /* Graphique 24 h : l'historique du capteur en filigrane, la valeur en clair.
  * L'API historique de HA est un GET (pattern des autres lectures d'historique
  * du fichier) : relecture au montage puis toutes les cinq minutes. */
-function CvHistory({ id, hass, demoPoints = null }) {
+function CvHistory({ id, hass, demoPoints = null, onOpen = null }) {
   // La bibliothèque injecte un historique FACTICE : le hook tourne quand
   // même (ordre des hooks), ses données sont simplement ignorées.
   const pointsReels = useHistorique24(hass, id);
@@ -11847,12 +12757,16 @@ function CvHistory({ id, hass, demoPoints = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
   const mort = !st || st.state === 'unavailable';
-  const cur = st ? parseFloat(st.state) : NaN;
+  // Une date, une heure (05/10, suite « dates partout ») : `texteDate`, sans
+  // courbe ni min/max — la carte d'un capteur daté traçait l'année, et
+  // l'écrivait en grand, « 2 026 ».
+  const date = mort ? null : texteDate(st);
+  const cur = st && date == null ? parseFloat(st.state) : NaN;
   // L'ÉNERGIE (kWh, compteur croissant) se raconte en BARRES par heure —
   // chaque barre est le delta du compteur sur l'heure. Le reste en courbe.
   const estEnergie = a.device_class === 'energy' || /Wh$/.test(a.unit_of_measurement || '');
   let chemin = '', aire = '', vmin = null, vmax = null, barres = null, totalJour = null;
-  if (Array.isArray(points) && points.length > 1) {
+  if (date == null && Array.isArray(points) && points.length > 1) {
     if (estEnergie) {
       const seaux = new Map();
       points.forEach(p => { const h = Math.floor(p.t / 3600000); const b = seaux.get(h) || { min: p.v, max: p.v }; b.min = Math.min(b.min, p.v); b.max = Math.max(b.max, p.v); seaux.set(h, b); });
@@ -11876,8 +12790,16 @@ function CvHistory({ id, hass, demoPoints = null }) {
     }
   }
   const bmax = barres && barres.length ? Math.max(...barres, 0.001) : 1;
+  const valeur = date != null ? date : isNaN(cur) ? '—' : decMax(cur, 1);
+  const unite = date != null ? '' : a.unit_of_measurement || '';
+  const nom = cvName(st, id);
   return (
-    <div className={'o-piece' + (mort ? ' o-panne' : '')} style={{ ...CV_CADRE, height: '100%', minHeight: 150, position: 'relative', overflow: 'hidden', opacity: mort ? .55 : 1 }}>
+    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */
+    <div className={'o-piece' + (mort ? ' o-panne' : '')} role={onOpen ? 'button' : undefined} tabIndex={onOpen ? 0 : undefined}
+      aria-label={onOpen ? nomCarte(nom, date == null && isNaN(cur) ? (mort ? tr('Indisponible') : null) : (unite ? valeur + ' ' + unite : valeur)) : undefined} aria-haspopup={onOpen ? 'dialog' : undefined}
+      onClick={onOpen ? () => onOpen(id) : undefined}
+      onKeyDown={onOpen ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(id); } } : undefined}
+      style={{ ...CV_CADRE, height: '100%', minHeight: 150, position: 'relative', overflow: 'hidden', opacity: mort ? .55 : 1, cursor: onOpen ? 'pointer' : undefined }}>
       {chemin && (
         <svg viewBox="0 0 100 40" preserveAspectRatio="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, width: '100%', height: '58%' }}>
           <path d={aire} fill="rgba(var(--o-accent-rgb),.10)" />
@@ -11892,12 +12814,12 @@ function CvHistory({ id, hass, demoPoints = null }) {
           ))}
         </div>
       )}
-      <div style={{ position: 'relative', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</div>
-      <div style={{ position: 'relative', fontSize: 25, fontWeight: 800, marginTop: 2 }}>{isNaN(cur) ? '—' : Math.round(cur * 10) / 10}<span style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)', marginLeft: 4 }}>{a.unit_of_measurement || ''}</span></div>
+      <div style={{ position: 'relative', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
+      <div style={{ position: 'relative', fontSize: 25, fontWeight: 800, marginTop: 2 }}>{valeur}<span style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)', marginLeft: 4 }}>{unite}</span></div>
       <div style={{ position: 'relative', marginTop: 'auto', fontSize: 11, fontWeight: 600, color: 'var(--o-text3)' }}>
-        {points === null ? tr('Chargement…') : points === 'erreur' ? tr('Historique indisponible pour le moment') : points.length < 2 ? tr("Pas d'historique sur 24 h")
-          : estEnergie ? tr('{n} sur 24 h', { n: Math.round(totalJour * 10) / 10 + ' ' + (a.unit_of_measurement || 'kWh') })
-            : (tr('min {a} · max {b}', { a: Math.round(vmin * 10) / 10, b: Math.round(vmax * 10) / 10 }))}
+        {date != null ? null : points === null ? tr('Chargement…') : points === 'erreur' ? tr('Historique indisponible pour le moment') : points.length < 2 ? tr("Pas d'historique sur 24 h")
+          : estEnergie ? tr('{n} sur 24 h', { n: decMax(totalJour, 1) + ' ' + (a.unit_of_measurement || 'kWh') })
+            : (tr('min {a} · max {b}', { a: decMax(vmin, 1), b: decMax(vmax, 1) }))}
       </div>
     </div>
   );
@@ -11975,7 +12897,7 @@ function CvAir({ hass }) {
           <div style={{ height: '100%', width: Math.min(100, (air.co2V || 0) / 20) + '%', background: col, borderRadius: 4, transition: 'width .3s' }} />
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          {tuile('COV', air.vocV != null ? air.vocV + ' ppb' : null)}
+          {tuile(tr('COV'), air.vocV != null ? air.vocV + ' ppb' : null)}
           {tuile('PM2.5', air.pmV != null ? air.pmV + ' µg' : null)}
           {tuile(tr('Humidité'), air.humV != null ? air.humV + ' %' : null)}
         </div>
@@ -12028,6 +12950,15 @@ function CvPresence({ hass, gens = null }) {
   const maison = liste.filter(p => p.home).length;
   const [ouvert, setOuvert] = useState(false);
   const ouvrable = liste.length > 0;
+  // Le compteur affiché en haut à droite, et lu dans le nom de la carte.
+  const compteur = maison + ' / ' + liste.length;
+  /* Relecture du lot 13 : un rôle bouton rend sa descendance
+   * présentationnelle — qui est là (« Alice · À la maison ») ne se lisait
+   * nulle part. Ces textes se lisent en DESCRIPTION, au focus : le nom et
+   * l'état de chaque ligne (pas l'avatar, dont les initiales se liraient),
+   * sinon la grille, dont chaque case porte déjà son nom. */
+  const did = useId();
+  const decrit = !ouvrable ? undefined : liste.length <= 3 ? liste.map(p => did + p.haid).join(' ') : did + '-g';
   const etat = (p) => p.home ? tr('À la maison') : tr('Absent');
   const avatar = (p, taille) => (
     <span aria-hidden="true" style={{ position: 'relative', width: taille, height: taille, flexShrink: 0 }}>
@@ -12036,17 +12967,20 @@ function CvPresence({ hass, gens = null }) {
     </span>
   );
   return (<>
-    {/* Ouvrable, la carte EST un bouton (rôle, tabulation, Entrée et Espace),
-      * comme une carte d'appareil ; vide, elle n'est rien de tout cela. */}
-    {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */}
-    <div className="o-piece o-carte-presence" role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : undefined} aria-label={ouvrable ? tr('Ouvrir') + ' ' + tr('Présence') : undefined}
+    {/* Ouvrable, la carte EST un bouton (rôle, tabulation, Entrée et Espace) :
+      * elle ne porte aucune commande. Vide, elle n'est rien de tout cela.
+      * Son nom est ce qu'elle affiche, « Présence, 1 / 2 », et elle dit
+      * ouvrir une feuille (lot 13 de l'audit du 03/10) : « Ouvrir Présence »
+      * taisait combien étaient là. */}
+    {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */}
+    <div className="o-piece o-carte-presence" role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : undefined} aria-label={ouvrable ? nomCarte(tr('Présence'), compteur) : undefined} aria-haspopup={ouvrable ? 'dialog' : undefined} aria-describedby={decrit}
       onClick={ouvrable ? () => setOuvert(true) : undefined}
       onKeyDown={ouvrable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOuvert(true); } } : undefined}
       style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden', cursor: ouvrable ? 'pointer' : 'default' }}>
       {/* Gabarit maison : icône hg, compteur hd, TITRE SOUS L'ICÔNE. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO(maison ? 'rgba(var(--o-ok-rgb),.14)' : 'var(--o-s1)', maison ? 'var(--o-ok)' : 'var(--o-text3)')}><Fi i="users" size={16} /></span>
-        {liste.length > 0 && <span style={{ fontSize: 11, fontWeight: 800, color: maison ? 'var(--o-ok)' : 'var(--o-text3)' }}>{maison + ' / ' + liste.length}</span>}
+        {liste.length > 0 && <span style={{ fontSize: 11, fontWeight: 800, color: maison ? 'var(--o-ok)' : 'var(--o-text3)' }}>{compteur}</span>}
       </div>
       <div style={{ marginTop: 8 }}>
         <div style={RM_NAME}>{tr('Présence')}</div>
@@ -12054,12 +12988,12 @@ function CvPresence({ hass, gens = null }) {
         {liste.length <= 3 && liste.map((p) => (
           <div key={p.haid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', marginTop: 2 }}>
             <span style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: p.img ? `url("${p.img}") center/cover` : 'var(--o-s1)', fontSize: 10, fontWeight: 800, color: p.home ? 'var(--o-text2)' : 'var(--o-text3)', opacity: p.home || !p.img ? 1 : .55 }}>{!p.img && p.name.slice(0, 2).toUpperCase()}</span>
-            <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<span className="o-presence-ou" style={{ fontWeight: 600, color: 'var(--o-text3)' }}> · {etat(p)}</span></span>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} id={did + p.haid}>{p.name}<span className="o-presence-ou" style={{ fontWeight: 600, color: 'var(--o-text3)' }}> · {etat(p)}</span></span>
             <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: p.home ? 'var(--o-ok)' : 'var(--o-text3)', boxShadow: p.home ? '0 0 6px rgba(var(--o-ok-rgb),.6)' : 'none' }} />
           </div>
         ))}
         {liste.length > 3 && (
-          <div className="o-presence-grille" role="list" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '4px 4px', marginTop: 2 }}>
+          <div className="o-presence-grille" id={did + '-g'} role="list" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '4px 4px', marginTop: 2 }}>
             {(liste.length > 8 ? liste.slice(0, 7) : liste).map((p) => (
               <div key={p.haid} role="listitem" title={p.name + ' · ' + etat(p)} aria-label={p.name + ' · ' + etat(p)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, minWidth: 0 }}>
                 {avatar(p, 26)}
@@ -12067,7 +13001,7 @@ function CvPresence({ hass, gens = null }) {
               </div>
             ))}
             {liste.length > 8 && (
-              <div role="listitem" title={trN(liste.length - 7, tr('{n} autre personne'), tr('{n} autres personnes'))} aria-label={trN(liste.length - 7, tr('{n} autre personne'), tr('{n} autres personnes'))} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, minWidth: 0 }}>
+              <div role="listitem" title={trN(liste.length - 7, '{n} autre personne', '{n} autres personnes')} aria-label={trN(liste.length - 7, '{n} autre personne', '{n} autres personnes')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, minWidth: 0 }}>
                 <span aria-hidden="true" style={{ width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', fontSize: 10.5, fontWeight: 800, color: 'var(--o-text2)' }}>{'+' + (liste.length - 7)}</span>
                 <span className="o-presence-nom" aria-hidden="true" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--o-text3)' }}>{'…'}</span>
               </div>
@@ -12093,7 +13027,7 @@ function CvOuvrants({ hass }) {
       {/* Gabarit maison : icône hg, verdict hd, TITRE SOUS L'ICÔNE. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO(ouverts ? 'rgba(var(--o-warn-rgb),.16)' : 'var(--o-s1)', ouverts ? 'var(--o-warn)' : 'var(--o-text3)')}><Fi i={ouverts ? 'door-open' : 'door-closed'} size={16} /></span>
-        <span style={{ fontSize: 11, fontWeight: 800, color: ouverts ? 'var(--o-warn)' : 'var(--o-ok)' }}>{os.length === 0 ? '—' : ouverts === 0 ? tr('Tout fermé') : ouverts > 1 ? tr('{n} ouverts', { n: ouverts }) : tr('{n} ouvert', { n: ouverts })}</span>
+        <span style={{ fontSize: 11, fontWeight: 800, color: ouverts ? 'var(--o-warn)' : 'var(--o-ok)' }}>{os.length === 0 ? '—' : ouverts === 0 ? tr('Tout fermé') : trN(ouverts, '{n} ouvert', '{n} ouverts')}</span>
       </div>
       <div style={{ marginTop: 10 }}>
         <div style={RM_NAME}>{tr('Ouvrants')}</div>
@@ -12114,11 +13048,23 @@ function CvOuvrants({ hass }) {
 function CvEnergie({ hass, roles = null }) {
   const S = (hass && hass.states) || {};
   const EN = roles || enHaids();
-  const lit = (id) => { const st = id && S[id]; const v = st ? parseFloat(st.state) : NaN; return isNaN(v) ? null : v; };
-  const sol = lit(EN.solarNow), grid = lit(EN.gridNow);
-  const maison = sol != null || grid != null ? Math.max(0, Math.round((sol || 0) + Math.max(0, grid || 0))) : null;
+  /* En watts et en kWh, quelle que soit l'unité du capteur (audit du 03/10) :
+   * un compteur P1/DSMR en kW s'affichait « 3 W », un compteur en Wh mille
+   * fois trop grand. `null` sans valeur lisible : la tuile ne paraît pas. */
+  const lit = (id, de) => (id && S[id] ? de(S[id]) : null);
+  const sol = lit(EN.solarNow, wattsDe), grid = lit(EN.gridNow, wattsDe);
+  /* Sans compteur réseau lisible, la consommation de la maison est inconnue
+   * (audit du 03/10) : `grid || 0` faisait du solaire seul TOUTE la maison,
+   * la pastille annonçait « Solaire 100 % » dès que le compteur se taisait,
+   * et la barre se peignait en réseau ; elle reste vide désormais. Un solaire
+   * muet compte pour rien, lui : un onduleur éteint la nuit ne produit pas.
+   * Le réseau garde son SIGNE (relecture du 03/10) : un compteur net passe
+   * sous zéro à l'export, et `Math.max(0, grid)` faisait de « solaire 3000 W,
+   * réseau −2000 W » une maison à 3000 W au lieu de 1000 — le double de
+   * l'export, quand la vue Énergie dit 1000. */
+  const maison = grid != null ? Math.max(0, Math.round((sol || 0) + grid)) : null;
   const part = maison && sol != null ? Math.round(Math.min(100, sol / maison * 100)) : null;
-  const jour = lit(EN.consoJour);
+  const jour = lit(EN.consoJour, kwhDe);
   const tuile = (l, v, c) => v != null && (
     <div style={{ flex: 1, minWidth: 0, padding: '5px 9px', borderRadius: 10, background: 'var(--o-s1)' }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--o-text3)' }}>{l}</div>
@@ -12137,12 +13083,12 @@ function CvEnergie({ hass, roles = null }) {
         <div style={{ fontSize: 19, fontWeight: 800, marginTop: 1 }}>{maison != null ? maison : '—'}<span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', marginLeft: 5 }}>W</span></div>
         <div style={{ display: 'flex', height: 5, borderRadius: 4, background: 'var(--o-bd1)', margin: '6px 0 7px', overflow: 'hidden' }}>
           <div style={{ width: (part || 0) + '%', background: 'var(--o-ok)', transition: 'width .3s' }} />
-          <div style={{ width: (100 - (part || 0)) + '%', background: 'var(--o-accent-fond)', opacity: .8, transition: 'width .3s' }} />
+          <div style={{ width: (maison != null ? 100 - (part || 0) : 0) + '%', background: 'var(--o-accent-fond)', opacity: .8, transition: 'width .3s' }} />
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {tuile(tr('Solaire'), sol != null ? Math.round(sol) + ' W' : null, 'var(--o-ok)')}
           {tuile(tr('Réseau'), grid != null ? Math.round(grid) + ' W' : null, 'var(--o-accent-soft)')}
-          {tuile(tr("Aujourd'hui"), jour != null ? Math.round(jour * 10) / 10 + ' kWh' : null)}
+          {tuile(tr("Aujourd'hui"), jour != null ? decMax(jour, 1) + ' kWh' : null)}
         </div>
       </div>
     </div>
@@ -12153,7 +13099,7 @@ function CvEnergie({ hass, roles = null }) {
 function ApplianceCard({ nom, etat, pct, restant, fin, conso, chip = false }) {
   if (chip) {
     return (
-      <div className="o-piece o-cvdense" style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'none', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))' }}>
+      <div className="o-piece o-cvdense" style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: LISERE, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))' }}>
         <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-purple-rgb),.16)', color: 'var(--o-purple)' }}><Fi i="soap" size={15} /></span>
           <div className="o-cvtxt" style={{ flex: 1, minWidth: 0 }}>
@@ -12258,7 +13204,9 @@ function FeuilleCalendrier({ hass, onClose }) {
     const d = new Date(ancre); d.setDate(1 - ((ancre.getDay() + 6) % 7)); d.setHours(0, 0, 0, 0); return d;
   }, [ancreMs]);
   const debutMs = debutGrille.getTime();
-  const finGrille = useMemo(() => new Date(debutMs + 42 * 864e5), [debutMs]);
+  // Compté sur le calendrier (agenda.js, `jourPlus`) : six semaines de 24 h
+  // finissaient à 23 h la veille dès que la grille passait l'heure d'hiver.
+  const finGrille = useMemo(() => jourPlus(new Date(debutMs), 42), [debutMs]);
   const finMs = finGrille.getTime();
   const plage = useMemo(() => ({ debut: debutGrille, fin: finGrille }), [debutMs, finMs]);
   const events = useAgenda(hass, actifs, plage, tick);
@@ -12267,6 +13215,16 @@ function FeuilleCalendrier({ hass, onClose }) {
    * s'afficherait pour ouvrir un formulaire condamne d'avance. Calcule a
    * chaque rendu — il y a une poignee d'agendas, pas un millier. */
   const calsEcrivables = tousCals.filter(k => peut(hass, k, 'creer_evenement'));
+  /* Le CHOIX des agendas reste aux administrateurs (03/10). Il ecrit
+   * `loggia_agendas` — quels calendriers la maison montre : de la
+   * configuration, pas de l'agencement — que `store.py` refuse a un compte
+   * Home Assistant ordinaire. Lui proposer les cases, c'etait lui servir un
+   * refus a chaque clic, et un choix qui revenait au rechargement : le geste
+   * se masque. La LECTURE reste a tous, il voit les agendas retenus
+   * (`actifs`). Seul un `false` explicite masque, comme dans la vue
+   * Systeme : sans compte connu, le serveur tranchera. Le critere est celui
+   * de tous les gestes masques (`compteOrdinaire`, state.js). */
+  const ordinaire = compteOrdinaire(hass);
 
   /* Supprimer.
    *
@@ -12287,7 +13245,6 @@ function FeuilleCalendrier({ hass, onClose }) {
     setConfirme(null); setErrListe(null); setTick(t => t + 1);
   };
 
-  const cleJour = (d) => d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
   const dateDe = (e) => new Date(e.start.dateTime || (e.start.date + 'T00:00:00'));
   const parJour = useMemo(() => {
     const m = new Map();
@@ -12295,7 +13252,7 @@ function FeuilleCalendrier({ hass, onClose }) {
     return m;
   }, [events]);
 
-  const jours = useMemo(() => Array.from({ length: 42 }, (_, i) => new Date(debutMs + i * 864e5)), [debutMs]);
+  const jours = useMemo(() => Array.from({ length: 42 }, (_, i) => jourPlus(new Date(debutMs), i)), [debutMs]);
   const duJour = parJour.get(cleJour(choisi)) || [];
   const moisAns = ancre.toLocaleDateString(locale(), { month: 'long', year: 'numeric' });
   const bougerMois = (n) => {
@@ -12324,14 +13281,14 @@ function FeuilleCalendrier({ hass, onClose }) {
     <BottomSheet onClose={onClose}>
       {() => (<>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-        <span style={{ flex: 1, fontSize: 17, fontWeight: 800, textTransform: 'capitalize', letterSpacing: '-.01em' }}>{moisAns}</span>
+        <NomFeuille><span style={{ flex: 1, fontSize: 17, fontWeight: 800, textTransform: 'capitalize', letterSpacing: '-.01em' }}>{moisAns}</span></NomFeuille>
         <button onClick={() => bougerMois(-1)} aria-label={tr('Mois précédent')} style={btnRond}><Fi i="angle-left" size={14} /></button>
         <button onClick={() => bougerMois(1)} aria-label={tr('Mois suivant')} style={btnRond}><Fi i="angle-right" size={14} /></button>
         {calsEcrivables.length > 0 && (
           <button onClick={() => { setNouveau(v => !v); setReglages(false); }} aria-label={tr('Nouvel événement')} aria-pressed={nouveau}
             style={{ ...btnRond, background: nouveau ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: nouveau ? '#fff' : 'var(--o-text1)' }}><Fi i="plus" size={14} /></button>
         )}
-        {tousCals.length > 1 && (
+        {!ordinaire && tousCals.length > 1 && (
           <button onClick={() => { setReglages(v => !v); setNouveau(false); }} aria-label={tr('Choisir les agendas')} aria-pressed={reglages}
             style={{ ...btnRond, background: reglages ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: reglages ? '#fff' : 'var(--o-text1)' }}><Fi i="settings-sliders" size={14} /></button>
         )}
@@ -12350,7 +13307,7 @@ function FeuilleCalendrier({ hass, onClose }) {
           onFait={() => { setEdition(null); setTick(t => t + 1); }} />
       )}
 
-      {reglages && (
+      {reglages && !ordinaire && (
         <div style={{ marginBottom: 14, padding: 12, borderRadius: 16, background: 'var(--o-s1)', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text1)', opacity: .78 }}>{tr('AGENDAS AFFICHÉS')}</div>
           {tousCals.map(k => {
@@ -12486,7 +13443,6 @@ function CvCalendrier({ id, hass, onOpen = null }) {
   // format standard — la référence « April 21 » respire mieux (retour 31/08).
   const lundi = new Date(auj); lundi.setHours(0, 0, 0, 0); lundi.setDate(auj.getDate() - ((auj.getDay() + 6) % 7));
   const semaine = Array.from({ length: 7 }, (_, i) => { const d = new Date(lundi); d.setDate(lundi.getDate() + i); return d; });
-  const cleJour = (d) => d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
   /* Combien d'evenements par jour, pas seulement s'il y en a : deux rendez-vous
    * ne se voient pas comme un seul. */
   const parJour = new Map();
@@ -12496,12 +13452,16 @@ function CvCalendrier({ id, hass, onOpen = null }) {
   }
   const mois = auj.toLocaleDateString(locale(), { month: 'long' });
   return (
-    /* Meme motif que la tuile ci-dessus : tout est conditionne par `onOpen`. */
+    /* Meme motif que la tuile ci-dessus : tout est conditionne par `onOpen`.
+     * La carte ne porte aucune commande : elle reste le bouton. Son nom est
+     * ce qu'elle affiche, le mois et le quantieme, et elle dit ouvrir une
+     * feuille (lot 13 de l'audit du 03/10) : son ancien nom, un geste,
+     * taisait la date qu'on lit. */
     /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex */
     <div className="o-piece" onClick={onOpen ? () => onOpen(id) : undefined} tabIndex={onOpen ? 0 : undefined}
       role={onOpen ? 'button' : undefined}
       onKeyDown={onOpen ? (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onOpen(id); } } : undefined}
-      aria-label={onOpen ? tr('Ouvrir le calendrier') : undefined}
+      aria-label={onOpen ? nomCarte(tr('Calendrier'), mois + ' ' + auj.getDate()) : undefined} aria-haspopup={onOpen ? 'dialog' : undefined}
       style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden', cursor: onOpen ? 'pointer' : undefined }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         {/* Le mois et le quantieme au MEME poids, l'un a gauche, l'autre a
@@ -12610,10 +13570,11 @@ function CvTyped({ x, hass, dc }) {
   // La chaîne nue EST la compacte : une ligne, le contrôle primaire, rien dessous.
   if (typeof x === 'string') return <CvCard id={x} hass={hass} onOpen={dc.ouvrir} dense />;
   const { t, id } = x;
-  // Les cartes capteur ouvrent la fiche 24 h au clic — elles n'ont aucun contrôle interne à protéger.
-  const ouvre = (comp) => String(id).split('.')[0] === 'sensor'
-    ? <div role="button" tabIndex={0} aria-label={tr('Ouvrir') + ' ' + id} onClick={() => dc.ouvrir(id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dc.ouvrir(id); } }} style={{ height: '100%', cursor: 'pointer' }}>{comp}</div>
-    : comp;
+  /* Les cartes capteur ouvrent la fiche 24 h au clic — elles n'ont aucun
+   * contrôle interne à protéger. Chacune est elle-même le bouton, nommée de ce
+   * qu'elle affiche (lot 13 de l'audit du 03/10) : l'enveloppe d'ici
+   * s'appelait « Ouvrir sensor.co2_sejour », l'identifiant épelé. */
+  const ouvreCapteur = String(id).split('.')[0] === 'sensor' ? dc.ouvrir : null;
   if (t === 'compacte') return <CvCard id={id} hass={hass} onOpen={dc.ouvrir} dense />;
   // La STANDARD : la carte riche des vues intégrées quand le domaine en a une
   // (volet à curseur, lumière au lavis, thermostat à consigne…) — la carte
@@ -12625,9 +13586,9 @@ function CvTyped({ x, hass, dc }) {
   if (t === 'ouvrants') return <CvOuvrants hass={hass} />;
   if (t === 'energiemaison') return <CvEnergie hass={hass} />;
   if (t === 'air') return <CvAir hass={hass} />;
-  if (t === 'chiffre') return ouvre(<CvBigSensor id={id} hass={hass} />);
-  if (t === 'jauge') return ouvre(<CvGauge id={id} hass={hass} />);
-  if (t === 'graph') return ouvre(<CvHistory id={id} hass={hass} />);
+  if (t === 'chiffre') return <CvBigSensor id={id} hass={hass} onOpen={ouvreCapteur} />;
+  if (t === 'jauge') return <CvGauge id={id} hass={hass} onOpen={ouvreCapteur} />;
+  if (t === 'graph') return <CvHistory id={id} hass={hass} onOpen={ouvreCapteur} />;
   if (t === 'gros') return <CvBigToggle id={id} hass={hass} />;
   if (t === 'personne') return <CvPerson id={id} hass={hass} />;
   if (t === 'meteo') return <CvWeather id={id} hass={hass} />;
@@ -12650,42 +13611,53 @@ function CvTyped({ x, hass, dc }) {
 const BIBLIO_ART = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%234c1d95%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%230ea5e9%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2296%22%20height%3D%2296%22%20fill%3D%22url(%23g)%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%2226%22%20fill%3D%22%23111827%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%225%22%20fill%3D%22%23f4f4f5%22%2F%3E%3C%2Fsvg%3E';
 /* Neuf personnes, pour voir la grille et le « +n » : presents et absents meles. */
 const FAMILLE_BIBLIO = ['Camille', 'Alex', 'Marie', 'Sam', 'Noa', 'Lou', 'Éli', 'Maé', 'Zoé'].map((name, i) => ({ name, haid: 'person.biblio' + (i === 0 ? '' : '_' + (i + 1)), img: null }));
+/* Les noms de la maison fictive passent par `tr()` (relecture du 03/10) : la
+ * Bibliothèque s'ouvre sur une vraie installation, pour tout le monde, et une
+ * page anglaise y lisait « Lampe salon », « Thermostat séjour », « Volet
+ * chambre ». Comme ceux de la démo (`etiquette`, demo.js), ces noms sont les
+ * NÔTRES, pas ceux qu'une maison a tapés ; les prénoms restent tels quels.
+ * Appelée au montage (`useState`), la fonction trouve le catalogue chargé.
+ * Trois noms rejoignent une clé qui existait : « Alarme maison » y était un
+ * geste de scénario (« Alarm home »), l'alarme s'appelle donc « Alarme »
+ * comme dans la démo ; « Import réseau » devient « Achat réseau » (« Grid
+ * import ») ; « Porte d’entrée » prend l'apostrophe courbe de sa clé.
+ * tests/biblio_langue.test.mjs refuse un nom écrit en clair. */
 function biblioStates() {
   const il_y_a = (min) => new Date(Date.now() - min * 60000).toISOString();
   const s = (state, attributes) => ({ state: String(state), attributes: attributes || {}, last_changed: il_y_a(12), last_updated: il_y_a(12) });
   return {
-    'light.biblio_rgb': s('on', { friendly_name: 'Lampe salon', brightness: 178, rgb_color: [255, 170, 60], supported_color_modes: ['rgb', 'color_temp'] }),
-    'light.biblio_simple': s('on', { friendly_name: 'Plafonnier couloir', supported_color_modes: ['onoff'] }),
-    'switch.biblio_prise': s('on', { friendly_name: 'Prise cafetière' }),
-    'climate.biblio': s('heat', { friendly_name: 'Thermostat séjour', current_temperature: 20.6, temperature: 21.5, hvac_action: 'heating', hvac_modes: ['off', 'heat', 'cool', 'auto'], preset_modes: ['eco', 'comfort', 'away'], preset_mode: 'comfort', min_temp: 7, max_temp: 30, target_temp_step: .5 }),
-    'cover.biblio': s('open', { friendly_name: 'Volet chambre', current_position: 65, supported_features: 15 }),
-    'media_player.biblio': s('playing', { friendly_name: 'Enceinte bureau', media_title: 'Clair de Lune', media_artist: 'Debussy', media_album_name: 'Suite bergamasque', volume_level: .4, supported_features: 20925, entity_picture: BIBLIO_ART }),
-    'vacuum.biblio': s('docked', { friendly_name: 'Aspirateur', battery_level: 87, supported_features: 4 | 8 | 16 | 512 | 8192, fan_speed: 'standard', fan_speed_list: ['quiet', 'standard', 'turbo'] }),
-    'lawn_mower.biblio': s('docked', { friendly_name: 'Tondeuse', battery_level: 64, supported_features: 1 | 2 | 4 }),
-    'sensor.biblio_temp': s(21.4, { friendly_name: 'Température séjour', unit_of_measurement: '°C', device_class: 'temperature' }),
-    'sensor.biblio_co2': s(640, { friendly_name: 'CO₂ séjour', unit_of_measurement: 'ppm', device_class: 'carbon_dioxide' }),
-    'sensor.biblio_puissance': s(1840, { friendly_name: 'Production solaire', unit_of_measurement: 'W', device_class: 'power', min: 0, max: 3000 }),
+    'light.biblio_rgb': s('on', { friendly_name: tr('Lampe salon'), brightness: 178, rgb_color: [255, 170, 60], supported_color_modes: ['rgb', 'color_temp'] }),
+    'light.biblio_simple': s('on', { friendly_name: tr('Plafonnier couloir'), supported_color_modes: ['onoff'] }),
+    'switch.biblio_prise': s('on', { friendly_name: tr('Prise cafetière') }),
+    'climate.biblio': s('heat', { friendly_name: tr('Thermostat séjour'), current_temperature: 20.6, temperature: 21.5, hvac_action: 'heating', hvac_modes: ['off', 'heat', 'cool', 'auto'], preset_modes: ['eco', 'comfort', 'away'], preset_mode: 'comfort', min_temp: 7, max_temp: 30, target_temp_step: .5 }),
+    'cover.biblio': s('open', { friendly_name: tr('Volet chambre'), current_position: 65, supported_features: 15 }),
+    'media_player.biblio': s('playing', { friendly_name: tr('Enceinte bureau'), media_title: 'Clair de Lune', media_artist: 'Debussy', media_album_name: 'Suite bergamasque', volume_level: .4, supported_features: 20925, entity_picture: BIBLIO_ART }),
+    'vacuum.biblio': s('docked', { friendly_name: tr('Aspirateur'), battery_level: 87, supported_features: 4 | 8 | 16 | 512 | 8192, fan_speed: 'standard', fan_speed_list: ['quiet', 'standard', 'turbo'] }),
+    'lawn_mower.biblio': s('docked', { friendly_name: tr('Tondeuse'), battery_level: 64, supported_features: 1 | 2 | 4 }),
+    'sensor.biblio_temp': s(21.4, { friendly_name: tr('Température séjour'), unit_of_measurement: '°C', device_class: 'temperature' }),
+    'sensor.biblio_co2': s(640, { friendly_name: tr('CO₂ séjour'), unit_of_measurement: 'ppm', device_class: 'carbon_dioxide' }),
+    'sensor.biblio_puissance': s(1840, { friendly_name: tr('Production solaire'), unit_of_measurement: 'W', device_class: 'power', min: 0, max: 3000 }),
     'person.biblio': s('home', { friendly_name: 'Camille' }),
-    'alarm_control_panel.biblio': s('disarmed', { friendly_name: 'Alarme maison' }),
-    'lock.biblio': s('locked', { friendly_name: 'Serrure entrée' }),
-    'valve.biblio': s('open', { friendly_name: 'Vanne arrosage' }),
-    'scene.biblio': s(il_y_a(95), { friendly_name: 'Scène cinéma' }),
-    'binary_sensor.biblio_porte': s('off', { friendly_name: "Porte d'entrée", device_class: 'door' }),
+    'alarm_control_panel.biblio': s('disarmed', { friendly_name: tr('Alarme') }),
+    'lock.biblio': s('locked', { friendly_name: tr('Serrure entrée') }),
+    'valve.biblio': s('open', { friendly_name: tr('Vanne arrosage') }),
+    'scene.biblio': s(il_y_a(95), { friendly_name: tr('Scène cinéma') }),
+    'binary_sensor.biblio_porte': s('off', { friendly_name: tr('Porte d’entrée'), device_class: 'door' }),
     // Agrégats : de quoi nourrir Présence, Ouvrants, Qualité d'air, Énergie.
     'person.biblio_2': s('not_home', { friendly_name: 'Alex' }),
-    'binary_sensor.biblio_fenetre': s('off', { friendly_name: 'Fenêtre chambre', device_class: 'window' }),
-    'binary_sensor.biblio_garage': s('on', { friendly_name: 'Garage', device_class: 'garage_door' }),
-    'sensor.biblio_voc': s(78, { friendly_name: 'COV bureau', unit_of_measurement: 'ppb', device_class: 'volatile_organic_compounds' }),
-    'sensor.biblio_pm25': s(6, { friendly_name: 'PM2.5 bureau', unit_of_measurement: 'µg/m³', device_class: 'pm25' }),
-    'sensor.biblio_hum': s(47, { friendly_name: 'Humidité séjour', unit_of_measurement: '%', device_class: 'humidity' }),
-    'sensor.biblio_solaire': s(486, { friendly_name: 'Production solaire', unit_of_measurement: 'W', device_class: 'power' }),
-    'sensor.biblio_reseau': s(298, { friendly_name: 'Import réseau', unit_of_measurement: 'W', device_class: 'power' }),
-    'sensor.biblio_conso_jour': s(7.4, { friendly_name: 'Conso du jour', unit_of_measurement: 'kWh', device_class: 'energy' }),
-    'camera.biblio_entree': s('idle', { friendly_name: 'Caméra entrée' }),
-    'camera.biblio_jardin': s('idle', { friendly_name: 'Caméra jardin' }),
-    'binary_sensor.biblio_mouvement': s('on', { friendly_name: 'Mouvement couloir', device_class: 'motion' }),
-    'calendar.biblio': s('off', { friendly_name: 'Maison' }),
-    'zone.home': s('1', { friendly_name: 'Maison', latitude: 46.98, longitude: 1.92, radius: 100 }),
+    'binary_sensor.biblio_fenetre': s('off', { friendly_name: tr('Fenêtre chambre'), device_class: 'window' }),
+    'binary_sensor.biblio_garage': s('on', { friendly_name: tr('Garage'), device_class: 'garage_door' }),
+    'sensor.biblio_voc': s(78, { friendly_name: tr('COV bureau'), unit_of_measurement: 'ppb', device_class: 'volatile_organic_compounds' }),
+    'sensor.biblio_pm25': s(6, { friendly_name: tr('PM2.5 bureau'), unit_of_measurement: 'µg/m³', device_class: 'pm25' }),
+    'sensor.biblio_hum': s(47, { friendly_name: tr('Humidité séjour'), unit_of_measurement: '%', device_class: 'humidity' }),
+    'sensor.biblio_solaire': s(486, { friendly_name: tr('Production solaire'), unit_of_measurement: 'W', device_class: 'power' }),
+    'sensor.biblio_reseau': s(298, { friendly_name: tr('Achat réseau'), unit_of_measurement: 'W', device_class: 'power' }),
+    'sensor.biblio_conso_jour': s(7.4, { friendly_name: tr('Conso du jour'), unit_of_measurement: 'kWh', device_class: 'energy' }),
+    'camera.biblio_entree': s('idle', { friendly_name: tr('Caméra entrée') }),
+    'camera.biblio_jardin': s('idle', { friendly_name: tr('Caméra jardin') }),
+    'binary_sensor.biblio_mouvement': s('on', { friendly_name: tr('Mouvement couloir'), device_class: 'motion' }),
+    'calendar.biblio': s('off', { friendly_name: tr('Maison') }),
+    'zone.home': s('1', { friendly_name: tr('Maison'), latitude: 46.98, longitude: 1.92, radius: 100 }),
     'person.biblio_3': s('not_home', { friendly_name: 'Marie', latitude: 47.06, longitude: 2.05 }),
     /* Une maisonnee de neuf, pour voir la grille et son « +n » (ADR 0088).
      * Presents et absents meles : c'est l'avatar estompe qui doit se lire. */
@@ -12697,23 +13669,28 @@ function biblioStates() {
     'person.biblio_9': s('not_home', { friendly_name: 'Zoé' }),
     'person.biblio_10': s('home', { friendly_name: 'Tom' }),
     'person.biblio_11': s('not_home', { friendly_name: 'Ana' }),
-    'sensor.biblio_energie_hist': s(7.4, { friendly_name: 'Énergie maison', unit_of_measurement: 'kWh', device_class: 'energy' }),
+    'sensor.biblio_energie_hist': s(7.4, { friendly_name: tr('Énergie maison'), unit_of_measurement: 'kWh', device_class: 'energy' }),
     // Arrivees le 20/09, pour les familles que la bibliotheque ne montrait pas
     // encore : la sirene (retour du 16/09), la meteo (le ciel se fond dans le
     // theme depuis l'ADR 0059) et le soleil, qui dit s'il fait nuit.
-    'siren.biblio': s('off', { friendly_name: 'Sirène intérieure' }),
-    'weather.biblio': s('partlycloudy', { friendly_name: 'Maison', temperature: 18.2, humidity: 62, temperature_unit: '°C' }),
-    'sun.sun': s('above_horizon', { friendly_name: 'Soleil' }),
+    'siren.biblio': s('off', { friendly_name: tr('Sirène intérieure') }),
+    'weather.biblio': s('partlycloudy', { friendly_name: tr('Maison'), temperature: 18.2, humidity: 62, temperature_unit: '°C' }),
+    // Sans nom (relecture du 03/10) : `sun.sun` ne sert qu'à dire s'il fait
+    // nuit, rien ne l'affiche, et « Soleil » est au catalogue un temps qu'il
+    // fait (« Sunny »).
+    'sun.sun': s('above_horizon'),
   };
 }
 /* Un scenario fictif, pour la carte des Scenarios : deux actions, lance il y a
  * un moment — de quoi remplir le resume et le repere sans rien inventer. */
 const SCN_BIBLIO = () => ({
-  id: 'biblio-cinema', nom: 'Cinéma', icone: 'film', teinte: 'chambre',
+  // Son nom et la pièce de son action s'affichent (« Lumières à 20 % ·
+  // Séjour ») : dans la langue de l'écran (relecture du 03/10).
+  id: 'biblio-cinema', nom: tr('Cinéma'), icone: 'film', teinte: 'chambre',
   // `dernier` se compte en SECONDES, comme le serveur le donne.
   dernier: Math.round(Date.now() / 1000) - 95 * 60,
   actions: [
-    { famille: 'lumieres', geste: 'niveau', valeur: 20, portee: 'piece', piece: 'Séjour' },
+    { famille: 'lumieres', geste: 'niveau', valeur: 20, portee: 'piece', piece: tr('Séjour') },
     { famille: 'volets', geste: 'fermer', portee: 'vie' },
     { famille: 'medias', geste: 'tv' },
   ],
@@ -12724,8 +13701,9 @@ function BiblioView() {
   const [S] = useState(biblioStates);
   const hb = useMemo(() => ({ states: S, connected: true, callService: () => {}, callApi: () => Promise.resolve([]), callWS: () => Promise.resolve(null) }), [S]);
   const dc = useDomainCards(hb);
+  // Son nom s'affiche sur la carte : traduit (relecture du 03/10).
   const pieceDemo = {
-    name: 'Séjour', bg: 'rgba(96,165,250,.16)', tc: '#60a5fa',
+    name: tr('Séjour'), bg: 'rgba(96,165,250,.16)', tc: '#60a5fa',
     icon: <Fi i="home" color="#60a5fa" size={17} />, box: 44, rad: 13,
     live: { temp: 21.4, hum: 47 }, status: { kind: 'repos' }, badge: '612 ppm', bc: 'var(--o-ok)', bbg: 'rgba(var(--o-ok-rgb),.14)',
   };
@@ -12809,7 +13787,7 @@ function BiblioView() {
       <Titre i="clock" c="var(--o-accent-soft)" t={tr('Widgets du rail')} />
       <Rangee>
         <Item l={tr('Heure')} w={280} h={200}><HorlogeRail hass={hb} /></Item>
-        <Item l={tr('CO₂')} w={280} h={200}><Co2Rail hass={hb} capteur={{ id: 'sensor.biblio_co2', nom: 'CO₂ séjour', piece: 'Séjour', valeur: 640 }} seuil={1400} /></Item>
+        <Item l={tr('CO₂')} w={280} h={200}><Co2Rail hass={hb} capteur={{ id: 'sensor.biblio_co2', nom: tr('CO₂ séjour'), piece: tr('Séjour'), valeur: 640 }} seuil={1400} /></Item>
       </Rangee>
 
       <Titre i="apps" c="var(--o-accent-soft)" t={tr('Cartes maison (agrégats)')} />
@@ -12835,8 +13813,10 @@ function BiblioView() {
 
       <Titre i="soap" c="var(--o-purple)" t={tr('Électroménager')} />
       <Rangee>
-        <Item l={tr('Compacte')} h={88}><ApplianceCard chip nom={tr('Lave-linge')} etat={tr('Essorage')} restant="34 min" /></Item>
-        <Item l={tr('Standard')} w={280}><ApplianceCard nom={tr('Lave-linge')} etat={tr('Coton 40° · essorage')} pct={72} restant="34 min" fin="13:38" conso="0,6 kWh" /></Item>
+        {/* La consommation passe par `dec` (relecture du 03/10) : « 0,6 kWh »
+          * écrit d'avance gardait sa virgule sur une page anglaise. */}
+        <Item l={tr('Compacte')} h={88}><ApplianceCard chip nom={tr('Lave-linge')} etat={tr('Essorage')} restant={tr('{n} min', { n: 34 })} /></Item>
+        <Item l={tr('Standard')} w={280}><ApplianceCard nom={tr('Lave-linge')} etat={tr('Coton 40° · essorage')} pct={72} restant={tr('{n} min', { n: 34 })} fin="13:38" conso={dec(0.6, 1) + ' kWh'} /></Item>
       </Rangee>
 
       <Titre i="shield-check" c="var(--o-ok)" t={tr('Sécurité et divers')} />
@@ -12867,8 +13847,11 @@ function BiblioView() {
       <Rangee>
         <Item l={tr('Points d’attention')} w={420} h="auto">
           <CarteAttention points={[
-            { cle: 'biblio-garage', niveau: 'alerte', icone: 'garage-open', titre: tr('Garage ouvert'), sous: 'Garage · 1 h 49' },
-            { cle: 'biblio-co2', niveau: 'info', icone: 'wind', titre: tr('CO₂ élevé'), sous: 'Séjour · 1480 ppm' },
+            /* Un nom, un point médian, une mesure, comme `pointsAttention`
+             * (attention.js) — dans la langue de l'écran, pas en français
+             * écrit d'avance (relecture du 03/10). */
+            { cle: 'biblio-garage', niveau: 'alerte', icone: 'garage-open', titre: tr('Garage ouvert'), sous: tr('Garage') + ' · ' + tr('{h} h {m}', { h: 1, m: 49 }) },
+            { cle: 'biblio-co2', niveau: 'info', icone: 'wind', titre: tr('CO₂ élevé'), sous: tr('Séjour') + ' · ' + tr('{v} ppm', { v: 1480 }) },
           ]} />
         </Item>
       </Rangee>
@@ -12966,16 +13949,40 @@ const CV_GALERIE = () => [
 /* Un APERÇU de carte, au vrai gabarit (88 ou 184) et inerte : on regarde,
  * on ne pilote pas. Les vignettes de la galerie tournent sur les états
  * fictifs de la bibliothèque, celles d'une entité choisie sur ses vraies
- * données — ce qu'on voit est ce qu'on posera. */
+ * données — ce qu'on voit est ce qu'on posera.
+ *
+ * Choisi, l'aperçu n'est PAS une puce (lot 15 de l’audit du 03/10) : le
+ * bleu plein recouvrirait la carte qu'il montre. Il garde un cadre teinté,
+ * un filet d'accent et `aria-pressed`. */
 function CarteApercu({ x, hass, dc, lbl, actif = false, onClick }) {
   const h = cvRowsDe(x) === 1 ? 88 : 184;
   return (
-    <button onClick={onClick} aria-pressed={actif} style={{ display: 'block', width: '100%', textAlign: 'left', padding: 8, borderRadius: 14, cursor: 'pointer', background: actif ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', border: '1px solid ' + (actif ? 'var(--o-accent-fond)' : 'var(--o-bd2)') }}>
+    <div className="o-apercu" style={{ position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center', width: '100%', textAlign: 'left', padding: 8, borderRadius: 14, cursor: 'pointer', background: actif ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', border: '1px solid ' + (actif ? 'var(--o-accent-fond)' : 'var(--o-bd2)') }}>
       <span style={{ display: 'block', fontSize: 11, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', color: actif ? 'var(--o-accent-soft)' : 'var(--o-text3)', margin: '0 2px 7px' }}>{lbl}</span>
-      <span className="o-cvfit" style={{ display: 'block', height: h, pointerEvents: 'none', overflow: 'hidden', borderRadius: 'var(--o-radius,18px)' }}>
-        <CvTyped x={x} hass={hass} dc={dc} />
+      {/* L'aperçu est INERTE aussi au clavier et au lecteur d'écran (lot 13 de
+        * l'audit du 03/10) : ses interrupteurs, curseurs et cartes-boutons se
+        * tabulaient DANS ce bouton, et leurs noms s'ajoutaient au sien. Le
+        * nom du choix est son libellé. `inert` en chaîne vide, comme le menu
+        * latéral : React 18 ne le connaît pas comme booléen.
+        *
+        * Et le choix n'ENGLOBE plus l'aperçu (relecture du lot 13, 04/10) :
+        * `ouvrir: null` n'y suffisait pas. La carte riche (`dc.card`) ferme
+        * sur son propre `ouvrir` et pose sa surface ; la chip, la caméra
+        * (« Agrandir »), l'alarme (ses modes), le volet, le thermostat ou le
+        * lecteur gardent leurs boutons — autant de <button> dans ce <button>,
+        * du HTML invalide que React signalait. Le geste passe par une
+        * `Surface` SŒUR, posée AVANT l'aperçu : une feuille donne son premier
+        * focus à son premier bouton, et un bouton inerte le refuse. Elle prend
+        * aussi le filet de 1 px (`inset: -1`), comme le bouton d'avant ;
+        * l'aperçu inerte laisse passer le clic jusqu'à elle. La racine centre
+        * sa colonne, comme le bouton : un aperçu de 88 px qu'un voisin de 184
+        * étire reste au milieu. `ouvrir: null` reste : une carte qui l'honore
+        * n'y pose pas une surface de plus. */}
+      <Surface popup={false} onClick={onClick} label={lbl} aria-pressed={actif} style={{ inset: -1 }} />
+      <span className="o-cvfit" inert="" style={{ display: 'block', height: h, pointerEvents: 'none', overflow: 'hidden', borderRadius: 'var(--o-radius,18px)' }}>
+        <CvTyped x={x} hass={hass} dc={{ ...dc, ouvrir: null }} />
       </span>
-    </button>
+    </div>
   );
 }
 
@@ -12991,7 +13998,7 @@ function ChipsEditSheet({ x, hass, onClose, onSave }) {
     <BottomSheet onClose={onClose}>
       {() => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 19, fontWeight: 700 }}>{tr('Composer les pastilles')}</span>
+          <NomFeuille><span style={{ flex: 1, minWidth: 0, fontSize: 19, fontWeight: 700 }}>{tr('Composer les pastilles')}</span></NomFeuille>
           <CroixFeuille />
         </div>
         {ids.length === 0
@@ -13038,7 +14045,7 @@ function CarteAjoutSheet({ hass, onClose, onPose, remplace = null }) {
     <BottomSheet onClose={onClose} onglets>
       {close => (<>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 19, fontWeight: 700 }}>{remplace ? tr('Changer la carte') : tr('Ajouter une carte')}</span>
+          <NomFeuille><span style={{ flex: 1, minWidth: 0, fontSize: 19, fontWeight: 700 }}>{remplace ? tr('Changer la carte') : tr('Ajouter une carte')}</span></NomFeuille>
           <CroixFeuille />
         </div>
         {carteAttente ? (<>
@@ -13088,12 +14095,29 @@ function CarteAjoutSheet({ hass, onClose, onPose, remplace = null }) {
   );
 }
 
+/* Le nom LU d'une carte de vue personnalisée, et d'un favori de l'Accueil
+ * qui en a le format. C'était le `nomCarte` local de CustomView (son
+ * histoire y reste) ; sorti tel quel en fonction de module à la relecture du
+ * lot 13 de l'audit du 03/10, pour que la barre d'outils des favoris nomme
+ * aussi la carte qu'elle touche — sans une copie qui divergerait. */
+function nomCv(x, hass) {
+  if (cvEstTpl(x)) return x.name || tr('Carte template');
+  const id = cvId(x) || cvKey(x);
+  const type = CV_TYPE_NOMS()[cvTypeDe(x)];
+  if (String(id).indexOf('.') < 0) return type || id;
+  const nom = cvName(hass && hass.states && hass.states[id], id);
+  return cvTypeDe(x) === 'compacte' || !type ? nom : nom + ', ' + type;
+}
+
 function CustomView({ cv, hass, edit = false, onSave }) {
   /* Le nom qu'on LIT d'une carte : son entite nommee, ou le titre d'un
    * template. La cle (`light.salon`, `graph:sensor.x`) est un identifiant, et
    * un lecteur d'ecran l'epelait (audit du 23/09). */
-  const nomCarte = (x) => (cvEstTpl(x) ? (x.name || tr('Carte template'))
-    : cvName(hass && hass.states && hass.states[cvId(x)], cvId(x) || cvKey(x)));
+  /* Lot 13 de l'audit du 03/10 : une carte SANS entité (présence, horloge,
+   * ouvrants…) se nomme par sa carte — sa clé, `presence:1791…`, s'épelait
+   * encore ; et deux cartes d'une même entité (la compacte et le graphique)
+   * ne portent plus le même nom : le type suit le nom, sauf la compacte. */
+  const nomCarte = (x) => nomCv(x, hass);
   // Mode édition en place : la CARTE ENTIÈRE se saisit et se déplace (ses
   // contrôles sont inertes pendant l'édition), la barre d'outils de la carte
   // porte le changement de dessin, la largeur et le retrait. Tuile
@@ -13125,7 +14149,8 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   const dragDebut = useRef(null);
   const debutDrag = (e, x) => {
     if (!edit) return;
-    if (e.target.closest && e.target.closest('button')) return; // ×, coin
+    // ×, coin — mais pas la surface : c'est elle qu'on saisit (lot 13).
+    if (e.target.closest && e.target.closest('button:not(.o-surface)')) return;
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
     if (e.pointerType === 'touch') {
       dragDebut.current = { x: e.clientX, y: e.clientY, cle: cvKey(x) };
@@ -13202,45 +14227,59 @@ function CustomView({ cv, hass, edit = false, onSave }) {
               </div>
             : <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 12 }}>
                 {edit
-                  ? <button onClick={() => setRenaming(true)} aria-label={tr('Renommer la vue')}
+                  ? <button onClick={() => setRenaming(true)} aria-label={tr('Renommer la vue') + ' ' + cv.name /* le nom AFFICHÉ reste dans le nom lu (lot 13 de l'audit du 03/10, WCAG 2.5.3) */}
                       style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 12 }}>
                       {cv.name}<Fi i="pencil" size={16} color="var(--o-text3)" />
                     </button>
                   : cv.name}
               </h1>}
-          <div style={{ fontSize: 14, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{cv.ents.length > 1 ? tr('{n} entités', { n: cv.ents.length }) : tr('{n} entité', { n: cv.ents.length })}</div>
+          <div style={{ fontSize: 14, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{trN(cv.ents.length, '{n} entité', '{n} entités')}</div>
         </div>
         {/* Grille DENSE : chaque carte déclare sa hauteur en rangées (.grid-custom
           * pose l'auto-flow dense et l'unité de rangée) — les trous se comblent. */}
-        <div ref={grilleRef} className="grid-custom" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 16 }}>
+        <div ref={grilleRef} className="grid-custom" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', columnGap: 16, rowGap: 8 }}>
           {liste.map((x) => {
             const saisie = dragCle === cvKey(x);
             return (
-            /* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-static-element-interactions -- même geste que les sections : en édition la carte se saisit et se déplace aux flèches, et porte son nom. */
-            <div key={cvKey(x)} data-cvk={cvKey(x)} className={cvW(x) === 2 ? 'o-cvw2' : undefined} tabIndex={edit ? 0 : undefined}
-              role={edit ? 'button' : undefined}
-              aria-label={edit ? nomCarte(x) + ' · ' + tr('Déplacer avec les flèches') : undefined}
-              onKeyDown={edit ? (e) => clavierCv(e, x) : undefined}
+            /* Le doigt et la souris saisissent la carte entière ; le clavier, lui,
+             * passe par sa surface (lot 13 de l'audit du 03/10). */
+            <div key={cvKey(x)} data-cvk={cvKey(x)} className={[cvW(x) === 2 ? 'o-cvw2' : '', edit ? 'o-pointille' : '', saisie ? 'o-saisie' : ''].filter(Boolean).join(' ') || undefined}
               onPointerDown={edit ? (e) => debutDrag(e, x) : undefined}
               onPointerMove={edit ? mouvDrag : undefined}
               onPointerUp={edit ? finDrag : undefined}
               onPointerCancel={edit ? finDrag : undefined}
               style={{ position: 'relative', minWidth: 0, gridRow: 'span ' + cvRowsDe(x),
               opacity: saisie ? .55 : 1, transform: saisie ? 'scale(.97)' : 'none', transition: 'opacity .15s, transform .15s',
-              ...(edit ? { outline: saisie ? '2px solid var(--o-accent)' : '1px dashed rgba(var(--o-accent-rgb),.5)', outlineOffset: 3, borderRadius: 'var(--o-radius,18px)', cursor: 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' } : {}) }}>
-              {/* En édition, la carte est INERTE : la saisir la déplace, ses contrôles ne s'actionnent pas. */}
-              <div className="o-cvfit" style={{ height: '100%', pointerEvents: edit ? 'none' : 'auto' }}>
+              /* Le pointillé et le trait plein de la carte saisie passent par
+               * les classes `o-pointille` et `o-saisie` (index.css) : en ligne,
+               * ils cachaient le focus au clavier (audit du 03/10). */
+              ...(edit ? { '--o-pointille': '.5', borderRadius: 'var(--o-radius,18px)', cursor: 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' } : {}) }}>
+              {/* En édition, la carte est INERTE : la saisir la déplace, ses
+                * contrôles ne s'actionnent pas — ni au doigt (`pointerEvents`),
+                * ni au clavier ni au lecteur d'écran (`inert`, lot 13 de l'audit
+                * du 03/10 : ils se tabulaient encore, cachés dans la carte). */}
+              <div className="o-cvfit" inert={edit ? '' : undefined} style={{ height: '100%', pointerEvents: edit ? 'none' : 'auto' }}>
                 <CvTyped x={x} hass={hass} dc={dc} />
               </div>
+              {/* La poignée du clavier (lot 13 de l'audit du 03/10) : la carte
+                * entière était un `role="button"` qui englobait sa barre
+                * d'outils et ses commandes (`nested-interactive`). C'est une
+                * SURFACE désormais, sœur de la barre : focus, nom et flèches
+                * (ADR 0068). Posée APRÈS la carte : la carte est positionnée,
+                * elle couvrirait son anneau de focus ; la barre (z-index 6)
+                * reste au-dessus d'elle. Le pointeur la saisit comme avant :
+                * `debutDrag` ne l'écarte pas avec les boutons. */}
+              {edit && <Surface popup={false} label={nomCarte(x) + ' · ' + tr('Déplacer avec les flèches')} onKeyDown={(e) => clavierCv(e, x)} style={{ cursor: 'grab' }} />}
               {edit && (
                 <EditBarre>
                   {/* Le crayon change le DESSIN d'une carte posée — il fallait
                     * la retirer et la reposer (retour 01/09). Un template garde
-                    * son propre éditeur. */}
-                  <button onClick={() => (cvEstTpl(x) ? setTplEdit(x) : cvTypeDe(x) === 'chips' ? setChipsEdit(x) : setRetype(x))} title={cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')} style={EDIT_BTN}><Fi i="pencil" size={11} /></button>
-                  <button onClick={() => basculerW(x)} title={cvW(x) === 2 ? tr('Largeur simple') : tr('Largeur double')} aria-pressed={cvW(x) === 2}
+                    * son propre éditeur. Chaque outil nomme la carte qu'il
+                    * touche (lot 13 de l'audit du 03/10). */}
+                  <button onClick={() => (cvEstTpl(x) ? setTplEdit(x) : cvTypeDe(x) === 'chips' ? setChipsEdit(x) : setRetype(x))} title={cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')} aria-label={(cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')) + ' · ' + nomCarte(x)} style={EDIT_BTN}><Fi i="pencil" size={11} /></button>
+                  <button onClick={() => basculerW(x)} title={cvW(x) === 2 ? tr('Largeur simple') : tr('Largeur double')} aria-label={tr('Largeur double') + ' · ' + nomCarte(x)} aria-pressed={cvW(x) === 2}
                     style={{ ...EDIT_BTN, ...(cvW(x) === 2 ? { background: 'var(--o-accent-fond)', color: '#fff' } : {}) }}><Fi i="arrows-h" size={11} /></button>
-                  <button onClick={() => setEnts(cv.ents.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
+                  <button onClick={() => setEnts(cv.ents.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} aria-label={tr('Retirer') + ' · ' + nomCarte(x)} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
                 </EditBarre>
               )}
             </div>
@@ -13296,13 +14335,27 @@ const sigHash = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 
 function useHass(keys, noisyKeys) {
   const [, force] = useState(0);
   const ref = useRef(null);
+  /* Lu DÈS le premier rendu (lot 14 de l'audit du 03/10). La référence ne se
+   * remplissait qu'au premier tic, dans l'effet, donc APRÈS le premier dessin :
+   * l'écran naissait sans `hass` alors que Home Assistant l'avait déjà —
+   * « HORS LIGNE », les pièces d'exemple et leurs squelettes, puis le rail qui
+   * se remplissait et toute la page qui sautait (0,24 des 0,27 de CLS mesurés
+   * sur la démo à 1440 px). Tant que `hass` manque, chaque rendu le
+   * redemande ; le tic garde la main. */
+  if (ref.current === null) ref.current = getHass();
   const keysSig = keys.join(',');
   const noisySig = noisyKeys ? noisyKeys.join(',') : '';
   useEffect(() => {
     const noisy = noisyKeys && noisyKeys.length ? {} : null;
     if (noisy) for (const k of noisyKeys) noisy[k] = 1;
-    const prefixes = keys.filter(k => k.charAt(k.length - 1) === '.'); // clés-préfixes (ex: 'automation.')
-    const plain = keys.filter(k => k.charAt(k.length - 1) !== '.');
+    /* Seules les chaînes non vides sont des clés (05/10, suite du point 10b) :
+     * un nombre, un objet ou `null` venu d'une configuration abîmée (import
+     * retouché, ancienne version) levait ici, dans un effet — React démontait
+     * alors TOUT l'écran, Paramètres compris, d'où l'on répare. Une garde ici
+     * plutôt qu'une par source : les clés viennent d'une trentaine de lecteurs. */
+    const cles = keys.filter(k => typeof k === 'string' && k !== '');
+    const prefixes = cles.filter(k => k.charAt(k.length - 1) === '.'); // clés-préfixes (ex: 'automation.')
+    const plain = cles.filter(k => k.charAt(k.length - 1) !== '.');
     let prev = '';
     const tick = () => { try {
       const hass = getHass();
@@ -13312,7 +14365,9 @@ function useHass(keys, noisyKeys) {
         const parts = plain.map(k => {
           const s = hass.states[k];
           if (!s) return k + ':-';
-          if (noisy && noisy[k]) { const n = parseFloat(s.state); return k + ':' + (isNaN(n) ? s.state : Math.round(n / 10) * 10); }
+          // En watts (audit du 03/10) : arrondi à 10 tel quel, un capteur en kW
+          // (2,75) restait « 0 » sous 5 kW, et l'écran ne se redessinait plus.
+          if (noisy && noisy[k]) { const n = wattsDe(s); return k + ':' + (n == null ? s.state : Math.round(n / 10) * 10); }
           // last_updated bouge aussi sur mise à jour d'attributs seuls (brightness, media_title, température météo…)
           return k + ':' + s.state + (s.last_updated || '');
         });
@@ -13370,7 +14425,7 @@ function peopleList() {
   const S = (getHass() || {}).states || null;
   const raw = cfgVal('loggia_people', null);
   const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.people;
-  const list = (Array.isArray(raw) && raw.length) ? raw.filter(p => p && p.haid && (!S || S[p.haid]))
+  const list = (Array.isArray(raw) && raw.length) ? raw.filter(p => p && typeof p.haid === 'string' && p.haid && (!S || S[p.haid]))
     : (r && r.available && r.list.length) ? r.list
       : [];
   return list.map(p => ({
@@ -13428,7 +14483,9 @@ const matchHaUser = (haUser, list) => {
 };
 /* Le palier de qualite d'air de la banniere et du badge d'une piece, sur les
  * bornes de la table de confort (confort.js, captures du 19/09) : 0 bon
- * (< 1150 ppm : excellent ou bon), 1 moyen (< 1400), 2 eleve. */
+ * (< 1150 ppm : excellent ou bon), 1 moyen (< 1400), 2 eleve. Le mot sort
+ * TRADUIT, l'appelant ne le repasse pas par `tr` ; il dit une qualite
+ * (« POOR », « MALA »), pas le niveau du CO2 (05/10, comme confort.js). */
 function airPalier(co2) { return co2 == null || co2 < 1150 ? 0 : co2 < 1400 ? 1 : 2; }
 function airLabel(co2) { return [tr('BON'), tr('MOYEN'), tr('ÉLEVÉ')][airPalier(co2)]; }
 /* Le badge CO₂ d'une pièce : discret tant que l'air est bon ou moyen, ambre
@@ -13449,18 +14506,29 @@ function deriveAccueil(hass, cfg, resolved) {
   const E = cfg.energy || {};
   // ⚠️ E.consoNow = flux NET du compteur : positif = import, négatif = export.
   //    Quand E.surplusNow n'existe pas, l'export vient de la partie négative du net.
-  const solarW = num(E.solarOutput), netW = num(E.consoNow), surplusRaw = num(E.surplusNow);
+  /* Les puissances en WATTS, quelle que soit l'unité du capteur (audit du
+   * 03/10) : un compteur P1/DSMR en kW donnait « ↓ 1 W » au bandeau, et les
+   * seuils « > 5 W » ci-dessous ne se franchissaient jamais. */
+  const numW = (id) => (id && S[id] ? wattsDe(S[id]) : null);
+  const solarW = numW(E.solarOutput), netW = numW(E.consoNow), surplusRaw = numW(E.surplusNow);
   const exp = (surplusRaw != null && surplusRaw > 5) ? surplusRaw : (netW != null ? Math.max(0, -netW) : null);
   const exporting = exp != null && exp > 5;
   const importW = netW != null ? Math.max(0, netW) : null;
   const gridVal = exporting ? exp : importW;
   // Conso maison estimée = net + prod connue (sera exacte quand l'onduleur toit sera intégré)
   const consoW = (netW != null) ? Math.max(0, netW + (solarW || 0)) : null;
-  const autoPct = (consoW != null && consoW > 0) ? Math.min(100, Math.round((solarW || 0) / consoW * 100)) : ((solarW || 0) > 0 ? 100 : 0);
   const rooms = (cfg.rooms || []).map(r => ({ name: r.room, area: r.area || null, icon: r.icon || null, lights: (r.haid && r.haid.lights) || [], temp: num(r.haid && r.haid.temp), hum: num(r.haid && r.haid.humidity), co2: num(r.haid && r.haid.co2), tempId: r.haid && r.haid.temp, humId: r.haid && r.haid.humidity, co2Id: r.haid && r.haid.co2, co2Seuil: num(r.haid && r.haid.co2seuil) }));
   const indoor = rooms.filter(r => !estDehors(r.name));
   const avg = arr => { const x = arr.filter(v => v != null); return x.length ? x.reduce((s, v) => s + v, 0) / x.length : null; };
-  const inTemp = avg(indoor.map(r => r.temp)), inHum = avg(indoor.map(r => r.hum));
+  /* La température intérieure (salutation de l'Accueil, écran de veille) :
+   * chaque pièce lue dans la VRAIE unité de son capteur, ramenée au Celsius
+   * avant l'addition, et la moyenne redite dans l'unité de l'installation —
+   * celle que l'écran de veille affiche déjà. Audit du 03/10 : la moyenne
+   * additionnait des nombres bruts et la salutation collait « °C » en dur
+   * derrière — « 72.0°C » dans une maison réglée en Fahrenheit. */
+  const inTempUnite = uniteTemp(null, hass);
+  const inTemp = moyenneTemperatures(indoor.map(r => ({ v: r.temp, unite: uniteTemp(r.tempId && S[r.tempId] ? S[r.tempId].attributes : null, hass) })), inTempUnite);
+  const inHum = avg(indoor.map(r => r.hum));
   const co2vals = rooms.map(r => r.co2).filter(v => v != null);
   const maxCo2 = co2vals.length ? Math.max(...co2vals) : null;
   let lightIds = (cfg.lights || []).map(l => l.haid).filter(Boolean);
@@ -13493,7 +14561,8 @@ function deriveAccueil(hass, cfg, resolved) {
     const autoS = S[m.auto]; if (autoS && autoS.state !== 'on') continue; // repas désactivé (entité absente = on par défaut)
     const p = m.time.split(':'); let d = (+p[0] * 60 + +p[1]) - nowM; if (d < 0) d += 1440; if (d < nd) { nd = d; nm = m; }
   }
-  const repasIn = nm ? `DANS ${Math.floor(nd / 60)}H${String(nd % 60).padStart(2, '0')}` : null;
+  // Dans la langue de l'écran (audit du 03/10) — rien ne l'affiche encore, mais « DANS 2H05 » restait en français.
+  const repasIn = nm ? (nd >= 60 ? tr('dans {h} h {m}', { h: Math.floor(nd / 60), m: String(nd % 60).padStart(2, '0') }) : tr('dans {n} min', { n: nd })).toUpperCase() : null;
   const repasLabel = nm ? `${nm.label} · ${nm.g}g` : null;
   // ── Machines À venir ──
   const machines = {};
@@ -13506,7 +14575,7 @@ function deriveAccueil(hass, cfg, resolved) {
     else if (paused) { phase = tr('En pause'); color = 'var(--o-warn2)'; }
     else if (returning) { phase = tr('Retour base'); color = 'var(--o-purple)'; }
     else if (/erreur|error/.test(low)) { phase = tr('Erreur'); color = 'var(--o-bad)'; }
-    else if (vacOnBase || /station|base|accueil|charge/.test(low)) { if (bat != null && bat < 100) { phase = 'En charge'; color = 'var(--o-warn)'; anim = 'charge'; } else { phase = tr('Sur base'); color = 'var(--o-ok)'; } }
+    else if (vacOnBase || /station|base|accueil|charge/.test(low)) { if (bat != null && bat < 100) { phase = tr('En charge'); color = 'var(--o-warn)'; anim = 'charge'; } else { phase = tr('Sur base'); color = 'var(--o-ok)'; } }
     else { phase = vacEtat || tr('Inactif'); color = 'var(--o-text3)'; }
     const batColor = couleurPile(bat);
     machines.wallE = { label: (rVac && rVac.name) || tr('Aspirateur'), iconKey: 'vacuum', phase, color, active: (vacCleaning && !paused) || returning, anim, spin, valueIcon: charging ? 'battery-charging' : 'battery', valueText: bat != null ? Math.round(bat) + '%' : '—', bar: bat, barColor: batColor };
@@ -13516,16 +14585,18 @@ function deriveAccueil(hass, cfg, resolved) {
     const chgS = S[mowerSensor(S, 'charging')]; const chg = !!(chgS && ['on', 'true', 'True', 'Oui'].indexOf(chgS.state) >= 0);
     const prog = num(mowerSensor(S, 'progress'), 0) || 0;
     let phase, color, anim = null, spin = false;
-    if (st === 'mowing') { phase = 'Tonte'; color = 'var(--o-ok)'; anim = 'wiggle'; spin = true; }
+    if (st === 'mowing') { phase = tr('Tonte'); color = 'var(--o-ok)'; anim = 'wiggle'; spin = true; }
     else if (st === 'returning') { phase = tr('Retour base'); color = 'var(--o-purple)'; }
-    else if (st === 'docked') { if (chg) { phase = 'En charge'; color = 'var(--o-warn)'; anim = 'charge'; } else { phase = tr('Sur base'); color = 'var(--o-ok)'; } }
+    else if (st === 'docked') { if (chg) { phase = tr('En charge'); color = 'var(--o-warn)'; anim = 'charge'; } else { phase = tr('Sur base'); color = 'var(--o-ok)'; } }
     else if (st === 'paused') { phase = tr('En pause'); color = 'var(--o-warn2)'; }
     else if (st === 'error') { phase = tr('Erreur'); color = 'var(--o-bad)'; }
     else { phase = tr('Inactif'); color = 'var(--o-text3)'; }
     const mowing = st === 'mowing'; const batColor = couleurPile(bat);
-    machines.luba = { label: (lm && lm.attributes && lm.attributes.friendly_name) || tr('Tondeuse'), iconKey: 'mower', phase, color, active: st === 'mowing' || st === 'returning', anim, spin, valueIcon: chg ? 'battery-charging' : 'battery', valueText: Math.round(bat) + '%', bar: mowing ? prog : bat, barColor: mowing ? color : batColor, extra: mowing ? ('Tonte ' + Math.round(prog) + '%') : null };
+    machines.luba = { label: (lm && lm.attributes && lm.attributes.friendly_name) || tr('Tondeuse'), iconKey: 'mower', phase, color, active: st === 'mowing' || st === 'returning', anim, spin, valueIcon: chg ? 'battery-charging' : 'battery', valueText: Math.round(bat) + '%', bar: mowing ? prog : bat, barColor: mowing ? color : batColor, extra: mowing ? (tr('Tonte') + ' ' + Math.round(prog) + '%') : null };
   }
-  { const power = num(notifIds().dishwasher, 0) || 0; const active = power > 100;
+  // Les seuils de phase (100, 200, 500, 1500) sont des watts : la prise du
+  // lave-vaisselle se lit par `numW`, comme les flux (audit du 03/10).
+  { const power = numW(notifIds().dishwasher) || 0; const active = power > 100;
     let phase, color, anim = null, spin = false;
     if (!active) { phase = tr('Éteint'); color = 'var(--o-text3)'; }
     else if (power > 1500) { phase = tr('Lavage'); color = 'var(--o-cold)'; spin = true; }
@@ -13541,14 +14612,14 @@ function deriveAccueil(hass, cfg, resolved) {
      * Ce qui reste est MESURÉ : la phase d'après la puissance, la durée
      * écoulée d'après l'heure de départ, les watts.
      *
-     * Le départ reste borné à la journée — l'horodatage compte les secondes
-     * depuis minuit, et un cycle commencé la veille donnerait n'importe quoi.
-     * La borne est une vraie journée, plus une durée de cycle supposée. */
+     * L'horodatage compte les secondes depuis minuit : un départ à 23 h 30
+     * vu à 0 h 40 est celui de la VEILLE. On l'ajoutait au minuit du jour,
+     * l'écart devenait négatif et s'affichait « 0min » jusqu'à la fin du
+     * cycle (audit du 03/10) — voir `minutesDepuisHeure`. */
     const idt = S[notifIds().dishwasherStart];
     const ts = (idt && idt.attributes && idt.attributes.timestamp) ? idt.attributes.timestamp : 0;
-    const nowD = new Date(); const todayStart = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate()).getTime() / 1000;
-    const elapsedMin = Math.max(0, Math.floor((nowD.getTime() / 1000 - (todayStart + ts)) / 60));
-    const departSu = ts > 0 && elapsedMin <= 1440;
+    const elapsedMin = minutesDepuisHeure(ts);
+    const departSu = elapsedMin != null && elapsedMin <= 1440;
     const fmtT = (mn) => { const h = Math.floor(mn / 60), mm = mn % 60; return (h > 0 ? h + 'h' : '') + (mm < 10 && h > 0 ? '0' : '') + mm + 'min'; };
     machines.lv = { label: tr('Lave-vaisselle'), iconKey: 'dishwasher', phase, color, active, anim, spin, valueIcon: 'timer', valueText: active ? (departSu ? fmtT(elapsedMin) : tr('En cours')) : '--:--', bar: null, barColor: color, extra: active ? (Math.round(power) + 'W') : null };
   }
@@ -13558,11 +14629,11 @@ function deriveAccueil(hass, cfg, resolved) {
       const today = at.est_aujourd_hui === true || at.est_aujourd_hui === 'True';
       const demain = at.est_demain === true || at.est_demain === 'True';
       let phase, color;
-      if (today) { phase = "Aujourd'hui !"; color = 'var(--o-bad)'; }
-      else if (demain) { phase = 'Demain soir'; color = 'var(--o-warn2)'; }
+      if (today) { phase = tr("Aujourd'hui !"); color = 'var(--o-bad)'; }
+      else if (demain) { phase = tr('Demain soir'); color = 'var(--o-warn2)'; }
       else if (jours <= 3) { phase = tr('Dans {j}j', { j: jours }); color = 'var(--o-warn)'; }
       else { phase = tr('Dans {j}j', { j: jours }); color = 'var(--o-ok)'; }
-      const dateDisp = at.decale_samedi ? ('Sam. ' + (at.date_formatee || '')) : (((at.jour_semaine || '') + ' ' + (at.date_formatee || '')).trim());
+      const dateDisp = at.decale_samedi ? (tr('Sam.') + ' ' + (at.date_formatee || '')) : (((at.jour_semaine || '') + ' ' + (at.date_formatee || '')).trim());
       const mainText = today ? tr('Sortir les poubelles !') : demain ? tr('Préparer ce soir') : (dateDisp || tr('Prochain ramassage'));
       machines.poubelles = { label: tr('Poubelles'), iconKey: today ? 'trash-full' : 'trash', phase, color, active: today || demain, anim: today ? 'shake' : (jours <= 3 ? 'bounce' : null), valueText: mainText, dotsFilled: Math.max(0, 14 - jours), dotsTotal: 14 };
     }
@@ -13576,9 +14647,14 @@ function deriveAccueil(hass, cfg, resolved) {
   }));
   return {
     flux: { solar: fmtW(solarW), home: fmtW(consoW), grid: (exporting ? '↑ ' : '↓ ') + fmtW(gridVal), exporting },
-    autoPct,
-    metricExport: { sign: exporting ? '↑ ' : '↓ ', val: fmtW(exporting ? exp : importW), raw: (exporting ? exp : importW) || 0, label: exporting ? tr('EXPORT RÉSEAU') : tr('IMPORT RÉSEAU'), color: exporting ? 'var(--o-ok)' : 'var(--o-warn)' },
-    rooms, inTemp, inHum, maxCo2, lightsOn, lightsTotal: lightIds.length,
+    /* La tuile réseau de la bannière n'existe que si un compteur se lit
+     * (audit du 03/10, ADR 0030). L'objet était TOUJOURS là, et le `|| 0` de
+     * `raw` passait sous le « — » de `Num` : une maison sans compteur voyait
+     * « ↓ 0 W IMPORT RÉSEAU » en permanence. `null` retire la tuile — la
+     * bannière teste déjà `a.metricExport`. `autoPct` est parti avec : il
+     * valait 100 % ou 0 % sans compteur, et personne ne le lisait. */
+    metricExport: gridVal == null ? null : { sign: exporting ? '↑ ' : '↓ ', val: fmtW(gridVal), raw: gridVal, label: exporting ? tr('EXPORT RÉSEAU') : tr('IMPORT RÉSEAU'), color: exporting ? 'var(--o-ok)' : 'var(--o-warn)' },
+    rooms, inTemp, inTempUnite, inHum, maxCo2, lightsOn, lightsTotal: lightIds.length,
     people, cams, hass,
     vacLabel, vacBattery, alarmArmed, camOnline, camTotal, sunsetHM, repasIn, repasLabel, machines, plants,
   };
@@ -13762,22 +14838,78 @@ function BoutonAssistant({ onAssistant, onDictee = null, hass = null, sens = 'ha
   );
 }
 
-function MobileNav({ view, onNav, onMenu, onAssistant = null, onDictee = null, hass = null }) {
+function MobileNav({ view, onNav, onMenu, menuOuvert = false, onAssistant = null, onDictee = null, hass = null, assistantAttendu = false }) {
   const { views: avail } = useLoggia();
   // Le safe-area du bas est géré par le dashboard (card_mod padding-bottom) → l'iframe s'arrête au-dessus du home indicator.
   // Alignée sur la sidebar épurée — sans Pièces (accessibles via cartes Accueil), avec Énergie + Sécurité (demande user).
   const items = [
-    { id: 'accueil', label: tr('Accueil'), icon: 'home' },
-    { id: 'scenes', label: tr('Scénarios'), icon: 'sparkles' },
-    { id: 'objets', label: tr('Objets'), icon: 'apps' },
+    // Des libellés COURTS, propres à la barre (03/10) : traduits, plusieurs
+    // ne tenaient pas dans leur case (« Dispositivos », « Dispositivi »).
+    // Le polonais n'en a PAS : sa traduction est relue par un Polonais, et
+    // ses mots restent les siens — c'est la taille du texte qui s'ajuste.
+    { id: 'accueil', label: trCourt('Accueil · court'), icon: 'home' },
+    { id: 'scenes', label: trCourt('Scénarios · court'), icon: 'sparkles' },
+    { id: 'objets', label: trCourt('Objets · court'), icon: 'apps' },
     { id: 'energie', label: tr('Énergie'), icon: 'bolt' },
-    { id: 'securite', label: tr('Sécurité'), icon: 'shield-check' },
+    { id: 'securite', label: trCourt('Sécurité · court'), icon: 'shield-check' },
   ].filter(it => isViewAvailable(avail, it.id));
-  const cell = (on) => ({ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '9px 4px 7px', background: 'none', border: 'none', cursor: 'pointer', color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)', fontSize: 11, fontWeight: 700, WebkitTapHighlightColor: 'transparent' });
+  /* Une case ne rétrécit jamais sous son libellé (rien n'est coupé, rien ne
+   * déborde chez la voisine) : `minWidth: 'auto'` défait le `* { min-width: 0 }`
+   * global, qui forçait six cases égales quoi qu'elles portent. C'est alors la
+   * SOMME des libellés qui doit tenir, et le corps s'y AJUSTE, mesuré : de 11
+   * à 9,5 px. Le français (330 px à 11 px) descend à 10,5 px à 320 px ; le
+   * polonais, aux mots entiers (« Bezpieczeństwo »), à 9,6 px à 360 px. Sous
+   * 9,5 px, plus lisible : les libellés courts gardent leur largeur, les longs
+   * se partagent le reste à parts égales (`cap`) et se coupent (« … ») au
+   * lieu de chevaucher — le polonais à 320 px. */
+  const [corps, setCorps] = useState({ px: 11, cap: null });
+  const cell = (on) => ({ position: 'relative', flex: corps.cap ? '1 1 auto' : 1, minWidth: corps.cap ? 0 : 'auto', ...(corps.cap ? { maxWidth: corps.cap } : {}), display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '9px 2px 7px', background: 'none', border: 'none', cursor: 'pointer', color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)', fontSize: corps.px, fontWeight: 700, WebkitTapHighlightColor: 'transparent' });
+  const libelle = { whiteSpace: 'nowrap', ...(corps.cap ? { maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' } : {}) };
   /* Sa hauteur RÉELLE, mesurée, pour que les feuilles du bas s'arrêtent
    * au-dessus d'elle : elle varie avec la zone sûre et la taille du texte,
    * une valeur écrite en dur mentirait sur un appareil ou l'autre. */
   const navRef = useRef(null);
+  const textes = items.map(it => it.label).join('|');
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return undefined;
+    const ajuster = () => {
+      // Cachée (ordinateur), elle ne mesure rien : on garde le dernier corps.
+      if (!nav.clientWidth) return;
+      const libelles = [...nav.querySelectorAll('[data-libelle]')];
+      if (!libelles.length) return;
+      // Largeurs NATURELLES à 11 px : le texte grandit en proportion du corps.
+      const f = parseFloat(getComputedStyle(libelles[0]).fontSize) || 11;
+      const naturels = libelles.map(el => el.scrollWidth * 11 / f);
+      const naturel = naturels.reduce((s, w) => s + w, 0);
+      let autres = 0;
+      for (const c of nav.children) if (!c.querySelector('[data-libelle]')) autres += c.getBoundingClientRect().width;
+      // 4 px de marge par case, et 2 px pour l'arrondi des mesures.
+      const place = nav.clientWidth - autres - 4 * libelles.length - 2;
+      const px = Math.max(9.5, Math.min(11, Math.floor(110 * place / naturel) / 10));
+      let cap = null;
+      if (naturel * px / 11 > place) {
+        // Les courts d'abord, entiers ; ce qui reste se partage entre les longs.
+        const tri = naturels.map(w => w * px / 11).sort((a, b) => a - b);
+        let reste = place;
+        for (let i = 0; i < tri.length; i++) {
+          const part = reste / (tri.length - i);
+          if (tri[i] > part) { cap = Math.floor(part) + 4; break; }
+          reste -= tri[i];
+        }
+      }
+      setCorps(c => (c.px === px && c.cap === cap ? c : { px, cap }));
+    };
+    ajuster();
+    let ro = null;
+    try { ro = new ResizeObserver(ajuster); ro.observe(nav); } catch { /* sans ResizeObserver : le redimensionnement suffit */ }
+    window.addEventListener('resize', ajuster);
+    // La police arrive APRÈS le premier rendu : mesurés avec celle de repli,
+    // les mots polonais « tenaient » à 11 px, puis débordaient.
+    const polices = document.fonts;
+    if (polices) { polices.ready.then(ajuster).catch(() => {}); polices.addEventListener('loadingdone', ajuster); }
+    return () => { window.removeEventListener('resize', ajuster); if (ro) ro.disconnect(); if (polices) polices.removeEventListener('loadingdone', ajuster); };
+  }, [textes]);
   useEffect(() => {
     const el = navRef.current;
     const poser = () => { try { document.documentElement.style.setProperty('--o-navh', Math.round(el ? el.getBoundingClientRect().height : 0) + 'px'); } catch {} };
@@ -13787,8 +14919,14 @@ function MobileNav({ view, onNav, onMenu, onAssistant = null, onDictee = null, h
     window.addEventListener('resize', poser);
     return () => { window.removeEventListener('resize', poser); if (ro) ro.disconnect(); try { document.documentElement.style.setProperty('--o-navh', '0px'); } catch {} };
   }, []);
+  /* Ce que la barre MONTRE, elle le DIT aussi (audit du 03/10). La vue
+   * ouverte n'était qu'une couleur et un trait d'accent, que la barre
+   * latérale disait déjà par `aria-current="page"` (plan M7) ; celle-ci,
+   * rien. Le <nav> porte un nom, « Vues » : la clé existe dans les six
+   * catalogues, aucune traduction neuve, le polonais reste tel que relu.
+   * « Menu » dit enfin si le tiroir qu'il ouvre est ouvert. */
   return (
-    <nav ref={navRef} className="loggia-mobilenav" style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 50, alignItems: 'stretch', background: 'var(--o-header)', borderTop: 'var(--o-bw,1px) solid var(--o-bd1)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', paddingBottom: 'calc(var(--o-safe-bottom, 0px) + 6px)', boxShadow: '0 -8px 24px rgba(0,0,0,.22)' }}>
+    <nav ref={navRef} className="loggia-mobilenav" aria-label={tr('Vues')} style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 50, alignItems: 'stretch', background: 'var(--o-header)', borderTop: 'var(--o-bw,1px) solid var(--o-bd1)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', paddingBottom: 'calc(var(--o-safe-bottom, 0px) + 6px)', boxShadow: '0 -8px 24px rgba(0,0,0,.22)' }}>
       {/* Luna prend le MILIEU, pas un bout.
         * C'est le seul geste de la barre qui ne soit pas une navigation : on
         * ne va pas quelque part, on adresse la parole a quelqu'un. Le mettre
@@ -13799,16 +14937,19 @@ function MobileNav({ view, onNav, onMenu, onAssistant = null, onDictee = null, h
         {/* Avec de quoi dicter : sans `onDictee` ni `hass`, le maintien ferait
           * paraitre l'orbe sans rien ecouter -- c'etait le cas jusqu'a la 3.54. */}
         {onAssistant && i === Math.ceil(items.length / 2) && <BoutonAssistant onAssistant={onAssistant} onDictee={onDictee} hass={hass} />}
-        <button onClick={() => onNav(it.id)} style={cell(on)}>
+        {/* Sa place au milieu, le temps de la première réponse (lot 14 de
+          * l'audit du 03/10) : les vues de la barre glissaient à son arrivée. */}
+        {!onAssistant && assistantAttendu && i === Math.ceil(items.length / 2) && <span aria-hidden="true" style={{ flex: '0 0 62px' }} />}
+        <button onClick={() => onNav(it.id)} aria-current={on ? 'page' : undefined} style={cell(on)}>
           {on && <span style={{ position: 'absolute', top: 0, width: 28, height: 3, borderRadius: '0 0 3px 3px', background: 'var(--o-accent-fond)' }} />}
           <Fi i={it.icon} size={20} color={on ? 'var(--o-accent)' : 'var(--o-text2)'} />
-          <span>{it.label}</span>
+          <span data-libelle="" style={libelle}>{it.label}</span>
         </button>
         </Fragment>
       ); })}
-      <button onClick={onMenu} style={cell(false)}>
+      <button onClick={onMenu} aria-expanded={menuOuvert} style={cell(false)}>
         <Ico name="menu-burger" size={20} color="var(--o-text2)" />
-        <span>{tr('Menu')}</span>
+        <span data-libelle="" style={libelle}>{tr('Menu')}</span>
       </button>
     </nav>
   );
@@ -13819,7 +14960,9 @@ function deriveNotifs(hass) {
   const S = hass && hass.states; if (!S) return [];
   const out = [];
   const stOf = (id) => (S[id] && S[id].state) || null;
-  const numOf = (id) => { const v = parseFloat(stOf(id)); return isNaN(v) ? null : v; };
+  // Les deux seuils lus plus bas (surplus, lave-vaisselle) sont des WATTS : la
+  // valeur s'y ramène, quelle que soit l'unité du capteur (audit du 03/10).
+  const wattsOf = (id) => (id && S[id] ? wattsDe(S[id]) : null);
   for (const id in S) { if (id.indexOf('alarm_control_panel.') === 0 && S[id].state === 'triggered') { out.push({ k: 'alarme:' + id, c: 'var(--o-bad)', t: tr('Alarme'), m: tr('Intrusion détectée') }); break; } }
   /* Alertes sûreté, sans aucune configuration : tout binary_sensor dont la
    * device_class désigne un danger passe en tête de liste dès qu'il est `on`.
@@ -13867,10 +15010,15 @@ function deriveNotifs(hass) {
   const mow = mid ? stOf(mid) : null;
   if (mow === 'returning') out.push({ k: 'tondeuse:retour', c: 'var(--o-accent-soft)', t: tr('Tondeuse'), m: tr('Retour à la base') });
   else if (mchg && stOf(mchg) === 'on') out.push({ k: 'tondeuse:charge', c: 'var(--o-ok)', t: tr('Tondeuse'), m: tr('En charge') });
-  const surId = enHaids().surplusNow || enHaids().injectionJour;
-  const sur = surId ? numOf(surId) : null;
+  /* Le surplus est une PUISSANCE (relecture du 03/10). L'index cumulé de
+   * l'export (`injectionJour`, 850 kWh) passait le seuil de 100 W en
+   * permanence, la nuit comprise. Même ordre que la vue Énergie : le flux net
+   * du compteur (négatif à l'export), sinon l'injection, sinon le surplus. */
+  const EH = enHaids();
+  const net = wattsOf(EH.consoNow);
+  const sur = net != null ? Math.max(0, -net) : wattsOf(EH.injectionNow || EH.surplusNow);
   if (sur != null && sur > 100) out.push({ k: 'energie:surplus', c: 'var(--o-accent-soft)', t: tr('Énergie'), m: tr('Surplus solaire — export réseau') });
-  const lv = numOf(notifIds().dishwasher);
+  const lv = wattsOf(notifIds().dishwasher);
   if (lv != null && lv > 100) out.push({ k: 'lv:cycle', c: 'var(--o-accent)', t: tr('Lave-vaisselle'), m: tr('Cycle en cours') });
   const bins = stOf(notifIds().bins);
   if (bins && bins !== 'unknown' && bins !== 'unavailable') out.push({ k: 'poubelles:' + bins, c: 'var(--o-warn)', t: tr('Poubelles'), m: tr('Prochain ramassage : {d}', { d: bins }) });
@@ -13937,10 +15085,16 @@ export default function App() {
   /* Le compte Home Assistant de CETTE session est-il administrateur ?
    *
    * Lui seul ecrit la configuration de la maison. Le dashboard doit le
-   * savoir, non pour cacher quoi que ce soit, mais pour ne pas TENTER des
-   * ecritures automatiques qui seront refusees : la liaison d'un profil a
-   * son compte Home Assistant se declenche toute seule au chargement, et
-   * elle ferait apparaitre un refus a chaque ouverture. */
+   * savoir pour ne pas TENTER des ecritures automatiques qui seront
+   * refusees : la liaison d'un profil a son compte Home Assistant se
+   * declenche toute seule au chargement, et elle ferait apparaitre un refus
+   * a chaque ouverture.
+   *
+   * Les gestes qu'un compte ordinaire ne pourrait jamais enregistrer se
+   * MASQUENT aussi depuis le 03/10, mais par `compteOrdinaire(hass)` : il lit
+   * Home Assistant lui-meme, alors que cet etat reste faux tant que le
+   * composant n'a pas repondu — un administrateur verrait ses gestes
+   * arriver apres l'ecran. */
   const [haAdmin, setHaAdmin] = useState(false);
   // Les fonctions pures du fichier — et les vues chargees a la demande — lisent
   // cet etat : on le tient a jour ici, pendant le rendu, pour qu'il soit juste
@@ -14017,17 +15171,41 @@ export default function App() {
     [discovery.ready, discovery.caps, cfgVues, sigEntites]
   );
   setLoggiaState({ resolved: loggiaRuntime.resolved || null });
+  /* Ce que le serveur tient, pour l'empreinte du carnet (audit du 03/10).
+   * Une reference et non `serverCfg` : `saveCfg` est fige au premier rendu,
+   * il ne verrait que `{}`. `null` tant que le composant n'a pas repondu —
+   * une empreinte prise sur rien ferait abandonner au renvoi un reglage que
+   * personne n'a depasse. Elle porte aussi nos ecritures optimistes : c'est
+   * prevu, `enattente.js` les reconnait comme NOS envois. */
+  const cfgServeurRef = useRef(null);
+  cfgServeurRef.current = serverOk ? serverCfg : null;
   // Ecriture d'un reglage : serveur si le composant repond, localStorage sinon.
   // L'etat local est mis a jour tout de suite, sans attendre l'aller-retour.
   const saveCfg = useCallback((patch) => {
     /* Au carnet AVANT l'envoi (28/09) : une page actualisee pendant
      * l'aller-retour, ou un serveur qui redemarre, laissait le reglage dans ce
      * seul navigateur — et la valeur du serveur, plus ancienne, revenait au
-     * chargement suivant. `enattente.js` le renvoie alors. */
-    const marques = poserEnAttente(patch);
+     * chargement suivant. `enattente.js` le renvoie alors.
+     *
+     * Avec l'empreinte de ce que le serveur tenait (audit du 03/10) : renvoye
+     * des jours plus tard, le reglage ecrasait sinon un rangement fait
+     * entre-temps sur un autre ecran.
+     *
+     * Et sous le compte qui ECRIT (audit du 03/10). Range pour tout le
+     * navigateur, un reglage de la maison tente depuis un compte ordinaire
+     * attendait le demarrage suivant, et repartait sous le compte qui ouvrait
+     * alors la page — un administrateur sur la meme tablette, et
+     * `loggia_users` ou `loggia_rooms = []` passaient sous SES droits. */
+    const h = getHass();
+    const compte = compteDe(h);
+    const marques = poserEnAttente(patch, compte, cfgServeurRef.current);
+    /* Ce que chaque cle valait AVANT : un refus le remet a l'ecran (audit du
+     * 03/10, plus bas). Releve dans la mise a jour elle-meme, qui voit l'etat
+     * du moment, et non une copie figee par `useCallback`. */
+    const avantEnvoi = {};
     setServerCfg(c => {
       const n = { ...c };
-      Object.keys(patch).forEach(k => { if (patch[k] == null) delete n[k]; else n[k] = patch[k]; });
+      Object.keys(patch).forEach(k => { avantEnvoi[k] = c[k]; if (patch[k] == null) delete n[k]; else n[k] = patch[k]; });
       return n;
     });
     const local = () => {
@@ -14038,10 +15216,22 @@ export default function App() {
         });
       } catch {}
     };
-    const h = getHass();
+    /* L'ISSUE se rend (audit du 03/10), en promesse qui ne rejette jamais :
+     * `false` quand le composant REFUSE, `null` quand le transport a coupe (le
+     * lot attend au carnet), `true` sinon — sans composant aussi. Qui l'ignore
+     * n'a rien a rattraper ; l'accueil la lit pour ne pas garder a l'ecran une
+     * grille que le serveur n'a pas prise (`saveAccL`). */
     if (h && h.callWS) {
-      h.callWS({ type: 'loggia/config/set', config: patch }).then(() => purgerEnAttente(marques)).catch((e) => {
-        local();
+      return h.callWS({ type: 'loggia/config/set', config: patch }).then(() => purgerEnAttente(marques, compte)).then(() => true).catch((e) => {
+        /* Un refus de DROITS ne se copie pas sur l'appareil (audit du 03/10).
+         * `completerDepuisLocal`, au passage suivant d'un administrateur,
+         * confie au serveur les cles qu'il n'a pas : la valeur refusee a un
+         * compte ordinaire — `loggia_users` dans une maison qui n'en a pas
+         * encore — y serait partie sous SES droits. Les autres echecs gardent
+         * leur repli : serveur absent, coupure, plafond. */
+        // Le passage refusé vers un profil Admin aussi : son code à lui depuis
+        // l'audit du 03/10 (`code_admin_requis`), le même refus de droits.
+        if (!(e && (e.code === 'not_admin' || e.code === 'code_admin_requis'))) local();
         /* Un serveur ABSENT est un cas normal : le repli local suffit, et l'on
          * n'alarme pas qui n'a pas installe le composant.
          *
@@ -14055,10 +15245,36 @@ export default function App() {
          * donc le rejet, que l'ecoute globale plus bas rend visible. */
         if (e && e.code) {
           console.error('Loggia : reglage refuse par le serveur', Object.keys(patch), e);
+          /* Refuse, le lot ne laisse rien derriere lui (audit du 03/10).
+           *
+           * Ni a l'ecran : chaque cle reprend sa valeur d'avant l'envoi, sauf
+           * si elle a ete reecrite depuis. Restee la, elle tenait toute la
+           * seance — une piece renommee pour rien, et une grille d'accueil
+           * refusee qu'un retour sur l'accueil relisait (`accL` nait de
+           * `cfgVal`), puis qu'un geste suivant, accepte lui, reecrivait dans
+           * le commun. Le toast dit le refus ; l'ecran n'a plus a le contredire.
+           *
+           * Ni au carnet : il n'y attendait que le prochain demarrage, pour y
+           * etre refuse de nouveau — et emporter dans son refus tout ce qui
+           * attendait avec lui, le carnet repartant d'un seul lot. Meme regle
+           * que `renvoyerEnAttente`. */
+          setServerCfg(c => {
+            const n = { ...c };
+            Object.keys(patch).forEach(k => {
+              if (!(k in avantEnvoi) || c[k] !== (patch[k] == null ? undefined : patch[k])) return;
+              if (avantEnvoi[k] === undefined) delete n[k]; else n[k] = avantEnvoi[k];
+            });
+            return n;
+          });
+          purgerEnAttente(marques, compte);
           Promise.reject(e);
+          return false;
         }
+        return null;
       });
-    } else local();
+    }
+    local();
+    return Promise.resolve(true);
   }, []);
   // Confié APRÈS sa déclaration : plus haut, `saveCfg` serait encore en zone
   // morte temporelle et le rendu entier échouerait.
@@ -14167,8 +15383,16 @@ export default function App() {
       /* Ce qui n'etait jamais arrive part MAINTENANT, avant tout le reste :
        * le carnet porte des valeurs plus recentes que celles du serveur, et
        * c'est la seule occasion de les lui donner. Un refus applicatif y
-       * renonce de lui-meme (`enattente.js`), sans retenter a chaque ouverture. */
-      renvoyerEnAttente(h)
+       * renonce de lui-meme (`enattente.js`), sans retenter a chaque ouverture.
+       *
+       * Sauf ce qu'un autre ecran a range depuis (audit du 03/10) : le carnet
+       * compare a la configuration qu'on vient de lire, et le serveur garde le
+       * dernier rangement — renvoyer la valeur du carnet l'aurait ecrase.
+       *
+       * Et seul part le carnet de CE compte (audit du 03/10) : `monId` est le
+       * compte de la connexion, celui dont les droits s'appliqueront. Ce
+       * qu'un autre compte a laisse sur l'appareil attend son auteur. */
+      renvoyerEnAttente(h, monId, state.available ? state.config : null)
         .then(r => {
           if (!alive || !r.cles.length) return;
           console.info('Loggia : %d reglage(s) renvoyes au serveur', r.cles.length, r.cles);
@@ -14242,7 +15466,7 @@ export default function App() {
    *
    * `sessionStorage` et non `localStorage` : l'endroit ou l'on se trouve
    * appartient a cet onglet et a ce moment. Un onglet neuf, ou Loggia rouvert
-   * le lendemain, doit s'ouvrir sur l'accueil — pas sur la vue Croquettes
+   * le lendemain, doit s'ouvrir sur l'accueil — pas sur la vue Energie
    * quittee l'avant-veille. */
   /* La vue memorisee est reprise DES LE PREMIER RENDU.
    *
@@ -14263,6 +15487,31 @@ export default function App() {
   });
   useEffect(() => {
     try { window.sessionStorage.setItem('loggia-vue', view); } catch { /* stockage indisponible */ }
+  }, [view]);
+  /* Le focus suit la vue (audit du 03/10).
+   *
+   * Toute la vue se remonte quand on en change (`key={view}`, plus bas) : le
+   * bouton qui venait de servir — « Ouvrir la pièce Salon », un retour, un
+   * lien « voir tout » — partait avec elle, et le focus tombait sur <body>.
+   * Au clavier, la tabulation suivante repartait du haut de la page ; au
+   * lecteur d'écran, rien n'était annoncé. Le titre de la nouvelle vue le
+   * reçoit : il s'annonce, et la tabulation repart de lui.
+   *
+   * Seulement si le focus est TOMBÉ : le menu latéral garde son bouton, qui
+   * existe toujours. Pas au premier rendu non plus — on n'arrache pas le focus
+   * à une page qui s'ouvre. Et `setView` reste nu : les vues le reçoivent tel
+   * quel (`onNav={setView}`), c'est son EFFET qu'on rattrape ici.
+   *
+   * `voir` : changer de vue ne remonte pas la page. Ouverte depuis le bas de
+   * l'Accueil, la pièce gardait le défilement, et son titre — focalisé —
+   * restait 300 px au-dessus de l'écran (mesuré en démo). Au CLAVIER seulement
+   * (`:focus-visible`), le titre revient à l'écran ; au doigt, rien ne bouge. */
+  const vueRef = useRef(null);
+  const vueFocus = useRef(view);
+  useEffect(() => {
+    if (vueFocus.current === view) return undefined;
+    vueFocus.current = view;
+    return reposerFocus(() => titreDeVue(vueRef.current), { voir: true });
   }, [view]);
   /* Et la position dans la page.
    *
@@ -14323,6 +15572,10 @@ export default function App() {
     try { if (sessionStorage.getItem('loggia_safe_nocv')) { sessionStorage.removeItem('loggia_safe_nocv'); return []; } } catch {}
     const v = readLS('loggia_customviews', []); return Array.isArray(v) ? v.filter(x => x && x.id && x.name) : [];
   });
+  /* `loggia_customviews` est de la configuration : une vue perso dit QUELLES
+   * entites elle montre. Y ranger ses cartes ecrit donc une cle reservee, et
+   * un compte Home Assistant ordinaire n'y entre pas en edition (03/10) —
+   * voir `<CustomView … edit=…>` plus bas, et les Parametres. */
   const saveCustomViews = (list) => { cfgSet({ loggia_customviews: list }); setCustomViews(list); };
   const [editMode, setEditMode] = useState(false);
   /* ADR 0067 : une relecture arrivee pendant l'edition se fait a sa sortie. */
@@ -14360,8 +15613,14 @@ export default function App() {
           return z ? { ...r, icon: z.icon || null, area: z.id } : r;
         });
       })(),
-      lights: cfgVal('loggia_lights', []) || [],
-      cams: (Array.isArray(cm) && cm.length) ? cm : [],
+      // `loggia_lights` voyage dans un import : un élément `null` ou un objet à
+      // la place de la liste levait dans les clés des lumières, calculées à
+      // chaque rendu — tout l'écran tombait (05/10, suite du point 10b).
+      lights: (() => { const l = cfgVal('loggia_lights', []); return Array.isArray(l) ? l.filter(x => x && typeof x === 'object') : []; })(),
+      // Une caméra `null` (configuration abîmée) levait `c.haid` dans les clés
+      // de l'Accueil, calculées quelle que soit la vue : tout l'écran tombait,
+      // Paramètres compris (05/10, suite du point 10b).
+      cams: (Array.isArray(cm) && cm.length) ? cm.filter(c => c && typeof c === 'object') : [],
       entities: (serverCfg && serverCfg.loggia_entities) || {},
     };
   }, [serverCfg, loggiaRuntime.ready]);
@@ -14404,7 +15663,7 @@ export default function App() {
     climat: [...climateKeys(), 'climate.', ...cfgKeys('climate'), ...voletKeys(), 'cover.', ...cfgKeys('covers')],
     volets: [...voletKeys(), 'cover.', ...cfgKeys('covers')],
     energie: [...enKeys(), cfg.energy.consoNow, cfg.energy.solarOutput],
-    croquettes: croqKeys(), medias: medKeys(),
+    medias: medKeys(),
     /* La vue Objets montre TOUS les appareils, et elle n'en surveillait que
      * cinq familles. Un interrupteur qu'on bascule ne changeait donc aucune
      * signature : le parent ne se redessinait pas, la carte gardait l'objet
@@ -14500,6 +15759,13 @@ export default function App() {
   const nowOk = !!(hass && hass.states && (hass.connected === undefined || hass.connected));
   if (nowOk) wasConnectedRef.current = true;
   const haLost = wasConnectedRef.current && !nowOk;
+  /* « CONNEXION… », pas « HORS LIGNE » en rouge, tant que le pont n'a pas fait
+   * un tic (lot 14 de l'audit du 03/10) : sans `hass` au premier rendu —
+   * l'application mobile le pose parfois après —, la barre latérale criait à
+   * la panne avant le moindre échec. Passé ce délai, la panne se dit. Déjà
+   * connecté au montage : rien à attendre, pas de minuteur ni de rendu de plus. */
+  const [patienceHa, setPatienceHa] = useState(true);
+  useEffect(() => { if (wasConnectedRef.current) return undefined; const t = setTimeout(() => setPatienceHa(false), HASS_POLL_MS); return () => clearTimeout(t); }, []);
   /* Échec de commande → écoute globale + toast.
    *
    * Deux sources aboutissent ici. Les appels directs à `callService`, dont la
@@ -14519,12 +15785,14 @@ export default function App() {
       // Un reglage de la maison refuse n'est pas une panne : c'est une regle.
       // Le message generique laissait croire a un incident, et l'on cherchait
       // du cote de Home Assistant une explication qui etait ici.
-      /* `not_admin` couvre DEUX refus depuis l'ADR 0080 : un réglage de la
-       * maison, et le passage vers un profil Admin sans le code. Le message
-       * unique disait « seul un administrateur Home Assistant peut le
-       * changer » — faux pour le second, où le code suffit. Le composant dit
-       * lequel dans son motif. */
-      const codeAdmin = r && r.code === 'not_admin' && /code administrateur/i.test(String(r.message || ''));
+      /* DEUX refus de droits depuis l'ADR 0080 : un réglage de la maison, et
+       * le passage vers un profil Admin sans le code. Le message unique disait
+       * « seul un administrateur Home Assistant peut le changer » — faux pour
+       * le second, où le code suffit. Les deux partageaient `not_admin`, et
+       * l'écran les départageait par une expression sur le motif FRANÇAIS du
+       * composant ; le passage refusé porte son code à lui depuis l'audit du
+       * 03/10. */
+      const codeAdmin = r && r.code === 'code_admin_requis';
       /* Le serveur NOMME les reglages refuses (« reglages reserves aux
        * administrateurs Home Assistant : loggia_rooms ») ; le message les
        * jetait. On ne pouvait ni savoir ce qui n'avait pas pris, ni le dire —
@@ -14536,8 +15804,14 @@ export default function App() {
           ? (cles
             ? tr('« {k} » non enregistré — ce réglage appartient à la maison, et seul un administrateur Home Assistant peut le changer', { k: cles })
             : tr('Réglage non enregistré — il appartient à la maison, et seul un administrateur Home Assistant peut le changer'))
+          /* Un rangement refusé : déjà dans la langue de l'écran, et nommé
+           * (`rangerScenarios`, audit du 03/10). */
+          : r && r.code === 'scenarios_ordre' ? String(r.message)
           : r && r.code === 'scenario_incomplet' ? String(r.message)
-          : tr('Commande non exécutée — Home Assistant a refusé ou n’a pas répondu');
+          /* Un autre refus prévisible du composant — trop volumineux, une
+           * limite atteinte — se dit par son code, dans la langue de l'écran
+           * (refus.js, audit du 03/10). */
+          : texteRefus(r) || tr('Commande non exécutée — Home Assistant a refusé ou n’a pas répondu');
       /* LE MEME refus ne se redit pas. Une ecriture refusee peut partir
        * plusieurs fois — plusieurs cartes, plusieurs cles — et le bandeau
        * revenait autant de fois, sans rien apprendre de plus. */
@@ -14615,6 +15889,10 @@ export default function App() {
     conn.subscribeMessage((msg) => {
       if (!vivant || !msg) return;
       const liste = msg.notifications || {};
+      // « current » est l'état COMPLET du serveur, renvoyé à chaque
+      // (ré)abonnement : une notification retirée pendant une coupure restait
+      // affichée pour toujours (audit du 03/10).
+      if (msg.type === 'current') table.clear();
       if (msg.type === 'removed') { for (const id in liste) table.delete(id); }
       else { for (const id in liste) table.set(id, liste[id]); }
       poser();
@@ -14725,7 +16003,12 @@ export default function App() {
    * est seul à porter le profil et la cloche, et ne pas les rendre du tout
    * sur ordinateur, où elles vivent en haut à droite. */
   const [tactile, setTactile] = useState(false);
-  useEffect(() => {
+  /* AVANT le premier dessin (lot 14 de l'audit du 03/10) : posée par un
+   * `useEffect`, la classe arrivait après — au doigt, la page naissait avec
+   * le bandeau du haut et, sur tablette, la barre latérale ouverte, puis
+   * sautait de 73 px vers le haut ou de 264 px vers la gauche (CLS 0,23 sur
+   * la démo, tablette tactile 1180 × 820). */
+  useLayoutEffect(() => {
     const actif = (() => { try { return window.matchMedia('(pointer: coarse)').matches; } catch { return false; } })();
     try { document.documentElement.classList.toggle('loggia-tactile', actif); } catch {}
     setTactile(actif);
@@ -14882,7 +16165,7 @@ export default function App() {
   /* L'assistant : le bouton n'apparait que si un nom est regle ET que le
    * composant repond. Une popup qui s'ouvre sur « indisponible » ne vaut pas
    * mieux qu'un bouton absent. */
-  const assistantNs = useAssistant(hass);
+  const { cle: assistantNs, attente: assistantAttendu } = useAssistant(hass);
   const [assistantOuvert, setAssistantOuvert] = useState(false);
   /* Ce qui a ete dicte au bouton, en attendant que la conversation s'ouvre.
    * L'appui long ecoute AVANT que la popup existe : la phrase doit donc
@@ -14948,13 +16231,17 @@ export default function App() {
     [view, discovery.devices, discovery.index, hass]
   );
   const onboarded = serverCfg.loggia_onboarded != null || readLS('loggia_onboarded', null) != null;
-  const showOnboarding = !onboarded && loggiaRuntime.ready;
+  /* Le premier lancement n'ecrit que la configuration de la maison — les
+   * pieces, l'alarme, la meteo, et sa propre marque (03/10). Un compte Home
+   * Assistant ordinaire n'en garderait rien : il ne le voit pas, et attend
+   * qu'un administrateur l'ait fait. */
+  const showOnboarding = !onboarded && loggiaRuntime.ready && !compteOrdinaire(hass);
   const closeOnboarding = (patch) => saveCfg({ ...(patch || {}), loggia_onboarded: CONFIG_VERSION });
 
   return (
     <LoggiaContext.Provider value={loggiaRuntime}>
     {showOnboarding && <Suspense fallback={null}><Onboarding runtime={loggiaRuntime} onDone={closeOnboarding} onSkip={() => closeOnboarding(null)} /></Suspense>}
-    <HeaderCtx.Provider value={{ light: lightMode, onToggleTheme: toggle, onToggleNav: () => setNavOpen(o => !o), onNav: setView, editMode, onToggleEdit: () => setEditMode(e => !e), users, userIdx, onSwitchUser: switchUser, peutEditer, droits, notifs, onLireNotifs: lireNotifs, customViews, rooms: (cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r)), lightsOn, onAssistant: assistantNs ? () => setAssistantOuvert(true) : null, onDictee: assistantNs ? poserQuestion : null, hass }}>
+    <HeaderCtx.Provider value={{ light: lightMode, onToggleTheme: toggle, onToggleNav: () => setNavOpen(o => !o), onNav: setView, editMode, onToggleEdit: () => setEditMode(e => !e), users, userIdx, onSwitchUser: switchUser, peutEditer, droits, notifs, onLireNotifs: lireNotifs, customViews, rooms: (cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r)), lightsOn, onAssistant: assistantNs ? () => setAssistantOuvert(true) : null, onDictee: assistantNs ? poserQuestion : null, assistantAttendu, hass }}>
     <div className={navbar ? 'o-navbar-on' : undefined} style={{ display: 'flex', minHeight: '100vh', background: fondPhotoActif ? 'transparent' : 'var(--o-bggrad, var(--o-bg))', fontFamily: 'var(--o-font)', color: 'var(--o-text)',
       // isolate : notre propre contexte d'empilement. Sans lui, le z-index
       // négatif du calque photo l'envoie sous le fond OPAQUE de tout wrapper
@@ -14974,8 +16261,30 @@ export default function App() {
         ast={(() => { const S = (hass && hass.states) || {}; const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null; const aid = (secAlarm() && S[secAlarm()]) ? secAlarm() : rAl; return (aid && S[aid]) ? S[aid].state : null; })()} />}
       {haLost && <div role="alert" style={BANDEAU_ALERTE}>{tr('Connexion Home Assistant perdue — les données affichées peuvent être obsolètes')}</div>}
       {!haLost && discovery.echec && <div role="alert" style={BANDEAU_ALERTE}>{tr('La découverte de la maison a été interrompue — recharge la page')}</div>}
-      {toast && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(24px + var(--o-safe-bottom,0px))', transform: 'translateX(-50%)', zIndex: 400, background: 'var(--o-surfA)', color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.4)', borderRadius: 14, padding: '10px 16px', fontSize: 12, fontWeight: 700, boxShadow: 'var(--o-shadow,0 10px 30px rgba(0,0,0,.4))' }}>{toast}</div>}
-      <Sidebar view={view} vuesAutorisees={vuesAutorisees} editMode={editMode} onToggleEdit={peutEditer ? () => setEditMode(e => !e) : null} tactile={tactile} users={users} userIdx={userIdx} onSwitchUser={switchUser} notifs={notifs} onLireNotifs={lireNotifs} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} open={navOpen} customViews={customViews} ha={(() => {
+      {/* L'échec d'une commande se DIT (audit du 03/10).
+        *
+        * Le toast n'était monté qu'une fois son texte connu, en `status` : une
+        * région vivante qui apparaît déjà remplie ne dit rien (ADR 0107). Le
+        * refus se voyait, il ne s'entendait pas — et celui qui attendait
+        * l'effet de son geste croyait la commande partie. La région est donc
+        * TOUJOURS montée, vide et hors de vue tant qu'il n'y a rien ; c'est
+        * son texte qui change. Le toast reste pour l'œil, 5 s comme avant,
+        * caché aux lecteurs d'écran : le message ne se dit qu'une fois.
+        *
+        * `alert` et non `status` : c'est la réponse NÉGATIVE à un geste qu'on
+        * vient de faire. Poli, le message attendrait la fin de la phrase en
+        * cours — et il ne vit que 5 s : il pouvait s'effacer avant d'être dit.
+        * Les deux bandeaux au-dessus restent montés avec leur texte : une
+        * alerte, elle, se dit à sa CRÉATION (WAI-ARIA 1.2) ; un `status`, non.
+        *
+        * `data-annonce` : montée en permanence, la région serait marquée
+        * inerte à chaque ouverture de feuille (`inerterAutour`, ui.jsx) — et
+        * bien des commandes partent d'une fiche. L'ancien toast y échappait
+        * par hasard, inséré après coup. Elle reste donc ICI, au premier
+        * niveau, sœur des vues : c'est là que la règle la voit. */}
+      <div className="o-vh" role="alert" data-annonce="">{toast || ''}</div>
+      {toast && <div aria-hidden="true" style={{ position: 'fixed', left: '50%', bottom: 'calc(24px + var(--o-safe-bottom,0px))', transform: 'translateX(-50%)', zIndex: 400, background: 'var(--o-surfA)', color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.4)', borderRadius: 14, padding: '10px 16px', fontSize: 12, fontWeight: 700, boxShadow: 'var(--o-shadow,0 10px 30px rgba(0,0,0,.4))' }}>{toast}</div>}
+      <Sidebar view={view} vuesAutorisees={vuesAutorisees} editMode={editMode} onToggleEdit={peutEditer ? () => setEditMode(e => !e) : null} tactile={tactile} users={users} userIdx={userIdx} onSwitchUser={switchUser} notifs={notifs} onLireNotifs={lireNotifs} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} open={navOpen} customViews={customViews} ha={!wasConnectedRef.current && patienceHa ? null : (() => {
         const ok = !!(hass && hass.states && (hass.connected === undefined || hass.connected));
         const devCount = nbAppareils;
         const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null;
@@ -14990,16 +16299,24 @@ export default function App() {
       })()} />
       {navOpen && <div className="loggia-backdrop" role="presentation" onClick={() => setNavOpen(false)} />}
       {pinTarget != null && <PinModal hass={hass} onClose={() => setPinTarget(null)} onSuccess={() => { applyUser(pinTarget); setPinTarget(null); }} />}
-      <div key={view} className="o-view" style={{ display: 'flex', flex: 1, minWidth: 0 }}>
+      <div key={view} ref={vueRef} className="o-view" style={{ display: 'flex', flex: 1, minWidth: 0 }}>
+      {/* Une barrière par vue (audit du 03/10). La seule vivait à la racine :
+          une carte qui levait au rendu remplaçait TOUT l'écran par la page de
+          secours. Elle ne prend plus que sa vue — le menu, la barre du bas et
+          les bandeaux, montés hors d'ici, restent. Rendue sous `key={view}`,
+          elle renaît réarmée à chaque changement de vue ; l'en-tête lui est
+          confié pour que la carte de panne le garde (`Barriere`, ui.jsx). */}
+      <Barriere entete={<Header />}>
       {/* Tant que la decouverte n'a pas repondu, on ne monte aucune vue autre que
           l'accueil : plusieurs lisent leur configuration sans verifier qu'elle
           existe. Une surface vide le temps d'un instant, pas l'accueil — sinon
           l'on verrait la page changer deux fois sous ses yeux. */}
       {(!loggiaRuntime.ready && view !== 'accueil') ? <main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
-        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'volets' ? <ObjetsView hass={hass} onNav={setView} filtre="volets" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'voletsplan' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'croquettes' ? <CroquettesView hass={hass} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} onNav={setView} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? lv.temp.toFixed(1) + '°' : base.temp, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : base.hum, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} sante={santeAccueil} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} />}
+        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'volets' ? <ObjetsView hass={hass} onNav={setView} filtre="volets" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'voletsplan' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} onNav={setView} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer && !compteOrdinaire(hass)} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); /* Une mesure absente reste null (audit du 03/10) : `base` porte les valeurs de vitrine du modèle (PIECES, l'écran d'avant la connexion), et la fiche de confort les affichait pour une vraie pièce — « Humidité 60 % » dans une chambre sans hygromètre. */ return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? dec(lv.temp, 1) + '°' : null, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : null, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} sante={santeAccueil} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} />}
+      </Barriere>
       </div>
-      {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} onAssistant={assistantNs ? () => setAssistantOuvert(true) : null} onDictee={assistantNs ? poserQuestion : null} hass={hass} />}
+      {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} menuOuvert={navOpen} assistantAttendu={assistantAttendu} onAssistant={assistantNs ? () => setAssistantOuvert(true) : null} onDictee={assistantNs ? poserQuestion : null} hass={hass} />}
       {assistantOuvert && assistantNs && <Suspense fallback={null}><AssistantSheet hass={hass} ns={assistantNs} question={questionVocale} onClose={() => { setAssistantOuvert(false); setQuestionVocale(''); }} /></Suspense>}
       {entSheet && editMode && peutEditer && <Suspense fallback={null}><ViewEntSheet view={view} hass={hass} onClose={() => setEntSheet(false)} /></Suspense>}
     </div>

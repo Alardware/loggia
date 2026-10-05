@@ -157,7 +157,9 @@ test('on change d’assistant depuis la popup', () => {
   assert.ok(FEUILLE.includes('conversationsDe(hass)'));
   assert.ok(FEUILLE.includes('if (id !== actuelle) cfgSet({ loggia_assistant: id });'));
   // Pas en pleine réponse : elle continuerait d'arriver dans le fil d'un autre.
-  assert.ok(FEUILLE.includes('disabled={occupe} aria-expanded={menu}'));
+  // Depuis le lot 13 de l'audit du 03/10, le choix est une `ListeChoix`, figée
+  // par `disabled` — pendant l'écoute aussi, comme le menu qui se refermait.
+  assert.ok(FEUILLE.includes('disabled={occupe || ecoute}'), 'on changerait d’assistant en pleine réponse');
 });
 
 test('l’écran « Parler » a une hauteur fixe, barre du bas comprise', () => {

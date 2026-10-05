@@ -186,7 +186,8 @@ test('en developpement, une edition de ce fichier recharge la page', () => {
   assert.ok(VITE.includes("apply: 'serve',"), 'le garde-fou tournerait aussi au build');
   assert.ok(VITE.includes("if (file.endsWith('/src/orbe.jsx')) {") && VITE.includes("server.ws.send({ type: 'full-reload' });"),
     'le garde-fou ne recharge plus la page');
-  assert.ok(VITE.includes('plugins: [react(), orbeRechargee],'), 'le garde-fou n’est pas branché');
+  // Le greffon du lot 14 de l'audit du 03/10 (préchargement du boot) le suit dans la liste.
+  assert.match(VITE, /plugins: \[react\(\), orbeRechargee[,\]]/, 'le garde-fou n’est pas branché');
 });
 
 test('le module ne recharge rien lui-meme, et CodeQL sait le lire', () => {

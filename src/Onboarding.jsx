@@ -12,26 +12,26 @@
 
 import { useState } from 'react';
 import { tr, trN } from './i18n.js';
-
-// Meme rendu que dans App.jsx, redefini ici : trois lignes pures, contre un
-// cycle d'import entre les deux fichiers.
-function Fi({ i, size = 18, color, style }) {
-  return <i aria-hidden="true" className={'fi fi-rr-' + i} style={{ fontSize: size, color, lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', ...style }} />;
-}
+// Fi vient de ui.jsx (lot 15 de l'audit du 03/10). La copie d'ici craignait un
+// cycle avec App.jsx : Fi n'y vit plus, et ui.jsx n'importe rien d'ici.
+import { Fi } from './ui.jsx';
 
 const VIEW_TITLES = {
   pieces: tr('Pièces'), scenes: tr('Scénarios'), objets: tr('Objets'), energie: tr('Énergie'),
   securite: tr('Sécurité'), systeme: tr('Système'), lumieres: tr('Lumières'), climat: tr('Climat'),
-  volets: tr('Volets'), aspirateur: tr('Aspirateur'), croquettes: tr('Croquettes'), medias: tr('Médias'),
+  volets: tr('Volets'), aspirateur: tr('Aspirateur'), medias: tr('Médias'),
 };
 
 const card = {
   background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)',
   borderRadius: 'var(--o-radius,18px)', boxShadow: 'var(--o-shadow)',
 };
+/* Blanc sur le fond d'accent, comme partout (lot 15 de l’audit du 03/10) :
+ * ce fond est calculé pour le blanc ; le quasi-noir y tombait à 4,00:1. La
+ * coche de `Check`, plus bas, garde le sien : une icône n'a besoin que de 3:1. */
 const primary = {
   padding: '11px 20px', borderRadius: 14, border: 'none', cursor: 'pointer',
-  fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#06121f',
+  fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#fff',
 };
 const ghost = {
   padding: '11px 18px', borderRadius: 14, cursor: 'pointer', fontSize: 13,
@@ -165,9 +165,12 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
             <div>
               <h1 style={title}>{tr('Vos pièces')}</h1>
               <div style={lead}>
+                {/* La section Entites des Parametres n'existe plus (audit du
+                    03/10) : pieces, meteo et energie se designent sur l'Accueil,
+                    l'alarme dans Securite, en mode edition. */}
                 {suggested.length
                   ? tr('Ces zones Home Assistant contiennent des équipements d’ambiance. Décochez celles qui ne sont pas des pièces.')
-                  : tr('Aucune zone Home Assistant ne ressemble à une pièce pour l’instant. Vous pourrez en désigner plus tard dans Paramètres → Entités.')}
+                  : tr('Aucune zone Home Assistant ne ressemble à une pièce pour l’instant. Vous pourrez en désigner plus tard sur l’Accueil, en mode édition, bouton « Entités de la vue ».')}
               </div>
             </div>
             {suggested.length > 0 && (
@@ -208,7 +211,7 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
             <div>
               <h1 style={title}>{tr('Les entités clés')}</h1>
               <div style={lead}>
-                {tr('Trois repères que le dashboard utilise partout. Tout se change plus tard dans Paramètres → Entités.')}
+                {tr('Trois repères que le dashboard utilise partout. Tout se change plus tard en mode édition, bouton « Entités de la vue » : sur l’Accueil pour la météo et l’énergie, dans Sécurité pour l’alarme.')}
               </div>
             </div>
             {alarm.available && (alarm.choices || []).length > 0 && (
@@ -230,8 +233,11 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
             <div style={{ ...card, padding: '15px 17px' }}>
               <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{tr('ÉNERGIE')}</div>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 6, lineHeight: 1.5 }}>
+                {/* La source se glissait en français DANS la phrase traduite —
+                  * « Tracked through the tableau de bord Energie » (audit du
+                  * 03/10) : une phrase par source. */}
                 {energy.available
-                  ? tr('Suivie via le {src}', { src: energy.source }) + ((energy.devices || []).length ? ' · ' + tr('{n} appareils mesurés', { n: energy.devices.length }) : '') + '. ' + tr('Rien à désigner.')
+                  ? (energy.source === 'utilisateur' ? tr('Suivie via les capteurs désignés dans Loggia') : tr('Suivie via le tableau de bord Énergie de Home Assistant')) + ((energy.devices || []).length ? ' · ' + tr('{n} appareils mesurés', { n: energy.devices.length }) : '') + '. ' + tr('Rien à désigner.')
                   : tr("Rien de détecté — configure le tableau de bord Énergie de Home Assistant, Loggia s'en servira tout seul.")}
               </div>
             </div>
@@ -257,7 +263,7 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
                 {missing.map(v => (
                   <div key={v} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 13, fontWeight: 700, minWidth: 96, flexShrink: 0 }}>{VIEW_TITLES[v]}</span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', lineHeight: 1.45, flex: 1, minWidth: 200 }}>{views[v].reason}</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', lineHeight: 1.45, flex: 1, minWidth: 200 }}>{tr(views[v].reason)}</span>
                   </div>
                 ))}
               </div>

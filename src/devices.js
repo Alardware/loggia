@@ -16,7 +16,8 @@
  * est citée.
  */
 
-const domaineDe = (id) => (typeof id === 'string' ? id.slice(0, id.indexOf('.')) : '');
+import { comparerTextes } from './i18n.js';
+import { domaineDe } from './outils.js';
 
 /* Une entité muette, c'est `unavailable` — et rien d'autre.
  *
@@ -123,11 +124,13 @@ export function buildDevices(index, states = {}) {
   return out;
 }
 
-/** Les appareils d'une zone, triés par nom. */
+/** Les appareils d'une zone, triés par nom — dans la langue de l'écran : le
+ * français était écrit en dur (audit du 03/10), et en polonais « Ś » vient
+ * après « S ». */
 export function devicesByArea(devices, areaId) {
   return [...devices.values()]
     .filter(d => d.area === areaId)
-    .sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id), 'fr'));
+    .sort((a, b) => comparerTextes(String(a.name || a.id), String(b.name || b.id)));
 }
 
 /**

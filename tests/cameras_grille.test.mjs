@@ -49,7 +49,7 @@ test('un format ne propose que ce qu’il peut montrer', () => {
 });
 
 test('le CSS du telephone ne force plus les grilles de cameras', () => {
-  const uneColonne = css.split(NL).find(l => l.includes('.grid-rappels, .grid-scenes') && l.includes('grid-template-columns: 1fr !important'));
+  const uneColonne = css.split(NL).find(l => l.includes('.grid-ehero, .grid-par-pal, .grid-par-about {') && l.includes('grid-template-columns: 1fr !important'));
   assert.ok(uneColonne, 'la liste « une colonne » du media mobile existe');
   assert.ok(!uneColonne.includes('.grid-cams') && !uneColonne.includes('.grid-sec-cams'), 'un !important rendrait le reglage sans effet');
   assert.ok(!css.includes('.grid-cams, .grid-sec-cams { grid-template-columns: 1fr 1fr'), 'plus de grille de deux en dur');

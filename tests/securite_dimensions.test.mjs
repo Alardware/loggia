@@ -19,12 +19,13 @@ test('UNE grille pour toute la vue : celle des objets, 225 px et des rangees de 
   const vue = bloc('function SecuriteContent(', NL + '}');
   assert.ok(vue.includes(`<div className="grid-objets" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gridAutoRows: 'minmax(184px, auto)', gap: 16, alignItems: 'stretch' }}>`), 'la grille des cartes standard');
   assert.ok(!src.includes('grid-securite-cartes') && !css.includes('grid-securite-cartes') && !vue.includes('ouvrantsSeuls') && !vue.includes('minmax(250'), 'plus de grille a part pour l’alarme, la sirene et la presence');
-  assert.ok(css.includes('.grid-objets, .grid-objplants { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }'), 'deux colonnes au telephone et sur tablette, comme partout');
+  assert.ok(css.includes('.grid-objets { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }'), 'deux colonnes au telephone et sur tablette, comme partout');
 });
 
 test('l’alarme : le mot d’une chip ne se tronque jamais — il s’efface, d’apres la largeur DE LA CARTE', () => {
   const c = bloc('function CvAlarm(', NL + '}');
-  assert.ok(c.includes(`<div className="o-piece o-carte-alarme" style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>`), 'la carte est un conteneur, au format standard');
+  // Morte, elle porte le liseré de panne (lot 16, 05/10) : la classe se compose.
+  assert.ok(c.includes(`<div className={'o-piece o-carte-alarme' + (mort ? ' o-panne' : '')} style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>`), 'la carte est un conteneur, au format standard');
   assert.ok(c.includes(`<div className="o-armchips" data-n={CHIPS.length} style={{ display: 'flex', gap: 8, margin: '7px 0 6px' }}>`), 'les chips disent combien elles sont');
   assert.ok(c.includes('aria-label={lbl} aria-pressed={actif} className="o-armchip" title={lbl}'), 'sans son mot, une chip garde son nom : lecteur d’ecran et infobulle');
   assert.ok(css.includes('.o-carte-alarme, .o-carte-presence { container-type: inline-size; }'));

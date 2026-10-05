@@ -5,7 +5,7 @@
  * n'a pas ne compte pas et ne s'affiche pas : l'indice se calcule sur ce qui
  * existe, et sans aucune mesure il n'y a pas d'indice.
  *
- * UNE SEULE TABLE DE SEUILS. La barre de la pièce, sa fiche (`COMFORT`,
+ * UNE SEULE TABLE DE SEUILS. La barre de la pièce, sa fiche (`FICHE_CONFORT()`,
  * App.jsx), les cartes des capteurs et leur jauge lisent les paliers d'ici :
  * ils ne peuvent pas se contredire. Ce sont ceux des captures Netatmo fournies
  * le 19/09 (« les valeurs sont inscrites sur les photos ») : bornes et
@@ -14,7 +14,7 @@
  * Pur : pas de React, pas de Home Assistant, testable à sec
  * (tests/pieces_confort.test.mjs).
  */
-import { tr, locale } from './i18n.js';
+import { tr, trSens, locale } from './i18n.js';
 import { deCelsius } from './unites.js';
 
 const OK = 'var(--o-ok)', DOUX = 'var(--o-accent-soft)', BLEU = 'var(--o-cold)';
@@ -22,15 +22,26 @@ const AMBRE = 'var(--o-warn)', ORANGE = 'var(--o-warn2)', ROUGE = 'var(--o-bad)'
 
 /* Un palier : [borne, mot, couleur]. La borne est EXCLUE (« < 15 »), sauf
  * `inclus` (« ≤ 23 : idéal »). Le dernier palier n'a pas de borne. Les mots
- * sont des littéraux : le catalogue les retrouve.
+ * sont des littéraux : le catalogue les retrouve. « Froid » et « Sec » passent
+ * par `trSens` (audit du 03/10) : leurs clés nues sont aussi les MODES d'une
+ * climatisation, et l'allemand lisait « Kühlen » (refroidir) sous 16 °C,
+ * « Trocknen » (sécher) sur la jauge d'humidité. Le CO₂ aussi (05/10) : sous
+ * « Qualité de l'air », « High », « Hoch » ou « Alto » se lisaient « bonne
+ * qualité » au palier même où il faut aérer. Ses mots y disent la QUALITÉ
+ * (« Poor », « Mala ») et s'accordent (« Buena », « Media ») ; le « Bon » de
+ * la température et de l'humidité, l'« Élevé » du robot gardent leur clé nue.
+ * Le dernier palier aussi (05/10, suite) : « Viziato », masculin, ne
+ * s'accordait ni à « qualità » ni à « aria » ; « Cargado » allait à « aire »,
+ * pas à « calidad » comme « Buena » et « Mala » — « Viziata », « Cargada » ;
+ * les autres langues recopient leur « Confiné », que le français lit nu.
  *
  * Les bornes et les couleurs des captures : le bleu, c'est l'idéal ; puis le
  * vert, le jaune (ambre), l'orange et le rouge à mesure qu'on s'en éloigne —
  * des deux côtés pour la température et l'humidité. */
 const PALIERS = {
-  temp: () => [[15, tr('Trop froid'), ROUGE], [16, tr('Froid'), ORANGE], [17, tr('Frais'), AMBRE], [18, tr('Bon'), OK], [23, tr('Idéal'), BLEU, true], [26, tr('Bon'), OK, true], [27, tr('Un peu chaud'), AMBRE, true], [29, tr('Chaud'), ORANGE, true], [null, tr('Trop chaud'), ROUGE]],
-  hum: () => [[15, tr('Très sec'), ROUGE], [20, tr('Trop sec'), ORANGE], [30, tr('Sec'), AMBRE], [40, tr('Bon'), OK], [50, tr('Idéal'), BLEU, true], [60, tr('Bon'), OK, true], [70, tr('Humide'), AMBRE, true], [80, tr('Trop humide'), ORANGE, true], [null, tr('Très humide'), ROUGE]],
-  co2: () => [[900, tr('Excellent'), BLEU], [1150, tr('Bon'), OK], [1400, tr('Moyen'), AMBRE], [1600, tr('Élevé'), ORANGE], [null, tr('Confiné'), ROUGE]],
+  temp: () => [[15, tr('Trop froid'), ROUGE], [16, trSens('Froid · ressenti'), ORANGE], [17, tr('Frais'), AMBRE], [18, tr('Bon'), OK], [23, tr('Idéal'), BLEU, true], [26, tr('Bon'), OK, true], [27, tr('Un peu chaud'), AMBRE, true], [29, tr('Chaud'), ORANGE, true], [null, tr('Trop chaud'), ROUGE]],
+  hum: () => [[15, tr('Très sec'), ROUGE], [20, tr('Trop sec'), ORANGE], [30, trSens('Sec · ressenti'), AMBRE], [40, tr('Bon'), OK], [50, tr('Idéal'), BLEU, true], [60, tr('Bon'), OK, true], [70, tr('Humide'), AMBRE, true], [80, tr('Trop humide'), ORANGE, true], [null, tr('Très humide'), ROUGE]],
+  co2: () => [[900, tr('Excellent'), BLEU], [1150, trSens('Bon · air'), OK], [1400, trSens('Moyen · air'), AMBRE], [1600, trSens('Élevé · air'), ORANGE], [null, trSens('Confiné · air'), ROUGE]],
   bruit: () => [[50, tr('Calme'), BLEU], [65, tr('Modéré'), OK], [70, tr('Animé'), AMBRE], [80, tr('Bruyant'), ORANGE], [null, tr('Très bruyant'), ROUGE]],
 };
 
@@ -73,8 +84,14 @@ const ECHELLES = {
 };
 const position = (e, x) => Math.round(Math.max(0, Math.min(100, (x - e.de) / (e.a - e.de) * 100)) * 10) / 10;
 
-/** L'échelle d'une mesure : { de, a, bandes: [{de, a, c}], reperes: [{v, pos}] }, ou null. */
-export function echelleMesure(cle) {
+/** L'échelle d'une mesure : { de, a, bandes: [{de, a, c}], reperes: [{v, pos, t}] }, ou null.
+ * `v` et `pos` restent dans le repère de la table — le Celsius pour `temp` ;
+ * `t` est le CHIFFRE écrit sous le repère, redit dans l'unité réelle du
+ * capteur (`uniteT`), arrondi comme les graduations de la fiche. Audit du
+ * 03/10 : la carte d'un capteur en Fahrenheit plaçait bien son trait (la
+ * valeur était convertie), mais écrivait dessous 15 · 17 · 23 · 26 · 29 —
+ * des Celsius sous « 72 °F ». */
+export function echelleMesure(cle, uniteT = 'C') {
   const e = ECHELLES[cle];
   if (!e || !PALIERS[cle]) return null;
   let debut = e.de;
@@ -84,12 +101,14 @@ export function echelleMesure(cle) {
     debut = fin;
     return b;
   });
-  return { de: e.de, a: e.a, bandes, reperes: e.reperes.map(v => ({ v, pos: position(e, v) })) };
+  return { de: e.de, a: e.a, bandes, reperes: e.reperes.map(v => ({ v, pos: position(e, v), t: cle === 'temp' ? Math.round(deCelsius(v, uniteT)) : v })) };
 }
 
-/** La jauge d'une valeur : l'échelle, la position du trait et le verdict — ou null. */
-export function jaugeMesure(cle, v) {
-  const e = echelleMesure(cle);
+/** La jauge d'une valeur : l'échelle, la position du trait et le verdict — ou null.
+ * `v` arrive en Celsius pour `temp`, comme partout dans ce module ; `uniteT`
+ * ne change que les chiffres des repères, jamais le trait ni le mot. */
+export function jaugeMesure(cle, v, uniteT = 'C') {
+  const e = echelleMesure(cle, uniteT);
   if (!e || !lisible(v)) return null;
   return { ...e, pos: position(ECHELLES[cle], Number(v)), verdict: verdictMesure(cle, v) };
 }
@@ -157,6 +176,34 @@ export function indiceConfort(valeurs, uniteT = 'C') {
   const moyenne = notes.reduce((a, n) => a + n, 0) / notes.length;
   const indice = Math.round((moyenne + Math.min(...notes)) / 2);
   return { indice, verdict: verdictIndice(indice), mesures };
+}
+
+/* Les mesures que lit la FICHE de confort d'une pièce (audit du 03/10).
+ *
+ * Une pièce réelle — `live`, ce que `deriveAccueil` (App.jsx) a lu dans ses
+ * capteurs — ne dit que ce qu'elle mesure : une mesure absente ou
+ * indisponible reste `null`, et la fiche la tait, comme la barre. Les
+ * chaînes de `piece` (« 18.1° », « 60% », « 529 ppm ») ne se lisent que
+ * SANS `live` : c'est l'écran d'avant la connexion, où les pièces d'exemple
+ * (`PIECES`) portent leurs valeurs de vitrine.
+ *
+ * La fiche relisait ces chaînes dès qu'une mesure manquait, et la vue Pièce
+ * y glissait celles du modèle : une chambre sans hygromètre affichait
+ * « Humidité 60 % », un conseil sur un air que rien ne mesure, et un indice
+ * de 78 sous une barre qui disait 100. Sans thermomètre, sur une
+ * installation en Fahrenheit, le « 18.1° » du modèle devenait −7,7 °C :
+ * « Trop froid ».
+ *
+ * La température sort dans l'unité de son capteur : la fiche la convertit
+ * (ADR 0128). Un tiret n'est pas un nombre — il reste `null`, jamais zéro
+ * (ADR 0030) ; un vrai 0 mesuré, lui, reste 0. */
+export function mesuresFiche(live, piece) {
+  if (live) {
+    const lu = (v) => (lisible(v) ? Number(v) : null);
+    return { temp: lu(live.temp), hum: lu(live.hum), co2: lu(live.co2) };
+  }
+  const chaine = (s) => { if (s == null) return null; const n = parseFloat(String(s).replace(',', '.')); return isNaN(n) ? null : n; };
+  return { temp: chaine(piece && piece.temp), hum: chaine(piece && piece.hum), co2: chaine(piece && piece.badge) };
 }
 
 /* Le capteur de bruit d'une pièce : la `device_class` fait foi. L'unité ne

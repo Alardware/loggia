@@ -15,6 +15,7 @@
 
 import { siblingsOf, pickSibling } from './discovery.js';
 import { mergedProfile, primaryEntity } from './profiles.js';
+import { comparerTextes } from './i18n.js';
 
 /** Choix de l'utilisateur pour ce domaine, s'il en a fait un. */
 function userPick(userCfg, key) {
@@ -351,6 +352,9 @@ export function resolveEnergy({ index, states = {}, energyPrefs = null, userCfg 
   const solar = src.filter(x => x && x.type === 'solar').map(x => x.stat_energy_from).filter(Boolean);
 
   // Puissance instantanee : un capteur `power` du meme appareil que le compteur.
+  // Choisi par sa seule device_class, sans regarder l'unite : c'est voulu, un
+  // capteur en kW (compteur P1/DSMR) est une puissance comme une autre. L'unite
+  // se lit a la LECTURE, par `wattsDe` (unites.js, audit du 03/10).
   const powerOf = (id) => id ? pickSibling(index, states, id, { domain: 'sensor', deviceClass: 'power' }) : null;
   const gridStat = from ? from.stat_energy_from : null;
   const solarStat = solar[0] || null;
@@ -494,7 +498,7 @@ export function resolveSystem({ index, states = {}, userCfg = {} } = {}) {
     });
   });
   if (!hosts.length) return { available: false, reason: 'aucune machine supervisee', hosts: [] };
-  hosts.sort((a, b) => String(a.name).localeCompare(String(b.name), 'fr'));
+  hosts.sort((a, b) => comparerTextes(String(a.name), String(b.name)));
   return { available: true, source: 'decouverte', hosts };
 }
 

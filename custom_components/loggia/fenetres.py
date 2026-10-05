@@ -58,6 +58,21 @@ DEFAUT: dict[str, Any] = {"actif": False, "delai": 3, "reprise": 0, "pieces": {}
 PRIORITE = niveau("surete", 5)
 
 
+def ouvrants_muets(etats: dict, ouvrants) -> list:
+    """Ceux qui ne disent rien — indisponibles, inconnus, absents.
+
+    Un capteur muet ne dit pas « ferme » (audit du 03/10) : la pile d'un
+    capteur Zigbee qui lache, fenetre ouverte, remettait le chauffage en
+    marche. Il ne coupe pas, il ne rend pas non plus.
+    """
+    muets = []
+    for haid in ouvrants or []:
+        st = etats.get(haid)
+        if st is None or str(getattr(st, "state", "")).lower() in MUETS:
+            muets.append(haid)
+    return muets
+
+
 def ouvrants_ouverts(etats: dict, ouvrants) -> list:
     """Ceux qui sont ouverts, parmi les ouvrants d'une piece.
 
@@ -75,6 +90,23 @@ def ouvrants_ouverts(etats: dict, ouvrants) -> list:
         if valeur in ("on", "open", "opening"):
             ouverts.append(haid)
     return ouverts
+
+
+def piece_propre(piece: dict) -> dict:
+    """Une piece dont les listes ne portent que des identifiants.
+
+    Rien ne relisait la configuration recue (lot 15 de l'audit du 03/10) : un
+    entier glisse dans `ouvrants` etait ecrit, puis `sorted` levait TypeError
+    au reabonnement — la regle n'ecoutait plus rien, au redemarrage pas
+    davantage. Meme filtre que `regles.suivre` : ce qui n'est pas un texte est
+    ecarte, une liste qui n'en est pas une devient vide.
+    """
+    propre = dict(piece)
+    for cle in ("ouvrants", "chauffages"):
+        if cle in propre:
+            liste = propre[cle]
+            propre[cle] = [h for h in liste if isinstance(h, str)] if isinstance(liste, list) else []
+    return propre
 
 
 def eteint_pour(haid: str):
@@ -161,11 +193,16 @@ class LoggiaFenetres:
         piece = (self.cfg.get("pieces") or {}).get(nom)
         if not isinstance(piece, dict) or not piece.get("actif"):
             return
-        ouverts = ouvrants_ouverts(self._etats(), piece.get("ouvrants"))
+        etats = self._etats()
+        ouverts = ouvrants_ouverts(etats, piece.get("ouvrants"))
         if ouverts:
             await self._async_armer(nom)
         else:
             self._desarmer(nom)
+            # On ne rend que sur des ouvrants FRANCHEMENT fermes : un capteur
+            # muet garde la coupure, la fenetre est peut-etre encore ouverte.
+            if ouvrants_muets(etats, piece.get("ouvrants")):
+                return
             await self._async_rendre(nom)
 
     async def _async_armer(self, nom: str) -> None:
@@ -217,9 +254,11 @@ class LoggiaFenetres:
         for (domaine, service, data), haids in groupes.items():
             # La coupure TIENT le chauffage : tant que la fenetre est ouverte,
             # une regle plus faible — le retour de presence — ne le rallume pas.
+            # Sans echeance : la coupure tient jusqu'a la fermeture, meme une
+            # fenetre ouverte toute une journee (le filet de 12 h la rendait).
             partis = await self._async_service(domaine, service, haids, dict(data),
                                                regle="fenetre", quoi="couper",
-                                               motif=nom, tenir=True)
+                                               motif=nom, tenir=True, jusqu_a_relacher=True)
             # Ne retenir que ce qui est vraiment parti : un radiateur sous la
             # main de quelqu'un n'a pas ete coupe, et n'est pas a rendre.
             for haid in haids:
@@ -266,6 +305,11 @@ class LoggiaFenetres:
         for (domaine, service, data), haids in groupes.items():
             await self._async_service(domaine, service, haids, dict(data),
                                       regle="fenetre", quoi="rendre", motif=nom)
+        # Ce qu'on ne rend pas — rallume a la main, ou pris par plus fort — on
+        # le lache quand meme : la tenue n'a plus d'echeance, et rien d'autre
+        # ne la ferait tomber. Seul reste tenu ce qu'une autre piece garde.
+        gardes = {h for piece in self.coupes.values() for h in piece}
+        self.regles.relacher("fenetres", "fenetre", cibles=[h for h in avant if h not in gardes])
 
     # ── Outils ─────────────────────────────────────────────────────────────
     def _etats(self) -> dict:
@@ -281,11 +325,12 @@ class LoggiaFenetres:
 
     async def _async_service(self, domaine: str, service: str, cibles: list, data: dict, *,
                              regle: str = "", quoi: str = "", motif: str = "",
-                             tenir: bool = False) -> list:
+                             tenir: bool = False, jusqu_a_relacher: bool = False) -> list:
         """Commande par le socle : il ecarte ce qu'une main tient, et note."""
         return await self.regles.agir("fenetres", regle, domaine, service, cibles, data or None,
                                       quoi=quoi or service, motif=motif,
-                                      priorite=PRIORITE, tenir=tenir, simuler=self._simule())
+                                      priorite=PRIORITE, tenir=tenir,
+                                      jusqu_a_relacher=jusqu_a_relacher, simuler=self._simule())
 
     def _simule(self) -> bool:
         """Observer sans agir : la regle note, rien ne bouge."""
@@ -301,13 +346,21 @@ class LoggiaFenetres:
 
     # ── Ce que l'interface lit et ecrit ────────────────────────────────────
     async def async_config(self) -> dict[str, Any]:
-        brut = await self.store.async_get_shared(CLE, None)
+        return self._config_de(await self.store.async_get_shared(CLE, None))
+
+    def _config_de(self, brut: Any) -> dict[str, Any]:
+        """La configuration, defauts compris. Synchrone : `async_enregistrer`
+        la rebatit sous le verrou du magasin (lot 15 de l'audit du 03/10)."""
         cfg = dict(DEFAUT)
         cfg["pieces"] = {}
         if isinstance(brut, dict):
             for k, v in brut.items():
-                if k == "pieces" and isinstance(v, dict):
-                    cfg["pieces"] = {n: dict(p) for n, p in v.items() if isinstance(p, dict)}
+                if k == "pieces":
+                    # Une table, sinon le defaut `{}` : la branche generique
+                    # recopiait une liste telle quelle, puis `.values()` levait
+                    # au reabonnement comme au redemarrage (relecture du lot 15).
+                    if isinstance(v, dict):
+                        cfg["pieces"] = {n: piece_propre(p) for n, p in v.items() if isinstance(p, dict)}
                 elif k in cfg:
                     cfg[k] = v
         return cfg
@@ -320,22 +373,45 @@ class LoggiaFenetres:
             "journal": await self.regles.journal(limite=40, module="fenetres"),
         }
 
-    async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:
-        cfg = await self.async_config()
-        simulait = bool(cfg.get("simulation"))
+    def _poser_patch(self, cfg: dict[str, Any], patch: dict[str, Any]) -> None:
+        """Le patch de l'ecran, pose sur `cfg`. Synchrone : sous le verrou."""
         for k, v in (patch or {}).items():
-            if k == "pieces" and isinstance(v, dict):
-                for nom, piece in v.items():
+            if k == "pieces":
+                # Jamais la branche generique : elle ecrivait la liste et
+                # effacait les pieces reglees (relecture du lot 15).
+                for nom, piece in (v.items() if isinstance(v, dict) else ()):
                     if piece is None:
                         cfg["pieces"].pop(nom, None)
                     elif isinstance(piece, dict):
-                        cfg["pieces"].setdefault(nom, {}).update(piece)
+                        cfg["pieces"][nom] = piece_propre({**cfg["pieces"].get(nom, {}), **piece})
             elif k in cfg:
                 cfg[k] = v
-        await self.store.async_set_shared(CLE, cfg)
+
+    async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:
+        # Lu, change et ecrit d'un seul tenant (store.async_modifier_shared,
+        # lot 15 de l'audit du 03/10) : deux reglages envoyes ensemble
+        # partaient de la meme configuration, le second effacait le premier.
+        simulait = False
+
+        def changer(brut: Any) -> dict[str, Any]:
+            nonlocal simulait
+            cfg = self._config_de(brut)
+            simulait = bool(cfg.get("simulation"))
+            self._poser_patch(cfg, patch)
+            return cfg
+
+        cfg = await self.store.async_modifier_shared(CLE, changer)
         self.cfg = cfg
         if bool(cfg.get("simulation")) != simulait:
             self._repartir_de_zero()
+        # Regle coupee, ou piece retiree : ce qui y etait coupe est lache. La
+        # coupure n'a plus d'echeance, une fermeture qui ne sera plus suivie
+        # la laisserait jusqu'au redemarrage (03/10).
+        for nom in list(self.coupes):
+            piece = (cfg.get("pieces") or {}).get(nom)
+            if not cfg.get("actif") or not isinstance(piece, dict) or not piece.get("actif"):
+                self._desarmer(nom)
+                self.regles.relacher("fenetres", "fenetre", cibles=list(self.coupes.pop(nom)))
         await self._async_reabonner()
         return cfg
 

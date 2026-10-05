@@ -8,11 +8,13 @@
  * Le contenu est repris a l'identique : ce module deplace du code, il n'en
  * change pas le comportement.
  */
-import { useState, useEffect, useRef, useMemo, useId, Fragment, createContext, useContext } from 'react';
+import { Component, useState, useEffect, useRef, useMemo, useId, Fragment, createContext, useContext, cloneElement, Children } from 'react';
 import { createPortal } from 'react-dom';
 import { getHass } from './state.js';
+import { rendreFocus } from './focus.js';
 import { filtrerChoix, blocsChoix, placerMenu, SEUIL_RECHERCHE } from './choix.js';
-import { tr } from './i18n.js';
+import { tr, comparerTextes } from './i18n.js';
+import { CARTE_MAISON, ICONE_CARTE, NOM_CARTE, SOUS_CARTE } from './styles.js';
 
 // Suit un min-width en live (layout PC : rail Accueil ≥ 1180 px)
 // ── Animations lot 1 : count-up, stagger d'entrée, jauges qui se remplissent ──
@@ -87,8 +89,9 @@ export const HIDDEN_VIEWS = () => [
   { label: tr('Volets'), vid: 'volets', icon: 'blinds', c: 'var(--o-purple)' },
   /* Aspirateur et Croquettes ont quitté la liste le 30/08/2026 : la FICHE
    * APPAREIL UNIVERSELLE (tap sur la carte, vue Objets) montre tout ce que
-   * l'appareil expose — la vue dédiée ne racontait rien de plus. Les routes
-   * restent : un appareil qui a mémorisé cette vue l'affiche encore.
+   * l'appareil expose — la vue dédiée ne racontait rien de plus. La route
+   * Croquettes est partie le 04/10 (une vue mémorisée retombe sur l'Accueil) ;
+   * ses repas s'activent dans la fiche du distributeur.
    * Les robots REVIENNENT le 17/09/2026 (ADR 0042) : leur vue raconte
    * désormais ce que la fiche ne dit pas — la semaine, l'historique,
    * l'entretien. Activables dans le menu ; la carte d'un robot y mène. */
@@ -147,9 +150,13 @@ export const userBg = (u) => { const im = userImg(u); if (im) return `url(${im})
  * (App.jsx), la meme dans toutes les vues et toujours en tete du contenu :
  * `ViewEditBar`, qui la doublait dans les Volets et la Securite, est partie
  * le 17/09.
+ *
+ * Plein, son texte est BLANC (lot 15 de l’audit du 03/10) : le fond
+ * d'accent est calculé pour lui (4,7:1 au moins) ; le quasi-noir d'avant
+ * n'y tenait que 4,00:1.
  */
 export const editBtn = (accent) => ({ padding: '7px 12px', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0,
-  background: accent ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: accent ? '#06121f' : 'var(--o-text1)',
+  background: accent ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: accent ? '#fff' : 'var(--o-text1)',
   border: accent ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)' });
 
 // opts = { mode:'dark'|'light', loggiaTheme:'' | 'neumorphix' | 'google' | 'ios', haTheme:'' | 'FOLLOW' } → retourne isDark
@@ -313,6 +320,12 @@ export function FlipText({ text, style, live = false }) {
     const t = setTimeout(() => setPrev(null), 380);
     return () => clearTimeout(t);
   }, [text]);
+  /* Au repos, le texte est du TEXTE : il se coupe en « … » avec ce qui le
+   * précède sur sa ligne. Bloc atomique en permanence, il disparaissait en
+   * entier derrière l'ellipse du parent dès qu'une icône le précédait — la
+   * carte pièce au téléphone affichait « ⚠ … » au lieu de « ⚠ Fenêtre
+   * ouverte · CO₂ é… » (audit du 03/10). Le bloc ne sert qu'à la bascule. */
+  if (prev == null) return <span aria-live={live ? 'polite' : undefined} style={style}>{cur}</span>;
   return (
     <span aria-live={live ? 'polite' : undefined} style={{ position: 'relative', display: 'inline-block', overflow: 'hidden', verticalAlign: 'bottom', maxWidth: '100%', ...style }}>
       <span key={'c' + k} className={prev != null ? 'o-flip-in' : undefined} style={{ display: 'inline-block', whiteSpace: 'nowrap' }}>{cur}</span>
@@ -358,7 +371,15 @@ export function inerterAutour(noeud) {
   while (el.parentElement) {
     const parent = el.parentElement;
     for (const frere of Array.from(parent.children)) {
-      if (frere === el || frere.hasAttribute('inert')) continue;
+      /* Une région d'annonce reste ÉVEILLÉE (audit du 03/10). `inert` retire
+       * l'élément de l'arbre d'accessibilité, et ce qu'il annonce avec lui :
+       * or bien des commandes partent d'une fiche, et la région du toast
+       * d'échec (App.jsx), montée en permanence, se serait tue au moment
+       * précis où elle avait à parler. Elle ne porte aucun contrôle : rien ne
+       * s'y active hors de la feuille. Seul un FRÈRE d'un ancêtre de la
+       * feuille est regardé ici — une région à épargner se pose donc au
+       * premier niveau du tableau de bord. */
+      if (frere === el || frere.hasAttribute('inert') || frere.hasAttribute('data-annonce')) continue;
       frere.setAttribute('inert', '');
       marques.push(frere);
     }
@@ -374,7 +395,7 @@ const FermerCtx = createContext(null);
  * `role="dialog"` sans nom fait annoncer « dialogue », et rien d'autre, à
  * l'ouverture de n'importe quelle fiche. La feuille tend donc un id, et la
  * PREMIÈRE ligne de titre qui le demande le porte — `TitreFeuille` ici,
- * `FicheEntete` dans App.jsx.
+ * `FicheEntete` dans App.jsx, `NomFeuille` autour d'un titre fait main.
  *
  * Le jeton évite deux écueils : deux lignes de titre dans la même feuille ne
  * peuvent pas porter le même id, et le double montage du mode strict de React
@@ -384,7 +405,18 @@ export function useIdTitreFeuille() {
   const ctx = useContext(TitreCtx);
   const jeton = useRef({});
   const [id, setId] = useState(null);
-  useEffect(() => { if (ctx && ctx.prendre(jeton.current)) setId(ctx.id); }, [ctx]);
+  /* L'id se REND au démontage (audit du 03/10) : une ligne de titre qui s'en
+   * va le laisse à celle qui la remplace. L'assistant passe d'un nom simple à
+   * un nom dans un menu quand ses entités arrivent, la fiche d'un robot de
+   * « ne répond plus » à son nom ; sans cela, la première gardait l'id pour
+   * toujours, et la feuille redevenait muette. Le double montage du mode
+   * strict rend puis reprend le même jeton — rien ne change pour lui. Le
+   * jeton est lu UNE fois : le nettoyage rend celui qu'il a pris. */
+  useEffect(() => {
+    const moi = jeton.current;
+    if (ctx && ctx.prendre(moi)) setId(ctx.id);
+    return () => { if (ctx) ctx.rendre(moi); };
+  }, [ctx]);
   return id;
 }
 export function CroixFeuille({ style = null }) {
@@ -403,6 +435,109 @@ export function TitreFeuille({ children, style = null, marge = 0 }) {
       <CroixFeuille />
     </div>
   );
+}
+
+/* Le nom d'une feuille dont l'en-tête est fait main (audit du 03/10).
+ *
+ * Dix-huit feuilles bâtissent leur ligne d'en-tête elles-mêmes — un nom, une
+ * épingle, des flèches, puis la croix — sans `TitreFeuille` ni `FicheEntete` :
+ * l'id tendu par la feuille ne trouvait personne, et un lecteur d'écran
+ * annonçait « dialogue », sans plus. Passer à `TitreFeuille` aurait posé une
+ * seconde croix sur leur ligne.
+ *
+ * `NomFeuille` ne dessine rien : il pose l'id sur son unique enfant, le titre
+ * EXISTANT. Il se rend DANS la feuille — le crochet lit le contexte de la
+ * feuille qui le contient ; appelé dans le composant qui rend `BottomSheet`,
+ * il lirait celui d'au-dessus et ne nommerait rien. Une feuille sans titre à
+ * l'écran (la recherche) lui confie un `<span hidden>` : un élément caché que
+ * `aria-labelledby` désigne compte quand même dans le nom. */
+export function NomFeuille({ children }) {
+  const idTitre = useIdTitreFeuille();
+  return cloneElement(Children.only(children), { id: idTitre || undefined });
+}
+
+/* ── Une barrière par vue, une par feuille (audit du 03/10) ─────────────────
+ *
+ * La seule barrière d'erreur vivait à la racine (`boot.jsx`) : une exception
+ * levée au rendu par N'IMPORTE QUELLE carte remplaçait tout l'écran par la
+ * page de secours — le menu, la barre du bas et les autres cartes partaient
+ * avec elle. L'ADR 0111 en raconte une vraie : la `RangeError` du graphique
+ * d'énergie, un `Math.min(...)` étalé sur des milliers de relevés, sous Safari.
+ *
+ * La panne reste maintenant où elle est née. Une vue garde son en-tête
+ * (`entete`, pour naviguer encore) et montre à sa place une carte au gabarit
+ * de la maison, avec le liseré de ce qui ne répond plus (`o-panne`, ADR 0048).
+ * Une feuille garde sa poignée, son nom et sa croix ; la panne y est posée à
+ * même la feuille, SANS carte — la feuille est déjà le panneau, une carte
+ * dedans serait une boîte dans une boîte. `titree` dit si sa ligne de titre
+ * est déjà posée au-dessus.
+ *
+ * « Réessayer » réarme la barrière sans recharger : un état de Home Assistant
+ * arrivé à moitié a souvent changé entre-temps. « Recharger » reste à côté,
+ * parce qu'une vue chargée à la demande dont le fichier a disparu — une mise à
+ * jour HACS pendant que la page était ouverte (ADR 0072) — ne se relit jamais
+ * d'elle-même : `lazy` garde son échec. L'erreur part dans la console avec la
+ * phrase de la racine : c'est là qu'on la cherche pour la corriger.
+ *
+ * Une classe : React ne confie la capture qu'à elles (`getDerivedStateFromError`). */
+export class Barriere extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { err: null };
+    this.reessayer = () => this.setState({ err: null });
+  }
+
+  static getDerivedStateFromError(err) {
+    return { err };
+  }
+
+  componentDidCatch(err, info) {
+    console.error('Loggia : erreur de rendu', err, info);
+  }
+
+  render() {
+    const { err } = this.state;
+    const { children, ou = 'vue', titree = false, entete = null } = this.props;
+    if (!err) return children;
+    const vue = ou === 'vue';
+    const titre = vue ? tr('Cette vue n’a pas pu s’afficher') : tr('Cette fiche n’a pas pu s’afficher');
+    const styleTitre = { ...NOM_CARTE, whiteSpace: 'normal', margin: 0 };
+    const bouton = { padding: '9px 15px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700 };
+    /* Une vue : une carte de la maison, liseré compris. Une feuille : son propre
+     * contenu, en colonne — pas de surface, pas d'ombre, pas de liseré. */
+    const cadre = vue
+      ? { ...CARTE_MAISON, justifyContent: 'flex-start', gap: 12, boxSizing: 'border-box', maxWidth: 560 }
+      : { display: 'flex', flexDirection: 'column', gap: 12 };
+    const panne = (
+      <div role="alert" className={vue ? 'o-panne' : undefined} style={cadre}>
+        <span style={{ ...ICONE_CARTE, background: 'rgba(var(--o-bad-rgb),.16)', color: 'var(--o-bad)' }}><Fi i="triangle-warning" size={17} /></span>
+        {/* Le titre SOUS l'icône. Dans une vue, un <h1> : c'est lui que le focus
+          * cherche après un changement de vue (`titreDeVue`, focus.js). Dans une
+          * feuille sans titre, la ligne de titre le porte déjà, croix comprise. */}
+        {vue ? <h1 style={styleTitre}>{titre}</h1> : titree ? <div style={styleTitre}>{titre}</div> : null}
+        <div style={{ ...SOUS_CARTE, marginTop: 0, whiteSpace: 'normal', lineHeight: 1.5 }}>{tr('Le reste de Loggia fonctionne. Le détail est parti dans la console du navigateur.')}</div>
+        <code style={{ fontSize: 11, lineHeight: 1.45, color: 'var(--o-text3)', background: 'var(--o-s1)', borderRadius: 8, padding: '6px 9px', overflowWrap: 'anywhere', maxHeight: 96, overflowY: 'auto' }}>{String((err && err.message) || err)}</code>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <button type="button" onClick={this.reessayer} style={{ ...bouton, border: 'none', background: 'rgba(var(--o-accent-rgb),.16)', color: 'var(--o-accent-soft)' }}>{tr('Réessayer')}</button>
+          <button type="button" onClick={() => window.location.reload()} style={{ ...bouton, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text2)' }}>{tr('Recharger')}</button>
+        </div>
+      </div>
+    );
+    if (!vue) {
+      return (
+        <>
+          {!titree && <TitreFeuille style={{ fontSize: 17, fontWeight: 800 }} marge={12}>{titre}</TitreFeuille>}
+          {panne}
+        </>
+      );
+    }
+    return (
+      <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+        {entete}
+        <div className="loggia-content" style={{ padding: '26px 28px 56px' }}>{panne}</div>
+      </main>
+    );
+  }
 }
 
 /* `onglets` : une feuille à onglets garde la même hauteur d'un onglet à
@@ -433,6 +568,7 @@ export function BottomSheet({ onClose, children, opaque = false, onglets = false
   const ctxTitre = useMemo(() => ({
     id: idTitre,
     prendre: (jeton) => { if (!prisPar.current) prisPar.current = jeton; return prisPar.current === jeton; },
+    rendre: (jeton) => { if (prisPar.current === jeton) prisPar.current = null; },
   }), [idTitre]);
   // A11y : focus dans la feuille à l'ouverture (Escape marche alors partout), restauré à la fermeture
   useEffect(() => {
@@ -443,14 +579,22 @@ export function BottomSheet({ onClose, children, opaque = false, onglets = false
      * focus — sinon on le rendrait à un élément encore inerte, qui le
      * refuserait, et le clavier repartirait du début du document. */
     const reveiller = inerterAutour(voileRef.current);
+    /* La feuille qui contient celle-ci, s'il y en a une : le repli du focus
+     * quand le bouton d'ouverture n'existe plus (relecture du lot 13). */
+    const hote = voileRef.current && voileRef.current.closest('.o-sheet');
     /* Le premier élément du contenu, pas la croix ; et un champ qui a déjà
      * pris le focus (`autoFocus` de la recherche) le garde. */
     const t = setTimeout(() => { try {
       const el = sheetRef.current; if (!el || el.contains(document.activeElement)) return;
-      const cible = [...el.querySelectorAll('button, [tabindex="0"], input, [role="switch"]')].find(n => !n.hasAttribute('data-croix'));
+      // Ni un bouton désactivé : il refuse le focus, qui restait hors de la feuille, sur une page inerte (relecture du lot 13).
+      const cible = [...el.querySelectorAll('button, [tabindex="0"], input, [role="switch"]')].find(n => !n.disabled && !n.hasAttribute('data-croix'));
       (cible || el).focus({ preventScroll: true });
     } catch {} }, 60);
-    return () => { clearTimeout(t); reveiller(); try { if (prev && prev.focus) prev.focus({ preventScroll: true }); } catch {} };
+    /* Rendu au bouton d'ouverture — ou, s'il est parti avec ce qu'il
+     * désignait (« Supprimer » dans la feuille d'un profil), à la feuille
+     * hôte, sinon au titre de la vue : `focus()` sur un nœud détaché ne
+     * faisait rien, le focus tombait sur <body> (relecture du lot 13). */
+    return () => { clearTimeout(t); reveiller(); try { rendreFocus(prev, hote); } catch {} };
   }, []);
   // Glisser-fermer iOS : la feuille suit le doigt depuis la poignée ; > 120 px = fermeture, sinon rebond spring.
   const dragClose = (e) => {
@@ -484,19 +628,30 @@ export function BottomSheet({ onClose, children, opaque = false, onglets = false
       {/* Une boite de dialogue qui ecoute le clavier n'est pas une anomalie :
         * Echap la ferme et Tab y boucle, ce que la regle nomme justement
         * comme le motif attendu ailleurs. Elle voit ici un role passif a qui
-        * on aurait rajoute des gestes. */}
+        * on aurait rajoute des gestes.
+        *
+        * Pas d'`aria-modal` (relecture du 03/10) : `inerterAutour` rend deja
+        * inerte tout ce qui est hors de la feuille — sauf la region d'annonce
+        * du toast d'echec (`data-annonce`). Avec `aria-modal`, WebKit (Safari,
+        * l'appli HA sur iOS) et Chromium retiraient cette region de l'arbre
+        * d'accessibilite : le refus d'une commande lancee DEPUIS une fiche
+        * restait muet, le cas meme qu'elle devait couvrir. */}
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
-      <div ref={sheetRef} className={'o-sheet' + (opaque ? ' o-sheet-opaque' : '') + (onglets ? ' o-sheet-onglets' : '')} role="dialog" aria-modal="true" aria-labelledby={idTitre} tabIndex={-1} onClick={e => e.stopPropagation()}
+      <div ref={sheetRef} className={'o-sheet' + (opaque ? ' o-sheet-opaque' : '') + (onglets ? ' o-sheet-onglets' : '')} role="dialog" aria-labelledby={idTitre} tabIndex={-1} onClick={e => e.stopPropagation()}
         onKeyDown={(e) => {
           if (e.key === 'Escape') { e.stopPropagation(); close(); return; }
           // Piège de focus : Tab boucle dans la feuille — derrière, la page vit
           // encore, et le clavier s'y perdait sans le voir.
           if (e.key === 'Tab') {
             const el = sheetRef.current; if (!el) return;
-            const focs = el.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+            /* Sans les désactivés (relecture du lot 13) : figé pendant l'écoute,
+             * le choix de l'assistant restait `premier` — il ne prend jamais le
+             * focus, et Maj+Tab sortait du document au lieu de boucler. */
+            const focs = [...el.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(n => !n.disabled);
             if (!focs.length) return;
             const premier = focs[0], dernier = focs[focs.length - 1];
-            if (e.shiftKey && document.activeElement === premier) { e.preventDefault(); dernier.focus(); }
+            // La feuille aussi : un clic sur son texte la focalise (tabIndex -1), et Maj+Tab sortait de là (relecture du lot 13).
+            if (e.shiftKey && (document.activeElement === premier || document.activeElement === el)) { e.preventDefault(); dernier.focus(); }
             else if (!e.shiftKey && document.activeElement === dernier) { e.preventDefault(); premier.focus(); }
           }
         }}
@@ -514,7 +669,11 @@ export function BottomSheet({ onClose, children, opaque = false, onglets = false
         <TitreCtx.Provider value={ctxTitre}>
           <FermerCtx.Provider value={close}>
             {title ? <TitreFeuille style={{ fontSize: 17, fontWeight: 800 }} marge={12}>{title}</TitreFeuille> : null}
-            {typeof children === 'function' ? children(close) : children}
+            {/* Une barrière par feuille (audit du 03/10) : une fiche qui casse au
+              * rendu ne prend plus la vue qui l'a ouverte, ni l'écran. La poignée,
+              * Échap et le voile la referment comme avant ; `titree` évite une
+              * seconde croix sous la ligne de titre déjà posée. */}
+            <Barriere ou="feuille" titree={!!title}>{typeof children === 'function' ? children(close) : children}</Barriere>
           </FermerCtx.Provider>
         </TitreCtx.Provider>
       </div>
@@ -592,7 +751,11 @@ function OptionsPanneau({ base, options, value, actif, auClavier, onPointe, onCh
         {o.ico ? <span style={{ display: 'inline-flex', flexShrink: 0, color: on ? '#fff' : 'var(--o-text2)' }}>{o.ico}</span> : null}
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.label}</span>
-          {o.sub ? <span style={{ display: 'block', marginTop: 1, fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace', fontSize: 10.5, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: on ? 'rgba(255,255,255,.78)' : 'var(--o-text3)' }}>{o.sub}</span> : null}
+          {/* Blanc PLEIN sur le bleu plein de l'option choisie (lot 13 de
+            * l'audit du 03/10) : à 78 %, l'identifiant en petit tombait à
+            * 3,54:1 — axe l'a relevé quand le menu de l'assistant est passé
+            * par cette liste. Blanc : 4,7:1, la règle des puces choisies. */}
+          {o.sub ? <span style={{ display: 'block', marginTop: 1, fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace', fontSize: 10.5, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: on ? '#fff' : 'var(--o-text3)' }}>{o.sub}</span> : null}
         </span>
       </button>
     );
@@ -619,9 +782,20 @@ function OptionsPanneau({ base, options, value, actif, auClavier, onPointe, onCh
  * identifiant, se lit en petit sous le nom ; les options qui se suivent sous
  * un même `groupe` passent sous son intitulé. Au-delà de douze, un champ
  * filtre la liste. Clavier : flèches, Début, Fin, Entrée ; Échap et Tab
- * referment et rendent la main au bouton. */
-export function ListeChoix({ value, options, onChange, label, style = null, children = null, recherche = null, vide = '—' }) {
-  const [open, setOpen] = useState(false);
+ * referment et rendent la main au bouton.
+ *
+ * Trois réglages pour un bouton que l'appelant dessine lui-même (lot 13 de
+ * l'audit du 03/10 : le nom de l'assistant, un titre et non une pastille).
+ * `disabled` fige la liste : le bouton se désactive, la liste ne s'ouvre pas,
+ * et se referme si elle l'était. `nom` remplace le nom composé quand le bouton
+ * montre autre chose que l'option choisie — le nom commence par ce qui se lit
+ * (WCAG 2.5.3). `title`, la bulle au survol. Sans eux, rien ne change. */
+export function ListeChoix({ value, options, onChange, label, style = null, children = null, recherche = null, vide = '—', disabled = false, nom = null, title = null }) {
+  /* Ouverte se DÉDUIT : désactivée, la liste est fermée dès ce rendu-ci, sans
+   * attendre l'effet qui remet son état à zéro — le panneau ne reste pas une
+   * image de trop à l'écran. */
+  const [ouverte, setOpen] = useState(false);
+  const open = ouverte && !disabled;
   const [filtre, setFiltre] = useState('');
   const [actif, setActif] = useState(-1);
   // Le liseré de l'option visée ne sert qu'au clavier : à la souris, le
@@ -637,6 +811,11 @@ export function ListeChoix({ value, options, onChange, label, style = null, chil
   const pos = usePanneau(open, wrapRef, menuRef);
   const liste = Array.isArray(options) ? options : [];
   const cur = liste.find(o => o.id === value) || null;
+  /* Le bouton dit son nom ET le choix (audit du 03/10) : « Langue : Deutsch »
+   * en français, « Language: Deutsch » ailleurs. Collés en dur, les deux
+   * imposaient l'espace française avant les deux-points à toutes les langues ;
+   * le gabarit « {a} : {b} » s'écrit à la façon de chaque catalogue. */
+  const nomBouton = cur ? tr('{a} : {b}', { a: label, b: cur.label }) : label;
   const avecRecherche = recherche != null ? !!recherche : liste.length > SEUIL_RECHERCHE;
   const visibles = open ? filtrerChoix(liste, filtre) : liste;
   const vise = actif >= 0 && actif < visibles.length ? base + '-o' + actif : undefined;
@@ -645,8 +824,12 @@ export function ListeChoix({ value, options, onChange, label, style = null, chil
     setOpen(false); setFiltre(''); setActif(-1);
     if (rendre) { try { if (btnRef.current) btnRef.current.focus({ preventScroll: true }); } catch { /* bouton parti */ } }
   };
-  const ouvrir = (clavier) => { setFiltre(''); setAuClavier(!!clavier); setActif(Math.max(0, liste.findIndex(o => o.id === value))); setOpen(true); };
+  const ouvrir = (clavier) => { if (disabled) return; setFiltre(''); setAuClavier(!!clavier); setActif(Math.max(0, liste.findIndex(o => o.id === value))); setOpen(true); };
   const choisir = (o) => { if (o) onChange(o.id); fermer(true); };
+  // Désactivée en cours de route, l'état se referme aussi : sinon la liste se
+  // rouvrirait d'elle-même au retour. Le focus ne revient pas au bouton — il
+  // est désactivé, il ne le prendrait pas.
+  useEffect(() => { if (disabled) { setOpen(false); setFiltre(''); setActif(-1); } }, [disabled]);
 
   // Un appui dehors referme. Échap aussi, et avant la feuille qui contient le
   // choix : écouté en capture sur le document, il ne ferme que le menu.
@@ -707,8 +890,8 @@ export function ListeChoix({ value, options, onChange, label, style = null, chil
       <button ref={btnRef} type="button" onClick={(e) => (open ? fermer(false) : ouvrir(e.detail === 0))}
         onKeyDown={(e) => { if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); ouvrir(true); } }}
         aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? base + '-l' : undefined}
-        aria-label={label + (cur ? ' : ' + cur.label : '')}
-        style={style ? { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', ...style } : pastille}>
+        aria-label={nom || nomBouton} title={title || undefined} disabled={disabled}
+        style={{ ...(style ? { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', ...style } : pastille), ...(disabled ? { cursor: 'default' } : null) }}>
         {children ? children(cur, open) : (
           <>
             <span style={{ flex: style ? 1 : 'none', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cur ? cur.label : vide}</span>
@@ -818,7 +1001,7 @@ export function EntPicker({ hass, exclude = [], onPick, autoFocus = false, domai
   const all = useMemo(() => {
     const st = (hRef.current && hRef.current.states) || null;
     if (!st) return [];
-    return ids.split('|').filter(Boolean).map(id => ({ id, name: cvName(st[id], id), dom: cvDomain(id) })).sort((a, b) => a.name.localeCompare(b.name));
+    return ids.split('|').filter(Boolean).map(id => ({ id, name: cvName(st[id], id), dom: cvDomain(id) })).sort((a, b) => comparerTextes(a.name, b.name));
   }, [ids]);
   const ql = q.trim().toLowerCase();
   /* `domaines` : une carte choisie d'abord (galerie) ne va qu'avec certains
@@ -929,10 +1112,21 @@ export function useEtatServeur(hass, type, ms, siErreur) {
 
   useEffect(() => {
     vivant.current = true;
-    if (!connecte) { setErr(tr('Home Assistant n’est pas joignable.')); return undefined; }
+    /* Pas avant un VRAI échec (lot 14 de l'audit du 03/10) : sans `hass` au
+     * premier rendu — l'application mobile le pose parfois après —, la vue
+     * disait « n'est pas joignable » puis l'effaçait à son arrivée. Le message
+     * attend 4 s ; un `hass` venu entre-temps relance l'effet, et le minuteur
+     * part avec l'ancien. À l'échéance, le pont est RELU : son intervalle se
+     * règle (Paramètres → Connexion, jusqu'à 60 s), et un `hass` déjà là mais
+     * pas encore relayé à la vue ne vaut pas une panne (relecture du lot 14). */
+    if (!connecte) { const t = setTimeout(() => { if (!getHass()) setErr(tr('Home Assistant n’est pas joignable.')); }, 4000); return () => clearTimeout(t); }
     const lire = () => hRef.current.callWS({ type })
       .then(r => { if (vivant.current) { setEtat(r); setErr(''); } })
-      .catch(e => { if (vivant.current) setErr((e && (e.message || e.code)) || siErreur); });
+      /* Le repli TRADUIT de la vue, jamais le motif du serveur (audit du
+       * 03/10) : « regles de volets indisponibles », « Unknown command. »
+       * s'affichaient tels quels, en français sans accents ou en anglais,
+       * dans les sept langues. Une lecture ratée n'a rien de plus à dire. */
+      .catch(() => { if (vivant.current) setErr(siErreur || tr('Réglages indisponibles.')); });
     lire();
     const t = setInterval(lire, ms);
     return () => { vivant.current = false; clearInterval(t); };
@@ -990,4 +1184,50 @@ export function Bascule({ on, cb, nom = null }) {
       <span style={{ width: 20, height: 20, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)' }} />
     </button>
   );
+}
+
+/** Le bouton de SURFACE d'une carte (ADR 0074 ; lot 13 de l'audit du 03/10).
+ *
+ * Une carte qui s'ouvre ET porte des commandes ne peut pas être elle-même un
+ * bouton : un rôle bouton rend sa descendance présentationnelle, et ses
+ * commandes disparaissaient d'un lecteur d'écran (`nested-interactive` : 23
+ * cartes sur Objets, 39 en mode édition). Le geste « ouvrir » passe donc par ce
+ * bouton, FRÈRE des commandes. Premier enfant de la carte, qui doit être
+ * `position: relative`, il la couvre, transparent, et passe SOUS tout enfant
+ * positionné : les commandes, `position: relative` UNE À UNE — jamais leur
+ * rangée entière, dont les écarts lui volaient ses appuis (relecture du lot
+ * 13) —,
+ * reçoivent leurs clics ; le texte, qui ne l'est pas, laisse passer le clic
+ * vers lui. Rien ne bouge à l'œil.
+ *
+ * Son nom est ce que la carte AFFICHE, nom puis état (`nomCarte`) : « Volet
+ * salon, Ouvert à 60 % », et non plus « Ouvrir Volet salon », qui taisait
+ * l'état et prenait le nom du bouton « Ouvrir » du volet (WCAG 2.5.3). Qu'il
+ * ouvre une fiche, `aria-haspopup="dialog"` le dit ; `popup={false}` pour un
+ * bouton qui change de vue.
+ *
+ * Son anneau de focus se trace EN DEDANS (`.o-surface`, index.css) : la carte
+ * rogne ce qui dépasse (`overflow: hidden`), et le contour habituel, à 2 px
+ * dehors, ne se voyait pas — c'était déjà le cas des cartes de pièce.
+ *
+ * Le reste des props passe au bouton : `onKeyDown`, `onPointerDown`, `data-*`
+ * d'une carte qu'on déplace en mode édition, par exemple. */
+export function Surface({ onClick, label, popup = true, style = null, ...reste }) {
+  return (
+    <button type="button" className="o-surface" onClick={onClick} aria-label={label}
+      aria-haspopup={popup ? 'dialog' : undefined} {...reste}
+      style={{ position: 'absolute', inset: 0, border: 'none', background: 'transparent', padding: 0, margin: 0,
+        borderRadius: 'inherit', cursor: 'pointer', ...style }} />
+  );
+}
+
+/** Le nom d'une carte tel qu'elle l'affiche : `nomCarte('Volet salon',
+ * 'Ouvert à 60 %')` → « Volet salon, Ouvert à 60 % ». Un morceau vide, ou qui
+ * n'est pas du texte (un élément React, `null`), tombe. */
+export function nomCarte(...morceaux) {
+  return morceaux
+    .filter(m => typeof m === 'string' || (typeof m === 'number' && isFinite(m)))
+    .map(m => String(m).replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join(', ');
 }

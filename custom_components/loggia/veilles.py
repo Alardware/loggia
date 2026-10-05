@@ -57,6 +57,18 @@ MUETS = {"unavailable", "unknown", "none", ""}
 # souffle.
 HYSTERESE = 0.90
 
+# Ce qui part au telephone (05/10) : des constantes, jamais un litteral glisse
+# dans un appel. Chaque gabarit est une cle de textes_catalogue.py, recopiee
+# par scripts/textes_serveur.mjs (CLES_TELEPHONE) : retouche ici sans sa cle,
+# la veille partait en francais chez un Allemand —
+# tests/python/test_lot16_alertes_traduites.py le dit. Les accents absents
+# (« aerer », « pile a ») SONT la cle des sept catalogues : les corriger la
+# renomme partout, polonais compris.
+MSG_CO2 = "{nom} : {v} ppm, il faut aerer"
+MSG_PILE = "{nom} : pile a {v} %"
+MSG_CONSO = "{nom} : {reste} restant, a remplacer"
+MSG_CREUSES = "Heures creuses : c’est le moment de lancer les machines"
+
 # Ce que les veilles commandent a sa place dans l'echelle de la maison : la
 # ventilation (l'air qu'on respire) passe devant le confort ; les prises des
 # heures creuses sont du confort. Sans rang declare, tout partait a 0 — sous
@@ -232,8 +244,7 @@ class LoggiaVeilles:
                     self.signales.add(cle)
                     motif = ("{v} ppm", {"v": int(valeur)})
                     await self._async_prevenir(
-                        "co2", ("{nom} : {v} ppm, il faut aerer",
-                                {"nom": self._nom(haid, etats), "v": int(valeur)}),
+                        "co2", (MSG_CO2, {"nom": self._nom(haid, etats), "v": int(valeur)}),
                         motif=motif)
                     ventilation = c.get("ventilation") or []
                     if ventilation:
@@ -256,7 +267,7 @@ class LoggiaVeilles:
                 if not deja:
                     self.signales.add(cle)
                     await self._async_prevenir(
-                        "batterie", ("{nom} : pile a {v} %", {"nom": self._nom(haid, etats), "v": int(valeur)}),
+                        "batterie", (MSG_PILE, {"nom": self._nom(haid, etats), "v": int(valeur)}),
                         motif=("{v} %", {"v": int(valeur)}))
             elif deja:
                 # Pile changee : on redevient capable de prevenir.
@@ -279,8 +290,7 @@ class LoggiaVeilles:
                     unite = str((getattr(st, "attributes", None) or {}).get("unit_of_measurement") or "").strip()
                     reste = ("%g %s" % (valeur, unite)).strip()
                     await self._async_prevenir(
-                        "consommables", ("{nom} : {reste} restant, a remplacer",
-                                         {"nom": self._nom(haid, {haid: st}), "reste": reste}),
+                        "consommables", (MSG_CONSO, {"nom": self._nom(haid, {haid: st}), "reste": reste}),
                         motif=reste)
             elif deja:
                 # Remplace : on redevient capable de prevenir.
@@ -302,7 +312,7 @@ class LoggiaVeilles:
         if dedans and not self.creuses_en_cours:
             self.creuses_en_cours = True
             await self._async_prevenir(
-                "creuses", "Heures creuses : c’est le moment de lancer les machines",
+                "creuses", MSG_CREUSES,
                 motif=attendu)
             prises = c.get("prises") or []
             if prises:
@@ -331,7 +341,11 @@ class LoggiaVeilles:
 
     # ── Ce que l'interface lit et ecrit ────────────────────────────────────
     async def async_config(self) -> dict[str, Any]:
-        brut = await self.store.async_get_shared(CLE, None)
+        return self._config_de(await self.store.async_get_shared(CLE, None))
+
+    def _config_de(self, brut: Any) -> dict[str, Any]:
+        """La configuration, defauts compris. Synchrone : `async_enregistrer`
+        la rebatit sous le verrou du magasin (lot 15 de l'audit du 03/10)."""
         cfg = {k: dict(v) for k, v in DEFAUT.items()}
         cfg["co2"]["capteurs"] = []
         cfg["co2"]["ventilation"] = []
@@ -357,8 +371,9 @@ class LoggiaVeilles:
             "journal": await self.regles.journal(limite=40, module="veilles"),
         }
 
-    async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:
-        cfg = await self.async_config()
+    def _poser_patch(self, cfg: dict[str, Any], patch: dict[str, Any]) -> None:
+        """Le patch de l'ecran, pose sur `cfg`, seuils bornes. Synchrone :
+        sous le verrou."""
         for section, valeurs in (patch or {}).items():
             if section in cfg and isinstance(valeurs, dict):
                 cfg[section].update(valeurs)
@@ -382,7 +397,16 @@ class LoggiaVeilles:
                 s["seuil"] = int(v) if float(v).is_integer() else v
             except (TypeError, ValueError):
                 s["seuil"] = DEFAUT[section]["seuil"]
-        await self.store.async_set_shared(CLE, cfg)
+
+    async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:
+        # D'un seul tenant, sous le verrou du magasin (lot 15 de l'audit du
+        # 03/10 ; voir store.async_modifier_shared).
+        def changer(brut: Any) -> dict[str, Any]:
+            cfg = self._config_de(brut)
+            self._poser_patch(cfg, patch)
+            return cfg
+
+        cfg = await self.store.async_modifier_shared(CLE, changer)
         self.cfg = cfg
         await self._async_reabonner()
         return cfg

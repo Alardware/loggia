@@ -52,3 +52,30 @@ Trois tests : un compte ordinaire enregistre son agencement et il atterrit bien
 dans le commun ; la configuration reste refusée ; et un garde-fou sur la liste
 elle-même, qui refuse nommément qu'une clé de configuration s'y glisse un jour
 par inadvertance.
+
+## Amendement (03/10/2026) — le choix d'une icône et le quart de tour du plan
+
+**Redémarrage de Home Assistant requis.**
+
+L'audit du 03/10 a trouvé deux clés d'apparence restées du côté réservé, faute
+d'avoir été rangées quand la frontière a bougé : `loggia_icones`, le glyphe
+choisi pour une entité, et `loggia_vacrot`, le quart de tour appliqué au plan
+du robot. Depuis un compte ordinaire, le geste s'affichait, un message le
+disait non enregistré, et il disparaissait au rechargement — le symptôme de
+départ, sur deux clés de plus.
+
+**Décidé : elles rejoignent l'apparence** (`APPARENCE`, store.py). Elles ne
+font que remplacer un dessin ou tourner une image ; une erreur ne coûte rien :
+on rend l'icône d'origine, on tourne encore d'un quart. Comme l'agencement,
+elles vont dans le commun — une icône vaut pour toutes les cartes de la maison
+qui montrent cette entité.
+
+**Ce qui ne suit pas.** L'association des couleurs du plan aux pièces
+(`loggia_vacplan`) décide de ce que le robot nettoie quand on touche une zone :
+c'est de la configuration, elle reste réservée. Le choix des agendas affichés
+(`loggia_agendas`) reste réservé aussi, par décision du 03/10. Le planning du
+robot garde son refus voulu et dit (0043).
+
+Un test : un compte ordinaire pose une icône, tourne le plan, rend l'icône
+d'origine, et tout atterrit dans le commun ; les deux voisines restent
+refusées, nommément.

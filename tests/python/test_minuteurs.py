@@ -264,6 +264,10 @@ def test_au_demarrage_l_echu_s_execute_et_le_reste_se_rearme(creer, evenements, 
               depart={"light.a": {"fin": 9_000.0, "duree": 30, "par": "u1"},
                       "light.b": {"fin": 12_000.0, "duree": 60, "par": "u2"}})
     lancer(m._async_demarrer())
+    # Le rattrapage part quand Home Assistant a fini de demarrer (03/10) :
+    # deja demarre ici, la doublure le pose en tache.
+    while m.hass.taches:
+        lancer(m.hass.taches.pop(0))
     assert m.hass.services.appels == [("homeassistant", "turn_off", {"entity_id": ["light.a"]}, "u1")]
     assert journal(m) == [("eteindre", "minuteur de 30 min (echu pendant un redemarrage)", ["light.a"])]
     assert set(m.table) == {"light.b"}
@@ -321,3 +325,30 @@ def test_le_composant_cree_le_module_et_ouvre_ses_trois_commandes():
     assert "par=connection.user.id" in ws
     assert ws.count("controle=controle_de(connection.user)") >= 3
     assert '"unauthorized"' in ws
+
+
+# ── Audit du 03/10 : un minuteur echu pendant un redemarrage ───────────────
+
+def test_un_minuteur_echu_attend_que_sa_lampe_existe(creer, monkeypatch, module):
+    """Le rattrapage tournait pendant la mise en place : la lampe pas encore
+    creee par son integration, le minuteur etait efface sans rien eteindre.
+    Il attend maintenant que Home Assistant ait fini de demarrer."""
+    import sys as _sys
+
+    rappels = []
+
+    def au_demarrage(_hass, rappel):
+        rappels.append(rappel)
+        return lambda: None
+
+    monkeypatch.setattr(_sys.modules["homeassistant.helpers.start"], "async_at_started", au_demarrage)
+    monkeypatch.setattr(module.time, "time", lambda: 10_000.0)
+    m = creer({}, depart={"light.a": {"fin": 9_000.0, "duree": 30, "par": "u1"}})
+    lancer(m._async_demarrer())
+    assert set(m.table) == {"light.a"}, "efface avant que la lampe existe"
+    assert m.hass.services.appels == []
+    # L'integration a cree la lampe, Home Assistant a fini de demarrer.
+    m.hass.states.table["light.a"] = FauxEtat("on")
+    lancer(rappels[0](m.hass))
+    assert m.hass.services.appels == [("homeassistant", "turn_off", {"entity_id": ["light.a"]}, "u1")]
+    assert m.table == {}

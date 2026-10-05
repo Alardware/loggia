@@ -41,7 +41,7 @@ body { overscroll-behavior: none; min-height: 100vh; min-height: 100dvh; }
 button { color: inherit; font-family: inherit; }
 
 /* Retour tactile : léger enfoncement au press + rebond (spring) au relâcher. transform = GPU. */
-button, .o-nav-item, .o-piece, .o-light-card, .o-scene-room, .grid-sec-tiles > div, .grid-sys-metrics > div, .grid-par-pal button, [role="switch"], [role="button"] {
+button, .o-nav-item, .o-piece, .o-light-card, .o-scene-room, .grid-par-pal button, [role="switch"], [role="button"] {
   transition: transform .16s cubic-bezier(.34, 1.45, .56, 1);
   -webkit-tap-highlight-color: transparent;
   /* Le navigateur n'attend plus de savoir si le doigt allait faire un double-tap
@@ -53,12 +53,12 @@ button, .o-nav-item, .o-piece, .o-light-card, .o-scene-room, .grid-sec-tiles > d
    * interface fermee a qui voit mal. */
   touch-action: manipulation;
 }
-button:active, .o-nav-item:active, .o-piece:active, .o-light-card:active, .o-scene-room:active, .grid-sec-tiles > div:active, .grid-sys-metrics > div:active, .grid-par-pal button:active, [role="switch"]:active, [role="button"]:active {
+button:active, .o-nav-item:active, .o-piece:active, .o-light-card:active, .o-scene-room:active, .grid-par-pal button:active, [role="switch"]:active, [role="button"]:active {
   transform: scale(.955);
 }
 @media (prefers-reduced-motion: reduce) {
-  button, .o-nav-item, .o-piece, .o-light-card, .o-scene-room, .grid-sec-tiles > div, .grid-sys-metrics > div, .grid-par-pal button, [role="switch"], [role="button"] { transition: none; }
-  button:active, .o-nav-item:active, .o-piece:active, .o-light-card:active, .o-scene-room:active, .grid-sec-tiles > div:active, .grid-sys-metrics > div:active, .grid-par-pal button:active, [role="switch"]:active, [role="button"]:active { transform: none; }
+  button, .o-nav-item, .o-piece, .o-light-card, .o-scene-room, .grid-par-pal button, [role="switch"], [role="button"] { transition: none; }
+  button:active, .o-nav-item:active, .o-piece:active, .o-light-card:active, .o-scene-room:active, .grid-par-pal button:active, [role="switch"]:active, [role="button"]:active { transform: none; }
 }
 
 /* Cible tactile des interrupteurs : le visuel fait 46x26, la zone cliquable est étendue à ~44px de haut. */
@@ -248,7 +248,19 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 
 /* Grille DENSE des vues intégrées : une carte riche occupe deux rangées, une
  * COMPACTE une seule — deux compactes s'empilent à côté d'une grande, comme
- * dans les vues custom. */
+ * dans les vues custom.
+ *
+ * L'écart ENTRE RANGÉES vaut 8 px, l'écart entre colonnes ne change pas (04/10,
+ * question 5 de l'audit : « ok pour 184 mais il faut que 2 compactes puissent
+ * être à côté sans déborder, ça doit être aligné »). Le `gap: 16` en ligne
+ * fixait aussi l'écart vertical : une standard couvre deux rangées ET l'écart
+ * qui les sépare, elle mesurait donc 88 + 16 + 88 = 192 px (186 au téléphone,
+ * écart de 10) quand l'Accueil et les Scénarios en donnent 184. Avec 8 px,
+ * 88 + 8 + 88 = 184 partout, et deux compactes empilées tombent pile sur le
+ * haut et le bas de la standard voisine. Les grilles le disent en ligne
+ * (`columnGap`, `rowGap`) — Pièce, Objets, Volets, piles d'Énergie, vues
+ * custom — et le bloc du téléphone ne rend que l'écart horizontal à 10 px
+ * (tests/cartes_184.test.mjs). */
 .grid-dense { grid-auto-flow: row dense; grid-auto-rows: 88px; }
 .grid-dense > * { grid-row: span 2; }
 .grid-dense > .o-cvrow1 { grid-row: span 1; }
@@ -268,9 +280,43 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 .o-cvdense { container-type: inline-size; }
 @container (max-width: 270px) {
   .o-cvclim .o-cvtxt { display: none; }
-  /* Carte lumière étroite (mobile) : les préréglages cèdent — la glissière
-   * et le pourcentage suffisent. */
-  .o-lightpresets { display: none !important; }
+}
+/* Le geste d'une carte d'appareil — Exécuter, la serrure, l'alarme (lot 16,
+ * 05/10). Le bouton avait un rembourrage fixe et ne rétrécissait pas : au
+ * téléphone, « Déverrouiller », « Zamknij na klucz » ou « Unscharf schalten »
+ * prenaient toute la ligne, le nom de la carte tombait à 0 px et le bouton
+ * sortait de la carte jusque sur la voisine — sur la compacte comme sur la
+ * STANDARD (même rangée, 176 px de large au téléphone). C'est la mise en page
+ * qui cède, pas les mots (aucune forme courte) : sous 200 px de contenu,
+ * l'icône du geste remplace le mot, comme les modes de l'alarme (ADR 0035) ;
+ * le mot reste dans l'`aria-label` et l'infobulle (`title`). `o-cvcarte` fait
+ * de TOUTE carte CvCard un conteneur (la compacte l'était déjà) : sa largeur
+ * vient de sa case de grille, jamais de son contenu. Le rembourrage vit ici et
+ * non en ligne : la requête peut le resserrer sans `!important`.
+ * La pastille (`o-cvpastille`) et l'écart de la rangée aussi (relecture du
+ * lot 16, 05/10) : en ligne, la STANDARD gardait 40 px de pastille et 11 px
+ * d'écart dans sa carte de 138 px à 320 px de large — 16 px de nom, une
+ * lettre. Sous le même seuil, elle prend ceux de la compacte (34 et 9 px) :
+ * 8 px rendus au nom. Les FAVORIS de l'Accueil (cases fixes de 225 px, 197 px
+ * de contenu) sont TOUJOURS sous le seuil, ordinateur compris : icône à
+ * 1440 px aussi, et c'est voulu — l'icône y rend 50 à 100 px de nom en
+ * allemand ou en polonais (« Unscharf schalten » n'en laissait que 13). Les
+ * cartes de la grille (268 px à 1440) gardent le mot.
+ * Ces sélecteurs ne vivent QUE dans ce bloc (épinglé) : une règle de même
+ * poids posée plus loin annulerait la requête sans bruit. */
+.o-cvcarte { container-type: inline-size; }
+.o-cvcarte > .o-cvrow { gap: 11px; }
+.o-cvcarte.o-cvdense > .o-cvrow { gap: 9px; }
+.o-cvpastille { width: 40px; height: 40px; border-radius: 12px; }
+.o-cvdense .o-cvpastille { width: 34px; height: 34px; border-radius: 10px; }
+.o-cvact { padding: 7px 12px; display: inline-flex; align-items: center; justify-content: center; }
+.o-cvact-ico { display: none; }
+@container (max-width: 200px) {
+  .o-cvcarte .o-cvact { padding: 7px 9px; }
+  .o-cvcarte .o-cvact-mot { display: none; }
+  .o-cvcarte .o-cvact-ico { display: inline-flex; }
+  .o-cvcarte > .o-cvrow { gap: 9px; }
+  .o-cvcarte .o-cvpastille { width: 34px; height: 34px; border-radius: 10px; }
 }
 /* Favoris : une rangée qui défile, barre discrète (elle ne doit pas manger la
  * carte suivante ni sauter aux yeux).
@@ -297,9 +343,6 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
    * lirait mal, et `aria-label` le porte de toute façon (ADR 0040, 25/09). */
   .o-objfiltre-mot, .o-objfiltre-nb { display: none; }
 }
-/* Héros « En ce moment » : la carte du catalogue remplit le gabarit 184 px. */
-.o-hero > * { height: 100%; box-sizing: border-box; }
-.o-heroslider::-webkit-scrollbar { display: none; }
 /* Tuile piece standard : les minis volets/clim cedent quand la carte est
  * VRAIMENT trop etroite — icone et interrupteur gardent la place.
  *
@@ -315,14 +358,8 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
   /* !important : le display:flex est pose inline par la carte. */
   .o-piecestd .o-piece-minis { display: none !important; }
 }
-/* Chip pièce : à l'étroit, la température quitte la droite (o-chip-temp-d)
- * et revient dans la ligne d'état (o-chip-temp-i) — le nom garde sa place. */
-.o-piecechip { container-type: inline-size; }
-.o-piecechip .o-chip-temp-i { display: none; }
-@container (max-width: 209px) {
-  .o-piecechip .o-chip-temp-d { display: none !important; }
-  .o-piecechip .o-chip-temp-i { display: inline; }
-}
+/* Chip pièce : maquette 1b (03/10) — la température vit dans la ligne
+ * d'état, sous le nom ; plus de bascule par container query. */
 
 /* Bibliothèque : chaque exemplaire remplit son gabarit (88 ou 184 px). */
 .o-bibitem > * { height: 100%; box-sizing: border-box; }
@@ -364,6 +401,23 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 /* Vues custom : la carte REMPLIT sa cellule de grille — sans quoi étirer le
    coin agrandissait le cadre pointillé et laissait la carte petite dedans. */
 .o-cvfit > * { height: 100%; box-sizing: border-box; }
+/* L'aperçu d'une carte dans la galerie d'ajout (`CarteApercu`) n'est plus un
+   `button` : il en englobait d'autres (relecture du lot 13, 04/10). Son geste
+   passe par sa surface, et il reprend ce que la règle des boutons lui donnait
+   (en tête de fichier) : l'enfoncement au press, avec son rebond, et l'anneau
+   de focus 2 px DEHORS, à la place de celui de la surface, tracé en dedans.
+   L'enfoncement aussi au clavier : Espace n'active que la surface, pas ses
+   ancêtres (mesuré : `none` au lieu de .955) — d'où le `:has`, en règle à
+   part pour qu'un navigateur sans `:has` garde celle de la souris. */
+.o-apercu { transition: transform .16s cubic-bezier(.34, 1.45, .56, 1); }
+.o-apercu:active { transform: scale(.955); }
+.o-apercu:has(> .o-surface:active) { transform: scale(.955); }
+.o-apercu:has(> .o-surface:focus-visible) { outline: 2px solid var(--o-accent); outline-offset: 2px; }
+@supports selector(:has(*)) { .o-apercu > .o-surface:focus-visible { outline: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .o-apercu { transition: none; } .o-apercu:active { transform: none; }
+  .o-apercu:has(> .o-surface:active) { transform: none; }
+}
 /* Une entité indisponible respire, et sa bordure tourne (reprise d'Atrium) :
    une pastille grise ne se voit pas de l'autre bout de la pièce, une tuile qui
    souffle, si. Cycles désynchronisés exprès pour ne pas battre ensemble. */
@@ -420,8 +474,6 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 /* Bottom sheet (popup lumière) : monte du bas avec la courbe drawer iOS. */
 @keyframes o-sheetIn { from { transform: translate(-50%, 105%); } to { transform: translate(-50%, 0); } }
 @keyframes o-sheetOut { from { transform: translate(-50%, 0); } to { transform: translate(-50%, 105%); } }
-@keyframes croq-bubble { 0% { transform: translateY(8px) scale(.5); opacity: 0; } 25% { opacity: .5; } 100% { transform: translateY(-78px) scale(1); opacity: 0; } }
-@keyframes croq-ring { 0% { box-shadow: 0 0 0 0 rgba(255,179,71,.55); } 70%,100% { box-shadow: 0 0 0 7px rgba(255,179,71,0); } }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--o-bd1); border-radius: 4px; }
@@ -443,8 +495,6 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
   .o-bar > * { flex-shrink: 0 !important; }
   .o-bar > button:last-child { position: sticky; right: -12px; z-index: 2; margin-left: 4px; }
   .o-bar > button:last-child::before { content: ''; position: absolute; top: -11px; bottom: -11px; left: -8px; right: -13px; z-index: -1; background: linear-gradient(var(--o-surfA), var(--o-surfA)), var(--o-bg); }
-  /* seconde ligne d'un libellé de groupe : elle doublait la hauteur du bandeau */
-  .o-bar-sub { display: none; }
   /* La barre des ambiances (Scènes) ne glisse pas : elle tient l'écran en deux
    * rangées (retour du 19/09 : « sur mobile je suis obligé de scroller, on voit
    * mal »). Les pièces se partagent la première ; collection, luminosité et
@@ -492,15 +542,6 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
   65% { transform: scale(1.08); opacity: .14; }
   100% { transform: scale(1.12); opacity: 0; }
 }
-/* Lecteur Médias sur téléphone : pochette GRANDE centrée + titre centré + gros play (comme la réf HOMEii mobile). */
-@media (max-width: 640px) {
-  .o-np-row { flex-direction: column !important; align-items: center !important; gap: 18px !important; }
-  .o-np-art { width: min(62vw, 250px) !important; height: min(62vw, 250px) !important; }
-  .o-np-art > div { border-radius: 18px !important; }
-  .o-np-meta { width: 100%; text-align: center; }
-  .o-np-title { font-size: 22px !important; }
-  .o-np-main { width: 104px !important; height: 104px !important; }
-}
 
 /* responsive (= design @media 820px) */
 @media (max-width: 820px) {
@@ -540,7 +581,6 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
   .grid-roomdev { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
   .grid-roomdev .o-rmcard { min-height: 150px !important; padding: 13px !important; }
   .grid-roomdev .o-rmbtn { padding: 8px 3px !important; font-size: 11px !important; }
-  .grid-roomdev .o-rmbig { font-size: 25px !important; }
   .grid-qscenes::-webkit-scrollbar { height: 4px; }
   .grid-qscenes::-webkit-scrollbar-thumb { background: var(--o-bd1); border-radius: 4px; }
   .grid-qscenes::-webkit-scrollbar-track { background: transparent; }
@@ -551,28 +591,11 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
   .loggia-aside.is-open { transform: translateX(0); }
   .loggia-backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 90; }
   .loggia-content { padding: 16px 14px 96px !important; }
-  .grid-rappels, .grid-scenes, .grid-covers, .grid-volcfg, .grid-ehero, .grid-ebilan, .grid-vac-top, .grid-vac-map, .grid-croq, .grid-speakers, .grid-par-pal, .grid-par-about { grid-template-columns: 1fr !important; }
+  .grid-ehero, .grid-par-pal, .grid-par-about { grid-template-columns: 1fr !important; }
   /* Caméras : une par ligne sur téléphone (retour du 15/09 : « pas fan
      finalement » de la grille de deux). Depuis le 20/09, c'est le RÉGLAGE qui
      le dit — `camdispo.js`, « Automatique » valant une seule colonne au
      téléphone : un `!important` ici rendrait le choix sans effet. */
-  /* Sécurité mobile : hero compact, jauge circulaire gardée SUR LE CÔTÉ (pas de wrap dessous), 4 tuiles en grille 2-col */
-  .o-sec-hero { padding: 18px 16px !important; border-radius: 18px !important; }
-  .o-sec-herotop { flex-wrap: nowrap !important; gap: 16px !important; align-items: flex-start !important; }
-  .o-sec-herotop > div:first-child { min-width: 0 !important; flex: 1 1 auto !important; }
-  .o-sec-herotop > div:first-child > div:nth-child(2) { font-size: 25px !important; margin-top: 6px !important; }
-  .o-sec-herotop > div:first-child > div:nth-child(3) { gap: 16px !important; margin-top: 12px !important; }
-  .o-sec-herotop > div:first-child > div:nth-child(3) > div > div:first-child { font-size: 24px !important; }
-  .o-sec-gauge, .o-sec-gauge svg { width: 92px !important; height: 92px !important; }
-  .grid-sec-tiles { grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
-  .grid-sec-tiles > div { padding: 14px 14px !important; border-radius: 14px !important; }
-  .o-sec-tile-val { font-size: 17px !important; }
-  /* Système mobile : metrics (CPU/RAM/disque/réseau) + machines en grille 2-col, boutons alimentation en grille 3-col compacts */
-  .grid-sys-metrics, .grid-sys-machines { grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
-  .grid-sys-metrics > div, .grid-sys-machines > div { padding: 14px !important; }
-  .grid-sys-metrics > div > div:nth-child(2) { font-size: 20px !important; }
-  .grid-sys-power { grid-template-columns: 1fr 1fr 1fr !important; gap: 8px !important; }
-  .grid-sys-power > button { flex-direction: column !important; gap: 8px !important; padding: 12px 6px !important; font-size: 11.5px !important; text-align: center !important; line-height: 1.25 !important; }
   /* La barre du bas ne vit PLUS ici (23/09, plan M13).
    *
    * Trois règles la montraient sous 820 px — elle, l'assistant qu'elle reprend
@@ -583,43 +606,40 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
    * promet depuis toujours que « c'est le TYPE d'appareil qui décide, jamais
    * la largeur » — c'est désormais vrai. Le reste de ce bloc, lui, est bien
    * une affaire de largeur : des grilles qui passent à deux colonnes. */
-  .grid-pieces, .grid-etats, .grid-lights { grid-template-columns: 1fr 1fr !important; }
-  /* Vue Objets mobile : appareils + plantes en 2 colonnes, cartes resserrées */
-  /* Telecommande sous « Lancer sur » : cote a cote, elle serait illisible. */
-  /* Plan de l'aspirateur : une tuile large deborderait sur deux colonnes. */
-  .grid-vac-plan > button { grid-column: span 1 !important; }
-  .grid-vac-map { grid-template-columns: 1fr !important; }
-  .grid-objets, .grid-objplants { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
+  /* Vue Objets mobile : appareils en 2 colonnes, cartes resserrées */
+  .grid-objets { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
+  /* Le `gap: 10px !important` ci-dessus resserre AUSSI les rangées : une grille
+   * dense y repasse à 8 (88 + 8 + 88 = 184, 04/10). Même poids, posé après —
+   * c'est l'ordre qui tranche. La grille de la Sécurité (rangées de 184, pas
+   * de compactes) garde ses 10 px. Ni largeur ni taille de carte ici : les
+   * choix de l'utilisateur (`o-cvw2`, `o-cvrow1`) restent les siens. */
+  .grid-dense { row-gap: 8px !important; }
   .grid-edevices { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
-  .grid-objets > .o-piece, .grid-objplants > .o-piece { padding: 12px 12px !important; }
-  .grid-rooms4 { grid-template-columns: repeat(4,1fr) !important; gap: 8px !important; }
+  .grid-objets > .o-piece { padding: 12px 12px !important; }
   .o-scene-room { flex-direction: column !important; gap: 4px !important; padding: 12px 4px !important; font-size: 12px !important; border-radius: 14px !important; }
-  .o-clim-hero { padding: 0 !important; background: none !important; border: none !important; box-shadow: none !important; overflow: visible !important; border-radius: 0 !important; }
-  .o-clim-glow { display: none !important; }
-  .o-clim-top { flex-wrap: nowrap !important; gap: 16px !important; }
-  .o-clim-topleft { min-width: 0 !important; gap: 10px !important; }
-  .o-clim-title { font-size: 21px !important; }
-  .o-clim-nums { gap: 13px !important; }
-  .o-clim-num { font-size: 19px !important; }
-  .o-clim-ring, .o-clim-ring svg { width: 96px !important; height: 96px !important; flex-shrink: 0; }
-  .o-clim-graph { display: none !important; }
-  .grid-gauges { grid-template-columns: 1fr 1fr !important; gap: 10px !important; margin-top: 14px !important; }
-  .grid-gauges > div { background: var(--o-surfA) !important; border: var(--o-bw, 1px) solid var(--o-bd2) !important; box-shadow: var(--o-shadow, none) !important; }
-  .grid-etiles { gap: 10px !important; }
-  .grid-edemain { gap: 8px !important; }
-  .grid-edemain > div { padding: 12px 4px !important; }
-  .grid-vac-cons { grid-template-columns: 1fr 1fr !important; }
-  .grid-etats { gap: 10px !important; }
   .loggia-hdr { padding-left: 14px !important; padding-right: 14px !important; gap: 10px !important; }
-  .grid-pieces { gap: 10px !important; }
   .o-piece { padding: 13px !important; border-radius: var(--o-radius,18px) !important; box-shadow: var(--o-shadow, 0 6px 16px rgba(0,0,0,.28)) !important; }
   .o-piece-name { margin-top: 9px !important; font-size: 15px !important; }
   .o-piece-temp { font-size: 22px !important; }
   .o-piece-badge-top { display: inline-flex !important; }
   .o-piece-badge-inline { display: none !important; }
-  .grid-lights { gap: 11px !important; }
   .o-light-card { padding: 14px !important; border-radius: var(--o-radius,18px) !important; box-shadow: var(--o-shadow, 0 6px 16px rgba(0,0,0,.28)) !important; }
-  .o-light-ico { width: 42px !important; height: 42px !important; }
+}
+/* Le champ de recherche de l'en-tête garde 200 px (audit du 03/10) : partagé à
+ * parts égales avec l'espaceur, il tombait à 11 px de texte à 1024 px — « R ».
+ * L'en-tête se mesure LUI-MÊME, la barre latérale ouverte ou fermée : sous
+ * 700 px, la date et son trait cèdent leur place ; sous 540, plus de minimum
+ * (rien ne doit déborder), et l'indication « Ctrl K » rend ses 55 px au texte.
+ * L'en-tête porte déjà un `transform` : la requête de
+ * conteneur ne change rien pour ce qui s'y positionne. */
+.loggia-hdr { container-type: inline-size; }
+.o-hdr-search { min-width: 200px; }
+@container (max-width: 700px) {
+  .o-hdr-date, .o-hdr-div { display: none !important; }
+}
+@container (max-width: 540px) {
+  .o-hdr-search { min-width: 0; }
+  .o-hdr-kbd { display: none; }
 }
 @media (max-width: 560px) {
   /* Les tuiles Securite (portes, fenetres, mouvement, cameras) restent sur
@@ -633,9 +653,6 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
   .sec-tuile .sec-val { font-size: 12px !important; white-space: normal !important; }
   .sec-tuile .sec-lib { display: block; font-size: 10px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .o-hdr-search, .o-hdr-date, .o-hdr-div { display: none !important; }
-  /* La chip « n allumées » garde sa place : c'est l'info d'un regard du header. */
-  .o-hdr-lights { padding: 6px 10px !important; font-size: 11.5px !important; }
-  .o-flux > div { width: auto !important; }
   .o-banner-row { gap: 8px !important; }
   /* Les modes de l'alarme au telephone : l'icone seule (ADR 0035). */
   .o-armchip-txt { display: none !important; }
@@ -674,17 +691,21 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 /* 2. halo bref après une action sur une carte (couleur via --o-flash) */
 @keyframes o-flashK { 0% { box-shadow: 0 0 0 0 var(--o-flash, var(--o-accent)); } 100% { box-shadow: 0 0 0 14px transparent; } }
 .o-flash { animation: o-flashK .55s ease-out 1; }
-/* 3. ripple + ✓ sur boutons d'action */
+/* 3. ripple sur boutons d'action */
 @keyframes o-rippleK { from { transform: scale(0); opacity: .35; } to { transform: scale(1); opacity: 0; } }
 .o-ripple { position: absolute; border-radius: 50%; background: currentColor; pointer-events: none; animation: o-rippleK .6s ease-out forwards; }
-@keyframes o-doneIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-.o-actbtn-done { animation: o-doneIn .2s ease-out both; }
-/* 4. indicateur sidebar : grandit depuis le centre quand il change d'item */
-@keyframes o-indIn { from { transform: scaleY(.2); opacity: .4; } to { transform: none; opacity: 1; } }
-.o-navbar-ind { animation: o-indIn .28s cubic-bezier(.22,1.2,.36,1) both; transform-origin: center; }
 /* La tuile Alarme de la banniere, ET ELLE SEULE, en verre depoli teinte par
    son etat (retour user du 17/09) : `--al-rgb` vient de `tuileAlarme`. */
 .o-tuile-alarme { background: rgba(var(--al-rgb), .16) !important; -webkit-backdrop-filter: blur(10px) saturate(1.2); backdrop-filter: blur(10px) saturate(1.2); box-shadow: inset 0 1px 0 rgba(255,255,255,.08); border-radius: 12px !important; }
+
+/* Une ligne « En ce moment » ou « À surveiller » n'est plus un
+   `role="button"` (lot 13 de l'audit du 03/10) : son geste « ouvrir » passe
+   par un bouton de surface transparent (`Surface`, ui.jsx). C'est la LIGNE
+   qui s'enfonce au press, comme quand `[role="button"]:active` la prenait —
+   `:active` gagne aussi les ancêtres de l'élément pressé. */
+.o-ligne-moment { transition: transform .16s cubic-bezier(.34, 1.45, .56, 1); }
+.o-ligne-moment:active { transform: scale(.955); }
+@media (prefers-reduced-motion: reduce) { .o-ligne-moment { transition: none; } .o-ligne-moment:active { transform: none; } }
 
 /* 5. hover profondeur (pointeur fin uniquement) : ombre plus profonde SEULEMENT.
    Le brightness(1.03) délavait les cartes translucides (lavis, verre) — elles
@@ -697,26 +718,60 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
   .o-tuile-hero.o-tuile-alarme:hover, .o-tuile-hero.o-tuile-alarme:focus-visible { background: rgba(var(--al-rgb), .26) !important; }
   .o-hov:hover { box-shadow: var(--o-shadow-hover, 0 10px 24px rgba(0,0,0,.32), 0 26px 52px rgba(0,0,0,.26)) !important; }
 }
-@media (prefers-reduced-motion: reduce) { .o-view, .o-flash, .o-ripple, .o-actbtn-done, .o-navbar-ind { animation: none; } .o-hov { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .o-view, .o-flash, .o-ripple { animation: none; } .o-hov { transition: none; } }
 /* lot 4 — pill de sélection sidebar qui glisse entre items */
 .o-navpill { transition: transform .32s cubic-bezier(.22,1.1,.36,1), height .2s ease; }
 .loggia-aside.is-closed .o-navpill { left: 14px !important; right: 14px !important; }
 @media (prefers-reduced-motion: reduce) { .o-navpill { transition: none; } }
 /* lot 4 fix : un clic sur un interrupteur ne doit pas « enfoncer » la carte parente (pas de scale sur le .o-piece) */
 .o-piece:has([role="switch"]:active) { transform: none !important; }
+/* lot 13 de l'audit du 03/10 : une carte d'appareil qui s'ouvre (lampe,
+   capteur, machine, volet, thermostat, fil pilote, lecteur…) n'est plus un
+   `[role="button"]` — son geste « ouvrir » passe par sa surface (`Surface`,
+   ui.jsx) — et perdait l'enfoncement au press que la règle des boutons lui
+   donnait (en tête de fichier). Il revient tel qu'il était : un appui
+   n'importe où sur la carte, ses commandes comprises, et seulement si elle
+   s'ouvre. */
+.o-rmcard:has(> .o-surface):active { transform: scale(.955); }
+@media (prefers-reduced-motion: reduce) { .o-rmcard:has(> .o-surface):active { transform: none; } }
 
 /* ── Animations lot 5 ── */
 /* 1. skeleton shimmer (placeholder avant données) */
 @keyframes o-shimmer { from { background-position: -200% 0; } to { background-position: 200% 0; } }
 .o-skel { background: linear-gradient(90deg, var(--o-s1) 25%, var(--o-bd1) 50%, var(--o-s1) 75%); background-size: 200% 100%; animation: o-shimmer 1.4s ease-in-out infinite; }
 /* 2. badge LIVE caméra : point qui respire + rebond à l'apparition */
-@keyframes o-livedot { 0%,100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(248,113,113,.55); } 50% { transform: scale(1.15); opacity: .85; box-shadow: 0 0 0 5px rgba(248,113,113,0); } }
-.o-livedot { animation: o-livedot 1.8s ease-in-out infinite; }
+@keyframes o-livedot { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: .85; } }
+/* Le halo du point ne s'anime plus en `box-shadow` (lot 14 de l'audit du
+   03/10) : le compositeur ne prend pas l'ombre, et le point de la cloche,
+   toujours à l'écran, faisait recalculer et repeindre la page à chaque image.
+   Même dessin en `transform` + `opacity` seulement : l'ombre d'un rond qui
+   s'étale de 5 px, c'est un disque de sa couleur, sous le point, qui grandit
+   de 5 px. Le point lui-même est redessiné par `::after` (sa boîte bordure,
+   fond et bordure hérités), peint APRÈS le halo : le point anime son opacité,
+   c'est donc un contexte d'empilement, et un z-index négatif passerait sur
+   son fond. `visibility` masque la boîte d'origine sans masquer ses deux
+   pseudo-éléments : peinte deux fois, elle foncerait son bord lissé.
+   `--o-point-r`, le rayon du point bordure comprise, est posé à côté de sa
+   taille (App.jsx) : la boîte des deux calques et l'échelle du halo en
+   découlent. */
+@keyframes o-livehalo { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(calc(1 + 5 / var(--o-point-r, 3.5))); opacity: 0; } }
+.o-livedot { position: relative; visibility: hidden; animation: o-livedot 1.8s ease-in-out infinite; }
+.o-livedot::before, .o-livedot::after { content: ''; position: absolute; inset: calc(50% - var(--o-point-r, 3.5) * 1px); box-sizing: border-box; border-radius: inherit; visibility: visible; pointer-events: none; }
+.o-livedot::before { background: rgba(248,113,113,.55); opacity: 0; animation: o-livehalo 1.8s ease-in-out infinite; }
+.o-livedot::after { background: inherit; border: inherit; }
+/* Hors de l'écran et sous l'écran de veille, rien ne tourne (lot 14 de
+   l'audit du 03/10) : ni le liseré « ne répond plus » (ADR 0048), ni le point
+   LIVE. `data-o-hors` vient de l'observateur partagé (horsecran.js). La veille
+   recouvre tout — barre latérale et cloche comprises — sans rien sortir de
+   l'écran : sa classe suffit. Une animation en pause garde son image ; le
+   signal s'arrête, son dessin ne change pas. Spécificité (0,2,0) au moins :
+   le raccourci `animation` des règles ci-dessus remet `running`. */
+.o-panne[data-o-hors], .o-panne[data-o-hors]::before, .o-livedot[data-o-hors], .o-livedot[data-o-hors]::before,
+.loggia-ambient-on .o-panne, .loggia-ambient-on .o-panne::before, .loggia-ambient-on .o-livedot, .loggia-ambient-on .o-livedot::before { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) { .o-livedot::before { animation: none; } }
 @keyframes o-liveIn { 0% { transform: translateY(-6px) scale(.9); opacity: 0; } 60% { transform: translateY(1px) scale(1.03); opacity: 1; } 100% { transform: none; } }
 .o-livebadge { animation: o-liveIn .5s cubic-bezier(.22,1.2,.36,1) both; }
-/* 5. pill des chips de pièce qui glisse */
-.o-roompill { transition: transform .34s cubic-bezier(.22,1.1,.36,1), width .24s ease; }
-@media (prefers-reduced-motion: reduce) { .o-skel, .o-livedot, .o-livebadge { animation: none; } .o-roompill { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .o-skel, .o-livedot, .o-livebadge { animation: none; } }
 
 /* ── Animations lot 6 ── */
 /* 1. courbes qui se dessinent (pathLength=1) + aires en fondu */
@@ -730,12 +785,9 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 /* 4. jauge liquide : reflets qui dérivent dans le remplissage */
 @keyframes o-liquidK { from { background-position: 0 0, 0 0; } to { background-position: 48px 0, 0 0; } }
 .o-liquid { background-image: repeating-linear-gradient(115deg, rgba(255,255,255,.22) 0 10px, transparent 10px 24px), linear-gradient(0deg, rgba(255,255,255,.08), rgba(255,255,255,.08)); background-size: 48px 100%, 100% 100%; animation: o-liquidK 1.6s linear infinite; }
-/* 5. radar sécurité : balayage conique lent */
-@keyframes o-radarK { to { transform: rotate(360deg); } }
-.o-radar { animation: o-radarK 6s linear infinite; }
 /* 6. glow du slider pendant le drag */
 .o-sliding [data-fill] { box-shadow: 0 0 14px 2px rgba(var(--o-accent-rgb), .5); }
-@media (prefers-reduced-motion: reduce) { .o-draw, .o-fadein, .o-scenefx, .o-liquid, .o-radar { animation: none; } .o-draw { stroke-dasharray: none; stroke-dashoffset: 0; } .o-sliding [data-fill] { box-shadow: none; } }
+@media (prefers-reduced-motion: reduce) { .o-draw, .o-fadein, .o-scenefx, .o-liquid { animation: none; } .o-draw { stroke-dasharray: none; stroke-dashoffset: 0; } .o-sliding [data-fill] { box-shadow: none; } }
 
 /* ── Animations lot 7 ── */
 /* 2. cloche qui tinte à l'arrivée d'une notification */
@@ -747,17 +799,6 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
    Classe et keyframes conserves — meme traitement que .o-stag. */
 .o-avatarin { animation: none; }
 @media (prefers-reduced-motion: reduce) { .o-bellring, .o-avatarin { animation: none; } }
-/* tuiles Sécurité : 4 colonnes PC, 2 en dessous de 1180 */
-@media (max-width: 1180px) { .grid-sec-tiles { grid-template-columns: 1fr 1fr !important; } }
-
-/* Paramètres façon Atrium : nav latérale PC, chips scrollables en dessous de 1024px */
-@media (max-width: 1024px) {
-  .grid-params { grid-template-columns: 1fr !important; }
-  .o-par-nav { position: static !important; flex-direction: row !important; overflow-x: auto; gap: 4px; padding: 8px !important; }
-  .o-par-nav .o-par-sec { display: flex; gap: 4px; flex-shrink: 0; }
-  .o-par-nav .o-par-grp { display: none !important; }
-  .o-par-nav button { width: auto !important; }
-}
 
 /* grille des thèmes (Apparence) : 3 colonnes PC, 2 tablette — et 3 au
  * téléphone aussi (retour du 19/09 : « sur mobile, il y a moyen d'afficher les
@@ -777,10 +818,6 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 }
 /* sous 350 px, deux par rangée : à trois, « Neumorphix » ne tiendrait plus entier */
 @media (max-width: 350px) { .grid-par-pal { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
-
-/* Paramètres : listes en lignes denses façon Atrium (filets entre les lignes, pas de carte par ligne) */
-.o-optlist > * { border-top: var(--o-bw,1px) solid var(--o-bd3); }
-.o-optlist > *:first-child { border-top: none; }
 
 /* ── Fond météo GLSL (Accueil) : zone haute limitée, fondue dans le fond ──
  * Le ciel s'EFFACE par un masque et laisse voir le vrai fond de la page : le
@@ -865,52 +902,11 @@ html.loggia-light main:has(.o-wx3d) .o-greet-hi,
 html.loggia-light main:has(.o-wx3d) .o-greet-facts,
 html.loggia-light main:has(.o-wx3d) .o-greet-name { text-shadow: 0 1px 3px rgba(255, 255, 255, .8), 0 0 16px rgba(255, 255, 255, .55); }
 
-/* Ciel étoilé par nuit claire : tout l'arrière-plan, sans voile (fixed = suit l'écran, pas le document) */
-.o-wx3d.o-sky-full { position: fixed; inset: 0; height: auto; -webkit-mask-image: none; mask-image: none; }
-
-/* ── Ciel étoilé actif : on voit les étoiles à travers les cartes, et le chrome reste lisible ──
-   Réversible : supprimer ce bloc rend aux cartes leur fond opaque d'origine (sauvegarde dans Loggia-source/backups). */
-html.loggia-sky [style*="--o-surfA"] {
-  background: linear-gradient(180deg, rgba(22,29,42,.58), rgba(16,22,34,.66)) !important;
-  /* PAS de backdrop-filter ici : ces cartes flottent au-dessus d'un canvas qui
-     s'anime en continu, et flouter un calque pose dessus force un recalcul du
-     flou a CHAQUE image, pour chaque carte. C'est le meme piege que celui deja
-     documente plus bas pour la navbar et la sidebar sur iOS. */
-  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
-}
-html.loggia-sky.loggia-light [style*="--o-surfA"] { background: linear-gradient(180deg, rgba(255,255,255,.70), rgba(248,250,253,.76)) !important; }
-/* Le theme Frosted fait du flou sa signature — mais le ciel prime : au-dessus
-   du canvas, aucun element ne floute son arriere-plan. */
-html.loggia-sky.loggia-frosted [style*="--o-surfA"] { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
-/* Meme raison pour l'en-tete, qui pose son flou en style inline. */
-html.loggia-sky .loggia-hdr,
+/* L'en-tête pose son flou en style en ligne. Au-dessus du ciel météo de
+   l'Accueil, un canvas qui s'anime sans cesse, ce flou se recalculerait à
+   chaque image : il s'en passe. Sa jumelle, celle du ciel étoilé plein
+   écran que plus rien n'allumait, est partie au lot 15 de l'audit du 03/10. */
 main:has(.o-wx3d) .loggia-hdr { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
-/* Navbar mobile et sidebar au-dessus du ciel : OPAQUES et sans backdrop-filter.
-   iOS Safari fait disparaître un élément flouté posé au-dessus d'un canvas WebGL plein écran ;
-   et un fond translucide sur ciel noir rend la barre invisible. Les deux pièges sont évités ici. */
-html.loggia-sky .loggia-mobilenav {
-  background: #0b101b !important;
-  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
-  border-top: 1px solid rgba(255,255,255,.22) !important;
-  box-shadow: 0 -12px 32px rgba(0,0,0,.6) !important;
-  z-index: 60 !important;
-}
-html.loggia-light.loggia-sky .loggia-mobilenav { background: #eef2f8 !important; border-top-color: rgba(20,30,55,.22) !important; }
-html.loggia-sky .loggia-aside {
-  background: linear-gradient(180deg, #0d1422, #0a0f1a) !important;
-  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
-  border-right-color: rgba(255,255,255,.14) !important;
-  z-index: 60;
-}
-html.loggia-light.loggia-sky .loggia-aside { background: linear-gradient(180deg, #ffffff, #f4f7fb) !important; }
-/* L'accueil et son ciel meteo gardent le depoli : couper le flou la-bas
-   donnait a l'accueil un rendu different des autres vues (retour user 29/08).
-   Seul le ciel three.js PLEIN ECRAN (loggia-sky) coupe encore : le flou s'y
-   recalcule a chaque image sur toute la page, et il y a autant de recalculs
-   que de cartes. */
-html.loggia-sky main [style*="--o-surfA"] { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
-/* le ciel reste tout au fond, quoi qu'il arrive */
-html.loggia-sky .o-sky-full { z-index: 0 !important; }
 
 /* Énergie mobile : la scène arc+maison est homothétique (composition PC réduite), puits resserré */
 @media (max-width: 820px) {
@@ -934,9 +930,6 @@ html.loggia-sky .o-sky-full { z-index: 0 !important; }
   /* le zoom fait sortir les marqueurs lever/coucher du cadre : on les retire plutot que
      de laisser un bout de chiffre rogne */
   .o-sunmark { display: none; }
-  /* Zones de l'aspirateur : 4 colonnes tombent a 98 px sur un telephone, trop court pour
-     « Chambre enfant » ou « Salle de bain » avec leur icone. */
-  .grid-vac-rooms { grid-template-columns: 1fr 1fr !important; }
   .o-en-house { top: 50% !important; height: auto !important; width: 55.56% !important; transform: translate(-50%, -50%) !important; }
   /* Chiffres sous le schema : plus compacts */
   .o-en-kpis { display: grid !important; grid-template-columns: repeat(4, 1fr); gap: 8px !important; margin-top: 14px !important; }
@@ -952,15 +945,6 @@ html.loggia-sky .o-sky-full { z-index: 0 !important; }
 @media (max-width: 1280px) {
   .grid-appar { grid-template-columns: minmax(0,1fr) !important; }
   .grid-appar .o-par-preview { display: none; }
-  .grid-par-about4 { grid-template-columns: 1fr 1fr !important; }
-}
-@media (max-width: 1180px) {
-  .grid-sys-machines { grid-template-columns: 1fr !important; }
-  .grid-sys-bottom { grid-template-columns: minmax(0,1fr) !important; }
-}
-@media (max-width: 640px) {
-  .grid-par-about4 { grid-template-columns: 1fr !important; }
-  .grid-sys-graphs2 { flex-direction: column; gap: 16px !important; }
 }
 
 /* Vue Pièce : titre + navigation + pastille sur une ligne ; empilés sur mobile */
@@ -978,11 +962,6 @@ html.loggia-sky .o-sky-full { z-index: 0 !important; }
   .grid-scenarios { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
 }
 
-/* Croquettes : cartes repas en 2 colonnes sur mobile */
-@media (max-width: 620px) {
-  .grid-croqmeals { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
-}
-
 /* Effets meteo DANS une carte : `.o-wx3d` colle le fond en haut de page sur
    44vh, ce qui ne convient pas a un cadre. */
 
@@ -990,6 +969,68 @@ html.loggia-sky .o-sky-full { z-index: 0 !important; }
    `outline:none` sans rien mettre a la place — au clavier, on ne savait plus
    ou l'on etait. */
 :focus-visible { outline: 2px solid var(--o-accent); outline-offset: 2px; }
+
+/* Le bouton de surface d'une carte (`Surface`, ui.jsx) la couvre exactement,
+   et la carte rogne ce qui dépasse (`overflow: hidden`) : son anneau, tracé
+   2 px DEHORS, ne se voyait jamais — mesuré le 03/10 sur les cartes de pièce
+   de l'Accueil. Il se trace en dedans. */
+.o-surface:focus-visible { outline-offset: -2px; }
+/* Et elle ne s'enfonce pas d'elle-même : `button:active` (en tête de
+   fichier) la rétrécissait DANS la carte qui se rétrécit déjà — sa zone de
+   clic perdait le double de bord, et un appui près du bord, relâché hors
+   d'elle, n'ouvrait plus rien. La carte s'enfonce, la surface la suit. */
+.o-surface:active { transform: none; }
+
+/* Le pointillé du mode édition, en CLASSE (audit du 03/10). Posé en style en
+   ligne sur les cartes qu'on saisit — carte du kit et intertitre, tuile de
+   pièce, scénario, carte d'une vue personnalisée —, il battait la règle
+   ci-dessus : au clavier, la carte qui avait le focus ressemblait à ses
+   voisines. Ici, le focus le remplace par le trait plein d'accent, comme
+   partout ailleurs. Chaque grille garde son dosage, posé par la carte :
+   `--o-pointille` (l'opacité du trait) et `--o-pointille-ecart` (son écart
+   au bord). La carte SAISIE prend le même trait plein : on n'en tient qu'une
+   à la fois, et elle est alors à demi effacée. Le fantôme d'un glisser copie
+   la classe, mais son `outline: none` en ligne l'emporte toujours. */
+.o-pointille { outline: 1px dashed rgba(var(--o-accent-rgb), var(--o-pointille, .4)); outline-offset: var(--o-pointille-ecart, 3px); }
+.o-pointille.o-saisie, .o-pointille:focus-visible { outline: 2px solid var(--o-accent); }
+/* Relecture du 04/10 : rangées à 8 px dans les grilles denses et les vues
+   perso — à 3 px d'écart, les pointillés de deux cartes empilées se
+   touchaient (un trait de 2 px) et le focus mordait sur la voisine. 2 px,
+   comme les pièces de l'Accueil (même rangée de 8) : 2 px entre les traits. */
+.grid-dense > .o-pointille, .grid-custom > .o-pointille { --o-pointille-ecart: 2px; }
+/* Lot 13 de l'audit du 03/10 : une carte qu'on range ne prend plus le focus
+   elle-même — c'est sa SURFACE (`Surface`, ui.jsx), sœur de ses boutons. Son
+   anneau reste celui de la carte : le trait plein d'accent à la place du
+   pointillé, et pour une section de l'Accueil le contour habituel, 2 px
+   dehors. Sans `:has`, la surface garde le sien, en dedans. */
+.o-pointille:has(> .o-surface:focus-visible) { outline: 2px solid var(--o-accent); }
+[data-sec]:has(> .o-surface:focus-visible) { outline: 2px solid var(--o-accent); outline-offset: 2px; }
+@supports selector(:has(*)) {
+  .o-pointille > .o-surface:focus-visible, [data-sec] > .o-surface:focus-visible { outline: none; }
+}
+/* Et le même enfoncement au press : la carte qu'on tient n'est plus un
+   `[role="button"]`, que visait le retour tactile du haut de la feuille. */
+.o-pointille:active, [data-sec]:has(> .o-surface):active { transform: scale(.955); }
+/* Et son rebond (relecture du lot 13, 04/10) : `[role="button"]` donnait
+   aussi la transition des boutons. Sans elle, l'intertitre qu'on saisit en
+   édition s'enfonçait d'un coup et revenait sec. Les autres cartes
+   pointillées posent la leur en ligne, qui l'emporte — le fantôme d'un
+   glisser aussi (`none`). */
+.o-pointille { transition: transform .16s cubic-bezier(.34, 1.45, .56, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .o-pointille:active, [data-sec]:has(> .o-surface):active { transform: none; }
+  .o-pointille { transition: none; }
+}
+
+/* Un titre qui reçoit le focus après un changement de vue (src/focus.js)
+   revient à l'écran au clavier — SOUS l'en-tête collant (72 px), pas
+   dessous : ramené au ras du haut, il s'y cachait dès que l'en-tête
+   reparaissait (audit du 03/10). */
+h1[tabindex="-1"] { scroll-margin-top: 84px; }
+/* La tuile du sommaire des Paramètres, rendue au retour d'une section, revient
+   de même à l'écran — ni sous l'en-tête, ni sous la barre du bas quand elle est
+   là (tablette tactile avec un clavier) : relecture du 03/10. */
+[data-section] { scroll-margin-top: 84px; scroll-margin-bottom: calc(var(--o-navh, 0px) + 12px); }
 
 /* ── Ecran Parametres > Entites, sur telephone ────────────────────────────
  * Cinq colonnes de saisie dans 375 px, c'etait un tableau illisible : les
@@ -1005,9 +1046,6 @@ html.loggia-sky .o-sky-full { z-index: 0 !important; }
   .o-entrow { flex-direction: column !important; align-items: stretch !important; gap: 8px !important;
     padding: 14px 0 4px; border-top: var(--o-bw,1px) solid var(--o-bd3); }
   .o-entrow:first-child { border-top: none; padding-top: 4px; }
-  /* La carte de section respire moins sur telephone : 24 px de chaque cote,
-   * c'est 48 px pris sur 375. */
-  .o-parcard { padding: 15px !important; }
   .o-entrow > span { flex: 1 1 auto !important; flex-direction: column !important; align-items: stretch !important; gap: 4px; }
   .o-entlabel { display: block; font-size: 10px; font-weight: 800; letter-spacing: .05em;
     text-transform: uppercase; color: var(--o-text3); }
@@ -1176,25 +1214,122 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
   .sys-releve { display: none; }
 }
 
-/* ── Les widgets en option du rail : l'heure et le calendrier (ADR 0041) ──
+/* ── Les widgets en option du rail : l'heure (ADR 0041 ; le calendrier est parti en v3.84.0) ──
  * Le rail fait 330 ou 276 px, le telephone 362 : les chiffres suivent la
  * largeur du WIDGET (requete de conteneur), pas celle de l'ecran. */
 .o-w-temps { container-type: inline-size; }
 .o-w-cadran { height: clamp(86px, 37cqw, 128px); }
 .o-w-chiffres-fond { font-size: clamp(58px, 29cqw, 100px); }
 .o-w-tuile-chiffre { font-size: clamp(30px, 15.5cqw, 54px); }
-.o-w-mois-heure { font-size: clamp(19px, 8.2cqw, 28px); }
-/* Les jours du mois : trois lettres tant qu'elles tiennent, une seule sinon ;
- * dans le rail etroit (276 px) la pastille et les villes se resserrent — un nom
- * de ville ne se tronque pas, une pastille ne deborde pas de sa colonne. */
-.o-w-pm { width: 23px; height: 23px; }
-.o-w-j1 { display: none; }
-@container (max-width: 290px) {
-  .o-w-j3 { display: none; }
-  .o-w-j1 { display: inline; }
-  .o-w-pm { width: 20px; height: 20px; font-size: 11px !important; }
-  .o-w-ville { font-size: 10.5px !important; }
+
+/* ── Le rail de l'Accueil : une colonne qui défile seule (04/10) ──
+ * Demande de l'utilisateur : sur ordinateur et tablette en paysage, avec peu
+ * ou pas de caméras, le rail faisait une grande bande à droite et du vide à
+ * gauche — la grille étirait le contenu principal jusqu'à lui (page de
+ * 2 069 px à 1440 × 900, quel que soit le nombre de caméras). Choix retenu :
+ * « la colonne qui défile simplement, tous les widgets restant dépliés ».
+ *
+ * La CELLULE (l'élément de grille) est en `contain: size` : elle compte pour
+ * zéro dans la rangée, qui suit donc le contenu principal, et `stretch` lui en
+ * donne la hauteur. `size` SEUL : `layout`, `paint`, `content` ou `strict`
+ * feraient d'elle le bloc conteneur des `position: fixed` de ses descendants
+ * — une feuille ouverte depuis un widget deviendrait invisible.
+ * La COLONNE colle 16 px sous l'en-tête (`--o-hdrh`, publié par lui ; 16 px
+ * du bord quand il se masque ; au doigt, pas d'en-tête) et s'arrête 16 px
+ * au-dessus du bas de l'écran ou de la barre du bas (`--o-navh`). Les bornes
+ * `--o-rail-depart` (la grille encore sous le bord, page en haut) et
+ * `--o-rail-fin` (la fin du contenu principal) viennent de railcolonne.js :
+ * sans elles, page en haut, le bas de la colonne sortait de l'écran et son
+ * dernier widget ne se montrait jamais ; en fin de page, le sticky rognait la
+ * première carte. `100%` (la cellule) plafonne la colonne à la hauteur du
+ * contenu principal ; 240 px de plancher évitent une lucarne.
+ *
+ * PAS de masque de fondu : il ferait de la colonne la racine du flou
+ * d'arrière-plan, et le verre dépoli de toutes les cartes du rail (toujours
+ * actif) ne flouterait plus rien — mesuré, rayures nettes derrière le rail.
+ * La carte du bas se coupe net au bord, comme dans la rangée des scénarios ;
+ * quand le bord tombe entre deux cartes, l'indice de suite (`::after`, plus
+ * bas) prend le relais.
+ * L'ombre est la COURTE des rangées qui défilent (ADR 0059) : la grande
+ * (16 px 32 px) serait rognée en halo carré par `overflow`. Le rembourrage
+ * (6 / 8 / 14 px) la loge, avec l'anneau de focus ; la marge négative
+ * l'annule dans la mise en page, sans mordre dans la gouttière. Barre de
+ * défilement masquée : la largeur des widgets (276 ou 330 px) ne bouge pas,
+ * leurs requêtes de conteneur non plus. « Ombres portées » coupé dans
+ * l'Apparence : theme.js vide aussi `--o-shadow-rangee`, sinon le rail (et la
+ * rangée des scénarios) gardait la sienne.
+ *
+ * `--o-rail-haut` est une propriété ENREGISTRÉE (`@property`) qui glisse en
+ * .3 s comme l'en-tête : `top` ET `max-height` en dépendent, le bas de la
+ * colonne ne bouge donc pas quand l'en-tête se masque ou revient (contre-étude
+ * du 04/10 : avec `transition: top` seul, la hauteur sautait d'un coup et le
+ * bas remontait de 30 à 70 px avant de redescendre). Posée sur la cellule
+ * même en édition : sortir de l'édition ne la fait pas glisser depuis 16 px.
+ * Navigateur sans `@property` : pas de glissement, rien ne casse. */
+.o-acc-grid { align-items: start; }
+@property --o-rail-haut { syntax: '<length>'; inherits: true; initial-value: 16px; }
+.o-rail-cell {
+  min-width: 0;
+  --o-rail-haut: calc(var(--o-hdrh, 0px) + 16px);
+  --o-rail-bas: calc(var(--o-navh, 0px) + 16px);
+  transition: --o-rail-haut .3s ease;
 }
+.o-rail-cell:not(.o-rail-edit) {
+  align-self: stretch; contain: size;
+  margin: -6px -8px -14px;
+}
+.o-rail-cell:not(.o-rail-edit) > .o-rail-col {
+  box-sizing: border-box; position: sticky; top: calc(var(--o-rail-haut) - 6px);
+  max-height: max(240px, min(100%, calc(100vh - max(var(--o-rail-haut), var(--o-rail-depart, 0px)) - var(--o-rail-bas) + 20px), calc(var(--o-rail-fin, 100000px) - max(var(--o-rail-haut), var(--o-rail-depart, 0px)) + 6px)));
+  max-height: max(240px, min(100%, calc(100dvh - max(var(--o-rail-haut), var(--o-rail-depart, 0px)) - var(--o-rail-bas) + 20px), calc(var(--o-rail-fin, 100000px) - max(var(--o-rail-haut), var(--o-rail-depart, 0px)) + 6px)));
+  overflow-y: auto; overflow-x: hidden; scrollbar-width: none;
+  padding: 6px 8px 14px; scroll-padding: 10px 0 32px;
+  --o-shadow: var(--o-shadow-rangee, 0 1px 2px rgba(0,0,0,.16), 0 3px 8px rgba(0,0,0,.12));
+}
+html.loggia-light .o-rail-cell:not(.o-rail-edit) > .o-rail-col { --o-shadow: var(--o-shadow-rangee, 0 1px 2px rgba(16,24,40,.10), 0 3px 8px rgba(16,24,40,.10)); }
+.o-rail-cell:not(.o-rail-edit) > .o-rail-col::-webkit-scrollbar { display: none; }
+/* L'indice de suite (relecture du 04/10). Le bas de la colonne tombait
+ * parfois dans l'écart de 12 px entre deux cartes : rien de coupé, un rail en
+ * apparence complet, quatre widgets cachés (1440 × 845, ou 1366 × 657 en-tête
+ * revenu). Un voile `color-mix(var(--o-bg))` ne se fondait pas : `--o-bg`
+ * n'est ni le dégradé ni la photo — marche de 12 à 66 niveaux au bord du voile
+ * (Frosted, The Projekt clair, fond photo ; mesuré). Ici, un FLOU
+ * d'arrière-plan : il ne peint aucune couleur, il reprend le vrai fond
+ * (dégradé, photo, verre des cartes) et brouille le bas de la carte qui passe
+ * dessous. Effacé sur TOUS ses bords : en haut, dans ses derniers 20 % (le bord
+ * de la colonne reste net, la carte s'y coupe comme avant) et sur les 8 px du
+ * rembourrage, où sa marge l'élargit — coupé net, il dessinait sur une photo
+ * détaillée un rectangle flou (marche jusqu'à 28 niveaux au bord gauche, 29 au
+ * bas quand la colonne s'arrête au-dessus de l'écran, en fin de page) ; ainsi,
+ * 3 au plus sur seize fonds. Le masque est posé sur le PSEUDO-ÉLÉMENT, frère
+ * des cartes et non leur ancêtre : leur verre dépoli reste intact (`black`
+ * n'y est qu'une opacité, rien ne se peint ; `intersect` croise les deux
+ * dégradés). Collé au bas (`bottom: -14px`, sinon il s'arrête au
+ * rembourrage), sorti du flux par sa marge (12 px d'écart + 28 px), sans clic.
+ * La frise de défilement l'éteint dans les derniers 4 % ; quand rien ne
+ * dépasse, elle est inactive et il reste à 0, comme sans `animation-timeline`
+ * (Firefox) — le comportement d'avant. */
+.o-rail-cell:not(.o-rail-edit) > .o-rail-col::after {
+  content: ''; flex: none; position: sticky; bottom: -14px;
+  height: 28px; margin-top: -40px; margin-inline: -8px; pointer-events: none; opacity: 0;
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 65%, black 80%, transparent), linear-gradient(to right, transparent, black 8px, black calc(100% - 8px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, black 65%, black 80%, transparent), linear-gradient(to right, transparent, black 8px, black calc(100% - 8px), transparent);
+  -webkit-mask-composite: source-in; mask-composite: intersect;
+}
+@supports (animation-timeline: scroll()) {
+  .o-rail-cell:not(.o-rail-edit) > .o-rail-col::after { animation: o-rail-suite linear both; animation-timeline: scroll(nearest block); }
+}
+@keyframes o-rail-suite { 0%, 96% { opacity: 1; } 100% { opacity: 0; } }
+html.loggia-hdr-cache .o-rail-cell { --o-rail-haut: 16px; }
+/* APRÈS la règle de l'en-tête masqué, même spécificité : au doigt, il n'y a
+ * pas d'en-tête, seulement la zone sûre. */
+html.loggia-tactile .o-rail-cell { --o-rail-haut: max(16px, var(--o-safe-top, 0px)); }
+/* Au doigt, arrivé au bout de la colonne, le geste n'entraîne pas la page. À
+ * la souris, la molette enchaîne sur la page : la piéger sur un quart de
+ * l'écran serait pire. */
+html.loggia-tactile .o-rail-cell:not(.o-rail-edit) > .o-rail-col { overscroll-behavior-y: contain; }
+@media (prefers-reduced-motion: reduce) { .o-rail-cell { transition: none !important; } }
 
 /* ── Les scenarios de l'Accueil : UNE rangee qui defile (17/09) ──
  * Six cartes visibles sur PC — jamais sous 116 px : un nom ne se tronque pas
@@ -1219,7 +1354,8 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
  * téléphone comme sur grand écran (retours des 19 et 20/09). Une ombre
  * COURTE tient dans le rembourrage de la rangée — et la carte continue de se
  * détacher sur un thème clair peu contrasté, où le fond seul ne suffit pas.
- * Un thème sans ombre (Atrium) pose son filet dans `--o-shadow-rangee`. */
+ * Un thème sans ombre (Atrium) pose son filet dans `--o-shadow-rangee`,
+ * Neumorphix son relief en petit (relecture du 04/10). */
 .grid-qscenes > button { box-shadow: var(--o-shadow-rangee, 0 1px 2px rgba(0,0,0,.16), 0 3px 8px rgba(0,0,0,.12)) !important; }
 html.loggia-light .grid-qscenes > button { box-shadow: var(--o-shadow-rangee, 0 1px 2px rgba(16,24,40,.10), 0 3px 8px rgba(16,24,40,.10)) !important; }
 
@@ -1253,14 +1389,14 @@ html.loggia-light .grid-qscenes > button { box-shadow: var(--o-shadow-rangee, 0 
  *
  * `currentColor` : la plaque porte deja la couleur de son appareil.
  */
-@keyframes o-prise-turn { to { transform: rotate(360deg); } }
+/* Plus de « turn » (lot 15 de l'audit du 03/10) : aucun type de prise ne le
+ * posait — le tambour tourne dans son dessin (`o-ic-spin`, plus bas). */
 @keyframes o-prise-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
 @keyframes o-prise-shake { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-14deg); } 40% { transform: rotate(12deg); } 60% { transform: rotate(-8deg); } 80% { transform: rotate(5deg); } }
-.o-prise-turn { animation: o-prise-turn 6s linear infinite; }
 .o-prise-bob { animation: o-prise-bob 1.8s ease-in-out infinite; }
 .o-prise-shake { transform-origin: 50% 10%; animation: o-prise-shake .9s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .o-prise-turn, .o-prise-bob, .o-prise-shake { animation: none; }
+  .o-prise-bob, .o-prise-shake { animation: none; }
 }
 
 /* ── Les appareils dessines : leur mouvement est DANS le dessin (26/09) ───────

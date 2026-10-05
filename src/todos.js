@@ -25,13 +25,16 @@
  * tout se teste à la main.
  */
 
-/** Les entités de listes de tâches, par ordre alphabétique de leur nom. */
+import { comparerTextes } from './i18n.js';
+
+/** Les entités de listes de tâches, par ordre alphabétique de leur nom — celui
+ * de la langue de l'écran, pas du navigateur (audit du 03/10). */
 export function listesTodo(states) {
   const S = states || {};
   const l = Object.keys(S)
     .filter(id => id.indexOf('todo.') === 0)
     .map(id => ({ id, nom: (((S[id] || {}).attributes || {}).friendly_name || id.slice(5)).trim() }))
-    .sort((x, y) => x.nom.localeCompare(y.nom));
+    .sort((x, y) => comparerTextes(x.nom, y.nom));
   /* La couleur SERT a distinguer : a six listes ou moins, chacune a la sienne
    * — le hachage, lui, pouvait en donner deux pareilles. Au-dela il reprend la
    * main : il faut bien que deux listes partagent, autant que ce soit stable. */
@@ -122,7 +125,7 @@ export function rangerTodos(taches, maintenant) {
   }
   const quandMs = (t) => (t.echeance ? t.echeance.getTime() : Infinity);
   for (const k of ONGLETS_RAPPELS) {
-    out[k].sort((x, y) => (rang[x.quand] - rang[y.quand]) || (quandMs(x) - quandMs(y)) || x.titre.localeCompare(y.titre));
+    out[k].sort((x, y) => (rang[x.quand] - rang[y.quand]) || (quandMs(x) - quandMs(y)) || comparerTextes(x.titre, y.titre));
   }
   return out;
 }

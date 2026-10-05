@@ -33,6 +33,22 @@ export const CLES_TELEPHONE = [
   'Heures creuses : c’est le moment de lancer les machines',
 ];
 
+/* Les cles du telephone d'un catalogue, en chaines. Une valeur qui n'en est
+ * pas une (un pluriel {few, many, other}, ADR 0071) aurait ete recopiee
+ * telle quelle, et remplir() du serveur aurait envoye son str() au
+ * telephone : le generateur s'arrete et le dit (05/10). Une cle absente
+ * reste ecartee — textes_serveur et langues_catalogues l'attrapent deja. */
+export function clesTelephone(cat, code) {
+  const out = [];
+  for (const cle of CLES_TELEPHONE) {
+    const v = cat[cle];
+    if (v == null) continue;
+    if (typeof v !== 'string') throw new Error(`src/langues/${code}.js : « ${cle} » part au telephone, il doit etre une chaine`);
+    if (v) out.push([cle, v]);
+  }
+  return out;
+}
+
 export async function catalogueTelephone() {
   const { CHARGEURS } = await import(pathToFileURL(join(RACINE, 'src', 'langues', 'index.js')).href);
   const textes = {};
@@ -40,7 +56,7 @@ export async function catalogueTelephone() {
     let cat;
     try { cat = (await CHARGEURS[code]()).default; } catch { continue; } // catalogue pas encore ecrit
     const t = {};
-    for (const cle of CLES_TELEPHONE) if (cat[cle]) t[cle] = cat[cle];
+    for (const [cle, v] of clesTelephone(cat, code)) t[cle] = v;
     if (Object.keys(t).length) textes[code] = t;
   }
   return textes;

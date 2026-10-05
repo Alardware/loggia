@@ -146,7 +146,8 @@ test('une feuille ouverte rend le reste de la page INERTE', () => {
   for (const [nom, f] of [['ui.jsx', 'ui.jsx'], ['pinmodal.jsx', 'pinmodal.jsx']]) {
     const s = readFileSync(join(RACINE, 'src', f), 'utf8');
     assert.match(s, /const reveiller = inerterAutour\(voileRef\.current\)/, nom + ' : le fond ne devient plus inerte');
-    assert.match(s, /reveiller\(\);[^\n]*focus\(\{ preventScroll: true \}\)/,
+    // ui.jsx rend par `rendreFocus` (focus.js, relecture du lot 13), qui pose `preventScroll` : lot13r_focus_feuilles le joue.
+    assert.match(s, f === 'ui.jsx' ? /reveiller\(\);[^\n]*rendreFocus\(prev, hote\)/ : /reveiller\(\);[^\n]*focus\(\{ preventScroll: true \}\)/,
       nom + ' : le focus est rendu AVANT le réveil — l’élément inerte le refusera');
   }
 });
@@ -195,4 +196,186 @@ test('rien ne se vise sous 24 px', () => {
     'l’interrupteur d’une tuile pièce a reperdu sa zone de 24');
   // Les boutons « − / + » : 22 avant, 24 depuis.
   assert.ok(!/width: 22, height: 22, borderRadius: 10/.test(app), 'un bouton « − / + » est retombé à 22 px');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// La touche d'un bouton n'est pas la touche de sa carte (audit du 03/10).
+//
+// Une carte qui s'ouvre est un bouton : Entrée et Espace ouvrent sa fiche. La
+// touche d'un bouton INTÉRIEUR — « Fermer » d'un volet, « Pause » d'un
+// lecteur, − / + d'un thermostat, « Renvoyer au dock » — remonte jusqu'à elle.
+// Ces boutons n'arrêtaient que le clic : la carte prenait la touche, appelait
+// `preventDefault` — le bouton ne s'activait donc plus — et ouvrait la fiche.
+// Dix cartes, plus le kit d'édition, où Entrée sur « Supprimer » ouvrait
+// Modifier. À la souris, tout marchait.
+//
+// LE CRITÈRE. Un gestionnaire qui fait `preventDefault` sur Entrée ET Espace
+// commence par `if (e.target !== e.currentTarget) return;` (le motif de
+// l'ADR 0068) dès que l'élément qui le porte CONTIENT quelque chose qui prend
+// le focus ou le clic : <button>, <input>, <select>, <textarea>, <a>, un
+// `onClick`, `onKeyDown`, `onPointerDown`, `onChange`, `href` ou `tabIndex`,
+// un rôle interactif, un curseur `kbSlider` — ou un composant qui n'est pas un
+// pur dessin (`Fi`, `Ico`, `WeatherIco`, `PlugIcon`) : ce qu'il rend ne se lit
+// pas d'ici, on le tient pour interactif. Sans rien de tout cela — un lien du
+// menu, un interrupteur, la carte météo, la barre de confort —, la touche ne
+// peut venir que de l'élément lui-même : la garde n'y changerait rien, on ne
+// l'exige pas. Un gestionnaire en OBJET (`onKeyDown:`, étalé par
+// `{...prise}`) ne sait pas sur quoi il sera posé : il la porte toujours.
+//
+// Limites assumées : une expression (`{extra}`, `{comp}`) ne se lit pas, un
+// gestionnaire nommé (`onKeyDown={surTouche}`) non plus. Ces deux formes
+// restent à la relecture.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** L'indice qui ferme la chaîne ouverte en `k` (', " ou `). */
+function finChaine(s, k) {
+  const q = s[k];
+  for (k++; k < s.length; k++) {
+    if (s[k] === '\\') { k++; continue; }
+    if (s[k] === q) return k;
+  }
+  return k;
+}
+
+/** Le bloc qui s'ouvre sur l'accolade `i`, jusqu'à sa fermante. Chaînes et
+ *  commentaires sont sautés : le « s'y » d'un commentaire ouvrirait sinon une
+ *  chaîne qui ne se referme jamais. */
+function blocAccolade(s, i) {
+  let p = 0;
+  for (let k = i; k < s.length; k++) {
+    const c = s[k];
+    if (c === '"' || c === "'" || c === '`') k = finChaine(s, k);
+    else if (c === '/' && s[k + 1] === '/') { k = s.indexOf('\n', k); if (k < 0) break; }
+    else if (c === '/' && s[k + 1] === '*') { k = s.indexOf('*/', k) + 1; if (k < 1) break; }
+    else if (c === '{') p++;
+    else if (c === '}' && --p === 0) return s.slice(i, k + 1);
+  }
+  return s.slice(i);
+}
+
+/** La balise ouvrante qui commence en `d` : son nom, l'indice de son `>`, et
+ *  si elle se ferme d'elle-même. Avec `cible`, elle n'est retenue que si
+ *  `cible` en est un attribut de premier niveau : un `<` croisé dans une
+ *  expression n'ouvre pas de balise. */
+function baliseOuvrante(s, d, cible = -1) {
+  const m = /^<([A-Za-z][\w.]*)/.exec(s.slice(d, d + 80));
+  if (!m) return null;
+  let vu = cible < 0;
+  for (let k = d + m[0].length; k < s.length; k++) {
+    if (k === cible) vu = true;
+    const c = s[k];
+    if (c === '{') k += blocAccolade(s, k).length - 1;
+    else if (c === '"' || c === "'") k = finChaine(s, k);
+    else if (c === '}' || c === '<') return null;
+    else if (c === '>') return vu ? { nom: m[1], fin: k, seule: s[k - 1] === '/' } : null;
+  }
+  return null;
+}
+
+/** L'élément qui porte l'attribut placé en `i`. */
+function porteur(s, i) {
+  for (let d = s.lastIndexOf('<', i); d >= 0 && i - d < 6000; d = s.lastIndexOf('<', d - 1)) {
+    const b = baliseOuvrante(s, d, i);
+    if (b) return { debut: d, ...b };
+  }
+  return null;
+}
+
+/** Ce que l'élément contient, jusqu'à SA fermante — les balises du même nom
+ *  imbriquées sont comptées. `null` si elle manque. */
+function contenu(s, b) {
+  if (b.seule) return '';
+  const re = new RegExp('<(/?)' + b.nom.replace(/\./g, '\\.') + '(?=[\\s>/])', 'g');
+  re.lastIndex = b.fin + 1;
+  let prof = 1;
+  for (let m; (m = re.exec(s)); ) {
+    if (m[1]) { if (--prof === 0) return s.slice(b.fin + 1, m.index); continue; }
+    const o = baliseOuvrante(s, m.index);
+    if (o) { if (!o.seule) prof++; re.lastIndex = o.fin + 1; }
+  }
+  return null;
+}
+
+const DESSINS = new Set(['Fi', 'Ico', 'WeatherIco', 'PlugIcon']);
+const MARQUES_INTERACTIVES = /<(button|input|select|textarea|a)[\s>/]|\b(onClick|onKeyDown|onPointerDown|onChange|href|tabIndex)=|role="(button|switch|slider|checkbox|radio|link|menuitem|tab|option)"|\.\.\.kbSlider\(/;
+
+/** Le contenu renferme-t-il quelque chose qui prend le focus ou le clic ? */
+function interactif(c) {
+  const sans = c.replace(/\/\*[\s\S]*?\*\//g, '');
+  if (MARQUES_INTERACTIVES.test(sans)) return true;
+  return (sans.match(/<[A-Z]\w*/g) || []).some(m => !DESSINS.has(m.slice(1)));
+}
+
+/** Les gestionnaires `onKeyDown` écrits en ligne, en attribut JSX ou en objet. */
+function gestionnaires(s) {
+  const out = [];
+  for (const re of [/onKeyDown=(?=\{)/g, /onKeyDown:\s*\(?\w*\)?\s*=>\s*(?=\{)/g]) {
+    for (const m of s.matchAll(re)) {
+      const h = blocAccolade(s, m.index + m[0].length);
+      const garde = h.search(/if \((\w+)\.target !== \1\.currentTarget\) return;/);
+      out.push({
+        i: m.index,
+        ligne: s.slice(0, m.index).split('\n').length,
+        objet: m[0].startsWith('onKeyDown:'),
+        // Entrée ET Espace, et la touche avalée : c'est une activation.
+        active: /\.key === 'Enter'/.test(h) && /\.key === ' '/.test(h) && /preventDefault\(\)/.test(h),
+        // EN TÊTE : avant la première touche lue.
+        garde: garde >= 0 && garde < h.search(/\.key === /),
+      });
+    }
+  }
+  return out;
+}
+
+test('Entrée sur un bouton d’une carte n’ouvre pas la carte', () => {
+  const fautes = [];
+  for (const [nom, src] of sources()) {
+    for (const g of gestionnaires(src)) {
+      if (!g.active || g.garde) continue;
+      if (g.objet) { fautes.push(`${nom}:${g.ligne} → onKeyDown en objet, sans garde`); continue; }
+      const b = porteur(src, g.i);
+      assert.ok(b, `${nom}:${g.ligne} : balise introuvable — le lecteur du test ne suit plus le code`);
+      const c = contenu(src, b);
+      assert.notEqual(c, null, `${nom}:${g.ligne} : <${b.nom}> sans fermante — le lecteur du test ne suit plus le code`);
+      if (interactif(c)) fautes.push(`${nom}:${g.ligne} → <${b.nom}> contient un contrôle`);
+    }
+  }
+  assert.deepEqual(fautes, [],
+    'Entrée ou Espace sur un bouton intérieur ouvre la carte, et le bouton n’agit plus : « if (e.target !== e.currentTarget) return; » en tête du gestionnaire');
+});
+
+test('le lecteur de la garde distingue un conteneur d’une feuille', () => {
+  // Un lecteur qui ne trouverait plus rien laisserait tout passer : zéro
+  // faute, faute de gestionnaire lu. On le vérifie sur trois cas connus.
+  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const lus = gestionnaires(app).filter(g => g.active && !g.objet).map(g => {
+    const b = porteur(app, g.i);
+    return { g, balise: b ? app.slice(b.debut, b.fin + 1) : '', dedans: (b && contenu(app, b)) || '' };
+  });
+  assert.ok(lus.length >= 20, `seulement ${lus.length} activations au clavier lues dans App.jsx`);
+  // Un conteneur : une carte et son bouton « Fermer ». La carte volet servait
+  // d'exemple ; depuis le lot 13 de l'audit du 03/10, sa fiche s'ouvre par un
+  // bouton de surface (`Surface`, ui.jsx) et elle n'a plus de touche à
+  // garder. Le cas est donc écrit ici, à sa forme d'avant : un lecteur qui ne
+  // verrait plus ses boutons laisserait passer toute carte de ce genre.
+  const carte = '<div role="button" tabIndex={0} onKeyDown={(e) => { if (e.target !== e.currentTarget) return; if (e.key === \'Enter\' || e.key === \' \') { e.preventDefault(); onOpen(id); } }} onClick={() => onOpen(id)}>\n'
+    + '  <button aria-label={tr(\'Fermer\') + \' \' + nom} onClick={(e) => { e.stopPropagation(); commander(hass, id, \'close\'); }}><Fi i="angle-down" size={14} /></button>\n'
+    + '</div>';
+  const [volet] = gestionnaires(carte);
+  const bv = volet && porteur(carte, volet.i);
+  assert.ok(bv && bv.nom === 'div', 'la carte d’exemple n’est plus lue');
+  assert.ok(interactif(contenu(carte, bv)), 'une carte passe pour une feuille : ses boutons ne sont plus vus');
+  assert.ok(volet.active && volet.garde, 'la garde de la carte d’exemple n’est plus reconnue');
+  // Sans la garde, la même carte est une faute : le lecteur ne voit pas une
+  // garde partout.
+  const [nue] = gestionnaires(carte.replace('if (e.target !== e.currentTarget) return; ', ''));
+  assert.ok(nue.active && !nue.garde, 'une carte sans garde passe pour gardée');
+  // Une feuille : la barre de recherche de l'en-tête, un dessin et deux
+  // textes. Rien à garder — elle ne doit pas passer pour fautive.
+  const recherche = lus.find(x => x.balise.includes("tr('Rechercher (Ctrl+K)')"));
+  assert.ok(recherche, 'la barre de recherche n’est plus lue');
+  assert.ok(!interactif(recherche.dedans), 'faux positif : une feuille sans contrôle passe pour un conteneur');
+  // Le kit d'édition : un gestionnaire en objet, étalé sur la carte.
+  const kit = gestionnaires(app).filter(g => g.objet && g.active);
+  assert.ok(kit.length >= 1 && kit.every(g => g.garde), 'la carte d’édition reprend la touche de « Supprimer »');
 });

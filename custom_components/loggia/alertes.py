@@ -53,6 +53,21 @@ _LOGGER = logging.getLogger(__name__)
 
 CLE_CONFIG = "loggia_alertes"
 
+# Ce qui part au telephone (05/10) : des constantes, jamais un litteral glisse
+# dans un appel. Chaque gabarit est une cle de textes_catalogue.py, recopiee
+# par scripts/textes_serveur.mjs (CLES_TELEPHONE). Un message retouche ici
+# sans sa cle partait en francais chez un Allemand, et tout restait vert :
+# tests/python/test_lot16_alertes_traduites.py le dit maintenant.
+TITRE = "Loggia — sûreté"
+MSG_ALARME = "Alarme déclenchée"
+MSG_OUVERTURE = "Ouverture pendant que l’alarme est armée"
+
+
+def gabarit(message: str) -> str:
+    """Le gabarit envoye : « Fumée détectée : {nom} », le nom venant de HA."""
+    return message + " : {nom}"
+
+
 # device_class -> (categorie, message)
 BINAIRES: dict[str, tuple[str, str]] = {
     "smoke": ("fumee", "Fumée détectée"),
@@ -139,7 +154,7 @@ class LoggiaAlertes:
             if new.attributes.get("device_class") in BINAIRES:
                 self._hass.async_create_task(self._danger_passe(new.entity_id))
         elif domaine == "alarm_control_panel" and new.state == "triggered":
-            self._hass.async_create_task(self._envoyer(new, "alarme", "Alarme déclenchée", urgent=True))
+            self._hass.async_create_task(self._envoyer(new, "alarme", MSG_ALARME, urgent=True))
             self._hass.async_create_task(self._reagir(new, "alarme"))
         elif domaine == "alarm_control_panel" and old.state == "triggered":
             self._hass.async_create_task(self._danger_passe(new.entity_id))
@@ -300,7 +315,7 @@ class LoggiaAlertes:
             for s in self._hass.states.async_all("alarm_control_panel")
         )
         if armee:
-            await self._envoyer(etat, "portes", "Ouverture pendant que l’alarme est armée")
+            await self._envoyer(etat, "portes", MSG_OUVERTURE)
 
     async def _envoyer(self, etat: Any, categorie: str, message: str, urgent: bool = False) -> None:
         cfg = await self._store.async_get_shared(CLE_CONFIG)
@@ -329,7 +344,7 @@ class LoggiaAlertes:
         # Le message est un gabarit : « Fumée détectée : {nom} » a sa cle dans
         # chaque langue, le nom de l'appareil vient de Home Assistant (ADR 0070).
         parti = await self._regles.prevenir(
-            "alertes", categorie, (message + " : {nom}", {"nom": nom}), titre="Loggia — sûreté",
+            "alertes", categorie, (gabarit(message), {"nom": nom}), titre=TITRE,
             critique=categorie in DANGER, motif=etat.entity_id)
         if parti:
             _LOGGER.info("Loggia : alerte %s envoyée pour %s", categorie, etat.entity_id)

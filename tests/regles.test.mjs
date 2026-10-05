@@ -413,7 +413,8 @@ test('l’éclairage nocturne se règle pièce par pièce, depuis les zones', ()
   assert.ok(vue.includes('if (patch.eclairage && patch.eclairage.pieces) {'), 'les autres pièces disparaîtraient le temps de l’aller-retour');
   const demo = readFileSync(join(RACINE, 'src', 'demo.js'), 'utf8');
   assert.ok(demo.includes("device_class: 'motion'"), 'la démo n’a pas de capteur de mouvement');
-  assert.ok(demo.includes("motif: 'mouvement : Entrée'"), 'la démo ne montre pas la règle');
+  // Par ses parties, comme le serveur l'écrit : sa clé traduit le motif (relecture du 03/10).
+  assert.ok(demo.includes("motif: [['mouvement : {piece}', { piece: lieu('Entrée') }]]"), 'la démo ne montre pas la règle');
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

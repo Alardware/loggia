@@ -15,13 +15,17 @@ import {
   useState, useMemo, useEffect
 } from 'react';
 import { BottomSheet, EntPicker, cvName, useEtatServeur, Fi } from '../ui.jsx';
-import { tr } from '../i18n.js';
+import { tr, trN } from '../i18n.js';
+import { raisonEchec } from '../refus.js';
+import { puceHaute } from '../styles.js';
 import { entityCaps } from '../capabilities.js';
+import { versHex } from '../contraste.js';
 import { libelleGeste } from '../gestes.js';
 import { Panneau, Pastille, Intertitre, MONO, FILET, btnDiscret, btnPrimaire, btnSecondaire } from './parcommun.jsx';
 
 /* L'ecoute d'apprentissage s'ouvre pour ce temps, comme l'appairage de
- * zigbee2mqtt, puis se referme d'elle-meme (interrupteurs.py, ECOUTE_S). */
+ * zigbee2mqtt, puis se referme d'elle-meme. La duree vit ICI ; le serveur ne
+ * fait que la borner (interrupteurs.py, ECOUTE_MAX_S — lot 15 de l'audit du 03/10). */
 const ECOUTE_S = 300;
 
 /* Les telecommandes que la page montre : toutes pendant l'ecoute, seulement
@@ -92,7 +96,9 @@ function resume(gestes, hass) {
   }).join(' · ');
 }
 
-const enHex = (rgb) => '#' + rgb.map(v => Math.max(0, Math.min(255, v | 0)).toString(16).padStart(2, '0')).join('');
+/* versHex (contraste.js, lot 15 de l'audit du 03/10) ; `| 0` garde ce que
+ * faisait la copie d'avant : tronquer, et 0 pour une valeur illisible. */
+const enHex = (rgb) => versHex(rgb.map(v => v | 0));
 const enRgb = (hex) => {
   const n = parseInt(String(hex).slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
@@ -132,7 +138,9 @@ export function InterrupteursSection({ hass, onCompte = null }) {
       setEtat(e => (e ? { ...e, affectations: (r && r.affectations) || {} } : e));
       setCible(null);
     } catch (e) {
-      setErr((e && (e.message || e.code)) || tr('Enregistrement impossible.'));
+      // Un refus se dit comme tel et nomme sa clé ; une panne reste une panne
+      // (audit du 03/10, refus.js). Il s'affichait en « Unauthorized ».
+      setErr(raisonEchec(e, 'loggia_interrupteurs'));
     }
   };
 
@@ -164,7 +172,9 @@ export function InterrupteursSection({ hass, onCompte = null }) {
       const e = (r && r.ecoute) || { active: false, reste: 0 };
       setEtat(x => (x ? { ...x, ecoute: e } : x));
     } catch (e) {
-      setErr((e && (e.message || e.code)) || tr('L’écoute ne répond pas.'));
+      // Même règle que le journal (audit du 03/10) : « Unauthorized » et le
+      // motif du composant s'affichaient tels quels, dans les sept langues.
+      setErr(e && e.code === 'unauthorized' ? tr('Réservé aux administrateurs.') : tr('L’écoute ne répond pas.'));
     }
   };
   const appareils = appareilsVisibles((etat && etat.appareils) || [], ecoute);
@@ -255,8 +265,8 @@ export function InterrupteursSection({ hass, onCompte = null }) {
         const posees = (affectations[ap.cle] || {}).actions || {};
         const boutons = Array.from(new Set([...(ap.affectees || []), ...(ap.vues || [])])).sort();
         const regles = boutons.filter(b => (posees[b] || []).length > 0).length;
-        const gTxt = regles === 0 ? tr('aucun geste') : regles > 1 ? tr('{n} gestes', { n: regles }) : tr('{n} geste', { n: regles });
-        const bTxt = boutons.length > 1 ? tr('{n} boutons', { n: boutons.length }) : tr('{n} bouton', { n: boutons.length });
+        const gTxt = regles === 0 ? tr('aucun geste') : trN(regles, '{n} geste', '{n} gestes');
+        const bTxt = trN(boutons.length, '{n} bouton', '{n} boutons');
         return (
           <Panneau key={ap.cle} titre={ap.nom} desc={SOURCES[ap.source] || ap.source}
             titreStyle={{ fontFamily: 'var(--o-font)', fontStyle: 'normal', fontSize: 15, fontWeight: 800, letterSpacing: 0 }}
@@ -361,7 +371,9 @@ function FeuilleAffectation({ hass, cible, existant, onFermer, onValider }) {
   };
 
   const champ = { width: '100%', padding: '10px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600, boxSizing: 'border-box' };
-  const puce = (on) => ({ padding: '7px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' });
+  // La puce partagée (styles.js) ; `puce` nomme déjà, plus haut, la pastille
+  // d'une source (lot 15 de l’audit du 03/10).
+  const puce = puceHaute;
   const label = { fontSize: 12, fontWeight: 700, marginBottom: 6 };
 
   return (

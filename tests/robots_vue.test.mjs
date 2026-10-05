@@ -295,7 +295,7 @@ test('la fiche technique : ce que l’appareil dit de lui, rien de plus', () => 
 
 test('la fiche : une feuille pour les deux robots, ouverte depuis leur carte — partout, le même rendu', () => {
   const app = lire('src', 'App.jsx');
-  assert.ok(app.includes("const FicheRobotContent = lazy(() => import('./ficherobot.jsx'));"), 'chargée à la demande');
+  assert.ok(app.includes("const FicheRobotContent = lazyRecharge(() => import('./ficherobot.jsx'));"), 'chargée à la demande, derrière le rechargement unique (audit du 03/10)');
   assert.ok(!existsSync(join(RACINE, 'src', 'views', 'robot.jsx')) && !existsSync(join(RACINE, 'src', 'views', 'aspirateur.jsx')), 'plus de vue : une fiche, comme les autres appareils (18/09)');
   const f = bloc(app, 'function FicheRobot(', NL + '}');
   assert.ok(f.includes('<BottomSheet onClose={onClose} onglets>') && f.includes('<Suspense fallback=') && f.includes('<FicheRobotContent hass={H} idRobot={id} domaine={domaine} onFiche={setFiche} epingle={<BoutonEpingle id={id} />} />'),

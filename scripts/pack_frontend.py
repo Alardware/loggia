@@ -16,6 +16,12 @@ tiennent tout ce fichier :
    Deux suffisent : le cache d'un client ne saute qu'une version a la fois, et
    celui qui en a saute deux recharge la page.
 
+   « Celui d'avant » n'existait pas (audit du 03/10) : devine par la date des
+   fichiers, que tout checkout egalise, il se perdait a sept mises a jour sur
+   huit. Il est desormais NOMME — la page de la derniere release — et protege
+   entier : voir `generation_precedente`. La regle 5 retire alors ce
+   qu'aucune des deux pages n'atteint.
+
 3. Ce que le build ne produit PLUS DU TOUT s'en va, lui, en entier. La regle 2
    garde les deux derniers de chaque famille ; une famille que Vite a cessee de
    produire ne redescend donc jamais sous deux, et restait pour toujours.
@@ -41,6 +47,7 @@ import io
 import os
 import re
 import shutil
+import subprocess
 import sys
 
 RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -53,6 +60,17 @@ RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DIST = os.environ.get('LOGGIA_DIST', os.path.join(RACINE, 'dist'))
 CIBLE = os.path.join(RACINE, 'custom_components', 'loggia', 'frontend')
 GARDE = 2
+
+# Ce qu'une page nomme dans `assets/`, puis ce qu'un js ou un css y reclame a
+# son tour, sous les formes que Vite emet : `import("./en-<hash>.js")`,
+# `from"./vendor-<hash>.js"`, la liste `__vite__mapDeps` et
+# `new URL("snow-<hash>.svg", import.meta.url)`.
+REF_HTML = r'assets/([A-Za-z0-9._-]+)'
+REF_BUNDLE = r'["\'/]([A-Za-z0-9._-]+\.(?:js|css|jpg|jpeg|png|webp|svg|woff2?))'
+# Un nom n'est un bundle que s'il porte une empreinte Vite : `index.css` ou
+# `panel.js` sont des noms stables, et `three.js` une chaine du code.
+EMPREINTE = re.compile(
+    r'^[A-Za-z0-9_]+(?:-[A-Za-z0-9_]+)*-[A-Za-z0-9_-]{8}\.(?:js|css)$')
 
 
 def verifier_fraicheur(dist, racine):
@@ -96,7 +114,8 @@ def inliner_css(html, dossier_assets):
 def retenir(dossier, prefixe, suffixe, proteges=()):
     """Supprime les bundles au-dela des `GARDE` plus recents. Rend les effaces.
 
-    `proteges` liste ce que l'`index.html` courant reference. Sans cette garde, la
+    `proteges` : tout ce qu'atteignent la page du jour et la page N-1 (audit du
+    03/10 ; seule l'entree du jour l'etait). Sans cette garde, la
     rentention a efface le bundle du jour : `shutil.copyfile` ne reporte pas les
     dates, tous les fichiers venaient d'etre ecrits a la meme seconde, et « les
     trois plus recents » ne voulait plus rien dire.
@@ -134,24 +153,158 @@ def atteignables(dist):
     index = os.path.join(dist, 'index.html')
     if not os.path.exists(index):
         return None
-    vus, a_voir = set(), []
     with io.open(index, encoding='utf-8') as fh:
-        a_voir += re.findall(r'assets/([A-Za-z0-9._-]+)', fh.read())
+        depart = re.findall(REF_HTML, fh.read())
+    dossier = os.path.join(dist, 'assets')
+    return parcourir(depart, lambda f: lire_bundle(dossier, f))
+
+
+def lire_texte(chemin):
+    """Le texte d'un fichier, ou None s'il manque."""
+    try:
+        with io.open(chemin, encoding='utf-8', errors='ignore') as fh:
+            return fh.read()
+    except OSError:
+        return None
+
+
+def lire_bundle(dossier, f):
+    """Le texte d'un js ou d'un css de `dossier` ; None pour le reste, ou s'il manque."""
+    return lire_texte(os.path.join(dossier, f)) if f.endswith(('.js', '.css')) else None
+
+
+def parcourir(depart, lire):
+    """Ferme `depart` sur ce que chaque fichier reclame, de proche en proche.
+
+    `lire(nom)` rend le texte d'un js ou d'un css, None sinon. Rend TOUS les
+    noms vus, presents ou non : juger d'un manque revient a l'appelant.
+    """
+    vus, a_voir = set(), list(depart)
     while a_voir:
         f = a_voir.pop()
         if f in vus:
             continue
         vus.add(f)
-        p = os.path.join(dist, 'assets', f)
-        if os.path.exists(p) and f.endswith(('.js', '.css')):
-            try:
-                with io.open(p, encoding='utf-8', errors='ignore') as fh:
-                    a_voir += re.findall(
-                        r'["\'/]([A-Za-z0-9._-]+\.(?:js|css|jpg|jpeg|png|webp|svg|woff2?))',
-                        fh.read())
-            except Exception:
-                pass
+        texte = lire(f)
+        if texte:
+            a_voir += re.findall(REF_BUNDLE, texte)
     return vus
+
+
+def tags_publies(racine):
+    """Les releases atteignables depuis HEAD, la plus recente d'abord.
+
+    HACS livre les RELEASES, pas les commits : la page qu'un client a en cache
+    est celle d'un tag `v*`. Liste vide sans git ou sans tags — la CI clone a
+    plat, sans eux.
+    """
+    try:
+        sortie = subprocess.run(
+            ['git', '-C', racine, 'tag', '--list', '--merged', 'HEAD',
+             '--sort=-v:refname', 'v*'],
+            capture_output=True, timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if sortie.returncode != 0:
+        return []
+    return sortie.stdout.decode('utf-8', 'replace').split()
+
+
+def git_lire(racine, objet):
+    """Un fichier tel qu'une revision le porte (`v3.84.0:chemin`), en octets.
+
+    `cat-file blob` rend le blob brut, sans conversion de fins de ligne : un
+    bundle restaure est celui que la release a livre, a l'octet pres. None si
+    la revision ou le fichier manque, ou sans git.
+    """
+    try:
+        sortie = subprocess.run(['git', '-C', racine, 'cat-file', 'blob', objet],
+                                capture_output=True, timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return sortie.stdout if sortie.returncode == 0 else None
+
+
+def generation_precedente(assets, html, en_place, racine, cible):
+    """La page N-1 — celle qu'un client au cache perime demande encore —, entiere.
+
+    Audit du 03/10 : le filet de la regle 2 n'existait pas. Sur les huit
+    derniers passages d'une release a la suivante (v3.77.0 -> v3.84.0), sept
+    ont fait perdre a la page precedente 10 a 17 de ses 28 fichiers, dont son
+    `boot` et son entree. Un checkout pose tous les fichiers a la meme
+    seconde : la retenue « par date » tirait au sort entre N-1 et N-2, famille
+    par famille, et la regle 4 rasait ensuite toute page que le tirage avait
+    trouee. Elle comptait de plus les PASSAGES du pack : deux packs dans une
+    meme branche poussaient dehors la generation que les clients avaient
+    vraiment.
+
+    La page N-1 est donc nommee, plus devinee. Trois sources, dans cet ordre :
+
+    1. La derniere RELEASE dont la page differe de celle du jour : HACS livre
+       les releases, c'est leur page que les clients ont en cache. Ce qui
+       manque au dossier — rase par un pack d'avant ce correctif, ou dossier
+       vide — est restaure depuis le tag.
+    2. L'`index.html` EN PLACE, s'il n'est pas deja celui du jour : sans git,
+       ou sans tags.
+    3. Le re-pack du meme build — la CI, qui clone a plat, sans tags : l'autre
+       entree que le paquet porte, si elle est seule. C'est la N-1 que le pack
+       precedent a gardee ; sans elle, la CI raserait ce que le poste a garde,
+       et son `git diff --exit-code` le refuserait.
+
+    Rend (origine, fichiers), `fichiers` etant tout ce que la page atteint
+    dans `assets`. (None, ensemble vide) quand aucune page precedente n'est
+    ENTIERE : une N-1 trouee ne sert personne (regle 4), on ne la protege pas,
+    et le reste retombe sur les regles 2 a 4 comme avant.
+    """
+    neuves = set(re.findall(REF_HTML, html))
+    rel = os.path.relpath(cible, racine).replace(os.sep, '/')
+    candidates = []
+    for tag in tags_publies(racine):
+        brut = git_lire(racine, tag + ':' + rel + '/index.html')
+        depart = set(re.findall(REF_HTML, brut.decode('utf-8', 'replace'))) if brut else set()
+        if depart and depart != neuves:
+            candidates.append(('release ' + tag, depart, tag))
+            break
+    depart = set(re.findall(REF_HTML, en_place or ''))
+    if depart and depart != neuves:
+        candidates.append(('index.html en place', depart, None))
+    # L'entree d'une page se reconnait a son nom, `index-<hash>.js` comme celle
+    # du jour. Un chunk du jour qui porterait ce nom (un `index.js` importe a
+    # la demande) n'est pas une entree d'avant : ce que la page du jour
+    # atteint est ecarte.
+    jour = parcourir(neuves, lambda f: lire_bundle(assets, f))
+    # L'entree, c'est le <script type="module"> : depuis le lot 14 de l'audit
+    # du 03/10, la page nomme aussi `boot` et `vendor` (`modulepreload`,
+    # vite.config.js). Les compter trouvait DEUX « autres », l'entree et le
+    # boot d'avant, au lieu d'une : le re-pack de la CI perdait sa N-1.
+    # Quel que soit l'ordre des attributs : Vite ecrit `type` puis `src`
+    # aujourd'hui, rien ne l'y oblige demain.
+    entrees = [m.group(1) for b in re.findall(r'<script\b[^>]*\btype="module"[^>]*>', html)
+               for m in [re.search(r'\bsrc="\./assets/([A-Za-z0-9._-]+\.js)"', b)] if m]
+    prefixes = {n[:n.index('-') + 1] for n in entrees if '-' in n}
+    autres = sorted(f for f in os.listdir(assets) if f not in jour and f.endswith('.js')
+                    and any(f.startswith(p) for p in prefixes))
+    if len(autres) == 1:
+        candidates.append(('paquet en place', set(autres), None))
+
+    for origine, depart, tag in candidates:
+        def lire(f, tag=tag):
+            chemin = os.path.join(assets, f)
+            if tag and not os.path.exists(chemin):
+                brut = git_lire(racine, tag + ':' + rel + '/assets/' + f)
+                if brut is not None:
+                    with open(chemin, 'wb') as fh:
+                        fh.write(brut)
+            return lire_bundle(assets, f)
+        vus = parcourir(depart, lire)
+        nom = origine + ' (' + ', '.join(sorted(depart)) + ')'
+        trous = sorted(f for f in vus if EMPREINTE.match(f)
+                       and not os.path.exists(os.path.join(assets, f)))
+        if trous:
+            print('page N-1 ecartee    :', nom, '- trouee :', trous)
+            continue
+        return nom, {f for f in vus if os.path.isfile(os.path.join(assets, f))}
+    return None, set()
 
 
 def copier_arbre(src, dst, garder=None):
@@ -170,7 +323,7 @@ def copier_arbre(src, dst, garder=None):
     return n
 
 
-def bundles_morts(dossier, vivants):
+def bundles_morts(dossier, vivants, proteges=()):
     """Les bundles du paquet dont le build courant ne produit plus l'equivalent.
 
     `vivants` vient d'`atteignables` : tout ce que l'`index.html` du jour finit
@@ -189,6 +342,10 @@ def bundles_morts(dossier, vivants):
     extension, le module existe encore et le fichier reste. Le doute profite au
     client : on ne retire que ce dont aucune coupure ne repond.
 
+    `proteges` : la page N-1 entiere (audit du 03/10). Un module que le build
+    du jour ne produit plus n'est pas mort tant que cette page le reclame —
+    sinon un module renomme cassait la page d'avant a la mise a jour suivante.
+
     Rend une liste de noms. Vide quand `vivants` l'est ou vaut None : sans
     reference sure on ne tranche pas, et l'on garde tout.
     """
@@ -196,7 +353,7 @@ def bundles_morts(dossier, vivants):
         return []
     morts = []
     for f in sorted(os.listdir(dossier)):
-        if f in vivants:
+        if f in vivants or f in proteges:
             continue
         suf = next((s for s in ('.js', '.css') if f.endswith(s)), None)
         if suf is None:
@@ -229,10 +386,10 @@ def renvois_morts(dossier, proteges):
     On retire donc, jusqu'a point fixe, tout fichier garde dont une reference
     manque — retirer l'un peut en condamner un autre. La generation VIVANTE est
     protegee : si elle est trouee, c'est la compilation qui est fautive, et le
-    refus plus bas le dit deja.
+    refus plus bas le dit deja. La page N-1 l'est aussi depuis le 03/10, mais
+    seulement ENTIERE : `generation_precedente` ne nomme pas une page trouee.
     """
-    empreinte = re.compile(
-        r'^[A-Za-z0-9_]+(?:-[A-Za-z0-9_]+)*-[A-Za-z0-9_-]{8}\.(?:js|css)$')
+    empreinte = EMPREINTE
     partis = []
     while True:
         presents = set(os.listdir(dossier))
@@ -254,6 +411,28 @@ def renvois_morts(dossier, proteges):
         for f in tour:
             os.remove(os.path.join(dossier, f))
         partis += tour
+
+
+def hors_des_deux_pages(dossier, gardes):
+    """Regle 5 : quand la page N-1 est connue, ce qu'aucune des deux n'atteint s'en va.
+
+    Les regles 2 a 4 jugent par famille et par renvoi : elles laissaient les
+    FEUILLES d'une page rasee. Mesure du 03/10 dans le paquet de travail :
+    onze fichiers, 1,4 Mo — `three`, `vendor`, six langues, la demo, `voix`,
+    un `index-*.css` —, cites par aucun fichier : la regle 4 avait rase la page
+    qui les nommait, la regle 2 les gardait comme « deuxieme de leur famille ».
+
+    N'est appelee que lorsque la page N-1 a ete trouvee ENTIERE : sans elle on
+    ne tranche pas, et les regles 2 a 4 font ce qu'elles peuvent.
+    """
+    otes = []
+    for f in sorted(os.listdir(dossier)):
+        chemin = os.path.join(dossier, f)
+        if f in gardes or not os.path.isfile(chemin):
+            continue
+        os.remove(chemin)
+        otes.append(f)
+    return otes
 
 
 def balayer_publics(dist, cible):
@@ -315,6 +494,9 @@ def main():
 
     assets_src = os.path.join(DIST, 'assets')
     assets_dst = os.path.join(CIBLE, 'assets')
+    # La page qu'on va remplacer, lue AVANT d'y toucher : c'est peut-etre la
+    # N-1 (voir `generation_precedente`).
+    en_place = lire_texte(os.path.join(CIBLE, 'index.html'))
     os.makedirs(assets_dst, exist_ok=True)
 
     # Ne recopier que ce qui sert : voir `atteignables`. Le meme ensemble sert
@@ -363,6 +545,22 @@ def main():
         print('REFUS : le html reclame des fichiers absents du paquet :', manquants)
         return 1
 
+    # Le filet N-1, NOMME (audit du 03/10) : la page que les clients ont encore
+    # en cache, entiere — restauree depuis sa release s'il le faut. Ce que
+    # l'une des deux pages atteint est intouchable, par TOUTES les regles.
+    # Jusqu'ici seule l'entree du jour l'etait : le reste de la generation
+    # vivante ne tenait qu'a sa date, et la N-1 au tirage des dates egales.
+    origine, precedents = generation_precedente(assets_dst, html, en_place, RACINE, CIBLE)
+    gardes = {f for f in os.listdir(assets_dst)
+              if f in reference or f in (vivants or ()) or f in precedents}
+    # La page en place n'est ni celle du jour ni la N-1 protegee : un pack de
+    # travail, que personne n'a recu — ou une release dont le tag manque ici,
+    # que la regle 5 retirerait a tort. Le dire plutot que trancher en silence.
+    place = set(re.findall(REF_HTML, en_place or ''))
+    if place and place != reference and not place <= precedents:
+        print('ATTENTION : page en place non protegee', sorted(place),
+              '- si c est une release, `git fetch --tags` puis repacker')
+
     # TOUTES les familles, pas seulement `index-`.
     #
     # La retenue ne portait que sur `index-*`. Les autres bundles — `boot`,
@@ -382,21 +580,27 @@ def main():
                 familles.add((f[:f[:-len(suf)].rindex('-') + 1], suf))
     # Ce que le build ne produit plus du tout s'en va d'abord (regle 3) : la
     # retenue ci-dessous n'a plus alors que des generations a departager.
-    morts = bundles_morts(assets_dst, vivants)
+    morts = bundles_morts(assets_dst, vivants, gardes)
     for f in morts:
         os.remove(os.path.join(assets_dst, f))
     efface = []
     for prefixe, suffixe in sorted(familles):
-        efface += retenir(assets_dst, prefixe, suffixe, reference)
-    # Regle 4, en DERNIER : les deux balayages ci-dessus viennent peut-etre de
-    # retirer ce qu'une generation gardee reclamait.
-    troues = renvois_morts(assets_dst, reference)
+        efface += retenir(assets_dst, prefixe, suffixe, gardes)
+    # Regle 4 : les deux balayages ci-dessus viennent peut-etre de retirer ce
+    # qu'une generation gardee reclamait.
+    troues = renvois_morts(assets_dst, gardes)
+    # Regle 5, en DERNIER, et seulement quand la page N-1 est connue : le
+    # paquet est alors exactement les deux pages.
+    orphelins = hors_des_deux_pages(assets_dst, gardes) if precedents else []
     print('bundle publie       :', ', '.join(sorted(f for f in reference if f.endswith('.js'))))
+    print('page N-1 protegee   :', (origine + ', ' + str(len(precedents)) + ' fichiers')
+          if precedents else 'AUCUNE : un client au cache perime n a pas de filet')
     print('assets copies       :', n)
     print('fichiers publics    :', autres)
     print('anciens bundles otes:', len(efface), efface if efface else '')
     print('modules disparus    :', len(morts), morts if morts else '')
     print('renvois morts otes  :', len(troues), troues if troues else '')
+    print('hors des deux pages :', len(orphelins), orphelins if orphelins else '')
     print('publics disparus    :', len(publics_otes), publics_otes if publics_otes else '')
     print('cible               :', CIBLE)
     return 0

@@ -55,7 +55,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 #
 # `regles` en fait partie : c'est lui qui ecoute les gestes et qui retient
 # l'ecriture differee du journal. Son arret l'ECRIT avant de partir.
+#
+# `rechargement` vient EN TETE : il ecoute la configuration pour recharger les
+# autres, il doit se taire avant qu'ils ne s'arretent.
 MODULES_VIVANTS = (
+    "rechargement",
     "alertes", "fenetres", "interrupteurs", "minuteurs", "nuit", "presence",
     "robots", "scenarios", "sirene", "veilles", "volets", "regles",
 )
@@ -251,6 +255,17 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : test de sirene indisponible")
 
+    # Un import ou une remise a zero ecrit la configuration des modules par la
+    # configuration generale : ils la reprennent tout de suite, au lieu
+    # d'attendre le prochain redemarrage (relecture du lot 1, audit du 03/10).
+    if not data.get("rechargement") and data.get("store"):
+        try:
+            from .rechargement import LoggiaRechargement
+
+            data["rechargement"] = LoggiaRechargement(hass, data)
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia : rechargement des modules indisponible")
+
     # Les scenarios : ce que la maison fait d'un seul geste (ADR 0027). Ils
     # ne posent aucun abonnement — seul le magasin leur est necessaire.
     if not data.get("scenarios") and data.get("store"):
@@ -267,11 +282,25 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
     if not data.get("service_scenario") and data.get("scenarios"):
         try:
             import voluptuous as vol
+            from homeassistant.exceptions import ServiceValidationError
+
+            def _refus(cle: str, **valeurs) -> ServiceValidationError:
+                """Un refus que l'automatisation VOIT, dans la langue de la maison.
+
+                Le service echouait en silence (audit du 03/10) : un scenario
+                mal nomme dans une automatisation, un composant pas encore
+                demarre, un compte illisible — l'automatisation se deroulait
+                « avec succes » et rien ne se passait. Les messages vivent
+                dans translations/*.json, section `exceptions`.
+                """
+                return ServiceValidationError(
+                    translation_domain=DOMAIN, translation_key=cle,
+                    translation_placeholders={k: str(v) for k, v in valeurs.items()} or None)
 
             async def _lancer_scenario(call):
                 scenarios = hass.data.get(DOMAIN, {}).get("scenarios")
                 if scenarios is None:
-                    return
+                    raise _refus("scenarios_indisponibles")
                 contexte = getattr(call, "context", None)
                 uid = getattr(contexte, "user_id", None)
                 # Appele par une personne : ses permissions d'entite valent ici
@@ -296,10 +325,13 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
                 if not compte_resolu(uid, utilisateur):
                     _LOGGER.warning(
                         "Loggia : scenario refuse, le compte %s n'a pas pu etre lu", uid)
-                    return
+                    raise _refus("compte_illisible")
 
-                await scenarios.async_lancer(str(call.data.get("id") or ""), user_id=uid,
-                                             controle=controle_de(utilisateur) if uid else None)
+                ident = str(call.data.get("id") or "")
+                resultat = await scenarios.async_lancer(ident, user_id=uid,
+                                                        controle=controle_de(utilisateur) if uid else None)
+                if resultat is None:
+                    raise _refus("scenario_inconnu", id=ident)
 
             hass.services.async_register(DOMAIN, "scenario", _lancer_scenario,
                                          schema=vol.Schema({vol.Required("id"): cv.string}))

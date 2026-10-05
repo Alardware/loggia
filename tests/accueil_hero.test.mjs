@@ -41,7 +41,7 @@ test('les tuiles de la banniere sont des boutons qui menent la ou l’on agit', 
 
 test('« appareils actifs » mene a En ce moment : le rail sur PC, la seconde page sur telephone', () => {
   const d = bloc('function Dashboard(', NL + '}');
-  assert.ok(d.includes("const el = document.querySelector('[data-sec=\"moment\"]');") && d.includes("el.scrollIntoView({ behavior: 'smooth', block: 'start' })"), 'sur PC, le panneau du rail');
+  assert.ok(d.includes("const el = document.querySelector('[data-sec=\"moment\"]');") && d.includes("el.scrollIntoView({ behavior: REDUCE_MOTION ? 'auto' : 'smooth', block: 'start' })"), 'sur PC, le panneau du rail');
   assert.ok(d.includes('setPageDemandee(1);') && d.includes('const [pageDemandee, setPageDemandee] = useState(null);'), 'sur telephone, la seconde page');
   const o = bloc('function OngletsAccueil(', NL + '}');
   assert.ok(o.includes('demande = null, onDemande = null })') && o.includes("useEffect(() => { if (demande != null) { va(demande); if (onDemande) onDemande(); } }, [demande, va, onDemande]);"), 'les pages obeissent puis rendent la main');
@@ -53,11 +53,13 @@ test('les scenarios : UNE rangee qui defile, tous dedans ; le chemin vers la vue
   // ressemblait a un scenario sans en etre un.
   const s = bloc('function ScenariosAccueil(', NL + '}');
   assert.ok(!s.includes('liste.slice(') && !s.includes('useWide('), 'plus de coupe a cinq : tous les scenarios de l’Accueil sont dans la rangee');
-  assert.ok(s.includes('<div ref={rangee} className="grid-qscenes">') && s.includes("{liste.map(s => <CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} />)}"), 'la rangee ne contient QUE des scenarios');
-  const rangee = s.slice(s.indexOf('<div ref={rangee} className="grid-qscenes">'));
+  assert.ok(s.includes(`<div ref={rangee} className="grid-qscenes" inert={edit ? '' : undefined}>`) && s.includes("{liste.map(s => <CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} />)}"), 'la rangee ne contient QUE des scenarios');
+  const rangee = s.slice(s.indexOf(`<div ref={rangee} className="grid-qscenes" inert={edit ? '' : undefined}>`));
   assert.ok(!rangee.includes("onNav('scenes')") && !rangee.includes('dashed'), 'plus de fausse carte dans la rangee');
   assert.ok(s.includes("? <button type=\"button\" onClick={() => onNav('scenes')} aria-label={tr('Tous les scénarios')}") && s.includes("{nScenarios ? compte : tr('Tous les scénarios')}<Fi i=\"angle-right\" size={10} color=\"var(--o-text3)\" />"), 'le lien de l’en-tete : « 9 scenarios → », ou « Tous les scenarios » quand aucun n’est sur l’Accueil');
-  assert.ok(s.includes("const compte = nScenarios > 1 ? tr('{n} scénarios', { n: nScenarios }) : tr('{n} scénario', { n: nScenarios });"), 'un scenario ne s’ecrit pas au pluriel');
+  // Par `trN` (relecture du 03/10) : la règle française `n > 1` tranchait
+  // aussi pour le polonais et l'anglais.
+  assert.ok(s.includes("const compte = trN(nScenarios, '{n} scénario', '{n} scénarios');"), 'un scenario ne s’ecrit pas au pluriel');
   assert.ok(s.includes('{(bords.avant || bords.apres) && (<>') && s.includes('disabled={!bords.avant}') && s.includes('disabled={!bords.apres}'), 'les fleches n’existent que si la rangee deborde, actives du cote ou il reste quelque chose');
   assert.ok(s.includes('bordsDefilement(el.scrollLeft, el.scrollWidth, el.clientWidth)') && s.includes("el.addEventListener('scroll', mesurer, { passive: true });") && s.includes('new ResizeObserver(mesurer)'), 'la mesure suit le defilement et la largeur');
   assert.ok(s.includes("behavior: REDUCE_MOTION ? 'auto' : 'smooth'") && s.includes("if (Math.abs(el.scrollLeft - depart) < 2) el.scrollBy({ left: pas, behavior: 'auto' });"), 'un moteur qui n’anime pas ne laisse pas la rangee sur place');

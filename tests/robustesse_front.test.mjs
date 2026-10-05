@@ -142,7 +142,10 @@ test('exclure un volet du planning ne cache plus un refus', () => {
 });
 
 test('un historique illisible se dit « indisponible », il ne se montre pas vide', () => {
-  assert.ok(app.includes("if (!mort) setPoints('erreur');"));
+  /* … sauf quand une courbe de moins d'une demi-heure est déjà montrée : un
+   * GET raté la garde (audit du 03/10, tests/agenda_echec.test.mjs). Sans
+   * courbe récente, l'erreur se dit. */
+  assert.ok(app.includes("if (!mort) setPoints(montree && Date.now() - montree.t < 30 * 60000 ? montree.serie : 'erreur');"));
   assert.equal(compter(app, "points === 'erreur' ? tr('Historique indisponible pour le moment')"), 2, 'la courbe de fiche et la carte graphique');
   assert.equal(compter(app, 'Array.isArray(points) && points.length > 1'), 2, 'aucun `.length` sur la chaîne d’erreur');
   const robot = lire('src', 'ficherobot.jsx');

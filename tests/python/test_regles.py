@@ -706,3 +706,33 @@ def test_un_abonne_qui_echoue_n_empeche_pas_le_gel(socle):
 
     r._sur_changement(Ev())
     assert r.gele("light.salon")
+
+
+# ── Audit du 03/10 : le journal ne perd pas une ligne au demarrage ──────────
+
+def test_deux_lignes_notees_pendant_le_premier_chargement_restent(socle):
+    """Le drapeau etait pose AVANT de lire le fichier : un second `noter`
+    passait, inserait sa ligne, puis la relecture l'ecrasait. Au demarrage,
+    plusieurs modules notent en meme temps — c'est la qu'une ligne manquait."""
+    import asyncio
+
+    r = socle(depart={"entrees": [{"module": "ancien", "regle": "x", "quoi": "y", "ts": 1}]})
+    lent = r._depot
+
+    class Lent:
+        async def async_load(self):
+            await asyncio.sleep(0)   # le disque prend son temps : l'autre passe
+            return await lent.async_load()
+
+        def __getattr__(self, nom):
+            return getattr(lent, nom)
+
+    r._depot = Lent()
+
+    async def deux():
+        await asyncio.gather(r.noter("minuteurs", "minuteur", "eteindre"),
+                             r.noter("sirene", "test", "eteindre"))
+
+    lancer(deux())
+    modules = {e.get("module") for e in lancer(r.journal())}
+    assert {"minuteurs", "sirene", "ancien"} <= modules, modules

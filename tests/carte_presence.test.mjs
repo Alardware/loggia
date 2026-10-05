@@ -34,7 +34,7 @@ test('jusqu’à trois, des lignes ; à partir de quatre, une grille d’avatars
   assert.ok(c.includes('className="o-presence-grille"'));
   assert.ok(c.includes("gridTemplateColumns: 'repeat(4, minmax(0, 1fr))'"), 'quatre par rangée');
   assert.ok(c.includes('(liste.length > 8 ? liste.slice(0, 7) : liste).map('), 'au-delà de huit : sept personnes et un « +n »');
-  assert.ok(c.includes("trN(liste.length - 7, tr('{n} autre personne'), tr('{n} autres personnes'))"), 'le « +n » se lit au lecteur d’écran');
+  assert.ok(c.includes("trN(liste.length - 7, '{n} autre personne', '{n} autres personnes')"), 'le « +n » se lit au lecteur d’écran');
   // Chaque case porte le nom et l'état, même quand le prénom est caché.
   assert.ok(c.includes("title={p.name + ' · ' + etat(p)} aria-label={p.name + ' · ' + etat(p)}"));
   assert.ok(c.includes('className="o-presence-nom"'));
@@ -44,7 +44,11 @@ test('la carte s’ouvre — à la souris, au clavier — sur une feuille qui mo
   const c = fonction('CvPresence');
   assert.ok(c.includes('const [ouvert, setOuvert] = useState(false);'));
   assert.ok(c.includes("role={ouvrable ? 'button' : undefined} tabIndex={ouvrable ? 0 : undefined}"));
-  assert.ok(c.includes("aria-label={ouvrable ? tr('Ouvrir') + ' ' + tr('Présence') : undefined}"));
+  // Son nom est ce qu'elle affiche, « Présence, 1 / 2 », et elle dit ouvrir
+  // une feuille (lot 13 de l'audit du 03/10) : « Ouvrir Présence » taisait le
+  // compteur.
+  assert.ok(c.includes("const compteur = maison + ' / ' + liste.length;") && c.includes('}}>{compteur}</span>}'), 'le compteur affiché est celui qu’on nomme');
+  assert.ok(c.includes("aria-label={ouvrable ? nomCarte(tr('Présence'), compteur) : undefined} aria-haspopup={ouvrable ? 'dialog' : undefined}"));
   assert.ok(c.includes("if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOuvert(true); }"), 'Entrée et Espace ouvrent');
   assert.ok(c.includes('{ouvert && <FeuillePresence liste={liste} onClose={() => setOuvert(false)} />}'));
   const f = fonction('FeuillePresence');

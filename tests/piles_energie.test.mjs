@@ -51,7 +51,11 @@ test('les piles : la classe battery, la plus basse d’abord, les muettes à la 
 });
 
 test('piles.js est pur : ni React, ni Home Assistant', () => {
-  assert.doesNotMatch(lire('src', 'piles.js'), /^import /m);
+  /* Audit du 03/10 : les noms de même charge se rangent dans la langue de
+   * l'écran, par `comparerTextes`. C'est la SEULE dépendance permise, comme
+   * pour attention.js — épinglée à l'identique, rien d'autre ne passe. */
+  const imports = lire('src', 'piles.js').match(/^import .*$/gm) || [];
+  assert.deepEqual(imports, ["import { comparerTextes } from './i18n.js';"]);
 });
 
 test('la vue Énergie : la section suit les postes, avec la carte standard et la grille des Objets', () => {

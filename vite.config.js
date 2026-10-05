@@ -65,10 +65,45 @@ const siteEnLigne = {
   },
 };
 
+/* Le boot part AVEC la page, plus derrière le catalogue (lot 14 de l'audit du
+ * 03/10). L'amorce (`main.jsx`) attend le catalogue de la langue, PUIS importe
+ * `boot.jsx` : des modules appellent tr() à l'import, le catalogue doit être
+ * posé avant que le boot ne s'ÉVALUE. Rien n'obligeait à le TÉLÉCHARGER après :
+ * hors français, en.js puis boot se suivaient (démo à froid, Slow 4G, paquet
+ * servi comme par Home Assistant : boot demandé à 4,5 s, derrière demo.js et
+ * en.js ; à 0,9 s avec ce greffon). Le lien reste plein : l'Accueil n'y gagne que 0,5 s,
+ * l'écran complet 4,2 s avec les polices préchargées d'index.html.
+ * Un `modulepreload` télécharge et analyse sans évaluer : l'`import()` de
+ * l'amorce trouve le module prêt, et l'ordre d'évaluation ne bouge pas. Le nom
+ * haché n'existe qu'à la construction, d'où ce greffon, qui lit le paquet
+ * produit : le boot, et ce qu'il importe (`vendor`, React) — pas l'entrée, que
+ * la page nomme déjà. Les deux constructions l'ont, celle du paquet HACS et
+ * celle de la démo en ligne ; `pack_frontend.py` garde les balises telles
+ * quelles, et reconnaît l'entrée d'avant au seul <script type="module">. */
+let baseHtml = './';
+const prechargerBoot = {
+  name: 'loggia-precharger-boot',
+  apply: 'build',
+  configResolved(c) { baseHtml = c.base; },
+  transformIndexHtml: {
+    order: 'post',
+    handler(html, { bundle }) {
+      const morceaux = Object.values(bundle || {}).filter((m) => m.type === 'chunk');
+      const boot = morceaux.find((m) => m.name === 'boot');
+      // Un boot renommé ou fondu ailleurs ne doit pas reperdre le gain en silence.
+      if (!boot) throw new Error('vite.config.js : plus de morceau « boot » à précharger');
+      const entrees = new Set(morceaux.filter((m) => m.isEntry).map((m) => m.fileName));
+      return [boot.fileName, ...boot.imports.filter((f) => !entrees.has(f))].map((f) => ({
+        tag: 'link', attrs: { rel: 'modulepreload', crossorigin: true, href: baseHtml + f }, injectTo: 'head',
+      }));
+    },
+  },
+};
+
 // base relative : le dashboard est servi depuis /local/loggia/ (www de Home Assistant)
 const config = {
   base: './',
-  plugins: [react(), orbeRechargee],
+  plugins: [react(), orbeRechargee, prechargerBoot],
   // Pré-bundler les grosses dépendances dès le démarrage du serveur dev,
   // plutôt qu'à leur découverte au premier chargement de page.
   optimizeDeps: { include: ['react', 'react-dom', 'three'] },

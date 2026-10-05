@@ -9,7 +9,7 @@
  * App reste seul a les ECRIRE, via `setLoggiaState`. Les vues ne font que lire.
  */
 
-import { LOCAL_ONLY_KEYS } from './config.js';
+import { estCleAppareil, estCleServeur, horsSauvegarde } from './config.js';
 
 /** Index de la decouverte : zones, appareils, entites. */
 export let LOGGIA_INDEX = null;
@@ -136,9 +136,15 @@ export function cfgVal(key, fallback = null) {
  *
  * `LOGGIA_CFG` est mis a jour tout de suite : le rendu suivant voit la nouvelle
  * valeur sans attendre l'aller-retour. Une valeur `null` efface la cle.
+ *
+ * Rend l'ISSUE, en promesse qui ne rejette jamais (audit du 03/10) : `false`
+ * quand le composant a refuse le lot, `null` quand il n'est pas arrive — le
+ * transport a coupe et il attend au carnet (`enattente.js`) —, `true` sinon,
+ * y compris sans composant. Presque personne ne la lit ; l'accueil, si : une
+ * grille refusee ne doit pas rester a l'ecran.
  */
 export function cfgSet(patch) {
-  if (!patch || typeof patch !== 'object') return;
+  if (!patch || typeof patch !== 'object') return Promise.resolve(null);
   const next = { ...(LOGGIA_CFG || {}) };
   Object.keys(patch).forEach((k) => {
     if (patch[k] == null) delete next[k];
@@ -151,7 +157,7 @@ export function cfgSet(patch) {
       else localStorage.setItem(k, JSON.stringify(patch[k]));
     });
   } catch { /* stockage indisponible : la valeur serveur suffit */ }
-  if (cfgSave) cfgSave(patch);
+  return Promise.resolve(cfgSave ? cfgSave(patch) : true);
 }
 
 /**
@@ -165,6 +171,29 @@ export function getHass() {
     const el = doc.querySelector('home-assistant');
     return (el && el.hass) || null;
   } catch { return null; }
+}
+
+/**
+ * Le compte Home Assistant de cette session est-il ORDINAIRE (03/10) ?
+ *
+ * Il ne voit pas les gestes qu'il ne pourra jamais enregistrer : le composant
+ * reserve la configuration de la maison aux administrateurs (`store.py`), et
+ * un geste qui semble marcher puis revient au rechargement ment. Ranger ses
+ * cartes et changer l'apparence lui restent ouverts — rien de cela ne passe
+ * par ici.
+ *
+ * C'est le COMPTE qui compte, jamais le profil Loggia : un profil Admin se
+ * choisit au code depuis n'importe quel compte, et c'est celui d'une
+ * installation neuve.
+ *
+ * « Ordinaire », seulement quand Home Assistant le dit en toutes lettres
+ * (`is_admin === false`), comme la vue Systeme. Sur un doute — pas encore de
+ * compte, la demonstration, un test —, rien ne se masque : un administrateur
+ * ne doit jamais perdre un geste, et le serveur tranche de toute facon.
+ */
+export function compteOrdinaire(hass) {
+  const h = hass || getHass();
+  return !!(h && h.user && h.user.is_admin === false);
 }
 
 /**
@@ -338,12 +367,19 @@ export async function exportConfigComplete() {
    * Melangees telles quelles, un `loggia_rooms` local revenait a l'import en JSON
    * double-encode — `normRooms` n'y voyait plus un tableau et rendait la main a
    * la decouverte. Pieces, lecteurs et vues personnalisees disparaissaient.
+   *
+   * Ni ce que l'appareil sait de lui-meme — la photo de fond, le journal lu,
+   * l'ecran de veille —, ni ce que le serveur calcule : voir `horsSauvegarde`
+   * (config.js). Le filtre vaut aussi pour le SERVEUR : un ancien import y a
+   * parfois range la photo d'un appareil dans la partie commune.
    */
+  const garde = {};
+  Object.keys(serveur).forEach((k) => { if (!horsSauvegarde(k)) garde[k] = serveur[k]; });
   const local = {};
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (!/^loggia[_-]/.test(k) || LOCAL_ONLY_KEYS.has(k) || serveur[k] !== undefined) continue;
+      if (!/^loggia[_-]/.test(k) || horsSauvegarde(k) || serveur[k] !== undefined) continue;
       const brut = localStorage.getItem(k);
       try { local[k] = JSON.parse(brut); } catch { local[k] = brut; }
     }
@@ -353,48 +389,112 @@ export async function exportConfigComplete() {
     version: 1,
     exporte_le: new Date().toISOString(),
     source: h ? 'serveur' : 'appareil',
-    config: { ...local, ...serveur },
+    config: { ...local, ...garde },
   }, null, 2);
 }
 
+/** Un refus de lecture, avec un code que l'ecran traduit. */
+function refusImport(code) {
+  const e = new Error(code);
+  e.code = code;
+  return e;
+}
+
 /**
- * Restaure une configuration exportee.
+ * Lit un fichier de configuration SANS RIEN ECRIRE : ce qu'on en garde, et de
+ * quoi le resumer avant de demander confirmation.
+ *
+ * L'import prenait n'importe quel objet JSON pour une configuration : un
+ * `package.json` choisi par erreur dans les telechargements remplacait la
+ * maison par ses `dependencies`, sans un mot (audit du 03/10). Seules les cles
+ * Loggia passent desormais, et un fichier qui n'en contient aucune est refuse
+ * avant tout envoi.
  *
  * L'ancien format — un objet plat de cles — reste accepte : un fichier
- * enregistre avant cette version doit pouvoir revenir.
+ * enregistre avant la version 1 doit pouvoir revenir.
+ *
+ * Refus (`Error` portant `code`) : `illisible`, `pas_loggia`, `vide`.
  */
-export async function importConfigComplete(txt) {
-  const brut = JSON.parse(String(txt).trim());
-  if (!brut || typeof brut !== 'object' || Array.isArray(brut)) throw new Error('fichier invalide');
-  const config = (brut.format === 'loggia-config' && brut.config) ? brut.config : brut;
-  if (!config || typeof config !== 'object') throw new Error('aucune configuration dans ce fichier');
+export function lireConfigImport(txt) {
+  let brut;
+  try { brut = JSON.parse(String(txt).trim()); } catch { throw refusImport('illisible'); }
+  if (!brut || typeof brut !== 'object' || Array.isArray(brut)) throw refusImport('illisible');
+  const export1 = brut.format === 'loggia-config';
+  const source = export1 ? brut.config : brut;
+  if (!source || typeof source !== 'object' || Array.isArray(source)) throw refusImport(export1 ? 'vide' : 'pas_loggia');
+  const config = {};
+  const ignorees = [];
+  Object.keys(source).forEach((k) => {
+    if (source[k] == null) return;
+    // Le PIN, la photo d'un autre appareil, une cle etrangere : rien de tout
+    // cela ne remonte, meme d'un fichier ancien ou bricole a la main.
+    if (horsSauvegarde(k)) { ignorees.push(k); return; }
+    config[k] = source[k];
+  });
+  if (!Object.keys(config).length) throw refusImport(export1 ? 'vide' : 'pas_loggia');
+  const compte = (v) => (Array.isArray(v) ? v.length : 0);
+  const date = export1 && typeof brut.exporte_le === 'string' && !isNaN(Date.parse(brut.exporte_le))
+    ? brut.exporte_le : null;
+  return {
+    config,
+    ignorees,
+    resume: { exporteLe: date, cles: Object.keys(config).length, pieces: compte(config.loggia_rooms), profils: compte(config.loggia_users) },
+  };
+}
+
+/**
+ * Restaure une configuration exportee : le texte du fichier, ou ce qu'en a
+ * deja lu `lireConfigImport`.
+ */
+export async function importConfigComplete(entree) {
+  const { config } = typeof entree === 'string' ? lireConfigImport(entree) : entree;
 
   const h = pont();
   if (h) {
-    // On efface d'abord ce qui existe, sinon une cle absente de l'export
-    // survivrait a la restauration — l'import doit etre un MIROIR.
-    // Sans lecture, pas de miroir : on ecrirait par-dessus sans avoir efface
-    // (audit 18/09). L'appelant affiche l'erreur.
+    // L'import est un MIROIR : une cle absente du fichier ne doit pas survivre
+    // a la restauration. Sans lecture, pas de miroir — on ecrirait par-dessus
+    // sans avoir efface (audit 18/09). L'appelant affiche l'erreur.
     const actuelle = await h.callWS({ type: 'loggia/config/get' });
-    const purge = {};
-    Object.keys((actuelle && actuelle.config) || {}).forEach(k => { purge[k] = null; });
-    if (Object.keys(purge).length) await h.callWS({ type: 'loggia/config/set', config: purge });
-    // Une cle purement locale ne remonte jamais au serveur, meme si un
-    // fichier ancien — ou bricole a la main — en contient une.
-    const aEcrire = {};
-    Object.keys(config).forEach(k => {
-      if (config[k] != null && !LOCAL_ONLY_KEYS.has(k)) aEcrire[k] = config[k];
-    });
-    if (Object.keys(aEcrire).length) await h.callWS({ type: 'loggia/config/set', config: aEcrire });
+    /* UN SEUL envoi : la purge et le contenu du fichier ensemble (audit du
+     * 03/10). Le composant construit la nouvelle configuration en memoire, la
+     * verifie — droits, nombre de cles, tailles — puis l'ecrit d'un bloc :
+     * refusee, rien n'a bouge (store.py, `_set_locked`).
+     *
+     * En deux envois, la purge passait toujours — des valeurs nulles ne pesent
+     * rien — et la reecriture pouvait etre refusee, ou perdue avec la
+     * connexion. Il ne restait alors plus rien de la maison : ni pieces, ni
+     * profils, ni agencements, sur tous les ecrans a la fois. */
+    const patch = {};
+    // Tout ce qui existe est purge — y compris la photo d'un appareil qu'un
+    // ancien import aurait rangee la. Sauf ce que le serveur tient en cours
+    // d'execution : un minuteur qui tourne n'appartient a aucun fichier.
+    Object.keys((actuelle && actuelle.config) || {}).forEach((k) => { if (!estCleServeur(k)) patch[k] = null; });
+    Object.assign(patch, config);
+    await h.callWS({ type: 'loggia/config/set', config: patch });
   }
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
-      if (/^loggia[_-]/.test(k)) localStorage.removeItem(k);
+      // Ce que l'appareil sait de lui-meme reste : sa photo de fond, son
+      // journal lu, son ecran de veille. Le carnet des reglages en attente,
+      // lui, part : il rejouerait par-dessus la maison importee des reglages
+      // d'avant l'import.
+      if (/^loggia[_-]/.test(k) && !estCleAppareil(k)) localStorage.removeItem(k);
     }
-    Object.keys(config).forEach(k => {
+    /* Une chaine s'ecrit telle quelle — le theme et le mode sont lus bruts au
+     * premier affichage.
+     *
+     * Le reste, en JSON, SEULEMENT SANS COMPOSANT : ce stockage est alors la
+     * configuration, et n'ecrire que les chaines perdait pieces et profils.
+     * Avec le composant, le serveur fait foi et la page se recharge sur lui ;
+     * une copie complete laissee ici remonterait plus tard au serveur par
+     * `completerDepuisLocal`, des qu'une cle y manquerait — et defairait une
+     * remise a zero ou un import faits depuis un autre ecran (relecture du
+     * lot 1, audit du 03/10). */
+    Object.keys(config).forEach((k) => {
       const v = config[k];
       if (typeof v === 'string') localStorage.setItem(k, v);
+      else if (!h) localStorage.setItem(k, JSON.stringify(v));
     });
   } catch { /* le serveur fait foi de toute facon */ }
 }
@@ -437,7 +537,9 @@ export async function resetLoggiaComplet() {
 // Interrupteurs (domaine switch) à traiter comme des lumières on/off dans la vue Lumières.
 // Interrupteurs traités comme des lumières — choix de l'utilisateur, sans
 // défaut : une installation neuve n'en déclare aucun.
-export const switchLightsCfg = () => (cfgVal('loggia_switchlights', []) || []).filter(Boolean);
+// Un objet à la place de la liste (configuration abîmée) levait `.filter` dans
+// le corps d'App : tout l'écran tombait (05/10, suite du point 10b).
+export const switchLightsCfg = () => { const v = cfgVal('loggia_switchlights', []); return Array.isArray(v) ? v.filter(Boolean) : []; };
 
 /* L'icone qu'on a CHOISIE pour une entite : `{ "<entity_id>": "<glyphe>" }`.
  *
@@ -491,6 +593,17 @@ export const DROITS = [
 
 export const DROITS_IDS = DROITS.map(d => d[0]);
 
+/* Les autorisations dont le COMPOSANT garde l'écriture (audit du 03/10).
+ *
+ * Les règles et les interrupteurs s'enregistrent par des commandes réservées
+ * aux administrateurs de Home Assistant (`require_admin`, websocket_api.py) ;
+ * les alertes dans `loggia_alertes`, une clé de la maison (store.py). Cocher la
+ * case ouvre la section, mais sous un compte Home Assistant ordinaire rien de
+ * ce qu'on y règle n'est accepté — c'est ce que dit déjà, plus haut, « ces
+ * autorisations ne sont pas une sécurité ». L'éditeur de profil le dit au
+ * moment d'accorder ; la frontière, elle, ne bouge pas (ADR 0125). */
+export const DROITS_ADMIN_HA = ['regles', 'inter', 'alertes'];
+
 /* Signature d'une liste de profils : ce qui, en changeant, doit faire
  * adopter la version du serveur sur les autres appareils.
  *
@@ -537,7 +650,9 @@ export const medPlayers = () => {
   const raw = cfgVal('loggia_medias', null);
   // Sans choix explicite : les lecteurs trouvés, chacun avec son compagnon.
   if (!Array.isArray(raw) || !raw.length) return medResolved().map((m, i) => ({ ...m, c: MED_COLORS[i % MED_COLORS.length] }));
-  return raw.filter(p => p && p.haid).map((p, i) => ({ id: p.id || p.haid, name: p.name || p.haid.replace('media_player.', '').replace(/_/g, ' '), haid: p.haid, ma: p.ma || undefined, c: p.c || MED_COLORS[i % MED_COLORS.length] }));
+  // `p.haid.replace` plus bas : un identifiant qui n'est pas une chaîne faisait
+  // tomber tout l'écran (05/10, suite du point 10b).
+  return raw.filter(p => p && typeof p.haid === 'string' && p.haid).map((p, i) => ({ id: p.id || p.haid, name: p.name || p.haid.replace('media_player.', '').replace(/_/g, ' '), haid: p.haid, ma: p.ma || undefined, c: p.c || MED_COLORS[i % MED_COLORS.length] }));
 };
 
 // Compagnon manquant dans une configuration ancienne : la résolution le retrouve
@@ -726,14 +841,27 @@ export function vacSensors(hass, vacId) {
  * traductions dans l'état : les options arrivent en anglais technique
  * (« sweeping_and_mopping »). On traduit les mots courants et on humanise le
  * reste, plutôt que d'afficher l'identifiant brut.
+ *
+ * Ces mots sont des CLÉS du catalogue, en français : ils se traduisent à
+ * l'affichage (ficherobot.jsx, par `trSens`), state.js ne pouvant importer
+ * i18n.js qui l'importe déjà (audit du 03/10).
+ *
+ * Quatre portent leur sens (relecture du 03/10) : leur clé nue est traduite
+ * pour un autre écran. « Moyen » est le niveau de CO₂ — « Fair » en anglais,
+ * « Regular » (médiocre) en espagnol, « Średnia » au féminin en polonais ; le
+ * pas-à-pas disait « Low → Fair → High ». « Normal » est l'état d'un capteur
+ * (« Normalnie », un adverbe), « Standard » une taille de carte
+ * (« Standardowa »), « Serpillière » l'accessoire (« Panno », le chiffon). Un
+ * niveau ou un mode du robot — aspiration, débit d'eau, mode de travail : tous
+ * passent par ici — a ses clés ; le CO₂ et les cartes gardent les leurs.
  */
 const VAC_MOTS = {
-  sweeping: 'Aspiration', mopping: 'Serpillière', vacuuming: 'Aspiration',
-  vacuum: 'Aspiration', mop: 'Serpillière', vacuum_and_mop: 'Aspiration + serpillière', mop_after_vacuum: 'Serpillière après aspiration',
+  sweeping: 'Aspiration', mopping: 'Serpillière · mode', vacuuming: 'Aspiration',
+  vacuum: 'Aspiration', mop: 'Serpillière · mode', vacuum_and_mop: 'Aspiration + serpillière', mop_after_vacuum: 'Serpillière après aspiration',
   sweeping_and_mopping: 'Aspiration + serpillière', mopping_after_sweeping: 'Serpillière après aspiration',
-  low: 'Faible', medium: 'Moyen', high: 'Élevé', ultrahigh: 'Maximum', ultra_high: 'Maximum',
-  quiet: 'Silencieux', normal: 'Normal', max: 'Maximum', max_plus: 'Maximum +',
-  standard: 'Standard', strong: 'Fort', off: 'Arrêt', auto: 'Auto', customize: 'Personnalisé',
+  low: 'Faible', medium: 'Moyen · réglage', high: 'Élevé', ultrahigh: 'Maximum', ultra_high: 'Maximum',
+  quiet: 'Silencieux', normal: 'Normal · réglage', max: 'Maximum', max_plus: 'Maximum +',
+  standard: 'Standard · réglage', strong: 'Fort', off: 'Arrêt', auto: 'Auto', customize: 'Personnalisé',
 };
 export function vacOption(opt) {
   const k = vacSlug(opt);

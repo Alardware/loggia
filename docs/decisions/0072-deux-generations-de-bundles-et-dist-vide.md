@@ -41,3 +41,57 @@ paquet, pas dans `dist` — que personne ne sert.
   livraison, et la garde du cache iOS demanderait à être rejouée autrement.
 
 Tests : tests/generique.test.mjs (la borne devient `GARDE`, lu à la source).
+
+## Audit du 03/10 : la génération d'avant n'existait pas
+
+Le filet promis plus haut — « la génération du jour, et celle d'avant » — ne
+tenait pas. Mesuré sur les releases elles-mêmes : sur les huit derniers
+passages d'une release à la suivante (v3.77.0 → v3.84.0), **sept** ont fait
+perdre à la page précédente 10 à 17 de ses 28 fichiers, dont son `boot` et
+son entrée. Un client resté sur la page d'avant pendant une mise à jour HACS
+avait un écran cassé — exactement ce que `GARDE = 2` devait éviter.
+
+Trois causes, qui s'additionnent :
+
+- la retenue « les deux plus récents » triait par **date**, et un checkout git
+  pose tous les fichiers à la même seconde : entre N-1 et N-2, c'était un
+  tirage au sort, famille par famille ;
+- la règle 4 (ADR 0106) rasait ensuite, à juste titre, toute page trouée : il
+  suffisait qu'un seul de ses fichiers ait perdu le tirage ;
+- la retenue comptait les **passages du pack**, pas les releases : deux packs
+  dans une même branche poussaient dehors la génération que les clients
+  avaient vraiment.
+
+Il en restait des feuilles orphelines : dans le paquet de travail du 03/10,
+onze fichiers, 1,4 Mo (`three`, `vendor`, six langues, la démo, `voix`, un
+`index-*.css`), cités par aucun fichier.
+
+**Correctif** (`scripts/pack_frontend.py`) : la page N-1 est **nommée**, plus
+devinée — celle de la dernière release dont la page diffère de celle du jour
+(le tag `v*` le plus récent atteignable depuis HEAD) ; sans git ni tags,
+l'`index.html` en place ; au re-pack du même build (la CI clone à plat, sans
+tags), l'autre entrée que le paquet porte et que la page du jour n'atteint
+pas. Tout ce qu'elle atteint est protégé de **toutes** les règles — la
+génération du jour aussi, dont seule l'entrée l'était —, et ce qui manque au
+dossier est restauré depuis le tag. Une page précédente trouée n'est pas
+protégée. Les règles 2 à 4 jugent le reste ; une règle 5 retire, quand la page
+N-1 est connue, ce qu'aucune des deux pages n'atteint : le paquet est alors
+exactement deux pages, et ne dépend plus d'aucune date.
+
+**Prémisse non vérifiée** : HACS vide-t-il `custom_components/loggia/` à la
+mise à jour ? Son option `persistent_directory` (un dossier à préserver d'une
+mise à jour à l'autre) le laisse penser ; ce n'est pas mesuré ici. S'il le
+vide, le client n'a QUE ce que la release livre : le filet est exactement ce
+paquet, et ce correctif est ce qui le rend réel. S'il ne le vide pas, les
+fichiers d'avant restent de toute façon sur son disque : le correctif n'y
+change rien, il ne retire rien de chez lui.
+
+Prérequis : packer dans un clone qui a les tags (`git fetch --tags`). Un tag
+manquant ferait protéger une release plus ancienne ; le pack affiche la page
+qu'il protège, et prévient quand la page en place n'est pas protégée.
+
+Tests : tests/python/test_pack_frontend.py (la page d'avant garde tous ses
+fichiers, l'avant-veille part, un second passage ne touche à rien, la release
+l'emporte sur un pack de travail, un dossier vide est restauré depuis le tag,
+une page trouée n'est pas protégée) ; tests/generique.test.mjs (le paquet
+livré porte une page d'avant entière, et rien d'autre que les deux pages).

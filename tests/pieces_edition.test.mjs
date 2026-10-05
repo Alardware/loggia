@@ -66,8 +66,10 @@ test('l’Accueil : la carte d’edition remplace la tuile, la case d’ajout fe
   assert.ok(home.includes("gridColumn: piecesApres.c, gridRow: piecesApres.r + ' / span 1'"), 'et elle ferme la grille');
   assert.ok(home.includes('premiereLibre(piecesPrises, piecesCols, 1, 400, piecesBas)'), 'le balayage part de la carte la plus basse : sinon la tuile remonte se loger dans le trou');
   assert.ok(home.includes('<FichePiece key={pieceSheet.nom} nom={pieceSheet.nom} compacte={pieceSheet.compacte} hass={dashHass} onEnregistrer={enregistrerPieceIci} onSupprimer={retirerPiece}'), 'la fiche');
-  assert.ok(home.includes("tailles[piece.room] = compacte ? 'c' : 's';") && home.includes("piecesOrdre: (grille.piecesOrdre || []).map(n => n === avant ? piece.room : n)"), 'renommer emporte la taille et l’ordre');
-  assert.ok(home.includes("piecesOrdre: (grille.piecesOrdre || []).filter(n => n !== nom)"), 'retirer les efface');
+  // Le calcul vit dans `ecrirepiece.js` depuis l'audit du 03/10, et se rejoue
+  // dans pieces_grille.test.mjs ; l'Accueil l'envoie AVEC la piece, en un lot.
+  assert.ok(home.includes('saveGrille(grilleAvecPiece(grille, avant, piece.room, compacte), lotPiece(avant, piece));'), 'renommer emporte la taille et l’ordre');
+  assert.ok(home.includes('saveGrille(grilleSansPiece(grille, nom), lotSansPiece(nom));'), 'retirer les efface');
 });
 
 test('la fiche : nom, icone, teinte, tuile compacte, entites — et un nom deja pris ne s’enregistre pas', () => {
@@ -90,14 +92,19 @@ test('la fiche : nom, icone, teinte, tuile compacte, entites — et un nom deja 
   assert.ok(f.includes("haid: { temp: temp.trim() || null, humidity: hum.trim() || null, co2: co2.trim() || null, lights: lumieres.split(',').map(s => s.trim()).filter(Boolean) }"), 'les capteurs sous haid, comme Parametres');
 });
 
-test('ecrire une piece : une seule ecriture, et renommer emporte sa grille', () => {
-  const e = bloc('function enregistrerPiece(', NL + '}');
-  assert.equal((e.match(/cfgSet\(/g) || []).length, 1, 'une ecriture');
-  assert.ok(e.includes('if (all[avant]) { all[piece.room] = all[avant]; delete all[avant]; maj[ROOM_LAYOUT_KEY] = all; }'), 'la grille suit le nouveau nom');
-  assert.ok(e.includes("normRooms(cfgVal('loggia_rooms', null))"), 'la liste normalisee, jamais une piece seule');
-  const s = bloc('function supprimerPiece(', NL + '}');
-  assert.equal((s.match(/cfgSet\(/g) || []).length, 1, 'une ecriture aussi');
-  assert.ok(s.includes('delete all[nom]'), 'la grille de la piece part avec elle');
+test('ecrire une piece : un seul lot, et renommer emporte sa grille', () => {
+  /* Depuis l'audit du 03/10, `ecrirepiece.js` COMPOSE le lot de la piece et
+   * n'envoie rien : l'Accueil y joint sa grille et envoie le tout d'un bloc.
+   * Un envoi parti du module serait de nouveau un second lot. */
+  const mod = readFileSync(join(RACINE, 'src', 'ecrirepiece.js'), 'utf8');
+  const lb = (debut) => { const d = mod.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); return mod.slice(d, mod.indexOf(NL + '}', d + 1)); };
+  assert.ok(!mod.includes('cfgSet('), 'le module envoie lui-meme : la grille repartirait dans un second lot');
+  const e = lb('export function lotPiece(');
+  assert.ok(e.includes('if (all[avant]) { all[piece.room] = all[avant]; delete all[avant]; maj[GRILLES] = all; }'), 'la grille suit le nouveau nom');
+  assert.ok(e.includes("normRooms(cfgVal('loggia_rooms', null))") && e.includes('return maj;'), 'la liste normalisee, jamais une piece seule');
+  const s = lb('export function lotSansPiece(');
+  assert.ok(s.includes('delete all[nom]') && s.includes('return maj;'), 'la grille de la piece part avec elle');
+  assert.ok(!src.includes('function enregistrerPiece(') && !src.includes('function supprimerPiece('), 'l’ecriture en deux envois est revenue dans App.jsx');
 });
 
 test('Parametres ne perd ni l’icone ni la teinte a l’enregistrement', () => {

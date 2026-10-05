@@ -26,8 +26,8 @@
 import { deviceCaps } from './capabilities.js';
 import { planAction } from './actions.js';
 import { mergedProfile, primaryEntity } from './profiles.js';
-
-const domaineDe = (id) => (typeof id === 'string' ? id.slice(0, id.indexOf('.')) : '');
+import { comparerTextes } from './i18n.js';
+import { domaineDe } from './outils.js';
 
 /**
  * Les domaines qui portent l'usage d'un appareil, du plus parlant au moins.
@@ -114,7 +114,7 @@ export function deviceCard(device, ctx = {}) {
         controls.push({ capability: c, options: options[liste] });
       }
     });
-    controls.sort((a, b) => a.capability.localeCompare(b.capability));
+    controls.sort((a, b) => comparerTextes(a.capability, b.capability));
   }
 
   const readings = LECTURES_UTILES.filter(r => caps.reads.has(r));
@@ -157,7 +157,7 @@ export function presentableDevices(devices, ctx = {}) {
     }
     out.push(carte);
   });
-  return out.sort((a, b) => String(a.name).localeCompare(String(b.name), 'fr'));
+  return out.sort((a, b) => comparerTextes(String(a.name), String(b.name)));
 }
 
 /** Les appareils présentables d'une zone. */

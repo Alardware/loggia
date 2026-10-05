@@ -128,3 +128,73 @@ le note (`console.info`), et un refus se voit (`console.warn`).
 
 Neuf tests neufs, dont six échouent sans le module. 1 018 tests JS, 579 pytest,
 lint propre (aucun avertissement ajouté), audit propre. Paquet rebâti.
+
+## Complément du 03/10 : quand le serveur a bougé depuis
+
+L'audit du 03/10 a trouvé le revers de « indéfiniment s'il le faut ». Un
+téléphone rate une écriture ; le lendemain, l'ordinateur range ; le téléphone
+rouvert renvoie sa vieille valeur. Comme elle porte la clé **entière**, l'ordre
+fait sur l'ordinateur, la carte ajoutée, la disposition de la tablette
+disparaissaient — sans un mot.
+
+Chaque entrée du carnet retient désormais deux choses : l'**empreinte** `e` de
+ce que le serveur tenait quand elle s'est ouverte, et `p`, les empreintes de
+nos propres envois restés sans réponse (seize au plus). Au renvoi,
+`renvoyerEnAttente` compare à la configuration qu'on vient de lire :
+
+- le serveur tient déjà la valeur : elle était arrivée, seule la réponse
+  s'est perdue — rayée sans rien renvoyer ;
+- il tient `e`, ou l'un de nos envois de `p` : personne d'autre n'a rangé, la
+  valeur repart — le cas du 28/09, inchangé ;
+- il tient autre chose : un autre écran a rangé depuis. **Le serveur a
+  raison** : l'entrée est rayée, et le journal nomme la clé.
+
+`p` n'est pas un luxe. Home Assistant qui redémarre juste après avoir rangé un
+envoi n'en rend pas la réponse ; le suivant part dans le vide. Le serveur tient
+alors NOTRE premier envoi : sans `p`, il passerait pour un rangement venu
+d'ailleurs, et la dernière carte se perdrait de nouveau — exactement ce que ce
+carnet corrige. Un écran qui a relu le rangement d'un autre (décision 0067)
+puis range par-dessus prend pour `e` ce qu'il a vu. Sans empreinte — carnet
+écrit avant ce correctif, réglage fait avant que le composant réponde —, on
+renvoie comme avant. Chacun de ces cas est épinglé par un test.
+
+L'empreinte est courte (longueur et FNV-1a sur 32 bits, clés d'objet triées) :
+le carnet n'a pas à loger une seconde copie de chaque agencement.
+
+**Toujours pas de durée de vie.** Le carnet garde indéfiniment ce qui n'est pas
+arrivé ; il ne le renvoie simplement plus contre un serveur qui a bougé.
+Une durée de vie de 24 h a été proposée, puis écartée par l'utilisateur
+(« Empreinte seule ») : elle aurait perdu le lendemain un réglage fait hors
+ligne la veille.
+
+## Complément du 03/10 : un carnet par compte, et clé par clé
+
+Deux autres trous du même audit.
+
+**Un refus partait plus tard sous les droits d'un autre.** Le carnet était
+unique pour le navigateur, et `saveCfg` ne rayait rien sur un refus. Un
+réglage de la maison tenté depuis un compte ordinaire (`loggia_users`, ou
+`loggia_rooms = []`) attendait le démarrage suivant. Il repartait alors sous
+le compte qui ouvrait la page : un administrateur sur la même tablette, et il
+passait sous SES droits. Trois corrections :
+- le carnet se range **par compte** (`{ comptes: { <id>: … } }`, l'id du
+  compte Home Assistant) et ne repart que sous son auteur ;
+- `saveCfg` raye un refus dès qu'il tombe ;
+- une valeur refusée **faute de droits** (`not_admin`) ne se recopie plus sur
+  l'appareil : `completerDepuisLocal` l'aurait confiée au serveur sous un
+  administrateur.
+
+Un carnet d'avant ce correctif, rangé sans auteur, se lit vide. Personne ne
+sait sous quels droits il avait été écrit.
+
+**Un refus emportait tout le lot.** Le composant refuse un lot ENTIER dès
+qu'une seule clé de la maison y figure. Le renvoi rayait alors tout le
+carnet, l'agencement perdu à côté d'une clé réservée compris : le cas même
+que ce carnet devait sauver, sur ce que la décision 0125 ouvre à tous. Le
+renvoi part maintenant **une clé par envoi**. Un refus (avec `code`) ne raye
+que sa clé ; une coupure (sans `code`) arrête tout et garde ce qui n'est pas
+parti ; ce qui arrive est rayé aussitôt.
+
+Rejoués contre un faux composant aussi strict que `store.py` (rejeux A, B et
+C de l'audit) : `tests/reglages_en_attente.test.mjs` et
+`tests/reglages_en_attente_cle_par_cle.test.mjs`.

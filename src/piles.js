@@ -18,6 +18,8 @@
  * Pur : pas de React, pas de Home Assistant, testable à sec.
  */
 
+import { comparerTextes } from './i18n.js';
+
 const MUETS = ['unavailable', 'unknown'];
 
 /** Les piles : [{ id, niveau }] triées, `niveau` nul pour un capteur muet.
@@ -46,6 +48,6 @@ export function pilesMaison(S, meta = () => ({})) {
       if (x.niveau != null) return -1;
       if (y.niveau != null) return 1;
     } else if (x.niveau !== y.niveau) return x.niveau - y.niveau;
-    return nomDe(x.id).localeCompare(nomDe(y.id), 'fr');
+    return comparerTextes(nomDe(x.id), nomDe(y.id));
   });
 }

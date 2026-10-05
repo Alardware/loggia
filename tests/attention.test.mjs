@@ -107,10 +107,27 @@ test('tuilesSecurite : le mouvement se conjugue, les familles absentes n’ont p
   assert.deepEqual([deux[0].valeur, deux[0].libelle, deux[0].actif, deux[0].alerte], ['2', 'détectés', true, false]);
   const aucun = tuilesSecurite({ mouvement: { total: 3, actifs: 0, noms: [] }, cameras: { total: 1, enLigne: 1, noms: [] } });
   assert.deepEqual(aucun.map(x => x.cle), ['mouvement', 'cameras']);
-  assert.deepEqual([aucun[0].valeur, aucun[0].libelle, aucun[0].actif], ['Aucun', 'mouvement', false]);
+  // Audit du 03/10 : la phrase entière dans la valeur, un libellé vide — « Aucun »
+  // et « mouvement » traduits à part ne s'accordaient dans aucune langue.
+  assert.deepEqual([aucun[0].valeur, aucun[0].libelle, aucun[0].actif], ['Aucun mouvement', '', false]);
   assert.deepEqual([aucun[1].valeur, aucun[1].alerte], ['1/1', false]);
   assert.deepEqual(tuilesSecurite(null), []);
   assert.deepEqual(tuilesSecurite({ portes: null, fenetres: { total: 0 } }), []);
+});
+
+test('tuilesSecurite : « Aucun mouvement » est UNE clé, traduite partout, jamais deux mots recollés (audit du 03/10)', async () => {
+  /* « None motion », « Brak ruch », « Ninguno movimiento » : le déterminant
+   * venait de Home Assistant (`ui.common.none`), le nom du catalogue, et rien
+   * ne les accordait. La phrase entière existe dans les six catalogues — c'est
+   * déjà celle de la carte d'un détecteur au repos. */
+  const { CHARGEURS } = await import('../src/langues/index.js');
+  for (const langue of Object.keys(CHARGEURS)) {
+    const cat = (await CHARGEURS[langue]()).default;
+    assert.equal(typeof cat['Aucun mouvement'], 'string', langue + ' : la phrase entière manque au catalogue');
+  }
+  assert.ok(app.includes("tr('Aucun mouvement')"), 'la carte du détecteur dit la même phrase que la tuile');
+  const nu = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.ok(!nu.includes("tr('Aucun')") && !nu.includes("tr('mouvement')"), 'la tuile recolle la phrase en deux morceaux');
 });
 
 // ── Les points d'attention, règle par règle ─────────────────────────────────

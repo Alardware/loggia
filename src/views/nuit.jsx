@@ -10,7 +10,9 @@ import {
 import { LOGGIA_INDEX } from '../state.js';
 import { cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
 import { ZONE_REGLAGES } from './parcommun.jsx';
-import { tr } from '../i18n.js';
+import { tr, comparerTextes } from '../i18n.js';
+import { raisonEchec } from '../refus.js';
+import { puce } from '../styles.js';
 
 // Le bit TRANSITION de Home Assistant : une lampe qui ne l'a pas ne sait pas
 // s'éteindre en fondu.
@@ -59,7 +61,9 @@ export function NuitReglages({ hass, cardSt }) {
       const r = await h.callWS({ type: 'loggia/nuit/config', patch });
       if (vivant.current && r && r.config) setEtat(e => (e ? { ...e, config: r.config } : e));
     } catch (e) {
-      setErr((e && (e.message || e.code)) || tr('Enregistrement impossible.'));
+      // Un refus se dit comme tel et nomme sa clé ; une panne reste une panne
+      // (audit du 03/10, refus.js). Il s'affichait en « Unauthorized ».
+      setErr(raisonEchec(e, 'loggia_nuit'));
     }
   };
 
@@ -72,7 +76,7 @@ export function NuitReglages({ hass, cardSt }) {
         const f = ((st && st.attributes) || {}).supported_features || 0;
         return { id, nom: cvName(st, id), fondu: !!(Number(f) & LIGHT_TRANSITION) };
       })
-      .sort((a, b) => a.nom.localeCompare(b.nom));
+      .sort((a, b) => comparerTextes(a.nom, b.nom));
   }, [hass]);
   /* Les pièces candidates à l'éclairage nocturne : une zone Home Assistant
    * avec au moins un capteur de mouvement et une lampe. Rien à saisir. */
@@ -107,7 +111,6 @@ export function NuitReglages({ hass, cardSt }) {
   const simu = cfg.simulation || {};
   const label = { fontSize: 12, fontWeight: 700 };
   const ligne = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12 };
-  const puce = (on) => ({ padding: '6px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: 'none', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text2)' });
   const champ = { padding: '8px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 };
 
 

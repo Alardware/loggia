@@ -15,8 +15,8 @@
  * que poser des pixels et appeler Home Assistant.
  */
 import { useState, useMemo, useEffect } from 'react';
-import { tr, trN, locale } from './i18n.js';
-import { BottomSheet, Fi, CroixFeuille } from './ui.jsx';
+import { tr, trN, locale, comparerTextes } from './i18n.js';
+import { BottomSheet, Fi, CroixFeuille, NomFeuille, nomCarte } from './ui.jsx';
 import { cleJour, jourDeCle, moisPlus, joursAgenda, comptesParJour, evenementsDuJour, debutDe, finDe } from './agenda.js';
 import { peut } from './actions.js';
 import { NouvelEvenement } from './formevenement.jsx';
@@ -148,8 +148,12 @@ function BandeJours({ jours, compte, choisi, onChoisir, grand = false }) {
         const n = compte[k] || 0;
         const dow = j.toLocaleDateString(locale(), { weekday: 'short' }).replace('.', '').slice(0, 3);
         return (
+          /* Son nom COMMENCE par ce qu'il affiche, « dim 4 », puis la date en
+           * entier (lot 13 de l'audit du 03/10). « dimanche 4 octobre » seul ne
+           * contenait pas « dim 4 » : qui pilote à la voix dit ce qu'il voit, et
+           * le bouton ne répondait pas (WCAG 2.5.3). */
           <button key={k} type="button" onClick={onChoisir ? () => onChoisir(k) : undefined}
-            aria-pressed={sel} aria-label={j.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' })}
+            aria-pressed={sel} aria-label={nomCarte(dow + ' ' + j.getDate(), j.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }))}
             style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: grand ? '8px 0 6px' : '7px 0 6px',
               borderRadius: grand ? 14 : 12,
               /* Le jour CHOISI se remplit d'accent, comme toute puce choisie de
@@ -198,7 +202,7 @@ export function FeuilleAgenda({ hass = null, evenements = null, jourChoisi = nul
       if (!m.has(id)) m.set(id, { id, nom: nomCalendrier(e, hass), rgb: teinteAgenda(id), n: 0 });
       m.get(id).n += 1;
     }
-    return [...m.values()].sort((a, b) => a.nom.localeCompare(b.nom, locale()));
+    return [...m.values()].sort((a, b) => comparerTextes(a.nom, b.nom));
   }, [evts, hass]);
   const [eteints, setEteints] = useState(() => new Set());
   const basculer = (id) => setEteints(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -278,8 +282,10 @@ function FeuilleLarge({ hass, evts, jourSel, allerA, vue, setVue, bouger, cals, 
           </aside>
 
           <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-            <EnTete titre={titre} vue={vue} setVue={setVue} bouger={bouger} allerA={allerA} large croix={<CroixFeuille />}
-              onNouveau={ecrivables.length ? () => setNouveau(true) : null} />
+            <NomFeuille>
+              <EnTete titre={titre} vue={vue} setVue={setVue} bouger={bouger} allerA={allerA} large croix={<CroixFeuille />}
+                onNouveau={ecrivables.length ? () => setNouveau(true) : null} />
+            </NomFeuille>
             {nouveau && (
               <NouvelEvenement hass={hass} cals={ecrivables} jour={jourSel}
                 onClose={() => setNouveau(false)} onFait={() => setNouveau(false)} />
@@ -319,8 +325,10 @@ function FeuilleEtroite({ hass, evts, jourSel, choisi, allerA, vue, setVue, boug
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
-        <EnTete titre={titre} vue={vue} setVue={setVue} bouger={bouger} allerA={allerA} croix={<CroixFeuille />}
-          onNouveau={ecrivables.length ? () => setNouveau(true) : null} />
+        <NomFeuille>
+          <EnTete titre={titre} vue={vue} setVue={setVue} bouger={bouger} allerA={allerA} croix={<CroixFeuille />}
+            onNouveau={ecrivables.length ? () => setNouveau(true) : null} />
+        </NomFeuille>
         {nouveau && (
           <NouvelEvenement hass={hass} cals={ecrivables} jour={jourSel}
             onClose={() => setNouveau(false)} onFait={() => setNouveau(false)} />
@@ -345,13 +353,15 @@ function FeuilleEtroite({ hass, evts, jourSel, choisi, allerA, vue, setVue, boug
 
 /* La croix arrive en PROPRIETE, et non depuis l'interieur : le controle des
  * feuilles la cherche litteralement dans le bloc de chaque `BottomSheet`,
- * et il a raison de ne pas voir a travers un composant. */
-function EnTete({ titre, vue, setVue, bouger, allerA, large = false, croix = null, onNouveau = null }) {
+ * et il a raison de ne pas voir a travers un composant. Le NOM suit le meme
+ * chemin (audit du 03/10) : `NomFeuille`, pose autour de l'en-tete dans ce
+ * bloc, lui passe l'id de la feuille en `id`, et le titre le porte. */
+function EnTete({ titre, vue, setVue, bouger, allerA, large = false, croix = null, onNouveau = null, id: idTitre = null }) {
   const rond = (n) => ({ width: 36, height: 36, borderRadius: '50%', border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: n });
   const VUES = large ? [['mois', tr('Mois')], ['semaine', tr('Semaine')], ['jour', tr('Jour')]] : [['semaine', tr('Semaine')], ['mois', tr('Mois')]];
 
   const titreDOM = (
-    <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: large ? 30 : 26, fontWeight: 500, whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{titre}</div>
+    <div id={idTitre || undefined} style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: large ? 30 : 26, fontWeight: 500, whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{titre}</div>
   );
   const aujourdhui = (
     <button type="button" onClick={() => allerA(cleJour(new Date()))}

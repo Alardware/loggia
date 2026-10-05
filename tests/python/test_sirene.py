@@ -247,6 +247,10 @@ def test_au_demarrage_un_test_en_cours_est_eteint_aussitot(creer, rdv):
     m = creer({"switch.s": "on", "siren.b": "off"},
               depart={"switch.s": {"fin": 1.0, "par": "u1"}, "siren.b": {"fin": 1.0, "par": "u2"}})
     lancer(m._async_demarrer())
+    # Le rattrapage part quand Home Assistant a fini de demarrer (03/10) :
+    # deja demarre ici, la doublure le pose en tache.
+    while m.hass.taches:
+        lancer(m.hass.taches.pop(0))
     # Un redemarrage dure plus de trois secondes : elle a assez sonne.
     assert m.hass.services.appels == [("switch", "turn_off", {"entity_id": ["switch.s"]}, "u1")]
     assert m.table == {} and m._rdv == {} and rdv_du_module(rdv) == []

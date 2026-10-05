@@ -152,11 +152,11 @@ test('l’Accueil : la rangee des scenarios, et « Gerer » cliquable malgre le 
   assert.ok(!app.includes('quickScenes') && !app.includes('QuickScenes') && !app.includes('ScenesView'), 'plus rien des scènes rapides');
 });
 
-test('la carte suit le gabarit : disque teinte en haut a gauche, dernier lancement a droite, titre sous l’icone, sans bordure', () => {
+test('la carte suit le gabarit : disque teinte en haut a gauche, dernier lancement a droite, titre sous l’icone, le liseré du réglage', () => {
   const c = bloc('function CarteScenario(', NL + '}');
   assert.ok(c.includes("borderRadius: '50%'") && c.includes('background: `rgba(${t.rgb},.22)`') && c.includes('<Ico name={s.icone || \'sparkles\'}'), 'le disque teinté porte l’icône');
   assert.ok(c.includes("{!sansDernier && <span") && c.includes("libelleDernier(s.dernier, Date.now(), locale())"), 'le repère haut-droit = dernier lancement, effacé en édition');
-  assert.ok(c.includes("height: compacte ? 88 : 184") && c.includes("border: 'none'"), 'deux tailles, sans bordure');
+  assert.ok(c.includes("height: compacte ? 88 : 184") && c.includes("boxSizing: 'border-box', borderRadius: 'var(--o-radius,18px)', border: LISERE,"), 'deux tailles, le liseré DANS la carte (04/10)');
   assert.ok(app.includes("const PUCE_SCN = { fontSize: 11, fontWeight: 700, padding: '4px 9px', borderRadius: 9,"), 'des puces à l’arrondi 9');
 });
 
@@ -189,7 +189,7 @@ test('la vue Scenarios : cartes standard, edition avec fleches et crayon, la bib
   assert.ok(v.includes("sansDernier={edit}") && v.includes("position: 'absolute', right: 12, top: 12"), 'les outils prennent la place du repère');
   assert.ok(v.includes("<ScenesContent hass={hass} />"), 'les ambiances Hue restent, dessous');
   // Les fleches rangent sur CE type d'ecran : l'ordinateur au composant, les autres chez eux (ADR 0052).
-  assert.ok(v.includes("sc.ordonner(ids).catch(() => {});"), 'l’ordre se range par les flèches');
+  assert.ok(v.includes("sc.ordonner(ids);") && !v.includes('sc.ordonner(ids).catch'), 'l’ordre se range par les flèches, et son refus ne s’avale plus');
   assert.ok(app.includes("view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} />"), 'la route `scenes` mène à la vue');
   assert.ok(app.includes("<h2 style={sectionTitle}>{tr('Ambiances lumineuses')}</h2>"), 'la bibliothèque Hue devient une section');
   const f = bloc('function FicheScenario(', NL + '}');

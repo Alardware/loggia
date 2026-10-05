@@ -21,5 +21,16 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "scenario_inconnu": {
+      "message": "Nessuno scenario Loggia ha l’identificativo «{id}»."
+    },
+    "scenarios_indisponibles": {
+      "message": "Gli scenari di Loggia non sono disponibili: l’integrazione non è avviata."
+    },
+    "compte_illisible": {
+      "message": "Scenario rifiutato: non è stato possibile leggere l’account che lo ha richiesto."
+    }
   }
 }

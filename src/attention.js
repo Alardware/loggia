@@ -21,7 +21,7 @@
  * Pur : pas de React, pas de Home Assistant, testable à sec. Le seul import
  * est `tr`, le test le vérifie aussi.
  */
-import { tr } from './i18n.js';
+import { tr, comparerTextes } from './i18n.js';
 
 export const CLASSES_PORTE = ['door', 'garage_door', 'gate'];
 export const CLASSES_FENETRE = ['window', 'opening'];
@@ -237,7 +237,14 @@ export function tuilesSecurite(comptes) {
   }
   if (estObjet(m) && n(m.total)) {
     const a = n(m.actifs);
-    out.push({ cle: 'mouvement', nom: tr('Mouvement'), icone: ICONES_ATTENTION.mouvement, valeur: a ? String(a) : tr('Aucun'), libelle: a ? (a > 1 ? tr('détectés') : tr('détecté')) : tr('mouvement'), alerte: false, actif: a > 0 });
+    /* Au repos, la phrase ENTIÈRE dans la valeur et un libellé vide (audit du
+     * 03/10). « Aucun » venait de Home Assistant (`ui.common.none`) et
+     * « mouvement » du catalogue : traduits chacun de son côté, ils donnaient
+     * « None motion », « Brak ruch », « Ninguno movimiento » — un déterminant
+     * s'accorde avec son nom, et chaque langue le fait à sa façon (génitif en
+     * polonais, « Sin » en espagnol). « Aucun mouvement » est la clé de la
+     * carte d'un détecteur au repos : la tuile dit la même chose qu'elle. */
+    out.push({ cle: 'mouvement', nom: tr('Mouvement'), icone: ICONES_ATTENTION.mouvement, valeur: a ? String(a) : tr('Aucun mouvement'), libelle: a ? (a > 1 ? tr('détectés') : tr('détecté')) : '', alerte: false, actif: a > 0 });
   }
   if (estObjet(c) && n(c.total)) {
     out.push({ cle: 'cameras', nom: tr('Caméras'), icone: ICONES_ATTENTION.cameras, valeur: n(c.enLigne) + '/' + n(c.total), libelle: tr('en ligne'), alerte: n(c.enLigne) < n(c.total), actif: false });
@@ -404,9 +411,10 @@ export function pointsAttention(ctx) {
 
   /* Du plus grave au plus doux, puis par titre — puis par sous-titre et clé :
    * un ordre entièrement déterminé, pour que la liste ne saute pas d'un rendu
-   * à l'autre quand Home Assistant réordonne ses états. */
+   * à l'autre quand Home Assistant réordonne ses états. Les textes se rangent
+   * dans la langue de l'écran (audit du 03/10 : c'était le français en dur). */
   const rang = (niveau) => { const r = NIVEAUX.indexOf(niveau); return r < 0 ? NIVEAUX.length : r; };
-  const cmp = (a, b) => String(a).localeCompare(String(b), 'fr');
+  const cmp = (a, b) => comparerTextes(String(a), String(b));
   out.sort((a, b) => (rang(a.niveau) - rang(b.niveau)) || cmp(a.titre, b.titre) || cmp(a.sous, b.sous) || cmp(a.cle, b.cle));
   return out;
 }

@@ -76,3 +76,28 @@ Tests : tests/disposition.test.mjs (+2). Vérifié en démo : sur téléphone
 émulé, « Avancer Cinéma » écrit `loggia_scnordre.mobile` ; sur ordinateur, la
 même flèche passe par le composant, laisse `loggia_scnordre` vide, et la
 rangée de l'Accueil suit.
+
+## Amendement (03/10/2026, audit du 03/10) — ranger n'est pas réservé
+
+Sur l'ordinateur, la flèche écrivait l'ordre par `loggia/scenarios/config`,
+réservée aux administrateurs, et la vue avalait le refus : un compte ordinaire
+ne rangeait rien, sans un mot — contraire à l'ADR 0125, qui met l'ordre des
+scénarios dans l'agencement, et à l'ADR 0046.
+
+- **L'ordinateur range par `loggia/scenarios/ordre`**, ouverte à tout compte.
+  Elle ne fait QUE ranger : des identifiants que la maison connaît, chacun une
+  fois. Un inconnu — un scénario supprimé ailleurs entre deux sondages — fait
+  tout refuser, et le refus le nomme. Créer, modifier, supprimer restent à
+  `config`, réservée.
+- **Un refus se dit** : plus de `catch` muet dans la vue, le toast global
+  l'annonce (« Ordre des scénarios non enregistré — … »).
+- **Lire, changer, écrire sous un seul verrou** côté composant (enregistrer,
+  ranger, et la reprise du démarrage) : sans lui, un rangement lu avant l'ajout
+  d'un scénario par un administrateur l'effaçait en s'écrivant après.
+- **La tablette et le téléphone ne changent pas** (`loggia_scnordre`, déjà
+  ouvert à tous depuis l'ADR 0125).
+
+Redémarrage de Home Assistant requis : tant qu'il n'a pas eu lieu, le
+composant ne connaît pas la commande, et l'écran reprend l'ancienne voie —
+celle des administrateurs. Tests : tests/scenarios_ordre.test.mjs,
+tests/python/test_websocket_api_execution.py, tests/python/test_scenarios.py.

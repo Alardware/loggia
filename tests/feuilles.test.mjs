@@ -87,10 +87,14 @@ test('aucune autre croix : la commune, la commande d’un volet, le formulaire d
   /* La quatrieme est arrivee le 03/10 avec les rappels : meme cas que celle
    * du formulaire d'evenement — elle ferme le PANNEAU d'ajout pose dans la
    * carte, et non une feuille. */
-  assert.deepEqual(croix.sort(), ['src/App.jsx × 1', 'src/agendarail.jsx × 1', 'src/formevenement.jsx × 1', 'src/rappelsrail.jsx × 1', 'src/ui.jsx × 1']);
+  /* La commande « Fermer » d'un volet ne compte plus ici depuis le lot 13 de
+   * l'audit du 03/10 : son nom dit le volet (« Fermer Volet salon »), il n'a
+   * plus la forme d'une croix. Elle reste épinglée plus bas ; App.jsx, lui,
+   * n'a plus aucune croix à part. */
+  assert.deepEqual(croix.sort(), ['src/agendarail.jsx × 1', 'src/formevenement.jsx × 1', 'src/rappelsrail.jsx × 1', 'src/ui.jsx × 1']);
   const rap = readFileSync(join(RACINE, 'src', 'rappelsrail.jsx'), 'utf8');
   assert.ok(rap.includes("<button onClick={onClose} aria-label={tr('Fermer')}"), 'la croix du formulaire de rappel');
-  assert.ok(APP.includes("<button aria-label={tr('Fermer')} title={tr('Fermer')} onClick={(e) => { e.stopPropagation(); setOv(0); commander(hass, id, 'close'); }}"), 'la commande du volet');
+  assert.ok(APP.includes("<button aria-label={tr('Fermer') + ' ' + nom} title={tr('Fermer')} onClick={(e) => { e.stopPropagation(); setOv(0); commander(hass, id, 'close'); }}"), 'la commande du volet');
   /* Le formulaire a quitte `App.jsx` le 02/10 : l'agenda du rail en avait
    * besoin, et un second formulaire aurait duplique sa validation. */
   const form = readFileSync(join(RACINE, 'src', 'formevenement.jsx'), 'utf8');
@@ -99,15 +103,117 @@ test('aucune autre croix : la commune, la commande d’un volet, le formulaire d
 });
 
 test('plus de bouton en bas qui ne fait que fermer', () => {
+  /* `onClose` aussi (lot 13 de l'audit du 03/10) : les éditeurs d'un profil
+   * et d'une vue (parametres.jsx) fermaient par lui, et leurs deux
+   * « Annuler » passaient sous ce filet. */
   const fautifs = [];
   for (const [f, s] of sources()) {
-    if (/<button[^>]*onClick=\{(close|onFermer)\}[^>]*>\s*(\{tr\('(Annuler|Terminé|Fermer)'\)\}|Annuler|Fermer)\s*<\/button>/.test(s)) fautifs.push(f);
+    if (/<button[^>]*onClick=\{(close|onClose|onFermer)\}[^>]*>\s*(\{tr\('(Annuler|Terminé|Fermer)'\)\}|Annuler|Fermer)\s*<\/button>/.test(s)) fautifs.push(f);
   }
   assert.deepEqual(fautifs, [], 'un « Annuler » ou un « Terminé » ferme encore la feuille, à côté de la croix');
+});
+
+test('aucune modale faite main : un voile qui se ferme passe par BottomSheet', () => {
+  /* Lot 13 de l'audit du 03/10. Les éditeurs d'un profil et d'une vue
+   * (parametres.jsx) posaient leur propre voile — `position: 'fixed',
+   * inset: 0`, fermé par `onClose` — : ni dialogue, ni nom, ni Échap, ni fond
+   * inerte, et Tab filait derrière lui vers la page restée vivante.
+   * `BottomSheet` (ui.jsx) apporte tout cela d'un coup. Un plein-écran qui se
+   * FERME passe donc par lui, ou figure ci-dessous avec sa raison. Les autres
+   * ne se ferment pas : l'écran de veille (son seul geste réveille),
+   * l'accueil d'une installation neuve, le calque du fond photo. */
+  const EXCEPTIONS = {
+    /* Le pavé du code administrateur : centré au-dessus de tout, ce n'est pas
+     * une feuille. Il tient seul ce qu'une feuille promet — relu ici, pour
+     * que l'exception ne survive pas à ses raisons. */
+    'src/pinmodal.jsx': (s) => s.includes("role=\"dialog\" aria-label={tr('Code administrateur')}")
+      && s.includes("if (e.key === 'Escape')") && s.includes('inerterAutour(voileRef.current)'),
+  };
+  // La balise ouvrante ENTIÈRE : ses attributs avant le style, et après.
+  const ouvrante = (s, i) => {
+    const debut = s.lastIndexOf('<', i);
+    let prof = 0;
+    for (let k = debut; k < s.length; k++) {
+      if (s[k] === '{') prof++;
+      else if (s[k] === '}') prof--;
+      else if (s[k] === '>' && prof === 0) return s.slice(debut, k + 1);
+    }
+    return s.slice(debut);
+  };
+  const fautives = [];
+  let voiles = 0;
+  for (const [f, s] of sources()) {
+    if (f === 'src/ui.jsx') continue;
+    // Les deux ordres d'écriture : un voile retourné ne passe pas dessous.
+    for (const m of s.matchAll(/position: 'fixed', inset: 0\b|inset: 0, position: 'fixed'/g)) {
+      voiles++;
+      // Il se ferme : il reçoit onClose / onFermer, ou appelle close() / fermer().
+      if (!/\bon(Close|Fermer)\b|\b(close|fermer)\(\)/.test(ouvrante(s, m.index))) continue;
+      if (EXCEPTIONS[f]) assert.ok(EXCEPTIONS[f](s), f + ' : l’exception ne tient plus ce qu’une feuille promet (dialogue nommé, Échap, fond inerte)');
+      else fautives.push(f + ':' + s.slice(0, m.index).split('\n').length);
+    }
+  }
+  assert.ok(voiles >= 3, 'le balayage ne voit plus les plein-écran : il est cassé, et ce test toujours vert');
+  assert.deepEqual(fautives, [], 'une modale faite main : rends-la dans <BottomSheet title=…>');
 });
 
 test('le navigateur de médias garde son retour, et la croix au bout de sa ligne', () => {
   const n = fonction(APP, 'NavigateurMedias');
   assert.ok(n.includes('{pile.length > 1 && (') && n.includes("<button onClick={remonter} aria-label={tr('Revenir')} style={btnRond}>"), 'le retour a disparu');
   assert.ok(n.includes('<CroixFeuille />'));
+});
+
+test('chaque feuille dit son nom : sa ligne de titre, ou NomFeuille posé sur le sien', () => {
+  /* Audit du 03/10. `BottomSheet` pose toujours `aria-labelledby` vers un id
+   * que seules `TitreFeuille` et `FicheEntete` portaient. Dix-huit feuilles
+   * bâtissent leur en-tête à la main — la recherche, les fiches d'un capteur,
+   * d'un lecteur, d'un appareil, d'un robot, l'agenda, l'assistant… — et
+   * s'annonçaient « dialogue », sans nom : le contrôle de la croix, juste
+   * au-dessus, les laissait passer, elles ont toutes la leur. */
+  const sans = [];
+  for (const [f, s] of sources()) {
+    let i = s.indexOf('<BottomSheet');
+    while (i >= 0) {
+      const fin = s.indexOf('</BottomSheet>', i);
+      const bloc = s.slice(i, fin < 0 ? undefined : fin);
+      const ouverture = s.slice(i, s.indexOf('\n', i));
+      if (!/<TitreFeuille|<FicheEntete|<NomFeuille|<FicheRobotContent/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
+      i = s.indexOf('<BottomSheet', i + 1);
+    }
+  }
+  assert.deepEqual(sans, [], 'une feuille s’annonce « dialogue », sans nom');
+  /* La fiche du robot se nomme DANS son contenu, chargé à la demande : ses
+   * deux en-têtes — le robot, et « ne répond plus » — portent le nom. */
+  const robot = lire('src', 'ficherobot.jsx');
+  const contenu = robot.slice(robot.indexOf('export default function FicheRobotContent('));
+  assert.equal((contenu.match(/<NomFeuille>/g) || []).length, 2, 'un en-tête de la fiche du robot ne nomme plus sa feuille');
+});
+
+test('NomFeuille pose l’id sur le titre existant, et ne dessine rien', async () => {
+  const debut = UI.indexOf('export function NomFeuille(');
+  assert.ok(debut >= 0, 'NomFeuille a disparu');
+  const n = UI.slice(debut, UI.indexOf('\n}\n', debut) + 2);
+  assert.ok(n.includes('const idTitre = useIdTitreFeuille();') && n.includes('cloneElement(Children.only(children), { id: idTitre || undefined })'),
+    'NomFeuille ne pose plus l’id sur son enfant');
+  assert.ok(!n.includes('CroixFeuille') && !n.includes('<div') && !n.includes('<span'),
+    'NomFeuille dessine quelque chose : une boîte autour du titre, ou une seconde croix sur la ligne');
+  /* Le crochet ne s'appelle que DANS une feuille. Appelé dans le composant qui
+   * rend `BottomSheet`, il lirait le contexte d'AU-DESSUS : aucun id, aucun
+   * nom — et rien à l'écran pour s'en apercevoir. */
+  const appels = [];
+  for (const [f, s] of sources()) {
+    const k = (s.match(/useIdTitreFeuille\(\)/g) || []).length;
+    if (k) appels.push(f + ' × ' + k);
+  }
+  assert.deepEqual(appels.sort(), ['src/App.jsx × 1', 'src/ui.jsx × 3'],
+    'le crochet du nom est appelé ailleurs que dans TitreFeuille, FicheEntete et NomFeuille');
+  // Une ligne de titre qui s'en va rend l'id : celle qui la remplace le reprend.
+  assert.ok(UI.includes('rendre: (jeton) => { if (prisPar.current === jeton) prisPar.current = null; },')
+    && UI.includes('return () => { if (ctx) ctx.rendre(moi); };'),
+    'un titre démonté garde l’id : celui qui le remplace ne nomme plus la feuille');
+  // Au rendu : l'enfant sort tel quel — ni boîte autour, ni croix à côté.
+  const { composant, rendre } = await import('./rendu.mjs');
+  const { createElement } = await import('react');
+  const NomFeuille = await composant('ui.jsx', 'NomFeuille');
+  assert.equal(rendre(NomFeuille, { children: createElement('span', null, 'Salon') }), '<span>Salon</span>');
 });

@@ -21,5 +21,16 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "scenario_inconnu": {
+      "message": "Ningún escenario de Loggia tiene el identificador «{id}»."
+    },
+    "scenarios_indisponibles": {
+      "message": "Los escenarios de Loggia no están disponibles: la integración no se ha iniciado."
+    },
+    "compte_illisible": {
+      "message": "Escenario rechazado: no se ha podido leer la cuenta que lo solicitó."
+    }
   }
 }

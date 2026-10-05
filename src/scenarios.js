@@ -4,9 +4,11 @@
  * DIRE les choses — le nom d'un scenario de Loggia dans la langue du moment,
  * sa teinte, ce qu'il fait en une ligne, quand il a tourne — et porter les
  * listes que la fiche propose. Pur : pas de React, pas de Home Assistant,
- * donc testable a sec.
+ * donc testable a sec. Une exception, `rangerScenarios` : elle recoit sa
+ * connexion en argument, et une doublure suffit a la rejouer (audit du 03/10).
  */
 import { tr } from './i18n.js';
+import { texteRefus } from './refus.js';
 
 export const FAMILLES = ['lumieres', 'volets', 'medias', 'chauffage', 'alarme', 'serrures'];
 /* Suffixe `_SCENARIO` : le nom nu est une liste-fonction ailleurs (les
@@ -174,4 +176,48 @@ export function versEnregistrement(s) {
   };
   if (s.id) out.id = s.id;
   return out;
+}
+
+/* Le refus d'un rangement, pour le toast global : un code a lui
+ * (`scenarios_ordre`), un message deja dans la langue de l'ecran. Un scenario
+ * inconnu — supprime ailleurs depuis le dernier sondage — y est NOMME : le
+ * composant donne ses identifiants apres les deux-points, comme il nomme les
+ * reglages qu'il refuse.
+ *
+ * Un refus PREVISIBLE — un plafond du magasin — se dit par son code, comme
+ * partout ailleurs (`texteRefus`, relecture du 03/10). Il tombait dans « Home
+ * Assistant a refuse ou n'a pas repondu » : une panne, a lire l'ecran, et la
+ * cle que le composant nommait etait perdue. Quand il n'en nomme aucune — le
+ * commun entier est plein —, c'est celle ou il range l'ordre qui n'a pas pris.
+ * Un code que la table ne connait pas garde la phrase d'avant. */
+const CLE_SCENARIOS = 'loggia_scenarios';
+function refusOrdre(e) {
+  const inconnus = e && e.code === 'not_found' ? (String(e.message || '').split(':')[1] || '').trim() : '';
+  const err = new Error(inconnus
+    ? tr('Ordre des scénarios non enregistré — scénario inconnu : {x}', { x: inconnus })
+    : texteRefus(e, CLE_SCENARIOS) || tr('Ordre des scénarios non enregistré — Home Assistant a refusé ou n’a pas répondu'));
+  err.code = 'scenarios_ordre';
+  err.cause = e;
+  return err;
+}
+
+/* Ranger les scenarios sur l'ordinateur (audit du 03/10).
+ *
+ * L'ordre passait par `loggia/scenarios/config`, reservee aux
+ * administrateurs, et la vue avalait le refus : sur un compte ordinaire, la
+ * fleche ne rangeait rien, sans un mot. Ranger est de l'agencement
+ * (ADR 0125) : `loggia/scenarios/ordre` est ouverte a tout compte, et ne fait
+ * QUE ranger des scenarios que la maison connait.
+ *
+ * Un composant d'avant cette commande — Home Assistant pas encore redemarre
+ * apres la mise a jour — repond `unknown_command` : l'ancienne voie reprend,
+ * qui reste celle des administrateurs. Tout autre refus, et celui de
+ * l'ancienne voie, remonte au toast global (ADR 0046). */
+export function rangerScenarios(h, ids) {
+  return h.callWS({ type: 'loggia/scenarios/ordre', ordre: ids }).catch((e) => {
+    if (e && e.code === 'unknown_command') {
+      return h.callWS({ type: 'loggia/scenarios/config', patch: { ordre: ids } }).catch((e2) => { throw refusOrdre(e2); });
+    }
+    throw refusOrdre(e);
+  });
 }
