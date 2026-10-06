@@ -82,7 +82,18 @@ autres.
   passant dessous. Rien ne rétrécit, rien ne disparaît : c'est la disposition
   qui cède.
 
-## 4. Les cartes Lovelace tierces
+## 4. Les cartes Lovelace tierces — RETIRÉ LE 06/10
+
+> **Ce chantier a été annulé le lendemain.** La carte ne pouvait pas
+> fonctionner : Loggia vit dans une iframe, les cartes de Home Assistant sont
+> des composants Lit, et Lit pose ses styles par `adoptedStyleSheets` — une
+> feuille construite appartient à un seul document. Montée dans notre cadre,
+> la carte levait « Sharing constructed stylesheets in multiple documents is
+> not allowed » et restait vide. Voir l'[ADR 0158](0158-la-carte-lovelace-ne-peut-pas-vivre-dans-un-cadre.md).
+>
+> La phrase « Vérifié : une carte montée prend bien la surface de Loggia »
+> ci-dessous était vraie **avec des aides simulées**, et ne prouvait rien du
+> cas réel. Elle reste ici telle quelle : c'est l'erreur qu'il fallait voir.
 
 Le seul des quatre qui n'existait nulle part. Le catalogue de Loggia est riche
 mais il était **fermé** : ni `mini-graph-card`, ni `apexcharts-card`, ni même
