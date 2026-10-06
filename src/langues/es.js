@@ -1737,7 +1737,7 @@ export default {
   'IoT': 'IoT',
   'Épingle un appareil depuis sa fiche': 'Fija un dispositivo desde su ficha',
   'Mode édition : avance, recule ou modifie un scénario, ou ajoutes-en un.': 'Modo edición: adelanta, retrasa o edita un escenario, o añade uno.',
-  'Mode édition : prends une carte pour la déplacer, retire-la (×) ou ajoutes-en une.': 'Modo edición: agarra una tarjeta para moverla, quítala (×) o añade una.',
+  'Mode édition : attrape une carte pour la déplacer, clique-la pour la régler, ou ajoutes-en une.': 'Modo edición: agarra una tarjeta para moverla, haz clic para ajustarla, o añade una.',
   'Entité météo : la carte météo sur le côté de l\'Accueil, le fond de la bannière, la veille et les conseils d\'extérieur.': 'Entidad meteorológica: la tarjeta del tiempo en el lateral de Inicio, el fondo del banner, el salvapantallas y los consejos de exterior.',
   // Les widgets en option du rail : l'heure et le calendrier (v3.42.0)
   'Heure': 'Hora',

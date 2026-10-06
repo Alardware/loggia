@@ -214,18 +214,31 @@ test('présence, calendrier et pastilles : le nom affiché, et la fiche annoncé
   assert.ok(fonction('CvChips').includes("aria-label={nomCarte(cvName(S[c.id], c.id), c.txt)} aria-haspopup={dc && dc.ouvrir ? 'dialog' : undefined}"), 'une pastille ne dit plus seulement « 65 % »');
 });
 
-test('vue personnalisée en édition : la carte est inerte, sa poignée est une surface sœur de la barre', () => {
+test('vue personnalisée en édition : la TUILE des autres vues, pas une carte inerte', () => {
+  /* Jusqu'au 06/10, l'edition posait la vraie carte, rendue inerte, sous une
+   * surface et une barre d'outils flottante. Elle passe desormais par la meme
+   * tuile que Objets ou Pieces : on l'attrape pour deplacer, on la clique pour
+   * ouvrir sa fiche. Tout ce que l'ancienne forme protegeait — commandes non
+   * tabulables, poignee nommee, anneau de focus visible — vient maintenant de
+   * `EditableCard`, qui le porte pour les cinq vues a la fois. */
   const v = fonction('CustomView');
-  const i = v.indexOf('<div key={cvKey(x)} data-cvk={cvKey(x)}');
+  assert.ok(v.includes('if (edit) {'), 'l’edition a sa branche, separee du rendu normal');
+  assert.ok(v.includes('<EditableCard ed={edCv} id={cle} nom={nomCarte(x)} hass={hass}'), 'la tuile partagee');
+  assert.ok(v.includes('onEdit={() => setFiche(x)}'), 'un clic ouvre la fiche de la carte');
+  // Ce que la tuile ne sait pas d'elle-meme : le TYPE de carte sous le nom.
+  assert.ok(v.includes('sous={sousCarte(x)}') && v.includes('const sousCarte = (x) => CV_TYPE_NOMS()[cvTypeDe(x)] || null;'),
+    'sous le nom, le type de carte — pas le domaine d’une entite');
+  /* L'enveloppe ne garde que ce que la grille exige : la cle du glisser, la
+   * largeur et la hauteur en rangees. */
+  const i = v.indexOf('<div key={cle} data-cvk={cle}');
   assert.ok(i >= 0, 'la carte de la grille a changé de forme');
   const env = balise(v, baliseOuvrante(v, i));
-  assert.ok(!env.includes('role=') && !env.includes('tabIndex=') && !env.includes('aria-label='), 'l’enveloppe est redevenue un bouton qui englobe la barre');
-  assert.ok(env.includes('onPointerDown={edit ? (e) => debutDrag(e, x) : undefined}'), 'le glisser reste sur la carte entière');
-  assert.ok(v.includes(`<div className="o-cvfit" inert={edit ? '' : undefined} style={{ height: '100%', pointerEvents: edit ? 'none' : 'auto' }}>`), 'en édition, les commandes de la carte se tabulent encore');
-  const s = v.indexOf("{edit && <Surface popup={false} label={nomCarte(x) + ' · ' + tr('Déplacer avec les flèches')} onKeyDown={(e) => clavierCv(e, x)}");
-  assert.ok(s > v.indexOf('<CvTyped x={x} hass={hass} dc={dc} />'), 'la poignée se pose APRÈS la carte : sinon la carte couvre son anneau de focus');
-  assert.ok(s < v.indexOf('<EditBarre>'), 'la barre d’outils reste au-dessus de la poignée');
+  assert.ok(!env.includes('role=') && !env.includes('tabIndex=') && !env.includes('aria-label='), 'l’enveloppe n’est pas un bouton');
+  assert.ok(!v.includes('<EditBarre>'), 'la barre flottante a disparu de cette vue');
   assert.ok(v.includes("e.target.closest('button:not(.o-surface)')"), 'saisir la poignée doit encore déplacer la carte');
+  // La fiche porte les trois reglages et le retrait.
+  assert.ok(v.includes("titre={tr('Carte compacte')}") && v.includes("tr('LARGEUR')") && v.includes("tr('Supprimer')"),
+    'la fiche regle la taille, la largeur, et retire la carte');
   // Le nom lu : jamais une clé épelée, jamais deux fois le même pour deux cartes.
   /* Relecture du lot 13 : le corps est sorti en `nomCv`, fonction de module,
    * pour que la barre des favoris de l'Accueil nomme ses cartes de même. */
@@ -234,12 +247,14 @@ test('vue personnalisée en édition : la carte est inerte, sa poignée est une 
   assert.ok(n.includes("if (String(id).indexOf('.') < 0) return type || id;"), 'une carte sans entité s’appelle encore « presence:1791… »');
   assert.ok(n.includes("return cvTypeDe(x) === 'compacte' || !type ? nom : nom + ', ' + type;"), 'la compacte et le graphique d’une même entité portent le même nom');
   assert.ok(v.includes("aria-label={tr('Renommer la vue') + ' ' + cv.name"), 'le bouton de renommage tait le nom qu’il affiche');
-  for (const geste of ["tr('Changer la carte'))", "tr('Largeur double')", "tr('Retirer')"]) {
-    assert.ok(v.includes(geste + " + ' · ' + nomCarte(x)}"), 'un outil de la barre ne dit pas quelle carte il touche : ' + geste);
-  }
-  // Un bouton à bascule garde UN nom, son état passe par aria-pressed : « Largeur
-  // simple », enfoncé, se lisait comme le contraire de ce qu'il était.
-  assert.ok(v.includes("aria-label={tr('Largeur double') + ' · ' + nomCarte(x)} aria-pressed={cvW(x) === 2}"), 'le nom de la bascule de largeur change avec son état');
+  /* La BARRE a disparu le 06/10 : ses outils vivent dans la fiche, qui nomme
+   * la carte UNE fois dans son titre. Un bouton n'a plus a repeter ce nom —
+   * c'est la regle generale (WCAG 2.5.3) appliquee a une feuille : son titre
+   * est le contexte de tout ce qu'elle contient. */
+  assert.ok(v.includes('<TitreFeuille style={{ fontSize: 19, fontWeight: 700 }} marge={4}>{nomCarte(x)}</TitreFeuille>'),
+    'la fiche doit dire de quelle carte elle parle');
+  // Et la tuile, elle, porte toujours le nom : c'est elle qu'on clique.
+  assert.ok(v.includes('nom={nomCarte(x)}'), 'la tuile nomme la carte qu’elle montre');
 });
 
 test('la galerie d’ajout : l’aperçu ne se tabule pas dans le bouton du choix', () => {

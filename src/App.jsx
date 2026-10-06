@@ -5116,10 +5116,16 @@ const BOUTON_COIN = { width: 30, height: 30, borderRadius: 10, border: 'none', b
  * la carte vivante qu'elle remplace. On la SAISIT
  * n'importe ou : elle suit le pointeur tant qu'on la tient. `plat` : un
  * intertitre, qui garde son dessin et prend juste ses deux boutons. */
-function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, taille = true, ...reste }) {
+/* `entite` et `sous` (06/10) : les vues personnalisées posent des CARTES, pas
+ * des entités. Leur clé n'est pas toujours un `entity_id` — une horloge ou un
+ * groupe de pastilles n'en ont pas —, et ce qu'il faut lire sous le nom est le
+ * TYPE de carte, pas le domaine. Les vues de la maison ne passent ni l'un ni
+ * l'autre : elles gardent exactement ce qu'elles avaient. */
+function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, taille = true, entite = null, sous = null, ...reste }) {
   const saisie = ed.dragId === id;
   const S = (hass && hass.states) || {};
-  const brut = id.indexOf('dev:') === 0 ? id.slice(4) : id;
+  const source = entite || id;
+  const brut = source.indexOf('dev:') === 0 ? source.slice(4) : source;
   const classe = (S[brut] && S[brut].attributes && S[brut].attributes.device_class) || '';
   const info = domaineInfo(domaineEdition(brut, { estLumiere: cvEstLumiere(brut), classe }));
   /* Le GESTE au pointeur reste à la racine (lot 13 de l'audit du 03/10) :
@@ -5181,7 +5187,7 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, taille =
   const classes = ['o-pointille', large ? 'o-cvw2' : '', compact ? 'o-cvrow1' : ''].filter(Boolean).join(' ');
   const lavis = 'linear-gradient(180deg,transparent 28%,rgba(' + info.rgb + ',.14)), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';
   const icone = (px) => (info.prise ? <PlugIcon size={px} /> : info.ico ? <Ico name={info.ico} size={px} /> : <Fi i={info.fi} size={px} />);
-  const sousTitre = info.label + ' · ' + identifiantEdition(brut);
+  const sousTitre = sous || (info.label + ' · ' + identifiantEdition(brut));
   const titre = tr('Attrape pour déplacer · clique pour modifier (flèches ← →)');
   /* La surface d'une carte (lot 13) : son nom est ce que la carte affiche,
    * puis le geste — « Plafonnier, Lumière · plafonnier, Modifier ou
@@ -14262,6 +14268,10 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   // compose la rangée.
   const [retype, setRetype] = useState(null);
   const [chipsEdit, setChipsEdit] = useState(null);
+  /* La FICHE d'une carte (06/10), comme dans les vues de la maison : on clique
+   * la tuile, elle s'ouvre, et tout s'y règle — le dessin, la taille, la
+   * largeur, le retrait. */
+  const [fiche, setFiche] = useState(null);
   useEffect(() => { setNameDraft(cv.name); setRenaming(false); setAdding(false); setTplEdit(null); setRetype(null); }, [cv.id, edit]);
   const setEnts = (ents) => onSave && onSave({ ...cv, ents });
   const dc = useDomainCards(hass);
@@ -14278,10 +14288,18 @@ function CustomView({ cv, hass, edit = false, onSave }) {
    * défile normalement. */
   const dragTimer = useRef(null);
   const dragDebut = useRef(null);
+  /* Ce qui distingue un CLIC d'un glisser : la carte a-t-elle pris l'appui, et
+   * a-t-elle bougé ? Deux références, pas deux états : rien à redessiner. */
+  const appuiRef = useRef(false);
+  const bougeRef = useRef(false);
+  /* Renvoie VRAI si la carte a pris l'appui (06/10). L'agencement des vues de
+   * la maison en dit autant par sa référence de glisser : sans cette réponse,
+   * un appui sur un bouton de coin passait pour un clic sur la carte, et la
+   * fiche s'ouvrait à chaque bascule de taille ou de largeur. */
   const debutDrag = (e, x) => {
-    if (!edit) return;
+    if (!edit) return false;
     // ×, coin — mais pas la surface : c'est elle qu'on saisit (lot 13).
-    if (e.target.closest && e.target.closest('button:not(.o-surface)')) return;
+    if (e.target.closest && e.target.closest('button:not(.o-surface)')) return false;
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
     if (e.pointerType === 'touch') {
       dragDebut.current = { x: e.clientX, y: e.clientY, cle: cvKey(x) };
@@ -14292,11 +14310,12 @@ function CustomView({ cv, hass, edit = false, onSave }) {
         setDragCle(dragDebut.current.cle);
         setOrdreDrag([...cv.ents]);
       }, 200);
-      return;
+      return true;
     }
     e.preventDefault();
     setDragCle(cvKey(x));
     setOrdreDrag([...cv.ents]);
+    return true;
   };
   const mouvDrag = (e) => {
     if (dragCle == null && dragDebut.current) {
@@ -14318,6 +14337,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
     const a = [...ordreDrag];
     const [pris] = a.splice(de, 1);
     a.splice(vers, 0, pris);
+    bougeRef.current = true;
     setOrdreDrag(a);
   };
   const finDrag = () => {
@@ -14328,28 +14348,60 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   const liste = ordreDrag || cv.ents;
   const basculerW = (x) => setEnts(cv.ents.map(y => cvKey(y) === cvKey(x) ? cvAvecW(x) : y));
   const basculerH = (x) => setEnts(cv.ents.map(y => cvKey(y) === cvKey(x) ? cvAvecH(x) : y));
+
+  /* L'AGENCEMENT, dans la forme qu'attend `EditableCard` (06/10). Les vues de
+   * la maison éditent leurs cartes par une tuile qu'on attrape et qu'on clique
+   * — « je veux comme pour les vues lumieres, objets etc... ». Les vues
+   * personnalisées avaient leur propre mécanique : une barre d'outils flottante
+   * sur la carte. Plutôt que de dupliquer la tuile, on donne ici à celle des
+   * autres vues l'interface qu'elle connaît, au-dessus de `cv.ents`.
+   *
+   * `dragEnd` doit dire si le relâcher était un CLIC : la tuile n'ouvre la
+   * fiche que dans ce cas, sans quoi un glisser l'ouvrirait en arrivant. */
+  const parCle = new Map(cv.ents.map(x => [cvKey(x), x]));
+  const de = (cle) => parCle.get(cle);
+  /* Sous le nom, le TYPE de carte — c'est ce qu'on vient changer ici, là où
+   * une vue de la maison lit le domaine de son entité. Une carte sans type
+   * nommé (un identifiant nu, posé par un ancien agencement) n'en affiche
+   * aucun plutôt qu'un mot vide. */
+  const sousCarte = (x) => CV_TYPE_NOMS()[cvTypeDe(x)] || null;
+  const edCv = {
+    dragId: dragCle,
+    dragStart: (cle, e) => { appuiRef.current = debutDrag(e, de(cle)); bougeRef.current = false; },
+    dragMove: mouvDrag,
+    /* Un clic, c'est un appui PRIS PAR LA CARTE qui n'a rien déplacé. Sans la
+     * première condition, appuyer sur un bouton de coin ouvrait la fiche ;
+     * sans la seconde, déposer une carte l'ouvrait en arrivant. */
+    dragEnd: () => {
+      const clic = appuiRef.current && !bougeRef.current;
+      appuiRef.current = false;
+      bougeRef.current = false;
+      finDrag();
+      return clic;
+    },
+    move: (cle, pas) => {
+      const i = cv.ents.findIndex(y => cvKey(y) === cle);
+      const j = i + pas;
+      if (i < 0 || j < 0 || j >= cv.ents.length) return;
+      const a = [...cv.ents];
+      const [pris] = a.splice(i, 1);
+      a.splice(j, 0, pris);
+      setEnts(a);
+    },
+    remove: (cle) => setEnts(cv.ents.filter(y => cvKey(y) !== cle)),
+    estLarge: (cle) => cvW(de(cle)) === 2,
+    basculerLarge: (cle) => basculerW(de(cle)),
+    estCompact: (cle) => cvRowsDe(de(cle)) === 1,
+    basculerCompact: (cle) => basculerH(de(cle)),
+  };
   /* Au clavier (ADR 0068) : la carte a le focus en edition, les fleches la
    * deplacent d'un cran — meme regle que les sections de l'Accueil. */
-  const deplacerCv = (x, delta) => {
-    const a = [...cv.ents];
-    const i = a.findIndex(y => cvKey(y) === cvKey(x)), j = i + delta;
-    if (i < 0 || j < 0 || j >= a.length) return;
-    a.splice(j, 0, a.splice(i, 1)[0]);
-    setEnts(a);
-  };
-  const clavierCv = (e, x) => {
-    if (e.target !== e.currentTarget) return;
-    const d = { ArrowUp: -1, ArrowLeft: -1, ArrowDown: 1, ArrowRight: 1 }[e.key];
-    if (!d) return;
-    e.preventDefault();
-    deplacerCv(x, d);
-  };
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
       <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
         {edit && <BandeauEdition onAjouter={() => setAdding(true)}
-          texte={tr('Mode édition : prends une carte pour la déplacer, retire-la (×) ou ajoutes-en une.')} />}
+          texte={tr('Mode édition : attrape une carte pour la déplacer, clique-la pour la régler, ou ajoutes-en une.')} />}
         <div>
           {edit && renaming
             ? <div style={{ display: 'flex', gap: 10, alignItems: 'center', maxWidth: 420 }}>
@@ -14371,51 +14423,28 @@ function CustomView({ cv, hass, edit = false, onSave }) {
           * pose l'auto-flow dense et l'unité de rangée) — les trous se comblent. */}
         <div ref={grilleRef} className="grid-custom" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', columnGap: 16, rowGap: 8 }}>
           {liste.map((x) => {
-            const saisie = dragCle === cvKey(x);
+            const cle = cvKey(x);
+            const saisie = dragCle === cle;
+            /* EN EDITION, la TUILE des autres vues (06/10) : on l'attrape pour
+             * deplacer, on la clique pour ouvrir sa fiche. Elle remplace la
+             * carte, comme dans Objets — la barre d'outils flottante qui se
+             * posait dessus a disparu. */
+            if (edit) {
+              return (
+                <div key={cle} data-cvk={cle} className={[cvW(x) === 2 ? 'o-cvw2' : '', saisie ? 'o-saisie' : ''].filter(Boolean).join(' ') || undefined}
+                  style={{ position: 'relative', minWidth: 0, gridRow: 'span ' + cvRowsDe(x) }}>
+                  <EditableCard ed={edCv} id={cle} nom={nomCarte(x)} hass={hass}
+                    entite={typeof x === 'string' ? x : (x.id || cle)} sous={sousCarte(x)}
+                    onEdit={() => setFiche(x)} />
+                </div>
+              );
+            }
             return (
-            /* Le doigt et la souris saisissent la carte entière ; le clavier, lui,
-             * passe par sa surface (lot 13 de l'audit du 03/10). */
-            <div key={cvKey(x)} data-cvk={cvKey(x)} className={[cvW(x) === 2 ? 'o-cvw2' : '', edit ? 'o-pointille' : '', saisie ? 'o-saisie' : ''].filter(Boolean).join(' ') || undefined}
-              onPointerDown={edit ? (e) => debutDrag(e, x) : undefined}
-              onPointerMove={edit ? mouvDrag : undefined}
-              onPointerUp={edit ? finDrag : undefined}
-              onPointerCancel={edit ? finDrag : undefined}
-              style={{ position: 'relative', minWidth: 0, gridRow: 'span ' + cvRowsDe(x),
-              opacity: saisie ? .55 : 1, transform: saisie ? 'scale(.97)' : 'none', transition: 'opacity .15s, transform .15s',
-              /* Le pointillé et le trait plein de la carte saisie passent par
-               * les classes `o-pointille` et `o-saisie` (index.css) : en ligne,
-               * ils cachaient le focus au clavier (audit du 03/10). */
-              ...(edit ? { '--o-pointille': '.5', borderRadius: 'var(--o-radius,18px)', cursor: 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' } : {}) }}>
-              {/* En édition, la carte est INERTE : la saisir la déplace, ses
-                * contrôles ne s'actionnent pas — ni au doigt (`pointerEvents`),
-                * ni au clavier ni au lecteur d'écran (`inert`, lot 13 de l'audit
-                * du 03/10 : ils se tabulaient encore, cachés dans la carte). */}
-              <div className="o-cvfit" inert={edit ? '' : undefined} style={{ height: '100%', pointerEvents: edit ? 'none' : 'auto' }}>
+            <div key={cle} data-cvk={cle} className={cvW(x) === 2 ? 'o-cvw2' : undefined}
+              style={{ position: 'relative', minWidth: 0, gridRow: 'span ' + cvRowsDe(x) }}>
+              <div className="o-cvfit" style={{ height: '100%' }}>
                 <CvTyped x={x} hass={hass} dc={dc} />
               </div>
-              {/* La poignée du clavier (lot 13 de l'audit du 03/10) : la carte
-                * entière était un `role="button"` qui englobait sa barre
-                * d'outils et ses commandes (`nested-interactive`). C'est une
-                * SURFACE désormais, sœur de la barre : focus, nom et flèches
-                * (ADR 0068). Posée APRÈS la carte : la carte est positionnée,
-                * elle couvrirait son anneau de focus ; la barre (z-index 6)
-                * reste au-dessus d'elle. Le pointeur la saisit comme avant :
-                * `debutDrag` ne l'écarte pas avec les boutons. */}
-              {edit && <Surface popup={false} label={nomCarte(x) + ' · ' + tr('Déplacer avec les flèches')} onKeyDown={(e) => clavierCv(e, x)} style={{ cursor: 'grab' }} />}
-              {edit && (
-                <EditBarre>
-                  {/* Le crayon change le DESSIN d'une carte posée — il fallait
-                    * la retirer et la reposer (retour 01/09). Un template garde
-                    * son propre éditeur. Chaque outil nomme la carte qu'il
-                    * touche (lot 13 de l'audit du 03/10). */}
-                  <button onClick={() => (cvEstTpl(x) ? setTplEdit(x) : cvTypeDe(x) === 'chips' ? setChipsEdit(x) : setRetype(x))} title={cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')} aria-label={(cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')) + ' · ' + nomCarte(x)} style={EDIT_BTN}><Fi i="pencil" size={11} /></button>
-                  <button onClick={() => basculerH(x)} title={cvRowsDe(x) === 1 ? tr('Carte standard') : tr('Carte compacte')} aria-label={tr('Carte compacte') + ' · ' + nomCarte(x)} aria-pressed={cvRowsDe(x) === 1}
-                    style={{ ...EDIT_BTN, ...(cvRowsDe(x) === 1 ? { background: 'var(--o-accent-fond)', color: '#fff' } : {}) }}><Fi i="arrows-v" size={11} /></button>
-                  <button onClick={() => basculerW(x)} title={cvW(x) === 2 ? tr('Largeur simple') : tr('Largeur double')} aria-label={tr('Largeur double') + ' · ' + nomCarte(x)} aria-pressed={cvW(x) === 2}
-                    style={{ ...EDIT_BTN, ...(cvW(x) === 2 ? { background: 'var(--o-accent-fond)', color: '#fff' } : {}) }}><Fi i="arrows-h" size={11} /></button>
-                  <button onClick={() => setEnts(cv.ents.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} aria-label={tr('Retirer') + ' · ' + nomCarte(x)} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
-                </EditBarre>
-              )}
             </div>
             );
           })}
@@ -14426,6 +14455,38 @@ function CustomView({ cv, hass, edit = false, onSave }) {
           )}
         </div>
         {!edit && !cv.ents.length && <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Vue vide — active le crayon (en haut) pour ajouter des cartes.')}</div>}
+        {fiche && (() => {
+          const x = de(cvKey(fiche)) || fiche;
+          const cle = cvKey(x);
+          const compacte = cvRowsDe(x) === 1;
+          const fermer = () => setFiche(null);
+          return (
+            <BottomSheet onClose={fermer}>
+              {close => (<>
+                <TitreFeuille style={{ fontSize: 19, fontWeight: 700 }} marge={4}>{nomCarte(x)}</TitreFeuille>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)', marginBottom: 14 }}>{sousCarte(x)}</div>
+
+                <FicheRangee premiere titre={tr('Carte compacte')} desc={tr('Une rangée au lieu de deux : icône, nom, état et le contrôle.')}
+                  droite={<RmBascule on={compacte} nom={tr('Carte compacte')} onToggle={() => basculerH(x)} couleur="var(--o-accent)" />} />
+
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text1)', opacity: .78, margin: '18px 0 8px' }}>{tr('LARGEUR')}</div>
+                <Segment grandir value={cvW(x) === 2} onChange={() => basculerW(x)} label={tr('Largeur')}
+                  options={[{ id: false, label: tr('Simple') }, { id: true, label: tr('Double') }]} />
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' }}>{tr('Double : la carte prend deux emplacements côte à côte.')}</div>
+
+                <div style={{ display: 'flex', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
+                  <button onClick={() => { close(); if (cvEstTpl(x)) setTplEdit(x); else if (cvTypeDe(x) === 'chips') setChipsEdit(x); else setRetype(x); }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' }}>
+                    <Fi i="pencil" size={12} />{cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')}</button>
+                  <button onClick={() => { edCv.remove(cle); close(); }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)' }}>
+                    <Fi i="cross-small" size={12} />{tr('Supprimer')}</button>
+                </div>
+                <CroixFeuille />
+              </>)}
+            </BottomSheet>
+          );
+        })()}
         {dc.sheets}
         {tplEdit && (
           <BottomSheet onClose={() => setTplEdit(null)}>

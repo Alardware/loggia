@@ -1737,7 +1737,7 @@ export default {
   'IoT': 'IoT',
   'Épingle un appareil depuis sa fiche': 'Hefte ein Gerät aus seiner Detailansicht an',
   'Mode édition : avance, recule ou modifie un scénario, ou ajoutes-en un.': 'Bearbeitungsmodus: Schiebe ein Szenario vor oder zurück, bearbeite es oder füge eines hinzu.',
-  'Mode édition : prends une carte pour la déplacer, retire-la (×) ou ajoutes-en une.': 'Bearbeitungsmodus: Nimm eine Karte, um sie zu verschieben, entferne sie (×) oder füge eine hinzu.',
+  'Mode édition : attrape une carte pour la déplacer, clique-la pour la régler, ou ajoutes-en une.': 'Bearbeitungsmodus: Karte greifen zum Verschieben, anklicken zum Einstellen, oder eine hinzufügen.',
   'Entité météo : la carte météo sur le côté de l\'Accueil, le fond de la bannière, la veille et les conseils d\'extérieur.': 'Wetter-Entität: die Wetterkarte an der Seite der Startseite, der Hintergrund des Banners, der Ruhemodus und die Tipps für draußen.',
   // Les widgets en option du rail : l'heure et le calendrier (v3.42.0)
   'Heure': 'Uhrzeit',
