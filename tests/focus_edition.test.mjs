@@ -39,5 +39,8 @@ test('les cinq cartes qu’on déplace au clavier portent la classe', () => {
   assert.ok(bloc('function Dashboard(').includes("editMode ? 'o-pointille' : '', saisie ? 'o-saisie' : ''"), 'la tuile de pièce de l’Accueil');
   assert.ok(bloc('function ScenariosView(').includes("className={edit ? 'o-pointille' : undefined}"), 'le scénario, en édition');
   assert.ok(bloc('function CarteScenario(').includes('className={className}'), 'que la carte transmet à son bouton');
-  assert.ok(bloc('function CustomView(').includes("edit ? 'o-pointille' : '', saisie ? 'o-saisie' : ''"), 'la carte d’une vue personnalisée');
+  /* La vue personnalisee passe par la TUILE depuis le 06/10 : le pointille
+   * vient d'elle (`classes`, plus haut), son enveloppe ne garde que le
+   * trait plein de la carte saisie. */
+  assert.ok(bloc('function CustomView(').includes("saisie ? 'o-saisie' : ''"), 'la carte d’une vue personnalisée');
 });

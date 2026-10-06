@@ -38,19 +38,38 @@ test('les sections de l’Accueil et les tuiles des pieces : focus en edition, f
 });
 
 test('les cartes d’une vue personnalisee suivent la meme regle', () => {
+  /* Depuis le 06/10, elles ne suivent plus une regle PARALLELE : elles passent
+   * par la MEME tuile que les vues de la maison — « je veux comme pour les
+   * vues lumieres, objets etc... ». `CustomView` ne porte plus son propre
+   * clavier ; il fournit a `EditableCard` l'agencement qu'elle attend, et les
+   * fleches arrivent par `ed.move`. */
   const v = bloc('function CustomView(');
-  assert.ok(v.includes('const deplacerCv = ') && v.includes('const clavierCv = ') && v.includes('setEnts(a);'), 'le rangement');
-  /* Depuis le lot 13 de l'audit du 03/10, le clavier passe par la SURFACE de
-   * la carte, un vrai bouton, nommé, posé en édition seulement : la carte
-   * entière, `role="button"`, englobait sa barre d'outils. */
-  assert.ok(v.includes("{edit && <Surface popup={false} label={nomCarte(x) + ' · ' + tr('Déplacer avec les flèches')} onKeyDown={(e) => clavierCv(e, x)}"), 'branche, en edition seulement');
-  assert.ok(v.includes('if (e.target !== e.currentTarget) return;'), 'les boutons de la barre gardent leurs touches');
+  assert.ok(v.includes('const edCv = {'), 'l’agencement que la tuile attend');
+  assert.ok(v.includes('move: (cle, pas) => {') && v.includes('setEnts(a);'), 'le rangement, derriere `move`');
+  assert.ok(v.includes('<EditableCard ed={edCv}'), 'la tuile des autres vues, pas une copie');
+  assert.ok(!v.includes('const clavierCv = '), 'le clavier en double est parti : la tuile le porte');
+  /* `dragEnd` doit dire si le relacher etait un CLIC, et la reponse se joue a
+   * DEUX conditions (retour du 06/10 : « sa mouvre a chaque fois la popup de
+   * modification, c'est penible »). La carte doit avoir PRIS l'appui — sinon un
+   * bouton de coin, dont le `pointerdown` ne remonte pas mais dont le
+   * `pointerup` remonte, passait pour un clic sur la carte — et elle ne doit
+   * pas avoir BOUGE, sinon deposer une carte ouvrirait sa fiche en arrivant.
+   * C'est la regle de l'agencement des vues de la maison, ou le defaut
+   * n'existait pas. */
+  assert.ok(v.includes('const clic = appuiRef.current && !bougeRef.current;'), 'les deux conditions du clic');
+  assert.ok(v.includes('dragStart: (cle, e) => { appuiRef.current = debutDrag(e, de(cle)); bougeRef.current = false; }'),
+    'l’appui n’est pris que si `debutDrag` l’accepte');
+  assert.ok(v.includes("if (e.target.closest && e.target.closest('button:not(.o-surface)')) return false;"),
+    'un appui sur un bouton n’est PAS un appui sur la carte');
+  assert.ok(v.includes('bougeRef.current = true;'), 'un deplacement se note : il annule le clic');
 });
 
 test('l’appui long qui saisit ne selectionne pas le texte ni n’ouvre le menu du telephone', () => {
   // Les trois enveloppes a part, et les deux formes de la carte du kit.
   const n = (app.match(/touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none'/g) || []).length;
-  assert.ok(n >= 5, 'cinq enveloppes de glisser sans selection : ' + n);
+  /* Quatre depuis le 06/10 : la vue personnalisee avait la sienne, elle
+   * passe maintenant par la tuile partagee, qui la porte deja. */
+  assert.ok(n >= 4, 'quatre enveloppes de glisser sans selection : ' + n);
 });
 
 test('le bandeau d’edition dit le geste, selon l’appareil', () => {

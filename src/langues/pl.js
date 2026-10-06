@@ -1742,7 +1742,7 @@ export default {
   'IoT': 'IoT',
   'Épingle un appareil depuis sa fiche': 'Przypnij urządzenie pinezką na jego karcie szczegółów',
   'Mode édition : avance, recule ou modifie un scénario, ou ajoutes-en un.': 'Tryb edycji: przesuń do przodu, do tyłu lub zmień scenariusz, albo dodaj nowy.',
-  'Mode édition : prends une carte pour la déplacer, retire-la (×) ou ajoutes-en une.': 'Tryb edycji: chwyć kartę, aby ją przenieść, usuń ją (×) lub dodaj nową.',
+  'Mode édition : attrape une carte pour la déplacer, clique-la pour la régler, ou ajoutes-en une.': 'Tryb edycji: chwyć kartę, aby ją przenieść, kliknij, aby ją ustawić, lub dodaj nową.',
   'Entité météo : la carte météo sur le côté de l\'Accueil, le fond de la bannière, la veille et les conseils d\'extérieur.': 'Encja pogodowa: karta pogody z boku Startu, tło banera, wygaszacz i porady na zewnątrz.',
   // Les widgets en option du rail : l'heure et le calendrier (v3.42.0)
   'Heure': 'Godzina',

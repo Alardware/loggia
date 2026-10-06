@@ -1737,7 +1737,7 @@ export default {
   'IoT': 'IoT',
   'Épingle un appareil depuis sa fiche': 'Pin een apparaat vast vanuit zijn detailvenster',
   'Mode édition : avance, recule ou modifie un scénario, ou ajoutes-en un.': 'Bewerkmodus: zet een scenario naar voren of naar achteren, bewerk het, of voeg er een toe.',
-  'Mode édition : prends une carte pour la déplacer, retire-la (×) ou ajoutes-en une.': 'Bewerkmodus: pak een kaart om die te verplaatsen, verwijder die (×) of voeg er een toe.',
+  'Mode édition : attrape une carte pour la déplacer, clique-la pour la régler, ou ajoutes-en une.': 'Bewerkmodus: pak een kaart om te verplaatsen, klik erop om in te stellen, of voeg er een toe.',
   'Entité météo : la carte météo sur le côté de l\'Accueil, le fond de la bannière, la veille et les conseils d\'extérieur.': 'Weerentiteit: de weerkaart in de zijkolom van het overzicht, de achtergrond van de banner, de stand-by en de tips voor buiten.',
   // Les widgets en option du rail : l'heure et le calendrier (v3.42.0)
   'Heure': 'Tijd',

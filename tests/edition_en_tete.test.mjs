@@ -150,7 +150,7 @@ test('detecter : la zone Home Assistant d’abord, le nom ensuite, jamais contre
 
 test('les mots nouveaux sont traduits', () => {
   for (const k of ['IoT', 'Mode édition : avance, recule ou modifie un scénario, ou ajoutes-en un.',
-    'Mode édition : prends une carte pour la déplacer, retire-la (×) ou ajoutes-en une.']) {
+    'Mode édition : attrape une carte pour la déplacer, clique-la pour la régler, ou ajoutes-en une.']) {
     assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');
   }
   assert.ok(en.includes("\"Entité météo : la carte météo sur le côté de l'Accueil, le fond de la bannière, la veille et les conseils d'extérieur.\":"), 'le mot de la section meteo');

@@ -1775,7 +1775,7 @@ export default {
   'IoT': 'IoT',
   'Épingle un appareil depuis sa fiche': 'Pin a device from its sheet',
   'Mode édition : avance, recule ou modifie un scénario, ou ajoutes-en un.': 'Edit mode: move a scenario forward or back, edit it, or add one.',
-  'Mode édition : prends une carte pour la déplacer, retire-la (×) ou ajoutes-en une.': 'Edit mode: grab a card to move it, remove it (×) or add one.',
+  'Mode édition : attrape une carte pour la déplacer, clique-la pour la régler, ou ajoutes-en une.': 'Edit mode: grab a card to move it, click it to adjust it, or add one.',
   "Entité météo : la carte météo sur le côté de l'Accueil, le fond de la bannière, la veille et les conseils d'extérieur.": 'Weather entity: the weather card on the side of Home, the banner backdrop, the ambient screen and the outdoor advice.',
   // Les widgets en option du rail : l'heure et le calendrier (v3.42.0)
   'Heure': 'Clock',
