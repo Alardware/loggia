@@ -224,7 +224,11 @@ const ALERTES_DEF = () => ({ actif: false, service: '', categories: { fumee: tru
   actions: { actif: true, lumieres: true, volets: true, vanne: { actif: true, entite: '' } } });
 /* Les familles de capteurs et les classes qui les font reconnaitre : les
  * memes que le composant (alertes.py, BINAIRES). */
-const ALERTES_CLASSES = { fumee: ['smoke', 'safety'], gaz: ['gas'], co: ['carbon_monoxide'], fuite: ['moisture'] };
+/* La même table que le composant (`alertes.py`), sinon l'écran compterait des
+ * détecteurs qui n'alertent plus. `safety` en est sorti le 06/10 : il ne dit
+ * pas DE QUOI il s'agit, et Meteoalarm s'en sert pour une alerte météo — une
+ * alerte vent a ouvert une chambre et allumé la maison. */
+const ALERTES_CLASSES = { fumee: ['smoke'], gaz: ['gas'], co: ['carbon_monoxide'], fuite: ['moisture'] };
 
 /** Le nom d'un telephone. L'app compagnon nomme son service d'apres
  *  l'appareil (`mobile_app_<appareil>`), et son traceur porte le meme nom. */

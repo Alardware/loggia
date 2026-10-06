@@ -50,8 +50,6 @@ import { resolveAll, report as resolveReport } from './resolve.js';
 import { LoggiaContext, buildRuntime, useLoggia, useEntities } from './runtime.js';
 import { isViewAvailable, viewReason } from './views.js';
 import { etagesDesPieces, piecesDeLEtage } from './etages.js';
-import CarteLovelace from './cartelovelace.jsx';
-import { lireConfig } from './miniyaml.js';
 import {
   REDUCE_MOTION, Fi, Anim, useTilt, editBtn, HIDDEN_VIEWS, readViewsCfg, HX_TOKENS,
   userBg, personPicture, LOOK_DEF, cvInp, cvName, cvEstTpl, cvKey, cvId, TplForm, lireFondPhoto, FlipText,
@@ -5204,6 +5202,21 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, taille =
       title={compact ? tr('Deux rangées') : tr('Une rangée')} aria-label={tr('Une rangée') + ' · ' + (nom || id)}
       style={BOUTON_COIN}><Fi i="resize" size={13} /></button>
   ) : null;
+  /* La LARGEUR, à côté de la taille (06/10). Elle ne vivait que dans la fiche
+   * — « ajoute le bouton simple double ». Le bouton de taille garde son rôle :
+   * il bascule les rangées, jamais la largeur (règle du 04/10). Un seul nom,
+   * l'état dit par `aria-pressed`, comme son voisin. */
+  const peutElargir = !!ed.estLarge && !!ed.basculerLarge;
+  const coins = (peutElargir || peutCompacter) ? (
+    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+      {coin}
+      {peutElargir && (
+        <button data-drag-ui="1" onPointerDown={stop} onClick={() => ed.basculerLarge(id)} aria-pressed={large}
+          title={large ? tr('Largeur simple') : tr('Largeur double')} aria-label={tr('Largeur double') + ' · ' + (nom || id)}
+          style={{ ...BOUTON_COIN, ...(large ? { background: 'var(--o-accent-fond)', color: '#fff' } : {}) }}><Fi i="arrows-h" size={13} /></button>
+      )}
+    </div>
+  ) : null;
   if (compact) {
     const serre = { padding: '4px 6px', fontSize: 11.5 };
     return (
@@ -5218,7 +5231,7 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, taille =
             <div style={RM_NAME}>{nom || id}</div>
             <div style={{ ...RM_SUB, marginTop: 0, color: 'rgb(' + info.rgb + ')' }}>{sousTitre}</div>
           </div>
-          {coin}
+          {coins}
         </div>
         <div style={{ position: 'relative', display: 'flex', gap: 6 }}>
           <button data-drag-ui="1" onPointerDown={stop} onClick={() => onEdit && onEdit(id)} aria-label={tr('Modifier') + ' ' + (nom || id)} style={{ ...bouton(false), ...serre }}>{tr('Modifier')}</button>
@@ -5232,7 +5245,7 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, taille =
       {surface}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO('rgba(' + info.rgb + ',.16)', 'rgb(' + info.rgb + ')')}>{icone(17)}</span>
-        {coin}
+        {coins}
       </div>
       <div style={{ marginTop: 14 }}>
         <div style={RM_NAME}>{nom || id}</div>
@@ -7811,7 +7824,6 @@ function FavorisAccueil({ hass, edit = false }) {
   const [retype, setRetype] = useState(null);
   // Carte chips dont on compose la rangée.
   const [chipsEdit, setChipsEdit] = useState(null);
-  const [lovelaceEdit, setLovelaceEdit] = useState(null);
   // Une entité disparue ne doit pas laisser un trou : on la saute au rendu,
   // sans la retirer de la configuration (elle peut revenir).
   const liste = eps.filter(x => cvEstTpl(x) || !cvId(x).includes('.') || S[cvId(x)]);
@@ -7845,7 +7857,9 @@ function FavorisAccueil({ hass, edit = false }) {
                 </div>
                 {edit && (
                   <EditBarre>
-                    <button onClick={() => (cvTypeDe(x) === 'chips' ? setChipsEdit(x) : cvTypeDe(x) === 'lovelace' ? setLovelaceEdit(x) : setRetype(x))} title={cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')} aria-label={(cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')) + ' · ' + nomCv(x, hass)} style={EDIT_BTN}><Fi i="pencil" size={11} /></button>
+                    <button onClick={() => (cvTypeDe(x) === 'chips' ? setChipsEdit(x) : setRetype(x))} title={cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')} aria-label={(cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')) + ' · ' + nomCv(x, hass)} style={EDIT_BTN}><Fi i="pencil" size={11} /></button>
+                    <button onClick={() => poser(eps.map(y => cvKey(y) === cvKey(x) ? cvAvecH(x) : y))} title={cvRowsDe(x) === 1 ? tr('Carte standard') : tr('Carte compacte')} aria-label={tr('Carte compacte') + ' · ' + nomCv(x, hass)} aria-pressed={cvRowsDe(x) === 1}
+                      style={{ ...EDIT_BTN, ...(cvRowsDe(x) === 1 ? { background: 'var(--o-accent-fond)', color: '#fff' } : {}) }}><Fi i="arrows-v" size={11} /></button>
                     <button onClick={() => poser(eps.map(y => cvKey(y) === cvKey(x) ? cvAvecW(x) : y))} title={cvW(x) === 2 ? tr('Largeur simple') : tr('Largeur double')} aria-label={tr('Largeur double') + ' · ' + nomCv(x, hass)} aria-pressed={cvW(x) === 2}
                       style={{ ...EDIT_BTN, ...(cvW(x) === 2 ? { background: 'var(--o-accent-fond)', color: '#fff' } : {}) }}><Fi i="arrows-h" size={11} /></button>
                     <button onClick={() => poser(eps.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} aria-label={tr('Retirer') + ' · ' + nomCv(x, hass)} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
@@ -7864,8 +7878,6 @@ function FavorisAccueil({ hass, edit = false }) {
       {retype && <CarteAjoutSheet hass={hass} remplace={retype} onClose={() => setRetype(null)} onPose={(e) => poser(eps.map(y => cvKey(y) === cvKey(retype) ? e : y))} />}
       {chipsEdit && <ChipsEditSheet x={chipsEdit} hass={hass} onClose={() => setChipsEdit(null)}
         onSave={(n) => { setChipsEdit(n); poser(eps.map(y => cvKey(y) === cvKey(chipsEdit) ? n : y)); }} />}
-      {lovelaceEdit && <LovelaceEditSheet x={lovelaceEdit} hass={hass} onClose={() => setLovelaceEdit(null)}
-        onSave={(n) => poser(eps.map(y => cvKey(y) === cvKey(lovelaceEdit) ? n : y))} />}
       {dc.sheets}
     </div>
   );
@@ -12137,7 +12149,7 @@ function cvTypesPour(id) {
   if (d === 'camera') return ['camera', 'compacte'];
   return ['compacte', 'riche', 'chip'];
 }
-const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Standard'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme'), horloge: tr('Horloge'), presence: tr('Présence maison'), ouvrants: tr('Ouvrants'), energiemaison: tr('Énergie maison'), air: tr('Qualité air'), alarmeseule: tr('Alarme (seule)'), activite: tr('Activité récente'), camera: tr('Caméra'), calendrier: tr('Calendrier'), localisation: tr('Localisation'), chips: tr('Chips (groupe)'), chip: tr('Chip'), lovelace: tr('Carte Home Assistant') });
+const CV_TYPE_NOMS = () => ({ compacte: tr('Compacte'), riche: tr('Standard'), gros: tr('Gros interrupteur'), chiffre: tr('Grand chiffre'), jauge: tr('Jauge'), graph: tr('Graphique 24 h'), journal: tr('Journal'), personne: tr('Présence'), meteo: tr('Météo'), agenda: tr('Agenda'), alarme: tr('Alarme'), horloge: tr('Horloge'), presence: tr('Présence maison'), ouvrants: tr('Ouvrants'), energiemaison: tr('Énergie maison'), air: tr('Qualité air'), alarmeseule: tr('Alarme (seule)'), activite: tr('Activité récente'), camera: tr('Caméra'), calendrier: tr('Calendrier'), localisation: tr('Localisation'), chips: tr('Chips (groupe)'), chip: tr('Chip') });
 
 /* Horloge : l'heure de la maison, sans entité — la carte se suffit. */
 function CvClock() {
@@ -13699,10 +13711,6 @@ function CvTyped({ x, hass, dc }) {
   if (t === 'alarmeseule') return <CvAlarm id={id} hass={hass} sans />;
   if (t === 'camera') return <CvCamera id={id} hass={hass} />;
   if (t === 'calendrier') return <CvCalendrier id={id} hass={hass} onOpen={dc ? dc.ouvrir : null} />;
-  /* Une carte de l'ecosysteme Home Assistant, posee telle quelle (05/10).
-   * Le catalogue de Loggia etait ferme : ni `mini-graph-card`, ni
-   * `apexcharts-card`, ni meme une `tile`. */
-  if (t === 'lovelace') { const lu = lireConfig(x && x.yaml); return <CarteLovelace config={lu.ok ? lu.config : null} hass={hass} />; }
   if (t === 'localisation') return <CvCarte hass={hass} />;
   if (t === 'chip') return <CvChip id={id} hass={hass} dc={dc} />;
   if (t === 'chips') return <CvChips x={x} hass={hass} dc={dc} />;
@@ -13981,9 +13989,14 @@ const cvW = (x) => (x && typeof x === 'object' && x.w === 2) ? 2 : 1;
 /* DEUX tailles, pas trois : compacte (1 rangée de 88 px) ou standard (2).
  * Toute carte non compacte DOIT tenir dans la standard — le graphique, le
  * journal et les machines se compriment plutôt que de déborder. */
-const CV_ROWS = { lovelace: 2, compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 2, agenda: 2, journal: 2, presence: 2, ouvrants: 2, energiemaison: 2, air: 2, alarmeseule: 2, activite: 2, camera: 2, calendrier: 2, localisation: 2, chips: 1, chip: 1 };
+const CV_ROWS = { compacte: 1, horloge: 1, personne: 2, riche: 2, gros: 2, jauge: 2, chiffre: 2, meteo: 2, alarme: 2, tpl: 2, graph: 2, agenda: 2, journal: 2, presence: 2, ouvrants: 2, energiemaison: 2, air: 2, alarmeseule: 2, activite: 2, camera: 2, calendrier: 2, localisation: 2, chips: 1, chip: 1 };
 const cvRowsDe = (x) => {
   if (typeof x === 'string') return 1;
+  /* Un choix EXPLICITE l'emporte (06/10) : ailleurs dans Loggia, le bouton de
+   * coin d'une carte bascule sa taille, et les vues perso ne le permettaient
+   * pas — la hauteur y découlait du seul type de carte. « je veux comme pour
+   * les autres vue […] les boutons pour la rendre compact ou grande ». */
+  if (x.h === 1 || x.h === 2) return x.h;
   const d = String(x.id || '').split('.')[0];
   if (x.t === 'riche') {
     if (['climate', 'cover', 'media_player', 'valve', 'light', 'vacuum', 'lawn_mower'].indexOf(d) >= 0) return 2;
@@ -13995,6 +14008,17 @@ const cvRowsDe = (x) => {
 const cvAvecW = (x) => (typeof x === 'string'
   ? { t: 'compacte', id: x, w: 2 }
   : (x.w === 2 ? (({ w, ...reste }) => reste)(x) : { ...x, w: 2 }));
+/* Bascule de TAILLE, sur le même patron : compacte (1 rangée de 88 px) ou
+ * standard (2). Revenir à la taille du type efface la clé plutôt que d'écrire
+ * la valeur par défaut — une carte qui change de dessin retrouve alors la
+ * sienne. */
+const cvAvecH = (x) => {
+  const sauf = (o) => (({ h, ...reste }) => reste)(o);
+  if (typeof x === 'string') return { t: 'compacte', id: x, h: 2 };
+  const vise = cvRowsDe(x) === 1 ? 2 : 1;
+  const nu = sauf(x);
+  return cvRowsDe(nu) === vise ? nu : { ...nu, h: vise };
+};
 /* Même entité, autre dessin : la largeur choisie survit au changement. */
 const cvRetype = (x, t) => {
   const id = typeof x === 'string' ? x : x.id;
@@ -14095,55 +14119,6 @@ function CarteApercu({ x, hass, dc, lbl, actif = false, onClick }) {
 /* L'éditeur d'une carte CHIPS : on compose la rangée, pastille par pastille.
  * Sans aucune entité, la carte résume la maison toute seule — c'est son état
  * de départ, et le vider y revient. */
-/* Coller la configuration d'une carte Home Assistant (05/10).
- *
- * On colle du YAML, parce que c'est ce que donnent la documentation des cartes
- * et l'editeur de Home Assistant ; le JSON passe aussi. L'apercu se redessine
- * a chaque frappe : on voit ce qu'on obtiendra avant de fermer.
- *
- * Ce qui ne se lit pas est REFUSE et DIT — une configuration mal comprise
- * donnerait une carte fausse, ce qui est pire qu'un refus. */
-function LovelaceEditSheet({ x, hass, onClose, onSave }) {
-  const [texte, setTexte] = useState(x && x.yaml ? x.yaml : '');
-  const lu = lireConfig(texte);
-  const souci = lu.ok ? null
-    : lu.raison === 'vide' ? null
-      : lu.raison === 'objet' ? tr('Une carte se décrit par des clés, pas par une liste.')
-        : tr('Cette configuration ne se lit pas. Les ancres et les blocs « | » ne sont pas pris en charge.');
-  const champ = {
-    width: '100%', boxSizing: 'border-box', minHeight: 170, resize: 'vertical',
-    background: 'var(--o-s2)', color: 'var(--o-text)', border: 'var(--o-bw,1px) solid var(--o-bd2)',
-    borderRadius: 12, padding: '10px 12px', fontSize: 12.5, lineHeight: 1.5,
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  };
-  return (
-    <BottomSheet onClose={onClose}>
-      {() => (<>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-          <NomFeuille><span style={{ flex: 1, minWidth: 0, fontSize: 19, fontWeight: 700 }}>{tr('Carte Home Assistant')}</span></NomFeuille>
-          <CroixFeuille />
-        </div>
-        <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 10 }}>
-          {tr('Collez la configuration de la carte, comme dans Home Assistant.')}
-        </div>
-        <textarea value={texte} onChange={(e) => setTexte(e.target.value)} spellCheck={false}
-          aria-label={tr('Configuration de la carte')} style={champ} />
-        {souci && <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{souci}</div>}
-        {/* L'apercu : la vraie carte, avec les vrais etats. */}
-        {lu.ok && (
-          <div style={{ marginTop: 14 }}>
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text1)', opacity: .78, marginBottom: 6 }}>{tr('APERÇU')}</div>
-            <CarteLovelace config={lu.config} hass={hass} />
-          </div>
-        )}
-        <button onClick={() => { onSave({ ...x, yaml: texte }); onClose(); }} disabled={!lu.ok}
-          style={{ marginTop: 14, width: '100%', minHeight: 44, borderRadius: 12, border: 'none', background: 'var(--o-accent)', color: '#fff', font: 'inherit', fontSize: 13, fontWeight: 800, cursor: lu.ok ? 'pointer' : 'default', opacity: lu.ok ? 1 : .5 }}>
-          {tr('Enregistrer')}
-        </button>
-      </>)}
-    </BottomSheet>
-  );
-}
 
 function ChipsEditSheet({ x, hass, onClose, onSave }) {
   const S = (hass && hass.states) || {};
@@ -14287,7 +14262,6 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   // compose la rangée.
   const [retype, setRetype] = useState(null);
   const [chipsEdit, setChipsEdit] = useState(null);
-  const [lovelaceEdit, setLovelaceEdit] = useState(null);
   useEffect(() => { setNameDraft(cv.name); setRenaming(false); setAdding(false); setTplEdit(null); setRetype(null); }, [cv.id, edit]);
   const setEnts = (ents) => onSave && onSave({ ...cv, ents });
   const dc = useDomainCards(hass);
@@ -14353,6 +14327,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   };
   const liste = ordreDrag || cv.ents;
   const basculerW = (x) => setEnts(cv.ents.map(y => cvKey(y) === cvKey(x) ? cvAvecW(x) : y));
+  const basculerH = (x) => setEnts(cv.ents.map(y => cvKey(y) === cvKey(x) ? cvAvecH(x) : y));
   /* Au clavier (ADR 0068) : la carte a le focus en edition, les fleches la
    * deplacent d'un cran — meme regle que les sections de l'Accueil. */
   const deplacerCv = (x, delta) => {
@@ -14433,7 +14408,9 @@ function CustomView({ cv, hass, edit = false, onSave }) {
                     * la retirer et la reposer (retour 01/09). Un template garde
                     * son propre éditeur. Chaque outil nomme la carte qu'il
                     * touche (lot 13 de l'audit du 03/10). */}
-                  <button onClick={() => (cvEstTpl(x) ? setTplEdit(x) : cvTypeDe(x) === 'chips' ? setChipsEdit(x) : cvTypeDe(x) === 'lovelace' ? setLovelaceEdit(x) : setRetype(x))} title={cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')} aria-label={(cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')) + ' · ' + nomCarte(x)} style={EDIT_BTN}><Fi i="pencil" size={11} /></button>
+                  <button onClick={() => (cvEstTpl(x) ? setTplEdit(x) : cvTypeDe(x) === 'chips' ? setChipsEdit(x) : setRetype(x))} title={cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')} aria-label={(cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')) + ' · ' + nomCarte(x)} style={EDIT_BTN}><Fi i="pencil" size={11} /></button>
+                  <button onClick={() => basculerH(x)} title={cvRowsDe(x) === 1 ? tr('Carte standard') : tr('Carte compacte')} aria-label={tr('Carte compacte') + ' · ' + nomCarte(x)} aria-pressed={cvRowsDe(x) === 1}
+                    style={{ ...EDIT_BTN, ...(cvRowsDe(x) === 1 ? { background: 'var(--o-accent-fond)', color: '#fff' } : {}) }}><Fi i="arrows-v" size={11} /></button>
                   <button onClick={() => basculerW(x)} title={cvW(x) === 2 ? tr('Largeur simple') : tr('Largeur double')} aria-label={tr('Largeur double') + ' · ' + nomCarte(x)} aria-pressed={cvW(x) === 2}
                     style={{ ...EDIT_BTN, ...(cvW(x) === 2 ? { background: 'var(--o-accent-fond)', color: '#fff' } : {}) }}><Fi i="arrows-h" size={11} /></button>
                   <button onClick={() => setEnts(cv.ents.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} aria-label={tr('Retirer') + ' · ' + nomCarte(x)} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
@@ -14463,9 +14440,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
         {retype && <CarteAjoutSheet hass={hass} remplace={retype} onClose={() => setRetype(null)} onPose={(e) => setEnts(cv.ents.map(y => cvKey(y) === cvKey(retype) ? e : y))} />}
         {chipsEdit && <ChipsEditSheet x={chipsEdit} hass={hass} onClose={() => setChipsEdit(null)}
           onSave={(n) => { setChipsEdit(n); setEnts(cv.ents.map(y => cvKey(y) === cvKey(chipsEdit) ? n : y)); }} />}
-        {lovelaceEdit && <LovelaceEditSheet x={lovelaceEdit} hass={hass} onClose={() => setLovelaceEdit(null)}
-          onSave={(n) => setEnts(cv.ents.map(y => cvKey(y) === cvKey(lovelaceEdit) ? n : y))} />}
-      </div>
+        </div>
     </main>
   );
 }

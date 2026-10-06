@@ -1475,6 +1475,7 @@ export default {
   'CO₂': 'CO₂',
   'Vide : toutes les lumières de la pièce. Une liste ne vaut que pour le bouton de la carte.': 'Leer: alle Lichter des Raums. Eine Liste gilt nur für die Schaltfläche der Karte.',
   'Carte compacte': 'Kompakte Karte',
+  'Carte standard': 'Standardkarte',
   'Une rangée au lieu de deux : icône, nom, état et le contrôle.': 'Eine Reihe statt zwei: Symbol, Name, Zustand und die Steuerung.',
   'Tout est fermé': 'Alles ist geschlossen',
   'Activation…': 'Wird scharf…',
@@ -2378,7 +2379,6 @@ export default {
   'Gaz détecté : {nom}': 'Gas erkannt: {nom}',
   'Monoxyde de carbone détecté : {nom}': 'Kohlenmonoxid erkannt: {nom}',
   'Fuite d’eau détectée : {nom}': 'Wasserleck erkannt: {nom}',
-  'Alerte de sûreté : {nom}': 'Sicherheitswarnung: {nom}',
   'Alarme déclenchée : {nom}': 'Alarm ausgelöst: {nom}',
   'Ouverture pendant que l’alarme est armée : {nom}': 'Öffnung bei scharfem Alarm: {nom}',
   '{nom} : {v} ppm, il faut aerer': '{nom}: {v} ppm, bitte lüften',
@@ -2672,12 +2672,4 @@ export default {
   'Coût du jour': 'Kosten heute',
 
   // Les cartes Lovelace posees dans Loggia (05/10)
-  'Carte Home Assistant': 'Home-Assistant-Karte',
-  'Une carte se décrit par des clés, pas par une liste.': 'Eine Karte wird durch Schlüssel beschrieben, nicht durch eine Liste.',
-  'Cette configuration ne se lit pas. Les ancres et les blocs « | » ne sont pas pris en charge.': 'Diese Konfiguration lässt sich nicht lesen. Anker und „|“-Blöcke werden nicht unterstützt.',
-  'Collez la configuration de la carte, comme dans Home Assistant.': 'Fügen Sie die Kartenkonfiguration ein, wie in Home Assistant.',
-  'Configuration de la carte': 'Kartenkonfiguration',
-  'Home Assistant n’a pas fourni ses cartes.': 'Home Assistant hat seine Karten nicht bereitgestellt.',
-  'Aucune carte configurée.': 'Keine Karte konfiguriert.',
-  'Carte « {t} » introuvable. La ressource est-elle installée ?': 'Karte „{t}“ nicht gefunden. Ist die Ressource installiert?',
 };

@@ -25,7 +25,14 @@ test('la carte d’edition : icone, bouton de taille en coin, « Domaine · iden
   assert.ok(c.includes("{tr('Modifier')}") && c.includes("{tr('Supprimer')}"), 'les deux boutons');
   assert.ok(c.includes("info.label + ' · ' + identifiantEdition(brut)"), 'le sous-titre de la maquette');
   assert.ok(c.includes('<Fi i="resize" size={13} />') && c.includes('onClick={() => ed.basculerCompact(id)}'), 'le bouton de taille en haut a droite : compacte ↔ standard (retour user du 15/09)');
-  assert.ok(!c.includes('ed.basculerLarge('), 'le coin ne touche pas a la largeur');
+  /* Le 04/10, la regle etait « le coin ne touche pas a la largeur » : UN seul
+   * bouton, qui basculait les rangees. Le 06/10 l'utilisateur demande le
+   * second — « ajoute le bouton simple double ». L'esprit tient : chacun son
+   * bouton, et celui de la taille ne change toujours pas la largeur. */
+  assert.ok(c.includes('onClick={() => ed.basculerLarge(id)}'), 'la largeur a SON bouton');
+  assert.ok(c.includes('<Fi i="arrows-h" size={13} />'), 'et son icone, distincte de celle de la taille');
+  const coin = c.slice(c.indexOf('const coin = '), c.indexOf('const peutElargir'));
+  assert.ok(coin.length > 40 && !coin.includes('basculerLarge'), 'le bouton de TAILLE ne touche pas a la largeur');
   assert.ok(!c.includes('<Fi i="pencil" size={14} />'), 'plus de crayon en coin : Modifier suffit');
   assert.ok(c.includes('const bouton = boutonEdition, petit = BOUTON_PETIT;') && c.includes('style={BOUTON_COIN}'), 'les boutons sont ceux de toutes les cartes d’edition');
   /* Lot 13 de l'audit du 03/10 : la carte entière reste la PRISE au pointeur,

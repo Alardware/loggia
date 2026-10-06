@@ -69,12 +69,27 @@ def gabarit(message: str) -> str:
 
 
 # device_class -> (categorie, message)
+#
+# `safety` N'EST PAS LA, ET NE DOIT PAS Y REVENIR. Il y figurait comme
+# « fumee » — la categorie qui remonte les volets et allume toute la maison.
+# Or Home Assistant ne lui donne qu'un sens : « on = pas sur », sans dire de
+# quoi. Meteoalarm l'emploie pour une alerte METEO.
+#
+# Le 06/10/2026 a 06:10, une alerte meteo a donc ouvert le volet d'une chambre
+# ou dormaient des gens et allume les quatorze lumieres de la maison. Le
+# journal de Loggia dit « fumee : meteoalarm ». Ce n'etait pas la premiere
+# fois : 27/09, 29/09, 03/10, 06/10 — toutes avec ce motif, et prises jusque-la
+# pour un mystere.
+#
+# La regle qui reste : une classe ne declenche une EVACUATION que si elle nomme
+# le danger. `smoke`, `gas`, `carbon_monoxide`, `moisture` le nomment ; une
+# classe fourre-tout, non. Mieux vaut ignorer un capteur mal declare — cela se
+# repare en lui donnant sa vraie classe — qu'ouvrir une chambre la nuit.
 BINAIRES: dict[str, tuple[str, str]] = {
     "smoke": ("fumee", "Fumée détectée"),
     "gas": ("gaz", "Gaz détecté"),
     "carbon_monoxide": ("co", "Monoxyde de carbone détecté"),
     "moisture": ("fuite", "Fuite d’eau détectée"),
-    "safety": ("fumee", "Alerte de sûreté"),
 }
 PORTES = ("door", "window", "garage_door", "opening")
 # Ce qui reveille — le seul canal qui contourne les heures calmes.

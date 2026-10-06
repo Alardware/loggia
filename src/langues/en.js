@@ -1513,6 +1513,7 @@ export default {
   'CO₂': 'CO₂',
   'Vide : toutes les lumières de la pièce. Une liste ne vaut que pour le bouton de la carte.': 'Empty: every light of the room. A list only applies to the card’s button.',
   'Carte compacte': 'Compact card',
+  'Carte standard': 'Standard card',
   'Une rangée au lieu de deux : icône, nom, état et le contrôle.': 'One row instead of two: icon, name, state and the control.',
   'Tout est fermé': 'Everything is closed',
   'Activation…': 'Arming…',
@@ -2417,7 +2418,6 @@ export default {
   'Gaz détecté : {nom}': 'Gas detected: {nom}',
   'Monoxyde de carbone détecté : {nom}': 'Carbon monoxide detected: {nom}',
   'Fuite d’eau détectée : {nom}': 'Water leak detected: {nom}',
-  'Alerte de sûreté : {nom}': 'Safety alert: {nom}',
   'Alarme déclenchée : {nom}': 'Alarm triggered: {nom}',
   'Ouverture pendant que l’alarme est armée : {nom}': 'Opened while the alarm is armed: {nom}',
   '{nom} : {v} ppm, il faut aerer': '{nom}: {v} ppm, time to air the room',
@@ -2711,12 +2711,4 @@ export default {
   'Coût du jour': 'Cost today',
 
   // Les cartes Lovelace posees dans Loggia (05/10)
-  'Carte Home Assistant': 'Home Assistant card',
-  'Une carte se décrit par des clés, pas par une liste.': 'A card is described by keys, not by a list.',
-  'Cette configuration ne se lit pas. Les ancres et les blocs « | » ne sont pas pris en charge.': 'This configuration cannot be read. Anchors and “|” blocks are not supported.',
-  'Collez la configuration de la carte, comme dans Home Assistant.': 'Paste the card configuration, as in Home Assistant.',
-  'Configuration de la carte': 'Card configuration',
-  'Home Assistant n’a pas fourni ses cartes.': 'Home Assistant did not provide its cards.',
-  'Aucune carte configurée.': 'No card configured.',
-  'Carte « {t} » introuvable. La ressource est-elle installée ?': 'Card “{t}” not found. Is the resource installed?',
 };

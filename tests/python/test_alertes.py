@@ -141,6 +141,32 @@ def test_chaque_danger_est_critique(module):
     assert "portes" not in module.DANGER
 
 
+def test_une_classe_qui_ne_nomme_pas_le_danger_ne_declenche_rien(module):
+    """`safety` ne dit pas DE QUOI il s'agit — et Meteoalarm s'en sert pour une
+    alerte METEO.
+
+    Il etait range en « fumee » : le 06/10/2026 a 06:10, une alerte meteo a
+    ouvert le volet d'une chambre ou dormaient des gens et allume les quatorze
+    lumieres de la maison. Le journal disait « fumee : meteoalarm ». Quatre fois
+    en dix jours, prises pour un mystere.
+    """
+    assert "safety" not in module.BINAIRES, (
+        "une classe fourre-tout ne doit jamais declencher une evacuation")
+    # Celles qui restent nomment toutes ce qu'elles ont vu.
+    assert set(module.BINAIRES) == {"smoke", "gas", "carbon_monoxide", "moisture"}
+    # Et chacune part bien dans une categorie qui reveille.
+    for dc, (cat, _msg) in module.BINAIRES.items():
+        assert cat in module.DANGER, dc
+
+
+def test_ce_qui_ouvre_les_volets_et_allume_reste_nomme(module):
+    """Le garde-fou de l'autre bout : meme si une classe revenait par megarde,
+    les categories qui AGISSENT restent celles qu'on a choisies une a une."""
+    assert module.VOLETS == ("fumee", "co", "gaz")
+    assert module.LUMIERES == ("fumee", "co", "alarme")
+    assert module.VANNE == ("fuite",)
+
+
 def test_une_porte_attend_son_heure(creer):
     """L'ouverture pendant que l'alarme est armee n'est pas un danger : la
     nuit, elle arrive en silence."""

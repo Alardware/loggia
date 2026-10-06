@@ -24,7 +24,8 @@ export const CLES_TELEPHONE = [
   'Gaz détecté : {nom}',
   'Monoxyde de carbone détecté : {nom}',
   'Fuite d’eau détectée : {nom}',
-  'Alerte de sûreté : {nom}',
+  /* « Alerte de sûreté » est partie le 06/10 avec la classe `safety` : elle ne
+   * nomme pas le danger, et Meteoalarm s'en sert pour une alerte météo. */
   'Alarme déclenchée : {nom}',
   'Ouverture pendant que l’alarme est armée : {nom}',
   '{nom} : {v} ppm, il faut aerer',
