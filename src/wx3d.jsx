@@ -31,6 +31,17 @@ uniform float uExc;
 uniform float uIntensity;
 
 float hash21(vec2 p){
+  // Replier la coordonnee avant de la hacher. fbm fait quatre fois
+  // p*2.02 + 11.3, et le vent ajoute le temps : elle grandit sans fin.
+  // Multipliee par 443 puis passee a fract, elle finit par epuiser la
+  // resolution du float — deux cases voisines rendent alors la MEME valeur,
+  // et le ciel se casse en rectangles plats au lieu de nuages.
+  //
+  // Mesure en float32 strict, 256 points a la quatrieme octave : 232 valeurs
+  // distinctes a l'ouverture, 4 apres une journee, 1 apres une semaine. Avec
+  // le repli : 256, 256, 251. La ligne ne change rien la ou la precision
+  // suffisait — elle sauve l'image quand elle manque.
+  p = mod(p, 256.0);
   vec2 q = fract(p * vec2(443.8975, 441.4232));
   q += dot(q, q + 19.19);
   return fract((q.x + q.y) * q.x);
