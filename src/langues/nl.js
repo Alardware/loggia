@@ -2667,6 +2667,7 @@ export default {
   'Vue d’ensemble': 'Overzicht',
   'Le tarif': 'Het tarief',
   'Tarif unique': 'Enkel tarief',
+  'Tarif en cours': 'Huidig tarief',
   'Heures creuses et pleines': 'Dal- en piekuren',
   'Heures creuses à partir de {h}': 'Daluren vanaf {h}',
   'Heures pleines à partir de {h}': 'Piekuren vanaf {h}',

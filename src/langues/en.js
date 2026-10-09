@@ -2706,6 +2706,7 @@ export default {
   'Vue d’ensemble': 'Overview',
   'Le tarif': 'The tariff',
   'Tarif unique': 'Single rate',
+  'Tarif en cours': 'Current rate',
   'Heures creuses et pleines': 'Off-peak and peak hours',
   'Heures creuses à partir de {h}': 'Off-peak hours from {h}',
   'Heures pleines à partir de {h}': 'Peak hours from {h}',

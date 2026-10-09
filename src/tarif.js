@@ -87,6 +87,36 @@ export function prixDuMoment({ hc = null, hp = null, enHc = null } = {}) {
 }
 
 /**
+ * LE PRIX EN COURS QUAND LE CONTRAT EN A PLUS DE DEUX — Tempo et assimilés.
+ *
+ * Tempo a six tarifs : bleu, blanc, rouge, chacun en heures creuses et en
+ * heures pleines. Le code prenait le moins cher pour « creuses » et le plus
+ * cher pour « pleines » — juste à deux tarifs, où c'est la définition même du
+ * tarif réduit, FAUX à six : il annonçait le bleu creuses ou le rouge pleines,
+ * jamais les quatre autres.
+ *
+ * On ne devine pas la couleur du jour, et on ne lit pas les noms des entités.
+ * On observe : parmi les compteurs déclarés, UN SEUL TOURNE — celui du tarif
+ * en cours. Les autres sont figés depuis des heures ou des jours. Le plus
+ * récemment bougé donne donc le prix du moment, et cela vaut pour n'importe
+ * quel contrat à N tarifs, nommé ou non, connu de Loggia ou pas.
+ *
+ * `connexions` : `[{ prix, instant, lisible }]`, une par connexion déclarée —
+ * le prix du kWh, l'instant du dernier mouvement de son compteur (en
+ * millisecondes), et si ce compteur se lit. Un compteur muet ne vote pas : son
+ * `last_changed` dirait l'instant où il est devenu muet, pas une consommation.
+ */
+export function prixEnCours(connexions) {
+  const vivantes = (connexions || []).filter(c => c && c.lisible
+    && typeof c.prix === 'number' && isFinite(c.prix)
+    && typeof c.instant === 'number' && isFinite(c.instant));
+  if (!vivantes.length) return null;
+  let tete = vivantes[0];
+  for (const c of vivantes) if (c.instant > tete.instant) tete = c;
+  return tete.prix;
+}
+
+/**
  * Le prochain changement de tarif, d'après les plages du jour.
  *
  * Rend `{ versHc, instant }`, ou `null` quand rien ne permet de le dire : la

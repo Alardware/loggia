@@ -2667,6 +2667,7 @@ export default {
   'Vue d’ensemble': 'Vista general',
   'Le tarif': 'La tarifa',
   'Tarif unique': 'Tarifa única',
+  'Tarif en cours': 'Tarifa actual',
   'Heures creuses et pleines': 'Horas valle y punta',
   'Heures creuses à partir de {h}': 'Horas valle a partir de {h}',
   'Heures pleines à partir de {h}': 'Horas punta a partir de {h}',
