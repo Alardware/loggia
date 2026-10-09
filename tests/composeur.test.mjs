@@ -67,8 +67,12 @@ test('les cles composees posees dans une piece sont surveillees', () => {
  * Objets et pour le composeur. */
 test('le distributeur existe dès qu’un champ le désigne, partout pareil', () => {
   const f = bloc('function distributeurConfigure(', NL + '}');
-  const configure = (feeder) => new Function('loggiaEnt', 'croqHaids', f + NL + '}' + NL + 'return distributeurConfigure();')(
-    () => feeder, () => Object.fromEntries(Object.entries((feeder && feeder.haids) || {}).filter(([, v]) => typeof v === 'string' && v)));
+  /* `trouverDistributeur` est le DERNIER recours (07/10) : rien de désigné,
+   * mais un appareil de la maison qui en est un. On l'injecte muet par défaut,
+   * pour que les cas ci-dessous ne jugent que la fiche. */
+  const configure = (feeder, trouve = null) => new Function('loggiaEnt', 'croqHaids', 'trouverDistributeur', 'LOGGIA_INDEX', f + NL + '}' + NL + 'return distributeurConfigure();')(
+    () => feeder, () => Object.fromEntries(Object.entries((feeder && feeder.haids) || {}).filter(([, v]) => typeof v === 'string' && v)),
+    () => trouve, {});
   assert.equal(configure(null), false, 'rien de configuré');
   assert.equal(configure({ meals: [{ time: '07:30', auto: 'automation.matin' }] }), false, 'l’ancienne liste seule ne fait pas un distributeur');
   assert.equal(configure({ haids: { reservoir: 'input_number.bac' } }), true, 'le réservoir, comme avant');
@@ -77,6 +81,12 @@ test('le distributeur existe dès qu’un champ le désigne, partout pareil', ()
   assert.equal(configure({ appareil: '   ' }), false, 'un appareil fait de blancs ne désigne rien');
   assert.equal(configure({ haid: 'button.granary_manual_feed' }), true, 'la commande seule');
   assert.equal(configure({ script: 'script.nourrir' }), true, 'le script seul');
+  /* Le distributeur était le DERNIER appareil à n'exister que par sa fiche
+   * (07/10, « tout doit être opérationnel ») : une maison dont Home Assistant
+   * connaît le distributeur n'en voyait aucune trace tant qu'on n'avait pas
+   * nommé une entité à la main. */
+  assert.equal(configure(null, '0123456789abcdef0123456789abcdef'), true, 'un appareil trouvé suffit, sans rien désigner');
+  assert.equal(configure({ meals: [{ time: '07:30' }] }, 'abcdef0123456789abcdef0123456789'), true, 'une ancienne liste n’empêche pas la découverte');
   const objets = bloc('function objetsDeLaMaison(', NL + '}');
   assert.ok(objets.includes("const feeder = distributeurConfigure() ? lireDistributeur(LOGGIA_INDEX, S, loggiaEnt('feeder', null)) : null;")
     && objets.includes("if (feeder) entree('obj:feeder',"), 'Objets suit la même règle');

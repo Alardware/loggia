@@ -177,7 +177,13 @@ test('la table PRIME sur les freres, et le ramassage ne se refait pas a chaque r
   assert.ok(conf.includes('const avecFreres = (table) => ({ ...table, host: { ...freresDeLHote(table.host || {}), ...(table.host || {}) } });'), 'un capteur choisi a la main n’est jamais remplace');
   assert.ok(conf.includes('if (_freres.index === LOGGIA_INDEX && _freres.cle === cle) return _freres.extra;'), 'une fois par index et par capteur de reference');
   assert.ok(conf.includes('if (!S || !refs.some(ref => S[ref])) return {};'), 'rien n’est retenu tant que les etats ne sont pas la');
-  assert.ok(conf.includes("if (cfg && typeof cfg === 'object') return avecFreres({ ...SYS_VIDE(), ...cfg });") && conf.includes('return avecFreres(out);'), 'la table de l’utilisateur comme celle de la decouverte');
+  /* La fiche ne REMPLACE plus la decouverte, elle la complete emplacement par
+   * emplacement (07/10, « tout doit etre operationnel ») : remplir une machine
+   * faisait perdre les deux autres. Ce que ce test garde : un emplacement que
+   * la fiche declare lui appartient — meme vide, c'est un choix —, et les
+   * freres de l'hote s'ajoutent au resultat, d'ou qu'il vienne. */
+  assert.ok(conf.includes('if (Object.prototype.hasOwnProperty.call(cfg, k)) out[k] = cfg[k] || {};'), 'un emplacement vide dans la fiche doit rester vide');
+  assert.equal(conf.match(/return avecFreres\(out\);/g).length, 1, 'la table de l’utilisateur comme celle de la decouverte');
   assert.ok(app.includes("systeme: [...sysKeys(), ...cfgKeys('system'), 'update.'],"), 'la vue relit aussi les mises a jour');
 });
 

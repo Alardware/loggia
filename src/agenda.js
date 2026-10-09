@@ -105,6 +105,44 @@ export function toucheJour(e, jour) {
   return d < j1 && f > j0;
 }
 
+/** Un événement TRAVERSE-t-il un jour ? Question différente de `toucheJour`,
+ * et les deux sont justes :
+ *
+ *   — « à quel jour appartient ce rendez-vous ? » Celui de son DÉBUT. Un dîner
+ *     de 23 h 30 à 1 h du matin se range au premier jour, et la carte du rail
+ *     ne l'annonce pas deux fois. C'est `toucheJour`.
+ *   — « quelle part de ce rendez-vous se dessine dans CETTE colonne ? » Une
+ *     grille d'heures montre du temps : un poste de nuit de 21 h 30 à 5 h 39
+ *     occupe la fin d'un jour ET le début du suivant.
+ *
+ * Signalé le 08/10 : un poste de nuit se réduisait à un rectangle de 30 px.
+ * `toucheJour` ne le rendait qu'au jour de début, et sa fin, ramenée au même
+ * jour, tombait AVANT son début. */
+export function traverseJour(e, jour) {
+  const d = debutDe(e);
+  if (!d) return false;
+  const j0 = jourPlus(jour, 0);
+  const j1 = jourPlus(jour, 1);
+  const f = finDe(e);
+  // Un instant sans durée touche quand même son jour.
+  return d < j1 && (f > j0 || (d >= j0 && d < j1));
+}
+
+/** Ce qu'un événement occupe DANS un jour : ses bornes ramenées à cette
+ * journée, en heures décimales depuis minuit. Un événement commencé la veille
+ * part de 0, un qui finit le lendemain va jusqu'à 24. */
+export function bornesDuJour(e, jour) {
+  const d = debutDe(e);
+  if (!d) return null;
+  const j0 = jourPlus(jour, 0);
+  const j1 = jourPlus(jour, 1);
+  const f = finDe(e);
+  const deb = d < j0 ? j0 : d;
+  const fin = (f && f > j1) ? j1 : f;
+  const h = (x) => (x - j0) / 3600000;
+  return { debut: Math.max(0, h(deb)), fin: Math.min(24, fin ? h(fin) : h(deb)) };
+}
+
 /** Combien d'événements par jour de la bande : { clé → n }. */
 export function comptesParJour(events, jours) {
   const out = {};

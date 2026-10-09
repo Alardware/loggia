@@ -203,8 +203,29 @@ test('un focus déjà repris ailleurs n’est pas déplacé', () => {
 
 test('la feuille passe par `rendreFocus`, après avoir réveillé la page', () => {
   assert.ok(UI.includes("import { rendreFocus } from './focus.js';"), 'ui.jsx n’importe pas `rendreFocus`');
-  assert.ok(FEUILLE.includes("const hote = voileRef.current && voileRef.current.closest('.o-sheet');"), 'la feuille hôte n’est plus retenue à l’ouverture');
+  /* L’hôte se cherche sur le BOUTON qui vient d’ouvrir, plus sur le voile : le
+   * voile est posé dans <body> depuis le 07/10 (voir le test du portail,
+   * ci-dessous) et ne descend donc d’aucune feuille. */
+  assert.ok(FEUILLE.includes("const hote = (prev && prev.closest) ? prev.closest('.o-sheet') : null;"), 'la feuille hôte n’est plus retenue à l’ouverture');
   assert.ok(FEUILLE.includes('return () => { clearTimeout(t); reveiller(); try { rendreFocus(prev, hote); } catch {} };'),
     'le focus n’est plus rendu par `rendreFocus`, ou avant que la page soit réveillée — un élément inerte le refuserait');
   assert.ok(!FEUILLE.includes('prev.focus('), 'la feuille rend de nouveau le focus à un ouvreur peut-être détaché');
+});
+
+/* Retour du 07/10 : « il y a un souci avec la popup, que ce soit sur mobile ou
+ * pc elle est trop haute », vu sur le détail d’un jour du calendrier d’Énergie.
+ *
+ * Un ancêtre flou, transformé ou animé devient le repère d’un `position: fixed`
+ * : l’`inset: 0` du voile ne couvre alors plus l’écran mais cet ancêtre. En
+ * thème givré CHAQUE carte porte un `backdrop-filter` — une feuille ouverte
+ * depuis l’intérieur d’une carte se posait donc au bas de la carte, à moitié
+ * hors de l’écran (mesuré : top 727 pour une fenêtre de 812).
+ *
+ * Dans <body>, le repère est toujours l’écran. Les menus (`ListeChoix`) ont la
+ * même parade depuis le 18/09, et pour la même raison. */
+test('la feuille se pose dans <body>, pas là où elle est écrite', () => {
+  assert.ok(UI.includes("import { createPortal } from 'react-dom';"), 'ui.jsx n’importe plus `createPortal`');
+  assert.ok(FEUILLE.includes('const feuille = ('), 'la feuille ne retient plus son arbre avant de le poser');
+  assert.ok(FEUILLE.includes("return (typeof document !== 'undefined' && document.body) ? createPortal(feuille, document.body) : feuille;"),
+    'la feuille ne passe plus par un portail vers <body> : un ancêtre flou ou transformé redeviendrait le repère de son `position: fixed`');
 });

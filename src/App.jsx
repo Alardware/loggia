@@ -10,7 +10,7 @@ import { WX_PRESETS } from './wxpresets.js';
 import { lisibleSurLavis, versHex } from './contraste.js';
 import { enPanne, sansAccents } from './outils.js';
 import { LAVIS, SAFE_NOLOOK, applyTheme, lav, readLook, signatureHaTheme } from './theme.js';
-import { uniteTemp, versCelsius, deCelsius, uniteVent, versKmh, wattsDe, kwhDe, facteurWatts, facteurKwh, moyenneTemperatures } from './unites.js';
+import { uniteTemp, versCelsius, deCelsius, uniteVent, versKmh, wattsDe, kwhDe, facteurKwh, moyenneTemperatures } from './unites.js';
 import { consigneClimat, plageClimat, pasConsigne } from './consigne.js';
 // Le mode clair, lu sur la racine : les couleurs d'appareils s'y assombrissent.
 const estClair = () => typeof document !== 'undefined' && document.documentElement.classList.contains('loggia-light');
@@ -24,6 +24,14 @@ const WeatherGL = lazyRecharge(() => import('./wx3d.jsx'), { decor: true });
 // dashboard, son code n'a donc pas a etre analyse au demarrage.
 /* Systeme : on l'ouvre pour regarder l'etat des machines, pas au demarrage. */
 const SystemeContent = lazyRecharge(() => import('./views/systeme.jsx'));
+/* Le tarif, l'historique et le calendrier de l'Energie : trente kilo-octets de
+ * statistiques longue duree et de graphes, que l'Accueil n'affiche pas. Les
+ * deux composants viennent du MEME module : un seul chargement pour les deux
+ * (ADR 0104, 0145). */
+const CarteTarif = lazyRecharge(() => import('./views/energiehisto.jsx').then(m => ({ default: m.CarteTarif })));
+const BilansEnergie = lazyRecharge(() => import('./views/energiehisto.jsx').then(m => ({ default: m.BilansEnergie })));
+const SectionHistorique = lazyRecharge(() => import('./views/energiehisto.jsx').then(m => ({ default: m.SectionHistorique })));
+const EnergieCalendrier = lazyRecharge(() => import('./views/energiehisto.jsx').then(m => ({ default: m.EnergieCalendrier })));
 // Parametres : 1300 lignes ou l'on n'arrive que volontairement. Le formulaire
 // d'entites vient du meme morceau — il ne s'ouvre qu'en mode edition.
 const ParametresContent = lazyRecharge(() => import('./views/parametres.jsx').then(m => ({ default: m.ParametresContent })));
@@ -54,7 +62,7 @@ import {
   REDUCE_MOTION, Fi, Anim, useTilt, editBtn, HIDDEN_VIEWS, readViewsCfg, HX_TOKENS,
   userBg, personPicture, LOOK_DEF, cvInp, cvName, cvEstTpl, cvKey, cvId, TplForm, lireFondPhoto, FlipText,
   BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur, ListeChoix, ChampSuggere, CroixFeuille, TitreFeuille,
-  useIdTitreFeuille, NomFeuille, Barriere, Surface, nomCarte, FERMER_TOUT
+  useIdTitreFeuille, NomFeuille, Barriere, Surface, nomCarte, FERMER_TOUT, MetricTile
 } from './ui.jsx';
 import { WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
 import { CarteMeteo } from './cartemeteo.jsx';
@@ -76,22 +84,25 @@ import { marqueDe } from './marques.js';
 import { WIDGETS_OPTION, STYLES_WIDGETS, NOMS_STYLES, styleDe, prochainSoleil } from './horloge.js';
 import { indiceConfort, verdictMesure, capteurBruit, echelleMesure, jaugeMesure, cleMesure, barresPile, mesuresFiche } from './confort.js';
 import { pilesMaison } from './piles.js';
-import { RoomActivityCard, useSysHist, etatJournal, grouperJournal, useRoomLogbook, useDerniersEvenements } from './historique.jsx';
+import { RoomActivityCard, etatJournal, grouperJournal, useRoomLogbook, useDerniersEvenements } from './historique.jsx';
+import { AnneauEnergie } from './anneau.jsx';
 import { armerReleve } from './releve.js';
 import { useOptimiste } from './optimiste.js';
 import { sysKeys } from './sysconf.js';
 import { consoJourKwh, autosuffisance, resumeEnergie } from './bilan.js';
+import { compteurDuJour, useTotauxJour } from './jourstat.js';
 import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
 import { colonnesCam, camDispoDe, poserCamDispo, camDisposDe, camSerre, CAM_AUTO } from './camdispo.js';
 import { decalageServeur, resteMinuteur, decompte } from './minuteur.js';
 import { disposer, poser, premiereLibre, hauteur as hauteurCarte, cellulePointee, colonnesPour, nettoyer } from './placement.js';
+import { bloquerDefilement, defileurAuto } from './glisser.js';
 import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, verdictsPlante } from './objets.js';
 import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, tuileAlarme, estSirene, ICONES_ARMEMENT, pointsAttention, niveauMax, resumeAttention, couleurNiveau, niveauPile, animationNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
 import { CARTE_RAIL, CARTE_MAISON, ICONE_CARTE, NOM_CARTE, SOUS_CARTE, LISERE } from './styles.js';
 import { fmtWatts, relTime, minutesDepuisHeure, nombre } from './format.js';
 import { voletMode, voletDays, croqHaids, hueScripts, notifIds, roomHidden, plantsCfg } from './lectures.js';
-import { lireDistributeur, envoiDistribuer, niveauDuBac, prochainRepas, dernierRepas, TABLES as TABLES_DISTRIBUTEUR } from './distributeur.js';
+import { lireDistributeur, envoiDistribuer, niveauDuBac, prochainRepas, dernierRepas, trouverDistributeur, TABLES as TABLES_DISTRIBUTEUR } from './distributeur.js';
 import { useEtatDistributeur, lireEtatDistributeur, poserEtatDistributeur } from './distributeuretat.js';
 import { PinModal } from './pinmodal.jsx';
 import { reposerFocus, titreDeVue } from './focus.js';
@@ -120,7 +131,7 @@ const AssistantSheet = lazyRecharge(() => import('./views/assistant.jsx'));
 // elle ne rend rien.
 const OrbeMini = lazyRecharge(() => import('./orbe.jsx'), { decor: true });
 import {
-  LOGGIA_INDEX, LOGGIA_RESOLVED, setLoggiaState, readLS, cfgVal, cfgSet, getHass, loggiaEnt, estPersonnelle,
+  LOGGIA_INDEX, LOGGIA_RESOLVED, setLoggiaState, readLS, cfgVal, cfgSet, getHass, loggiaEnt, estPersonnelle, enPrix, enVente,
   enHaids, medPlayers, normRooms, secAlarm, switchLightsCfg, LOGGIA_CONFIG_KEYS, droitsDe, usersSig,
   vacSensors, iconesCfg, compteOrdinaire
 } from './state.js';
@@ -180,6 +191,35 @@ const CHIP_ICONS = {
   pylon: (c) => <g stroke={c} strokeWidth="1.3" fill="none"><path d="M -3.5 5.5 L -1 -5 L 1 -5 L 3.5 5.5" /><line x1="-4.8" y1="-2.6" x2="4.8" y2="-2.6" /><line x1="-2.6" y1="2" x2="2.6" y2="2" /></g>,
 };
 
+/* LA GEOMETRIE DE LA SCENE ENERGIE, ecrite UNE fois (08/10).
+ *
+ * « Sur mobile, la maison est trop petite » : elle tenait dans 180 x 135 px
+ * sur un ecran de 375. Le cadre faisait 600 de large parce que l'arc du soleil
+ * en occupait tout le pourtour ; la maison, elle, n'en prenait que le tiers
+ * central. L'arc parti, le cadre se resserre sur ce qu'on dessine encore.
+ *
+ * « C'est encore un peu petit » : le cadre etait SYMETRIQUE autour du centre
+ * de la maison, ce qui reservait a gauche autant de vide que la pastille du
+ * reseau en demandait a droite — un dixieme du cadre perdu pour rien.
+ *
+ * L'invariant qui compte n'est pas la symetrie, c'est que LA SCENE TIENNE SON
+ * RAPPORT. Un SVG en `meet` ne se recentre que dans un conteneur d'un autre
+ * rapport que le sien ; c'est la seule chose qui faisait glisser les pastilles
+ * par rapport au dessin. Le plafond de hauteur de la scene devient donc un
+ * plafond de LARGEUR (index.css) : le rapport ne se rompt plus jamais, et le
+ * cadre peut enfin coller au dessin, bord a bord a gauche.
+ *
+ * Ces nombres etaient semes entre le composant et la feuille de style, avec
+ * un « 55.56% » a tenir a la main des que l'un bougeait. Ils vivent ici, et
+ * la scene comme la maison s'y calent. */
+const CHIP_RESEAU_X = 452;   // la pastille du réseau, posée au bout de son câble
+/* C'est elle qui décide du bord DROIT du cadre, et elle est la seule à
+ * dépasser du dessin : son libellé le plus long (« ↑ 12,3 kW ») lui donne 92
+ * d'envergure, et son halo d'activité déborde encore de 6 — elle s'arrête donc
+ * à 504. À gauche, rien ne dépasse : le cadre commence au bord de la maison. */
+const SCENE = { x0: 133.33, w: CHIP_RESEAU_X + 46 + 6 - 133.33, h: 250, mx: 133.33, mw: 333.33 };
+const SCENE_RATIO = (SCENE.w / SCENE.h).toFixed(4);
+
 const Chip = ({ x, y, color, txt, icon, live = false }) => {
   const w = 22 + txt.length * 6.4 + 12;
   return (
@@ -191,14 +231,6 @@ const Chip = ({ x, y, color, txt, icon, live = false }) => {
     </g>
   );
 };
-
-const SunMark = ({ x, y, hm }) => (
-  <g className="o-sunmark" opacity=".8">
-    <circle cx={x} cy={y} r="3.4" fill="none" stroke="var(--o-gold)" strokeWidth="1.3" />
-    {[0, 45, 90, 135, 180, 225, 270, 315].map(a => <line key={a} x1={x + 5.4 * Math.cos(a * RAD)} y1={y + 5.4 * Math.sin(a * RAD)} x2={x + 7.4 * Math.cos(a * RAD)} y2={y + 7.4 * Math.sin(a * RAD)} stroke="var(--o-gold)" strokeWidth="1.1" />)}
-    <text x={x} y={y + 19} textAnchor="middle" fontSize="9.5" fontWeight="700" fill="var(--o-text3)" fontFamily="var(--o-font)">{hm}</text>
-  </g>
-);
 
 const Titre = ({ i, c, t }) => (
   <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '26px 0 12px' }}>
@@ -662,11 +694,9 @@ function useFlash() {
  * ───────────────────────────────────────────────────────────────────────────── */
 
 // <ActionBtn onClick style>label</ActionBtn> : ripple au clic + « ✓ » 900 ms qui remplace le label (commande envoyée)
-// <Shiny on>texte</Shiny> : sweep lumineux discret (background-clip:text) sur un badge ACTIF uniquement.
-function Shiny({ on = true, children, style }) {
-  if (!on || REDUCE_MOTION) return <span style={style}>{children}</span>;
-  return <span className="o-shiny" style={style}>{children}</span>;
-}
+/* `Shiny` — un balayage lumineux sur un badge actif — est parti le 07/10 :
+ * « il y a un effet de balayage dessus enleve le ». La pastille « Solaire
+ * actif » etait son dernier lecteur. */
 /* La cascade d'entree est partie le 21/08 (demande user). Restait `stag`, une
  * fonction qui rend `undefined` — et son commentaire disait la garder « pour
  * les ~200 appels existants ». Il en restait UN, qui etalait `undefined` dans
@@ -1212,7 +1242,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
        * À la place : un bouton de SURFACE, frère des contrôles, qui porte le
        * geste « ouvrir la pièce » et se laisse couvrir par eux. Rien ne bouge
        * à l'œil, et la tabulation passe sur quatre choses distinctes. */
-      <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel} className={'o-piece o-piecestd o-stag o-hov ' + (tilt.className || '')} style={{ ...card, position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: 14, padding: '14px 15px 12px', overflow: 'hidden',
+      <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel} className={'o-piece o-piecestd o-stag ' + (tilt.className || '')} style={{ ...card, position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: 14, padding: '14px 15px 12px', overflow: 'hidden',
         // Direction « teinte pièce » (choix 31/08) : le lavis de la pièce
         // baigne la surface en permanence, l'icône est nue, la température en
         // héros. Sans halo doré (retour 01/09) : l'interrupteur allumé dit
@@ -6878,10 +6908,16 @@ function FichePlante({ pl, onClose }) {
  * exister sa carte dans Objets et dans la bibliothèque du composeur. */
 function distributeurConfigure() {
   const c = loggiaEnt('feeder', null);
-  if (!c || typeof c !== 'object') return false;
   const id = (v) => typeof v === 'string' && v.trim().indexOf('.') > 0;
-  const croq = croqHaids();
-  return !!(croq.reservoir || croq.portionWeight) || id(c.haid) || id(c.script) || (typeof c.appareil === 'string' && c.appareil.trim() !== '');
+  if (c && typeof c === 'object') {
+    const croq = croqHaids();
+    if (!!(croq.reservoir || croq.portionWeight) || id(c.haid) || id(c.script) || (typeof c.appareil === 'string' && c.appareil.trim() !== '')) return true;
+  }
+  /* RIEN DE DESIGNE, MAIS UN APPAREIL QUI EN EST UN (07/10). Le distributeur
+   * etait le dernier a n'exister que par sa fiche : une maison dont Home
+   * Assistant connait le distributeur n'en voyait aucune trace tant qu'on
+   * n'avait pas nomme une entite a la main. */
+  return !!trouverDistributeur(LOGGIA_INDEX);
 }
 
 /* La carte du distributeur : `RoomFeederCard` telle quelle, plus l'abonnement
@@ -7834,6 +7870,40 @@ function FavorisAccueil({ hass, edit = false }) {
   // sans la retirer de la configuration (elle peut revenir).
   const liste = eps.filter(x => cvEstTpl(x) || !cvId(x).includes('.') || S[cvId(x)]);
   const vide = !liste.length;
+
+  /* L'ÉDITION, comme partout ailleurs depuis le 06/10 : la carte devient une
+   * tuile qu'on clique pour ouvrir sa fiche. Les favoris n'ont jamais eu de
+   * glisser-déposer — la rangée défile — donc l'agencement ne sert ici qu'au
+   * clic, aux flèches du clavier et aux trois réglages. */
+  const [fiche, setFiche] = useState(null);
+  const appuiRef = useRef(false);
+  const parCle = new Map(eps.map(x => [cvKey(x), x]));
+  const de = (cle) => parCle.get(cle);
+  const sousCarte = (x) => CV_TYPE_NOMS()[cvTypeDe(x)] || null;
+  const majCarte = (x, f) => poser(eps.map(y => (cvKey(y) === cvKey(x) ? f(x) : y)));
+  const edFav = {
+    dragId: null,
+    // Un appui venu d'un bouton n'est pas un appui sur la carte (retour 06/10).
+    dragStart: (cle, e) => {
+      appuiRef.current = !(e.target.closest && e.target.closest('button:not(.o-surface)'));
+    },
+    dragMove: () => {},
+    dragEnd: () => { const clic = appuiRef.current; appuiRef.current = false; return clic; },
+    move: (cle, pas) => {
+      const i = eps.findIndex(y => cvKey(y) === cle);
+      const j = i + pas;
+      if (i < 0 || j < 0 || j >= eps.length) return;
+      const a = [...eps];
+      const [pris] = a.splice(i, 1);
+      a.splice(j, 0, pris);
+      poser(a);
+    },
+    remove: (cle) => poser(eps.filter(y => cvKey(y) !== cle)),
+    estLarge: (cle) => cvW(de(cle)) === 2,
+    basculerLarge: (cle) => majCarte(de(cle), cvAvecW),
+    estCompact: (cle) => cvRowsDe(de(cle)) === 1,
+    basculerCompact: (cle) => majCarte(de(cle), cvAvecH),
+  };
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -7851,34 +7921,41 @@ function FavorisAccueil({ hass, edit = false }) {
         /* Les favoris DÉFILENT (retour 01/09) : ils s'ajoutent sans repousser
          * le reste de l'accueil, et la rangée reste d'un seul tenant. */
         : <div className="o-favrow" style={{ display: 'flex', gap: edit ? 16 : 10, overflowX: 'auto', scrollSnapType: 'x proximity' }}>
-            {liste.map(x => (
-              <div key={cvKey(x)} style={{ position: 'relative', flex: '0 0 auto', width: cvW(x) === 2 ? 466 : 225, height: cvRowsDe(x) === 1 ? 88 : 184, scrollSnapAlign: 'start' }}>
-                {/* Relecture du lot 13 de l'audit du 03/10, comme la carte d'une
-                  * vue : inerte au clavier aussi (l'interrupteur d'un favori se
-                  * tabulait sous la barre, Espace éteignait la lampe) ; et
-                  * chaque outil de la barre nomme la carte qu'il touche
-                  * (`nomCv`), sa bascule de largeur sous un nom fixe. */}
-                <div className="o-cvfit" inert={edit ? '' : undefined} style={{ height: '100%', pointerEvents: edit ? 'none' : 'auto' }}>
-                  <CvTyped x={x} hass={hass} dc={dc} />
+            {liste.map(x => {
+              const cle = cvKey(x);
+              const taille = { width: cvW(x) === 2 ? 466 : 225, height: cvRowsDe(x) === 1 ? 88 : 184 };
+              /* EN EDITION, la TUILE partagee : on la clique pour ouvrir sa
+               * fiche. La rangee defile, elle n'a pas de glisser — les
+               * fleches du clavier rangent les favoris. */
+              if (edit) {
+                return (
+                  <div key={cle} style={{ position: 'relative', flex: '0 0 auto', ...taille, scrollSnapAlign: 'start' }}>
+                    <EditableCard ed={edFav} id={cle} nom={nomCv(x, hass)} hass={hass}
+                      entite={typeof x === 'string' ? x : (x.id || cle)} sous={sousCarte(x)}
+                      onEdit={() => setFiche(x)} />
+                  </div>
+                );
+              }
+              return (
+                <div key={cle} style={{ position: 'relative', flex: '0 0 auto', ...taille, scrollSnapAlign: 'start' }}>
+                  <div className="o-cvfit" style={{ height: '100%' }}>
+                    <CvTyped x={x} hass={hass} dc={dc} />
+                  </div>
                 </div>
-                {edit && (
-                  <EditBarre>
-                    <button onClick={() => (cvTypeDe(x) === 'chips' ? setChipsEdit(x) : setRetype(x))} title={cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')} aria-label={(cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')) + ' · ' + nomCv(x, hass)} style={EDIT_BTN}><Fi i="pencil" size={11} /></button>
-                    <button onClick={() => poser(eps.map(y => cvKey(y) === cvKey(x) ? cvAvecH(x) : y))} title={cvRowsDe(x) === 1 ? tr('Carte standard') : tr('Carte compacte')} aria-label={tr('Carte compacte') + ' · ' + nomCv(x, hass)} aria-pressed={cvRowsDe(x) === 1}
-                      style={{ ...EDIT_BTN, ...(cvRowsDe(x) === 1 ? { background: 'var(--o-accent-fond)', color: '#fff' } : {}) }}><Fi i="arrows-v" size={11} /></button>
-                    <button onClick={() => poser(eps.map(y => cvKey(y) === cvKey(x) ? cvAvecW(x) : y))} title={cvW(x) === 2 ? tr('Largeur simple') : tr('Largeur double')} aria-label={tr('Largeur double') + ' · ' + nomCv(x, hass)} aria-pressed={cvW(x) === 2}
-                      style={{ ...EDIT_BTN, ...(cvW(x) === 2 ? { background: 'var(--o-accent-fond)', color: '#fff' } : {}) }}><Fi i="arrows-h" size={11} /></button>
-                    <button onClick={() => poser(eps.filter(y => cvKey(y) !== cvKey(x)))} title={tr('Retirer')} aria-label={tr('Retirer') + ' · ' + nomCv(x, hass)} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
-                  </EditBarre>
-                )}
-              </div>
-            ))}
+              );
+            })}
             {edit && (
               <button onClick={() => setAdding(true)} style={{ flex: '0 0 auto', width: 190, height: 88, borderRadius: 'var(--o-radius,18px)', border: '2px dashed rgba(var(--o-accent-rgb),.45)', background: 'rgba(var(--o-accent-rgb),.06)', color: 'var(--o-accent-soft)', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, fontWeight: 700, fontSize: 13 }}>
                 <span style={{ fontSize: 19, lineHeight: 1 }}>+</span>{tr('Ajouter une carte')}
               </button>
             )}
           </div>}
+      {fiche && (
+        <FicheCarte x={de(cvKey(fiche)) || fiche} nom={nomCv(de(cvKey(fiche)) || fiche, hass)} sous={sousCarte(de(cvKey(fiche)) || fiche)}
+          onTaille={(y) => majCarte(y, cvAvecH)} onLargeur={(y) => majCarte(y, cvAvecW)}
+          onChanger={(y) => (cvTypeDe(y) === 'chips' ? setChipsEdit(y) : setRetype(y))}
+          onRetirer={(y) => edFav.remove(cvKey(y))} onClose={() => setFiche(null)} />
+      )}
       {/* Une carte chips arrive vide : on enchaîne sur son compositeur. */}
       {adding && <CarteAjoutSheet hass={hass} onClose={() => setAdding(false)} onPose={(e) => { poser([...eps, e]); if (cvTypeDe(e) === 'chips') setChipsEdit(e); }} />}
       {retype && <CarteAjoutSheet hass={hass} remplace={retype} onClose={() => setRetype(null)} onPose={(e) => poser(eps.map(y => cvKey(y) === cvKey(retype) ? e : y))} />}
@@ -7906,6 +7983,17 @@ const APPAREIL_ACTIF = {
 
 /* Le fantome d'un glisser : la copie qui suit le pointeur, partout, tant
  * qu'on la tient — le meme dessin que celui des grilles (useLayoutEditor). */
+/* LE FANTOME EST LE MOMENT OU LA CARTE EST VRAIMENT PRISE (07/10).
+ *
+ * Les cinq demarrages de glisser passent par lui — sections et cartes pieces,
+ * a la souris comme a l'appui long —, et aucun autre endroit ne sait aussi
+ * surement qu'on tient quelque chose. C'est donc ici qu'on coupe le defilement
+ * du doigt et qu'on arme celui qui suit le geste (`glisser.js`).
+ *
+ * Avant ce moment, rien n'est pose : le `touch-action: pan-y` des cartes laisse
+ * la page defiler normalement sous le doigt, ce qui est le comportement voulu
+ * en mode edition, ou les cartes couvrent l'ecran.
+ */
 function poserFantome(el, x0, y0) {
   const f = el.cloneNode(true);
   Array.prototype.slice.call(f.querySelectorAll('[data-drag-ui]')).forEach(n => n.remove());
@@ -7917,9 +8005,18 @@ function poserFantome(el, x0, y0) {
   st.transform = 'scale(1.02)'; st.transition = 'none'; st.outline = 'none';
   st.boxShadow = '0 22px 48px rgba(0,0,0,.55)';
   (el.ownerDocument || document).body.appendChild(f);
+  const rendre = bloquerDefilement(el.ownerDocument || document);
+  const defileur = defileurAuto(el);
   return {
-    suivre: (x, y) => { f.style.transform = 'translate(' + (x - x0) + 'px,' + (y - y0) + 'px) scale(1.02)'; },
-    lever: () => { try { f.remove(); } catch { /* deja parti */ } },
+    suivre: (x, y) => {
+      f.style.transform = 'translate(' + (x - x0) + 'px,' + (y - y0) + 'px) scale(1.02)';
+      defileur.viser(y);
+    },
+    lever: () => {
+      defileur.arreter();
+      rendre();
+      try { f.remove(); } catch { /* deja parti */ }
+    },
   };
 }
 
@@ -10621,8 +10718,17 @@ function EnergyHouseSchema({ solarW = 47, homeW = 907, surplusW = 954, evW = 0, 
     return bouts.length ? bouts.join(' · ') : '—';
   })();
   const layer = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none', userSelect: 'none' };
+  /* PAS DE `width` (08/10) : donner la largeur à côté de la hauteur et du
+   * rapport fait ignorer le rapport, et la maison sortait étirée à 664 × 340
+   * au lieu de 453 × 340. La hauteur et le rapport suffisent.
+   *
+   * Et `left: 0`, non plus le centre : le cadre commence désormais au bord
+   * gauche du dessin, puisque rien ne dépasse de ce côté. Tant que la scène
+   * tient son rapport — c'est le rôle du plafond de largeur, dans index.css —
+   * la maison déduite de sa hauteur remplit exactement la part du cadre
+   * qu'elle occupe dans le repère. */
   return (
-    <div className="o-en-house" style={{ position: 'absolute', top: 0, height: '100%', left: '50%', transform: 'translateX(-50%)', aspectRatio: '960 / 720' }}>
+    <div className="o-en-house" style={{ position: 'absolute', top: 0, left: 0, height: '100%', aspectRatio: '960 / 720' }}>
       <img src={energyHomeImg} alt="" draggable={false} style={layer} />
       {solarPresente && <img src={energySolarImg} alt="" draggable={false} style={layer} />}
       {evBranche && <img src={energyEvImg} alt="" draggable={false} style={layer} />}
@@ -10708,77 +10814,41 @@ function wxHourEq() {
     return (18 + 12 * Math.min(1, Math.max(0, tn))) % 24;
   } catch { const d = new Date(); return d.getHours() + d.getMinutes() / 60; }
 }
-/* Deux conditions, deux questions differentes : `solarPresente` dit s'il Y A
+/* LES PASTILLES POSEES SUR LA MAISON — l'arc du soleil n'est plus (08/10).
+ *
+ * « Retire la trajectoire du soleil aussi. » Ce composant s'appelait `SunArc`
+ * et dessinait une courbe du lever au coucher, le rond du soleil a l'heure
+ * reelle, et deux reperes d'horaires. Tout cela encerclait la maison et lui
+ * prenait les deux tiers du cadre.
+ *
+ * Ce qui reste a de la valeur : les quatre pastilles qui disent, POSEES SUR LE
+ * DESSIN, ce que chaque partie fait a l'instant. Elles gardent leurs places.
+ *
+ * Deux conditions, deux questions differentes : `solarPresente` dit s'il Y A
  * du solaire chez l'utilisateur, `format` dit quel ECRAN regarde. Les pastilles
  * ne retrecissent pas — a six sur un telephone elles se marchent dessus :
  * « pc mets-les toutes, tablette enleve garage, et mobile enleve panneau ». */
-function SunArc({ solarW = 0, gridW = 0, exportW = 0, homeW = 0, appW = null, solarPresente = true, format = 'pc' }) {
+function PastillesEnergie({ solarW = 0, gridW = 0, exportW = 0, homeW = 0, appW = null, solarPresente = true, format = 'pc' }) {
   const [, tick] = useState(0);
   useEffect(() => { const iv = setInterval(() => tick(n => n + 1), 60000); return () => clearInterval(iv); }, []);
+  /* SANS POSITION DECLAREE, LES PASTILLES RESTENT (08/10). Le composant
+   * rendait `null` des que Home Assistant n'avait pas de latitude : sans arc a
+   * dessiner, ce renvoi emportait aussi la consommation de la maison et le
+   * sens du reseau, qui n'ont rien a voir avec le soleil. Seule l'irradiance
+   * depend du jour. */
   const s = sunInfo();
-  // Sans position déclarée dans Home Assistant, la course du soleil n'a pas de
-  // sens : mieux vaut ne rien dessiner qu'un arc faux.
-  if (!s) return null;
-  // Bézier quadratique dans un espace 600×250 : lever (70,235) → contrôle (300,-140) → coucher (540,205)
-  const P0 = [70, 235], C = [300, -140], P2 = [540, 205];
-  const at = (t) => { const mt = 1 - t; return [mt * mt * P0[0] + 2 * mt * t * C[0] + t * t * P2[0], mt * mt * P0[1] + 2 * mt * t * C[1] + t * t * P2[1]]; };
-  const t = s.t;
-  const [sx, sy] = at(t);
-  // sous-courbe 0→t (subdivision de De Casteljau)
-  const Ct = [P0[0] + (C[0] - P0[0]) * t, P0[1] + (C[1] - P0[1]) * t];
-  const day = s.day;
+  const day = !!(s && s.day);
   const irr = day ? Math.max(0, Math.round(1090 * Math.pow(Math.max(0, Math.sin(s.elevation * RAD)), 1.15))) : 0; // irradiance ciel clair estimée
   // Arrondi AVANT l'unité (05/10) : 994,6 W s'écrivait « 995 W », et 995 « 1,0 kW ».
   const fmtKW = (w) => Math.abs(Math.round(w)) >= 995 ? dec(w / 1000, 1) + ' kW' : Math.round(w) + ' W';
   return (
-    <svg viewBox="0 0 600 250" preserveAspectRatio="xMidYMid meet" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
-      {/* arc complet estompé + segment parcouru brillant (style Helios) */}
-      <path d={`M ${P0} Q ${C} ${P2}`} fill="none" stroke="rgba(255,209,102,.18)" strokeWidth="2" strokeDasharray="4 6" />
-      {day && <path d={`M ${P0} Q ${Ct} ${sx} ${sy}`} fill="none" stroke="url(#sunGrad)" strokeWidth="3.2" strokeLinecap="round" />}
-      <defs>
-        <linearGradient id="sunGrad" x1="0" y1="1" x2="1" y2="0">
-          <stop offset="0" stopColor="rgba(255,166,60,.25)" /><stop offset="1" stopColor="var(--o-gold)" />
-        </linearGradient>
-      </defs>
-      <SunMark x={P0[0]} y={P0[1] - 2} hm={s.sunriseHM} />
-      <SunMark x={P2[0]} y={P2[1] - 2} hm={s.sunsetHM} />
-      {/* Le soleil, SEULEMENT le jour : `t` n'a de sens qu'entre lever et
-          coucher, et se plafonne a 0 ou 1 hors de cet intervalle (sunInfo).
-          Affiche la nuit, ce rond retombait pile sur le repere de lever ou
-          de coucher qu'il cotoie deja — un doublon colle dessus, pas une
-          position de lune (02/10, signale : « a l'exterieur de l'arc,
-          superpose aux autres »). */}
-      {day && <circle cx={sx} cy={sy} r="10" fill="var(--o-gold)" style={{ filter: 'drop-shadow(0 0 10px rgba(255,209,102,.95))' }} />}
-      {day && solarW > 5 && <circle cx={sx} cy={sy} r="16" fill="none" stroke="rgba(255,209,102,.35)" strokeWidth="1.6">{!REDUCE_MOTION && <><animate attributeName="r" values="13;20;13" dur="3s" repeatCount="indefinite" /><animate attributeName="opacity" values=".5;.12;.5" dur="3s" repeatCount="indefinite" /></>}</circle>}
-      {/* chips façon Helios : soleil=irradiance, panneaux=production, maison=conso, pylône=NET réseau */}
-      {day && (() => {
-        /* « Le capteur du soleil se superpose, place-le de l'autre côté » (02/10).
-         *
-         * Deux corrections se sont croisées sur ce calcul, et les deux étaient
-         * justes : le PLAFOND de hauteur, qui garde la pastille dans le dôme de
-         * l'arc au lieu de la laisser descendre jusqu'au pylône au lever et au
-         * coucher ; et l'essai de L'AUTRE CÔTÉ quand le premier est pris.
-         *
-         * Les trois positions fixes sont NOMMÉES ici. Le défaut d'origine
-         * n'était pas quelques pixels : c'était une liste incomplète, qui
-         * n'évitait que la production. En ajouter une sans l'écrire ici
-         * ramènerait le défaut par le même chemin. */
-        const FIXES = [[352, 78], [352, 200], [478, 168]];
-        const libre = (x, y) => FIXES.every(([fx, fy]) => Math.abs(x - fx) > 128 || Math.abs(y - fy) > 32);
-        const cotes = sx < 300 ? [78, -78] : [-78, 78];
-        const cy0 = Math.min(150, Math.max(22, sy - 4));
-        let cx = null;
-        let cy = cy0;
-        for (const d of cotes) {
-          const x = Math.min(510, Math.max(90, sx + d));
-          if (libre(x, cy0)) { cx = x; break; }
-        }
-        if (cx === null) {                 // les deux côtés sont pris : on monte
-          cy = 26;
-          cx = Math.min(510, Math.max(90, sx + cotes[0]));
-        }
-        return <Chip icon="sun" x={cx} y={cy} color="var(--o-gold)" txt={irr + ' W/m²'} />;
-      })()}
+    <svg viewBox={`${SCENE.x0} 0 ${SCENE.w} ${SCENE.h}`} preserveAspectRatio="xMidYMid meet" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
+      {/* L'IRRADIANCE A UNE PLACE FIXE. Elle suivait le soleil le long de
+        * l'arc, avec tout un calcul pour eviter les trois pastilles fixes
+        * (02/10, « le capteur du soleil se superpose »). Sans arc il n'y a
+        * plus rien a suivre : elle se pose au-dessus du toit, a gauche du
+        * badge de production, et ne peut plus rencontrer personne. */}
+      {day && <Chip icon="sun" x={250} y={48} color="var(--o-gold)" txt={irr + ' W/m²'} />}
       {solarPresente && format !== 'mobile' && <Chip icon="panel" x={352} y={78} color="#ffa63c" txt={fmtKW(solarW)} live={solarW > 5} />}
       {/* La maison et le pylône ne disent que ce qui se lit (audit du 03/10).
         * Sans compteur, l'appel passe `null` et la pastille s'efface — comme
@@ -10786,229 +10856,16 @@ function SunArc({ solarW = 0, gridW = 0, exportW = 0, homeW = 0, appW = null, so
         * « 0 W » et « ↓ 0 W » juste au-dessus des chiffres qui, eux, disaient
         * « — » (ADR 0030). */}
       {homeW != null && <Chip icon="house" x={352} y={200} color="var(--o-cyan)" txt={fmtKW(homeW)} />}
-      {gridW != null && <Chip icon="pylon" x={478} y={168} color="var(--o-purple)" txt={(exportW > 5 ? '↑ ' : '↓ ') + fmtKW(exportW > 5 ? exportW : gridW)} live={(exportW > 5 ? exportW : gridW) > 5} />}
+      {/* AU BOUT DU CABLE (08/10). Elle etait posee a 478, vingt-six unites
+        * apres l'endroit ou le cable du reseau s'arrete (452) : du temps de
+        * l'arc, ce vide a droite etait occupe par la courbe. Elle elargissait
+        * le cadre d'autant, et donc retrecissait la maison. */}
+      {gridW != null && <Chip icon="pylon" x={CHIP_RESEAU_X} y={168} color="var(--o-purple)" txt={(exportW > 5 ? '↑ ' : '↓ ') + fmtKW(exportW > 5 ? exportW : gridW)} live={(exportW > 5 ? exportW : gridW) > 5} />}
     </svg>
   );
 }
 
 const EN_LAYOUT_KEY = 'loggia_enlayout';
-
-/* Sources de puissance sur 24 h — plusieurs séries dans une même échelle.
- *
- * Une courbe qui recale son échelle sur elle-même ne se compare pas à sa
- * voisine. Ici l'échelle est
- * COMMUNE, le zéro est une ligne (le réseau passe en négatif quand on
- * exporte), et le survol donne l'heure et les valeurs, comme le tableau de
- * bord Énergie de Home Assistant.
- */
-/* Moins de points que de pixels, sans perdre les pics (audit du 29/09).
- *
- * Vingt-quatre heures de relevés font des milliers de points pour trois cents
- * pixels de large : on en dessinait donc des dizaines par colonne, pour un
- * tracé identique.
- *
- * On garde le plus BAS et le plus HAUT de chaque tranche, pas un point au
- * hasard : prendre un point sur vingt raboterait justement les pointes de
- * consommation, qui sont ce qu'on vient regarder. Les deux sortent dans
- * l'ordre du temps, sinon le trait ferait des allers-retours.
- */
-function sousEchantillonner(pts, colonnes) {
-  if (!Array.isArray(pts) || pts.length <= colonnes * 2) return pts;
-  const taille = Math.ceil(pts.length / colonnes);
-  const out = [];
-  for (let i = 0; i < pts.length; i += taille) {
-    const fin = Math.min(i + taille, pts.length);
-    let lo = pts[i], hi = pts[i];
-    for (let k = i + 1; k < fin; k += 1) {
-      if (pts[k].v < lo.v) lo = pts[k];
-      if (pts[k].v > hi.v) hi = pts[k];
-    }
-    if (lo === hi) out.push(lo);
-    else if (lo.t <= hi.t) { out.push(lo); out.push(hi); }
-    else { out.push(hi); out.push(lo); }
-  }
-  // Les deux bouts restent les vrais bouts : l'aire se referme dessus.
-  if (out[0] !== pts[0]) out.unshift(pts[0]);
-  if (out[out.length - 1] !== pts[pts.length - 1]) out.push(pts[pts.length - 1]);
-  return out;
-}
-
-function EnPuissances({ series, h = 190 }) {
-  const [survol, setSurvol] = useState(null);
-  const W = 320, PAD = 8;
-  /* TOUT le calcul se fait une fois par jeu de données, et non plus à chaque
-   * rendu. Le survol change soixante fois par seconde quand la souris traverse
-   * la carte ; il refaisait avec lui les bornes, l'échelle et les tracés de
-   * toutes les séries. Seules la ligne verticale et la bulle en dépendent. */
-  const g = useMemo(() => {
-    const vives = (series || []).filter(s => s.pts && s.pts.length > 1);
-    if (!vives.length) return null;
-    /* Les bornes en UNE passe. `Math.min(...tableau)` passe le tableau en
-     * arguments : au-delà de quelques dizaines de milliers de points, le
-     * navigateur lève une `RangeError` — Safari cède le premier. Une boucle
-     * n'a pas de limite, et lit chaque point une seule fois. */
-    let t0 = Infinity, t1 = -Infinity, haut = 0, bas = 0;
-    for (const s of vives) {
-      for (const p of s.pts) {
-        if (p.t < t0) t0 = p.t;
-        if (p.t > t1) t1 = p.t;
-        if (p.v > haut) haut = p.v;
-        if (p.v < bas) bas = p.v;
-      }
-    }
-    const dt = (t1 - t0) || 1;
-    const span = (haut - bas) || 1;
-    const x = (t) => ((t - t0) / dt) * W;
-    const y = (v) => PAD + (1 - (v - bas) / span) * (h - PAD * 2);
-    const chemin = (pts) => 'M ' + pts.map(p => x(p.t).toFixed(1) + ' ' + y(p.v).toFixed(1)).join(' L ');
-    const yZero = y(0);
-    const traces = vives.map(s => {
-      const pts = sousEchantillonner(s.pts, W);
-      const d = chemin(pts);
-      return { nom: s.nom, couleur: s.couleur, d,
-               aire: d + ' L ' + x(pts[pts.length - 1].t) + ' ' + yZero + ' L ' + x(pts[0].t) + ' ' + yZero + ' Z' };
-    });
-    // Repères d'heures : quatre traits, c'est assez pour situer sans charger.
-    const heures = [0, .25, .5, .75, 1].map(f => ({ f, d: new Date(t0 + dt * f) }));
-    return { vives, t0, dt, yZero, traces, heures };
-  }, [series, h]);
-  if (!g) return <div style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('historique indisponible')}</div>;
-  const { vives, t0, dt, yZero, traces, heures } = g;
-  const surPointeur = (e) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    if (!r.width) return;
-    const f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
-    const t = t0 + dt * f;
-    // La valeur montrée se lit sur les points d'ORIGINE : on a allégé le
-    // tracé, pas la mesure.
-    setSurvol({ f, t, vals: vives.map(s => ({ nom: s.nom, couleur: s.couleur, v: prochePoint(s.pts, t) })) });
-  };
-  return (
-    /* Le conteneur ne fait que positionner et suivre le pointeur : ce n'est
-     * pas une commande. Le survol reste cependant le SEUL chemin vers les
-     * valeurs point par point — limite connue, faute d'un parcours au
-     * clavier des points. Le trace annonce au moins ce qu'il montre. */
-    <div role="presentation" style={{ position: 'relative' }} onMouseMove={surPointeur} onMouseLeave={() => setSurvol(null)}>
-      <svg role="img" aria-label={tr('Puissances sur 24 h : {n}', { n: vives.map(v => v.nom).join(', ') })}
-        viewBox={`0 0 ${W} ${h}`} preserveAspectRatio="none" style={{ width: '100%', height: h, display: 'block', overflow: 'visible' }}>
-        {[0, .5, 1].map(f => <line key={f} x1="0" x2={W} y1={PAD + f * (h - PAD * 2)} y2={PAD + f * (h - PAD * 2)} stroke="var(--o-bd3)" strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
-        <line x1="0" x2={W} y1={yZero} y2={yZero} stroke="var(--o-text3)" strokeWidth="1" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
-        {traces.map(s => (
-          <g key={s.nom}>
-            <path d={s.aire} fill={s.couleur} opacity=".14" />
-            <path d={s.d} fill="none" stroke={s.couleur} strokeWidth="1.7" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-          </g>
-        ))}
-        {survol && <line x1={survol.f * W} x2={survol.f * W} y1="0" y2={h} stroke="var(--o-accent)" strokeWidth="1" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />}
-      </svg>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 10, fontWeight: 700, color: 'var(--o-text3)' }}>
-        {heures.map(({ f, d }) => <span key={f}>{String(d.getHours()).padStart(2, '0')}h</span>)}
-      </div>
-      {/* La bulle suit le curseur mais reste dans la carte. */}
-      {survol && (
-        <div style={{ position: 'absolute', top: 6, left: `clamp(0px, calc(${(survol.f * 100).toFixed(1)}% - 70px), calc(100% - 140px))`, width: 140, padding: '8px 10px', borderRadius: 10, background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: 'var(--o-shadow)', pointerEvents: 'none' }}>
-          <div style={{ fontSize: 11, fontWeight: 800, marginBottom: 4 }}>{new Date(survol.t).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}</div>
-          {survol.vals.map(v => (
-            <div key={v.nom} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600 }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: v.couleur, flexShrink: 0 }} />
-              <span style={{ flex: 1, color: 'var(--o-text2)' }}>{v.nom}</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{v.v == null ? '—' : dec(v.v / 1000, 2) + ' kW'}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 8 }}>
-        {vives.map(s => (
-          <span key={s.nom} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-text2)' }}>
-            <span style={{ width: 9, height: 9, borderRadius: 4, background: s.couleur }} />{s.nom}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-/* Consommation par heure — les barres empilées du tableau de bord Énergie.
- *
- * Les capteurs d'énergie sont CUMULATIFS et repartent de zéro chaque nuit :
- * l'énergie d'une heure, c'est la différence entre son dernier et son premier
- * relevé. Une différence négative est un passage de minuit, pas une
- * consommation négative — on la jette plutôt que de dessiner un trou.
- */
-function enParHeure(pts) {
-  const seaux = new Map();
-  for (const p of pts) {
-    const h = Math.floor(p.t / 3600000) * 3600000;
-    const e = seaux.get(h);
-    if (!e) seaux.set(h, { min: p.v, max: p.v, t: h });
-    else { e.min = Math.min(e.min, p.v); e.max = Math.max(e.max, p.v); }
-  }
-  return [...seaux.values()].sort((a, b) => a.t - b.t).map(e => ({ t: e.t, v: Math.max(0, e.max - e.min) }));
-}
-function EnBarresConso({ series, h = 190 }) {
-  const parSerie = (series || []).map(s => ({ ...s, barres: enParHeure(s.pts || []) })).filter(s => s.barres.length);
-  if (!parSerie.length) return <div style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('historique indisponible')}</div>;
-  // Une colonne par heure présente dans au moins une série.
-  const heures = [...new Set(parSerie.flatMap(s => s.barres.map(b => b.t)))].sort();
-  const valeurDe = (s, t) => { const b = s.barres.find(x => x.t === t); return b ? b.v : 0; };
-  const totaux = heures.map(t => parSerie.reduce((a, s) => a + valeurDe(s, t), 0));
-  const max = Math.max(...totaux, 0.001);
-  const total = totaux.reduce((a, v) => a + v, 0);
-  return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: h, padding: '0 1px' }}>
-        {heures.map((t, i) => (
-          <div key={t} title={new Date(t).getHours() + 'h · ' + dec(totaux[i], 2) + ' kWh'}
-            style={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 2 }}>
-            {parSerie.map(s => {
-              const v = valeurDe(s, t);
-              if (v <= 0) return null;
-              return <div key={s.nom} style={{ height: (v / max * 100) + '%', minHeight: 2, background: s.couleur, borderRadius: 4, opacity: .88 }} />;
-            })}
-          </div>
-        ))}
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 10, fontWeight: 700, color: 'var(--o-text3)' }}>
-        {[0, .25, .5, .75, 1].map(f => {
-          const t = heures[Math.min(heures.length - 1, Math.round(f * (heures.length - 1)))];
-          return <span key={f}>{String(new Date(t).getHours()).padStart(2, '0')}h</span>;
-        })}
-      </div>
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 8, alignItems: 'center' }}>
-        {parSerie.map(s => (
-          <span key={s.nom} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-text2)' }}>
-            <span style={{ width: 9, height: 9, borderRadius: 4, background: s.couleur }} />{s.nom}
-          </span>
-        ))}
-        <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{dec(total, 2)} kWh</span>
-      </div>
-    </div>
-  );
-}
-
-/** Valeur d'une série à un instant : le point le plus proche, sans interpoler. */
-function prochePoint(pts, t) {
-  let best = null, d = Infinity;
-  for (const p of pts) { const e = Math.abs(p.t - t); if (e < d) { d = e; best = p; } }
-  return best ? best.v : null;
-}
-
-/* Jauge en demi-cercle, le cadran du tableau de bord Énergie : un taux, un
- * mot. Rien à l'intérieur qui ne soit le chiffre. */
-function EnDemiJauge({ pct, label, couleur, aide = null }) {
-  const v = pct == null ? null : Math.max(0, Math.min(100, Math.round(pct)));
-  const R = 46, C = Math.PI * R; // demi-cercle
-  return (
-    <div style={{ flex: '1 1 150px', minWidth: 0, padding: '16px 14px 14px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd3)', textAlign: 'center' }} title={aide || undefined}>
-      <svg viewBox="0 0 110 62" style={{ width: '100%', maxWidth: 150, height: 62, display: 'block', margin: '0 auto' }}>
-        <path d={`M 9 55 A ${R} ${R} 0 0 1 101 55`} fill="none" stroke="var(--o-s4)" strokeWidth="11" strokeLinecap="round" />
-        {v != null && <path d={`M 9 55 A ${R} ${R} 0 0 1 101 55`} fill="none" stroke={couleur} strokeWidth="11" strokeLinecap="round"
-          strokeDasharray={`${(C * v / 100).toFixed(1)} ${C.toFixed(1)}`} style={{ transition: 'stroke-dasharray .8s cubic-bezier(.22,.61,.36,1)' }} />}
-        <text x="55" y="52" textAnchor="middle" fontSize="22" fontWeight="800" fill="var(--o-text)" style={{ fontVariantNumeric: 'tabular-nums' }}>{v == null ? '—' : v + ' %'}</text>
-      </svg>
-      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', marginTop: 6, lineHeight: 1.3 }}>{label}</div>
-    </div>
-  );
-}
 
 function EnergieContent({ hass, edit = false, onEnt }) {
   /* Le format decide du nombre de pastilles sur la maison : toutes sur
@@ -11026,11 +10883,6 @@ function EnergieContent({ hass, edit = false, onEnt }) {
    * pour ce qui n'a pas d'unité à ramener : les taux (%) et la devise. */
   const numW = (id, def = 0) => { const w = avail(id) ? wattsDe(S[id]) : null; return w == null ? def : w; };
   const numKwh = (id, def = 0) => { const k = avail(id) ? kwhDe(S[id]) : null; return k == null ? def : k; };
-  // L'historique arrive dans l'unité du capteur, sans ses attributs : il se
-  // ramène au même repère que la valeur du moment. Sinon une courbe en kW se
-  // tracerait mille fois trop bas à côté d'une courbe en W, sur l'échelle commune.
-  const uniteEn = (id) => (S && S[id] && S[id].attributes && S[id].attributes.unit_of_measurement) || '';
-  const ramener = (pts, f) => (f === 1 ? pts : pts.map(p => ({ t: p.t, v: p.v * f })));
   // Package énergie v3 prioritaire, repli sur les capteurs bruts si absent
   const EN = enHaids();
   // Vehicule electrique : sa puissance de charge suffit a tout piloter — le
@@ -11041,8 +10893,20 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   // calque, le cable et la pastille d'un bloc, par intermittence.
   const evBranche = !!EN.evNow;
   const evW = avail(EN.evNow) ? Math.max(0, Math.round(numW(EN.evNow))) : null;
-  const batPresente = !!(EN.batNow || EN.batSoc);
-  const batW = avail(EN.batNow) ? Math.round(numW(EN.batNow)) : null;
+  /* LA BATTERIE, DANS LES DEUX SENS (07/10). `batNow` suppose un capteur
+   * SIGNE — positif en charge, negatif en decharge —, et beaucoup d'onduleurs
+   * en publient un. Mais le tableau de bord Energie nomme souvent les deux
+   * sens separement (`power_config`), et deux capteurs toujours positifs ne
+   * disent rien a eux seuls : la puissance de la batterie est leur DIFFERENCE.
+   * Le capteur signe reste prioritaire quand il existe. */
+  const batPresente = !!(EN.batNow || EN.batSoc || EN.batChargeNow || EN.batDechargeNow);
+  const batW = (() => {
+    if (avail(EN.batNow)) return Math.round(numW(EN.batNow));
+    const c = avail(EN.batChargeNow) ? Math.max(0, numW(EN.batChargeNow)) : null;
+    const d = avail(EN.batDechargeNow) ? Math.max(0, numW(EN.batDechargeNow)) : null;
+    if (c == null && d == null) return null;
+    return Math.round((c || 0) - (d || 0));
+  })();
   const batSoc = avail(EN.batSoc) ? Math.round(num(EN.batSoc)) : null;
 
   // Postes de consommation : la liste proposee, puis l'agencement.
@@ -11088,11 +10952,49 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   const exporting = surplusW > 5;
   const importW = Math.max(0, gridDrawW);
   const gridNetW = exporting ? surplusW : importW;
+  /* Le TOUR de relecture : toutes les cinq minutes, l'historique et les
+   * statistiques se relisent. Rien quand la page est cachee, le tour manque au
+   * retour (releve.js) ; quitter la vue coupe le minuteur. Sans lui, sur une
+   * tablette ouverte au mur, « les douze derniers mois » s'arretaient au jour
+   * de l'arrivee sur la page. */
+  const [tourEn, setTourEn] = useState(0);
+  useEffect(() => armerReleve(() => setTourEn(x => x + 1), 5 * 60000), []);
+
+  /* LE TOTAL DU JOUR, SUR N'IMPORTE QUEL COMPTEUR (audit du 07/10).
+   *
+   * Le tableau de bord Energie de Home Assistant ne designe pas des compteurs
+   * journaliers : il designe l'INDEX du compteur, qui ne fait que monter. Lu
+   * tel quel, il annoncait « 12 450 kWh aujourd'hui » chez quiconque n'avait
+   * jamais rempli la fiche Entites a la main — c'est-a-dire chez presque tout
+   * le monde sauf l'installation qui a servi a ecrire la vue.
+   *
+   * Un compteur qui s'est remis a zero cette nuit le DIT (`last_reset`) : son
+   * etat est alors le total du jour, et rien n'est demande. Les autres sont des
+   * index, et leur journee se lit dans les statistiques — une seule requete
+   * pour tous (`jourstat.js`). Quand ni l'un ni l'autre ne repond, on ne rend
+   * rien : un tiret vaut mieux qu'un index pris pour une journee.
+   */
+  const CPT_JOUR = [EN.consoJour, EN.consoJourHc, EN.consoJourHp, EN.consoReseauToday,
+    EN.consoHcToday, EN.consoHpToday, EN.prodJour, EN.injectionJour, EN.coutJour, EN.revenuJour];
+  const cumulatifs = CPT_JOUR.filter(id => id && S && S[id] && !compteurDuJour(S[id]));
+  const totauxJour = useTotauxJour(hass, cumulatifs, tourEn);
+  /* `kwh` ramene en kilowattheures ce qui est une energie ; une somme d'argent
+   * garde son unite. L'etat brut passe par `numKwh`, qui convertit deja. */
+  const valJour = (id, kwh) => {
+    if (!id || !S || !S[id]) return null;
+    if (compteurDuJour(S[id])) return avail(id) ? (kwh ? numKwh(id, null) : num(id, null)) : null;
+    const v = totauxJour[id];
+    if (v == null || !isFinite(v)) return null;
+    const u = (S[id].attributes && S[id].attributes.unit_of_measurement) || '';
+    return kwh ? v * facteurKwh(u) : v;
+  };
+  const kwhJour = (id) => valJour(id, true);
+  const euroJour = (id) => valJour(id, false);
+
   // Bilans / coûts du package
-  const prodJour = avail(EN.prodJour) ? numKwh(EN.prodJour) : null;
+  const prodJour = kwhJour(EN.prodJour);
   const autosuff = avail(EN.autosuffJour) ? Math.round(num(EN.autosuffJour)) : null;
   const tauxAutoconso = avail(EN.tauxAutoconso) ? Math.round(num(EN.tauxAutoconso)) : null;
-  const ecoJour = avail(EN.ecoJour) ? num(EN.ecoJour) : null;
   /* Le COUT du jour (05/10). `resolveEnergy` le resolvait depuis le tableau
    * de bord Energie de Home Assistant (`stat_cost`) et personne ne le lisait :
    * on allait le chercher, on le rangeait dans l'index, et il mourait la.
@@ -11101,7 +11003,11 @@ function EnergieContent({ hass, edit = false, onEnt }) {
    * multiples : on reprend son chiffre, on n'en refait pas un a partir d'un
    * prix du kWh. Sans tarif declare, `stat_cost` n'existe pas et rien ne
    * s'affiche — ni zero, ni tiret. */
-  const coutJour = avail(EN.coutJour) ? num(EN.coutJour) : null;
+  const coutJour = euroJour(EN.coutJour);
+  /* Ce que l'injection RAPPORTE, quand Home Assistant le tient
+   * (`stat_compensation`). Meme lecture que le cout : un cumul, pas une
+   * journee — `euroJour` s'en charge. */
+  const revenuJour = euroJour(EN.revenuJour);
   // La devise suit l'entite, puis l'installation — jamais suppose en euros.
   const uniteDe = (id) => (id && S[id] && S[id].attributes && S[id].attributes.unit_of_measurement) || null;
   const deviseJour = uniteDe(EN.coutJour) || uniteDe(EN.ecoJour)
@@ -11112,67 +11018,37 @@ function EnergieContent({ hass, edit = false, onEnt }) {
    * nul, et le garde-fou de l'autosuffisance ne jouait pas. `numKwh(id, null)`
    * dit « illisible » ; `consoJourKwh` (bilan.js) choisit le compteur et rend
    * null quand aucun ne répond. */
-  const hcToday = avail(EN.consoJourHc) ? numKwh(EN.consoJourHc) : numKwh(EN.consoHcToday, null);
-  const hpToday = avail(EN.consoJourHp) ? numKwh(EN.consoJourHp) : numKwh(EN.consoHpToday, null);
+  const hcToday = EN.consoJourHc ? kwhJour(EN.consoJourHc) : kwhJour(EN.consoHcToday);
+  const hpToday = EN.consoJourHp ? kwhJour(EN.consoJourHp) : kwhJour(EN.consoHpToday);
   /* Configuré mais muet n'est pas « non configuré » (relecture du 03/10). */
   const hcMuet = !!(EN.consoJourHc || EN.consoHcToday) && hcToday == null;
   const hpMuet = !!(EN.consoJourHp || EN.consoHpToday) && hpToday == null;
-  const totalToday = consoJourKwh({ jour: numKwh(EN.consoJour, null), hc: hcToday, hp: hpToday, reseau: numKwh(EN.consoReseauToday, null), hcMuet, hpMuet });
+  const totalToday = consoJourKwh({ jour: kwhJour(EN.consoJour), hc: hcToday, hp: hpToday, reseau: kwhJour(EN.consoReseauToday), hcMuet, hpMuet });
 
-  /* ── Sources de puissance et cadrans, à droite du schéma ───────────────────
-   *
-   * Trois séries sur 24 h : le RÉSEAU d'abord (le flux net du compteur, qui
-   * passe sous zéro quand on exporte), le solaire, la consommation de la
-   * maison. Chacune n'est tracée que si son capteur existe.
-   */
-  const puissIds = [EN.consoNow || EN.gridNow, EN.solarNow || EN.solarOutput, EN.consoMaison].filter(Boolean);
-  /* Relues, et pas seulement lues (audit du 03/10). La clé de relecture était
-   * figée à 0 : l'historique partait une fois, au montage, et sur une tablette
-   * ouverte au mur « les dernières 24 heures » s'arrêtaient à l'heure de
-   * l'arrivée sur la page. Un tour toutes les cinq minutes pour les DEUX
-   * onglets — puissance et consommation —, comme les courbes des fiches
-   * (`useHistorique24`) et le CO₂ du rail ; rien quand la page est cachée, le
-   * tour manqué au retour (releve.js). L'effet rend l'arrêt : quitter la vue
-   * coupe le minuteur. Le Système fait de même, chaque minute. */
-  const [tourEn, setTourEn] = useState(0);
-  useEffect(() => armerReleve(() => setTourEn(x => x + 1), 5 * 60000), []);
-  const puissHist = useSysHist(hass, puissIds, 24, tourEn);
-  const puissSeries = [
-    { id: EN.consoNow || EN.gridNow, nom: tr('Réseau'), couleur: 'var(--o-accent)' },
-    { id: EN.solarNow || EN.solarOutput, nom: tr('Solaire'), couleur: 'var(--o-gold)' },
-    { id: EN.consoMaison, nom: tr('Consommation'), couleur: 'var(--o-text2)' },
-  ].filter(s => s.id && puissHist[s.id]).map(s => ({ ...s, pts: ramener(puissHist[s.id], facteurWatts(uniteEn(s.id))) }));
-
-  /* Onglet CONSOMMATION : les mêmes 24 h, mais en kWh par heure. Les compteurs
-   * du jour séparent souvent heures creuses et heures pleines — on garde cette
-   * distinction quand elle existe, sinon le total réseau suffit. */
-  const consoIds = [EN.consoJourHc, EN.consoJourHp, EN.consoJour, EN.prodJour].filter(Boolean);
-  const consoHist = useSysHist(hass, consoIds, 24, tourEn);
-  const aHcHp = !!(EN.consoJourHc && consoHist[EN.consoJourHc]) || !!(EN.consoJourHp && consoHist[EN.consoJourHp]);
-  const consoSeries = [
-    { id: EN.prodJour, nom: tr('Solaire'), couleur: 'var(--o-gold)' },
-    ...(aHcHp
-      ? [{ id: EN.consoJourHc, nom: tr('Heures creuses'), couleur: 'var(--o-ok)' },
-        { id: EN.consoJourHp, nom: tr('Heures pleines'), couleur: 'var(--o-accent)' }]
-      : [{ id: EN.consoJour, nom: tr('Réseau'), couleur: 'var(--o-accent)' }]),
-  ].filter(s => s.id && consoHist[s.id]).map(s => ({ ...s, pts: ramener(consoHist[s.id], facteurKwh(uniteEn(s.id))) }));
-  const [ongletEn, setOngletEn] = useState('puissance');
+  const [onglEn, setOnglEn] = useState('vue');       // vue | piles
+  const [pilesFiltre, setPilesFiltre] = useState('toutes');
+  /* A surveiller : une pile faible, ou une qui ne repond plus. Le seuil est
+   * celui des cartes (piles.js) : rien de neuf a regler. Le badge de l'onglet
+   * et le filtre comptent la MEME chose — deux comptes differents sur le meme
+   * ecran mentiraient. */
+  const pilesSurveiller = piles.filter(p => p.niveau == null || p.niveau <= 35).length;
+  const pilesVues = pilesFiltre === 'surveiller' ? piles.filter(p => p.niveau == null || p.niveau <= 35) : piles;
 
   /* Autosuffisance : la part de la consommation couverte par le solaire. Le
    * capteur du package si l'installation en publie un, sinon les kWh du jour —
-   * ce que produit la maison MOINS ce qu'elle renvoie au réseau, rapporté à
-   * tout ce qu'elle a consommé. */
-  const injJour = avail(EN.injectionJour) ? numKwh(EN.injectionJour) : null;
+   * ce que produit la maison MOINS ce qu'elle renvoie au reseau, rapporte a
+   * tout ce qu'elle a consomme. */
+  const injJour = kwhJour(EN.injectionJour);
   const injectionMuette = !!EN.injectionJour && injJour == null;
-  /* Sans production OU sans consommation lisible, pas de cadran (audit du
+  /* Sans production OU sans consommation lisible, pas de taux (audit du
    * 03/10) : `autosuffisance` (bilan.js) rend null — jamais « 100 % » sur un
    * compteur muet. */
   const autoPct = autosuff != null ? autosuff : (tauxAutoconso != null ? tauxAutoconso : autosuffisance(prodJour, totalToday, injJour, injectionMuette));
 
   /* Part bas-carbone : Electricity Maps (ou CO2 Signal) publie le pourcentage
-   * d'énergies FOSSILES du réseau. Le solaire de la maison est bas-carbone par
-   * construction ; on pondère donc les deux sources par leurs kWh du jour.
-   * Sans cette intégration, pas de cadran — on ne devine pas un mix. */
+   * d'energies FOSSILES du reseau. Le solaire de la maison est bas-carbone par
+   * construction ; on pondere donc les deux sources par leurs kWh du jour.
+   * Sans cette integration, pas de tuile — on ne devine pas un mix. */
   const fossilePct = (() => {
     if (!S) return null;
     const id = Object.keys(S).find(k => k.indexOf('sensor.') === 0 && /fossil/i.test(k)
@@ -11190,22 +11066,18 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   })();
   const solarActive = solarW > 5;
   const fmtW = fmtWatts;
-  /* L'en-tête ne dit que ce qui se lit (audit du 03/10). Il était bâti sur
-   * `consoW`, `solarW` et `gridNetW`, que `num()` met à 0 quand l'entité se
+  /* L'en-tete ne dit que ce qui se lit (audit du 03/10). Il etait bati sur
+   * `consoW`, `solarW` et `gridNetW`, que `num()` met a 0 quand l'entite se
    * tait : « Consommation 0 W » au-dessus de chiffres qui, eux, disaient
-   * « — ». Il suit maintenant les MÊMES conditions que ces chiffres — la
-   * consommation se lit au compteur réseau ou au capteur de la maison, le
-   * réseau à l'un de ses capteurs —, et sans rien de lisible il n'y a ni
-   * ligne ni pastille « PAS DE SURPLUS » : ce que rien ne mesure ne
-   * s'affirme pas (ADR 0030). Le schéma solaire (`SunArc`) reçoit les mêmes
-   * conditions pour ses pastilles maison et pylône. */
+   * « — ». Il suit les MEMES conditions que ces chiffres, et sans rien de
+   * lisible il n'y a ni ligne ni pastille : ce que rien ne mesure ne s'affirme
+   * pas (ADR 0030). */
   const consoLue = consoAvail || avail(EN.consoMaison);
   const reseauLu = surplusAvail || consoAvail;
-  /* Les deux SENS du réseau ne se lisent pas aux mêmes capteurs (relecture du
+  /* Les deux SENS du reseau ne se lisent pas aux memes capteurs (relecture du
    * 03/10). Un capteur de surplus seul mesure l'export, pas l'achat : la nuit,
-   * sans surplus, l'en-tête écrivait « réseau 0 W » et le pylône « ↓ 0 W »
-   * alors que rien n'avait mesuré l'achat. L'achat se lit au compteur
-   * réseau ; l'export, à lui ou au capteur de surplus. */
+   * sans surplus, l'en-tete ecrivait « reseau 0 W » alors que rien n'avait
+   * mesure l'achat. */
   const sensLu = exporting ? reseauLu : consoAvail;
   const ligneEnTete = resumeEnergie({
     conso: consoLue ? consoW : null,
@@ -11213,123 +11085,328 @@ function EnergieContent({ hass, edit = false, onEnt }) {
     reseau: sensLu ? gridNetW : null,
   });
 
-  return (
-    <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {edit && <BandeauEdition ed={ed} onAjouter={() => setEnAdd(true)} ajouterLabel={tr('Ajouter un poste')} onEnt={onEnt} entLabel={tr('Entités du schéma')} />}
-      <div className="o-en-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
-        <div style={{ minWidth: 0 }}>
-        <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Énergie')}</h1>
-        {ligneEnTete && <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{ligneEnTete}</div>}
+  /* ── L'APERÇU, sur le modèle de la maquette ───────────────────────────────
+   *
+   * Un disque qui se remplit comme un verre, cerclé des parts de chaque source,
+   * et à sa droite les chiffres du jour. L'onglet « Maison » bascule sur le
+   * SCHÉMA DE LOGGIA — ses flux à lui, pas les maisons dessinées de la
+   * maquette : « pour la maison par contre garde les flux d'energie actuel ».
+   */
+  const [faceApercu, setFaceApercu] = useState('apercu');            // apercu | maison
+
+  /* Le MIX du moment : d'où vient ce que la maison consomme à l'instant.
+   * Le solaire ne compte que pour ce qui est consommé sur place — ce qui part
+   * au réseau n'alimente rien ici. */
+  const solaireUtile = Math.max(0, Math.min(solarW, consoW + Math.max(0, evW || 0)));
+  const batterieSortie = batW != null ? Math.max(0, -batW) : 0;
+  const totalMix = solaireUtile + batterieSortie + importW;
+  const mix = totalMix > 0 ? [
+    { label: tr('Solaire'), couleur: 'var(--o-gold)', pct: Math.round(solaireUtile / totalMix * 100) },
+    batPresente && { label: tr('Batterie'), couleur: 'var(--o-purple)', pct: Math.round(batterieSortie / totalMix * 100) },
+    { label: tr('Réseau'), couleur: 'var(--o-accent)', pct: Math.round(importW / totalMix * 100) },
+  ].filter(Boolean) : [];
+  // La part qui ne vient PAS du réseau : c'est le niveau du liquide.
+  const partPropre = totalMix > 0 ? Math.round((solaireUtile + batterieSortie) / totalMix * 100) : 0;
+  const couleurAnneau = importW === 0 && totalMix > 0 ? 'var(--o-ok)' : solarActive ? 'var(--o-gold)' : 'var(--o-accent)';
+
+  /* Les SOURCES en direct, sous le disque. Une source absente de l'installation
+   * n'a pas de jeton : on ne montre pas une batterie à qui n'en a pas. */
+  const jetons = [
+    solarAvail && { icone: 'sun', couleur: 'var(--o-gold)', v: fmtW(solarW), label: tr('Solaire') },
+    batPresente && { icone: 'battery-full', couleur: 'var(--o-purple)', v: batW != null ? fmtW(Math.abs(batW)) : (batSoc != null ? batSoc + ' %' : '—'), label: (batW > 0 ? tr('Charge') : batW < 0 ? tr('Décharge') : tr('En veille')) + (batSoc != null ? ' · ' + batSoc + ' %' : '') },
+    reseauLu && { icone: 'bolt', couleur: exporting ? 'var(--o-ok)' : 'var(--o-accent-soft)', v: fmtW(gridNetW), label: exporting ? tr('Vente réseau') : tr('Achat réseau') },
+    evBranche && { icone: 'car-side', couleur: 'var(--o-ok)', v: evW != null ? fmtW(evW) : '—', label: tr('Véhicule') },
+  ].filter(Boolean);
+
+  /* La phrase du haut de carte : ce qui alimente la maison en ce moment. */
+  const titreApercu = solarActive ? tr('Production solaire active')
+    : (batW != null && batW < 0) ? tr('La batterie prend le relais')
+      : tr('Alimentée par le réseau');
+
+  /* Les quatre chiffres de la colonne droite. Chacun n'apparaît que s'il se
+   * lit — une maison sans panneaux n'a pas de « Production du jour » à zéro. */
+  /* LE TELEPHONE REORGANISE, il ne retrecit pas (maquette mobile du 07/10).
+   * Sur la LARGEUR et non sur le type d'appareil : les regles CSS de la vue
+   * basculent au meme endroit, et un navigateur de bureau retreci doit lire la
+   * meme page qu'un telephone. */
+  const etroit = !useWide(760);
+
+  const statsJour = [
+    prodJour != null && { l: tr('Production du jour'), v: dec(prodJour, 1), u: 'kWh' },
+    autoPct != null && { l: tr('Autosuffisance'), v: String(autoPct), u: '%' },
+    totalToday != null && { l: tr('Réseau importé'), v: dec(totalToday, 1), u: 'kWh' },
+    injJour != null && { l: tr('Réseau exporté'), v: dec(injJour, 1), u: 'kWh' },
+  ].filter(Boolean);
+
+  /* Les tuiles de mesure, sous l'historique. Le gaz et l'eau viennent du
+   * tableau de bord Énergie quand la maison en déclare — sinon ils n'existent
+   * pas, et on ne les invente pas. */
+  const mesures = [
+    autoPct != null && { caption: tr('Autosuffisance'), value: String(autoPct), unit: '%', icon: 'leaf', tone: 'var(--o-ok)', pct: autoPct },
+    basCarbonePct != null && { caption: tr('Électricité bas-carbone'), value: String(basCarbonePct), unit: '%', icon: 'bolt', tone: 'var(--o-cyan)', pct: basCarbonePct },
+    avail(EN.gasJour) && { caption: tr('Gaz'), value: dec(numKwh(EN.gasJour), 1), unit: uniteDe(EN.gasJour) || 'kWh', icon: 'flame', tone: 'var(--o-orange)', pct: null },
+    avail(EN.waterJour) && { caption: tr('Eau'), value: dec(num(EN.waterJour), 0), unit: uniteDe(EN.waterJour) || 'L', icon: 'raindrops', tone: 'var(--o-cold)', pct: null },
+  ].filter(Boolean);
+
+  /* La CONSOMMATION DU JOUR et ses quatre chiffres : a droite de l'anneau sur
+   * un grand ecran, dans leur propre carte au telephone. Meme contenu, deux
+   * places — c'est ce que fait la maquette. */
+  const colonneDuJour = (
+    <>
+      <div style={etroit ? { display: 'flex', alignItems: 'flex-end', gap: 10 } : undefined}>
+        <div style={etroit ? { flex: 1, minWidth: 0 } : undefined}>
+          <div style={{ fontSize: etroit ? 12.5 : 13, fontWeight: etroit ? 700 : 600, color: 'var(--o-text2)' }}>{tr('Consommation du jour')}</div>
+          <div style={{ marginTop: 6, fontSize: etroit ? 28 : 34, fontWeight: 800, letterSpacing: '-.01em', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+            {totalToday != null ? <Num v={totalToday} d={1} /> : '—'}<span style={{ fontSize: etroit ? 12 : 14, fontWeight: 700, color: 'var(--o-text2)', marginLeft: etroit ? 4 : 5 }}>kWh</span>
+          </div>
         </div>
-        <span style={{ flex: 1 }} />
-        {reseauLu && <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: exporting ? 'rgba(var(--o-ok-rgb),.14)' : 'var(--o-s2)', color: exporting ? 'var(--o-ok)' : 'var(--o-text2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: exporting ? 'var(--o-ok)' : 'var(--o-text3)' }} />{exporting ? tr('SURPLUS') + ' ' + fmtW(surplusW) : tr('PAS DE SURPLUS')}</span>}
+        {coutJour != null && (etroit
+          ? <div style={{ textAlign: 'right', lineHeight: 1.3 }}>
+            <div style={{ fontSize: 15, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}><Num v={coutJour} d={2} suffix={' ' + deviseJour} /></div>
+            <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>{tr('Coût du jour')}</div>
+          </div>
+          : <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
+            <span style={{ width: 34, height: 34, flexShrink: 0, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}><Fi i="euro" size={15} /></span>
+            <span style={{ minWidth: 0, lineHeight: 1.3 }}>
+              <span style={{ display: 'block', fontSize: 15, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}><Num v={coutJour} d={2} suffix={' ' + deviseJour} /></span>
+              <span style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Coût du jour')}</span>
+            </span>
+          </div>)}
+      </div>
+      {!etroit && statsJour.length > 0 && <div style={{ height: 1, width: 110, background: 'var(--o-bd2)' }} />}
+      {/* Au telephone les quatre chiffres sont ENCADRES : sans cadre, ils se
+        * confondent avec le grand nombre juste au-dessus. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: etroit ? 8 : '18px 20px', marginTop: etroit ? 14 : 0 }}>
+        {statsJour.map(s => (
+          <div key={s.l} style={etroit
+            ? { minWidth: 0, padding: '10px 12px', background: 'var(--o-well)', border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: 14 }
+            : { minWidth: 0 }}>
+            <div style={{ fontSize: etroit ? 11 : 12.5, fontWeight: 600, color: 'var(--o-text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.l}</div>
+            <div style={{ marginTop: etroit ? 4 : 5, fontSize: etroit ? 18 : 22, fontWeight: 800, letterSpacing: '-.01em', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{s.v}<span style={{ fontSize: etroit ? 11 : 12, fontWeight: 700, color: 'var(--o-text2)', marginLeft: etroit ? 3 : 4 }}>{s.u}</span></div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+
+  /* La pastille du reseau : a droite du titre au telephone, au bout de la barre
+   * d'onglets au large. Deux places, un seul dessin. */
+  const pastilleReseau = reseauLu ? (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, padding: '5px 11px', borderRadius: 999, fontSize: etroit ? 10.5 : 11, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', background: exporting ? 'rgba(var(--o-ok-rgb),.13)' : 'rgba(var(--o-accent-rgb),.13)', color: exporting ? 'var(--o-ok)' : 'var(--o-accent-soft)' }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />{(exporting ? tr('Surplus') : tr('Import')) + ' ' + fmtW(gridNetW)}
+    </span>
+  ) : null;
+
+  // Le total des postes suivis, en en-tête de leur grille.
+  const totalPostes = ed.ids.reduce((a, k) => a + (avail(posteDe(k).power) ? Math.round(numW(posteDe(k).power)) : 0), 0);
+
+  return (
+    <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {edit && <BandeauEdition ed={ed} onAjouter={() => setEnAdd(true)} ajouterLabel={tr('Ajouter un poste')} onEnt={onEnt} entLabel={tr('Entités du schéma')} />}
+
+      <div className="o-en-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ flex: etroit ? '1 1 100%' : '1 1 320px', minWidth: 0, display: etroit ? 'flex' : 'block', alignItems: 'flex-end', gap: 10 }}>
+          <h1 className="o-en-titre" style={{ flex: etroit ? 1 : undefined, minWidth: 0, margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500, lineHeight: 1.1 }}>{tr('L’énergie')}</h1>
+          {!etroit && ligneEnTete && <div style={{ fontSize: 13.5, color: 'var(--o-text2)', fontWeight: 600, marginTop: 6, textWrap: 'pretty' }}>{ligneEnTete}</div>}
+          {etroit && pastilleReseau}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {/* Les piles ont leur onglet (06/10) : elles étaient en bas d'une page
+            * qui s'allonge, et personne ne descend jusque-là pour voir qu'une
+            * télécommande est à plat. Le badge dit combien sont à surveiller. */}
+          {piles.length > 0 && (
+            <div className="o-en-onglets" style={{ display: 'inline-flex', gap: 4, padding: 3, borderRadius: 12, background: 'var(--o-well)', border: 'var(--o-bw,1px) solid var(--o-bd2)', flexShrink: 0 }}>
+              {[['vue', tr('Vue d’ensemble'), 0], ['piles', tr('Piles et batteries'), pilesSurveiller]].map(([id, lb, badge]) => (
+                <button key={id} onClick={() => setOnglEn(id)} aria-pressed={onglEn === id}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 30, padding: '0 13px', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', background: onglEn === id ? 'var(--o-accent-fond)' : 'transparent', color: onglEn === id ? '#fff' : 'var(--o-text2)' }}>
+                  {lb}
+                  {badge > 0 && <span style={{ minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, fontWeight: 800, background: onglEn === id ? 'rgba(255,255,255,.22)' : 'rgba(var(--o-bad-rgb),.16)', color: onglEn === id ? '#fff' : 'var(--o-bad)' }}>{badge}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+          {!etroit && pastilleReseau}
+        </div>
       </div>
 
-      <div className="grid-ehero" style={{ display: 'grid', gridTemplateColumns: (puissSeries.length > 0 || autoPct != null || basCarbonePct != null) ? 'minmax(0,1.45fr) minmax(300px,1fr)' : 'minmax(0,1fr)', gap: 16, alignItems: 'stretch' }}>
-        <Anim i={0}><div style={{ position: 'relative', overflow: 'hidden', height: '100%', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: 24, boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.4))' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
-            <div><div style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)' }}>{tr('Maison · Temps réel')}</div><div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 25, fontWeight: 500, marginTop: 2 }}>{solarActive ? tr('Production solaire active') : tr('Consommation réseau')}</div></div>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 13px', borderRadius: 999, border: '1px solid ' + (solarActive ? 'rgba(var(--o-ok-rgb),.3)' : 'var(--o-bd2)'), color: solarActive ? 'var(--o-ok)' : 'var(--o-text3)', fontSize: 12, fontWeight: 700, flexShrink: 0 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: solarActive ? 'var(--o-ok)' : 'var(--o-text3)', animation: 'none' }} /><Shiny on={solarActive}>{solarActive ? tr('Solaire actif') : tr('Solaire inactif')}</Shiny></span>
-          </div>
-          <div className="o-en-well" style={{ position: 'relative', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 30%,var(--o-well0),var(--o-well2))', border: 'var(--o-bw,1px) solid var(--o-bd3)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 10 }}>
-            {/* Scène type Helios : arc du jour (géoloc domicile), soleil + irradiance, chips de flux */}
-            <div className="o-en-scene" style={{ position: 'relative', width: '100%', aspectRatio: '600 / 250', margin: '0 auto' }}>
-              <EnergyHouseSchema solarW={solarW} homeW={consoW} surplusW={surplusW} evW={evW} evBranche={evBranche} batW={batW} batSoc={batSoc} batPresente={batPresente} solarPresente={solarAvail} format={formatEn} />
-              <SunArc solarW={solarW} gridW={consoAvail || exporting ? importW : null} exportW={surplusW} homeW={consoLue ? consoW : null} appW={avail(EN.appTotal) ? Math.round(numW(EN.appTotal)) : null} solarPresente={solarAvail} format={formatEn} />
+      {onglEn === 'vue' && (<>
+      {/* Pas d'`Anim` sur les GRANDES sections : elle enveloppe son enfant
+        * dans un div, qui devient le vrai enfant flex — une carte posee la se
+        * reduit a son contenu au lieu de prendre la largeur (07/10). Les cartes
+        * de postes et de piles, elles, la gardent : la, c'est le geste commun. */}
+      {/* L'APERÇU et LE TARIF, côte à côte. */}
+      <div className="grid-ehero" style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'stretch' }}>
+        <div style={{ flex: '2 1 620px', minWidth: 0, display: 'flex' }}><section style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', borderRadius: 'var(--o-radius,18px)', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: 'var(--o-shadow)', padding: '22px 24px 24px' }}>
+          <div className="o-en-cartehead" style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
+            <div className="o-en-cartetitre" style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--o-text2)' }}>{tr('Aperçu')}</div>
+              <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, fontWeight: 500, marginTop: 2 }}>{titreApercu}</div>
             </div>
+            <div className="o-en-onglets" style={{ display: 'inline-flex', gap: 2, padding: 3, borderRadius: 12, background: 'var(--o-well)', border: 'var(--o-bw,1px) solid var(--o-bd2)', flexShrink: 0 }}>
+              {[['apercu', tr('Synthèse'), 'chart-pie-alt'], ['maison', tr('Maison'), 'home']].map(([id, lb, ic]) => (
+                <button key={id} onClick={() => setFaceApercu(id)} aria-pressed={faceApercu === id}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 30, padding: '0 13px', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', background: faceApercu === id ? 'var(--o-accent-fond)' : 'transparent', color: faceApercu === id ? '#fff' : 'var(--o-text2)' }}>
+                  <Fi i={ic} size={12} />{lb}
+                </button>
+              ))}
+            </div>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, padding: '4px 10px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: solarActive ? 'rgba(var(--o-gold-rgb),.13)' : 'var(--o-s2)', color: solarActive ? 'var(--o-gold)' : 'var(--o-text3)' }}><Fi i="sun" size={11} />{solarActive ? tr('Solaire actif') : tr('Solaire inactif')}</span>
           </div>
-          <div className="o-en-kpis" style={{ display: 'flex', gap: 24, marginTop: 16, flexWrap: 'wrap' }}>
-            <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-accent-soft)' }}>{consoLue ? <Num v={consoW} suffix=" W" /> : '—'}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-accent-fond)' }} />{tr('Conso maison')}</div></div>
-            <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-gold)' }}>{solarAvail ? <Num v={solarW} suffix=" W" /> : '—'}</div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-gold)' }} />{tr('Production')}</div></div>
-            {coutJour != null && <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-text)' }}><Num v={coutJour} d={2} suffix={' ' + deviseJour} /></div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-text2)' }} />{tr('Coût du jour')}</div></div>}
-            {ecoJour != null && <div><div style={{ fontSize: 25, fontWeight: 800, color: 'var(--o-ok)' }}><Num v={ecoJour} d={2} suffix={' ' + deviseJour} /></div><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--o-ok)' }} />{tr('Économie du jour')}</div></div>}
-            <div style={{ marginLeft: 'auto', textAlign: 'right' }}><div style={{ fontSize: 25, fontWeight: 800, color: exporting ? 'var(--o-ok)' : 'var(--o-bad)' }}>{sensLu ? <Num v={exporting ? surplusW : importW} suffix=" W" /> : '—'}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2 }}><FlipText text={exporting ? '↑ ' + tr('Vente réseau') : '↓ ' + tr('Achat réseau')} /></div></div>
-          </div>
-        </div></Anim>
 
-        {/* À DROITE du schéma sur PC et tablette, dessous sur mobile (le CSS
-          * repasse `grid-ehero` sur une colonne) : les sources de puissance sur
-          * 24 h, puis les deux cadrans du tableau de bord Énergie. La colonne
-          * n'existe pas si la maison ne publie ni historique ni taux. */}
-        {(puissSeries.length > 0 || consoSeries.length > 0 || autoPct != null || basCarbonePct != null) && (
-          <Anim i={1}><div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
-            {(puissSeries.length > 0 || consoSeries.length > 0) && (() => {
-              // Deux lectures des mêmes 24 heures : la PUISSANCE, ce qui passe à
-              // l'instant, et la CONSOMMATION, ce qui s'est accumulé. Un onglet
-              // chacune plutôt que deux cartes : c'est le même sujet.
-              const onglets = [puissSeries.length > 0 && ['puissance', tr('Puissance')], consoSeries.length > 0 && ['conso', tr('Consommation')]].filter(Boolean);
-              const actif = onglets.some(([id]) => id === ongletEn) ? ongletEn : onglets[0][0];
-              return (
-                <div style={{ flex: 1, minHeight: 0, background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: '18px 20px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.4))' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)' }}>{actif === 'conso' ? tr('Consommation') : tr('Sources de puissance')}</div>
-                      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, fontWeight: 500, marginTop: 2 }}>{tr('Les dernières 24 heures')}</div>
-                    </div>
-                    {onglets.length > 1 && (
-                      <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 10, background: 'var(--o-s2)', flexShrink: 0 }}>
-                        {onglets.map(([id, lb]) => (
-                          <button key={id} onClick={() => setOngletEn(id)} aria-pressed={actif === id}
-                            style={{ padding: '5px 11px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: actif === id ? 'var(--o-accent-fond)' : 'transparent', color: actif === id ? '#fff' : 'var(--o-text2)' }}>{lb}</button>
-                        ))}
+          {/* Les deux faces de l'aperçu occupent la MÊME place : la synthèse
+            * reste en flux (elle donne sa hauteur), le schéma se pose dessus.
+            * Bascule sans que la carte change de taille. */}
+          <div style={{ position: 'relative', marginTop: 20 }}>
+            <div style={{ display: (etroit && faceApercu === 'maison') ? 'none' : 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 28, visibility: faceApercu === 'maison' ? 'hidden' : 'visible' }}>
+              <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 26, padding: '14px 0 4px' }}>
+                <AnneauEnergie classe="o-en-anneau" pct={partPropre} couleur={couleurAnneau} mix={mix} taille={216}>
+                  <span style={{ position: 'relative', fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-text)', textShadow: '0 1px 3px rgba(0,0,0,.35)' }}>{tr('Consommation')}</span>
+                  <div style={{ position: 'relative', textShadow: '0 1px 4px rgba(0,0,0,.3)', fontSize: 42, fontWeight: 800, letterSpacing: '-.01em', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                    {consoLue ? <Num v={consoW} fmt={fmtW} /> : '—'}
+                  </div>
+                  <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 800, color: 'var(--o-text)', textShadow: '0 1px 3px rgba(0,0,0,.35)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-ok)' }} />{tr('En direct')}</span>
+                </AnneauEnergie>
+                {jetons.length > 0 && (
+                  <div className="o-en-jetons" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                    {jetons.map(j => (
+                      <div key={j.label} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px 6px 6px', borderRadius: 12, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+                        <span style={{ width: 28, height: 28, flexShrink: 0, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', background: hx(j.couleur, 0.15), color: j.couleur }}><Fi i={j.icone} size={13} /></span>
+                        <span style={{ lineHeight: 1.2 }}>
+                          <span style={{ display: 'block', fontSize: 13.5, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{j.v}</span>
+                          <span style={{ display: 'block', fontSize: 10.5, fontWeight: 600, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{j.label}</span>
+                        </span>
                       </div>
-                    )}
+                    ))}
                   </div>
-                  <div style={{ marginTop: 10 }}>
-                    {actif === 'conso' ? <EnBarresConso series={consoSeries} /> : <EnPuissances series={puissSeries} />}
-                  </div>
+                )}
+              </div>
+              {!etroit && (
+                <div className="o-en-col" style={{ flex: '1 1 300px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 20, paddingLeft: 28, borderLeft: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+                  {colonneDuJour}
                 </div>
-              );
-            })()}
-            {(autoPct != null || basCarbonePct != null) && (
-              <div style={{ display: 'flex', gap: 12 }}>
-                {autoPct != null && <EnDemiJauge pct={autoPct} label={tr('Autosuffisance')} couleur="var(--o-gold)"
-                  aide={tr('Part de la consommation couverte par la production de la maison')} />}
-                {basCarbonePct != null && <EnDemiJauge pct={basCarbonePct} label={tr('Électricité bas-carbone consommée')} couleur="var(--o-ok)"
-                  aide={tr('Solaire de la maison et part non fossile du réseau')} />}
+              )}
+            </div>
+            {/* LE SCHÉMA DE LA MAISON : celui de Loggia, ses flux à lui. */}
+            {faceApercu === 'maison' && (
+              <div className="o-en-well" style={etroit
+                ? { position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 14, overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 30%,var(--o-well0),var(--o-well2))', border: 'var(--o-bw,1px) solid var(--o-bd3)', padding: 10 }
+                : { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 14, overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 30%,var(--o-well0),var(--o-well2))', border: 'var(--o-bw,1px) solid var(--o-bd3)', padding: 10 }}>
+                {/* Le rapport part aussi en variable : la feuille de style en
+                  * tire le plafond de LARGEUR, pour que la scène ne rompe
+                  * jamais son rapport — c'est ce qui garde les pastilles
+                  * posées sur le dessin. */}
+                <div className="o-en-scene" style={{ position: 'relative', width: '100%', aspectRatio: SCENE_RATIO, margin: '0 auto', '--o-scene-ratio': SCENE_RATIO }}>
+                  <EnergyHouseSchema solarW={solarW} homeW={consoW} surplusW={surplusW} evW={evW} evBranche={evBranche} batW={batW} batSoc={batSoc} batPresente={batPresente} solarPresente={solarAvail} format={formatEn} />
+                  <PastillesEnergie solarW={solarW} gridW={consoAvail || exporting ? importW : null} exportW={surplusW} homeW={consoLue ? consoW : null} appW={null} solarPresente={solarAvail} format={formatEn} />
+                </div>
               </div>
             )}
-          </div></Anim>
+          </div>
+
+          {/* Les bilans se calculent des STATISTIQUES quand la maison n'a pas
+            * de compteurs mois et annee a elle : ils arrivent donc du module
+            * a la demande, avec le tarif et l'historique. Au telephone ils
+            * suivent la consommation du jour, dans sa carte. */}
+          {!etroit && (
+            <Suspense fallback={null}>
+              <BilansEnergie hass={hass} EN={EN} tour={tourEn} devise={deviseJour} etroit={etroit} />
+            </Suspense>
+          )}
+        </section></div>
+
+        {/* LA CONSOMMATION DU JOUR a sa propre carte au telephone : dans
+          * l'apercu, elle passerait sous l'anneau sans rien pour l'en separer. */}
+        {etroit && (
+          <section style={{ background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', borderRadius: 'var(--o-radius,18px)', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: 'var(--o-shadow)', padding: 14 }}>
+            {colonneDuJour}
+            <Suspense fallback={null}>
+              <BilansEnergie hass={hass} EN={EN} tour={tourEn} devise={deviseJour} etroit={etroit} />
+            </Suspense>
+          </section>
         )}
+        <div style={{ flex: '1 1 300px', minWidth: 0, display: 'flex' }}><div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
+          <Suspense fallback={<div style={{ flex: 1, minHeight: 320 }} />}>
+            <CarteTarif hass={hass} EN={EN} tour={tourEn} devise={deviseJour} etroit={etroit} prixHa={enPrix()} venteHa={enVente()} coutJour={coutJour} revenuJour={revenuJour} />
+          </Suspense>
+        </div></div>
       </div>
 
+      {/* L'HISTORIQUE, pleine largeur. */}
+      <Suspense fallback={<div style={{ minHeight: 360 }} />}>
+        <SectionHistorique hass={hass} EN={EN} tour={tourEn} devise={deviseJour} etroit={etroit} />
+      </Suspense>
 
-      {/* Bilan instantané : les chiffres du moment, en lignes denses */}
-
-      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Postes de consommation')}</div>
-        <div ref={ed.gridRef} className="grid-edevices" style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12 }}>
-          {ed.ids.map((k) => { const d = posteDe(k); const di = ed.ids.indexOf(k); const w = Math.round(numW(d.power)); const kwh = avail(d.kwh) ? numKwh(d.kwh) : null; const on = w > 5;
-            const carte = (
-            <div style={{ position: 'relative', overflow: 'hidden', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 18, padding: '14px 15px' }}>
-              {d.art && VIEW_ART[d.art] && <div aria-hidden="true" style={{ position: 'absolute', right: 6, bottom: -6, width: 92, height: 92, backgroundImage: `url("${VIEW_ART[d.art]}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.16, pointerEvents: 'none' }} />}
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
-                <div style={{ width: 34, height: 34, borderRadius: 10, background: hx(d.c, 0.14), display: 'flex', alignItems: 'center', justifyContent: 'center', color: d.c }}><GlypheCarte id={d.power} size={15}><Fi i={d.icon} size={15} color={d.c} /></GlypheCarte></div>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: on ? 'var(--o-ok)' : 'var(--o-text3)' }} />
-              </div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name}</div>
-              <div style={{ fontSize: 15, fontWeight: 800, marginTop: 3, color: on ? d.c : 'var(--o-text3)' }}>{avail(d.power) ? <Num v={w} fmt={fmtW} /> : '—'}</div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{kwh != null ? tr('{n} kWh jour', { n: dec(kwh, 2) }) : '—'}</div>
-            </div>);
-            if (!edit) return <Anim key={k} i={di} base={160} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
-            return <EditableCard key={k} ed={ed} id={k} nom={d.name} onEdit={setCardEdit} hass={hass} taille={false}>{carte}</EditableCard>;
-          })}
-          {edit && <CarteAjout onClick={() => setEnAdd(true)} label={tr('Ajouter un poste')} />}
+      {mesures.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,150px),1fr))', gap: 16 }}>
+          {mesures.map(m => <MetricTile key={m.caption} caption={m.caption} value={m.value} unit={m.unit} icon={m.icon} tone={m.tone} pct={m.pct} />)}
         </div>
-        {enAdd && <ComposeurCartes hass={hass} entete={tr('Ajouter un poste')} domaines={['sensor']} composites={false} present={ed.ids.map(k => k.indexOf('dev:') === 0 ? k.slice(4) : k)} onToggle={(id) => ed.toggle('dev:' + id)} onClose={() => setEnAdd(false)} />}
-        {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={posteDe(cardEdit).name} origine={posteOrigine(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
+      )}
 
-      {/* Les piles et batteries : la carte standard a cinq barres (ADR 0057),
-        * a la suite des postes — retour user du 19/09. Un titre et une grille
-        * sur la page, pas de cadre autour ; la grille des Objets (176 × 184 au
-        * telephone). */}
-      {piles.length > 0 && (
+      {/* LES POSTES. Un titre sans rien dessous ne s'affiche pas (ADR 0030) :
+        * une maison dont le tableau de bord Énergie ne suit aucun appareil
+        * voyait « Postes de consommation » seul au milieu de la page. En
+        * ÉDITION il reste — c'est là qu'on ajoute le premier. */}
+      {(ed.ids.length > 0 || edit) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 16 }}>
+            <div style={{ flex: 1, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, fontWeight: 500, color: 'var(--o-text2)' }}>{tr('Postes de consommation')}</div>
+            {ed.ids.length > 0 && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>{tr('{v} suivis en direct', { v: fmtW(totalPostes) })}</div>}
+          </div>
+          <div ref={ed.gridRef} className="grid-edevices" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 14 }}>
+            {ed.ids.map((k) => { const d = posteDe(k); const di = ed.ids.indexOf(k); const w = Math.round(numW(d.power)); const kwh = avail(d.kwh) ? numKwh(d.kwh) : null; const on = w > 5;
+              const carte = (
+              /* Le gabarit de la maquette : l'illustration ou l'icône en grand,
+               * très pâle, dans le coin ; le nom et les chiffres poussés en bas
+               * de carte. */
+              <div style={{ position: 'relative', overflow: 'hidden', minHeight: 130, boxSizing: 'border-box', padding: 16, background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', borderRadius: 'var(--o-radius,18px)', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: 'var(--o-shadow)', display: 'flex', flexDirection: 'column' }}>
+                {d.art && VIEW_ART[d.art]
+                  ? <div aria-hidden="true" style={{ position: 'absolute', right: 6, bottom: -6, width: 92, height: 92, backgroundImage: `url("${VIEW_ART[d.art]}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.16, pointerEvents: 'none' }} />
+                  : <span aria-hidden="true" style={{ position: 'absolute', right: 14, bottom: 10, lineHeight: 1, color: 'var(--o-text)', opacity: 0.06, pointerEvents: 'none' }}><Fi i={d.icon} size={56} /></span>}
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                  <span style={{ width: 34, height: 34, borderRadius: 10, background: hx(d.c, 0.15), display: 'flex', alignItems: 'center', justifyContent: 'center', color: d.c }}><GlypheCarte id={d.power} size={15}><Fi i={d.icon} size={15} color={d.c} /></GlypheCarte></span>
+                  <span style={{ width: 7, height: 7, marginTop: 4, borderRadius: '50%', background: on ? 'var(--o-ok)' : 'var(--o-text3)' }} />
+                </div>
+                <div style={{ position: 'relative', marginTop: 'auto', paddingTop: 16, fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name}</div>
+                <div style={{ position: 'relative', marginTop: 4, fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{avail(d.power) ? <Num v={w} fmt={fmtW} /> : '—'}</div>
+                <div style={{ position: 'relative', marginTop: 3, fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{kwh != null ? tr('{n} kWh jour', { n: dec(kwh, 2) }) : '—'}</div>
+              </div>);
+              if (!edit) return <Anim key={k} i={di} base={160} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
+              return <EditableCard key={k} ed={ed} id={k} nom={d.name} onEdit={setCardEdit} hass={hass} taille={false}>{carte}</EditableCard>;
+            })}
+            {edit && <CarteAjout onClick={() => setEnAdd(true)} label={tr('Ajouter un poste')} />}
+          </div>
+        </div>
+      )}
+      {enAdd && <ComposeurCartes hass={hass} entete={tr('Ajouter un poste')} domaines={['sensor']} composites={false} present={ed.ids.map(k => k.indexOf('dev:') === 0 ? k.slice(4) : k)} onToggle={(id) => ed.toggle('dev:' + id)} onClose={() => setEnAdd(false)} />}
+      {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={posteDe(cardEdit).name} origine={posteOrigine(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
+
+      {/* LE CALENDRIER, du même module à la demande que l'historique. */}
+      <Suspense fallback={<div style={{ minHeight: 280 }} />}>
+        <EnergieCalendrier hass={hass} EN={EN} tour={tourEn} devise={deviseJour} etroit={etroit} />
+      </Suspense>
+      </>)}
+
+      {/* LES PILES, dans leur onglet, au gabarit de la maquette. */}
+      {onglEn === 'piles' && piles.length > 0 && (
         <>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-            <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Piles et batteries')}</div>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{trN(piles.length, '{n} capteur', '{n} capteurs')}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+              <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, fontWeight: 500, color: 'var(--o-text2)' }}>{tr('Piles et batteries')}</div>
+              <div style={{ marginTop: 4, fontSize: 12.5, fontWeight: 600, color: 'var(--o-text3)' }}>{trN(piles.length, '{n} capteur', '{n} capteurs')}</div>
+            </div>
+            {pilesSurveiller > 0 && (
+              <div style={{ display: 'inline-flex', gap: 2, padding: 3, borderRadius: 12, background: 'var(--o-well)', border: 'var(--o-bw,1px) solid var(--o-bd2)', flexShrink: 0 }}>
+                {[['toutes', tr('Toutes'), piles.length], ['surveiller', tr('À surveiller'), pilesSurveiller]].map(([id, lb, n]) => (
+                  <button key={id} onClick={() => setPilesFiltre(id)} aria-pressed={pilesFiltre === id}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 30, padding: '0 13px', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', background: pilesFiltre === id ? 'var(--o-accent-fond)' : 'transparent', color: pilesFiltre === id ? '#fff' : 'var(--o-text2)' }}>
+                    {lb}<span style={{ minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, fontWeight: 800, background: pilesFiltre === id ? 'rgba(255,255,255,.22)' : 'var(--o-s1)', color: pilesFiltre === id ? '#fff' : 'var(--o-text2)' }}>{n}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className="o-piles grid-objets grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', columnGap: 16, rowGap: 8 }}>
-            {piles.map((p, i) => <Anim key={p.id} i={i} base={200}>{dc.card(p.id)}</Anim>)}
+            {pilesVues.map((p, i) => <Anim key={p.id} i={i} base={200}>{dc.card(p.id)}</Anim>)}
           </div>
         </>
       )}
@@ -12412,8 +12489,8 @@ function chipVif(id, st) {
  *
  * Elle ne remplit pas sa case : une pastille de 48 px flotte au milieu de la
  * rangée, comme les chips de Home Assistant posées seules. On en pose autant
- * qu'on veut, côte à côte ; c'est le format que Guillaume demandait (retour
- * 01/09 : « une vraie chip par entité et non rassemblé dans une carte »). */
+ * qu'on veut, côte à côte ; c'est le format demandé le 01/09 : « une vraie
+ * chip par entité et non rassemblé dans une carte ». */
 function CvChip({ id, hass, dc = null }) {
   const S = (hass && hass.states) || {};
   const st = S[id];
@@ -14035,14 +14112,6 @@ const cvRetype = (x, t) => {
 /* Le type d'une entrée posée, pour cocher le bon dessin dans la feuille. */
 const cvTypeDe = (x) => (typeof x === 'string' ? 'compacte' : (x.t || 'compacte'));
 
-/* Barre d'outils d'une carte en édition : DANS la carte, jamais débordante —
- * des boutons flottant hors du cadre mordaient la carte voisine et le contenu
- * (retour 01/09). Fond opaque : elle reste lisible sur n'importe quelle carte. */
-function EditBarre({ children }) {
-  return (
-    <div style={{ position: 'absolute', top: 6, right: 6, zIndex: 6, display: 'flex', gap: 4, padding: 3, borderRadius: 10, background: 'var(--o-surfA)', boxShadow: '0 4px 14px rgba(0,0,0,.45)' }}>{children}</div>
-  );
-}
 const EDIT_BTN = { width: 26, height: 26, borderRadius: 10, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 12, fontWeight: 800, padding: 0 };
 
 /* Les domaines qu'une carte accepte — l'inverse de `cvTypesPour`, pour la
@@ -14244,6 +14313,43 @@ function nomCv(x, hass) {
   if (String(id).indexOf('.') < 0) return type || id;
   const nom = cvName(hass && hass.states && hass.states[id], id);
   return cvTypeDe(x) === 'compacte' || !type ? nom : nom + ', ' + type;
+}
+
+/* La FICHE d'une carte posée (06/10), partagée par les vues personnalisées et
+ * les favoris de l'Accueil. Elle reprend celle des vues de la maison, avec ce
+ * qui a du sens ici : le dessin, la taille, la largeur, le retrait.
+ *
+ * Partagée et non recopiée : deux mécaniques pour un même geste finissent par
+ * diverger — c'est exactement ce qu'on vient de corriger en donnant la tuile
+ * des vues de la maison aux vues personnalisées. */
+function FicheCarte({ x, nom, sous, onTaille, onLargeur, onChanger, onRetirer, onClose }) {
+  const compacte = cvRowsDe(x) === 1;
+  return (
+    <BottomSheet onClose={onClose}>
+      {close => (<>
+        <TitreFeuille style={{ fontSize: 19, fontWeight: 700 }} marge={4}>{nom}</TitreFeuille>
+        {sous && <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)', marginBottom: 14 }}>{sous}</div>}
+
+        <FicheRangee premiere titre={tr('Carte compacte')} desc={tr('Une rangée au lieu de deux : icône, nom, état et le contrôle.')}
+          droite={<RmBascule on={compacte} nom={tr('Carte compacte')} onToggle={() => onTaille(x)} couleur="var(--o-accent)" />} />
+
+        <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text1)', opacity: .78, margin: '18px 0 8px' }}>{tr('LARGEUR')}</div>
+        <Segment grandir value={cvW(x) === 2} onChange={() => onLargeur(x)} label={tr('Largeur')}
+          options={[{ id: false, label: tr('Simple') }, { id: true, label: tr('Double') }]} />
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' }}>{tr('Double : la carte prend deux emplacements côte à côte.')}</div>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
+          <button onClick={() => { close(); onChanger(x); }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' }}>
+            <Fi i="pencil" size={12} />{cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')}</button>
+          <button onClick={() => { onRetirer(x); close(); }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)' }}>
+            <Fi i="cross-small" size={12} />{tr('Supprimer')}</button>
+        </div>
+        <CroixFeuille />
+      </>)}
+    </BottomSheet>
+  );
 }
 
 function CustomView({ cv, hass, edit = false, onSave }) {
@@ -14455,38 +14561,12 @@ function CustomView({ cv, hass, edit = false, onSave }) {
           )}
         </div>
         {!edit && !cv.ents.length && <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Vue vide — active le crayon (en haut) pour ajouter des cartes.')}</div>}
-        {fiche && (() => {
-          const x = de(cvKey(fiche)) || fiche;
-          const cle = cvKey(x);
-          const compacte = cvRowsDe(x) === 1;
-          const fermer = () => setFiche(null);
-          return (
-            <BottomSheet onClose={fermer}>
-              {close => (<>
-                <TitreFeuille style={{ fontSize: 19, fontWeight: 700 }} marge={4}>{nomCarte(x)}</TitreFeuille>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)', marginBottom: 14 }}>{sousCarte(x)}</div>
-
-                <FicheRangee premiere titre={tr('Carte compacte')} desc={tr('Une rangée au lieu de deux : icône, nom, état et le contrôle.')}
-                  droite={<RmBascule on={compacte} nom={tr('Carte compacte')} onToggle={() => basculerH(x)} couleur="var(--o-accent)" />} />
-
-                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text1)', opacity: .78, margin: '18px 0 8px' }}>{tr('LARGEUR')}</div>
-                <Segment grandir value={cvW(x) === 2} onChange={() => basculerW(x)} label={tr('Largeur')}
-                  options={[{ id: false, label: tr('Simple') }, { id: true, label: tr('Double') }]} />
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' }}>{tr('Double : la carte prend deux emplacements côte à côte.')}</div>
-
-                <div style={{ display: 'flex', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
-                  <button onClick={() => { close(); if (cvEstTpl(x)) setTplEdit(x); else if (cvTypeDe(x) === 'chips') setChipsEdit(x); else setRetype(x); }}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' }}>
-                    <Fi i="pencil" size={12} />{cvTypeDe(x) === 'chips' ? tr('Composer les pastilles') : tr('Changer la carte')}</button>
-                  <button onClick={() => { edCv.remove(cle); close(); }}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)' }}>
-                    <Fi i="cross-small" size={12} />{tr('Supprimer')}</button>
-                </div>
-                <CroixFeuille />
-              </>)}
-            </BottomSheet>
-          );
-        })()}
+        {fiche && (
+          <FicheCarte x={de(cvKey(fiche)) || fiche} nom={nomCarte(de(cvKey(fiche)) || fiche)} sous={sousCarte(de(cvKey(fiche)) || fiche)}
+            onTaille={basculerH} onLargeur={basculerW}
+            onChanger={(y) => (cvEstTpl(y) ? setTplEdit(y) : cvTypeDe(y) === 'chips' ? setChipsEdit(y) : setRetype(y))}
+            onRetirer={(y) => edCv.remove(cvKey(y))} onClose={() => setFiche(null)} />
+        )}
         {dc.sheets}
         {tplEdit && (
           <BottomSheet onClose={() => setTplEdit(null)}>
@@ -15768,6 +15848,42 @@ export default function App() {
     editRef.current = editMode;
     if (!editMode && enAttenteRef.current && relireRef.current) { enAttenteRef.current = false; relireRef.current(); }
   }, [editMode]);
+  /* UN ECRAN QUI SE REVEILLE RELIT (08/10).
+   *
+   * La resynchronisation de l'ADR 0067 ne tenait qu'a un fil : le message
+   * `loggia/config/suivre`. Un onglet endormi ne le recoit pas, et une
+   * connexion coupee puis revenue ne rejoue pas ce qu'on a manque — Home
+   * Assistant se rabonne, il ne raconte pas le passe.
+   *
+   * L'ecran gardait donc un cache perime. Et comme un reglage s'ecrit par
+   * OBJET ENTIER — la grille de l'Accueil, la disposition d'une vue —, son
+   * premier rangement renvoyait cet objet dans son etat d'avant : les widgets
+   * reranges ailleurs revenaient, leur ordre aussi, et une carte repassait en
+   * compacte. Une tablette murale ouverte en permanence le faisait a chaque
+   * fois qu'on la touchait.
+   *
+   * Trois reveils, le meme geste : l'onglet redevient visible, la fenetre
+   * reprend le focus, la connexion repart. `relire` est deja groupee (300 ms)
+   * et attend la fin de l'edition : les trois peuvent tomber ensemble. */
+  useEffect(() => {
+    const relire = () => { if (relireRef.current) relireRef.current(); };
+    const auReveil = () => { if (typeof document === 'undefined' || document.visibilityState === 'visible') relire(); };
+    try { document.addEventListener('visibilitychange', auReveil); } catch { /* pas de document */ }
+    try { window.addEventListener('focus', auReveil); } catch { /* pas de fenetre */ }
+    let conn = null;
+    try {
+      const h = getHass();
+      conn = (h && h.connection && typeof h.connection.addEventListener === 'function') ? h.connection : null;
+      if (conn) conn.addEventListener('ready', relire);
+    } catch { conn = null; }
+    return () => {
+      try { document.removeEventListener('visibilitychange', auReveil); } catch { /* deja parti */ }
+      try { window.removeEventListener('focus', auReveil); } catch { /* deja parti */ }
+      try { if (conn) conn.removeEventListener('ready', relire); } catch { /* deja parti */ }
+    };
+    /* Rejoue a l'arrivee du serveur : au premier rendu la connexion n'existe
+     * pas encore, et l'ecouteur de reconnexion se serait pose dans le vide. */
+  }, [serverOk]);
   // L'édition est réservée aux admins : si le profil actif n'est plus admin, on coupe le mode édition.
   // (le bouton crayon du Header est déjà admin-only ; ceci couvre le switch de profil pendant l'édition)
   // Recalculé quand la configuration serveur ou la découverte change. Figer

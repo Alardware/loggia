@@ -55,7 +55,7 @@ export function Anim({ i = 0, base = 0, children, style, className = '' }) {
   const tilt = useTilt(4);
   return (
     <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel}
-      className={'o-hov ' + (tilt.className || '') + (className ? ' ' + className : '')} style={{ position: 'relative', borderRadius: 'var(--o-radius,18px)', minWidth: 0, ...style }}>
+      className={(tilt.className || '') + (className ? ' ' + className : '')} style={{ position: 'relative', borderRadius: 'var(--o-radius,18px)', minWidth: 0, ...style }}>
       {children}
     </div>
   );
@@ -305,6 +305,33 @@ export function Gauge({ pct, color, h = 4, track = 'var(--o-bd1)', style, liquid
     </div>
   );
 }
+/**
+ * La TUILE DE MESURE : un petit titre en capitales, un grand nombre, parfois
+ * une barre.
+ *
+ * Reprise du système de dessin (`MetricTile`), où elle sert les grilles de la
+ * Sécurité et du Système. L'Énergie s'en sert pour l'autosuffisance, la part
+ * bas-carbone, le gaz et l'eau.
+ *
+ * Le nombre bascule (`FlipText`) : ces tuiles changent sous les yeux, et un
+ * chiffre qui se remplace d'un coup ne se voit pas.
+ */
+export function MetricTile({ caption, value, unit, icon, tone = 'var(--o-text)', pct = null, style }) {
+  return (
+    <div style={{ padding: 16, borderRadius: 'var(--o-radius,18px)', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: 'var(--o-shadow)', display: 'flex', flexDirection: 'column', minWidth: 0, ...style }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {icon && <Fi i={icon} size={13} color="var(--o-text3)" />}
+        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-text3)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{caption}</span>
+      </div>
+      <div style={{ marginTop: 8, fontSize: 20, fontWeight: 800, color: tone, display: 'flex', alignItems: 'baseline', gap: 5, fontVariantNumeric: 'tabular-nums' }}>
+        <FlipText live text={String(value)} />
+        {unit && <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{unit}</span>}
+      </div>
+      {pct != null && <Gauge pct={pct} color={tone} h={3} style={{ marginTop: 10 }} />}
+    </div>
+  );
+}
+
 // (Ancienne entree en cascade — neutralisee : stag() ne renvoie plus de delai.)
 // ── Animations lot 2 : tilt 3D au survol (pointeur fin) + FlipText (états qui basculent) ──
 
@@ -597,8 +624,12 @@ export function BottomSheet({ onClose, children, opaque = false, onglets = false
      * refuserait, et le clavier repartirait du début du document. */
     const reveiller = inerterAutour(voileRef.current);
     /* La feuille qui contient celle-ci, s'il y en a une : le repli du focus
-     * quand le bouton d'ouverture n'existe plus (relecture du lot 13). */
-    const hote = voileRef.current && voileRef.current.closest('.o-sheet');
+     * quand le bouton d'ouverture n'existe plus (relecture du lot 13).
+     *
+     * Elle se cherche sur le BOUTON qui vient d'ouvrir, pas sur le voile : le
+     * voile est posé dans <body> (voir le portail, plus bas) et ne descend donc
+     * d'aucune feuille — `closest` n'y trouvait plus rien. */
+    const hote = (prev && prev.closest) ? prev.closest('.o-sheet') : null;
     /* Le premier élément du contenu, pas la croix ; et un champ qui a déjà
      * pris le focus (`autoFocus` de la recherche) le garde. */
     const t = setTimeout(() => { try {
@@ -629,9 +660,25 @@ export function BottomSheet({ onClose, children, opaque = false, onglets = false
     };
     h.onpointerup = up; h.onpointercancel = up;
   };
-  return (
+  /* LA FEUILLE SE POSE DANS <body>, PAS LÀ OÙ ELLE EST ÉCRITE.
+   *
+   * Un ancêtre flou, transformé ou animé devient le repère d'un
+   * `position: fixed` : son `inset: 0` ne couvre plus l'écran mais cet
+   * ancêtre. En thème givré, chaque carte porte un `backdrop-filter` — une
+   * feuille ouverte depuis l'intérieur d'une carte se posait donc au bas de
+   * LA CARTE, à moitié hors de l'écran (retour du 07/10, « elle est trop
+   * haute », vu sur le détail d'un jour du calendrier d'Énergie). Dans
+   * <body>, le repère est toujours l'écran. Les menus (`ListeChoix`) ont la
+   * même parade, et pour la même raison.
+   *
+   * Effet de bord heureux : la feuille ne vit plus dans le wrapper de la
+   * section qui l'a ouverte, donc le glisser-déposer du mode édition ne peut
+   * plus lui prendre le pointeur. Les `stopPropagation` du voile restent —
+   * ils ne coûtent rien, et couvrent le rendu sans `document`.
+   */
+  const feuille = (
     /* Les événements POINTEUR s'arrêtent au voile : une feuille ouverte depuis
-     * une section en mode édition vit dans le wrapper de cette section, dont
+     * une section en mode édition vivait dans le wrapper de cette section, dont
      * le glisser-déposer capturait le pointeur — le clic sur une ligne de la
      * feuille partait alors à la section et l'ajout ne se faisait jamais
      * (retour 01/09). Les gestes internes (poignée, boutons) sont plus bas
@@ -696,6 +743,7 @@ export function BottomSheet({ onClose, children, opaque = false, onglets = false
       </div>
     </div>
   );
+  return (typeof document !== 'undefined' && document.body) ? createPortal(feuille, document.body) : feuille;
 }
 
 

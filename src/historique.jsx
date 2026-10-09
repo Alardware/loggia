@@ -149,6 +149,46 @@ export function RoomActivityCard({ hass, ids, titre = null, sous = null, max = 8
   );
 }
 
+/**
+ * L'historique BRUT d'une entité, entre deux instants.
+ *
+ * `useSysHist` ne convient pas à un capteur binaire : il passe chaque état au
+ * crible de `parseFloat`, et « on »/« off » n'en sortent pas — la série
+ * revenait vide. Ici rien n'est converti : les états partent tels quels, à qui
+ * sait les lire (les créneaux d'heures creuses, par exemple, cf. tarif.js).
+ *
+ * `null` tant que rien n'est lu, et après un raté : « pas encore » et « rien »
+ * ne se confondent pas.
+ */
+export function useEtatsHist(hass, id, debut, fin, refreshKey) {
+  const [etats, setEtats] = useState(null);
+  /* Comme `useSysHist` : ce qui compte, c'est d'ÊTRE connecté, pas l'objet
+   * `hass` — il change à chaque état qui bouge dans la maison, et relire
+   * l'historique à chaque fois noierait Home Assistant. Les bornes, elles,
+   * sont des nombres : elles se comparent telles quelles. */
+  const connecte = hass ? 1 : 0;
+  /* Et comme `ciel3d` et `useEtatServeur` : la connexion passe par une
+   * RÉFÉRENCE vivante. L'effet lit toujours le `hass` du moment sans avoir à
+   * se relancer quand l'objet est remplacé — ce qui évite d'ajouter une
+   * cinquante-septième omission à l'inventaire de `dependances.test.mjs`. */
+  const vivantHass = useRef(hass);
+  vivantHass.current = hass;
+  useEffect(() => {
+    let vivant = true;
+    const h = vivantHass.current;
+    if (!h || !h.callApi || !id || !debut) { setEtats(null); return undefined; }
+    const q = 'history/period/' + new Date(debut).toISOString()
+      + '?filter_entity_id=' + encodeURIComponent(id)
+      + (fin ? '&end_time=' + encodeURIComponent(new Date(fin).toISOString()) : '')
+      + '&minimal_response&no_attributes';
+    h.callApi('GET', q)
+      .then(res => { if (vivant) setEtats((res && res[0]) || []); })
+      .catch(() => { if (vivant) setEtats(null); });
+    return () => { vivant = false; };
+  }, [connecte, id, debut, fin, refreshKey]);
+  return etats;
+}
+
 export function useSysHist(hass, ids, hours, refreshKey) {
   const [data, setData] = useState({});
   // L'instant de la dernière lecture RÉUSSIE de chaque série (relecture du 03/10).

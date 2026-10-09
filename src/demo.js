@@ -115,7 +115,9 @@ const APPAREILS = {
   'Rez-de-chaussée': { en: 'Ground floor', de: 'Erdgeschoss', nl: 'Begane grond', it: 'Piano terra', es: 'Planta baja', pl: 'Parter' },
   'Étage': { en: 'Upstairs', de: 'Obergeschoss', nl: 'Verdieping', it: 'Piano superiore', es: 'Piso superior', pl: 'Piętro' },
   'Coût du jour': { en: 'Cost today', de: 'Kosten heute', nl: 'Kosten vandaag', it: 'Costo di oggi', es: 'Coste de hoy', pl: 'Koszt dzisiaj' },
+  'Revente du jour': { en: 'Feed-in today', de: 'Einspeisung heute', nl: 'Teruglevering vandaag', it: 'Rivendita di oggi', es: 'Venta de hoy', pl: 'Odsprzedaż dzisiaj' },
   'Collectes': { en: 'Waste collection', de: 'Abfuhr', nl: 'Inzameling', it: 'Raccolta', es: 'Recogida', pl: 'Odbiór odpadów' },
+  'Anniversaires': { en: 'Birthdays', de: 'Geburtstage', nl: 'Verjaardagen', it: 'Compleanni', es: 'Cumpleaños', pl: 'Urodziny' },
   'Recyclables': { en: 'Recycling', de: 'Wertstoffe', nl: 'Recyclebaar', it: 'Riciclabili', es: 'Reciclables', pl: 'Surowce wtórne' },
   'Verre': { en: 'Glass', de: 'Glas', nl: 'Glas', it: 'Vetro', es: 'Vidrio', pl: 'Szkło' },
   'Ordures ménagères': { en: 'Household waste', de: 'Restmüll', nl: 'Restafval', it: 'Rifiuti indifferenziati', es: 'Basura doméstica', pl: 'Odpady zmieszane' },
@@ -208,6 +210,7 @@ const APPAREILS = {
   'Lave-linge terminé': { en: 'Washing machine finished', de: 'Waschmaschine fertig', nl: 'Wasmachine klaar', it: 'Lavatrice finita', es: 'Lavadora terminada', pl: 'Pralka skończyła' },
   'Liste partagée': { en: 'Shared list', de: 'Geteilte Liste', nl: 'Gedeelde lijst', it: 'Lista condivisa', es: 'Lista compartida', pl: 'Lista wspólna' },
   'Livrable client': { en: 'Client deliverable', de: 'Abgabe beim Kunden', nl: 'Oplevering klant', it: 'Consegna al cliente', es: 'Entrega al cliente', pl: 'Oddanie projektu klientowi' },
+  'Poste de nuit': { en: 'Night shift', de: 'Nachtschicht', nl: 'Nachtdienst', it: 'Turno di notte', es: 'Turno de noche', pl: 'Nocna zmiana' },
   'Livraison colis': { en: 'Parcel delivery', de: 'Paketzustellung', nl: 'Pakketbezorging', it: 'Consegna pacco', es: 'Entrega de paquete', pl: 'Dostawa paczki' },
   'Lumière couloir la nuit': { en: 'Hallway light at night', de: 'Flurlicht bei Nacht', nl: 'Ganglicht ’s nachts', it: 'Luce corridoio di notte', es: 'Luz del pasillo de noche', pl: 'Światło korytarza w nocy' },
   'Maison': { en: 'Home', de: 'Zu Hause', nl: 'Huis', it: 'Casa', es: 'Casa', pl: 'Dom' },
@@ -283,6 +286,25 @@ const APPAREILS = {
   'Volets : fermeture au coucher du soleil': { en: 'Blinds: close at sunset', de: 'Rollläden: schließen bei Sonnenuntergang', nl: 'Rolluiken: sluiten bij zonsondergang', it: 'Tapparelle: chiusura al tramonto', es: 'Persianas: cerrar al atardecer', pl: 'Rolety: zamknięcie o zachodzie' },
   'Volets : ouverture du matin': { en: 'Blinds: open in the morning', de: 'Rollläden: Öffnen am Morgen', nl: 'Rolluiken: openen ’s ochtends', it: 'Tapparelle: apertura al mattino', es: 'Persianas: apertura por la mañana', pl: 'Rolety: otwarcie rano' },
   'Éclairage terrasse au crépuscule': { en: 'Terrace lighting at dusk', de: 'Terrassenbeleuchtung bei Dämmerung', nl: 'Terrasverlichting bij schemering', it: 'Illuminazione terrazza al crepuscolo', es: 'Iluminación de la terraza al anochecer', pl: 'Oświetlenie tarasu o zmierzchu' },
+  'PC bureau': { en: 'Desktop PC', de: 'Büro-PC', nl: 'Bureau-pc', it: 'PC ufficio', es: 'PC de oficina', pl: 'Komputer biurowy' },
+  'PC bureau du jour': { en: 'Desktop PC today', de: 'Büro-PC heute', nl: 'Bureau-pc vandaag', it: 'PC ufficio oggi', es: 'PC de oficina hoy', pl: 'Komputer biurowy dzisiaj' },
+  'Serveur de fichiers': { en: 'File server', de: 'Dateiserver', nl: 'Bestandsserver', it: 'Server di file', es: 'Servidor de archivos', pl: 'Serwer plików' },
+  'Serveur de fichiers du jour': { en: 'File server today', de: 'Dateiserver heute', nl: 'Bestandsserver vandaag', it: 'Server di file oggi', es: 'Servidor de archivos hoy', pl: 'Serwer plików dzisiaj' },
+  'Lave-vaisselle': { en: 'Dishwasher', de: 'Geschirrspüler', nl: 'Vaatwasser', it: 'Lavastoviglie', es: 'Lavavajillas', pl: 'Zmywarka' },
+  'Lave-vaisselle du jour': { en: 'Dishwasher today', de: 'Geschirrspüler heute', nl: 'Vaatwasser vandaag', it: 'Lavastoviglie oggi', es: 'Lavavajillas hoy', pl: 'Zmywarka dzisiaj' },
+  'Radiateur chambre du jour': { en: 'Bedroom heater today', de: 'Heizung Schlafzimmer heute', nl: 'Radiator slaapkamer vandaag', it: 'Radiatore camera oggi', es: 'Radiador dormitorio hoy', pl: 'Grzejnik w sypialni dzisiaj' },
+  'Box internet': { en: 'Internet router', de: 'Internet-Router', nl: 'Internetrouter', it: 'Router internet', es: 'Rúuter de internet', pl: 'Router internetowy' },
+  'Box internet du jour': { en: 'Internet router today', de: 'Internet-Router heute', nl: 'Internetrouter vandaag', it: 'Router internet oggi', es: 'Rúuter de internet hoy', pl: 'Router internetowy dzisiaj' },
+  'Heures creuses actives': { en: 'Off-peak hours active', de: 'Niedertarif aktiv', nl: 'Daluren actief', it: 'Fascia economica attiva', es: 'Horas valle activas', pl: 'Taryfa nocna aktywna' },
+  'Prix heures creuses': { en: 'Off-peak price', de: 'Niedertarif-Preis', nl: 'Dalurenprijs', it: 'Prezzo fascia economica', es: 'Precio horas valle', pl: 'Cena taryfy nocnej' },
+  'Prix heures pleines': { en: 'Peak price', de: 'Hochtarif-Preis', nl: 'Piekurenprijs', it: 'Prezzo fascia piena', es: 'Precio horas punta', pl: 'Cena taryfy dziennej' },
+  'Abonnement': { en: 'Standing charge', de: 'Grundpreis', nl: 'Vastrecht', it: 'Quota fissa', es: 'Cuota fija', pl: 'Opłata abonamentowa' },
+  'Coût du mois': { en: 'Cost this month', de: 'Kosten diesen Monat', nl: 'Kosten deze maand', it: 'Costo del mese', es: 'Coste del mes', pl: 'Koszt w tym miesiącu' },
+  'Économie du mois': { en: 'Savings this month', de: 'Ersparnis diesen Monat', nl: 'Besparing deze maand', it: 'Risparmio del mese', es: 'Ahorro del mes', pl: 'Oszczędność w tym miesiącu' },
+  'Consommation du mois': { en: 'Consumption this month', de: 'Verbrauch diesen Monat', nl: 'Verbruik deze maand', it: 'Consumo del mese', es: 'Consumo del mes', pl: 'Zużycie w tym miesiącu' },
+  'Production du mois': { en: 'Production this month', de: 'Erzeugung diesen Monat', nl: 'Opbrengst deze maand', it: 'Produzione del mese', es: 'Producción del mes', pl: 'Produkcja w tym miesiącu' },
+  'Consommation de l’année': { en: 'Consumption this year', de: 'Verbrauch dieses Jahr', nl: 'Verbruik dit jaar', it: 'Consumo dell’anno', es: 'Consumo del año', pl: 'Zużycie w tym roku' },
+  'Production de l’année': { en: 'Production this year', de: 'Erzeugung dieses Jahr', nl: 'Opbrengst dit jaar', it: 'Produzione dell’anno', es: 'Producción del año', pl: 'Produkcja w tym roku' },
 };
 
 /** Le nom d'un appareil, sinon d'un lieu, dans la langue de la demonstration. */
@@ -389,17 +411,55 @@ function etatsInitiaux() {
     'sensor.production_solaire': s(1840, { friendly_name: 'Production solaire', unit_of_measurement: 'W', device_class: 'power' }),
     'sensor.reseau': s(-460, { friendly_name: 'Réseau', unit_of_measurement: 'W', device_class: 'power' }),
     'sensor.surplus': s(460, { friendly_name: 'Surplus', unit_of_measurement: 'W', device_class: 'power' }),
-    // Les kWh du jour : sans eux, pas de bilan ni de cadran d'autosuffisance.
-    'sensor.conso_jour': s(6.16, { friendly_name: 'Consommation du jour', unit_of_measurement: 'kWh', device_class: 'energy' }),
-    'sensor.production_jour': s(4.32, { friendly_name: 'Production du jour', unit_of_measurement: 'kWh', device_class: 'energy' }),
-    'sensor.injection_jour': s(0.96, { friendly_name: 'Injection du jour', unit_of_measurement: 'kWh', device_class: 'energy' }),
-    'sensor.conso_jour_hc': s(3.90, { friendly_name: 'Consommation heures creuses', unit_of_measurement: 'kWh', device_class: 'energy' }),
-    'sensor.conso_jour_hp': s(2.26, { friendly_name: 'Consommation heures pleines', unit_of_measurement: 'kWh', device_class: 'energy' }),
+    /* Les kWh du jour : sans eux, pas de bilan ni de cadran d'autosuffisance.
+     *
+     * Chacun porte `last_reset`, comme un `utility_meter` remis a zero cette
+     * nuit. C'est a cet attribut que l'apercu reconnait un compteur dont
+     * l'etat EST le total de la journee, au lieu d'aller chercher la variation
+     * du jour dans les statistiques (jourstat.js, ADR 0162). Une maison de
+     * demonstration doit se comporter comme une vraie. */
+    'sensor.conso_jour': s(6.16, { friendly_name: 'Consommation du jour', unit_of_measurement: 'kWh', device_class: 'energy', last_reset: MINUIT }),
+    'sensor.production_jour': s(4.32, { friendly_name: 'Production du jour', unit_of_measurement: 'kWh', device_class: 'energy', last_reset: MINUIT }),
+    'sensor.injection_jour': s(0.96, { friendly_name: 'Injection du jour', unit_of_measurement: 'kWh', device_class: 'energy', last_reset: MINUIT }),
+    'sensor.conso_jour_hc': s(3.90, { friendly_name: 'Consommation heures creuses', unit_of_measurement: 'kWh', device_class: 'energy', last_reset: MINUIT }),
+    'sensor.conso_jour_hp': s(2.26, { friendly_name: 'Consommation heures pleines', unit_of_measurement: 'kWh', device_class: 'energy', last_reset: MINUIT }),
     /* Le cout du jour : Home Assistant le calcule lui-meme a partir du tarif
      * declare dans son tableau de bord Energie (`stat_cost`). La devise se lit
      * sur l'entite, jamais supposee en euros. */
-    'sensor.cout_du_jour': s(1.84, { friendly_name: etiquette('Coût du jour'), unit_of_measurement: '€', device_class: 'monetary' }),
+    'sensor.cout_du_jour': s(1.84, { friendly_name: etiquette('Coût du jour'), unit_of_measurement: '€', device_class: 'monetary', last_reset: MINUIT }),
+    /* Ce que le surplus RAPPORTE. Home Assistant le tient lui-meme des qu'un
+     * tarif de rachat est declare (`stat_compensation`), comme il tient le
+     * cout : 0,96 kWh injectes a 0,1269 EUR. */
+    'sensor.revente_du_jour': s(0.12, { friendly_name: etiquette('Revente du jour'), unit_of_measurement: '€', device_class: 'monetary', last_reset: MINUIT }),
     'sensor.part_fossile_reseau': s(38, { friendly_name: 'Part fossile du réseau', unit_of_measurement: '%' }),
+    /* Les POSTES de consommation (06/10) : la section existait, la demo n'avait
+     * jamais de quoi la remplir. Chacun sa puissance et ses kWh du jour, comme
+     * ce qu'un tableau de bord Energie declare. */
+    'sensor.pc_bureau_puissance': s(153, { friendly_name: etiquette('PC bureau'), unit_of_measurement: 'W', device_class: 'power' }),
+    'sensor.pc_bureau_jour': s(1.42, { friendly_name: etiquette('PC bureau du jour'), unit_of_measurement: 'kWh', device_class: 'energy' }),
+    'sensor.nas_puissance': s(34, { friendly_name: etiquette('Serveur de fichiers'), unit_of_measurement: 'W', device_class: 'power' }),
+    'sensor.nas_jour': s(0.81, { friendly_name: etiquette('Serveur de fichiers du jour'), unit_of_measurement: 'kWh', device_class: 'energy' }),
+    'sensor.lave_vaisselle_puissance': s(0, { friendly_name: etiquette('Lave-vaisselle'), unit_of_measurement: 'W', device_class: 'power' }),
+    'sensor.lave_vaisselle_jour': s(0.94, { friendly_name: etiquette('Lave-vaisselle du jour'), unit_of_measurement: 'kWh', device_class: 'energy' }),
+    'sensor.radiateur_chambre_puissance': s(0, { friendly_name: etiquette('Radiateur chambre'), unit_of_measurement: 'W', device_class: 'power' }),
+    'sensor.radiateur_chambre_jour': s(0.61, { friendly_name: etiquette('Radiateur chambre du jour'), unit_of_measurement: 'kWh', device_class: 'energy' }),
+    'sensor.box_internet_puissance': s(11, { friendly_name: etiquette('Box internet'), unit_of_measurement: 'W', device_class: 'power' }),
+    'sensor.box_internet_jour': s(0.26, { friendly_name: etiquette('Box internet du jour'), unit_of_measurement: 'kWh', device_class: 'energy' }),
+    /* Le TARIF (06/10) : deux prix, et le capteur binaire qui dit lequel court.
+     * Home Assistant ne publie jamais les CRENEAUX d'un contrat — la barre des
+     * vingt-quatre heures se reconstitue depuis l'historique de ce binaire
+     * (tarif.js), ce que la demo doit donc savoir rendre. */
+    'binary_sensor.heures_creuses': s('off', { friendly_name: etiquette('Heures creuses actives') }),
+    'sensor.prix_hc': s(0.1605, { friendly_name: etiquette('Prix heures creuses'), unit_of_measurement: '€/kWh', device_class: 'monetary' }),
+    'sensor.prix_hp': s(0.2092, { friendly_name: etiquette('Prix heures pleines'), unit_of_measurement: '€/kWh', device_class: 'monetary' }),
+    'sensor.abonnement_mois': s(16.73, { friendly_name: etiquette('Abonnement'), unit_of_measurement: '€/mois', device_class: 'monetary' }),
+    // Les bilans du mois et de l'annee : les tuiles a cote du tarif.
+    'sensor.cout_du_mois': s(41.27, { friendly_name: etiquette('Coût du mois'), unit_of_measurement: '€', device_class: 'monetary' }),
+    'sensor.eco_du_mois': s(18.40, { friendly_name: etiquette('Économie du mois'), unit_of_measurement: '€', device_class: 'monetary' }),
+    'sensor.conso_mois': s(184.6, { friendly_name: etiquette('Consommation du mois'), unit_of_measurement: 'kWh', device_class: 'energy' }),
+    'sensor.production_mois': s(97.3, { friendly_name: etiquette('Production du mois'), unit_of_measurement: 'kWh', device_class: 'energy' }),
+    'sensor.conso_annee': s(2140, { friendly_name: etiquette('Consommation de l’année'), unit_of_measurement: 'kWh', device_class: 'energy' }),
+    'sensor.production_annee': s(1386, { friendly_name: etiquette('Production de l’année'), unit_of_measurement: 'kWh', device_class: 'energy' }),
     // De quoi remplir les cartes de la vue Meteo : indice d'air et vigilance.
     'sensor.qualite_air_exterieur': s(62, { friendly_name: "Qualité de l'air", device_class: 'aqi' }),
     'sensor.vigilance_meteo': s('Jaune', { friendly_name: 'Vigilance météo', vent_violent: 'Jaune', orages: 'Jaune' }),
@@ -551,7 +611,20 @@ function configDemo() {
     // sert ailleurs. Sans `haid`, la tuile prend son rendu de repli : degrade,
     // halo et badge « Direct », au lieu d'attendre un flux qui n'existe pas ici.
     loggia_cameras: CAMERAS(),
-    loggia_energyHaids: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp', coutJour: 'sensor.cout_du_jour',
+    /* Les postes suivis : `enDevices` les lit ici en priorite. L'habillage
+     * (icone, couleur, illustration) suit la palette de la vue. */
+    loggia_energyDevices: [
+      { name: etiquette('PC bureau'), power: 'sensor.pc_bureau_puissance', kwh: 'sensor.pc_bureau_jour', art: 'pc', icon: 'briefcase', c: 'var(--o-cyan)' },
+      { name: etiquette('Serveur de fichiers'), power: 'sensor.nas_puissance', kwh: 'sensor.nas_jour', art: 'nas', icon: 'microchip', c: 'var(--o-purple)' },
+      { name: etiquette('Lave-vaisselle'), power: 'sensor.lave_vaisselle_puissance', kwh: 'sensor.lave_vaisselle_jour', art: 'dishwasher', icon: 'utensils', c: 'var(--o-accent-soft)' },
+      { name: etiquette('Radiateur chambre'), power: 'sensor.radiateur_chambre_puissance', kwh: 'sensor.radiateur_chambre_jour', art: 'radiator', icon: 'thermometer-half', c: 'var(--o-orange)' },
+      { name: etiquette('Box internet'), power: 'sensor.box_internet_puissance', kwh: 'sensor.box_internet_jour', art: null, icon: 'bolt', c: 'var(--o-rose)' },
+    ],
+    loggia_energyHaids: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', revenuJour: 'sensor.revente_du_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp', coutJour: 'sensor.cout_du_jour',
+      hcActive: 'binary_sensor.heures_creuses', hcPrice: 'sensor.prix_hc', hpPrice: 'sensor.prix_hp',
+      abonnement: 'sensor.abonnement_mois', coutMois: 'sensor.cout_du_mois', ecoMois: 'sensor.eco_du_mois',
+      consoMois: 'sensor.conso_mois', prodMois: 'sensor.production_mois',
+      consoAnnee: 'sensor.conso_annee', prodAnnee: 'sensor.production_annee',
       evNow: 'sensor.borne_recharge', batNow: 'sensor.batterie_maison', batSoc: 'sensor.batterie_niveau' },
     loggia_entities: {
       weather: ['weather.maison', 'sun.sun'],
@@ -559,7 +632,11 @@ function configDemo() {
       cameras: CAMERAS(),
       people: [{ name: 'Camille', haid: 'person.camille' }, { name: 'Alex', haid: 'person.alex' },
         { name: 'Léa', haid: 'person.lea' }],
-      energy: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp', coutJour: 'sensor.cout_du_jour',
+      energy: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', revenuJour: 'sensor.revente_du_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp', coutJour: 'sensor.cout_du_jour',
+      hcActive: 'binary_sensor.heures_creuses', hcPrice: 'sensor.prix_hc', hpPrice: 'sensor.prix_hp',
+      abonnement: 'sensor.abonnement_mois', coutMois: 'sensor.cout_du_mois', ecoMois: 'sensor.eco_du_mois',
+      consoMois: 'sensor.conso_mois', prodMois: 'sensor.production_mois',
+      consoAnnee: 'sensor.conso_annee', prodAnnee: 'sensor.production_annee',
         evNow: 'sensor.borne_recharge', batNow: 'sensor.batterie_maison', batSoc: 'sensor.batterie_niveau' },
     },
     // Deux profils : la demo doit exercer les DEUX branches, admin comprise.
@@ -765,17 +842,131 @@ function historiqueRobotDemo(ids, states) {
   return listes;
 }
 
+/* --- Les creneaux d'heures creuses de la demo ------------------------------
+ *
+ * Deux plages, comme un contrat courant : 2 h - 7 h et 13 h - 16 h. La vue les
+ * retrouve dans l'HISTORIQUE du capteur binaire (tarif.js), jamais dans une
+ * liste ecrite quelque part -- c'est tout l'interet, et la demo joue donc le
+ * jeu jusqu'au bout. */
+const CRENEAUX_HC = [[2, 7], [13, 16]];
+
+/** Vrai si cette heure (decimale) tombe en heures creuses. */
+function enCreuse(heure) {
+  return CRENEAUX_HC.some(([a, b]) => heure >= a && heure < b);
+}
+
+/* L'historique d'un capteur BINAIRE : une bascule a chaque bord de creneau,
+ * plus l'etat qui courait au debut de la fenetre. */
+function historiqueBinaireDemo(t0, t1) {
+  const etatA = (ms) => (enCreuse(new Date(ms).getHours() + new Date(ms).getMinutes() / 60) ? 'on' : 'off');
+  const pts = [{ state: etatA(t0), last_changed: new Date(t0).toISOString() }];
+  // Un passage heure par heure suffit : les creneaux tombent sur des heures rondes.
+  for (let ms = t0 + 3600e3; ms <= t1; ms += 3600e3) {
+    const e = etatA(ms);
+    if (e !== pts[pts.length - 1].state) pts.push({ state: e, last_changed: new Date(ms).toISOString() });
+  }
+  return [pts];
+}
+
+/* --- Les STATISTIQUES longue duree (06/10) ---------------------------------
+ *
+ * `recorder/statistics_during_period` : ce que lit l'historique de la vue
+ * Energie au-dela des dernieres vingt-quatre heures. La demo n'a pas de base,
+ * elle fabrique donc une annee plausible.
+ *
+ * DETERMINISTE, et c'est le point : une meme journee doit rendre la meme
+ * valeur a chaque lecture. Le calendrier des douze mois relit les memes jours
+ * a chaque changement d'onglet, et des valeurs tirees au hasard le feraient
+ * scintiller sous les yeux.
+ *
+ * Rien apres MAINTENANT : une case vide dit « pas encore », un zero dirait
+ * « rien consomme » (ADR 0030).
+ */
+function hasardStable(graine) {
+  let x = (graine + 0x6D2B79F5) >>> 0;
+  x = Math.imul(x ^ (x >>> 15), x | 1);
+  x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+  return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+}
+
+const MINUIT = (() => {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
+})();
+
+function statistiquesDemo(msg) {
+  const ids = Array.isArray(msg.statistic_ids) ? msg.statistic_ids : [];
+  const t0 = Date.parse(msg.start_time);
+  const t1 = Date.parse(msg.end_time || new Date().toISOString());
+  const pas = msg.period === 'month' ? 'month' : msg.period === 'day' ? 'day' : 'hour';
+  if (!ids.length || isNaN(t0)) return {};
+  const maintenant = Date.now();
+  const out = {};
+  for (const id of ids) {
+    /* Ce que l'entite MESURE se lit sur son nom : la demo se donne ici le droit
+     * de connaitre ses propres capteurs, comme partout ailleurs dans ce
+     * fichier. */
+    const hc = /_hc$/.test(id), hp = /_hp$/.test(id);
+    const prod = /production|solaire/.test(id);
+    const cout = /cout/.test(id);
+    const lignes = [];
+    let curseur = new Date(t0);
+    while (curseur.getTime() < t1 && curseur.getTime() < maintenant) {
+      const suivant = pas === 'month' ? new Date(curseur.getFullYear(), curseur.getMonth() + 1, 1)
+        : pas === 'day' ? new Date(curseur.getFullYear(), curseur.getMonth(), curseur.getDate() + 1)
+          : new Date(curseur.getTime() + 3600e3);
+      const jours = Math.max(1, Math.round((suivant - curseur) / 864e5));
+      const h = curseur.getHours();
+      /* La saison : l'hiver chauffe, l'ete produit. Un cosinus cale sur le
+       * solstice, comme le vrai ciel. */
+      const doy = Math.round((curseur - new Date(curseur.getFullYear(), 0, 1)) / 864e5);
+      const saison = Math.cos(2 * Math.PI * (doy - 172) / 365);
+      const alea = hasardStable(doy * 7919 + h * 31 + id.length * 104729);
+      // Le solaire en cloche, la consommation en deux pointes : matin et soir.
+      const soleil = Math.max(0, Math.sin((h - 6.5) / 11 * Math.PI));
+      const pointe = Math.exp(-(((h - 7.5) / 1.6) ** 2)) + Math.exp(-(((h - 20) / 2.2) ** 2));
+      const parHeure = 0.14 + 0.1 * Math.max(0, saison) + 0.3 * pointe;
+      const parJour = jours * (3.1 + 2.6 * Math.max(0, saison)) * (0.85 + 0.3 * alea);
+      let v;
+      if (cout) {
+        // Le cout suit la consommation, au tarif de son creneau.
+        const kwh = pas === 'hour' ? parHeure : parJour;
+        v = kwh * (pas === 'hour' && enCreuse(h) ? 0.1605 : 0.1905);
+      } else if (prod) {
+        v = pas === 'hour'
+          ? 1.35 * (0.55 + 0.45 * -saison) * soleil * (0.75 + 0.5 * alea)
+          : jours * 3.4 * (0.5 + 0.5 * -saison) * (0.6 + 0.8 * alea);
+      } else if (pas === 'hour') {
+        // Les heures creuses ne comptent que pendant leurs creneaux.
+        v = enCreuse(h) ? (hp ? 0 : parHeure * 1.35) : (hc ? 0 : parHeure);
+      } else {
+        v = parJour * (hc ? 0.42 : hp ? 0.58 : 1);
+      }
+      lignes.push({ start: curseur.getTime(), end: suivant.getTime(), change: Math.round(Math.max(0, v) * 1000) / 1000 });
+      curseur = suivant;
+    }
+    out[id] = lignes;
+  }
+  return out;
+}
+
 function historiqueDemo(chemin, states) {
   const m = String(chemin).match(/filter_entity_id=([^&]+)/);
   const plusieurs = m ? decodeURIComponent(m[1]).split(',') : [];
   if (plusieurs.some(x => /^(vacuum|lawn_mower)\./.test(x))) return historiqueRobotDemo(plusieurs, states);
   if (plusieurs.some(x => SERIES_DIST.has(x))) return historiqueDistributeurDemo(plusieurs, String(chemin), states);
   const id = m ? decodeURIComponent(m[1]) : null;
-  const cur = id && states[id] ? parseFloat(states[id].state) : NaN;
-  if (!id || isNaN(cur)) return [];
   const d = String(chemin).match(/history\/period\/([^?]+)/);
   const t0 = d ? Date.parse(decodeURIComponent(d[1])) : Date.now() - 86400000;
-  const t1 = Date.now();
+  const finVoulue = String(chemin).match(/end_time=([^&]+)/);
+  const t1 = Math.min(Date.now(), finVoulue ? Date.parse(decodeURIComponent(finVoulue[1])) : Date.now());
+  /* Un capteur BINAIRE n'a pas de valeur a multiplier : `parseFloat('off')`
+   * rendait NaN et la fonction repartait les mains vides. C'est pourtant d'un
+   * binaire que la vue Energie tire les creneaux d'heures creuses. */
+  const brut = id && states[id] ? String(states[id].state) : '';
+  if (id && (brut === 'on' || brut === 'off')) return historiqueBinaireDemo(t0, t1);
+  const cur = id && states[id] ? parseFloat(states[id].state) : NaN;
+  if (!id || isNaN(cur)) return [];
   const solaire = /solaire|solar|production/i.test(id);
   /* Le RESEAU n'est pas une courbe comme les autres : il change de SIGNE.
    *
@@ -1955,6 +2146,8 @@ function calendrierDemo(id) {
   const p2 = (x) => String(x).padStart(2, '0');
   const j = (n) => { const d = new Date(Date.now() + n * 864e5); return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()); };
   const h = (n, hh) => { const d = new Date(Date.now() + n * 864e5); d.setHours(hh, 0, 0, 0); return d.toISOString(); };
+  // Avec les MINUTES : un poste de nuit ne commence pas a l'heure pile.
+  const hm = (n, hh, mm) => { const d = new Date(Date.now() + n * 864e5); d.setHours(hh, mm, 0, 0); return d.toISOString(); };
   const vivants = (l) => l
     .filter(e => !calSupprimes.has(e.uid))
     .map(e => (calModifies.has(e.uid) ? { ...e, ...calModifies.get(e.uid) } : e));
@@ -1971,7 +2164,17 @@ function calendrierDemo(id) {
   if (id === 'calendar.travail') return vivants([
     { uid: 'demo-equipe', summary: etiquette('Point d’équipe'), start: { dateTime: h(1, 9) }, end: { dateTime: h(1, 10) } },
     { uid: 'demo-livrable', summary: etiquette('Livrable client'), start: { dateTime: h(3, 17) }, end: { dateTime: h(3, 18) } },
+    /* UN POSTE DE NUIT (08/10), qui franchit minuit. La demonstration n'en
+     * avait aucun : elle ne pouvait donc pas montrer qu'un tel rendez-vous se
+     * reduisait a un rectangle de 30 px le soir et n'existait pas le
+     * lendemain matin. Il doit courir de son debut jusqu'au bas de la
+     * journee, et reprendre en haut de la suivante. */
+    { uid: 'demo-nuit', summary: etiquette('Poste de nuit'), start: { dateTime: hm(0, 21, 30) }, end: { dateTime: hm(1, 5, 39) } },
   ]);
+  /* L'AGENDA VIDE (08/10) : il doit l'etre vraiment, sinon la demonstration
+   * ne montre pas le cas qu'elle est la pour montrer — un agenda sans aucun
+   * rendez-vous, qui doit quand meme figurer dans « Mes agendas ». */
+  if (id === 'calendar.anniversaires') return [];
   return vivants([
     { uid: 'demo-poubelles', summary: etiquette('Ramassage des poubelles'), start: { date: j(1) }, end: { date: j(2) } },
     { uid: 'demo-cafe', summary: etiquette('Café avec Sam'), start: { dateTime: h(2, 10) }, end: { dateTime: h(2, 11) } },
@@ -2417,6 +2620,10 @@ export function installerDemo(langue) {
       if (msg && msg.type === 'supervisor/api') return superviseurDemo(msg);
       if (msg && msg.type === 'system_log/list') return Promise.resolve(erreursDemo());
       if (msg && msg.type === 'cloud/status') return Promise.resolve({ logged_in: true, cloud: 'connected' });
+      /* L'historique au-dela de vingt-quatre heures (06/10) : la vue Energie
+       * lit les statistiques longue duree, et la demo en fabrique une annee
+       * plausible -- meme journee, meme valeur, sinon le calendrier scintille. */
+      if (msg && msg.type === 'recorder/statistics_during_period') return Promise.resolve(statistiquesDemo(msg));
       return Promise.reject(new Error('démonstration : pas de composant serveur'));
     },
     /* `connection.subscribeMessage` : le seul endroit ou la demo doit imiter
@@ -2506,6 +2713,14 @@ export function installerDemo(langue) {
   /* Un calendrier de COLLECTE : beaucoup de communes publient un .ics, et la
    * carte Collecte sait le lire quand aucun capteur n'est designe. */
   states['calendar.collectes'] = s('off', { friendly_name: etiquette('Collectes'), supported_features: 0 });
+  /* UN AGENDA VIDE (08/10). « Pourquoi dans le calendrier j'en ai qu'un seul
+   * alors que sur HAOS j'en ai 4 ? » — il en avait quatre, dont trois sans
+   * aucun rendez-vous sur la semaine affichee, et la liste « Mes agendas » se
+   * construisait a partir des EVENEMENTS trouves : les trois etaient
+   * invisibles, donc impossibles a cocher. La demonstration n'avait aucun
+   * agenda vide, elle ne pouvait donc pas montrer le defaut. Celui-ci n'a
+   * jamais d'evenement : il doit paraitre dans la liste, avec un zero. */
+  states['calendar.anniversaires'] = s('off', { friendly_name: etiquette('Anniversaires'), supported_features: 0 });
 
   /* Deux LISTES DE TACHES (`todo.*`) : les rappels de l'Accueil. Les categories
    * sont les listes elles-memes — chez chacun les siennes. « Partagee » est en

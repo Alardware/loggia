@@ -40,7 +40,12 @@ test('la tuile Alarme, et elle seule, est en verre', () => {
   assert.equal(home.split('o-tuile-alarme').length - 1, 1, 'aucune autre tuile ne la porte');
   assert.ok(css.includes('.o-tuile-alarme { background: rgba(var(--al-rgb), .16) !important; -webkit-backdrop-filter: blur(10px) saturate(1.2); backdrop-filter: blur(10px) saturate(1.2);'), 'un fond teinte leger et un flou');
   assert.ok(css.includes('.o-tuile-hero.o-tuile-alarme:hover, .o-tuile-hero.o-tuile-alarme:focus-visible { background: rgba(var(--al-rgb), .26) !important; }'), 'le survol garde la teinte');
-  assert.ok(css.indexOf('.o-tuile-alarme { background') < css.indexOf('@media (hover: hover) and (pointer: fine) {' + NL + '  .o-hov'), 'le verre ne depend pas du pointeur : il vaut aussi au doigt');
+  /* Le bloc du survol commencait par `.o-hov`, retiree le 08/10 avec l'ombre
+   * qu'elle levait (« enleve s'il te plait ») : on s'ancre sur la premiere
+   * ligne qui reste. Ce que le test garde est le meme — le verre teinte est
+   * pose AVANT le bloc `@media (hover)`, donc il vaut aussi au doigt. */
+  assert.ok(css.indexOf('.o-tuile-alarme { background') < css.indexOf('@media (hover: hover) and (pointer: fine) {' + NL + '  .o-tuile-hero { transition'), 'le verre ne depend pas du pointeur : il vaut aussi au doigt');
+  assert.ok(!css.includes('.o-hov'), 'le survol ne doit plus lever d’ombre sur les cartes');
 });
 
 test('les domaines d’edition connaissent l’alarme, la sirene et la carte Presence', () => {

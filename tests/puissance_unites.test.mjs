@@ -104,8 +104,15 @@ test('la vue Énergie lit ses puissances en watts et ses énergies en kWh', () =
     'une puissance se lit encore brute : 2,75 kW redeviendrait « 3 W »');
   assert.doesNotMatch(code, /\bnum\((EN\.(prodJour|consoJour|consoJourHc|consoJourHp|consoHcToday|consoHpToday|consoReseauToday|injectionJour)|d\.kwh)\)/,
     'une énergie se lit encore brute : des Wh passeraient pour des kWh');
-  assert.ok(code.includes('pts: ramener(puissHist[s.id], facteurWatts(uniteEn(s.id)))'), 'la courbe des puissances ne se ramène plus au watt');
-  assert.ok(code.includes('pts: ramener(consoHist[s.id], facteurKwh(uniteEn(s.id)))'), 'les barres de consommation ne se ramènent plus au kWh');
+  /* Les deux courbes des dernieres 24 h ont disparu avec la refonte du 06/10.
+   * Ce qu'elles protegeaient tient maintenant dans l'historique feuilletable :
+   * une statistique arrive dans l'unite du capteur, et se ramene au kWh avant
+   * d'etre tracee — sans quoi un compteur en Wh ferait mille fois trop. */
+  const histo = lire('src', 'views', 'energiehisto.jsx');
+  assert.ok(histo.includes("facteurs[id] = id === EN.coutJour ? 1 : facteurKwh(unite(id));"),
+    'les statistiques ne se ramènent plus au kWh');
+  assert.ok(histo.includes("facteurs[id] = choix === 'cout' ? 1 : facteurKwh(unite(id));"),
+    'le calendrier non plus');
 });
 
 test('l’Accueil, la carte Énergie, les points d’attention et l’aperçu lisent en watts', () => {

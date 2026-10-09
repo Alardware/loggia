@@ -90,19 +90,23 @@ test('la section et la tuile de pièce de l’Accueil : une surface en édition,
   assert.equal(compte(p, /aria-label=\{\(confirme \? tr\('Confirmer \?'\) : tr\('Supprimer'\)\) \+ ' ' \+ p\.name\}/g), 2, 'Supprimer aussi, et son second appui');
 });
 
-test('les favoris de l’Accueil en édition : la carte inerte au clavier aussi, chaque outil nomme la carte qu’il touche', () => {
-  /* Relecture du lot 13 : la carte d'une vue l'était devenue
-   * (tests/lot13_vues_perso), pas sa jumelle des favoris — son interrupteur
-   * se tabulait sous la barre, Espace éteignait la lampe. */
+test('les favoris de l’Accueil en édition : la TUILE partagee, comme les vues', () => {
+  /* Jusqu'au 06/10, les favoris avaient leur propre barre d'outils flottante,
+   * jumelle de celle des vues personnalisees. Les deux passent desormais par
+   * la tuile des vues de la maison : ce que le lot 13 avait du corriger DEUX
+   * fois — la carte inerte, les commandes non tabulables, le nom de chaque
+   * outil — vient d'un seul endroit. */
   const f = bloc('function FavorisAccueil(');
-  assert.ok(f.includes(`<div className="o-cvfit" inert={edit ? '' : undefined} style={{ height: '100%', pointerEvents: edit ? 'none' : 'auto' }}>`), 'en édition, les commandes d’un favori se tabulent encore');
-  // Trois favoris lisaient trois fois « Changer la carte », et la croix « × ».
-  for (const geste of ["tr('Changer la carte'))", "tr('Largeur double')", "tr('Retirer')"]) {
-    assert.ok(f.includes(geste + " + ' · ' + nomCv(x, hass)}"), 'un outil de la barre des favoris ne dit pas quelle carte il touche : ' + geste);
-  }
-  assert.ok(f.includes("aria-label={tr('Largeur double') + ' · ' + nomCv(x, hass)} aria-pressed={cvW(x) === 2}"), 'le nom de la bascule de largeur change avec son état : « Largeur simple », enfoncé');
-  // Le nom est celui des vues, par la même fonction de module : pas une copie.
-  assert.ok(app.includes(NL + 'function nomCv(x, hass) {') && !f.includes('CV_TYPE_NOMS()'), 'les favoris recopient le nom d’une carte');
+  assert.ok(f.includes('<EditableCard ed={edFav}'), 'la tuile partagee');
+  assert.ok(f.includes('onEdit={() => setFiche(x)}'), 'un clic ouvre la fiche');
+  assert.ok(!f.includes('<EditBarre>'), 'la barre flottante a disparu des favoris');
+  /* La rangee DEFILE : les favoris n'ont jamais eu de glisser. L'agencement ne
+   * sert qu'au clic, aux fleches et aux trois reglages. */
+  assert.ok(f.includes('dragId: null') && f.includes('dragMove: () => {}'), 'pas de glisser dans une rangee qui defile');
+  assert.ok(f.includes("appuiRef.current = !(e.target.closest && e.target.closest('button:not(.o-surface)'));"),
+    'un appui sur un bouton de coin ne doit pas ouvrir la fiche');
+  // Le nom est celui des vues, par la meme fonction de module : pas une copie.
+  assert.ok(app.includes(NL + 'function nomCv(x, hass) {') && f.includes('nomCv(x, hass)'), 'les favoris recopient le nom d’une carte');
 });
 
 test('la surface d’une carte qu’on range : transparente au curseur de saisie, un dialogue seulement si elle ouvre une fiche', async () => {

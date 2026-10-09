@@ -177,7 +177,9 @@ test('les cartes d’Énergie et de Sécurité aussi', () => {
   ]) assert.ok(app.includes(bout), quoi + ' : la carte dessine le sien sans demander l’icône choisie');
   /* Un dessin maison prend la couleur du parent (`currentColor`) : la pastille
    * du poste ne donnait que son fond, le tracé serait sorti noir. */
-  assert.ok(app.includes("background: hx(d.c, 0.14), display: 'flex', alignItems: 'center', justifyContent: 'center', color: d.c }}>"),
+  // Ce qui compte est le `color`, pas l'opacite du fond : la maquette du 06/10
+  // a porte celle-ci de .14 a .15, et le trace resterait noir sans la couleur.
+  assert.match(app, /background: hx\(d\.c, 0\.1[45]\)[^}]*color: d\.c \}\}>/,
     'la pastille du poste ne donne plus sa couleur au dessin choisi');
 });
 
