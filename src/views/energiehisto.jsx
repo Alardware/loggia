@@ -19,7 +19,7 @@ import { tr, locale } from '../i18n.js';
 import { nombre } from '../format.js';
 import { facteurKwh, kwhDe } from '../unites.js';
 import { useStats, bornesStat, damier, sommeStat, libellePeriode, RECUL_MAX } from '../stats.js';
-import { plagesVraies, barreTarif, prixDuMoment, prochainTarif } from '../tarif.js';
+import { plagesVraies, barreTarif, prixDuMoment, prixEnCours, prochainTarif } from '../tarif.js';
 import { useEtatsHist } from '../historique.jsx';
 import { EnHistoBarres, EnCalendrier, CalendrierMois } from '../engraphes.jsx';
 
@@ -117,7 +117,30 @@ export function CarteTarif({ hass, EN = {}, tour = 0, devise = '€', etroit = f
   const hcLu = num(EN.hcPrice) != null ? num(EN.hcPrice) : (duTableau.length > 1 ? duTableau[0] : null);
   const hpLu = num(EN.hpPrice) != null ? num(EN.hpPrice)
     : (duTableau.length > 1 ? duTableau[duTableau.length - 1] : (duTableau.length === 1 ? duTableau[0] : null));
-  const prix = prixDuMoment({ hc: hcLu, hp: hpLu, enHc });
+  /* PLUS DE DEUX TARIFS : TEMPO ET ASSIMILÉS (09/10).
+   *
+   * À deux prix, « le moins cher est l'heure creuse » est la définition même
+   * du tarif réduit. À six — bleu, blanc, rouge, chacun creuses et pleines —
+   * c'est faux : on annonçait le bleu creuses ou le rouge pleines, jamais les
+   * quatre autres.
+   *
+   * On n'invente pas la couleur du jour et on ne lit aucun nom d'entité : un
+   * seul compteur TOURNE, celui du tarif en cours. `resolve.js` attache déjà à
+   * chaque prix le compteur de sa connexion. La fiche garde la main : si elle
+   * nomme les deux prix, c'est elle qui décide. */
+  const connexions = (prixHa || []).map(p => {
+    const e = brut(p.compteur);
+    return {
+      prix: p.valeur != null ? p.valeur : num(p.entite),
+      instant: e ? Date.parse(e.last_changed || e.last_updated || '') : NaN,
+      lisible: !!(e && e.state != null && e.state !== 'unknown' && e.state !== 'unavailable'),
+    };
+  });
+  const multi = num(EN.hcPrice) == null && num(EN.hpPrice) == null && duTableau.length > 2;
+  const prixMulti = multi ? prixEnCours(connexions) : null;
+  const prix = prixMulti != null
+    ? { valeur: prixMulti, enHc, unique: false, multi: true }
+    : prixDuMoment({ hc: hcLu, hp: hpLu, enHc });
   /* LE PRIX DE REVENTE. Le tableau de bord le declare en face de celui
    * d'achat ; personne n'a de capteur « tarif de rachat » par defaut, et on ne
    * le devine pas. Plusieurs connexions peuvent en porter un : on prend le
@@ -154,7 +177,10 @@ export function CarteTarif({ hass, EN = {}, tour = 0, devise = '€', etroit = f
         <div style={etroit ? { flex: 1, minWidth: 0 } : undefined}>
           <div style={SURTITRE}>{tr('Le tarif')}</div>
           <div style={TITRE}>
-            {prix.unique ? tr('Tarif unique') : prix.enHc === true ? tr('Heures creuses') : prix.enHc === false ? tr('Heures pleines') : tr('Heures creuses et pleines')}
+            {/* À plus de deux tarifs sans capteur de créneau, on sait CE QUE
+              * coûte le kWh maintenant, pas dans quel créneau on se trouve :
+              * « Tarif en cours » le dit sans rien promettre de plus. */}
+            {prix.unique ? tr('Tarif unique') : prix.enHc === true ? tr('Heures creuses') : prix.enHc === false ? tr('Heures pleines') : prix.multi ? tr('Tarif en cours') : tr('Heures creuses et pleines')}
           </div>
         </div>
         {(prix.valeur != null || prixVente != null) && (
@@ -204,8 +230,13 @@ export function CarteTarif({ hass, EN = {}, tour = 0, devise = '€', etroit = f
             ))}
           </div>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 12, fontSize: 12, fontWeight: 700, color: 'var(--o-text2)' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><span style={{ width: 8, height: 8, borderRadius: 3, background: 'rgba(var(--o-cold-rgb),.55)' }} />{tr('Heures creuses')}{hcLu != null && <span style={{ color: 'var(--o-text)', fontVariantNumeric: 'tabular-nums' }}>{dec(hcLu, 4)}</span>}</span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><span style={{ width: 8, height: 8, borderRadius: 3, background: 'var(--o-accent-fond)' }} />{tr('Heures pleines')}{hpLu != null && <span style={{ color: 'var(--o-text)', fontVariantNumeric: 'tabular-nums' }}>{dec(hpLu, 4)}</span>}</span>
+            {/* LES CHIFFRES DE LA LÉGENDE SE TAISENT À PLUS DE DEUX TARIFS.
+              * `hcLu` et `hpLu` valent alors le moins cher et le plus cher de
+              * tous les créneaux — en Tempo, le bleu creuses et le rouge
+              * pleines, qui n'ont jamais cours le même jour. Les deux puces
+              * restent : elles servent à lire la barre. */}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><span style={{ width: 8, height: 8, borderRadius: 3, background: 'rgba(var(--o-cold-rgb),.55)' }} />{tr('Heures creuses')}{!multi && hcLu != null && <span style={{ color: 'var(--o-text)', fontVariantNumeric: 'tabular-nums' }}>{dec(hcLu, 4)}</span>}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><span style={{ width: 8, height: 8, borderRadius: 3, background: 'var(--o-accent-fond)' }} />{tr('Heures pleines')}{!multi && hpLu != null && <span style={{ color: 'var(--o-text)', fontVariantNumeric: 'tabular-nums' }}>{dec(hpLu, 4)}</span>}</span>
           </div>
         </>
       )}

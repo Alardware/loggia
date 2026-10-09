@@ -2667,6 +2667,7 @@ export default {
   'Vue d’ensemble': 'Übersicht',
   'Le tarif': 'Der Tarif',
   'Tarif unique': 'Einheitstarif',
+  'Tarif en cours': 'Aktueller Tarif',
   'Heures creuses et pleines': 'Nieder- und Hochtarif',
   'Heures creuses à partir de {h}': 'Niedertarif ab {h}',
   'Heures pleines à partir de {h}': 'Hochtarif ab {h}',

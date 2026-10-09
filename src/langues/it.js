@@ -2667,6 +2667,7 @@ export default {
   'Vue d’ensemble': 'Panoramica',
   'Le tarif': 'La tariffa',
   'Tarif unique': 'Tariffa unica',
+  'Tarif en cours': 'Tariffa in corso',
   'Heures creuses et pleines': 'Fascia economica e piena',
   'Heures creuses à partir de {h}': 'Fascia economica dalle {h}',
   'Heures pleines à partir de {h}': 'Fascia piena dalle {h}',

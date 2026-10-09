@@ -14,6 +14,17 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { siblingsOf, pickSibling } from './discovery.js';
+import { trouverCreneau } from './creneau.js';
+
+/** Le registre d'entités, mis à plat pour les découvertes qui lisent les clés
+ * de traduction. `entityMeta` est une Map ; on n'en sort que ce qui sert. */
+function listeEntites(index) {
+  const table = index && index.entityMeta;
+  if (!table || typeof table.forEach !== 'function') return [];
+  const out = [];
+  table.forEach((m, id) => out.push({ id, cle: (m && m.translationKey) || '', desactive: !!(m && m.disabled) }));
+  return out;
+}
 import { mergedProfile, primaryEntity } from './profiles.js';
 import { comparerTextes } from './i18n.js';
 
@@ -488,6 +499,17 @@ export function resolveEnergy({ index, states = {}, energyPrefs = null, userCfg 
       batChargeNow: batRate('stat_rate_to'),
       batDechargeNow: batRate('stat_rate_from'),
       batSoc: batCle ? pickSibling(index, states, batCle, { domain: 'sensor', deviceClass: 'battery' }) : null,
+      /* LE CRÉNEAU TARIFAIRE EN COURS (09/10). Home Assistant ne lui donne ni
+       * `device_class` ni rôle dans le tableau de bord : il n'existait que
+       * désigné à la main, partout, ce qui contredit « tout opérationnel sans
+       * configurer ».
+       *
+       * On le cherche dans TOUTE la maison, et non auprès des compteurs : le
+       * créneau décrit le CONTRAT, les compteurs décrivent le COMPTEUR, et
+       * rien ne les lie — mesuré sur une installation réelle, ils venaient de
+       * deux intégrations différentes. C'est la clé de traduction qui le
+       * désigne, et l'unicité qui le garantit (creneau.js). */
+      hcActive: trouverCreneau(listeEntites(index)),
       // Ce que l'injection a rapporte, quand Home Assistant le tient.
       revenuJour: seul(compensations),
       /* Les PARTS, quand le contrat en compte plusieurs : l'historique les

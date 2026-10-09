@@ -2668,6 +2668,7 @@ export default {
   'Vue d’ensemble': 'Przegląd',
   'Le tarif': 'Taryfa',
   'Tarif unique': 'Taryfa jednostrefowa',
+  'Tarif en cours': 'Aktualna taryfa',
   'Heures creuses et pleines': 'Taryfa nocna i dzienna',
   'Heures creuses à partir de {h}': 'Taryfa nocna od {h}',
   'Heures pleines à partir de {h}': 'Taryfa dzienna od {h}',
