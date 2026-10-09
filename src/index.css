@@ -453,6 +453,11 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 .o-optrow input[type="range"]::-moz-range-thumb, .o-cvrange input[type="range"]::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; background: var(--o-accent); border: none; cursor: pointer; }
 
 @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.45; transform:scale(.8); } }
+/* Les vagues de l'anneau de l'Énergie. Une onde fait DEUX fois la largeur du
+   disque : la glisser d'une largeur la ramène exactement sur elle-même, et la
+   boucle ne se voit pas. Trois couches à des vitesses différentes donnent la
+   surface ; une seule ne ferait qu'un dessin qui défile. */
+@keyframes lgWave { to { transform: translateX(-216px); } }
 /* Mini-scènes météo de la vignette d'accueil : transform/opacity seulement,
    jamais de layout — le coût GPU reste celui d'une poignée de spans. */
 @keyframes o-wxm-fall { 0% { transform: translateY(-14px); opacity: 0; } 12% { opacity: .8; } 88% { opacity: .8; } 100% { transform: translateY(64px); opacity: 0; } }
@@ -658,6 +663,38 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
   .loggia-backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 90; }
   .loggia-content { padding: 16px 14px 96px !important; }
   .grid-ehero, .grid-par-pal, .grid-par-about { grid-template-columns: 1fr !important; }
+  /* ── L'ÉNERGIE AU TÉLÉPHONE (maquette mobile du 07/10) ───────────────────
+     La rangée Aperçu + Tarif est en FLEX depuis la refonte : la règle de
+     grille au-dessus ne la touche plus. Sans celle-ci, `flex: 2 1 620px` ne
+     tient pas dans 390 px et la carte se tasse à deux cents pixels de large. */
+  .grid-ehero > * { flex: 1 1 100% !important; }
+  /* L'anneau descend à 172 px, et les sources passent sur deux colonnes : en
+     rangée, elles débordaient de la carte. */
+  .o-en-anneau { width: 172px !important; height: 172px !important; }
+  .o-en-jetons { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  /* Les postes, deux par ligne plutôt qu'un seul large. */
+  .grid-edevices { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  /* LE CALENDRIER TIENT DANS L'ÉCRAN, il ne défile plus : les cases se
+     resserrent et la colonne des mois se réduit. Seuls quatre repères de jours
+     restent — trente-et-un nombres sur 390 px ne se lisent pas. */
+  .o-cal-defile > div { min-width: 0 !important; }
+  .o-cal-ligne { grid-template-columns: 38px repeat(31, minmax(0, 1fr)) !important; gap: 2px !important; }
+  .o-cal-case { height: 11px !important; border-radius: 2px !important; }
+  .o-cal-jours > span { display: none; }
+  .o-cal-jours > span:nth-child(2), .o-cal-jours > span:nth-child(11),
+  .o-cal-jours > span:nth-child(21), .o-cal-jours > span:nth-child(32) { display: block; font-size: 9px; }
+  /* Le grand titre passe à 28 px : à 36, « L'énergie » mangeait un quart de
+     l'écran avant que la page ne commence. */
+  .o-en-titre { font-size: 28px !important; }
+  /* L'en-tête d'une carte garde son titre sur UNE ligne, et renvoie ses onglets
+     DESSOUS, en pleine largeur. Sur trois lignes de deux mots, « Production
+     solaire active » prenait toute la hauteur avant le moindre chiffre. */
+  .o-en-cartetitre > div:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .o-en-cartehead > .o-en-onglets { order: 9; flex: 1 0 100%; }
+  /* Un groupe d'onglets occupe la largeur, ses boutons se la partagent : à
+     l'étroit, ils débordaient ou se chevauchaient. */
+  .o-en-onglets { display: grid !important; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); flex: 1 0 100% !important; min-width: 0; }
+  .o-en-onglets > button { min-width: 0; overflow: hidden; justify-content: center; }
   /* Caméras : une par ligne sur téléphone (retour du 15/09 : « pas fan
      finalement » de la grille de deux). Depuis le 20/09, c'est le RÉGLAGE qui
      le dit — `camdispo.js`, « Automatique » valant une seule colonne au
@@ -742,12 +779,8 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 .o-flip-out { animation: o-flipOut .36s cubic-bezier(.22,.61,.36,1) both; }
 @media (prefers-reduced-motion: reduce) { .o-flip-in, .o-flip-out { animation: none; } }
 
-/* ── Animations lot 3 : shiny badges (sweep lumineux sur texte actif) ── */
-@keyframes o-shine { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-.o-shiny { background-image: linear-gradient(100deg, currentColor 0%, currentColor 42%, #fff 50%, currentColor 58%, currentColor 100%);
-  background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: inherit;
-  animation: o-shine 3.2s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { .o-shiny { animation: none; -webkit-text-fill-color: currentColor; background: none; } }
+/* Le balayage lumineux des badges actifs (`o-shiny`) est parti le 07/10 avec
+   son dernier lecteur, la pastille « Solaire actif ». */
 
 /* ── Animations lot 4 ── */
 /* 1. transition de vue : fade + slide 8px à l'entrée */
@@ -773,18 +806,33 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 .o-ligne-moment:active { transform: scale(.955); }
 @media (prefers-reduced-motion: reduce) { .o-ligne-moment { transition: none; } .o-ligne-moment:active { transform: none; } }
 
-/* 5. hover profondeur (pointeur fin uniquement) : ombre plus profonde SEULEMENT.
-   Le brightness(1.03) délavait les cartes translucides (lavis, verre) — elles
-   semblaient devenir transparentes au survol (retour user 29/08). */
+/* 5. LE SURVOL NE LEVE PLUS D'OMBRE (08/10).
+
+   « Pourquoi il y a cet effet d'ombre sur les cartes quand je passe dessus,
+   enleve s'il te plait. » Une ombre qui grandit sous le pointeur n'apprend
+   rien : la carte ne devient pas plus cliquable parce qu'on la survole, et le
+   geste n'existe meme pas au doigt, ou se fait l'essentiel de l'usage.
+   Signale une premiere fois le 07/10 pour les grandes sections d'Energie ;
+   on y avait retire `Anim` au lieu de regarder la regle, qui touchait toutes
+   les cartes de tous les ecrans.
+   (Avant elle, un `brightness(1.03)` delavait les cartes translucides —
+   retire le 29/08 pour la meme raison : un survol ne doit rien abimer.)
+   Ce qui reste : les tuiles de la banniere, qui sont des BOUTONS (ADR 0030)
+   et dont le survol change le fond, pas l'ombre. */
 @media (hover: hover) and (pointer: fine) {
-  .o-hov { transition: box-shadow .25s ease; }
-  /* Les tuiles de la banniere sont des boutons (ADR 0030) : le survol le dit. */
   .o-tuile-hero { transition: background .2s ease; }
   .o-tuile-hero:hover, .o-tuile-hero:focus-visible { background: var(--o-s1) !important; }
   .o-tuile-hero.o-tuile-alarme:hover, .o-tuile-hero.o-tuile-alarme:focus-visible { background: rgba(var(--al-rgb), .26) !important; }
-  .o-hov:hover { box-shadow: var(--o-shadow-hover, 0 10px 24px rgba(0,0,0,.32), 0 26px 52px rgba(0,0,0,.26)) !important; }
 }
-@media (prefers-reduced-motion: reduce) { .o-view, .o-flash, .o-ripple { animation: none; } .o-hov { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .o-view, .o-flash, .o-ripple { animation: none; } }
+/* La POUSSE des barres d'un graphe : chaque colonne monte depuis sa base, un
+   cheveu après la précédente (`animationDelay` posé au rendu). Une barre plate
+   d'un aplat uni n'avait pas d'âme ; elle arrive maintenant comme le reste du
+   tableau de bord, et l'`opacity` du survol reste libre. */
+.o-barre { animation: o-barre-pousse .5s cubic-bezier(.22,1,.36,1) both; }
+@keyframes o-barre-pousse { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .o-barre { animation: none; } }
+
 /* lot 4 — pill de sélection sidebar qui glisse entre items */
 .o-navpill { transition: transform .32s cubic-bezier(.22,1.1,.36,1), height .2s ease; }
 .loggia-aside.is-closed .o-navpill { left: 14px !important; right: 14px !important; }
@@ -981,31 +1029,57 @@ main:has(.o-wx3d) .loggia-hdr { -webkit-backdrop-filter: none !important; backdr
 /* Scene energetique : pleine largeur, mais hauteur plafonnee pour ne pas manger l'ecran.
    L'arc (SVG centre, preserveAspectRatio meet) et la maison (height 100%, centree) sont
    tous deux a l'echelle de la HAUTEUR : plafonner celle-ci ne desaligne pas les pastilles. */
-.o-en-scene { max-height: 340px; }
-@media (max-width: 1180px) { .o-en-scene { max-height: 290px; } }
+/* UN PLAFOND DE LARGEUR, PAS DE HAUTEUR (08/10).
+   La scene doit tenir sa hauteur sans manger l'ecran — mais un `max-height`
+   lui FAIT ROMPRE SON RAPPORT des qu'il mord, et le SVG des pastilles, qui est
+   en `meet`, se recentre alors dans la largeur qui reste : les pastilles
+   glissent par rapport au dessin. Le meme plafond exprime en LARGEUR donne la
+   meme hauteur maximale sans jamais rompre le rapport — ce qui permet au cadre
+   de coller au dessin (App.jsx : plus de symetrie a reserver a gauche, et la
+   maison gagne un dixieme de sa largeur). */
+.o-en-scene { max-width: calc(340px * var(--o-scene-ratio, 1.5)); }
+/* « Et sur tablette pareil » (08/10). La tablette avait un plafond plus bas que
+   l'ordinateur (290 contre 340) et gardait les retraits de la carte : mesure a
+   834, le dessin tenait dans 387 x 290 alors que le PUITS faisait 456 x 639 —
+   349 px de vide en hauteur. Le plafond s'aligne sur celui du grand ecran, et
+   le puits deborde du retrait de la carte comme sur un telephone : c'est une
+   illustration, elle a le droit d'aller presque bord a bord. */
+@media (max-width: 1180px) { .o-en-well { margin-left: -16px; margin-right: -16px; } }
 @media (max-width: 820px) {
-  /* Mobile : la largeur bride la scene (377px -> 157px de haut). On lui donne une hauteur
-     minimale, et la maison passe a l'echelle de la LARGEUR (55.56% = 1.333 x 250/600),
-     exactement l'echelle que l'arc SVG adopte quand c'est la largeur qui limite : les
-     pastilles restent posees au bon endroit sur la maison. */
-  /* La largeur bride le dessin (l'arc SVG est en 'meet') : on zoome legerement la scene
-     entiere — arc ET maison ensemble, donc les pastilles restent en place — et le puits
-     rogne le debord. min-height couvre la hauteur zoomee (157 x 1.18 = 186). */
-  .o-en-well { margin-left: -24px !important; margin-right: -24px !important; border-radius: 0 !important; border-left: none !important; border-right: none !important; }
-  .o-en-scene { max-height: none; min-height: 0; aspect-ratio: 600 / 355 !important; transform: scale(1.42); transform-origin: center; }
-  /* le zoom fait sortir les marqueurs lever/coucher du cadre : on les retire plutot que
-     de laisser un bout de chiffre rogne */
-  .o-sunmark { display: none; }
-  .o-en-house { top: 50% !important; height: auto !important; width: 55.56% !important; transform: translate(-50%, -50%) !important; }
-  /* Chiffres sous le schema : plus compacts */
-  .o-en-kpis { display: grid !important; grid-template-columns: repeat(4, 1fr); gap: 8px !important; margin-top: 14px !important; }
-  .o-en-kpis > div { margin-left: 0 !important; text-align: left !important; min-width: 0; }
-  .o-en-kpis > div > div:first-child { font-size: 15px !important; white-space: nowrap; }
-  .o-en-kpis > div > div:last-child { align-items: flex-start !important; gap: 4px !important; line-height: 1.25; }
-  .o-en-kpis > div > div:last-child, .o-en-kpis > div > div:last-child * { font-size: 9.5px !important; }
-  /* la pastille de couleur doit rester ronde meme quand le libelle passe sur 2 lignes */
-  .o-en-kpis > div > div:last-child > span:first-child { flex: 0 0 auto; margin-top: 3px; }
+  /* PLUS RIEN A RATTRAPER ICI (08/10). Ce bloc portait un zoom de 118 %, une
+     maison figee a 55,56 % et un cadre au ratio 600/420 — trois reglages faits
+     a la main pour rattraper l'echelle que l'arc du soleil imposait au dessin.
+     L'arc retire, la scene et la maison se calent sur la meme table `SCENE`
+     (App.jsx), celle du cadre reellement dessine. Il ne reste que le plafond de
+     hauteur a lever, puisque sur un telephone c'est la largeur qui bride. */
+  /* « C'est encore un peu petit la maison », puis « encore un tout petit peu ».
+     Sur un ecran de 375, la page prend 28 px, la carte 48, le puits 22 : il ne
+     restait que 275 px de scene. Le puits deborde donc du retrait de la carte
+     — c'est une illustration, pas un texte, et elle a le droit d'aller presque
+     bord a bord — et son propre retrait tombe de 10 a 4. Quarante-huit pixels
+     repris sur les marges, pour quatre qui separent encore le puits du bord de
+     la carte. */
+  .o-en-well { overflow: hidden; margin-left: -20px; margin-right: -20px; padding: 4px; }
+  .o-en-scene { min-height: 0; max-width: 100%; }
 }
+
+/* LA MAISON DU SCHEMA ENERGIE EN MODE CLAIR (08/10).
+   « La maison est trop foncee en mode clair. » Les quatre calques (maison,
+   panneaux, voiture, batterie) sont des images anthracite sur fond
+   transparent, dessinees pour le theme sombre. Posees sur le puits clair
+   (#eee), elles faisaient un bloc noir au milieu d'une carte claire.
+   Mesure : toit a 59 de luminance pour un puits a 238.
+
+   On ne redessine pas les images — on les eclaircit, et la valeur est MESUREE
+   plutot que choisie : brightness(2.1) porte le toit a 124 et le mur a 168,
+   donc le relief tient (44 points d'ecart, contre 25 avec une baisse de
+   contraste), et le bloc cesse d'etre noir. `saturate` retient le bleu que la
+   luminosite exagere. Les fenetres eclairees saturent vers le blanc : sur une
+   maison grise, une fenetre claire se lit encore comme une fenetre allumee.
+
+   Le selecteur vise `html.loggia-light`, donc TOUS les themes clairs, et les
+   images seules — le SVG des flux garde ses couleurs. */
+html.loggia-light .o-en-house img { filter: brightness(2.1) saturate(.85); }
 
 /* Parametres + Systeme v6 (design Claude Design 21/08) */
 @media (max-width: 1280px) {

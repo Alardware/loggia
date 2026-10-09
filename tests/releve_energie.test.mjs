@@ -101,8 +101,14 @@ test('la vue Énergie fait avancer ses deux séries au même tour, et coupe le m
   assert.ok(!/useSysHist\([^)]*, 0\)/.test(vue), 'une clé de relecture figée à 0 : les courbes ne bougent plus après le montage');
   assert.ok(vue.includes('useEffect(() => armerReleve(() => setTourEn(x => x + 1), 5 * 60000), []);'),
     'un tour toutes les cinq minutes ; l’effet rend l’arrêt, le démontage coupe le minuteur');
-  assert.ok(vue.includes('useSysHist(hass, puissIds, 24, tourEn)') && vue.includes('useSysHist(hass, consoIds, 24, tourEn)'),
-    'la puissance et la consommation suivent le même tour');
+  /* Les deux courbes des dernieres 24 h ont disparu avec la refonte du 06/10 :
+   * l'historique feuilletable les remplace, et il vit dans un module charge a
+   * la demande. Le tour les y suit — le tarif relit ses creneaux, l'historique
+   * et le calendrier leurs statistiques. */
+  assert.ok(vue.includes('tour={tourEn}'), 'le tour arrive aux sections de l’historique');
+  const histo = lire('src', 'views', 'energiehisto.jsx');
+  assert.ok(histo.includes('useStats(hass, ids, periode, recul, tour, facteurs)'), 'l’historique suit le tour');
+  assert.ok(histo.includes("useEtatsHist(hass, EN.hcActive || null, t0, t1, tour)"), 'les créneaux du tarif aussi');
   // Le tour ne sert que si l'historique le lit comme une dépendance.
   const h = lire('src', 'historique.jsx');
   const j = h.indexOf('export function useSysHist(');

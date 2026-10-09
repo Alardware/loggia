@@ -110,6 +110,79 @@ const scriptDesigne = (cfg) => { const s = idDe(cfg && cfg.script); return s && 
 
 const meta = (index, id) => (index && index.entityMeta && typeof index.entityMeta.get === 'function' && index.entityMeta.get(id)) || null;
 
+/* ════════════ TROUVER LE DISTRIBUTEUR, SANS RIEN DEMANDER ════════════
+ *
+ * Home Assistant n'a pas de domaine pour ces appareils : aucun `vacuum.` ou
+ * `light.` ne les designe, et le distributeur etait donc le dernier qui
+ * n'existait QUE par sa fiche — sans une entite nommee a la main dans
+ * Parametres, pas de carte, pas de vue, rien (07/10, « tout doit etre
+ * operationnel »).
+ *
+ * Mais les integrations qui en gerent nomment leurs entites de la meme facon,
+ * par une CLE DE TRADUCTION : le meme mot dans toutes les langues, et c'est
+ * deja sur elles que repose toute la lecture ci-dessus. On remonte donc des
+ * entites a leur appareil.
+ *
+ * DEUX FAMILLES DE SIGNAUX AU MINIMUM. Une seule ne suffit pas : `portions`
+ * tout seul pourrait etre autre chose, et poser une carte de croquettes sur un
+ * appareil qui n'en est pas un serait pire que de n'en poser aucune. Deux
+ * familles distinctes — une portion ET un prochain repas, un programme ET un
+ * niveau bas — ne se rencontrent que sur un vrai distributeur.
+ */
+const SIGNATURES = [
+  ['portion', (c) => dans(T.CLES_PORTION, c) || rx(T.MOTIF_SUFFIXE_PORTION, c)],
+  ['poids', (c) => dans(T.CLES_POIDS_PORTION, c) || rx(T.MOTIF_SUFFIXE_POIDS_PORTION, c)],
+  ['programme', (c) => Object.values(T.CLES_PROGRAMME).some(l => dans(l, c)) || rx(T.MOTIF_SCHEDULE_Z2M, c)],
+  ['prochain', (c) => dans(T.CLES_PROCHAIN, c) || rx(T.MOTIF_PROCHAIN, c)],
+  ['dernier', (c) => dans(T.CLES_DERNIER, c) || rx(T.MOTIF_DERNIER, c)],
+  ['encours', (c) => dans(T.CLES_EN_COURS, c)],
+  ['compteur', (c) => dans(T.CLES_COMPTEUR, c) || rx(T.MOTIF_COMPTEUR_Z2M, c)],
+  ['niveau', (c) => dans(T.CLES_ANOMALIE_BAS, c) || rx(T.MOTIF_BAS, c)],
+  ['bloque', (c) => dans(T.CLES_ANOMALIE_BLOQUE, c)],
+  ['repas', (c) => dans(T.CLES_SOURCE_REPAS, c) || rx(T.MOTIF_SOURCE_REPAS, c)],
+  ['consommable', (c) => Object.values(T.MOTIF_CONSOMMABLE).some(m => rx(m, c))],
+];
+
+/* Le resultat est MEMORISE par index : `distributeurConfigure()` est appelee a
+ * chaque rendu, et parcourir toutes les entites de la maison a chaque fois
+ * coute cher pour une reponse qui ne change qu'au rechargement du registre. */
+let _trouve = { index: undefined, appareil: null };
+
+/**
+ * L'appareil qui ressemble a un distributeur, ou `null`.
+ *
+ * Une entite MASQUEE compte (tuya-local masque son `meal_plan`), une
+ * DESACTIVEE non : elle n'a pas d'etat. A egalite de signaux, c'est l'appareil
+ * dont l'identifiant vient en premier — pour que deux lectures de suite
+ * rendent la meme chose.
+ */
+export function trouverDistributeur(index) {
+  if (_trouve.index === index) return _trouve.appareil;
+  const table = index && index.entityMeta;
+  let appareil = null;
+  if (table && typeof table.forEach === 'function') {
+    const vus = new Map();
+    table.forEach((m, id) => {
+      if (!m || !m.deviceId || m.disabled || !id) return;
+      const cle = String(m.translationKey || '').toLowerCase();
+      if (!cle) return;
+      SIGNATURES.forEach(([nom, voit]) => {
+        if (!voit(cle)) return;
+        const s = vus.get(m.deviceId) || new Set();
+        s.add(nom);
+        vus.set(m.deviceId, s);
+      });
+    });
+    let meilleur = 0;
+    [...vus.keys()].sort().forEach(dev => {
+      const n = vus.get(dev).size;
+      if (n >= 2 && n > meilleur) { meilleur = n; appareil = dev; }
+    });
+  }
+  _trouve = { index, appareil };
+  return appareil;
+}
+
 /**
  * L'appareil du distributeur : `cfg.appareil` s'il est donné ; sinon celui de
  * la première entité désignée qui en a un (haid > portion > compteur >
@@ -121,7 +194,9 @@ export function appareilDistributeur(index, cfg) {
   const choisi = cfg && typeof cfg.appareil === 'string' ? cfg.appareil.trim() : '';
   if (choisi) return choisi;
   for (const id of designees(cfg)) { const m = meta(index, id); if (m && m.deviceId) return m.deviceId; }
-  return null;
+  /* Rien de designe : ON CHERCHE (07/10). Le distributeur etait le dernier
+   * appareil qui n'existait que par sa fiche. */
+  return trouverDistributeur(index);
 }
 
 /** Une entité désignée posée sur un AUTRE appareil : ignorée, et signalée. */

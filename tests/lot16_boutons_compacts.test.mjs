@@ -283,7 +283,9 @@ test('les favoris de l’Accueil sont TOUJOURS en icône, ordinateur compris —
    * laissait que 13) : à 1440 aussi, mesuré. Si la case s'élargit ou si le
    * seuil baisse, le mot revient sur ordinateur — à décider, pas à subir. */
   const bloc = blocGeste();
-  const m = app.match(/width: cvW\(x\) === 2 \? \d+ : (\d+), height: cvRowsDe\(x\) === 1 \? 88 : 184, scrollSnapAlign/);
+  /* La case est sortie en objet le 06/10 (`taille`), l'edition et le rendu
+   * la partageant : memes chiffres, autre forme. */
+  const m = app.match(/width: cvW\(x\) === 2 \? \d+ : (\d+), height: cvRowsDe\(x\) === 1 \? 88 : 184 \}/);
   assert.ok(m, 'la case des favoris n’est plus lue : réaligner');
   const seuil = Number(bloc.requete.sel.match(/\d+/)[0]);
   const pad = cvCard.match(/padding: dense \? '12px (\d+)px' : (\d+)/);

@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  JOURS_AGENDA, cleJour, jourDeCle, moisPlus, debutDe, finDe, plageSemaine, joursAgenda, toucheJour, comptesParJour, evenementsDuJour,
+  JOURS_AGENDA, cleJour, jourDeCle, moisPlus, debutDe, finDe, plageSemaine, joursAgenda, toucheJour, traverseJour, bornesDuJour, comptesParJour, evenementsDuJour,
 } from '../src/agenda.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -181,8 +181,13 @@ test('ce que la relecture a l’ecran a corrige', () => {
   assert.ok(c.includes("plage: journee ? tr('Toute la journée')"), 'le texte entier reste sous le titre');
 
   /* 2. Trois comptes ecrivaient « 1 evenements » : un compte qui peut valoir
-   * un passe par `trN`, qui prend ses deux gabarits. */
-  assert.ok(c.includes("trN(duJour.length, '{n} événement', '{n} événements')"), 'le compte du jour a besoin de son singulier');
+   * un passe par `trN`, qui prend ses deux gabarits.
+   *
+   * Le troisieme — « JEUDI 8 OCTOBRE · 2 evenements », en tete de la grille
+   * d'heures du telephone — a disparu le 08/10 avec cette grille : la feuille
+   * LISTE desormais ses evenements, et un compte au-dessus de la liste qui les
+   * montre ne disait rien de plus. Les deux qui restent annoncent ce qu'on ne
+   * voit PAS, et gardent donc leur singulier. */
   assert.ok(c.includes("trN(reste, '+{n} autre ce jour-là', '+{n} autres ce jour-là')"), '« + 1 autres ce jour-là »');
   assert.ok(c.includes("trN(duJour.length - MONTRES, '+{n} autre', '+{n} autres')"), '« + 1 autres » dans une case du mois');
 
@@ -241,4 +246,137 @@ test('les flèches : un jour, une semaine, un MOIS — et la clé se relit', () 
     'la bande du telephone suit le jour choisi, comme les sept colonnes de l’ordinateur');
   assert.ok(c.includes('const choisi = cleJour(jourSel);'),
     'la carte marque le jour qu’elle montre — pas un jour que sa bande ne porte pas');
+});
+
+test('« Mes agendas » liste les agendas de la MAISON, pas ceux qui ont un rendez-vous (08/10)', () => {
+  /* « Pourquoi dans le calendrier j'en ai qu'un seul alors que sur HAOS j'en
+   * ai 4 ? » Il en avait bien quatre, et Loggia les lisait tous — la liste se
+   * construisait a partir des EVENEMENTS trouves :
+   *
+   *   planning_guillaume : 5 rendez-vous cette semaine-la -> affiche
+   *   maison             : 2 rendez-vous, aucun en octobre -> absent
+   *   collectes, rappels : vides, pas meme un fichier       -> jamais affiches
+   *
+   * Un agenda vide sur la periode n'existait donc pas, et un agenda toujours
+   * vide n'existait jamais : impossible de savoir qu'il est la, impossible de
+   * le cocher ou de le decocher. La liste part desormais des entites. */
+  const rail = readFileSync(join(RACINE, 'src', 'agendarail.jsx'), 'utf8');
+  assert.ok(rail.includes('function calendriersDeLaMaison(hass)'), 'la liste ne part plus des entites de la maison');
+  assert.ok(rail.includes("return Object.keys(S).filter(id => id.indexOf('calendar.') === 0);"),
+    'les agendas ne se cherchent plus parmi les `calendar.*`');
+  const cals = rail.slice(rail.indexOf('const cals = useMemo('), rail.indexOf('const [eteints,'));
+  assert.ok(cals.includes('for (const id of calendriersDeLaMaison(hass))'),
+    'la liste se reconstruit a partir des seuls evenements : un agenda vide redevient invisible');
+  /* Un agenda qui porte un evenement sans plus figurer dans les etats garde sa
+   * ligne, sinon ses rendez-vous resteraient a l'ecran sans moyen de les
+   * eteindre. */
+  assert.ok(cals.includes('if (!m.has(id)) m.set(id,'), 'un agenda disparu des etats perdrait sa case, ses rendez-vous restant affiches');
+  // Le nom se demande par l'ID : un agenda vide n'a aucun evenement a presenter.
+  assert.ok(rail.includes('function nomDuCalendrier(id, hass)'), 'le nom se redemande a un evenement, qu’un agenda vide n’a pas');
+
+  /* La demonstration doit porter le cas, sinon elle ne peut pas le montrer :
+   * aucun de ses agendas n'etait vide. */
+  const demo = readFileSync(join(RACINE, 'src', 'demo.js'), 'utf8');
+  assert.ok(demo.includes("states['calendar.anniversaires']"), 'la demonstration n’a plus d’agenda vide');
+  assert.ok(demo.includes("if (id === 'calendar.anniversaires') return [];"), 'l’agenda vide de la demonstration s’est rempli');
+});
+
+test('la feuille d’agenda : jours fixes, rien de rogné, le fond ne suit plus (08/10)', () => {
+  /* Quatre reproches sur une meme capture :
+   *
+   *   « Les jours en haut doivent etre fixes quand je descends, et non
+   *     caches » — l'en-tete defilait avec la grille.
+   *   « C'est rogne » — la fiche d'un evenement s'ouvrait TOUJOURS a droite :
+   *     sur les derniers jours de la semaine elle sortait 244 px hors de la
+   *     feuille, qui se mettait a defiler horizontalement.
+   *   « Quand je suis sur le planning l'arriere-plan suit aussi le mouvement,
+   *     c'est penible » — arrive en bout de course, le navigateur passait la
+   *     molette a la page derriere la feuille.
+   *   « L'affichage ne me plait pas trop » (captures de Google Agenda) —
+   *     grosses tuiles de jour, colonnes espacees en sept cartes, evenements
+   *     en fond translucide. */
+  const rail = readFileSync(join(RACINE, 'src', 'agendarail.jsx'), 'utf8');
+
+  // Les jours restent en haut, sur un fond opaque — sinon les heures passent au travers.
+  assert.ok(rail.includes("position: 'sticky', top: 0, zIndex: 5, background: 'var(--o-bg2)'"),
+    'l’en-tete des jours redefile avec la grille');
+
+  // La fiche s'ouvre du cote ou il y a de la place.
+  assert.ok(rail.includes('function FicheEvenement({ e, hass, onFermer, aGauche = false })'), 'la fiche n’a plus de cote');
+  assert.ok(rail.includes("...(aGauche ? { right: '100%', marginRight: 8 } : { left: '100%', marginLeft: 8 })"),
+    'la fiche s’ouvre de nouveau toujours a droite : elle sortira du cadre');
+  assert.ok(rail.includes('const ficheAGauche = i > (colonnes.length - 1) / 2;'), 'le choix du cote a disparu');
+  assert.ok(rail.includes('aGauche={ficheAGauche}'), 'le cote ne se transmet plus a la fiche');
+
+  // Le defilement s'arrete dans la feuille, aux deux formats.
+  const contain = rail.match(/overscrollBehavior: 'contain'/g) || [];
+  assert.equal(contain.length, 2, 'les deux feuilles doivent retenir le defilement, pas une seule');
+
+  /* L'allure : jour en petit au-dessus, chiffre dans une pastille RONDE,
+   * colonnes jointives separees d'un trait, evenements en blocs pleins. */
+  assert.ok(rail.includes("width: 38, height: 38, borderRadius: '50%'"), 'le chiffre du jour a reperdu sa pastille ronde');
+  assert.ok(!/gridTemplateColumns: '56px ' \+ cols, gap: 6/.test(rail), 'les colonnes se reecartent en sept cartes');
+  assert.ok(rail.includes("borderLeft: '1px solid var(--o-bd3)'"), 'les colonnes n’ont plus leur trait de separation');
+  assert.ok(rail.includes("background: 'rgba(' + e.rgb + ',.92)', color: '#fff'"), 'les evenements repassent en fond translucide');
+});
+
+test('un poste de nuit s’étend sur les deux jours, et son titre ne se coupe pas (08/10)', () => {
+  /* « Regarde ça va pas, c'est coupé », sur deux captures : un bloc orange ou
+   * il ne restait du titre que le bas des lettres, et un « 21:30 - 05:39 »
+   * ecrase dans un rectangle minuscule.
+   *
+   * Trois causes, pas une :
+   *
+   *   1. La grille allait de 6 h a 23 h. Un poste de nuit n'avait NULLE PART
+   *      ou se dessiner le matin, et se faisait couper le soir a 23 h.
+   *   2. `toucheJour` ne rend un rendez-vous qu'a son jour de DEBUT — ce qui
+   *      est juste pour la carte du rail, qui ne doit pas l'annoncer deux
+   *      fois, mais faux pour une grille, qui montre du temps.
+   *   3. La fin, ramenee au meme jour, tombait AVANT le debut : `haut(fin)`
+   *      valait 0, et la hauteur retombait sur son plancher de 30 px — trop
+   *      court pour deux lignes, qui se compressaient et debordaient de leur
+   *      propre boite. */
+  const nuit = { summary: 'Poste de nuit', start: { dateTime: iso(2026, 8, 16, 21, 30) }, end: { dateTime: iso(2026, 8, 17, 5, 39) } };
+
+  // `toucheJour` ne change pas : le rail garde sa regle du jour de debut.
+  assert.equal(toucheJour(nuit, new Date(2026, 8, 17)), false, 'le rail annoncerait le poste de nuit deux fois');
+
+  // `traverseJour`, lui, rend les DEUX jours.
+  assert.equal(traverseJour(nuit, new Date(2026, 8, 16)), true, 'le soir du poste de nuit a disparu');
+  assert.equal(traverseJour(nuit, new Date(2026, 8, 17)), true, 'le matin du poste de nuit a disparu');
+  assert.equal(traverseJour(nuit, new Date(2026, 8, 18)), false, 'le poste de nuit deborde d’un jour de trop');
+
+  // Et `bornesDuJour` le borne a chaque journee.
+  const soir = bornesDuJour(nuit, new Date(2026, 8, 16));
+  assert.equal(soir.debut, 21.5, 'le soir ne commence plus a son heure');
+  assert.equal(soir.fin, 24, 'le soir ne court plus jusqu’a minuit');
+  const matin = bornesDuJour(nuit, new Date(2026, 8, 17));
+  assert.equal(matin.debut, 0, 'le matin ne part plus de minuit');
+  assert.ok(Math.abs(matin.fin - 5.65) < 0.01, 'le matin ne s’arrete plus a l’heure de fin');
+
+  const rail = readFileSync(join(RACINE, 'src', 'agendarail.jsx'), 'utf8');
+  // La grille couvre les 24 heures, et s'ouvre sur une heure utile.
+  assert.ok(/const H0 = 0;/.test(rail) && /const H1 = 24;/.test(rail), 'la grille se rogne de nouveau sur la journee de bureau');
+  assert.ok(rail.includes('const HEURE_OUVERTURE = 7;'), 'la grille s’ouvrira sur minuit');
+  assert.ok(rail.includes('zone.current.scrollTop = h * PAS_H;'), 'le placement a l’ouverture a disparu');
+  assert.ok(rail.includes('if (placee.current || vue === \'mois\' || !zone.current) return;'),
+    'le placement se referait a chaque rendu, annulant le geste de qui lit');
+
+  // Le bloc tient sur ses bornes, et jamais moins que son texte.
+  assert.ok(rail.includes('const deuxLignes = h >= 40;'), 'le seuil des deux lignes a disparu : le texte se recoupera');
+  assert.ok(rail.includes("flexShrink: 0, fontSize: 12"), 'le titre peut de nouveau se comprimer hors de sa boite');
+  assert.ok(rail.includes('{deuxLignes && <span'), 'l’heure s’affiche de nouveau dans un bloc trop court');
+
+  /* Les journees entieres ont leur BANDE au-dessus des heures : posees dans
+   * la grille a l'heure zero, elles recouvraient le debut d'un poste de
+   * nuit. Au telephone il n'y a pas de bande, elles restent dans la grille. */
+  assert.ok(rail.includes("const parJour = colonnes.map(d => (evts || []).filter(e => traverseJour(e, d) && e.start && e.start.date && !e.start.dateTime)"),
+    'la bande des journees entieres a disparu');
+  assert.ok(rail.includes('.filter(e => compacte || !(e.start && e.start.date && !e.start.dateTime))'),
+    'les journees entieres se redessinent dans la grille, par-dessus les heures');
+
+  // La demonstration porte le cas, sinon elle ne peut ni le montrer ni le proteger.
+  const demo = readFileSync(join(RACINE, 'src', 'demo.js'), 'utf8');
+  assert.ok(demo.includes("uid: 'demo-nuit'"), 'la demonstration n’a plus de poste de nuit');
+  assert.ok(demo.includes('hm(0, 21, 30)') && demo.includes('hm(1, 5, 39)'), 'le poste de nuit ne franchit plus minuit');
 });

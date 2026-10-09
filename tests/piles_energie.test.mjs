@@ -58,49 +58,34 @@ test('piles.js est pur : ni React, ni Home Assistant', () => {
   assert.deepEqual(imports, ["import { comparerTextes } from './i18n.js';"]);
 });
 
-test('la vue Énergie : la section suit les postes, avec la carte standard et la grille des Objets', () => {
+test('la vue Énergie : les piles ont leur onglet, avec la carte standard et la grille des Objets', () => {
+  /* Elles suivaient les postes jusqu'au 06/10. La vue s'est allongée —
+   * historique sur quatre périodes, tarif, calendrier des douze mois — et
+   * personne ne descend aussi loin pour apprendre qu'une télécommande est à
+   * plat : elles passent dans leur propre onglet, avec le compte de celles à
+   * surveiller sur le bouton. Le reste ne change pas : même carte à cinq
+   * barres (ADR 0057), même grille que les Objets, pas de cadre autour. */
   assert.ok(APP.includes("import { pilesMaison } from './piles.js';"));
   const i = APP.indexOf('\nfunction EnergieContent(');
   const vue = APP.slice(i, APP.indexOf('\nfunction ', i + 1));
   assert.ok(vue.includes('const piles = pilesMaison(S, (id) => (LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && LOGGIA_INDEX.entityMeta.get(id)) || {});'), 'les piles, filtrées par le registre');
-  assert.ok(vue.indexOf("tr('Postes de consommation')") < vue.indexOf("tr('Piles et batteries')"), 'la section vient après les postes');
-  assert.ok(vue.includes('{piles.length > 0 && ('), 'sans pile, pas de section');
+  assert.ok(vue.includes("{onglEn === 'piles' && piles.length > 0 && ("), 'sans pile, ni onglet ni section');
+  assert.ok(vue.includes('{piles.length > 0 && ('), 'l’onglet lui-même n’apparaît que s’il y a des piles');
   assert.ok(vue.includes('<div className="o-piles grid-objets grid-dense"'), 'la grille des Objets : 176 × 184 au téléphone');
-  assert.ok(vue.includes('{piles.map((p, i) => <Anim key={p.id} i={i} base={200}>{dc.card(p.id)}</Anim>)}') && vue.includes('{dc.sheets}'), 'la carte standard, et sa fiche au toucher');
+  assert.ok(vue.includes('{pilesVues.map((p, i) => <Anim key={p.id} i={i} base={200}>{dc.card(p.id)}</Anim>)}') && vue.includes('{dc.sheets}'), 'la carte standard, et sa fiche au toucher');
+  // Le badge et le filtre comptent la MÊME chose, au même seuil : une pile
+  // faible ou muette. Deux comptes différents sur le même écran mentiraient.
+  assert.ok(vue.includes('const pilesSurveiller = piles.filter(p => p.niveau == null || p.niveau <= 35).length;'), 'le compte à surveiller');
+  assert.ok(vue.includes("const pilesVues = pilesFiltre === 'surveiller' ? piles.filter(p => p.niveau == null || p.niveau <= 35) : piles;"), 'le filtre, au même seuil');
   assert.ok(lire('src', 'langues', 'en.js').includes("'Piles et batteries': 'Batteries',"));
 });
 
-test('le graphique de puissances ne dessine pas plus de points qu’il n’a de pixels', () => {
-  /* Vingt-quatre heures de releves font des milliers de points pour trois
-   * cents pixels de large. Deux degats (audit du 29/09) :
-   *
-   *   — `Math.min(...tous)` passe le tableau EN ARGUMENTS ; au-dela de
-   *     quelques dizaines de milliers de points, le navigateur leve une
-   *     `RangeError`, et Safari cede le premier ;
-   *   — tout le calcul se refaisait a chaque rendu, donc a chaque mouvement
-   *     de souris, alors que seuls la ligne verticale et la bulle en dependent.
-   *
-   * Le sous-echantillonnage garde le plus BAS et le plus HAUT de chaque
-   * tranche : prendre un point sur vingt raboterait les pointes de
-   * consommation, qui sont ce qu'on vient regarder. */
-  const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
-  const f = src.slice(src.indexOf('function sousEchantillonner('), src.indexOf('\nfunction EnPuissances('));
-  assert.ok(f.includes('if (pts[k].v < lo.v) lo = pts[k];') && f.includes('if (pts[k].v > hi.v) hi = pts[k];'),
-    'le sous-echantillonnage ne garde plus le bas ET le haut : les pics seraient rabotes');
-  assert.ok(f.includes('if (out[0] !== pts[0]) out.unshift(pts[0]);'), 'les deux bouts ne sont plus les vrais bouts : l’aire se refermerait de travers');
-
-  const g = src.slice(src.indexOf('function EnPuissances('), src.indexOf('\n/* Consommation par heure'));
-  // Les commentaires citent le code d'avant : on ne teste que le code.
-  const code = g.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  assert.ok(!/Math\.(min|max)\([^)]*\.\.\./.test(code),
-    'les bornes repassent par un etalement du tableau : RangeError en vue sur Safari');
-  assert.ok(code.includes('if (p.t < t0) t0 = p.t;') && code.includes('if (p.v > haut) haut = p.v;'),
-    'les bornes ne se calculent plus en une passe');
-  assert.ok(g.includes('const g = useMemo(() => {') && g.includes('}, [series, h]);'),
-    'le calcul n’est plus memoise : il repart a chaque mouvement de souris');
-  assert.ok(g.includes('const pts = sousEchantillonner(s.pts, W);'), 'le trace ne s’allege plus');
-  assert.ok(g.includes('v: prochePoint(s.pts, t)'), 'la bulle ne lit plus les points d’origine : on a allege la mesure, pas le trace');
-});
+/* Le cas « le graphique de puissances ne dessine pas plus de points qu'il n'a
+ * de pixels » vivait ici. La refonte du 06/10 a retire la carte « Sources de
+ * puissance » — absente de la maquette, remplacee par l'historique
+ * feuilletable —, et avec elle `sousEchantillonner` et `EnPuissances`. Le
+ * sous-echantillonnage n'a plus de courbe a alleger : le cas part avec eux.
+ */
 
 test('un capteur retiré de la fiche Énergie ne revient pas par la détection automatique (02/10)', () => {
   /* « J'ai retiré les entités mais sur le schéma elles sont toujours
@@ -133,9 +118,16 @@ test('le tableau de bord Énergie NATIF de Home Assistant ne complète plus une 
    * JAMAIS éteindre `solarNow`, puisque cette clé n'existe nulle part dans
    * `cfg`. Elle survivait donc dans `out`, et `solarW` la préfère à
    * `solarOutput` — d'où un toit solaire actif malgré une fiche vide.
-   * La fiche doit faire foi SEULE dès qu'elle existe, quelle que soit la
-   * forme du repli natif — même logique que le véhicule et la batterie, qui
-   * n'ont jamais eu ce repli. */
+   * La fiche fait donc foi pour la FAMILLE entière du capteur qu'elle touche
+   * — `solarOutput` et `solarNow` sont le même toit, `consoNow` et `gridNow`
+   * le même compteur.
+   *
+   * RÈGLE RÉVISÉE LE 07/10 (« tout doit être opérationnel ») : elle ne fait
+   * plus foi sur TOUT le domaine. L'écran Paramètres n'expose que six champs
+   * de puissance, et les enregistrer coupait les compteurs, les coûts, le gaz,
+   * l'eau et les appareils que le tableau de bord déclarait. Ce que ce test
+   * protège reste entier : un capteur du schéma retiré ne revient pas sous un
+   * autre nom. Ce qui change : le reste du tableau survit. */
   setLoggiaState({
     resolved: { energy: { available: true, source: 'tableau de bord Energie', haids: {
       consoJour: 'sensor.ha_conso_jour', prodJour: 'sensor.ha_prod_jour',
@@ -151,7 +143,9 @@ test('le tableau de bord Énergie NATIF de Home Assistant ne complète plus une 
     assert.equal(EN.consoNow, 'sensor.compteur_conso_reel');
     assert.ok(!EN.solarNow, 'le capteur solaire du tableau de bord natif ne doit plus filtrer sous un autre nom');
     assert.ok(!EN.gridNow, 'le capteur réseau du tableau de bord natif ne doit plus filtrer sous un autre nom');
-    assert.equal(Object.keys(EN).length, 1, 'seule la clé réellement renseignée doit sortir');
+    // Ce que la fiche ne gère PAS continue de venir du tableau de bord.
+    assert.equal(EN.consoJour, 'sensor.ha_conso_jour', 'le compteur du tableau se perd avec la fiche');
+    assert.equal(EN.prodJour, 'sensor.ha_prod_jour', 'la production du tableau se perd avec la fiche');
   } finally {
     setLoggiaState({ resolved: null, cfg: {} });
   }
@@ -172,51 +166,136 @@ test('sans fiche enregistrée, la détection automatique du tableau de bord nati
   }
 });
 
-test('la pastille d’irradiance évite les DEUX badges fixes du schéma solaire, pas un seul (02/10)', () => {
-  /* « Le capteur d'énergie du soleil est à l'extérieur de l'arc, ça se
-   * superpose avec les autres. » Au lever et au coucher, la pastille suit
-   * le soleil au ras du bas du cadre (sy proche de 205-235) : sans
-   * plafond, elle descendait jusqu'au badge réseau (pylône, 478×168),
-   * jamais vérifié — seul le badge de production (352×78) l'était. */
+test('la trajectoire du soleil est partie, et ne revient pas (08/10)', () => {
+  /* « Retire la trajectoire du soleil aussi. » Le composant `SunArc` dessinait
+   * une courbe du lever au coucher, le rond du soleil a l'heure reelle, son
+   * halo, et deux reperes d'horaires. Tout cela encerclait la maison et lui
+   * prenait les deux tiers du cadre : 180 x 135 px sur un ecran de 375.
+   *
+   * Ce test remplace deux tests du 02/10 qui protegeaient des defauts de cet
+   * arc — la pastille d'irradiance qui se superposait aux badges fixes, et le
+   * rond qui se posait la nuit sur le repere de lever. Les deux defauts sont
+   * devenus impossibles : il n'y a plus ni rond, ni repere, ni arc. */
   const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
-  const f = src.slice(src.indexOf('function SunArc('), src.indexOf('\nconst EN_LAYOUT_KEY'));
-  /* Deux corrections se sont croisées sur ce calcul le 02/10, et les deux
-   * étaient justes : le PLAFOND de hauteur (ici) et l'essai de l'AUTRE CÔTÉ
-   * (décision 0131). Le test porte donc sur l'intention, pas sur la façon de
-   * l'écrire — sinon il casserait à la première réécriture tout en laissant
-   * passer une vraie régression. */
-  assert.ok(/cy0? = Math\.min\(150,/.test(f),
-    'cy n’est plus plafonné : la pastille peut redescendre jusqu’au bas du cadre');
-  const fixes = f.match(/const FIXES = \[([^\]]*\][^;]*)\];/);
-  assert.ok(fixes, 'la liste des pastilles fixes a disparu : plus rien ne dit ce qu’il faut éviter');
-  for (const [x, y] of [[352, 78], [352, 200], [478, 168]]) {
-    assert.ok(fixes[1].includes(`[${x}, ${y}]`),
-      `la pastille ne vérifie plus sa collision avec le badge ${x}×${y}`);
+  for (const trace of ['function SunArc(', '<SunArc', 'SunMark', 'sunGrad', 'o-sunmark']) {
+    assert.ok(!src.includes(trace), `l\u2019arc du soleil est revenu : ${trace}`);
   }
+  // Les pastilles, elles, restent : c'est tout ce qui avait de la valeur la-dedans.
+  const f = src.slice(src.indexOf('function PastillesEnergie('), src.indexOf('\nconst EN_LAYOUT_KEY'));
+  for (const icone of ['sun', 'panel', 'house', 'pylon']) {
+    assert.ok(f.includes(`<Chip icon="${icone}"`), `la pastille ${icone} a disparu avec l\u2019arc`);
+  }
+  /* L'irradiance suivait le soleil le long de la courbe, avec tout un calcul
+   * d'evitement. Sans courbe il n'y a plus rien a suivre : une place fixe, et
+   * plus personne a rencontrer. */
+  assert.ok(f.includes('<Chip icon="sun" x={250} y={48}'), 'l’irradiance s’est remise a flotter');
+  assert.ok(!f.includes('const FIXES = ['), 'le calcul d’evitement traine encore, sans rien a eviter');
 });
 
-test('la nuit, le rond du soleil ne se pose plus sur le repère de lever ou de coucher (02/10)', () => {
-  /* `sunInfo().t` n'a de sens qu'ENTRE le lever et le coucher ; hors de cet
-   * intervalle il se plafonne à 0 ou 1 (voir `sunInfo`), et le rond du
-   * « soleil / lune », jusqu'ici dessiné jour ET nuit, retombait alors
-   * exactement sur le `SunMark` du lever ou du coucher — deux ronds collés
-   * au même endroit, toute la nuit, chaque nuit. Signalé le 02/10 (capture
-   * prise après le coucher) comme « à l'extérieur de l'arc, superposé aux
-   * autres ». Le rond ne représente rien de réel la nuit : il disparaît,
-   * les deux repères fixes suffisent à montrer lever et coucher. */
+test('sans position declaree, les pastilles de la maison restent (08/10)', () => {
+  /* Le composant rendait `null` des que Home Assistant n'avait pas de
+   * latitude — ce qui se tenait quand il ne dessinait qu'un arc solaire. Sans
+   * arc, ce renvoi emportait aussi la consommation de la maison et le sens du
+   * reseau, qui n'ont rien a voir avec le soleil : chez quelqu'un qui n'a pas
+   * declare sa position, le schema perdait ses chiffres. */
   const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
-  const f = src.slice(src.indexOf('function SunArc('), src.indexOf('\nconst EN_LAYOUT_KEY'));
-  assert.ok(f.includes("{day && <circle cx={sx} cy={sy} r=\"10\" fill=\"var(--o-gold)\""),
-    'le rond du soleil n’est plus réservé au jour : il redessine sur le repère fixe la nuit');
-  assert.ok(!/<circle cx=\{sx\} cy=\{sy\} r=\{day \? 10 : 7\}/.test(f),
-    'l’ancien rond jour/nuit (couleur et rayon variables) traîne encore dans le code');
+  const f = src.slice(src.indexOf('function PastillesEnergie('), src.indexOf('\nconst EN_LAYOUT_KEY'));
+  assert.ok(!/if \(!s\) return null;/.test(f), 'le composant redevient muet sans position declaree');
+  assert.ok(f.includes('const day = !!(s && s.day);'), 'le jour ne se lit plus prudemment');
+  // Seule l'irradiance depend du soleil.
+  assert.ok(/\{day && <Chip icon="sun"/.test(f), 'l’irradiance s’affiche meme la nuit');
+});
+
+test('la scene TIENT SON RAPPORT, et le cadre colle au dessin (08/10)', () => {
+  /* « Sur mobile, la maison est trop petite », puis « c'est encore un peu
+   * petit ». Le cadre faisait 600 de large parce que l'arc en occupait le
+   * pourtour ; la maison n'en prenait que le tiers central — 180 x 135 px sur
+   * un ecran de 375. Premier resserrage : 225 x 169. Second : 276 x 207.
+   *
+   * Ce qui coutait les derniers dix pour cent, c'etait la SYMETRIE du cadre :
+   * elle reservait a gauche autant de vide que la pastille du reseau en
+   * demandait a droite. Elle n'etait qu'un MOYEN. Le vrai invariant est que la
+   * scene TIENNE SON RAPPORT : un SVG en `meet` ne se recentre que dans un
+   * conteneur d'un autre rapport que le sien, et c'est la seule chose qui
+   * faisait glisser les pastilles par rapport au dessin. Le plafond de la
+   * scene passe donc de la HAUTEUR a la LARGEUR — meme hauteur maximale, mais
+   * le rapport ne se rompt plus jamais, et le cadre peut coller au dessin.
+   *
+   * Mesure apres : bords du dessin et du repere confondus (34 et 310 sur un
+   * telephone, 0 px d'ecart ; idem sur un ordinateur). */
+  const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const m = src.match(/const SCENE = \{ x0: ([^,]+), w: ([^,]+), h: (\d+), mx: ([\d.]+), mw: ([\d.]+) \};/);
+  assert.ok(m, 'la table SCENE a disparu : les nombres sont repartis se semer dans le code');
+  // A gauche, le cadre commence au bord du dessin : rien n'y depasse.
+  assert.equal(m[1], '133.33', 'le cadre ne colle plus au bord gauche du dessin');
+  assert.equal(m[1], m[4], 'le cadre et le dessin ne commencent plus au meme endroit');
+  /* A droite, une seule pastille depasse, et la largeur s'en DEDUIT : si on la
+   * deplace, le cadre suit tout seul. Un nombre ecrit en dur la laisserait
+   * sortir du cadre sans que rien ne le dise. */
+  assert.ok(m[2].includes('CHIP_RESEAU_X'),
+    'la largeur ne se deduit plus de la pastille la plus a droite : un nombre en dur la laissera deborder');
+
+  /* `width` + `height` + `aspect-ratio` donnes ensemble font IGNORER le
+   * rapport : la maison est sortie etiree a 664 x 340 au lieu de 453 x 340. */
+  const maison = src.slice(src.indexOf('<div className="o-en-house"'), src.indexOf('<img src={energyHomeImg}'));
+  assert.ok(maison.includes("height: '100%'") && maison.includes("aspectRatio: '960 / 720'"),
+    'la maison ne tient plus sa taille de sa hauteur et de son rapport');
+  assert.ok(!/width:/.test(maison), 'une largeur imposee revient ecraser le rapport de la maison');
+  assert.ok(maison.includes('left: 0'), 'la maison n’est plus posee sur le bord gauche du cadre');
+
+  const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
+  /* LE PLAFOND EST UNE LARGEUR. Un `max-height` sur la scene rompt son rapport
+   * des qu'il mord, et toutes les pastilles glissent. */
+  assert.ok(css.includes('.o-en-scene { max-width: calc(340px * var(--o-scene-ratio, 1.5)); }'),
+    'le plafond de la scene est redevenu une hauteur : le rapport se rompra');
+  assert.ok(!/\.o-en-scene \{[^}]*max-height: 3/.test(css), 'un plafond de hauteur est revenu sur la scene');
+  assert.ok(src.includes("'--o-scene-ratio': SCENE_RATIO"), 'le rapport n’arrive plus jusqu’a la feuille de style');
+
+  /* La feuille de style n'a plus rien a rattraper : tout ce bloc existait pour
+   * recoller a la main l'echelle que l'arc imposait. */
+  for (const vieux of ['55.56%', 'scale(1.18)', '600 / 420', 'o-sunmark']) {
+    assert.ok(!css.includes(vieux), `le rattrapage mobile est revenu : ${vieux}`);
+  }
+  /* LES RETRAITS COMPTENT, et pas qu'au telephone.
+   *
+   * Sur 375 px d'ecran : la page en prend 28, la carte 48, le puits 22 — il ne
+   * restait que 275 px de scene. Le puits deborde donc du retrait de la carte
+   * (c'est une illustration, pas un texte) et son propre retrait tombe a 4 : il
+   * s'arrete a 5 px du bord de la carte, il n'y a plus rien a prendre.
+   *
+   * « Et sur tablette pareil » : elle gardait les retraits ET un plafond plus
+   * bas que l'ordinateur (290 contre 340). Mesure a 834, le dessin tenait dans
+   * 387 x 290 pour un puits de 456 x 639. Les deux sautent. */
+  assert.ok(css.includes('.o-en-well { overflow: hidden; margin-left: -20px; margin-right: -20px; padding: 4px; }'),
+    'le puits a repris les retraits de la carte : la maison redevient petite');
+  assert.ok(css.includes('@media (max-width: 1180px) { .o-en-well { margin-left: -16px; margin-right: -16px; } }'),
+    'la tablette a repris les retraits de la carte');
+  assert.ok(!/max-width: calc\(290px/.test(css),
+    'le plafond bas de la tablette est revenu : le dessin y reste petit pour rien');
+});
+
+test('en mode clair, la maison du schema n’est plus un bloc noir (08/10)', () => {
+  /* « La maison est trop foncee en mode clair. » Les quatre calques sont des
+   * images anthracite sur fond transparent, dessinees pour le theme sombre :
+   * sur le puits clair (#eee) elles faisaient un bloc noir au milieu d'une
+   * carte claire. Mesure : toit a 59 de luminance pour un puits a 238.
+   *
+   * La valeur est MESUREE, pas choisie : brightness(2.1) porte le toit a 124
+   * et le mur a 168 — 44 points d'ecart, donc le relief tient, contre 25 avec
+   * une baisse de contraste qui aplatissait le volume. */
+  const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
+  assert.ok(css.includes('html.loggia-light .o-en-house img { filter: brightness(2.1) saturate(.85); }'),
+    'la maison du schema Energie repasse en bloc noir sur le theme clair');
+  // Les images SEULES : le SVG des flux garde ses couleurs.
+  assert.ok(!/html\.loggia-light \.o-en-house \{ filter/.test(css),
+    'le filtre deborde sur les flux, qui ont deja leurs couleurs');
 });
 
 test('sans capteur de production, les panneaux solaires ne s’affichent plus sur le toit (02/10)', () => {
   /* « J'ai les panneaux avec la production alors qu'il n'y a pas d'entité. »
    * `energySolarImg` se dessinait SANS CONDITION, contrairement au véhicule
    * (`evBranche &&`) et à la batterie (`batPresente &&`) qui suivent déjà
-   * cette règle. Le dessin du toit et le chip « 0 W » de `SunArc` suivent
+   * cette règle. Le dessin du toit et le chip « 0 W » des pastilles suivent
    * maintenant `solarPresente`, alimenté par `solarAvail` (capteur configuré,
    * pas seulement production non nulle) — le même signal qui pilote déjà
    * « Solaire actif / inactif » dans l'en-tête. */
@@ -225,8 +304,8 @@ test('sans capteur de production, les panneaux solaires ne s’affichent plus su
   assert.ok(maison.includes('solarPresente = true'), 'solarPresente a disparu de la signature (ou son défaut, qui garde la démo intacte)');
   assert.ok(maison.includes('{solarPresente && <img src={energySolarImg}'), 'les panneaux redessinent sans vérifier solarPresente');
 
-  const arc = src.slice(src.indexOf('function SunArc('), src.indexOf('\nconst EN_LAYOUT_KEY'));
-  assert.ok(arc.includes('solarPresente = true'), 'SunArc a perdu le paramètre solarPresente');
+  const arc = src.slice(src.indexOf('function PastillesEnergie('), src.indexOf('\nconst EN_LAYOUT_KEY'));
+  assert.ok(arc.includes('solarPresente = true'), 'PastillesEnergie a perdu le paramètre solarPresente');
   assert.ok(/\{solarPresente &&[^}]*<Chip icon="panel"/.test(arc),
     'le chip de production ne vérifie plus solarPresente : un « 0 W » resterait affiché sans toit');
 
@@ -234,7 +313,7 @@ test('sans capteur de production, les panneaux solaires ne s’affichent plus su
    * entière : d'autres propriétés s'y ajoutent (le format d'écran, décision
    * 0131), et un test qui recopie un appel JSX au caractère près se casse à
    * chaque ajout sans rien protéger de plus. */
-  for (const nom of ['EnergyHouseSchema', 'SunArc']) {
+  for (const nom of ['EnergyHouseSchema', 'PastillesEnergie']) {
     const i = src.indexOf('<' + nom + ' ');
     assert.notEqual(i, -1, `l’appel de ${nom} est introuvable`);
     const appel = src.slice(i, src.indexOf('/>', i));

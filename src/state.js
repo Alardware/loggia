@@ -276,6 +276,12 @@ export const ENT_ALIAS = {
   alarm: 'loggia_alarm',
   switchLights: 'loggia_switchlights',
   energy: 'loggia_energyHaids',
+  /* Les POSTES de consommation ont leur clé, comme les capteurs d'énergie à
+   * côté desquels ils vivent. Sans elle, ils ne venaient que de
+   * `loggia_entities` — que le serveur remplit, et que la démonstration, qui
+   * n'en a pas, ne pouvait pas garnir : la section restait vide dans la
+   * vitrine (06/10). */
+  energyDevices: 'loggia_energyDevices',
   weather: 'loggia_weather',
   // Le distributeur (14/09) : une cle a lui, comme les autres, sinon il
   // n'existe que par `loggia_entities` — que la demo, sans serveur, n'a pas.
@@ -668,32 +674,75 @@ export const medCompanion = (haid) => {
 // ce que le tableau de bord Énergie natif permet de déduire. Les deux ne se
 // mélangent jamais : voir le commentaire d'enHaids(). Les cases sans
 // équivalent standard restent nulles et la vue ne les affiche pas.
+/* LES CAPTEURS DU SCHEMA, PAR FAMILLE.
+ *
+ * Le tableau de bord Energie et la fiche ne donnent pas les memes NOMS a la
+ * meme chose : `gridNow` et `consoNow` sont le meme capteur, `solarNow` et
+ * `solarOutput` aussi. Vider un champ dans la fiche ne retirait donc rien —
+ * le tableau le resservait sous son autre nom, et un capteur qu'on venait de
+ * retirer restait actif sur le schema (retour du 02/10).
+ *
+ * Des que la fiche DECLARE une cle d'une famille — meme vide, c'est un choix —
+ * elle decide pour la famille entiere. Partout ailleurs, les deux se marient. */
+const FAM_SCHEMA = [
+  ['consoNow', 'gridNow'],
+  ['surplusNow', 'injectionNow'],
+  ['solarOutput', 'solarNow'],
+  ['evNow'],
+  ['batNow', 'batSoc', 'batChargeNow', 'batDechargeNow'],
+];
+
+/**
+ * Les capteurs d'energie : CE QUE LA FICHE DIT, COMPLETE PAR LE TABLEAU.
+ *
+ * La fiche faisait foi seule des qu'elle avait ete enregistree une fois. Mais
+ * l'ecran Parametres n'expose que six champs de puissance : nommer sa voiture
+ * suffisait a perdre les compteurs, les couts, le gaz, l'eau et les appareils
+ * que Home Assistant declarait (07/10, « tout doit etre operationnel »).
+ *
+ * Desormais : la fiche d'abord, le tableau de bord pour tout ce qu'elle ne dit
+ * pas — sauf dans une famille du schema qu'elle a touchee, ou elle reste seule
+ * maitresse (voir `FAM_SCHEMA`).
+ */
 export function enHaids() {
-  // loggiaEnt('energy') lit déjà loggia_energyHaids en priorité (cf. ENT_ALIAS).
-  const cfg = loggiaEnt('energy', null);
-  // Dès que la fiche (Paramètres → Entités) a été enregistrée UNE FOIS, elle
-  // fait foi SEULE — exactement comme le véhicule et la batterie, qui n'ont
-  // jamais eu de repli automatique. Avant ce garde, un mélange des deux
-  // sources survivait : le tableau de bord Énergie NATIF de Home Assistant
-  // nomme ses capteurs différemment (`solarNow`/`gridNow`, pas
-  // `solarOutput`/`consoNow`), donc aucune clé vidée dans la fiche ne
-  // l'arrêtait jamais — un capteur retiré restait actif sur le schéma,
-  // sourcé par le tableau de bord HA plutôt que par ce qu'on avait réglé
-  // (02/10, signalé après un premier correctif incomplet). La fiche n'a pas
-  // besoin d'être complète : une seule clé enregistrée suffit à l'activer.
-  if (cfg && typeof cfg === 'object') {
-    const out = {};
-    Object.keys(cfg).forEach(k => { if (cfg[k]) out[k] = cfg[k]; });
-    return out;
-  }
-  // Rien n'a jamais été enregistré : on propose ce que le tableau de bord
-  // Énergie natif de Home Assistant permet de déduire.
   const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.energy;
-  const fromPrefs = (r && r.available) ? r.haids : null;
+  const deduit = (r && r.haids && typeof r.haids === 'object') ? r.haids : {};
+  const cfg = loggiaEnt('energy', null);
   const out = {};
-  if (fromPrefs) Object.keys(fromPrefs).forEach(k => { if (fromPrefs[k]) out[k] = fromPrefs[k]; });
+  Object.keys(deduit).forEach(k => { if (deduit[k]) out[k] = deduit[k]; });
+  if (!cfg || typeof cfg !== 'object') return out;
+  // Une famille touchee par la fiche se vide d'abord : elle n'appartient qu'a elle.
+  FAM_SCHEMA.forEach(fam => {
+    if (fam.some(k => Object.prototype.hasOwnProperty.call(cfg, k))) fam.forEach(k => { delete out[k]; });
+  });
+  Object.keys(cfg).forEach(k => { if (cfg[k]) out[k] = cfg[k]; });
   return out;
 }
+
+/**
+ * Les PRIX du kilowattheure declares dans le tableau de bord Energie.
+ *
+ * `enHaids` ne transporte que des identifiants ; un prix est une VALEUR, ou
+ * l'entite qui la publie. C'est la seule source generique d'un tarif : personne
+ * n'a de capteur « prix » par defaut, et sans cela la carte du tarif ne pouvait
+ * s'afficher que chez qui en avait fabrique un (07/10).
+ *
+ * `[{ valeur, entite, compteur }]`, une entree par connexion — un contrat
+ * heures creuses / pleines en donne deux.
+ */
+export function enPrix() {
+  const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.energy;
+  return (r && Array.isArray(r.prix)) ? r.prix : [];
+}
+
+/** Le prix de REVENTE du kilowattheure, meme forme que celui d'achat. Vide
+ * tant que le tableau de bord Energie n'en declare pas : on ne devine pas un
+ * tarif de rachat. */
+export function enVente() {
+  const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.energy;
+  return (r && Array.isArray(r.prixVente)) ? r.prixVente : [];
+}
+
 // Appareils suivis : ceux de la configuration, sinon ceux que le tableau de bord
 // Énergie déclare. L'habillage (icône, couleur, illustration) tourne sur la
 // palette existante, Home Assistant ne le fournissant pas.

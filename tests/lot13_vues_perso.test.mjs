@@ -236,8 +236,12 @@ test('vue personnalisée en édition : la TUILE des autres vues, pas une carte i
   assert.ok(!env.includes('role=') && !env.includes('tabIndex=') && !env.includes('aria-label='), 'l’enveloppe n’est pas un bouton');
   assert.ok(!v.includes('<EditBarre>'), 'la barre flottante a disparu de cette vue');
   assert.ok(v.includes("e.target.closest('button:not(.o-surface)')"), 'saisir la poignée doit encore déplacer la carte');
-  // La fiche porte les trois reglages et le retrait.
-  assert.ok(v.includes("titre={tr('Carte compacte')}") && v.includes("tr('LARGEUR')") && v.includes("tr('Supprimer')"),
+  /* La fiche est un composant de module depuis le 06/10 : les favoris de
+   * l'Accueil s'en servent aussi, et deux copies auraient diverge. La vue ne
+   * fait plus que l'ouvrir. */
+  assert.ok(v.includes('<FicheCarte x={de(cvKey(fiche)) || fiche}'), 'la vue ouvre la fiche partagee');
+  const fc = fonction('FicheCarte');
+  assert.ok(fc.includes("titre={tr('Carte compacte')}") && fc.includes("tr('LARGEUR')") && fc.includes("tr('Supprimer')"),
     'la fiche regle la taille, la largeur, et retire la carte');
   // Le nom lu : jamais une clé épelée, jamais deux fois le même pour deux cartes.
   /* Relecture du lot 13 : le corps est sorti en `nomCv`, fonction de module,
@@ -251,7 +255,7 @@ test('vue personnalisée en édition : la TUILE des autres vues, pas une carte i
    * la carte UNE fois dans son titre. Un bouton n'a plus a repeter ce nom —
    * c'est la regle generale (WCAG 2.5.3) appliquee a une feuille : son titre
    * est le contexte de tout ce qu'elle contient. */
-  assert.ok(v.includes('<TitreFeuille style={{ fontSize: 19, fontWeight: 700 }} marge={4}>{nomCarte(x)}</TitreFeuille>'),
+  assert.ok(fonction('FicheCarte').includes('<TitreFeuille style={{ fontSize: 19, fontWeight: 700 }} marge={4}>{nom}</TitreFeuille>'),
     'la fiche doit dire de quelle carte elle parle');
   // Et la tuile, elle, porte toujours le nom : c'est elle qu'on clique.
   assert.ok(v.includes('nom={nomCarte(x)}'), 'la tuile nomme la carte qu’elle montre');

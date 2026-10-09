@@ -342,21 +342,124 @@ export function resolveEnergy({ index, states = {}, energyPrefs = null, userCfg 
    * entiere chez qui ne s'en sert pas. */
   const brut = (userCfg && (userCfg.loggia_energyHaids || userCfg.loggia_energy)) || null;
   const cfg = (brut && typeof brut === 'object' && Object.keys(brut).length) ? brut : null;
-  if (cfg) return { available: true, source: 'utilisateur', haids: cfg, devices: [] };
   const src = (energyPrefs && Array.isArray(energyPrefs.energy_sources)) ? energyPrefs.energy_sources : null;
-  if (!src) return { available: false, reason: 'tableau de bord Energie non configure', haids: {}, devices: [] };
+  /* LA FICHE NE COUPE PLUS LA DEDUCTION (07/10).
+   *
+   * On rendait ici la fiche SEULE, sans meme regarder le tableau de bord
+   * Energie. Or l'ecran Parametres n'expose que six champs de PUISSANCE :
+   * nommer sa voiture suffisait a perdre les compteurs, les couts, les prix,
+   * le gaz, l'eau et les appareils mesures que Home Assistant declarait.
+   *
+   * La deduction se fait donc TOUJOURS, et c'est `enHaids` (state.js) qui
+   * marie les deux — la fiche d'abord, le tableau pour tout ce qu'elle ne dit
+   * pas. Le garde du 02/10 (un capteur retire de la fiche ne doit pas revenir
+   * par le tableau) y vit aussi, par FAMILLE de capteurs. */
+  if (!src) {
+    return cfg
+      ? { available: true, source: 'utilisateur', haids: {}, devices: [], prix: [], prixVente: [] }
+      : { available: false, reason: 'tableau de bord Energie non configure', haids: {}, devices: [], prix: [], prixVente: [] };
+  }
 
-  const grid = src.find(x => x && x.type === 'grid') || null;
-  const from = (grid && Array.isArray(grid.flow_from) && grid.flow_from[0]) || null;
-  const to = (grid && Array.isArray(grid.flow_to) && grid.flow_to[0]) || null;
+  /* LE TABLEAU DE BORD ÉNERGIE A DEUX FORMATS, et on ne lisait que l'ancien.
+   *
+   * Historiquement, UNE source `grid` portait toutes les connexions dans
+   * `flow_from` et `flow_to`. Les versions récentes de Home Assistant écrivent
+   * UNE SOURCE PAR CONNEXION, avec `stat_energy_from` directement sur la
+   * source — un contrat heures creuses / heures pleines en donne donc deux.
+   *
+   * `grid.flow_from[0]` ne trouvait rien du tout sur une installation
+   * récente : ni consommation, ni coût, ni injection. Et même à l'ancien
+   * format, ne prendre que la PREMIÈRE connexion ne lisait que la moitié d'un
+   * compteur bi-horaire.
+   *
+   * On aplatit donc les deux formes, et on garde toutes les parts.
+   */
+  const grids = src.filter(x => x && x.type === 'grid');
+  const imports = [], exports_ = [];
+  for (const g of grids) {
+    const froms = (Array.isArray(g.flow_from) && g.flow_from.length) ? g.flow_from : (g.stat_energy_from ? [g] : []);
+    const tos = (Array.isArray(g.flow_to) && g.flow_to.length) ? g.flow_to : (g.stat_energy_to ? [g] : []);
+    for (const f of froms) if (f && f.stat_energy_from) imports.push({ src: g, flux: f });
+    for (const t of tos) if (t && t.stat_energy_to) exports_.push({ src: g, flux: t });
+  }
   const solar = src.filter(x => x && x.type === 'solar').map(x => x.stat_energy_from).filter(Boolean);
+  /* LA BATTERIE DOMESTIQUE. Le tableau de bord Energie la declare comme une
+   * source a part entiere, avec deux compteurs : `stat_energy_from` est ce
+   * qu'elle REND a la maison, `stat_energy_to` ce qu'elle STOCKE. On ne lisait
+   * ni l'un ni l'autre — le schema de la maison n'avait donc jamais de
+   * batterie chez qui n'avait pas rempli la fiche a la main (audit du 07/10).
+   *
+   * La vue veut une PUISSANCE SIGNEE (positive en charge) et un niveau. Les
+   * compteurs sont des energies : la puissance se cherche dans `power_config`
+   * quand Home Assistant la nomme, sinon sur l'appareil du compteur. */
+  const batteries = src.filter(x => x && x.type === 'battery');
+  const batDecharge = batteries.map(x => x.stat_energy_from).filter(Boolean);
+  const batCharge = batteries.map(x => x.stat_energy_to).filter(Boolean);
+  const batCle = batDecharge[0] || batCharge[0] || null;
+  const batRate = (cle) => {
+    for (const b of batteries) if (b.power_config && b.power_config[cle]) return b.power_config[cle];
+    return null;
+  };
+  /* LE GAZ ET L'EAU. Le tableau de bord Energie les declare comme l'electricite
+   * — un type de source, un compteur, parfois un cout. On ne les lisait pas du
+   * tout : les deux tuiles ne pouvaient apparaitre chez personne, meme sur une
+   * maison qui les avait renseignes (07/10). */
+  const parType = (nom) => src.filter(x => x && x.type === nom).map(x => x.stat_energy_from).filter(Boolean);
+  const gaz = parType('gas');
+  const eau = parType('water');
+  /* LE PRIX DU KILOWATTHEURE, tel que le tableau de bord le declare : un nombre
+   * fixe (`number_energy_price`) ou une entite qui le publie
+   * (`entity_energy_price`). C'est la seule source generique d'un tarif —
+   * personne n'a de capteur « prix » par defaut. Les prix de TOUTES les
+   * connexions sortent : un contrat heures creuses / pleines en a deux, et
+   * c'est a la vue de dire lequel court. */
+  const prix = [];
+  for (const x of imports) {
+    const p = x.flux.number_energy_price != null ? x.flux.number_energy_price : x.src.number_energy_price;
+    const e = x.flux.entity_energy_price || x.src.entity_energy_price || null;
+    if (typeof p === 'number' && isFinite(p)) prix.push({ valeur: p, entite: e, compteur: x.flux.stat_energy_from });
+    else if (e) prix.push({ valeur: null, entite: e, compteur: x.flux.stat_energy_from });
+  }
+
+  /* CE QUE L'INJECTION RAPPORTE. Le tableau de bord declare, en face du prix
+   * d'achat, un prix de REVENTE (`number_energy_price_export`, ou l'entite qui
+   * le publie) et parfois la somme deja gagnee (`stat_compensation`, que Home
+   * Assistant tient lui-meme comme il tient `stat_cost`). Rien n'en etait lu :
+   * l'injection s'affichait en kilowattheures, jamais en euros (audit du
+   * 07/10). Comme pour le cout, on reprend SON chiffre — il connait les
+   * paliers et les contrats, pas nous. */
+  const compensations = exports_.map(x => x.flux.stat_compensation).filter(Boolean);
+  const prixVente = [];
+  for (const x of exports_) {
+    const p = x.flux.number_energy_price_export != null
+      ? x.flux.number_energy_price_export : x.src.number_energy_price_export;
+    const e = x.flux.entity_energy_price_export || x.src.entity_energy_price_export || null;
+    if (typeof p === 'number' && isFinite(p)) prixVente.push({ valeur: p, entite: e, compteur: x.flux.stat_energy_to });
+    else if (e) prixVente.push({ valeur: null, entite: e, compteur: x.flux.stat_energy_to });
+  }
 
   // Puissance instantanee : un capteur `power` du meme appareil que le compteur.
   // Choisi par sa seule device_class, sans regarder l'unite : c'est voulu, un
   // capteur en kW (compteur P1/DSMR) est une puissance comme une autre. L'unite
   // se lit a la LECTURE, par `wattsDe` (unites.js, audit du 03/10).
   const powerOf = (id) => id ? pickSibling(index, states, id, { domain: 'sensor', deviceClass: 'power' }) : null;
-  const gridStat = from ? from.stat_energy_from : null;
+  /* Le format récent NOMME lui-même la puissance, dans `power_config` : c'est
+   * plus sûr qu'une déduction par voisinage, et on la prend quand elle est là. */
+  const rate = (liste, cle) => {
+    for (const x of liste) {
+      const p = x.src && x.src.power_config;
+      if (p && p[cle]) return p[cle];
+    }
+    return null;
+  };
+  const partsImport = imports.map(x => x.flux.stat_energy_from);
+  const partsExport = exports_.map(x => x.flux.stat_energy_to);
+  const couts = imports.map(x => x.flux.stat_cost).filter(Boolean);
+  /* Un seul compteur : c'est LE compteur. Plusieurs : aucun ne vaut pour le
+   * tout, et mieux vaut ne rien désigner que d'en élire un au hasard — les
+   * parts restent à côté, pour qui sait les additionner (ADR 0030). */
+  const seul = (a) => (a.length === 1 ? a[0] : null);
+  const gridStat = seul(partsImport);
   const solarStat = solar[0] || null;
 
   const devices = ((energyPrefs && energyPrefs.device_consumption) || [])
@@ -369,16 +472,44 @@ export function resolveEnergy({ index, states = {}, energyPrefs = null, userCfg 
 
   return {
     available: true,
-    source: 'tableau de bord Energie',
+    source: cfg ? 'utilisateur' : 'tableau de bord Energie',
     haids: {
       consoJour: gridStat,
-      coutJour: (from && from.stat_cost) || null,
-      injectionJour: to ? to.stat_energy_to : null,
+      coutJour: seul(couts),
+      injectionJour: seul(partsExport),
       prodJour: solarStat,
-      gridNow: powerOf(gridStat),
+      gridNow: rate(imports, 'stat_rate_from') || powerOf(gridStat),
       solarNow: powerOf(solarStat),
+      injectionNow: rate(exports_, 'stat_rate_to') || null,
+      /* La batterie : une puissance SIGNEE si l'appareil en publie une, sinon
+       * les deux sens separement — la vue fait la difference. Le niveau se
+       * cherche sur le meme appareil que le compteur. */
+      batNow: batCle ? powerOf(batCle) : null,
+      batChargeNow: batRate('stat_rate_to'),
+      batDechargeNow: batRate('stat_rate_from'),
+      batSoc: batCle ? pickSibling(index, states, batCle, { domain: 'sensor', deviceClass: 'battery' }) : null,
+      // Ce que l'injection a rapporte, quand Home Assistant le tient.
+      revenuJour: seul(compensations),
+      /* Les PARTS, quand le contrat en compte plusieurs : l'historique les
+       * additionne au lieu de n'en lire qu'une. Absentes quand il n'y en a
+       * qu'une — `consoJour` suffit alors, et une liste d'un seul élément ne
+       * ferait que doubler l'information. */
+      gasJour: seul(gaz),
+      waterJour: seul(eau),
+      consoJourParts: partsImport.length > 1 ? partsImport : null,
+      injectionJourParts: partsExport.length > 1 ? partsExport : null,
+      coutJourParts: couts.length > 1 ? couts : null,
+      revenuJourParts: compensations.length > 1 ? compensations : null,
+      prodJourParts: solar.length > 1 ? solar : null,
     },
     devices,
+    /* A COTE des identifiants : un prix est une VALEUR, pas une entite, et
+     * `enHaids` ne transporte que des identifiants. La vue lit celui-ci
+     * directement dans la resolution. */
+    prix,
+    /* Le prix de REVENTE, a cote de celui d'achat : meme forme, meme raison —
+     * une valeur, ou l'entite qui la publie, jamais un identifiant seul. */
+    prixVente,
   };
 }
 
@@ -469,8 +600,12 @@ export function capteursHote(freres, states) {
 
 export function resolveSystem({ index, states = {}, userCfg = {} } = {}) {
   const cfg = (userCfg && typeof userCfg.loggia_system === 'object' && userCfg.loggia_system) || null;
-  if (cfg) return { available: true, source: 'utilisateur', hosts: [] , table: cfg };
-  if (!index) return { available: false, reason: 'decouverte indisponible', hosts: [] };
+  /* LA FICHE NE COUPE PLUS LA DECOUVERTE (07/10), comme pour l'energie. On
+   * rendait ici `hosts: []` des qu'une fiche existait : remplir UN emplacement
+   * de machine faisait perdre les deux autres, que la decouverte connaissait.
+   * C'est `sysSensors` (sysconf.js) qui marie les deux, emplacement par
+   * emplacement — celui que la fiche declare lui appartient, meme vide. */
+  if (!index) return { available: !!cfg, source: cfg ? 'utilisateur' : null, reason: 'decouverte indisponible', hosts: [], table: cfg };
 
   const pct = (id) => {
     const a = (states[id] && states[id].attributes) || {};
@@ -497,9 +632,9 @@ export function resolveSystem({ index, states = {}, userCfg = {} } = {}) {
       clients: sib({ domain: 'sensor', match: /(client|clients)/ }),
     });
   });
-  if (!hosts.length) return { available: false, reason: 'aucune machine supervisee', hosts: [] };
+  if (!hosts.length) return { available: !!cfg, source: cfg ? 'utilisateur' : null, reason: 'aucune machine supervisee', hosts: [], table: cfg };
   hosts.sort((a, b) => comparerTextes(String(a.name), String(b.name)));
-  return { available: true, source: 'decouverte', hosts };
+  return { available: true, source: cfg ? 'utilisateur' : 'decouverte', table: cfg, hosts };
 }
 
 /** Meteo : le domaine `weather` suffit. */
