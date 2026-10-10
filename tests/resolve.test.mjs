@@ -255,11 +255,122 @@ test('energie : les appareils suivis viennent des preferences, avec leur puissan
   assert.deepEqual(e.devices[0], { name: 'Prise bureau', kwh: 'sensor.prise_energie', power: 'sensor.prise_puissance' });
 });
 
-test('energie : une configuration explicite court-circuite les preferences', () => {
+test('energie : une fiche est signalee, mais ne coupe plus la deduction', () => {
+  /* Elle court-circuitait TOUT : `resolveEnergy` rendait la fiche seule, sans
+   * meme regarder le tableau de bord. Or l'ecran Parametres n'expose que six
+   * champs de puissance — nommer sa voiture faisait perdre les compteurs, les
+   * couts, les prix, le gaz, l'eau et les appareils mesures (07/10, « tout
+   * doit etre operationnel »). La deduction se fait desormais toujours, et
+   * c'est `enHaids` (state.js) qui marie les deux. */
   const mine = { consoJour: 'sensor.a_moi' };
   const e = resolveEnergy(ctxOf(energyHome(), { loggia_energy: mine }));
-  assert.equal(e.source, 'utilisateur');
-  assert.deepEqual(e.haids, mine);
+  assert.equal(e.source, 'utilisateur', 'la fiche doit rester signalee comme la source');
+  assert.equal(e.haids.consoJour, 'sensor.compteur_energie', 'la deduction continue de lire le tableau');
+  assert.equal(e.devices.length, 1, 'les appareils mesures ne doivent plus se perdre');
+  assert.ok(Array.isArray(e.prix), 'les prix non plus');
+});
+
+/* Le format RECENT du tableau de bord Energie (06/10).
+ *
+ * Les versions actuelles de Home Assistant ecrivent UNE SOURCE `grid` PAR
+ * CONNEXION, `stat_energy_from` pose directement dessus — un contrat heures
+ * creuses / heures pleines en donne deux. On ne lisait que `flow_from[0]`,
+ * absent de cette forme : ni consommation, ni cout, ni injection ne
+ * remontaient. Une vraie installation s'en est apercue.
+ */
+const grilleRecente = () => {
+  const fx = energyHome();
+  fx.energyPrefs.energy_sources = [
+    { type: 'grid', stat_energy_from: 'sensor.compteur_hc', number_energy_price: 0.1605 },
+    {
+      type: 'grid',
+      stat_energy_from: 'sensor.compteur_hp',
+      stat_energy_to: 'sensor.compteur_injection',
+      number_energy_price: 0.2092,
+      power_config: { stat_rate_from: 'sensor.compteur_puissance', stat_rate_to: 'sensor.compteur_export_w' },
+    },
+    { type: 'solar', stat_energy_from: 'sensor.pv_energie' },
+  ];
+  return fx;
+};
+
+test('energie : une source par connexion se lit aussi bien que l’ancien groupe', () => {
+  const e = resolveEnergy(ctxOf(grilleRecente()));
+  assert.equal(e.available, true);
+  assert.deepEqual(e.haids.consoJourParts, ['sensor.compteur_hc', 'sensor.compteur_hp'],
+    'les DEUX compteurs du contrat, pas seulement le premier');
+  assert.equal(e.haids.injectionJour, 'sensor.compteur_injection');
+  assert.equal(e.haids.prodJour, 'sensor.pv_energie');
+});
+
+test('energie : deux compteurs, aucun ne vaut pour le tout', () => {
+  // Elire le premier ferait lire la moitie d'une facture comme si c'etait la
+  // facture (ADR 0030). Les parts sont a cote, pour qui sait les additionner.
+  const e = resolveEnergy(ctxOf(grilleRecente()));
+  assert.equal(e.haids.consoJour, null);
+  // Une seule connexion : la part disparait, `consoJour` suffit.
+  const un = resolveEnergy(ctxOf(energyHome()));
+  assert.equal(un.haids.consoJour, 'sensor.compteur_energie');
+  assert.equal(un.haids.consoJourParts, null, 'pas de liste a un seul element');
+});
+
+test('energie : la puissance declaree l’emporte sur celle qu’on devine', () => {
+  /* `power_config` NOMME la puissance du compteur. La deduire par voisinage
+   * marche, mais ce que la configuration dit vaut mieux que ce qu'on infere —
+   * et l'export, lui, ne se devinait pas du tout. */
+  const e = resolveEnergy(ctxOf(grilleRecente()));
+  assert.equal(e.haids.gridNow, 'sensor.compteur_puissance');
+  assert.equal(e.haids.injectionNow, 'sensor.compteur_export_w');
+  // Sans `power_config`, le voisinage reprend la main, et l'export reste muet.
+  const vieux = resolveEnergy(ctxOf(energyHome()));
+  assert.equal(vieux.haids.gridNow, 'sensor.compteur_puissance');
+  assert.equal(vieux.haids.injectionNow, null);
+});
+
+test('energie : le gaz et l’eau viennent du tableau de bord, comme l’electricite', () => {
+  /* Ils s'y declarent exactement comme l'electricite — un type de source, un
+   * compteur. On ne les lisait pas du tout : les deux tuiles ne pouvaient
+   * apparaitre chez personne (07/10). */
+  const fx = energyHome();
+  fx.energyPrefs.energy_sources.push(
+    { type: 'gas', stat_energy_from: 'sensor.compteur_gaz' },
+    { type: 'water', stat_energy_from: 'sensor.compteur_eau' },
+  );
+  const e = resolveEnergy(ctxOf(fx));
+  assert.equal(e.haids.gasJour, 'sensor.compteur_gaz');
+  assert.equal(e.haids.waterJour, 'sensor.compteur_eau');
+  // Une maison sans gaz ni eau n'en invente pas.
+  const sans = resolveEnergy(ctxOf(energyHome()));
+  assert.equal(sans.haids.gasJour, null);
+  assert.equal(sans.haids.waterJour, null);
+});
+
+test('energie : le prix du kWh se lit la ou le tableau de bord le declare', () => {
+  /* La seule source generique d'un tarif : personne n'a de capteur « prix » par
+   * defaut. Un contrat heures creuses / pleines en declare deux, et c'est a la
+   * vue de dire lequel court. */
+  const e = resolveEnergy(ctxOf(grilleRecente()));
+  assert.deepEqual(e.prix.map(p => p.valeur), [0.1605, 0.2092]);
+  assert.deepEqual(e.prix.map(p => p.compteur), ['sensor.compteur_hc', 'sensor.compteur_hp']);
+  // Un prix PUBLIE PAR UNE ENTITE sort avec son identifiant, valeur a null :
+  // c'est la lecture qui la donnera, pas la configuration.
+  const fx = energyHome();
+  fx.energyPrefs.energy_sources[0].flow_from[0].entity_energy_price = 'sensor.prix_du_kwh';
+  const v = resolveEnergy(ctxOf(fx));
+  assert.equal(v.prix.length, 1);
+  assert.equal(v.prix[0].valeur, null);
+  assert.equal(v.prix[0].entite, 'sensor.prix_du_kwh');
+  // Sans prix declare, rien : on ne devine pas un tarif.
+  assert.deepEqual(resolveEnergy(ctxOf(energyHome())).prix, []);
+});
+
+test('energie : un cout par connexion ne se confond pas avec le cout total', () => {
+  const fx = grilleRecente();
+  fx.energyPrefs.energy_sources[0].stat_cost = 'sensor.cout_hc';
+  fx.energyPrefs.energy_sources[1].stat_cost = 'sensor.cout_hp';
+  const e = resolveEnergy(ctxOf(fx));
+  assert.equal(e.haids.coutJour, null, 'deux couts : aucun n’est LE cout');
+  assert.deepEqual(e.haids.coutJourParts, ['sensor.cout_hc', 'sensor.cout_hp']);
 });
 
 // ── Systeme ──────────────────────────────────────────────────────────────────

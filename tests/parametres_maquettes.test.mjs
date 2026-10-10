@@ -247,7 +247,10 @@ test('les puces de navigation choisies sont en bleu plein, texte blanc', () => {
     [APP, "background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)' }}>", 'pièces'],
     [APP, "const miniBtn = (on) => ({ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: on ? 'var(--o-accent-fond)'", 'pièces Hue'],
     [APP, "background: actif ? 'var(--o-accent-fond)' : 'transparent', color: actif ? '#fff' : 'var(--o-text2)' });", 'modes des volets'],
-    [APP, "background: actif === id ? 'var(--o-accent-fond)' : 'transparent', color: actif === id ? '#fff' : 'var(--o-text2)' }}>{lb}</button>", 'Puissance / Consommation'],
+    // Les onglets Puissance / Consommation ont disparu avec la refonte du
+    // 06/10 ; l'Energie garde ses puces, soumises a la meme regle.
+    [APP, "background: faceApercu === id ? 'var(--o-accent-fond)' : 'transparent', color: faceApercu === id ? '#fff' : 'var(--o-text2)' }}>", 'Synthèse / Maison'],
+    [lire('src', 'views', 'energiehisto.jsx'), "background: actif ? 'var(--o-accent-fond)' : 'transparent', color: actif ? '#fff' : 'var(--o-text2)',", 'périodes de l’historique'],
     [APP, "background: onglet === id ? 'var(--o-accent-fond)' : 'transparent', color: onglet === id ? '#fff' : 'var(--o-text2)' }}>{lbl}</button>", 'onglets de la bibliothèque'],
     [lire('src', 'ficherobot.jsx'), "style={{ background: actuel === id ? 'var(--o-accent-fond)' : 'transparent', color: actuel === id ? '#fff' : 'var(--o-text2)' }}>", 'onglets d’un robot'],
     [lire('src', 'views', 'systeme.jsx'), "background: x.cle === s.cle ? 'var(--o-accent-fond)' : 'transparent', color: x.cle === s.cle ? '#fff' : 'var(--o-text2)' }}>{x.nom}</button>", 'séries du Système'],

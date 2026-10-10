@@ -82,17 +82,30 @@ test('le branchement de la vue Énergie : ses chiffres muets ne valent plus 0', 
   const en = code('function EnergieContent(');
   assert.ok(!en.includes('(hcToday + hpToday) ||'), 'la somme des index muets revaut 0 kWh');
   assert.ok(en.includes('const totalToday = consoJourKwh({'), 'le total du jour ne passe plus par consoJourKwh');
-  assert.ok(en.includes('numKwh(EN.consoHcToday, null)') && en.includes('numKwh(EN.consoHpToday, null)') && en.includes('reseau: numKwh(EN.consoReseauToday, null)'),
+  /* Depuis le 07/10 les trois passent par `kwhJour` (jourstat.js), qui lit
+   * l'etat d'un compteur remis a zero cette nuit et les statistiques du jour
+   * pour un index. Ce que ce test garde est inchange : un compteur muet arrive
+   * `null`, jamais 0 — `kwhJour` ne rend un nombre que s'il en a lu un. */
+  assert.ok(en.includes('kwhJour(EN.consoHcToday)') && en.includes('kwhJour(EN.consoHpToday)') && en.includes('reseau: kwhJour(EN.consoReseauToday)'),
     'un index muet doit arriver null, pas 0');
   assert.ok(en.includes('autosuffisance(prodJour, totalToday, injJour, injectionMuette)'), 'l’autosuffisance se recalcule dans la vue');
   assert.ok(!en.includes("tr('Consommation') + ' ' + fmtW(consoW)"), 'l’en-tête revient bâti sur des 0 W');
-  assert.ok(en.includes('{ligneEnTete && <div'), 'sans rien de lisible, la ligne d’en-tête doit disparaître');
-  assert.ok(en.includes('{consoLue ? <Num v={consoW}'), 'le chiffre « Conso maison » et l’en-tête doivent suivre la même condition');
-  assert.ok(en.includes('{reseauLu && <span') && en.includes("tr('PAS DE SURPLUS')"), '« PAS DE SURPLUS » sans compteur affirme ce que rien ne mesure');
+  /* Le telephone ne montre PAS ce resume (maquette mobile du 07/10) : deux
+   * lignes avant que la page ne commence, et tout ce qu'il dit se relit dans
+   * l'apercu juste en dessous. La condition de lisibilite, elle, ne bouge pas. */
+  assert.ok(en.includes('{!etroit && ligneEnTete && <div'), 'sans rien de lisible, la ligne d’en-tête doit disparaître');
+  /* Le chiffre au centre de l'anneau (06/10) : la refonte a remplace la rangee
+   * de chiffres par l'apercu, mais la condition est la meme — sans compteur,
+   * un tiret, pas un zero. */
+  assert.ok(en.includes("{consoLue ? <Num v={consoW} fmt={fmtW} /> : '—'}"), 'le chiffre de l’anneau et l’en-tête doivent suivre la même condition');
+  /* La pastille est devenue un morceau nomme (07/10) : au telephone elle se
+   * pose a droite du titre, au large au bout de la barre d'onglets. Un seul
+   * dessin, deux places — et toujours la meme condition. */
+  assert.ok(en.includes('const pastilleReseau = reseauLu ? ('), 'la pastille du reseau ne s’affiche pas sans compteur : elle affirmerait ce que rien ne mesure');
   // Le schéma solaire, juste au-dessus des chiffres : mêmes conditions.
   assert.ok(en.includes('gridW={consoAvail || exporting ? importW : null}') && en.includes('homeW={consoLue ? consoW : null}'),
     'le schéma solaire reçoit encore des 0 W pour un compteur muet');
-  const arc = code('function SunArc(');
+  const arc = code('function PastillesEnergie(');
   assert.ok(arc.includes('{homeW != null && <Chip icon="house"'), 'la pastille de la maison affiche « 0 W » sans compteur');
   assert.ok(arc.includes('{gridW != null && <Chip icon="pylon"'), 'le pylône affiche « ↓ 0 W » sans compteur');
 });
@@ -137,7 +150,9 @@ test("l’achat au réseau ne se dit qu’au compteur : un capteur de surplus se
   const en = code('function EnergieContent(');
   assert.ok(en.includes('const sensLu = exporting ? reseauLu : consoAvail;'));
   assert.ok(en.includes('reseau: sensLu ? gridNetW : null,'), 'l’en-tête');
-  assert.ok(en.includes(`{sensLu ? <Num v={exporting ? surplusW : importW} suffix=" W" /> : '—'}`), 'le chiffre « Achat réseau »');
+  /* Le jeton « Achat / Vente reseau » sous l'anneau, depuis la refonte : il
+   * n'existe que si un compteur le mesure. */
+  assert.ok(en.includes("reseauLu && { icone: 'bolt'"), 'le jeton « Achat réseau »');
 });
 
 test('la notification « Surplus solaire » ne lit qu’une puissance, jamais l’index cumulé', () => {
