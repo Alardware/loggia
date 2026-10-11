@@ -110,3 +110,34 @@ test('le menu se relit quand la configuration arrive', () => {
   // L'écoute, en face : c'est elle qui relit.
   assert.ok(app.includes("window.addEventListener('loggia-views-changed', f)"), 'la barre n’écoute plus le signal');
 });
+
+/* Les réglages se relisent quand Home Assistant répond (11/10).
+ *
+ * « Si je modifie en interne une disposition ou bien les vues et que je bascule
+ *  sur le lien externe, je n'ai pas la même chose. »
+ *
+ * Et son raisonnement était juste : « HAOS est le serveur qui héberge Loggia,
+ * donc les données sont enregistrées dans HAOS ; du coup peu importe quel lien
+ * on utilise, je devrais avoir la même chose. » Elles y SONT. Le défaut était
+ * dans la lecture.
+ *
+ * Huit réglages se lisent au MONTAGE — la grille de l'Accueil, le profil,
+ * l'agenda, l'historique, l'ordre des scénarios, la disposition des caméras,
+ * la vue des pièces, le menu. À cet instant le composant n'a pas encore
+ * répondu : `cfgVal` retombe sur le stockage du navigateur, qui appartient à
+ * UNE adresse. Le lien interne et le lien externe sont deux origines : chacune
+ * gardait sa copie, et rien ne la relisait quand la configuration arrivait.
+ *
+ * Une clé qui change remonte le sous-arbre, et tout se relit — une seule fois,
+ * jamais le retour : une coupure réseau ne doit pas rejeter l'écran. */
+test('l’écran se relit à la première réponse du composant', () => {
+  const app = lire('src', 'App.jsx');
+  assert.ok(app.includes('const [servi, setServi] = useState(false);'),
+    'le drapeau de première réponse a disparu');
+  assert.match(app, /useEffect\(\(\) => \{ if \(serverOk\) setServi\(true\); \}, \[serverOk\]\);/,
+    'le drapeau ne suit plus la réponse du serveur, ou il redescend : une coupure rejetterait l’écran');
+  assert.ok(app.includes("<div key={servi ? 'srv' : 'local'} className={navbar ?"),
+    'la racine du rendu ne porte plus la clé : les réglages resteraient sur la copie locale de l’adresse');
+  // La raison, là où on la relira.
+  assert.ok(app.includes('stockage appartient a UNE adresse'), 'la raison a disparu du code');
+});

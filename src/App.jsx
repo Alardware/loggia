@@ -15495,6 +15495,29 @@ export default function App() {
   // Le composant a-t-il repondu ? Distingue « pas de configuration » de
   // « configuration vide », que rien ne separait jusqu'ici.
   const [serverOk, setServerOk] = useState(false);
+  /* Le passage du LOCAL au SERVEUR, une seule fois (11/10).
+   *
+   * Huit reglages se lisent au MONTAGE — la grille de l Accueil, le profil,
+   * l agenda, l historique, l ordre des scenarios, la disposition des cameras,
+   * la vue des pieces, et le menu. A cet instant le composant n a pas encore
+   * repondu : `cfgVal` retombe alors sur le stockage du NAVIGATEUR, et ce
+   * stockage appartient a UNE adresse.
+   *
+   * Les donnees, elles, sont bien dans Home Assistant — « HAOS est le serveur
+   * qui heberge Loggia, donc les donnees sont enregistrees dans HAOS ; du coup
+   * peu importe quel lien on utilise, je devrais avoir la meme chose ». C'est
+   * juste : le defaut n'est pas dans le rangement, il est dans la LECTURE.
+   *
+   * « Si je modifie en interne une disposition ou bien les vues et que je
+   * bascule sur le lien externe, je n ai pas la meme chose. » Les deux liens
+   * sont deux origines : chacune avait garde sa copie, et rien ne les relisait
+   * quand la configuration commune arrivait.
+   *
+   * Une cle qui change remonte le sous-arbre : tout se relit, cette fois
+   * depuis le serveur. Une seule bascule, jamais le retour — une coupure de
+   * reseau ne doit pas rejeter l ecran. */
+  const [servi, setServi] = useState(false);
+  useEffect(() => { if (serverOk) setServi(true); }, [serverOk]);
   /* Le compte Home Assistant de CETTE session est-il administrateur ?
    *
    * Lui seul ecrit la configuration de la maison. Le dashboard doit le
@@ -16747,7 +16770,7 @@ export default function App() {
     <LoggiaContext.Provider value={loggiaRuntime}>
     {showOnboarding && <Suspense fallback={null}><Onboarding runtime={loggiaRuntime} onDone={closeOnboarding} onSkip={() => closeOnboarding(null)} /></Suspense>}
     <HeaderCtx.Provider value={{ light: lightMode, onToggleTheme: toggle, onToggleNav: () => setNavOpen(o => !o), onNav: setView, editMode, onToggleEdit: () => setEditMode(e => !e), users, userIdx, onSwitchUser: switchUser, peutEditer, droits, notifs, onLireNotifs: lireNotifs, customViews, rooms: (cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r)), lightsOn, onAssistant: assistantNs ? () => setAssistantOuvert(true) : null, onDictee: assistantNs ? poserQuestion : null, assistantAttendu, hass }}>
-    <div className={navbar ? 'o-navbar-on' : undefined} style={{ display: 'flex', minHeight: '100vh', background: fondPhotoActif ? 'transparent' : 'var(--o-bggrad, var(--o-bg))', fontFamily: 'var(--o-font)', color: 'var(--o-text)',
+    <div key={servi ? 'srv' : 'local'} className={navbar ? 'o-navbar-on' : undefined} style={{ display: 'flex', minHeight: '100vh', background: fondPhotoActif ? 'transparent' : 'var(--o-bggrad, var(--o-bg))', fontFamily: 'var(--o-font)', color: 'var(--o-text)',
       // isolate : notre propre contexte d'empilement. Sans lui, le z-index
       // négatif du calque photo l'envoie sous le fond OPAQUE de tout wrapper
       // qu'une extension glisse entre body et #root — photo invisible, vécu.
