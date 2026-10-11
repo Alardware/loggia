@@ -88,7 +88,7 @@ const OptRow = ({ title, desc, children, retrait = false, eteint = false }) => (
  * nomme, `aria-pressed` sur chaque option. Chaque appel donne son nom — le
  * plus souvent le titre de la ligne qui l'entoure. Le bleu plein ne change pas. */
 const Seg = ({ value, opts, onPick, label, disabled = false, wrap = false }) => (
-  <div role="group" aria-label={label} style={{ display: 'flex', flexWrap: wrap ? 'wrap' : 'nowrap', gap: 4, padding: 3, borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd3)', opacity: disabled ? .5 : 1 }}>
+  <div role="group" aria-label={label} style={{ display: 'flex', flexWrap: wrap ? 'wrap' : 'nowrap', gap: 4, padding: 3, borderRadius: 12, background: 'var(--o-well)', border: 'var(--o-bw,1px) solid var(--o-bd3)', opacity: disabled ? .5 : 1 }}>
     {opts.map(([v, lb]) => (
       <button key={String(v)} aria-pressed={value === v} disabled={disabled} onClick={() => onPick(v)} style={{ padding: '6px 13px', borderRadius: 10, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: value === v ? 'var(--o-accent-fond)' : 'transparent', color: value === v ? '#fff' : 'var(--o-text2)', boxShadow: 'none', fontFamily: 'inherit' }}>{lb}</button>
     ))}
@@ -496,7 +496,7 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
           <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>{now.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
         <div style={{ background: 'var(--o-s3)', border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: RAD[1], padding: '10px 12px', marginBottom: 9 }}>
-          <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 15, fontWeight: 500 }}>{greet}{userName ? ', ' + nomProfil(userName) : ''}</div>
+          <div style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 15, fontWeight: 500 }}>{greet}{userName ? ', ' + nomProfil(userName) : ''}</div>
           <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{tr("l'aperçu suit le thème choisi")}</div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 9 }}>
@@ -874,7 +874,7 @@ function FondPhotoBtn({ actif, onLook }) {
   return (
     <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end' }}>
       <input aria-label={tr('Choisir une image de fond')} ref={fichierRef} type="file" accept="image/*" onChange={choisir} style={{ display: 'none' }} />
-      <span style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
+      <span style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 12, background: 'var(--o-well)', border: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
         <button onClick={() => onLook({ fond: 'aucun' })} aria-pressed={!actif} style={seg(!actif)}>{tr('Aucun')}</button>
         <button onClick={() => { if (!photo) { fichierRef.current && fichierRef.current.click(); return; } onLook({ fond: 'photo' }); }} aria-pressed={actif} style={seg(actif)}>{tr('Photo')}</button>
       </span>
@@ -1970,7 +1970,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         <>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ minWidth: 0 }}>
-              <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Paramètres')}</h1>
+              <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Paramètres')}</h1>
               <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{tr('Réglages de Loggia')} · {trN(users.length, '{n} profil du foyer', '{n} profils du foyer')}</div>
             </div>
             <span style={{ flex: 1 }} />
@@ -1979,7 +1979,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
 
           {/* Pas de barre « Mode Sombre / Clair » ici (retiree le 17/09) : le
             * reglage vit dans Apparence, avec le theme qu'il accompagne. */}
-          <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Toutes les sections')}</div>
+          <div style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Toutes les sections')}</div>
           <div className="grid-parsections" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(210px,1fr))', gap: 16 }}>
             {SECTIONS.map(sec => (
               <button key={sec.id} data-section={sec.id} onClick={() => setTab(sec.id)} style={{ textAlign: 'left', cursor: 'pointer', padding: '16px 17px', borderRadius: 18, background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -2012,7 +2012,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <button onClick={() => setTab('hub')} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' }}><Fi i="angle-small-left" size={13} color="var(--o-text2)" />{tr('Paramètres')}</button>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
               <div style={{ flex: '1 1 280px', minWidth: 0 }}>
-                <h1 style={{ margin: '10px 0 0', fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 34, fontWeight: 500 }}>{curSection ? (curSection.long || curSection.name) : tr('Paramètres')}</h1>
+                <h1 style={{ margin: '10px 0 0', fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 34, fontWeight: 500 }}>{curSection ? (curSection.long || curSection.name) : tr('Paramètres')}</h1>
                 <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{enTete.sous}</div>
               </div>
               {enTete.droite && <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingBottom: 2 }}>{enTete.droite}</div>}

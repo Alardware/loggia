@@ -11,7 +11,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -137,4 +137,57 @@ test('« ne répond plus » se dit d’une seule façon : le liseré', async () 
   // La croix, en dernier sur la ligne (19/09) : le rembourrage passe à gauche.
   assert.ok(lire('src', 'ficherobot.jsx').includes("<div className=\"o-panne\" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 6px 6px 14px', borderRadius: 30 }}>"), 'la fiche du robot');
   assert.ok(css.includes('.o-cam-tuile.o-panne::before { inset: 0; }'), 'le liseré de la caméra reste dans ses coins');
+});
+
+/* La police des TITRES suit le thème, comme le reste du texte (10/10).
+ *
+ * « Et le texte, pourquoi il est pas adapté au thème ? » Mesuré : 39 endroits
+ * écrivaient la police en dur et 2 seulement passaient par `--o-serif`, un
+ * jeton qui n'était défini nulle part — il ne marchait que par son repli. Les
+ * thèmes posent pourtant leur police (`applyVars` → `--o-font`) : sur iOS tout
+ * le corps de texte changeait, et les titres restaient en Newsreader.
+ *
+ * Le jeton existe maintenant, un preset le pose depuis SA police faute de
+ * serif à lui, et il est purgé au changement de thème comme `--o-font`. */
+test('aucun titre n’écrit sa police en dur : ils suivent tous le thème', () => {
+  const dur = [];
+  const parcourir = (dir) => {
+    for (const e of readdirSync(join(RACINE, dir), { withFileTypes: true })) {
+      if (e.isDirectory()) { parcourir(join(dir, e.name)); continue; }
+      if (!/\.(jsx?|mjs)$/.test(e.name)) continue;
+      const src = lire(dir, e.name);
+      const n = compter(src, 'fontFamily: "\'Newsreader\',serif"');
+      if (n) dur.push(join(dir, e.name) + ' × ' + n);
+    }
+  };
+  parcourir('src');
+  assert.deepEqual(dur, [], 'une police de titre est écrite en dur : elle ne suivra aucun thème');
+
+  // Le jeton est défini, sinon les `var()` ne tiendraient que par leur repli.
+  assert.ok(lire('src', 'index.css').includes("--o-serif:'Newsreader', serif;"), '--o-serif a disparu de :root');
+  const theme = lire('src', 'theme.js');
+  assert.ok(theme.includes("set('--o-serif', v.serif || v.font);"),
+    'un preset ne pose plus le serif : ses titres resteraient en Newsreader');
+  assert.ok(/const THEME_KEYS = \[[^\]]*'--o-serif'/.test(theme),
+    '--o-serif n’est plus purgé : le serif d’un thème survivrait au suivant');
+});
+
+/* `body` pose la couleur du texte, et ça ne se perd pas (10/10).
+ *
+ * En remplaçant les trois blocs de jetons pour le thème v2, j'ai avalé la
+ * règle qui les suivait — elle vivait ENTRE `html.loggia-light` et `.o-sombre`.
+ * Sans `color: var(--o-text)` sur `body`, tout le texte retombe sur le noir par
+ * défaut du navigateur : « c'est noir partout », sur un fond sombre.
+ *
+ * Trois jours de thème peuvent partir sur une ligne perdue au milieu d'un
+ * remplacement de bloc. Ce test la tient. */
+test('body pose le fond, la police et la couleur du texte', () => {
+  const css = lire('src', 'index.css');
+  const regle = /^body \{[^}]*\}/m.exec(css.slice(css.indexOf('html.loggia-light')));
+  assert.ok(regle, 'la règle `body` du thème a disparu : le texte retomberait au noir du navigateur');
+  for (const [quoi, attendu] of [
+    ['la couleur du texte', 'color: var(--o-text)'],
+    ['le fond', 'background: var(--o-bggrad, var(--o-bg))'],
+    ['la police', 'font-family: var(--o-font)'],
+  ]) assert.ok(regle[0].includes(attendu), '`body` ne pose plus ' + quoi);
 });

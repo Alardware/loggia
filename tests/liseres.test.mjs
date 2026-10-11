@@ -83,10 +83,20 @@ test('les cartes de la maison et des vues portent le liseré, aucune ne l’effa
   for (const [nom, src] of Object.entries(racines)) {
     assert.ok(src.includes('border: LISERE'), nom + ' : la carte n’a plus le liseré du réglage');
   }
-  // Les deux formes de la pièce (184 et 88).
+  /* Les deux formes de la pièce (184 et 88). Leur trait vient de `bordPiece`,
+   * qui prend la TEINTE de la pièce quand elle est allumée (maquette v2) sans
+   * toucher à la largeur : « Liserés » coupé le coupe comme les autres.
+   *
+   * On vérifie les deux bouts — l'appel sur chacune des deux formes, et ce que
+   * la fonction renvoie —, sans quoi un `border: '1px solid …'` écrit en dur y
+   * passerait sans que personne le voie. */
   const piece = corps('PieceCard');
   assert.ok(piece.includes('style={{ ...card,'), 'la carte de pièce ne part plus du gabarit `card`');
-  assert.ok(/className="o-piece o-piecechip"\n\s+style=\{\{[^]*?border: LISERE,/.test(piece), 'la pastille de pièce n’a plus le liseré');
+  assert.ok(/className="o-piece o-piecechip"\n\s+style=\{\{[^]*?border: bordPiece\(p, on, amb\),/.test(piece), 'la pastille de pièce n’a plus le liseré');
+  assert.equal((piece.match(/border: bordPiece\(p, on, amb\),/g) || []).length, 2, 'les deux formes de la pièce portent le trait');
+  const bord = corps('bordPiece');
+  assert.ok(bord.includes('var(--o-bw,1px) solid'), 'bordPiece doit garder la LARGEUR du réglage « Liserés »');
+  assert.ok(/:\s*LISERE;/.test(bord), 'bordPiece retombe sur le liseré quand la pièce est au repos');
 });
 
 test('les panneaux de Système et de la fiche du robot aussi', () => {

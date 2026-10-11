@@ -80,11 +80,17 @@ test('sur une carte teintée, les gris ont une variante à 4,5:1 — et Loggia g
   for (const j of ['--o-text2-lavis', '--o-text3-lavis', '--o-text3-lavis-rgb']) assert.ok(JETONS_GARDE.includes(j), j + ' échapperait à la purge au changement de thème');
   // Les cartes teintées substituent la variante aux gris, et :root la définit
   // avant le passage de la garde (sinon `var()` serait invalide).
-  assert.ok(css.includes('[style*="transparent 28%"], [style*="transparent 62%"], [style*="background: rgba(var(--o-"], .o-piecestd, .o-tuile-alarme, .grid-qscenes > * {'));
+  assert.ok(css.includes('[style*="72%), linear-gradient(180deg,var(--o-surfA)"], [style*="background: rgba(var(--o-"], .o-piecestd, .o-tuile-alarme, .grid-qscenes > * {'));
   assert.ok(css.includes('--o-text2: var(--o-text2-lavis); --o-text3: var(--o-text3-lavis); --o-text3-rgb: var(--o-text3-lavis-rgb);'));
   assert.equal(css.split('--o-text2-lavis:#').length - 1, 3, 'sombre, clair et îlot sombre');
-  // Les sélecteurs lisent un dégradé que les cartes posent en ligne : s'il change, la règle ne prend plus.
-  assert.ok(src.split('linear-gradient(180deg,transparent 28%,').length - 1 >= 8);
+  /* Les sélecteurs lisent un dégradé que les cartes posent en ligne : s'il
+   * change, la règle ne prend plus. Depuis le thème v2 ce dégradé est fabriqué
+   * en UN seul endroit, et on compte les cartes qui y passent — une carte qui
+   * se repeindrait à la main sortirait du compte, donc de la garde. */
+  assert.ok(src.includes('function lavisCarte(teinte, base = .2) {'), 'le lavis commun a disparu');
+  assert.ok(src.includes('rgba(${teinte},${a})') || src.includes('`rgba(${teinte},${a})`'), 'lavisCarte ne compose plus la teinte');
+  assert.ok(src.includes("} 72%), ${SURF_CARTE}`"), 'le dégradé ne finit plus par « 72%), » : le sélecteur ne prendrait plus');
+  assert.ok(src.split('lavisCarte(').length - 1 >= 12, 'des cartes ont cessé de passer par le lavis commun');
   // Le rouge d'alerte et le rose gardent leur force : ils ne parlent jamais seuls.
   assert.equal(SEUILS.surLavis, 4.5);
   assert.equal(SEUILS.surLavisVif, 4.2);
@@ -188,7 +194,7 @@ test('la garde est branchée, purgée, et les thèmes sans ombre gardent un file
   assert.ok(src.includes("'--o-shadow-hover', '--o-shadow-rangee',"), 'le jeton de la rangée se purge aussi');
   // La rangée des scénarios : une ombre courte, contenue par le rembourrage.
   assert.ok(css.includes('.grid-qscenes > button { box-shadow: var(--o-shadow-rangee, 0 1px 2px rgba(0,0,0,.16), 0 3px 8px rgba(0,0,0,.12)) !important; }'), 'l’ombre courte de la rangée');
-  assert.ok(css.includes('--o-rose-fond:#e01f63; --o-purple-fond:#7c5ce0;'), 'le repli des fonds du bouton de l’assistant');
+  assert.ok(css.includes('--o-rose-fond:#b60152; --o-purple-fond:#6e3dbd;'), 'le repli des fonds du bouton de l’assistant');
   // Tout ce que la garde peut poser doit être purgeable.
   for (const cle of Object.keys(garde(lecteur(LOGGIA_SOMBRE)))) assert.ok(JETONS_GARDE.includes(cle), cle + ' manque à JETONS_GARDE');
 });

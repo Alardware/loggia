@@ -59,10 +59,10 @@ test('le blanc tient sur le fond d’accent ; le quasi-noir, non', () => {
 
 /* Les jetons de Loggia (index.css) dont dépend le compteur. */
 const LOGGIA = {
-  sombre: { '--o-bg': '#0b101b', '--o-bggrad': '', '--o-surfA': 'rgba(22,29,42,.9)', '--o-surfB': 'rgba(16,22,34,.9)', '--o-s1': 'rgba(255,255,255,.05)', '--o-s2': 'rgba(255,255,255,.04)',
-    '--o-text': '#eaf0fb', '--o-text1': '#c2cadb', '--o-text2': '#8c98b2', '--o-text3': '#7d8aa6', '--o-accent': '#4f8cff' },
-  clair: { '--o-bg': '#eef2f8', '--o-bggrad': '', '--o-surfA': 'rgba(255,255,255,.96)', '--o-surfB': 'rgba(248,250,253,.96)', '--o-s1': 'rgba(20,30,55,.05)', '--o-s2': 'rgba(20,30,55,.04)',
-    '--o-text': '#16203a', '--o-text1': '#27324d', '--o-text2': '#5a6884', '--o-text3': '#5d6b86', '--o-accent': '#4f8cff' },
+  sombre: { '--o-bg': '#0b101b', '--o-bggrad': '', '--o-surfA': 'rgba(26,36,54,.62)', '--o-surfB': 'rgba(21,30,46,.62)', '--o-s1': 'rgba(255,255,255,.05)', '--o-s2': 'rgba(255,255,255,.04)',
+    '--o-text': '#eaf0fb', '--o-text1': '#c2cadb', '--o-text2': '#97a3bc', '--o-text3': '#818ea9', '--o-accent': '#70a2ff' },
+  clair: { '--o-bg': '#edeff3', '--o-bggrad': '', '--o-surfA': 'rgba(255,255,255,.62)', '--o-surfB': 'rgba(250,251,253,.62)', '--o-s1': 'rgba(18,24,38,0.055)', '--o-s2': 'rgba(18,24,38,0.044)',
+    '--o-text': '#181c23', '--o-text1': '#333842', '--o-text2': '#515762', '--o-text3': '#5e6572', '--o-accent': '#104fca' },
 };
 
 test('le compteur des filtres d’Objets : discret par un jeton, lisible à 4,5:1', () => {

@@ -26,24 +26,46 @@ const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const APP = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
 const CSS = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
 
-/** Le bloc qui porte la salutation de l'Accueil, et ce qu'il s'ajoute. */
-const BANNIERE = /\{\/\* BANNER \*\/\}\s*\n\s*<div style=\{\{[^}]*padding: '(\d+)px (\d+)px' \}\}>/;
+/* 10/10 — les deux remontent AU NIVEAU DES AUTRES VUES.
+ *
+ * « Je voudrais que tu remontes Pièces au même niveau que les autres vues, et
+ *   fais de même pour l'Accueil. »
+ *
+ * L'égalité du 01/10 tient toujours, et c'est elle qui compte : Accueil et
+ * Pièce se valent. Ce qu'elles valent a changé — ZÉRO en plus du rembourrage
+ * de la page, soit 26 px, comme Objets, Sécurité et Énergie. Mesuré avant :
+ * Accueil 39, Pièce 40, les autres 26.
+ *
+ * Le test garde donc les deux bouts : chacun ne s'ajoute plus rien, et ils
+ * s'ajoutent la MÊME chose — si quelqu'un remet 14 px d'un seul côté, il
+ * tombe. */
 
-test('la salutation de l’Accueil descend de 14 px', () => {
+/** Le bloc qui porte la salutation de l'Accueil, et ce qu'il s'ajoute en haut. */
+const BANNIERE = /\{\/\* BANNER[\s\S]{0,400}?\*\/\}\s*\n\s*<div style=\{\{[^}]*padding: '([^']+)' \}\}>/;
+
+/** Ce qu'une tête s'ajoute au-dessus d'elle, en pixels. */
+const hautAccueil = () => {
   const m = APP.match(BANNIERE);
   assert.ok(m, 'le bloc de la bannière a bougé : le calcul d’alignement est à refaire');
-  assert.equal(m[1], '14', 'la bannière ne descend plus de 14 px — la marge du titre de pièce doit suivre');
-});
-
-test('le titre d’une pièce reprend EXACTEMENT ces 14 px', () => {
+  return parseInt(m[1].trim().split(/\s+/)[0], 10);   // « 0 8px 14px » → 0
+};
+const hautPiece = () => {
   const tete = APP.match(/<div className="o-room-head" style=\{\{([^}]*)\}\}/);
   assert.ok(tete, 'la tête de la vue d’une pièce est introuvable');
-  const marge = tete[1].match(/marginTop: edit \? 0 : (\d+)/);
-  assert.ok(marge, 'la tête d’une pièce n’a plus de marge haute : le titre remonte de 14 px');
-  assert.equal(marge[1], '14', 'la marge ne vaut plus les 14 px de la bannière de l’Accueil');
+  const marge = tete[1].match(/marginTop: (?:edit \? 0 : )?(\d+)/);
+  return marge ? parseInt(marge[1], 10) : 0;
+};
 
-  /* Et elle ne vaut QUE si le titre arrive en premier : en édition, le bandeau
-   * passe devant et tient le haut à sa place. */
+test('la salutation de l’Accueil ne descend plus : elle est au niveau des autres vues', () => {
+  assert.equal(hautAccueil(), 0,
+    'la bannière se rajoute un rembourrage en haut : la salutation retombe sous le titre des autres vues');
+});
+
+test('le titre d’une pièce arrive au même niveau que la salutation', () => {
+  assert.equal(hautPiece(), 0, 'la tête d’une pièce a repris une marge : son titre redescend');
+  // La règle du 01/10, intacte : les deux se valent, quoi qu'ils vaillent.
+  assert.equal(hautPiece(), hautAccueil(),
+    'le titre d’une pièce et la salutation de l’Accueil ne tombent plus à la même hauteur');
 });
 
 test('une marge, parce qu’un padding serait écrasé sous 820 px', () => {

@@ -96,7 +96,7 @@ function IcoFigee({ src, size, nom }) {
   // Un canvas qui ne fait que montrer une image EST une image : la règle le
   // croit interactif.
   // eslint-disable-next-line jsx-a11y/no-interactive-element-to-noninteractive-role
-  return <canvas ref={ref} role="img" aria-label={nom} style={{ width: size, height: size, display: 'block' }} />;
+  return <canvas ref={ref} className="o-wx-ico" role="img" aria-label={nom} style={{ width: size, height: size, display: 'block' }} />;
 }
 
 /* L'icône météo.
@@ -116,7 +116,7 @@ export function WeatherIco({ wx, size = 42, anime = true }) {
   const src = WX_METEO[wx] || wxCloudy;
   const nom = nomMeteo(WX_METEO[wx] ? wx : 'clouds');
   if (!anime || REDUCE_MOTION) return <IcoFigee src={src} size={size} nom={nom} />;
-  return <img src={src} alt={nom} width={size} height={size} style={{ pointerEvents: 'none', display: 'block' }} />;
+  return <img src={src} alt={nom} className="o-wx-ico" width={size} height={size} style={{ pointerEvents: 'none', display: 'block' }} />;
 }
 
 // Mappe une condition météo HA → mode d'effet WeatherFx (suit l'entité).

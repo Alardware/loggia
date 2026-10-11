@@ -35,7 +35,7 @@ import { nomJour, heureValide } from './robots.js';
 export const FOND = 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';
 // Le liseré du réglage (04/10), comme les panneaux de Paramètres et du robot.
 export const PANNEAU = { background: FOND, border: LISERE, borderRadius: 'var(--o-radius,18px)', padding: '18px 20px', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', boxSizing: 'border-box', minWidth: 0 };
-export const TITRE_SECTION = { fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' };
+export const TITRE_SECTION = { fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' };
 export const PETITES_CAPITALES = petitesCapitales(10.5);
 export const BOUTON_DOUX = { padding: '9px 14px', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text1)', fontFamily: 'inherit' };
 export const CHAMP_HEURE = { padding: '9px 12px', borderRadius: 12, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 15, fontWeight: 700, fontFamily: 'inherit', fontVariantNumeric: 'tabular-nums', colorScheme: 'inherit' };
@@ -63,7 +63,7 @@ export function BoutonConfirme({ libelle, onConfirme }) {
  * sinon une page de réglages répète « Moins », « Plus » sans dire de quoi (05/10). */
 const nomPas = (nom, geste) => (nom ? tr('{a} : {b}', { a: nom, b: geste }) : geste);
 export const PasAPas = ({ valeur, moins, plus, peutMoins = true, peutPlus = true, nom = null }) => (
-  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: 4, borderRadius: 12, background: 'var(--o-s2)', flexShrink: 0 }}>
+  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: 4, borderRadius: 12, background: 'var(--o-well)', flexShrink: 0 }}>
     <button type="button" onClick={moins} disabled={!peutMoins} aria-label={nomPas(nom, tr('Moins'))} style={{ width: 32, height: 32, borderRadius: 9, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 16, fontWeight: 800, opacity: peutMoins ? 1 : .4 }}>−</button>
     <span style={{ minWidth: 64, padding: '0 6px', textAlign: 'center', fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap' }}>{valeur}</span>
     <button type="button" onClick={plus} disabled={!peutPlus} aria-label={nomPas(nom, tr('Plus'))} style={{ width: 32, height: 32, borderRadius: 9, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 16, fontWeight: 800, opacity: peutPlus ? 1 : .4 }}>+</button>

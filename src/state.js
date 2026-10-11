@@ -47,10 +47,23 @@ export function setLoggiaState({ index, ent, resolved, cfg, save, server }) {
  */
 const PERSONNELLES = new Set([
   // Restent attachees a l'appareil : ses marges d'ecran et la trace du
-  // dernier passage. Le profil actif et le code administrateur ont rejoint la
-  // maison le 03/09 — ils differaient d'un appareil a l'autre, et meme entre
-  // l'acces local et l'acces distant, faute d'origine commune.
+  // dernier passage. Le code administrateur, lui, a rejoint la maison le
+  // 03/09 — il differait d'un appareil a l'autre, et meme entre l'acces local
+  // et l'acces distant, faute d'origine commune.
   'loggia-navoffset', 'loggia-topoffset', 'loggia-lastseen',
+  /* LE PROFIL ACTIF revient ici le 10/10. Il avait suivi le code en 03/09, et
+   * la consequence ne s'est vue qu'avec plusieurs ecrans allumes : la tablette
+   * changeait de profil des que l'ordinateur en changeait. « Si je modifie
+   * depuis mon PC avec le profil Nova, ca modifie sur la tablette aussi, qui
+   * est sur un autre profil — chaque profil pour la personnalisation est
+   * independant. »
+   *
+   * Un profil DECRIT QUI REGARDE CET ECRAN : la tablette reste sur le sien
+   * quand l'ordinateur passe sur un autre. C'est aussi ce qui permet aux
+   * reglages ranges par profil (le menu, voir `readViewsCfg`) de separer
+   * vraiment deux personnes — indexes sur un profil commun, ils ne separaient
+   * rien. */
+  'loggia_active_user',
 ]);
 export const estPersonnelle = (cle) => {
   const s = String(cle);

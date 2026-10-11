@@ -456,7 +456,7 @@ test('les retouches du 17/09 : le graphe a la hauteur des versions, les modules 
   // Les modules : des cartes posees sur la page, plus de boite autour.
   const modules = vue.slice(vue.indexOf('{modules.total > 0 && ('), vue.indexOf('<div className="grid-sys-duo">', vue.indexOf('{modules.total > 0 && (')));
   assert.ok(modules.includes('<div className="grid-sys-modules">') && !modules.includes('SYS_PANNEAU') && !modules.includes('EntetePanneau'), 'ni panneau ni en-tete de panneau autour des modules');
-  assert.ok(modules.includes(`fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19`) && modules.includes("{tr('{n} en cours sur {t}', { n: modules.enCours, t: modules.total })}"), 'un titre de section, le compte a droite');
+  assert.ok(modules.includes(`fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19`) && modules.includes("{tr('{n} en cours sur {t}', { n: modules.enCours, t: modules.total })}"), 'un titre de section, le compte a droite');
   // Le journal et le reseau cote a cote, le journal defile.
   const pied = vue.slice(vue.lastIndexOf('<div className="grid-sys-duo">'));
   assert.ok(pied.indexOf('<PanneauJournal') > 0 && pied.indexOf('<PanneauJournal') < pied.indexOf('<PanneauReseau'), 'le journal a gauche, le reseau a droite');

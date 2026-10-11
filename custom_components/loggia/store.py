@@ -63,12 +63,27 @@ SECRETES: frozenset[str] = frozenset({CLE_CLAIR, CLE_HACHE})
 PERSONAL_KEYS: frozenset[str] = frozenset(
     {
         # Marges de securite de l'ecran et trace du dernier passage : elles
-        # decrivent un appareil, pas la maison. Le profil actif les a quittees
-        # le 03/09 — on veut se retrouver au meme endroit, quel que soit
-        # l'ecran que l'on prend.
+        # decrivent un appareil, pas la maison.
         "loggia-navoffset",
         "loggia-topoffset",
         "loggia-lastseen",
+        # LE PROFIL ACTIF revient ici le 10/10. Il avait rejoint la maison le
+        # 03/09 — « on veut se retrouver au meme endroit, quel que soit l'ecran
+        # que l'on prend » —, et la consequence ne s'est vue qu'avec plusieurs
+        # ecrans allumes a la fois : la tablette changeait de profil des que
+        # l'ordinateur en changeait.
+        #
+        # « Si je modifie depuis mon PC avec le profil Nova, ca modifie sur la
+        # tablette aussi, qui est sur un autre profil — chaque profil pour la
+        # personnalisation est independant. »
+        #
+        # Un profil dit QUI REGARDE CET ECRAN. Et c'est lui qui permet aux
+        # reglages ranges par profil (le menu) de separer deux personnes :
+        # indexes sur un profil commun, ils ne separaient rien.
+        #
+        # Miroir exact de `PERSONNELLES` dans src/state.js : les deux listes
+        # doivent dire la meme chose.
+        "loggia_active_user",
     }
 )
 # Sans separateur, a dessein : les cles en place — `loggia-secpanel`,
@@ -115,6 +130,18 @@ PERSONAL_SUFFIXES: tuple[str, ...] = ("panel",)
 # Ou se posent les cartes, dans quel ordre, de quelle taille, et par format
 # d ecran. `loggia_histo` archive ces memes agencements : le separer de ce
 # qu il archive ferait echouer une sortie d edition sur deux.
+#
+# Les trois dernieres rangent le MENU, et elles l ont rejoint le 10/10 : quelles
+# vues y figurent, lesquelles sont remises, dans quel ordre. Elles sont arrivees
+# avec leur passage du stockage de l appareil a la configuration — sans cela, un
+# compte ordinaire aurait vu son menu revenir au rechargement, le symptome meme
+# que la note d APPARENCE decrit plus bas.
+#
+# Elles sont ici et non dans la configuration de la maison parce qu une erreur
+# n y coute rien : une vue masquee se reaffiche. Elles ne decident ni de ce que
+# Loggia COMMANDE, ni de ce qui EXISTE — creer une vue perso
+# (`loggia_customviews`) reste reserve, puisqu une vue perso decide de ce
+# qu elle montre.
 AGENCEMENT: frozenset[str] = frozenset(
     {
         "loggia_accueil",
@@ -128,6 +155,9 @@ AGENCEMENT: frozenset[str] = frozenset(
         "loggia_vuepieces",
         "loggia_scnordre",
         "loggia_epingles",
+        "loggia-hiddenviews",
+        "loggia-shownviews",
+        "loggia-vueordre",
     }
 )
 

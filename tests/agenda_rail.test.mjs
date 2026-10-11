@@ -297,9 +297,25 @@ test('la feuille d’agenda : jours fixes, rien de rogné, le fond ne suit plus 
    *     en fond translucide. */
   const rail = readFileSync(join(RACINE, 'src', 'agendarail.jsx'), 'utf8');
 
-  // Les jours restent en haut, sur un fond opaque — sinon les heures passent au travers.
-  assert.ok(rail.includes("position: 'sticky', top: 0, zIndex: 5, background: 'var(--o-bg2)'"),
-    'l’en-tete des jours redefile avec la grille');
+  /* Les jours restent en haut, sur un fond OPAQUE — sinon les heures passent
+   * au travers quand la grille défile dessous.
+   *
+   * Qui PORTE ce fond a changé le 10/10 : « on voit les fonds, enlève-moi ça ».
+   * La colonne et la grille posaient chacune le leur, et la feuille se lisait
+   * comme trois rectangles empilés. C'est la feuille qui porte le fond
+   * maintenant (`opaque`), et les blocs n'en ont plus. Seul l'en-tête collé
+   * garde le sien, parce qu'il masque les heures — et il prend EXACTEMENT
+   * celui de la feuille, donc il ne se voit pas comme un bloc. */
+  assert.ok(/<BottomSheet large opaque /.test(rail),
+    'la feuille d’agenda n’est plus opaque : ses blocs laisseraient voir l’Accueil au travers');
+  const FOND_FEUILLE = "'linear-gradient(var(--o-surfA), var(--o-surfA)), var(--o-bg)'";
+  assert.ok(rail.includes("position: 'sticky', top: 0, zIndex: 5, background: " + FOND_FEUILLE),
+    'l’en-tete des jours a perdu le fond de la feuille : soit il redéfile, soit il se voit comme un bloc');
+  // Et les deux blocs restent sans fond : c'est ce qu'il a demandé.
+  for (const [quoi, ancre] of [
+    ['la colonne de gauche', "borderRight: '1px solid var(--o-bd2)', background: 'transparent'"],
+    ['la zone qui défile', "overscrollBehavior: 'contain', background: 'transparent'"],
+  ]) assert.ok(rail.includes(ancre), quoi + ' a repris un fond : on reverrait le bloc');
 
   // La fiche s'ouvre du cote ou il y a de la place.
   assert.ok(rail.includes('function FicheEvenement({ e, hass, onFermer, aGauche = false })'), 'la fiche n’a plus de cote');

@@ -58,18 +58,22 @@ def test_non_admin_ne_peut_pas_ecrire_la_maison(creer_store, store_module):
 
 
 def test_tout_le_monde_peut_changer_de_profil(creer_store):
-    """Le profil actif est la seule cle de maison ouverte a tous.
+    """Changer de profil reste permis a tous — et ne regarde que cet ecran.
 
-    Elle dit qui se sert du dashboard en ce moment. La refuser aux comptes
+    Elle dit qui se sert de CE dashboard en ce moment. La refuser aux comptes
     ordinaires empecherait une tablette de famille de changer de profil, ce
-    qui est son usage premier. `loggia_users` reste refuse dans le meme
-    mouvement — c est lui qui porte les roles, et lui le vrai danger.
+    qui est son usage premier ; et elle n'a plus besoin d'etre ouverte pour
+    cela, puisqu'une cle personnelle n'est pas une cle de maison.
+
+    Elle est revenue sur l'appareil le 10/10 : commune, la tablette changeait
+    de profil des que l'ordinateur en changeait. `loggia_users` reste refuse —
+    c est lui qui porte les roles, et lui le vrai danger.
     """
     magasin = creer_store({"users": {}, "shared": {}, "migrated": True})
     lancer(magasin.async_set_user("famille", {"loggia_active_user": "2"}, is_admin=False))
     data = lancer(magasin._load())
-    assert data["shared"]["loggia_active_user"] == "2"
-    assert data["users"].get("famille", {}) == {}, "la valeur a fini dans une ombre"
+    assert data["users"]["famille"]["loggia_active_user"] == "2"
+    assert "loggia_active_user" not in data["shared"], "le profil d'un ecran a fini dans la maison"
 
 
 def test_non_admin_garde_ses_reglages_d_appareil(creer_store):
@@ -303,11 +307,10 @@ def test_reprise_de_l_ancien_fichier(creer_store):
     data = lancer(magasin._load())
     assert data["shared"]["loggia_rooms"] == ["Salon"]
     assert data["shared"]["loggia-theme"] == "sombre"
-    # `loggia_active_user` appartient a la maison depuis le 03/09 : on veut se
-    # retrouver au meme endroit quel que soit l'ecran que l'on prend. Le fichier
-    # etant deja marque `migrated`, rien ne le remonte — le menage le retire de
-    # la section du compte, ou il ne servait qu'a figer cet appareil.
-    assert "loggia_active_user" not in data["users"]["u1"]
+    # `loggia_active_user` est revenu a l'appareil le 10/10 : il dit qui
+    # regarde CET ecran. Une valeur deja rangee dans la section d'un compte y
+    # reste donc — c'est desormais sa place, et le menage ne la retire plus.
+    assert data["users"]["u1"]["loggia_active_user"] == 2
     assert data["users"]["u1"]["loggia-secpanel"] == "0", "le personnel a ete emporte"
     assert not [k for k in data["shared"] if k.startswith("orion")]
     assert magasin._store.ecritures == 1, "la reprise n'a pas ete enregistree"
@@ -444,12 +447,15 @@ def test_ecritures_concurrentes_ne_se_perdent_pas(creer_store):
 
 def test_classement_des_cles(store_module):
     est_perso = store_module.est_personnelle
-    for cle in ("loggia-navoffset", "loggia-topoffset",
-                "loggia-lastseen", "loggia-secpanel", "loggia-enpanel"):
+    # `loggia_active_user` a rejoint cette liste le 10/10 : un profil dit qui
+    # regarde CET ecran, et c'est lui qui permet aux reglages ranges par profil
+    # de separer deux personnes.
+    for cle in ("loggia-navoffset", "loggia-topoffset", "loggia-lastseen",
+                "loggia-secpanel", "loggia-enpanel", "loggia_active_user"):
         assert est_perso(cle), f"{cle} devrait rester sur l'appareil"
     for cle in ("loggia_rooms", "loggia_entities", "loggia_users", "loggia-theme",
                 "loggia_energyHaids", "loggia_roomlayout",
-                "loggia_active_user", "loggia_admin_pin", "loggia_accueil"):
+                "loggia_admin_pin", "loggia_accueil"):
         assert not est_perso(cle), f"{cle} devrait etre commun a la maison"
 
 def test_le_plafond_vaut_aussi_pour_les_modules(creer_store, store_module):

@@ -100,7 +100,7 @@ export function CarteRappels({ hass = null, taches = null, onFait = null, onAjou
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 800 }}>{tr('Rappels')}</div>
-          <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 14, fontWeight: 500, color: 'var(--o-text2)', marginTop: 2 }}>
+          <div style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 14, fontWeight: 500, color: 'var(--o-text2)', marginTop: 2 }}>
             {ranges.aujourdhui.length
               ? trN(ranges.aujourdhui.length, '1 à faire aujourd’hui', '{n} à faire aujourd’hui')
               : tr('Rien à faire aujourd’hui')}
@@ -122,7 +122,7 @@ export function CarteRappels({ hass = null, taches = null, onFait = null, onAjou
 
       {/* Les trois onglets, avec leur compte — une puce choisie se remplit
         * d'accent, comme partout dans Loggia. */}
-      <div style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 12, background: 'var(--o-s2)' }}>
+      <div style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 12, background: 'var(--o-well)' }}>
         {ONGLETS_RAPPELS.map(id => {
           const on = onglet === id;
           const n = (ranges[id] || []).length;
