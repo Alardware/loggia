@@ -70,6 +70,123 @@ export const estPersonnelle = (cle) => {
   return PERSONNELLES.has(s) || s.endsWith('panel');
 };
 
+/* ── Ce qui suit le PROFIL Loggia (11/10) ───────────────────────────────────
+ *
+ * « Je modifie en tant que Guillaume, ca modifie aussi Luna, qui est un autre
+ * profil. Ca ne doit pas se produire : toute modification est liee au meme
+ * profil, il n'a pas a synchroniser les autres. »
+ *
+ * Et la frontiere, qu'il a posee dans la meme conversation : « la seule chose
+ * qui est commune a tous, c'est l'ajout, la suppression et la modification
+ * d'entites. »
+ *
+ * Trois couches, desormais, et elles ne se melangent plus :
+ *
+ *   la MAISON    ce qui EXISTE          `loggia_rooms`, `loggia_cameras`, les
+ *                                        capteurs, les lecteurs, et l'icone
+ *                                        choisie pour une entite
+ *   le PROFIL    comment c'est RANGE    ce qui suit
+ *   l'APPAREIL   ce qu'il sait de LUI   `PERSONNELLES` : ses marges, le profil
+ *                                        qui le regarde, ses panneaux replies
+ *
+ * Decrire deux fois une piece n'aurait aucun sens — d'ou la premiere couche.
+ * Mais ce qu'on RANGE appartient a qui l'a range.
+ *
+ * Le 10/10, trois cles seulement avaient recu ce traitement, a la main, dans
+ * `readViewsCfg` : le menu separait bien deux personnes, et les ONZE autres
+ * continuaient de synchroniser tout le monde — la grille de l'Accueil, les
+ * agencements des cinq vues a cartes, les cameras, les epingles, l'ordre des
+ * scenarios. Le tri se fait donc ICI, sur le passage que tout le monde
+ * emprunte, et non cle par cle : une cle ajoutee demain n'a qu'a entrer dans
+ * cette liste.
+ */
+const PAR_PROFIL = new Set([
+  'loggia_accueil', 'loggia_histo', 'loggia_vuepieces', 'loggia_camdispo',
+  'loggia_scnordre', 'loggia_epingles',
+  'loggia_roomlayout', 'loggia_objlayout', 'loggia_coverlayout',
+  'loggia_enlayout', 'loggia_seclayout',
+  'loggia-hiddenviews', 'loggia-shownviews', 'loggia-vueordre',
+]);
+export const estParProfil = (cle) => PAR_PROFIL.has(String(cle));
+
+/* Le MENU ne s'herite pas, la DISPOSITION si.
+ *
+ * « Un profil non admin ne doit avoir que les vues par defaut, et non les vues
+ * secondaires » (10/10) : il s'etait retrouve avec la Climatisation que
+ * quelqu'un d'autre s'etait ajoutee, et sans le droit de la retirer. Une vue
+ * heritee AJOUTE donc quelque chose qu'on n'a pas choisi — la part commune
+ * d'avant la bascule n'echoit qu'au premier profil, a qui elle appartenait.
+ *
+ * Une disposition heritee, elle, ne fait que donner un point de depart, qu'on
+ * peut toujours ranger. La refuser ferait repartir tous les profils sauf le
+ * premier sur une grille par defaut : brutal, et pour rien. */
+const COMMUN_AU_PREMIER = new Set(['loggia-hiddenviews', 'loggia-shownviews', 'loggia-vueordre']);
+
+/* La part d'un profil se range sous un MARQUEUR, jamais a la racine.
+ *
+ * Ces cles portent deja des objets dont ce n'est pas nous qui choisissons les
+ * cles : une grille par format (`pc`, `mobile`, `tablette`), un ordre par vue.
+ * Deviner « est-ce indexe par profil ? » a la FORME marcherait aujourd'hui et
+ * casserait au premier reglage dont les cles ressemblent a des index. Un
+ * marqueur ne se confond avec rien, et son absence dit « valeur d'avant la
+ * bascule, commune a tous ».
+ *
+ * Le composant Python n'en sait rien et n'a pas besoin de le savoir : c'est une
+ * FORME DE VALEUR, pas une cle. Les droits ne bougent pas — ranger ses cartes
+ * reste de l'AGENCEMENT, ouvert a un compte ordinaire — et aucun redemarrage de
+ * Home Assistant n'est necessaire. */
+const MARQUE = '__profils';
+const indexe = (v) => !!v && typeof v === 'object' && !Array.isArray(v)
+  && Object.prototype.hasOwnProperty.call(v, MARQUE);
+
+/** Le profil qui regarde CET ecran. Personnel, donc la tablette garde le sien
+ *  quand l'ordinateur change — sans quoi indexer par profil ne separerait
+ *  rien, les deux ecrans lisant la meme part. */
+export const profilActif = () => String(cfgVal('loggia_active_user', '0') ?? '0');
+
+/** La part de `id` dans une valeur rangee par profil ; la valeur telle quelle
+ *  si elle vient d'avant la bascule.
+ *
+ * `auPremier` : la part commune n'echoit qu'au profil « 0 » — voir
+ * `COMMUN_AU_PREMIER`. */
+function partProfil(v, id, auPremier = false) {
+  const commune = (val) => ((auPremier && id !== '0') ? null : val);
+  if (!indexe(v)) return commune(v);
+  const p = v[MARQUE] || {};
+  if (Object.prototype.hasOwnProperty.call(p, id)) return p[id];
+  // La part commune `*` : ce que tout le monde partageait avant la bascule.
+  return Object.prototype.hasOwnProperty.call(p, '*') ? commune(p['*']) : null;
+}
+
+/** La valeur a enregistrer pour que SEUL `id` change.
+ *
+ * Ce qui etait commun devient la part `*` : au premier rangement d'une
+ * personne, les autres gardent exactement ce qu'elles avaient a l'ecran.
+ * Rendre `null` quand il ne reste plus rien efface la cle, comme ailleurs. */
+function poserProfil(ancien, id, val) {
+  const p = indexe(ancien) ? { ...ancien[MARQUE] } : (ancien == null ? {} : { '*': ancien });
+  if (typeof val === 'function') {
+    /* UN GESTE DE STRUCTURE : la meme transformation sur CHAQUE part.
+     *
+     * Renommer ou retirer une piece est commun a la maison — « la seule chose
+     * commune a tous, c'est l'ajout, la suppression et la modification
+     * d'entites ». Mais chaque profil a range cette piece a sa facon, et son
+     * rangement la NOMME : n'appliquer le renommage qu'a sa propre part
+     * laisserait les autres avec une grille qui pointe une piece disparue, et
+     * leur ferait perdre son rangement sans qu'ils y soient pour rien.
+     *
+     * D'ou une valeur qui peut etre une FONCTION : chacun garde son rangement,
+     * et c'est le nom qui change partout. Elle rend `null` pour effacer sa
+     * part — une table videe ne laisse pas de coquille. */
+    Object.keys(p).forEach((k) => {
+      const v = val(p[k]);
+      if (v == null) delete p[k]; else p[k] = v;
+    });
+  } else if (val == null) delete p[id];
+  else p[id] = val;
+  return Object.keys(p).length ? { [MARQUE]: p } : null;
+}
+
 /** Lecture tolerante du stockage local : une valeur illisible ne casse rien. */
 export function readLS(key, fb) {
   // Sans navigateur (un test qui rend un composant, ADR 0069) : le defaut,
@@ -129,6 +246,16 @@ export function migrerAnciennesCles() {
  * n'est pas installe, ou avant que sa reponse arrive.
  */
 export function cfgVal(key, fallback = null) {
+  if (!estParProfil(key)) return cfgBrute(key, fallback);
+  /* Une cle rangee par profil se lit en deux temps : la valeur entiere, puis
+   * la part de celui qui regarde. Le repli ne s'applique qu'a la part — une
+   * valeur qui existe pour un AUTRE profil ne doit pas passer pour la sienne. */
+  const part = partProfil(cfgBrute(key, null), profilActif(), COMMUN_AU_PREMIER.has(String(key)));
+  return (part == null) ? fallback : part;
+}
+
+/** La valeur ENTIERE d'une cle, sans decoupage par profil. */
+function cfgBrute(key, fallback) {
   const v = LOGGIA_CFG ? LOGGIA_CFG[key] : undefined;
   if (v !== undefined && v !== null) return v;
   // Serveur joignable : il fait autorite sur tout ce qui est commun a la
@@ -158,19 +285,31 @@ export function cfgVal(key, fallback = null) {
  */
 export function cfgSet(patch) {
   if (!patch || typeof patch !== 'object') return Promise.resolve(null);
-  const next = { ...(LOGGIA_CFG || {}) };
+  /* Ce que l'appelant demande, puis ce qui part REELLEMENT : une cle rangee par
+   * profil n'ecrit que SA part, et laisse les autres ou elles sont. L'appelant
+   * ne sait rien de tout cela — il pose la valeur qu'il veut voir, comme avant
+   * (11/10). */
+  const id = Object.keys(patch).some(estParProfil) ? profilActif() : null;
+  const reel = {};
   Object.keys(patch).forEach((k) => {
-    if (patch[k] == null) delete next[k];
-    else next[k] = patch[k];
+    // Une FONCTION transforme ce qui est deja la, au lieu de le remplacer : par
+    // part pour un reglage range par profil, sur la valeur entiere sinon.
+    if (estParProfil(k)) reel[k] = poserProfil(cfgBrute(k, null), id, patch[k]);
+    else reel[k] = (typeof patch[k] === 'function') ? patch[k](cfgBrute(k, null)) : patch[k];
+  });
+  const next = { ...(LOGGIA_CFG || {}) };
+  Object.keys(reel).forEach((k) => {
+    if (reel[k] == null) delete next[k];
+    else next[k] = reel[k];
   });
   LOGGIA_CFG = next;
   try {
-    Object.keys(patch).forEach((k) => {
-      if (patch[k] == null) localStorage.removeItem(k);
-      else localStorage.setItem(k, JSON.stringify(patch[k]));
+    Object.keys(reel).forEach((k) => {
+      if (reel[k] == null) localStorage.removeItem(k);
+      else localStorage.setItem(k, JSON.stringify(reel[k]));
     });
   } catch { /* stockage indisponible : la valeur serveur suffit */ }
-  return Promise.resolve(cfgSave ? cfgSave(patch) : true);
+  return Promise.resolve(cfgSave ? cfgSave(reel) : true);
 }
 
 /**

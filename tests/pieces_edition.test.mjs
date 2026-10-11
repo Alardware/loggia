@@ -101,11 +101,24 @@ test('ecrire une piece : un seul lot, et renommer emporte sa grille', () => {
   const mod = readFileSync(join(RACINE, 'src', 'ecrirepiece.js'), 'utf8');
   const lb = (debut) => { const d = mod.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); return mod.slice(d, mod.indexOf(NL + '}', d + 1)); };
   assert.ok(!mod.includes('cfgSet('), 'le module envoie lui-meme : la grille repartirait dans un second lot');
+  /* La grille part en TRANSFORMATION, pas en table calculee (11/10).
+   *
+   * Renommer ou retirer une piece est commun a la maison — « la seule chose
+   * commune a tous, c'est l'ajout, la suppression et la modification
+   * d'entites » —, mais la grille de sa vue est un RANGEMENT, propre a chaque
+   * profil. Poser la table de celui qui renomme ecraserait le rangement des
+   * autres ; poser la sienne seule leur laisserait une grille qui pointe une
+   * piece disparue. Une valeur-fonction s'applique part par part : le nom
+   * change partout, chacun garde son rangement (`poserProfil`, state.js). */
   const e = lb('export function lotPiece(');
-  assert.ok(e.includes('if (all[avant]) { all[piece.room] = all[avant]; delete all[avant]; maj[GRILLES] = all; }'), 'la grille suit le nouveau nom');
+  assert.ok(e.includes('maj[GRILLES] = (brut) => renommerGrille(brut, avant, piece.room)'), 'la grille suit le nouveau nom');
   assert.ok(e.includes("normRooms(cfgVal('loggia_rooms', null))") && e.includes('return maj;'), 'la liste normalisee, jamais une piece seule');
   const s = lb('export function lotSansPiece(');
-  assert.ok(s.includes('delete all[nom]') && s.includes('return maj;'), 'la grille de la piece part avec elle');
+  assert.ok(s.includes('[GRILLES]: (brut) => retirerGrille(brut, nom)'), 'la grille de la piece part avec elle');
+  for (const t of ['renommerGrille', 'retirerGrille']) {
+    assert.ok(mod.includes('const ' + t + ' = (brut'),
+      t + ' a disparu : la transformation ne s’appliquerait plus a chaque profil');
+  }
   assert.ok(!src.includes('function enregistrerPiece(') && !src.includes('function supprimerPiece('), 'l’ecriture en deux envois est revenue dans App.jsx');
 });
 

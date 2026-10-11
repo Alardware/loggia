@@ -136,8 +136,13 @@ test('l’écran se relit à la première réponse du composant', () => {
     'le drapeau de première réponse a disparu');
   assert.match(app, /useEffect\(\(\) => \{ if \(serverOk\) setServi\(true\); \}, \[serverOk\]\);/,
     'le drapeau ne suit plus la réponse du serveur, ou il redescend : une coupure rejetterait l’écran');
-  assert.ok(app.includes("<div key={servi ? 'srv' : 'local'} className={navbar ?"),
-    'la racine du rendu ne porte plus la clé : les réglages resteraient sur la copie locale de l’adresse');
+  /* La clé porte DEUX choses depuis le 11/10, et chacune pour sa raison : la
+   * première réponse du serveur (ci-dessus) et le PROFIL — un
+   * `useState(() => cfgVal(...))` ne se réévalue pas davantage parce qu'on a
+   * changé de profil, et les réglages rangés par profil resteraient sur la
+   * part de l'ancien. Voir `tests/reglages_par_profil.test.mjs`. */
+  assert.ok(app.includes("<div key={(servi ? 'srv' : 'local') + ':' + userIdx} className={navbar ?"),
+    'la racine du rendu ne porte plus la clé : les réglages resteraient sur la copie locale de l’adresse, ou sur la part de l’ancien profil');
   // La raison, là où on la relira.
   assert.ok(app.includes('stockage appartient a UNE adresse'), 'la raison a disparu du code');
 });
