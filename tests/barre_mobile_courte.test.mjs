@@ -21,7 +21,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
-const debut = app.indexOf('function MobileNav(');
+/* Les libelles vivent dans BARRE_VUES depuis le 10/10, juste au-dessus du
+   composant : la barre y choisit ses entrees au lieu de les ecrire en dur. */
+const debut = app.indexOf('const BARRE_VUES = ()');
 const nav = app.slice(debut, app.indexOf('</nav>', debut));
 
 const charger = async (l) => (await import(pathToFileURL(join(RACINE, 'src', 'langues', l + '.js')).href)).default;

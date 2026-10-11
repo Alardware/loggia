@@ -103,18 +103,37 @@ test('le navigateur et le composant s’accordent sur ce qui est personnel', () 
     'le navigateur ne reconnaît plus les panneaux, ou range les profils du mauvais côté');
 });
 
-test('les profils et le code admin appartiennent à la maison des deux côtés', () => {
+test('la liste des profils et le code admin appartiennent à la maison des deux côtés', () => {
   // Ils ont rejoint le commun le 03/09 : ils différaient d'un appareil à
   // l'autre, et même entre l'accès local et l'accès distant, faute d'origine
   // partagée. Les redéclarer personnels ramènerait exactement ce symptôme.
-  for (const cle of ['loggia_users', 'loggia_admin_pin_hache', 'loggia_active_user']) {
-    assert.ok(!estPersonnelle(cle), `« ${cle} » est redevenue propre à l’appareil`);
-  }
+  //
+  // QUI sont les profils et ce qu'ils ont le droit de faire appartient à la
+  // maison. LEQUEL regarde cet écran, non : voir le test suivant.
   const py = lire('custom_components', 'loggia', 'store.py');
   const bloc = py.slice(py.indexOf('PERSONAL_KEYS: frozenset'), py.indexOf('PERSONAL_SUFFIXES'));
-  for (const cle of ['loggia_users', 'loggia_admin_pin_hache', 'loggia_active_user']) {
+  for (const cle of ['loggia_users', 'loggia_admin_pin_hache']) {
+    assert.ok(!estPersonnelle(cle), `« ${cle} » est redevenue propre à l’appareil`);
     assert.ok(bloc.indexOf(cle) < 0, `« ${cle} » est redevenue personnelle côté composant`);
   }
+});
+
+test('le profil ACTIF, lui, décrit un écran — des deux côtés (10/10)', () => {
+  /* « Si je modifie depuis mon PC avec le profil Nova, ça modifie sur la
+   * tablette aussi, qui est sur un autre profil — chaque profil pour la
+   * personnalisation est indépendant. »
+   *
+   * Commun, il faisait changer la tablette de profil dès que l'ordinateur en
+   * changeait. Et il rendait vaine la séparation du menu par profil : indexés
+   * sur un profil commun, les réglages ne séparaient personne.
+   *
+   * L'autre moitié de la règle tient toujours : à profil ÉGAL, les écrans se
+   * suivent — « si je suis connecté sur mobile, PC et tablette avec le même
+   * profil, si j'active une vue sur l'un ça le fait de même sur l'autre ». */
+  assert.ok(estPersonnelle('loggia_active_user'), 'le profil actif est redevenu commun à la maison');
+  const py = lire('custom_components', 'loggia', 'store.py');
+  const bloc = py.slice(py.indexOf('PERSONAL_KEYS: frozenset'), py.indexOf('PERSONAL_SUFFIXES'));
+  assert.ok(bloc.indexOf('loggia_active_user') >= 0, 'le composant le croit encore commun : les deux listes divergent');
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

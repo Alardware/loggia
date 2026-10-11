@@ -519,7 +519,7 @@ function SystemeContent({ hass }) {
     <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div className="o-obj-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Système')}</h1>
+          <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Système')}</h1>
           <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{sousTitre}</div>
         </div>
         <span style={{ flex: 1 }} />
@@ -560,7 +560,7 @@ function SystemeContent({ hass }) {
       {modules.total > 0 && (
         <div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 12 }}>
-            <div style={{ flex: 1, minWidth: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Modules complémentaires')}</div>
+            <div style={{ flex: 1, minWidth: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Modules complémentaires')}</div>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{tr('{n} en cours sur {t}', { n: modules.enCours, t: modules.total })}</span>
           </div>
           <div className="grid-sys-modules">

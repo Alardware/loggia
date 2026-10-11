@@ -235,7 +235,7 @@ const Chip = ({ x, y, color, txt, icon, live = false }) => {
 const Titre = ({ i, c, t }) => (
   <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '26px 0 12px' }}>
     <Fi i={i} size={16} color={c} />
-    <span style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, fontWeight: 500 }}>{t}</span>
+    <span style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 500 }}>{t}</span>
   </div>
 );
 
@@ -1075,7 +1075,7 @@ function Header() {
 /* Un VRAI titre (`<h2>`) depuis le 20/09 : un lecteur d'écran saute de section
  * en section par les titres, et un bloc stylé n'en est pas un. `margin` et
  * `fontWeight` annulent ce que le navigateur donne à un h2 — rien ne bouge à l'œil. */
-const sectionTitle = { margin: 0, fontWeight: 400, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' };
+const sectionTitle = { margin: 0, fontWeight: 400, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' };
 // Carte de pièce : le liseré du réglage (04/10), comme toutes les cartes.
 const card = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: LISERE };
 
@@ -1142,6 +1142,56 @@ function uiconDeMdi(mdi) {
  * Chambre restait violet quand son icone suivait `--o-purple`, celui de la
  * Salle de bain bleu clair quand l'icone suivait `--o-cyan`. Invisible tant
  * qu'aucun theme ne les deplacait ; voyant des le premier qui le fait. */
+/* Le lavis d'une carte de piece, au degrade de la maquette v2 : la teinte
+ * descend du HAUT et ne s'eteint pas tout a fait (5 % a 72 %), au lieu de
+ * traverser en biais et de disparaitre a 62 %. La carte en sort franchement
+ * teintee au lieu de delavee — c'etait le plus gros ecart a l'oeil entre la
+ * maquette et le rendu.
+ *
+ * La teinte ne parait QUE sur une piece allumee. Elle baignait la surface en
+ * permanence depuis le 31/08 ; sur ses captures, Bureau, Entree et Salle de
+ * bain etaient colores alors qu'ils affichent « tout est eteint ». La maquette
+ * les laisse gris, et la couleur redevient un signal.
+ *
+ * `p.rgb` manque sur les modeles ecrits en dur et sur ceux de la demo, qui ne
+ * portent qu'un `bg` deja compose : le « r,g,b » s'y relit, sans quoi la demo
+ * perdrait toutes ses couleurs. */
+const SURF_CARTE = 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';
+function rgbDePiece(p) {
+  if (p && p.rgb) return p.rgb;
+  const s = String((p && p.bg) || '').trim();
+  if (s.slice(0, 5) !== 'rgba(' || s.slice(-1) !== ')') return null;
+  const i = s.lastIndexOf(',');
+  return i > 5 ? s.slice(5, i) : null;   // « var(--o-accent-rgb) » comme « 96,165,250 »
+}
+/* La bordure dit l'état de la pièce, comme dans la maquette v2 : ambre si
+ * quelque chose cloche (fenêtre ouverte, CO₂ élevé), sinon la teinte de la
+ * pièce quand elle est allumée, sinon le gris de tout le monde.
+ *
+ * L'ambre passe AVANT la teinte : une chambre au repos dont la fenêtre est
+ * ouverte doit se voir, et c'est le seul cas où une carte éteinte porte une
+ * couleur. La LARGEUR reste celle du réglage « Liserés » — coupe-le, et ces
+ * filets se coupent avec les autres. */
+function bordPiece(p, on, amb) {
+  if (amb && amb.niveau === 'probleme') return 'var(--o-bw,1px) solid rgba(var(--o-warn2-rgb),.42)';
+  const rgb = on ? rgbDePiece(p) : null;
+  return rgb ? `var(--o-bw,1px) solid rgba(${rgb},.26)` : LISERE;
+}
+/* LE lavis d'une carte teintee, pour toute la maison (theme v2).
+ *
+ * `teinte` est soit un « r,g,b » (ou un `var(--o-…-rgb)`), soit une fonction
+ * qui rend une couleur a partir d'une alpha — les cartes qui partent d'un hex
+ * passent leur `hx`. Sans teinte, SURF_CARTE : c'est la carte au repos, que la
+ * maquette laisse grise. */
+function lavisCarte(teinte, base = .2) {
+  if (!teinte || !LAVIS) return SURF_CARTE;
+  const f = typeof teinte === 'function' ? teinte : (a) => `rgba(${teinte},${a})`;
+  return `linear-gradient(180deg,${f(lav(base))},${f(lav(base / 4))} 72%), ${SURF_CARTE}`;
+}
+function lavisPiece(p, on) {
+  return on ? lavisCarte(rgbDePiece(p)) : SURF_CARTE;
+}
+
 const PIECES = [
   { name: 'Séjour', bg: 'rgba(var(--o-accent-rgb),.16)', box: 44, rad: 13, icon: <Ico name="couch" color="var(--o-accent)" size={22} />, status: { kind: 'active', n: 2 }, temp: '18.1°', tc: 'var(--o-accent-soft)', hum: '63%', badge: '412 ppm', bc: 'var(--o-ok)', bbg: 'rgba(var(--o-ok-rgb),.14)' },
   { name: 'Cuisine', bg: 'rgba(var(--o-piece-ambre-rgb),.16)', box: 44, rad: 13, icon: <Ico name="utensils" color="var(--o-piece-ambre)" size={22} />, status: { kind: 'active', n: 1 }, temp: '22.0°', tc: 'var(--o-piece-ambre)', hum: '53%', badge: '486 ppm', bc: 'var(--o-ok)', bbg: 'rgba(var(--o-ok-rgb),.14)' },
@@ -1185,8 +1235,8 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
        * oubliee ici — repere par l'audit du 23/09. */
       <div className="o-piece o-piecechip"
         style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 4, padding: '11px 14px', borderRadius: 'var(--o-radius,18px)', overflow: 'hidden',
-          background: `linear-gradient(160deg,${p.bg},rgba(0,0,0,0) 65%), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
-          border: LISERE,
+          background: lavisPiece(p, on),
+          border: bordPiece(p, on, amb),
           boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
         <span ref={flashRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: 'var(--o-radius,18px)', pointerEvents: 'none' }} />
         {/* Le bouton de surface : il couvre la pastille et passe sous
@@ -1247,7 +1297,8 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
         // baigne la surface en permanence, l'icône est nue, la température en
         // héros. Sans halo doré (retour 01/09) : l'interrupteur allumé dit
         // déjà que la pièce est éclairée.
-        background: `linear-gradient(160deg,${p.bg},rgba(0,0,0,0) 62%), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
+        background: lavisPiece(p, on),
+        border: bordPiece(p, on, amb),
         boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))',
         transition: 'box-shadow .3s ease, background .3s ease' }}>
         {/* Le bouton de surface : il couvre la carte, passe SOUS les contrôles
@@ -2153,7 +2204,7 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
       style={{ ...RM_CARD, position: 'relative', cursor: ouvrable ? 'pointer' : 'default',
         // Le lavis dit « ça travaille ». Une prise en veille ne travaille pas :
         // elle garde la surface ordinaire, et c'est ce qui la distingue.
-        ...((allume && LAVIS && (!carteDePrise || priseVive)) ? { background: `linear-gradient(180deg,transparent 28%,${lavisBase}${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` } : null),
+        ...((allume && LAVIS && (!carteDePrise || priseVive)) ? { background: lavisCarte((a) => `${lavisBase}${a})`) } : null),
         border: LISERE }}>
       {ouvrable && <Surface onClick={() => onOpen(id)} label={nomCarte(nom, valeur, subLu || sub)} />}
       {ouvrant && <IlluOuvrant type={a.device_class === 'window' ? 'fenetre' : 'porte'} ouvert={ouvert} />}
@@ -2268,7 +2319,7 @@ function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
         // Le lavis est une COUCHE posée sur la surface, jamais la surface elle-même :
         // sinon le bas de carte restait un alpha .22 sur le fond de page — faux-transparent
         // en mode opaque, et un rendu différent d'un matériau à l'autre (retour user 29/08).
-        background: on && LAVIS ? `linear-gradient(180deg,transparent 28%,${hx(accent, lav(.22))}), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))',
+        background: on && LAVIS ? lavisCarte((a) => hx(accent, a)) : SURF_CARTE,
         border: LISERE }}>
       {ouvre && <Surface onClick={ouvre} label={nomCarte(nom, sub)} />}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -2408,13 +2459,20 @@ function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onRempli = null, onO
   return (
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')}
       style={{ ...RM_CARD, position: 'relative', cursor: 'pointer', border: LISERE,
-        ...(LAVIS ? { background: 'linear-gradient(180deg,transparent 28%,rgba(var(--o-orange-rgb),' + lav(.14) + ')), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))' } : null) }}>
+        ...(LAVIS ? { background: lavisCarte('var(--o-orange-rgb)') } : null) }}>
       {onOpen && <Surface onClick={() => onOpen()} label={nomCarte(nom, ligne)} />}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={RM_ICO('rgba(var(--o-orange-rgb),.16)', orange)}><Fi i="paw" size={17} /></span>
         {pct != null && <span style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: pct < 25 ? 'var(--o-bad)' : orange, marginTop: 4 }}>{pct} %</span>}
       </div>
-      <div style={{ marginTop: 14 }}>
+      {/* PAS DE MARGE SUR LE CORPS (09/10). Le parent est en
+        * `space-between` : le corps est deja colle en bas, la marge n'y
+        * ajoute rien — sauf quand le contenu remplit la carte, et la elle le
+        * pousse DEHORS. « Il y a un souci au niveau de l'organisation,
+        * arrange la carte volet que ce soit au meme niveau que l'Echo » :
+        * mesure, le corps du volet finissait 12 px sous sa zone quand celui
+        * du media tombait pile. */}
+      <div>
         <div style={RM_NAME}>{nom}</div>
         <div style={{ ...RM_SUB, color: orange }}>{ligne || '—'}</div>
         {(onFeed || onRempli) && (
@@ -2488,13 +2546,20 @@ function RoomPlantCard({ mort = false, nom, sub, hum, verdict, verdictCol, lux, 
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={0} aria-label={nomCarte(nom, humLue, ligne)} aria-haspopup="dialog"
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
       onClick={onOpen} style={{ ...RM_CARD, cursor: 'pointer', position: 'relative', overflow: 'hidden', border: LISERE,
-        ...(LAVIS ? { background: 'linear-gradient(180deg,transparent 28%,rgba(' + rgb + ',' + lav(.14) + ')), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))' } : null) }}>
+        ...(LAVIS ? { background: lavisCarte(rgb) } : null) }}>
       {filigrane}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         {portrait(34)}
         {hum != null && <span style={{ fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: verdictCol || 'var(--o-text2)' }}>{Math.round(hum)}%</span>}
       </div>
-      <div style={{ position: 'relative', marginTop: 14 }}>
+      {/* PAS DE MARGE SUR LE CORPS (09/10). Le parent est en
+        * `space-between` : le corps est deja colle en bas, la marge n'y
+        * ajoute rien — sauf quand le contenu remplit la carte, et la elle le
+        * pousse DEHORS. « Il y a un souci au niveau de l'organisation,
+        * arrange la carte volet que ce soit au meme niveau que l'Echo » :
+        * mesure, le corps du volet finissait 12 px sous sa zone quand celui
+        * du media tombait pile. */}
+      <div style={{ position: 'relative' }}>
         <div style={RM_NAME}>{nom}</div>
         <div style={{ ...RM_SUB, color: verdictCol || 'var(--o-text3)' }}>{ligne || '—'}</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px 14px', marginTop: 10 }}>
@@ -2566,7 +2631,7 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : volet ouvert = lavis VIOLET, gradué par la position — le bleu accent restait trop proche des autres cartes.
       ...(!ferme && LAVIS ? {
-        background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-purple-rgb),${lav(.10 + pos * .0012)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
+        background: lavisCarte('var(--o-purple-rgb)', .10 + pos * .0012),
       } : null),
       // Le liseré du réglage, comme toute carte (04/10).
       border: LISERE }}>
@@ -2581,7 +2646,14 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
           <GlypheCarte id={id} size={18}><Ico name={(a.device_class === 'garage' || a.device_class === 'gate') ? 'garage' : 'blinds'} size={18} /></GlypheCarte></span>
         <span style={{ fontSize: 15, fontWeight: 800, color: ferme ? 'var(--o-text3)' : 'var(--o-text)' }}>{pos} %</span>
       </div>
-      <div style={{ marginTop: 14 }}>
+      {/* PAS DE MARGE SUR LE CORPS (09/10). Le parent est en
+        * `space-between` : le corps est deja colle en bas, la marge n'y
+        * ajoute rien — sauf quand le contenu remplit la carte, et la elle le
+        * pousse DEHORS. « Il y a un souci au niveau de l'organisation,
+        * arrange la carte volet que ce soit au meme niveau que l'Echo » :
+        * mesure, le corps du volet finissait 12 px sous sa zone quand celui
+        * du media tombait pile. */}
+      <div>
         <div style={RM_NAME}>{nom}</div>
         <div style={{ ...RM_SUB, color: !ferme && !mort ? 'var(--o-purple)' : 'var(--o-text3)' }}>{sub}</div>
         <RmJauge v={pos} couleur="var(--o-purple)" grade="linear-gradient(90deg,rgba(var(--o-purple-rgb),.75),var(--o-purple))" actif={!mort} label={tr('Position') + ' ' + nom} onCommit={poser} />
@@ -2663,7 +2735,7 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : la carte rougeoie pendant la chauffe, pas au simple mode.
       ...(heating && LAVIS ? {
-        background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-bad-rgb),${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
+        background: lavisCarte('var(--o-bad-rgb)'),
       } : null),
       // Le liseré du réglage, comme lumière et volet (04/10).
       border: LISERE }}>
@@ -2673,7 +2745,14 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
         <span style={RM_ICO(marche && !mort ? 'rgba(var(--o-bad-rgb),.14)' : 'var(--o-s1)', marche && !mort ? 'var(--o-bad)' : 'var(--o-text3)')}><GlypheCarte id={id} size={17}><Fi i={heating ? 'flame' : 'thermometer-half'} size={17} /></GlypheCarte></span>
         {!mort && <RmBascule on={marche} nom={nom} onToggle={basculer} />}
       </div>
-      <div style={{ marginTop: 14 }}>
+      {/* PAS DE MARGE SUR LE CORPS (09/10). Le parent est en
+        * `space-between` : le corps est deja colle en bas, la marge n'y
+        * ajoute rien — sauf quand le contenu remplit la carte, et la elle le
+        * pousse DEHORS. « Il y a un souci au niveau de l'organisation,
+        * arrange la carte volet que ce soit au meme niveau que l'Echo » :
+        * mesure, le corps du volet finissait 12 px sous sa zone quand celui
+        * du media tombait pile. */}
+      <div>
         <div style={RM_NAME}>{nom}</div>
         <div style={{ ...RM_SUB, color: (heating || cooling) && !mort ? 'var(--o-bad)' : 'var(--o-text3)' }}>{sub}</div>
         {/* − et + SEULS sont positionnés (RM_BTN), pas leur rangée : la
@@ -2818,7 +2897,7 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
      * restent dessous : un appui sur elles ouvre la fiche, comme avant. */
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')} style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
       ...(heating && marche && LAVIS ? {
-        background: `linear-gradient(180deg,transparent 28%,rgba(var(--o-bad-rgb),${lav(.14)})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
+        background: lavisCarte('var(--o-bad-rgb)'),
       } : null),
       border: LISERE }}>
       {onOpen && <Surface onClick={() => onOpen(zone.id)} label={nomCarte(nom, sub)} />}
@@ -2830,7 +2909,14 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
           {(modeMarche || off) && <RmBascule on={marche} nom={nom} onToggle={basculer} />}
         </div>
       </div>
-      <div style={{ marginTop: 14 }}>
+      {/* PAS DE MARGE SUR LE CORPS (09/10). Le parent est en
+        * `space-between` : le corps est deja colle en bas, la marge n'y
+        * ajoute rien — sauf quand le contenu remplit la carte, et la elle le
+        * pousse DEHORS. « Il y a un souci au niveau de l'organisation,
+        * arrange la carte volet que ce soit au meme niveau que l'Echo » :
+        * mesure, le corps du volet finissait 12 px sous sa zone quand celui
+        * du media tombait pile. */}
+      <div>
         <div style={RM_NAME}>{nom}</div>
         <div style={{ ...RM_SUB, color: heating && marche ? 'var(--o-bad)' : 'var(--o-text3)' }}>{sub}</div>
         <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
@@ -3719,7 +3805,7 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
       // Teinte d'état : un lecteur EN LECTURE lave sa surface de rose, comme la
       // lumière de son or — l'activité se voit avant de lire le titre.
       ...(np.playing && LAVIS ? {
-        background: `linear-gradient(180deg,transparent 28%,${hx(RM_ROSE, lav(.14))}), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
+        background: lavisCarte((a) => hx(RM_ROSE, a)),
       } : null),
       border: LISERE }}>
       {/* Le nom est `texte`, la ligne d'état affichée sous le nom : la même variable. */}
@@ -3769,7 +3855,7 @@ function FicheEntete({ titre, sous, id = null, droite = null }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div id={idTitre || undefined} style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 24, fontWeight: 500, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{titre}</div>
+        <div id={idTitre || undefined} style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 24, fontWeight: 500, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{titre}</div>
         {sous ? <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text3)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sous}</div> : null}
       </div>
       {droite}
@@ -4850,10 +4936,14 @@ function ChoixIcone({ valeur, onChoisir, suggerees }) {
  * captures, pour « Trait / Plein » comme pour « Simple / Double ».
  *
  * `grandir` : le segment prend toute la largeur, comme celui de LARGEUR. */
+/* Un groupe de puces exclusives. Le fond est le PUITS : un groupe segmenté est
+ * un rail creusé dans lequel la pastille choisie glisse, et le bleu plein
+ * (`--o-accent-fond`) y ressort. Même fond pour tous les groupes de Loggia —
+ * ils portaient trois gris différents avant le thème v2. */
 function Segment({ value, options, onChange, grandir = false, label = null }) {
   return (
     <div role="group" aria-label={label || undefined}
-      style={{ display: grandir ? 'flex' : 'inline-flex', width: grandir ? '100%' : undefined, boxSizing: 'border-box', padding: 3, gap: 3, borderRadius: 12, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+      style={{ display: grandir ? 'flex' : 'inline-flex', width: grandir ? '100%' : undefined, boxSizing: 'border-box', padding: 3, gap: 3, borderRadius: 12, background: 'var(--o-well)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
       {options.map(o => { const on = o.id === value; return (
         <button key={String(o.id)} aria-pressed={on} onClick={() => { if (!on) onChange(o.id); }}
           style={{ flex: grandir ? 1 : undefined, height: grandir ? 38 : 30, padding: '0 14px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: grandir ? 13 : 12.5, fontWeight: 700, background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
@@ -5215,7 +5305,7 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, taille =
    * avait le focus ne se distinguait plus de ses voisines au clavier (audit
    * du 03/10). Chaque forme garde l'opacité de son trait (`--o-pointille`). */
   const classes = ['o-pointille', large ? 'o-cvw2' : '', compact ? 'o-cvrow1' : ''].filter(Boolean).join(' ');
-  const lavis = 'linear-gradient(180deg,transparent 28%,rgba(' + info.rgb + ',.14)), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';
+  const lavis = lavisCarte(info.rgb);
   const icone = (px) => (info.prise ? <PlugIcon size={px} /> : info.ico ? <Ico name={info.ico} size={px} /> : <Fi i={info.fi} size={px} />);
   const sousTitre = sous || (info.label + ' · ' + identifiantEdition(brut));
   const titre = tr('Attrape pour déplacer · clique pour modifier (flèches ← →)');
@@ -5283,7 +5373,14 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, taille =
         <span style={RM_ICO('rgba(' + info.rgb + ',.16)', 'rgb(' + info.rgb + ')')}>{icone(17)}</span>
         {coins}
       </div>
-      <div style={{ marginTop: 14 }}>
+      {/* PAS DE MARGE SUR LE CORPS (09/10). Le parent est en
+        * `space-between` : le corps est deja colle en bas, la marge n'y
+        * ajoute rien — sauf quand le contenu remplit la carte, et la elle le
+        * pousse DEHORS. « Il y a un souci au niveau de l'organisation,
+        * arrange la carte volet que ce soit au meme niveau que l'Echo » :
+        * mesure, le corps du volet finissait 12 px sous sa zone quand celui
+        * du media tombait pile. */}
+      <div>
         <div style={RM_NAME}>{nom || id}</div>
         <div style={{ ...RM_SUB, color: 'rgb(' + info.rgb + ')' }}>{sousTitre}</div>
       </div>
@@ -6333,9 +6430,13 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
           * Elle ne vaut que si le titre arrive EN PREMIER : en édition, le
           * bandeau passe devant. */}
         {/* titre + navigation entre pièces + pastille de confort, sur une même ligne */}
-        <div className="o-room-head" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginTop: edit ? 0 : 14 }}>
+        {/* Au meme niveau que les autres vues (10/10) : le titre tombait 14 px plus
+          * bas que celui d Objets ou de Securite, qui n ont que le rembourrage
+          * de la page. La marge ne servait qu a ecarter du bandeau d edition,
+          * qui porte deja le sien. */}
+        <div className="o-room-head" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ minWidth: 0, flexShrink: 0 }}>
-            <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{room}</h1>
+            <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{room}</h1>
             <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>
               {lightsOn.length
                 ? (lightsOn.length > 1
@@ -6355,7 +6456,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
         {/* le confort de la pièce : l'indice, puis une pastille par mesure ; un tap ouvre la fiche et son historique */}
         {confortPiece && <BarreConfort confort={confortPiece} onOpen={onOpenComfort} />}
 
-        {ents.length > 0 && <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Appareils de la pièce')}</div>}
+        {ents.length > 0 && <div style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Appareils de la pièce')}</div>}
         {/* appareils de la pièce — mêmes cartes que les vues dédiées */}
         {ents.length
           ? <div ref={ed.gridRef} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -6365,11 +6466,11 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
               <div key={bloc.titre || 'b' + bi} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {bloc.titre && (edit
                   ? <EditableCard plat ed={ed} id={bloc.titre} nom={nomDe(bloc.titre)} onEdit={setCardEdit}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>
                         <Fi i="apps" size={16} color="var(--o-ok)" />{nomDe(bloc.titre)}
                       </div>
                     </EditableCard>
-                  : <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>
+                  : <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>
                       <Fi i="apps" size={16} color="var(--o-ok)" />{nomDe(bloc.titre)}
                     </div>)}
                 <div className="grid-roomdev grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', columnGap: 16, rowGap: 8 }}>
@@ -6502,12 +6603,16 @@ function CarteScenario({ s, noms = {}, compacte = false, enCours = false, onLanc
   const t = teinteScenario(s);
   const nom = nomScenario(s);
   const cibles = nombreCibles(s);
-  const lavis = enCours ? .28 : .12;
+  /* La maquette donne un dégradé à la carte, là où Loggia posait un aplat, et
+   * ne colore QUE le scénario qui tourne : sur ses captures, seul « Musique ·
+   * En cours » est rose, les cinq autres sont gris. La teinte redevient le
+   * signal « ça tourne » au lieu d'être la décoration de tout le monde. */
+  const fond = enCours ? lavisCarte(t.rgb, .26) : SURF_CARTE;
   const nActions = nombreActions(s);
   return (
     <button type="button" onClick={(e) => { fxTap(e); if (onLancer) onLancer(s.id); }} aria-label={tr('Lancer {x}', { x: nom })} className={className}
       style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%', height: compacte ? 88 : 184, padding: compacte ? '12px 13px' : '14px 15px', boxSizing: 'border-box', borderRadius: 'var(--o-radius,18px)', border: LISERE, cursor: 'pointer', textAlign: 'left', overflow: 'hidden', transition: 'background .25s, box-shadow .25s', color: 'var(--o-text)',
-        background: `linear-gradient(180deg, rgba(${t.rgb},${lavis}), rgba(${t.rgb},${lavis})), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))`,
+        background: fond,
         boxShadow: enCours ? `0 10px 26px rgba(${t.rgb},.35)` : 'var(--o-shadow,0 6px 16px rgba(0,0,0,.26))', ...(style || {}) }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', width: '100%' }}>
         <span aria-hidden="true" style={{ width: compacte ? 34 : 38, height: compacte ? 34 : 38, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: `rgba(${t.rgb},.22)`, color: t.col, flexShrink: 0 }}><Ico name={s.icone || 'sparkles'} size={compacte ? 18 : 20} color={t.col} /></span>
@@ -7151,7 +7256,7 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
             * par « Lumières », « Climat » ou « Médias », cette vue s'annonçait
             * « Objets » — un lecteur d'écran lisait donc le mauvais nom, et
             * trois entrées du menu menaient toutes au même titre. */}
-          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{filtre === 'lumieres' ? tr('Lumières') : filtre === 'chauffage' ? tr('Climat') : filtre === 'multimedia' ? tr('Médias') : filtre === 'volets' ? tr('Volets') : tr('Objets')}</h1>
+          <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{filtre === 'lumieres' ? tr('Lumières') : filtre === 'chauffage' ? tr('Climat') : filtre === 'multimedia' ? tr('Médias') : filtre === 'volets' ? tr('Volets') : tr('Objets')}</h1>
           <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{tr('{n} appareils répartis dans {p} pièces · {a} actifs', { n: stats.appareils, p: stats.pieces, a: stats.actifs })}</div>
           {/* Les volets ont une chose que les autres familles n'ont pas : des
             * MODES et un planning, qui ne tiennent dans aucune carte. L'entrée
@@ -7196,7 +7301,7 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
             </button>); })}
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-          <h2 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, fontWeight: 400, color: 'var(--o-text2)' }}>{titreFiltre}</h2>
+          <h2 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 400, color: 'var(--o-text2)' }}>{titreFiltre}</h2>
           <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{trN(visibles.length, '{n} appareil', '{n} appareils')}</span>
         </div>
         {(visibles.length || edit)
@@ -7232,7 +7337,7 @@ function ViewHead({ titre, sous, badge, rgb = 'var(--o-ok-rgb)' }) {
   return (
     <div className="o-obj-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
       <div style={{ minWidth: 0 }}>
-        <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{titre}</h1>
+        <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{titre}</h1>
         {sous && <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{sous}</div>}
       </div>
       <span style={{ flex: 1 }} />
@@ -7447,7 +7552,7 @@ function CartePieceEdition({ p, compacte, onModifier, onSupprimer, onTaille, reg
     <button data-drag-ui="1" onPointerDown={stop} onClick={onTaille} aria-pressed={compacte} title={compacte ? tr('Deux rangées') : tr('Une rangée')}
       aria-label={tr('Une rangée') + ' · ' + p.name} style={BOUTON_COIN}><Fi i="resize" size={13} /></button>
   );
-  const lavis = 'linear-gradient(180deg,transparent 28%,rgba(' + p.rgb + ',.14)), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';
+  const lavis = lavisCarte(p.rgb);
   if (compacte) {
     const serre = { padding: '4px 6px', fontSize: 11.5 };
     return (
@@ -7475,7 +7580,14 @@ function CartePieceEdition({ p, compacte, onModifier, onSupprimer, onTaille, reg
         {icone}
         {taille}
       </div>
-      <div style={{ marginTop: 14 }}>
+      {/* PAS DE MARGE SUR LE CORPS (09/10). Le parent est en
+        * `space-between` : le corps est deja colle en bas, la marge n'y
+        * ajoute rien — sauf quand le contenu remplit la carte, et la elle le
+        * pousse DEHORS. « Il y a un souci au niveau de l'organisation,
+        * arrange la carte volet que ce soit au meme niveau que l'Echo » :
+        * mesure, le corps du volet finissait 12 px sous sa zone quand celui
+        * du media tombait pile. */}
+      <div>
         <div style={RM_NAME}>{p.name}</div>
         <div style={{ ...RM_SUB, color: p.col }}>{sous}</div>
       </div>
@@ -8608,7 +8720,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                   <Fi i="menu-burger" size={12} color="var(--o-text3)" />
                   <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ACC_NOMS()[id] || id}</span>
-                  <button onClick={() => cacheSec(id)} title={estOption(id) ? tr('Retirer') : tr('Masquer')} aria-label={(estOption(id) ? tr('Retirer') : tr('Masquer')) + ' ' + (ACC_NOMS()[id] || id)} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
+                  <button data-drag-ui="1" onPointerDown={(e) => e.stopPropagation()} className="o-tapzone" onClick={() => cacheSec(id)} title={estOption(id) ? tr('Retirer') : tr('Masquer')} aria-label={(estOption(id) ? tr('Retirer') : tr('Masquer')) + ' ' + (ACC_NOMS()[id] || id)} style={{ ...EDIT_BTN, background: 'var(--o-bad)', color: '#fff' }}>×</button>
                 </div>
               )}
               {/* Le STYLE d'un widget, sur sa propre ligne : a cote du nom il le
@@ -9165,8 +9277,11 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
           </>} onEnt={onEnt} />
         )}
 
-        {/* BANNER */}
-        <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--o-radius,18px)', padding: '14px 8px' }}>
+        {/* BANNER. Pas de rembourrage EN HAUT (10/10) : son contenu tombait 14 px
+          * plus bas que le titre des autres vues, qui n ont que celui de la
+          * page. « Remonte Pieces au meme niveau que les autres vues, et fais
+          * de meme pour l accueil. » Le bas garde le sien. */}
+        <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--o-radius,18px)', padding: '0 8px 14px' }}>
           {REDUCE_MOTION && <WeatherFx weather={wx} />}
           {editMode && (
           <div style={{ position: 'absolute', bottom: 14, right: 18, display: 'flex', gap: 4, zIndex: 3 }}>
@@ -9187,7 +9302,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                 * meteo a disparu avec la vue Meteo : le fond de la banniere
                 * dit deja le temps, la piece Exterieur le detaille. */}
               <div className="o-greet-ligne" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <span className="o-greet-name" style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 28, fontWeight: 500, lineHeight: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nomProfil(userName)}</span>
+                <span className="o-greet-name" style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 28, fontWeight: 500, lineHeight: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nomProfil(userName)}</span>
                 {/* Leur hauteur, réservée tant que la découverte n'a pas répondu (lot 14
                   * de l'audit du 03/10) : les personnes en viennent, et la ligne
                   * grandissait de 6 px à leur arrivée, poussant toute la page.
@@ -9329,7 +9444,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             * disparu, « Cartes / Plan » coupe. Deux rangees alors, comme la
             * barre des ambiances — rien a faire glisser. */
           const etagesPuces = infosEtages.utile ? (
-            <div style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 12, background: 'var(--o-s2)', flexShrink: 0, minWidth: 0, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 12, background: 'var(--o-well)', flexShrink: 0, minWidth: 0, overflow: 'hidden' }}>
               {[{ id: null, nom: tr('Tous') }, ...infosEtages.etages].map(e => {
                 const on = etageChoisi === e.id;
                 return (
@@ -10044,7 +10159,7 @@ function ScenesContent({ hass }) {
       {/* carte Appliquer une scène */}
 
       {/* grille des scènes de la collection : l'IMAGE Hue reste la vignette */}
-      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{(HUE_CATS().find(c => c.id === cat) || {}).label}</div>
+      <div style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{(HUE_CATS().find(c => c.id === cat) || {}).label}</div>
       <div className="grid-scenecards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(178px,1fr))', gap: 16 }}>
         {scenes.map(sc => {
           const on = sel === sc.name;
@@ -10100,7 +10215,7 @@ function ScenariosView({ hass, edit = false }) {
           texte={tr('Mode édition : avance, recule ou modifie un scénario, ou ajoutes-en un.')} />}
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ minWidth: 0 }}>
-            <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Scénarios')}</h1>
+            <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Scénarios')}</h1>
             <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{sc.err && !liste.length ? sc.err : tr('{n} scénarios · dernier lancement {x}', { n: liste.length, x: libelleDernier(dernier, Date.now(), locale()).toLowerCase() })}</div>
           </div>
         </div>
@@ -10554,7 +10669,7 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
         /* L'intertitre de la vue Appareils : icône + titre serif — et les
          * chips de MODE à droite, seule commande qui n'a pas de carte. */
         ? <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>
               <Fi i="blinds" size={16} color="var(--o-purple)" />{tr('Volets')}
             </span>
             <span style={{ flex: 1 }} />
@@ -10589,7 +10704,7 @@ function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
       </ViewBar>}
 
       {!embarque && (edit || ed.ids.length > 0) && (
-        <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Volet par volet')}</div>
+        <div style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Volet par volet')}</div>
       )}
       <div ref={ed.gridRef} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {blocs.map((bloc, bi) => {
@@ -11206,7 +11321,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
 
       <div className="o-en-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: etroit ? '1 1 100%' : '1 1 320px', minWidth: 0, display: etroit ? 'flex' : 'block', alignItems: 'flex-end', gap: 10 }}>
-          <h1 className="o-en-titre" style={{ flex: etroit ? 1 : undefined, minWidth: 0, margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500, lineHeight: 1.1 }}>{tr('L’énergie')}</h1>
+          <h1 className="o-en-titre" style={{ flex: etroit ? 1 : undefined, minWidth: 0, margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 36, fontWeight: 500, lineHeight: 1.1 }}>{tr('L’énergie')}</h1>
           {!etroit && ligneEnTete && <div style={{ fontSize: 13.5, color: 'var(--o-text2)', fontWeight: 600, marginTop: 6, textWrap: 'pretty' }}>{ligneEnTete}</div>}
           {etroit && pastilleReseau}
         </div>
@@ -11240,7 +11355,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
           <div className="o-en-cartehead" style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
             <div className="o-en-cartetitre" style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--o-text2)' }}>{tr('Aperçu')}</div>
-              <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, fontWeight: 500, marginTop: 2 }}>{titreApercu}</div>
+              <div style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 500, marginTop: 2 }}>{titreApercu}</div>
             </div>
             <div className="o-en-onglets" style={{ display: 'inline-flex', gap: 2, padding: 3, borderRadius: 12, background: 'var(--o-well)', border: 'var(--o-bw,1px) solid var(--o-bd2)', flexShrink: 0 }}>
               {[['apercu', tr('Synthèse'), 'chart-pie-alt'], ['maison', tr('Maison'), 'home']].map(([id, lb, ic]) => (
@@ -11349,7 +11464,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
       {(ed.ids.length > 0 || edit) && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 16 }}>
-            <div style={{ flex: 1, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, fontWeight: 500, color: 'var(--o-text2)' }}>{tr('Postes de consommation')}</div>
+            <div style={{ flex: 1, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 500, color: 'var(--o-text2)' }}>{tr('Postes de consommation')}</div>
             {ed.ids.length > 0 && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>{tr('{v} suivis en direct', { v: fmtW(totalPostes) })}</div>}
           </div>
           <div ref={ed.gridRef} className="grid-edevices" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 14 }}>
@@ -11391,7 +11506,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ flex: '1 1 200px', minWidth: 0 }}>
-              <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, fontWeight: 500, color: 'var(--o-text2)' }}>{tr('Piles et batteries')}</div>
+              <div style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 500, color: 'var(--o-text2)' }}>{tr('Piles et batteries')}</div>
               <div style={{ marginTop: 4, fontSize: 12.5, fontWeight: 600, color: 'var(--o-text3)' }}>{trN(piles.length, '{n} capteur', '{n} capteurs')}</div>
             </div>
             {pilesSurveiller > 0 && (
@@ -11733,7 +11848,7 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
       {edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} onEnt={onEnt} />}
       <div className="o-obj-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Sécurité')}</h1>
+          <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Sécurité')}</h1>
           {/* L'etat en une seconde, les mots de la carte Securite de l'Accueil (ADR 0033). */}
           <div style={{ fontSize: 13, fontWeight: 600, marginTop: 5, color: comptesSecVue.ok ? 'var(--o-ok)' : 'var(--o-warn)' }}>{tr('Alarme')} {alarmWord} · {resumeSecurite(comptesSecVue)}</div>
         </div>
@@ -11758,7 +11873,7 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
         {blocs.map((bloc, bi) => {
           if (!edit && bloc.titre && !bloc.cartes.length) return null;
           const titre = bloc.titre ? (
-            <div id={bloc.titre === 'sect:ouvrants' ? 'sec-ouvrants' : undefined} style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{nomDe(bloc.titre)}</div>
+            <div id={bloc.titre === 'sect:ouvrants' ? 'sec-ouvrants' : undefined} style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{nomDe(bloc.titre)}</div>
           ) : null;
           // UNE grille pour toute la vue, celle des objets : 225 px, deux colonnes au
           // telephone et sur tablette, rangees de 184 px. L'alarme, la sirene et la
@@ -11780,7 +11895,7 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
       </div>
 
       <div id="sec-cameras" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Caméras en direct')}</span>
+        <span style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Caméras en direct')}</span>
         <span style={{ flex: 1 }} />
         {/* Le meme reglage que l'Accueil, la meme cle : disposer ici dispose
           * partout, pour ce type d'ecran (20/09). */}
@@ -12008,7 +12123,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
      * rangée, elle, ne l'est plus : un clic sur l'icône, le nom, l'état ou la
      * consigne ouvre la fiche, comme avant. */
     <div className={'o-piece' + (dense ? ' o-cvdense' : '') + (dead ? ' o-panne' : '') + ' o-cvcarte'}
-      style={{ position: 'relative', background: on ? `linear-gradient(180deg,${hx(teinte || 'var(--o-accent)', .12)},transparent), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: LISERE, borderRadius: 'var(--o-radius,18px)', padding: dense ? '12px 14px' : 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, cursor: ouvrable ? 'pointer' : 'default', transition: 'all .25s', ...(dense ? { height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center' } : {}) }}>
+      style={{ position: 'relative', background: on ? lavisCarte((a) => hx(teinte || 'var(--o-accent)', a)) : SURF_CARTE, border: LISERE, borderRadius: 'var(--o-radius,18px)', padding: dense ? '12px 14px' : 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, cursor: ouvrable ? 'pointer' : 'default', transition: 'all .25s', ...(dense ? { height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center' } : {}) }}>
       {ouvrable && <Surface onClick={() => onOpen(id)} label={nomCarte(name, sousTitre)} />}
       <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center' }}>
         <span className="o-cvpastille" style={{ background: on ? (teinte ? hx(teinte, .16) : 'rgba(var(--o-accent-rgb),.16)') : 'var(--o-s1)', color: on ? (teinteLu || 'var(--o-accent-soft)') : 'var(--o-text3)' }}>{/* `Ico` et non `Fi` : une icone CHOISIE peut etre un dessin, que `Fi`
@@ -12356,7 +12471,7 @@ function CvBigToggle({ id, hass }) {
   return (
     <button className={'o-piece' + (mort ? ' o-panne' : '')} onClick={toggle} disabled={mort}
       style={{ ...CV_CADRE, height: '100%', minHeight: 150, width: '100%', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: mort ? 'default' : 'pointer', opacity: mort ? .55 : 1, transition: 'all .25s',
-        ...(on ? { background: `linear-gradient(160deg,rgba(${rgbTok},${lav(.22)}),transparent 62%), linear-gradient(180deg,var(--o-surfA),var(--o-surfB))` } : {}) }}>
+        ...(on ? { background: lavisCarte(rgbTok) } : {}) }}>
       <span style={{ width: 52, height: 52, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? `rgba(${rgbTok},.2)` : 'var(--o-s1)', color: on ? txtCol : 'var(--o-text3)', boxShadow: on ? `0 0 22px rgba(${rgbTok},.4)` : 'none', transition: 'all .25s', flexShrink: 0 }}>
         {String(id).indexOf('switch.') === 0 && !lum ? <PlugIcon size={23} /> : <Fi i="power" size={23} />}
       </span>
@@ -13906,7 +14021,7 @@ function BiblioView() {
   };
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, padding: '26px 28px 40px', overflowX: 'hidden' }}>
-      <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Bibliothèque')}</h1>
+      <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Bibliothèque')}</h1>
       <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{tr('Toutes les cartes de Loggia, sur données fictives — rien ne pilote la maison ici.')}</div>
 
       <Titre i="door-open" c="#60a5fa" t={tr('Pièces')} />
@@ -14515,7 +14630,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
                   aria-label={tr('Nom de la vue')} autoFocus style={cvInp} />
                 <button onClick={() => { const n = nameDraft.trim(); if (n) onSave && onSave({ ...cv, name: n }); setRenaming(false); }} style={{ padding: '11px 16px', borderRadius: 10, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>OK</button>
               </div>
-            : <h1 style={{ margin: 0, fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 36, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+            : <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 36, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 12 }}>
                 {edit
                   ? <button onClick={() => setRenaming(true)} aria-label={tr('Renommer la vue') + ' ' + cv.name /* le nom AFFICHÉ reste dans le nom lu (lot 13 de l'audit du 03/10, WCAG 2.5.3) */}
                       style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 12 }}>
@@ -15103,21 +15218,54 @@ function BoutonAssistant({ onAssistant, onDictee = null, hass = null, sens = 'ha
   );
 }
 
-function MobileNav({ view, onNav, onMenu, menuOuvert = false, onAssistant = null, onDictee = null, hass = null, assistantAttendu = false }) {
+/* Ce que la barre du bas PEUT porter, parmi les vues principales.
+ *
+ * Des libellés COURTS, propres à la barre (03/10) : traduits, plusieurs ne
+ * tenaient pas dans leur case (« Dispositivos », « Dispositivi »). Le polonais
+ * n'en a PAS : sa traduction est relue par un Polonais, et ses mots restent
+ * les siens — c'est la taille du texte qui s'ajuste. */
+const BARRE_VUES = () => [
+  { id: 'accueil', label: trCourt('Accueil · court'), icon: 'home' },
+  { id: 'pieces', label: tr('Pièces'), icon: 'door-open' },
+  { id: 'scenes', label: trCourt('Scénarios · court'), icon: 'sparkles' },
+  { id: 'objets', label: trCourt('Objets · court'), icon: 'apps' },
+  { id: 'energie', label: tr('Énergie'), icon: 'bolt' },
+  { id: 'securite', label: trCourt('Sécurité · court'), icon: 'shield-check' },
+];
+/* Cinq cases au plus. Au-delà, la SOMME des libellés ne tient plus dans la
+ * largeur, et le corps a déjà touché son plancher (voir plus bas, 11 → 9,5 px).
+ * Le reste des vues vit dans « Menu », qui est juste à côté. */
+const BARRE_MAX = 5;
+
+function MobileNav({ view, onNav, onMenu, menuOuvert = false, onAssistant = null, onDictee = null, hass = null, assistantAttendu = false, vuesAutorisees = null }) {
   const { views: avail } = useLoggia();
   // Le safe-area du bas est géré par le dashboard (card_mod padding-bottom) → l'iframe s'arrête au-dessus du home indicator.
-  // Alignée sur la sidebar épurée — sans Pièces (accessibles via cartes Accueil), avec Énergie + Sécurité (demande user).
-  const items = [
-    // Des libellés COURTS, propres à la barre (03/10) : traduits, plusieurs
-    // ne tenaient pas dans leur case (« Dispositivos », « Dispositivi »).
-    // Le polonais n'en a PAS : sa traduction est relue par un Polonais, et
-    // ses mots restent les siens — c'est la taille du texte qui s'ajuste.
-    { id: 'accueil', label: trCourt('Accueil · court'), icon: 'home' },
-    { id: 'scenes', label: trCourt('Scénarios · court'), icon: 'sparkles' },
-    { id: 'objets', label: trCourt('Objets · court'), icon: 'apps' },
-    { id: 'energie', label: tr('Énergie'), icon: 'bolt' },
-    { id: 'securite', label: trCourt('Sécurité · court'), icon: 'shield-check' },
-  ].filter(it => isViewAvailable(avail, it.id));
+  /* La barre SUIT LE MENU (10/10) — « la nav barre mobile, actuellement elle
+   * n'est pas personnalisable ». Elle portait cinq entrées écrites en dur :
+   * masquer Objets dans le menu ne l'en retirait pas, remettre Climatisation
+   * ne l'y mettait pas.
+   *
+   * Même règle que la barre latérale, à la lettre : les droits du profil, les
+   * masquées retirées, les secondaires remises admises, l'ordre choisi. */
+  const [viewsCfg, setViewsCfg] = useState(readViewsCfg);
+  useEffect(() => {
+    const f = () => setViewsCfg(readViewsCfg());
+    window.addEventListener('loggia-views-changed', f);
+    return () => window.removeEventListener('loggia-views-changed', f);
+  }, []);
+  const permis = (vid) => !vuesAutorisees || vid === 'accueil' || vuesAutorisees.has(vid);
+  const rang = (vid) => { const i = (viewsCfg.order || []).indexOf(vid); return i < 0 ? 999 : i; };
+  const vues = BARRE_VUES();
+  const accueil = vues.filter(it => it.id === 'accueil');
+  /* Accueil garde sa place en tête : c'est le point de départ, et la barre
+   * latérale le tient aussi hors du rangement. */
+  const rangees = [
+    ...vues.filter(it => it.id !== 'accueil' && !viewsCfg.hidden.has(it.id)),
+    ...HIDDEN_VIEWS().filter(h => viewsCfg.shown.has(h.vid)).map(h => ({ id: h.vid, label: h.label, icon: h.icon })),
+  ].sort((a, b) => rang(a.id) - rang(b.id));
+  const items = [...accueil, ...rangees]
+    .filter(it => permis(it.id) && isViewAvailable(avail, it.id))
+    .slice(0, BARRE_MAX);
   /* Une case ne rétrécit jamais sous son libellé (rien n'est coupé, rien ne
    * déborde chez la voisine) : `minWidth: 'auto'` défait le `* { min-width: 0 }`
    * global, qui forçait six cases égales quoi qu'elles portent. C'est alors la
@@ -15372,6 +15520,21 @@ export default function App() {
     // source. Des qu'il repond, c'est lui qui fait foi.
     server: serverOk,
   });
+  /* Le menu se relit quand la configuration change (10/10).
+   *
+   * Les vues masquees et leur ordre viennent maintenant du serveur, et le menu
+   * les lit UNE fois au montage (`useState(readViewsCfg)` dans la barre). Sans
+   * ce signal, la reponse du composant — ou un changement fait depuis un autre
+   * ecran — n'arriverait qu'au prochain rechargement de la page.
+   *
+   * On reutilise l'evenement que Parametres emet deja ; la signature evite
+   * d'en emettre un a chaque rendu. */
+  const sigVues = JSON.stringify([
+    (serverCfg && serverCfg['loggia-hiddenviews']) || null,
+    (serverCfg && serverCfg['loggia-shownviews']) || null,
+    (serverCfg && serverCfg['loggia-vueordre']) || null,
+  ]);
+  useEffect(() => { try { window.dispatchEvent(new Event('loggia-views-changed')); } catch { /* sans navigateur */ } }, [sigVues]);
   // La langue se resout ICI, apres `setLoggiaState` : « suivre Home Assistant »
   // lit le compte HA, et le choix explicite vit dans la configuration qu'on vient
   // de poser. Resolue pendant le rendu, elle est juste des le meme tour pour tous
@@ -16658,7 +16821,7 @@ export default function App() {
         : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'volets' ? <ObjetsView hass={hass} onNav={setView} filtre="volets" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'voletsplan' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} onNav={setView} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} retourAcc={retourAcc} onRetourAcc={onRetourAcc} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer && !compteOrdinaire(hass)} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); /* Une mesure absente reste null (audit du 03/10) : `base` porte les valeurs de vitrine du modèle (PIECES, l'écran d'avant la connexion), et la fiche de confort les affichait pour une vraie pièce — « Humidité 60 % » dans une chambre sans hygromètre. */ return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? dec(lv.temp, 1) + '°' : null, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : null, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} sante={santeAccueil} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} />}
       </Barriere>
       </div>
-      {navbar && <MobileNav view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} menuOuvert={navOpen} assistantAttendu={assistantAttendu} onAssistant={assistantNs ? () => setAssistantOuvert(true) : null} onDictee={assistantNs ? poserQuestion : null} hass={hass} />}
+      {navbar && <MobileNav vuesAutorisees={vuesAutorisees} view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} menuOuvert={navOpen} assistantAttendu={assistantAttendu} onAssistant={assistantNs ? () => setAssistantOuvert(true) : null} onDictee={assistantNs ? poserQuestion : null} hass={hass} />}
       {assistantOuvert && assistantNs && <Suspense fallback={null}><AssistantSheet hass={hass} ns={assistantNs} question={questionVocale} onClose={() => { setAssistantOuvert(false); setQuestionVocale(''); }} /></Suspense>}
       {entSheet && editMode && peutEditer && <Suspense fallback={null}><ViewEntSheet view={view} hass={hass} onClose={() => setEntSheet(false)} /></Suspense>}
     </div>

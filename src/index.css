@@ -9,16 +9,17 @@ html, body { overflow-x: clip; max-width: 100%; }
  * le gris PARTOUT aurait changé le visage du thème ; il ne change que là où il
  * en a besoin. La garde (contraste.js) calcule ces variantes pour chaque thème ;
  * les valeurs de :root ne servent qu'avant son passage. Les sélecteurs lisent le
- * dégradé que ces cartes posent en ligne : « transparent 28% » (cartes d'appareil
- * allumées), « transparent 62% » (scénario actif) ; une carte de pièce et une
- * carte de scénario de l'Accueil portent toujours leur teinte, la tuile d'alarme
- * de la bannière aussi (celle de son état). Et toute pastille dont le FOND est
+ * dégradé que ces cartes posent en ligne. Depuis le thème v2 il n'y en a plus
+ * qu'un, le même pour toutes (`lavisCarte`), et il finit par « 72%), » suivi de
+ * la surface : c'est ce que le sélecteur lit. Les cartes de pièce et de
+ * scénario de l'Accueil gardent leur classe en plus, et la tuile d'alarme de la
+ * bannière la sienne (celle de son état). Et toute pastille dont le FOND est
  * une teinte du thème (`background: rgba(var(--o-…-rgb), α)`) : « 4 MISES À JOUR »
  * en ambre sur sa pastille ambre. Et le lavis des fiches à onglets (robot,
  * distributeur : `rgba(var(--rb-rgb), α)`), que le sélecteur des teintes du
  * thème ne voyait pas — « CETTE SEMAINE » de l'Historique à 3,41:1 en clair
  * (05/10). */
-[style*="background: rgba(var(--rb-"], [style*="transparent 28%"], [style*="transparent 62%"], [style*="background: rgba(var(--o-"], .o-piecestd, .o-tuile-alarme, .grid-qscenes > * {
+[style*="background: rgba(var(--rb-"], [style*="72%), linear-gradient(180deg,var(--o-surfA)"], [style*="background: rgba(var(--o-"], .o-piecestd, .o-tuile-alarme, .grid-qscenes > * {
   --o-text: var(--o-text-lavis); --o-text1: var(--o-text1-lavis);
   --o-text2: var(--o-text2-lavis); --o-text3: var(--o-text3-lavis); --o-text3-rgb: var(--o-text3-lavis-rgb);
   /* Les teintes qui ÉCRIVENT, elles aussi — pas leur compagnon « r,g,b », qui
@@ -68,99 +69,112 @@ button:active, .o-nav-item:active, .o-piece:active, .o-light-card:active, .o-sce
 [role="switch"] { position: relative; }
 [role="switch"]::after { content: ''; position: absolute; inset: -9px -5px; }
 
-/* ── Tokens Claude Design (verbatim) : dark = :root, light = html.loggia-light ── */
+/* ── Jetons de Loggia : sombre = :root, clair = html.loggia-light ──────────────
+ *
+ * Thèmes de base v2 (10/10). Les mêmes noms de jetons qu'avant — aucun ajout,
+ * aucune suppression : seules les valeurs changent.
+ *
+ * Les deux thèmes passent la garde de contraste (`src/contraste.js`) SANS une
+ * seule retouche : elle ne pose plus que ses variantes « sur lavis » et ses
+ * fonds d'icône. Mesuré avec la garde elle-même, surfaces à 62 % comprises —
+ * l'opacité qu'`applyLook` impose, et qui est donc écrite telle quelle ici :
+ * ce qui est déclaré est ce qui s'affiche.
+ *
+ * Références de la gamme : la neutre quasi achromatique de GlassHome
+ * (teinte 250-262, chroma ≈ 0,01), la hiérarchie d'encre et de remplissages
+ * d'Apple via DomusUI, les pastilles d'icône teintées de Mushroom. */
 :root {
+  /* Fonds — le bleu nuit de Loggia, inchangé. Seules les cartes s'éclaircissent d'un cran
+     pour se détacher de la page ; les valeurs que la garde corrigeait sont écrites telles qu'elle les rend. */
   --o-bg:#0b101b; --o-bg2:#0e1524; --o-side1:#0d1422; --o-side2:#0a0f1a;
-  --o-text:#eaf0fb; --o-text1:#c2cadb; --o-text2:#8c98b2; --o-text3:#7d8aa6; --o-text3-rgb:125,138,166;
-  --o-text2-lavis:#a9b2c5; --o-text3-lavis:#a2abbf; --o-text3-lavis-rgb:162,171,191; /* les gris SUR une carte teintée (ADR 0063) */
-  /* Sans la garde (mode sans apparence, premier affichage), la variante « sur
-   * lavis » d'une teinte EST la teinte : rien ne casse. La garde la remplace. */
+  /* Encre — quatre vraies marches : 14,8:1 · 10,3:1 · 6,7:1 · 5,2:1 sur la carte. */
+  --o-text:#eaf0fb; --o-text1:#c2cadb; --o-text2:#97a3bc; --o-text3:#818ea9; --o-text3-rgb:129,142,169;
+  --o-text2-lavis:#c8cedb; --o-text3-lavis:#c0c7d4; --o-text3-lavis-rgb:192,199,212; /* valeurs de la garde (ADR 0063) */
   --o-text-lavis: var(--o-text); --o-text1-lavis: var(--o-text1); --o-accent-soft-lavis: var(--o-accent-soft); --o-ok-lavis: var(--o-ok); --o-warn-lavis: var(--o-warn); --o-warn2-lavis: var(--o-warn2); --o-bad-lavis: var(--o-bad); --o-cold-lavis: var(--o-cold); --o-cyan-lavis: var(--o-cyan); --o-purple-lavis: var(--o-purple); --o-gold-lavis: var(--o-gold); --o-lampe-lavis: var(--o-lampe); --o-orange-lavis: var(--o-orange); --o-rose-lavis: var(--o-rose); --o-piece-ambre-lavis: var(--o-piece-ambre); --o-piece-tendre-lavis: var(--o-piece-tendre); --o-piece-chambre-lavis: var(--o-piece-chambre); --o-piece-bain-lavis: var(--o-piece-bain); --o-piece-vert-lavis: var(--o-piece-vert);
-  --o-surfA:rgba(22,29,42,.9); --o-surfB:rgba(16,22,34,.9); --o-header:rgba(11,16,27,.85);
+  /* Verre — déclaré à 62 %, l'opacité qu'applyLook impose : ce qui est écrit est ce qui s'affiche.
+     Éclairé par le haut : A plus clair que B. Carte/page 1,12:1 (1,07:1 avant). */
+  --o-surfA:rgba(26,36,54,.62); --o-surfB:rgba(21,30,46,.62); --o-header:rgba(11,16,27,.85);
   --o-bd1:rgba(255,255,255,.08); --o-bd2:rgba(255,255,255,.07); --o-bd3:rgba(255,255,255,.06);
-  --o-s1:rgba(255,255,255,.05); --o-s2:rgba(255,255,255,.04); --o-s3:rgba(255,255,255,.035);
-  --o-s4:rgba(255,255,255,.03); --o-s5:rgba(255,255,255,.025); --o-sky:rgba(74,118,190,.30);
+  --o-s1:rgba(255,255,255,.05); --o-s2:rgba(255,255,255,.04); --o-s3:rgba(255,255,255,.035); --o-s4:rgba(255,255,255,.03); --o-s5:rgba(255,255,255,.025); --o-sky:rgba(74,118,190,.30);
   --o-well0:#2a3242; --o-well:#10141c; --o-well2:#0a0e15;
-  /* Accent Loggia (suit --primary-color HA en mode "Home Assistant"). --o-radius non défini : chaque carte porte son fallback var(--o-radius,Npx). */
-  --o-accent:#4f8cff; --o-accent-rgb:79,140,255; --o-accent-soft:#6ea8ff; --o-accent-soft-rgb:110,168,255;
-  --o-ok:#34d399; --o-ok-rgb:52,211,153; /* vert statut (texte) — assombri en clair pour le contraste AA */
-  /* statuts texte theme-aware (assombris en clair) : warn=jaune, warn2=orange, bad=rouge, cold=bleu froid */
-  --o-warn:#ffce73; --o-warn-rgb:255,206,115; --o-warn2:#f59e0b; --o-warn2-rgb:245,158,11;
-  --o-bad:#ef4444; --o-bad-rgb:239,68,68; --o-cold:#60a5fa; --o-cold-rgb:96,165,250;
-  /* Teintes d'identification des PIÈCES. Elles ne décorent pas : elles font
-     reconnaître une carte sans la lire. Les valeurs ci-dessous sont celles
-     qui étaient écrites en dur — sans surcharge de thème, rien ne change.
-     Un thème monochrome, lui, peut les ramener dans sa gamme. */
-  --o-piece-ambre:#ff9d3c; --o-piece-ambre-rgb:255,157,60;   /* cuisine, bureau */
-  --o-piece-tendre:#f472b6; --o-piece-tendre-rgb:244,114,182; /* chambre enfant */
-  --o-piece-chambre:#a78bfa; --o-piece-chambre-rgb:167,139,250; /* chambre */
-  --o-piece-bain:#54c8f0; --o-piece-bain-rgb:84,200,240;        /* salle de bain */
-  --o-piece-vert:#34d399; --o-piece-vert-rgb:52,211,153;        /* extérieur */
-  /* Identités (v3.50.0) : ce qui était écrit en dur dans les vues — la lumière
-     chaude d'une lampe, l'orange de la chaleur et des croquettes, le rose des
-     médias, la palette du flux d'énergie. Sans surcharge de thème, rien ne
-     change ; en clair, les teintes s'assombrissent pour rester lisibles en
-     texte (le flux d'énergie, lui, se dessine sur une illustration sombre). */
-  --o-lampe:#ffce73; --o-lampe-rgb:255,206,115; --o-lampe-b:#f59e0b;
-  --o-orange:#ff8a4c; --o-orange-rgb:255,138,76;
-  --o-rose:#ff2d78; --o-rose-rgb:255,45,120;
-  /* Les deux fonds qui portent une icône BLANCHE (le bouton de l'assistant) :
-     la garde de contraste (contraste.js) les assombrit juste assez selon le
-     thème ; ici, le repli tant qu'elle n'a pas parlé. */
-  --o-rose-fond:#e01f63; --o-purple-fond:#7c5ce0;
-  /* La piste d'une jauge en anneau : toujours visible, même quand le
-     remplissage neutre du thème est clair (Frosted Glass en clair). */
+  /* Accent — #4f8cff, tel que la garde l'affiche déjà : éclairci juste assez pour 4,5:1 sur son propre disque. */
+  --o-accent:#70a2ff; --o-accent-rgb:112,162,255; --o-accent-soft:#6ea8ff; --o-accent-soft-rgb:110,168,255;
+  /* Statuts — une seule famille OKLCH, même poids de lecture (≥ 4,6:1 partout, 4,5:1 sur leur lavis). */
+  --o-ok:#34d399; --o-ok-rgb:52,211,153; --o-warn:#ffce73; --o-warn-rgb:255,206,115; --o-warn2:#f59e0b; --o-warn2-rgb:245,158,11;
+  --o-bad:#f26666; --o-bad-rgb:242,102,102; --o-cold:#60a5fa; --o-cold-rgb:96,165,250;
+  /* Teintes des pièces — identifier, pas décorer : même clarté, cinq teintes bien séparées. */
+  --o-piece-ambre:#ff9d3c; --o-piece-ambre-rgb:255,157,60; --o-piece-tendre:#f472b6; --o-piece-tendre-rgb:244,114,182; --o-piece-chambre:#a88dfa; --o-piece-chambre-rgb:168,141,250;
+  --o-piece-bain:#54c8f0; --o-piece-bain-rgb:84,200,240; --o-piece-vert:#34d399; --o-piece-vert-rgb:52,211,153;
+  /* Identités — la lampe, la chaleur, les médias, l'épingle, les volets, les scènes. */
+  --o-lampe:#ffce73; --o-lampe-rgb:255,206,115; --o-lampe-b:#f59e0b; --o-orange:#ff8a4c; --o-orange-rgb:255,138,76; --o-rose:#ff4d8c; --o-rose-rgb:255,77,140;
+  --o-rose-fond:#ff377e; --o-purple-fond:#9574f9;
   --o-piste:var(--o-s1);
   --o-flux-solaire:#fbbf24; --o-flux-maison:#ec4899; --o-flux-reseau:#a855f7; --o-flux-ve:#38bdf8; --o-flux-batterie:#4ade80;
-  /* accents décoratifs devenus theme-aware (texte lisible en clair) : or, violet, cyan */
-  --o-gold:#ffd166; --o-gold-rgb:255,209,102; --o-purple:#a78bfa; --o-purple-rgb:167,139,250; --o-cyan:#54c8f0; --o-cyan-rgb:84,200,240;
-  /* ombre multi-couches (profondeur réaliste : 2 couches douces empilées, pas une grosse tache) */
-  --o-shadow:0 4px 10px rgba(0,0,0,.22), 0 16px 32px rgba(0,0,0,.18);
+  --o-gold:#ffd166; --o-gold-rgb:255,209,102; --o-purple:#a88dfa; --o-purple-rgb:168,141,250; --o-cyan:#54c8f0; --o-cyan-rgb:84,200,240;
+  /* Profondeur — un filet de lumière en haut de la carte, deux ombres courtes ; au survol, un cran à peine. */
+  --o-shadow:inset 0 1px 0 rgba(255,255,255,.035), 0 1px 2px rgba(0,0,0,.22), 0 6px 16px -8px rgba(0,0,0,.42);
+  --o-shadow-hover:inset 0 1px 0 rgba(255,255,255,.06), 0 2px 4px rgba(0,0,0,.34), 0 16px 32px -12px rgba(0,0,0,.72);
   --o-font:'Manrope', -apple-system, sans-serif;
+  /* La police des titres. Elle n'existait pas comme jeton : les titres
+   * écrivaient « 'Newsreader',serif » en dur, et restaient donc en serif
+   * sur un thème qui change tout le reste du texte. */
+  --o-serif:'Newsreader', serif;
 }
+
 html.loggia-light {
-  --o-bg:#eef2f8; --o-bg2:#e3e9f3; --o-side1:#ffffff; --o-side2:#f4f7fb;
-  --o-text:#16203a; --o-text1:#27324d; --o-text2:#5a6884; --o-text3:#5d6b86; --o-text3-rgb:93,107,134;
-  --o-text2-lavis:#4b576e; --o-text3-lavis:#4f5b72; --o-text3-lavis-rgb:79,91,114;
-  --o-ok:#166534; --o-ok-rgb:22,101,52; /* 4,5:1 sur le fond de page, pas seulement sur blanc */
-  --o-accent-soft:#2563eb; --o-accent-soft-rgb:37,99,235; /* lisible en texte sur cartes blanches (le #6ea8ff dark = 2.4:1) */
-  --o-warn:#92400e; --o-warn-rgb:146,64,14; --o-warn2:#c2410c; --o-warn2-rgb:194,65,12; /* warn : 4,5:1 sur le fond de page */
-  --o-bad:#b91c1c; --o-bad-rgb:185,28,28; --o-cold:#2563eb; --o-cold-rgb:37,99,235;
-  --o-gold:#854d0e; --o-gold-rgb:133,77,14; --o-purple:#7c3aed; --o-purple-rgb:124,58,237; --o-cyan:#0e7490; --o-cyan-rgb:14,116,144;
-  /* En clair, une teinte de pièce sert aussi de TEXTE (la température d'une
-     carte, 25 px) : les valeurs sombres tiennent le contraste sur blanc. */
-  --o-piece-ambre:#b45309; --o-piece-ambre-rgb:180,83,9;
-  --o-piece-tendre:#be185d; --o-piece-tendre-rgb:190,24,93;
-  --o-piece-chambre:#6d28d9; --o-piece-chambre-rgb:109,40,217;
-  --o-piece-bain:#0e7490; --o-piece-bain-rgb:14,116,144;
-  --o-piece-vert:#15803d; --o-piece-vert-rgb:21,128,61;
-  --o-lampe:#b45309; --o-lampe-rgb:180,83,9; --o-lampe-b:#92400e;
-  --o-orange:#c2410c; --o-orange-rgb:194,65,12;
-  --o-rose:#be185d; --o-rose-rgb:190,24,93;
-  --o-shadow:0 2px 6px rgba(15,23,42,.06), 0 12px 28px rgba(15,23,42,.10); /* clair : douce, opacités faibles */
-  --o-surfA:rgba(255,255,255,.96); --o-surfB:rgba(248,250,253,.96); --o-header:rgba(255,255,255,.82);
-  --o-bd1:rgba(20,30,55,.12); --o-bd2:rgba(20,30,55,.10); --o-bd3:rgba(20,30,55,.08);
-  --o-s1:rgba(20,30,55,.05); --o-s2:rgba(20,30,55,.04); --o-s3:rgba(20,30,55,.035);
-  --o-s4:rgba(20,30,55,.03); --o-s5:rgba(20,30,55,.025); --o-sky:rgba(58,104,186,.55);
-  --o-well0:#ffffff; --o-well:#eef3fa; --o-well2:#e4ebf5;
+  /* Fonds — porcelaine : un gris neutre pour la page, du blanc pour le cadre (rail, bandeau). */
+  --o-bg:#edeff3; --o-bg2:#f6f7f9; --o-side1:#fcfdfe; --o-side2:#f9fafb;
+  /* Encre — quatre vraies marches : 16,2:1 · 11,2:1 · 6,9:1 · 5,6:1 sur la carte. */
+  --o-text:#181c23; --o-text1:#333842; --o-text2:#515762; --o-text3:#5e6572; --o-text3-rgb:94,101,114;
+  --o-text2-lavis:#424750; --o-text3-lavis:#474c56; --o-text3-lavis-rgb:71,76,86; /* valeurs de la garde (ADR 0063) */
+  /* Verre — déclaré à 62 %, l'opacité qu'applyLook impose : ce qui est écrit est ce qui s'affiche.
+     Blanc sur porcelaine. Carte/page 1,09:1 (1,08:1 avant) : le liseré et l'ombre finissent le travail. */
+  --o-surfA:rgba(255,255,255,.62); --o-surfB:rgba(250,251,253,.62); --o-header:rgba(251,253,255,0.85);
+  --o-bd1:rgba(18,24,38,0.11); --o-bd2:rgba(18,24,38,0.085); --o-bd3:rgba(18,24,38,0.065);
+  --o-s1:rgba(18,24,38,0.055); --o-s2:rgba(18,24,38,0.044); --o-s3:rgba(18,24,38,0.035); --o-s4:rgba(18,24,38,0.028); --o-s5:rgba(18,24,38,0.022); --o-sky:rgba(60,108,196,.5);
+  --o-well0:#ebedf0; --o-well:#e6e8eb; --o-well2:#dee0e3;
+  /* Accent — le même bleu, assombri pour le clair : la garde n'a plus à le pousser vers #0051ea. */
+  --o-accent:#104fca; --o-accent-rgb:16,79,202; --o-accent-soft:#114cbf; --o-accent-soft-rgb:17,76,191;
+  /* Statuts — une seule famille OKLCH, même poids de lecture (≥ 4,6:1 partout, 4,5:1 sur leur lavis). */
+  --o-ok:#03683a; --o-ok-rgb:3,104,58; --o-warn:#805201; --o-warn-rgb:128,82,1; --o-warn2:#964205; --o-warn2-rgb:150,66,5;
+  --o-bad:#b71920; --o-bad-rgb:183,25,32; --o-cold:#1358b3; --o-cold-rgb:19,88,179;
+  /* Teintes des pièces — identifier, pas décorer : même clarté, cinq teintes bien séparées. */
+  --o-piece-ambre:#8e4802; --o-piece-ambre-rgb:142,72,2; --o-piece-tendre:#a61d65; --o-piece-tendre-rgb:166,29,101; --o-piece-chambre:#6d40b8; --o-piece-chambre-rgb:109,64,184;
+  --o-piece-bain:#07637d; --o-piece-bain-rgb:7,99,125; --o-piece-vert:#03683a; --o-piece-vert-rgb:3,104,58;
+  /* Identités — la lampe, la chaleur, les médias, l'épingle, les volets, les scènes. */
+  --o-lampe:#874d04; --o-lampe-rgb:135,77,4; --o-lampe-b:#763b02; --o-orange:#9a3e01; --o-orange-rgb:154,62,1; --o-rose:#b60152; --o-rose-rgb:182,1,82;
+  --o-rose-fond:#b60152; --o-purple-fond:#6e3dbd;
+  --o-gold:#855100; --o-gold-rgb:133,81,0; --o-purple:#6e3dbd; --o-purple-rgb:110,61,189; --o-cyan:#00647c; --o-cyan-rgb:0,100,124;
+  /* Profondeur — le filet blanc en haut de la carte, une ombre courte ; au survol, un cran à peine. */
+  --o-shadow:inset 0 1px 0 rgba(255,255,255,.7), 0 1px 2px rgba(18,24,38,.05), 0 4px 12px -6px rgba(18,24,38,.08);
+  --o-shadow-hover:inset 0 1px 0 rgba(255,255,255,.7), 0 2px 4px rgba(18,24,38,.07), 0 12px 26px -10px rgba(18,24,38,.2);
 }
 
 body { background: var(--o-bggrad, var(--o-bg)); font-family: var(--o-font); color: var(--o-text); transition: background .3s; }
 
-/* Îlot sombre (v3.50.0) : ce qui se dessine sur un fond noir quel que soit
-   le thème — la veille, l'image d'une caméra, le schéma de la maison. Les
-   jetons y reprennent leurs valeurs sombres : en clair, un rouge assombri
-   pour le blanc ne se lit pas sur du noir. */
+/* Les icônes météo en mode CLAIR (10/10) — « on distingue mal en clair ».
+   Leurs nuages sont peints en dur dans les fichiers SVG (#deeafb, #e6effc,
+   #f3f7fe) : des bleus quasi blancs, posés sur une carte presque blanche.
+   Mesuré sur les pixels, le nuage tombait à 1,12:1 — invisible. Le soleil,
+   lui, restait visible, ce qui rendait le défaut déroutant.
+
+   Ces SVG sont des IMAGES : on ne peut pas y changer une couleur, seulement
+   filtrer. Réglage retenu après mesure de cinq candidats : 3,12:1 en moyenne
+   et 85 % des pixels au-dessus de 3:1 (un contour par drop-shadow ne donnait
+   que 1,22). Le sombre n’y touche pas : il n’en a pas besoin. */
+html.loggia-light .o-wx-ico { filter: brightness(.58) saturate(1.8); }
+
+/* Îlot sombre (caméra, veille, schéma) : les valeurs du sombre v2, quel que soit le thème. */
 .o-sombre {
-  --o-text:#eaf0fb; --o-text1:#c2cadb; --o-text2:#8c98b2; --o-text3:#7d8aa6; --o-text3-rgb:125,138,166;
-  --o-text2-lavis:#a9b2c5; --o-text3-lavis:#a2abbf; --o-text3-lavis-rgb:162,171,191; /* les gris SUR une carte teintée (ADR 0063) */
+  --o-text:#eaf0fb; --o-text1:#c2cadb; --o-text2:#97a3bc; --o-text3:#818ea9; --o-text3-rgb:129,142,169;
+  --o-text2-lavis:#c8cedb; --o-text3-lavis:#c0c7d4; --o-text3-lavis-rgb:192,199,212;
   --o-text-lavis: var(--o-text); --o-text1-lavis: var(--o-text1); --o-accent-soft-lavis: var(--o-accent-soft); --o-ok-lavis: var(--o-ok); --o-warn-lavis: var(--o-warn); --o-warn2-lavis: var(--o-warn2); --o-bad-lavis: var(--o-bad); --o-cold-lavis: var(--o-cold); --o-cyan-lavis: var(--o-cyan); --o-purple-lavis: var(--o-purple); --o-gold-lavis: var(--o-gold); --o-lampe-lavis: var(--o-lampe); --o-orange-lavis: var(--o-orange); --o-rose-lavis: var(--o-rose); --o-piece-ambre-lavis: var(--o-piece-ambre); --o-piece-tendre-lavis: var(--o-piece-tendre); --o-piece-chambre-lavis: var(--o-piece-chambre); --o-piece-bain-lavis: var(--o-piece-bain); --o-piece-vert-lavis: var(--o-piece-vert);
   --o-s1:rgba(255,255,255,.05); --o-s2:rgba(255,255,255,.04); --o-bd1:rgba(255,255,255,.08); --o-bd2:rgba(255,255,255,.07); --o-bd3:rgba(255,255,255,.06);
   --o-accent-soft:#6ea8ff; --o-accent-soft-rgb:110,168,255;
   --o-ok:#34d399; --o-ok-rgb:52,211,153; --o-warn:#ffce73; --o-warn-rgb:255,206,115; --o-warn2:#f59e0b; --o-warn2-rgb:245,158,11;
-  --o-bad:#ef4444; --o-bad-rgb:239,68,68; --o-cold:#60a5fa; --o-cold-rgb:96,165,250;
-  --o-gold:#ffd166; --o-gold-rgb:255,209,102; --o-purple:#a78bfa; --o-purple-rgb:167,139,250; --o-cyan:#54c8f0; --o-cyan-rgb:84,200,240;
-  --o-lampe:#ffce73; --o-lampe-rgb:255,206,115; --o-lampe-b:#f59e0b; --o-orange:#ff8a4c; --o-orange-rgb:255,138,76; --o-rose:#ff2d78; --o-rose-rgb:255,45,120;
+  --o-bad:#f26666; --o-bad-rgb:242,102,102; --o-cold:#60a5fa; --o-cold-rgb:96,165,250;
+  --o-gold:#ffd166; --o-gold-rgb:255,209,102; --o-purple:#a88dfa; --o-purple-rgb:168,141,250; --o-cyan:#54c8f0; --o-cyan-rgb:84,200,240;
+  --o-lampe:#ffce73; --o-lampe-rgb:255,206,115; --o-lampe-b:#f59e0b; --o-orange:#ff8a4c; --o-orange-rgb:255,138,76; --o-rose:#ff4d8c; --o-rose-rgb:255,77,140;
 }
 html.loggia-frosted body { background-attachment: fixed; }
 
@@ -683,9 +697,10 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
   .o-cal-jours > span { display: none; }
   .o-cal-jours > span:nth-child(2), .o-cal-jours > span:nth-child(11),
   .o-cal-jours > span:nth-child(21), .o-cal-jours > span:nth-child(32) { display: block; font-size: 9px; }
-  /* Le grand titre passe à 28 px : à 36, « L'énergie » mangeait un quart de
-     l'écran avant que la page ne commence. */
-  .o-en-titre { font-size: 28px !important; }
+  /* Le grand titre garde les 36 px des autres vues (10/10) : « sur mobile le
+     titre énergie est plus petit que les autres ». Il était passé à 28 pour
+     qu’il ne mange pas l’écran — mais « Scénarios », aussi long, tient à 36.
+     Le titre reste sur une ligne : il porte flex et minWidth: 0. */
   /* L'en-tête d'une carte garde son titre sur UNE ligne, et renvoie ses onglets
      DESSOUS, en pleine largeur. Sur trois lignes de deux mots, « Production
      solaire active » prenait toute la hauteur avant le moindre chiffre. */
@@ -1109,6 +1124,45 @@ html.loggia-light .o-en-house img { filter: brightness(2.1) saturate(.85); }
    `outline:none` sans rien mettre a la place — au clavier, on ne savait plus
    ou l'on etait. */
 :focus-visible { outline: 2px solid var(--o-accent); outline-offset: 2px; }
+
+/* …sauf le titre d'une vue (10/10). `src/focus.js` le focalise APRÈS chaque
+   changement d'écran, pour qu'un lecteur d'écran annonce la page ; il porte
+   `tabindex="-1"` et n'est donc JAMAIS atteint à la tabulation. Son anneau
+   n'apprend rien à personne, et sur une tablette Android le focus posé par
+   script compte comme « visible » : « le titre apparaît toujours comme
+   sélectionné dans un encadré bleu », sur toute la largeur. */
+h1[tabindex="-1"]:focus, h1[tabindex="-1"]:focus-visible { outline: none; }
+
+/* L'ombre au passage de la souris (10/10). « Il y a un léger effet de passage
+   avec une ombre sous la carte au passage de la souris (Loggia Vues v2) […] à
+   l'époque elle était trop prononcée, là c'est pas mal, c'est léger. »
+
+   `--o-shadow-hover` était déjà posé par le thème v2 — et plus utilisé que par
+   la bulle d'un événement d'agenda. On le rebranche sur les cartes.
+
+   SEULEMENT là où il y a une vraie souris : au doigt, le survol reste collé
+   après l'appui et l'ombre ne part plus, ce qui l'avait fait retirer
+   (« pourquoi il y a cet effet d'ombre sur les cartes quand je passe dessus,
+   enlève s'il te plaît » — c'était sur mobile). Les rangées qui défilent
+   gardent la leur, posée en `!important` (v3.59.1). */
+@media (hover: hover) and (pointer: fine) {
+  .o-piece:hover { box-shadow: var(--o-shadow-hover); }
+}
+
+/* Une cible qu'un doigt attrape (10/10) — « la croix rouge, c'est difficile de
+   masquer, ça a du mal à prendre, comme si le rayon du toucher est très
+   faible ».
+
+   Mesuré en édition sur tablette : 25 boutons sur 31 sous 40 px, certains
+   24 × 24 — le minimum strict de WCAG 2.5.8, loin des 44 recommandés. On
+   n'agrandit pas le DESSIN, qui irait mal dans une carte de 88 px : on étend
+   la zone sensible par-dessous, de 9 px tout autour, et seulement au doigt.
+   La souris n'en a pas besoin et n'y gagnerait qu'un voisin cliqué par
+   erreur. */
+@media (pointer: coarse) {
+  .o-tapzone { position: relative; }
+  .o-tapzone::after { content: ''; position: absolute; inset: -9px; border-radius: inherit; }
+}
 
 /* Le bouton de surface d'une carte (`Surface`, ui.jsx) la couvre exactement,
    et la carte rogne ce qui dépasse (`overflow: hidden`) : son anneau, tracé

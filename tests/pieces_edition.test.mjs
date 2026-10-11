@@ -51,7 +51,9 @@ test('la carte d’une piece en edition : meme dessin, taille en coin, Modifier,
   assert.ok(c.includes('setTimeout(() => setConfirme(false), 4000)'), 'la confirmation retombe seule');
   assert.ok(c.includes("tr('Pièce') + ' · '") && c.includes("tr('Aucun capteur')") && c.includes("tr('{n} capteurs', { n })"), '« Piece · n capteurs » : des capteurs configures, rien d’invente');
   assert.ok(c.includes('boutonEdition(false)') && c.includes('boutonEdition(true)'), 'les boutons de la carte d’entite');
-  assert.ok(c.includes("rgba(' + p.rgb + ',.14)") && c.includes("RM_ICO('rgba(' + p.rgb + ',.16)', p.col)"), 'le lavis et l’icone dans la teinte de la piece');
+  // En édition la carte porte sa teinte quoi qu'il arrive : on range des pièces,
+  // pas des lumières, et la couleur sert alors à les distinguer l'une de l'autre.
+  assert.ok(c.includes('lavisCarte(p.rgb)') && c.includes("RM_ICO('rgba(' + p.rgb + ',.16)', p.col)"), 'le lavis et l’icone dans la teinte de la piece');
   assert.ok(c.includes('if (compacte) {') && c.includes("const serre = { padding: '4px 6px', fontSize: 11.5 };"), 'compacte, elle tient sur une rangee : les boutons se serrent sur une seconde ligne');
 });
 

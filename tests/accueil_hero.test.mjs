@@ -16,7 +16,7 @@ const NL = String.fromCharCode(10);
 const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = src.indexOf(fin, d + 1); return src.slice(d, f < 0 ? undefined : f); };
 
 test('le hero est plus bas : marges et corps resserres, le fond meteo, les avatars et les faits gardes', () => {
-  assert.ok(src.includes("borderRadius: 'var(--o-radius,18px)', padding: '14px 8px' }}>" + NL + "          {REDUCE_MOTION && <WeatherFx weather={wx} />}"), 'le conteneur, et son fond meteo');
+  assert.ok(src.includes("borderRadius: 'var(--o-radius,18px)', padding: '0 8px 14px' }}>" + NL + "          {REDUCE_MOTION && <WeatherFx weather={wx} />}"), 'le conteneur, et son fond meteo');
   assert.ok(src.includes('<div className="o-banner-row" style={{ position: \'relative\', display: \'flex\', flexDirection: \'column\', gap: 0, minWidth: 0 }}>'), 'sans air entre les lignes');
   assert.ok(src.includes("fontStyle: 'italic', fontSize: 28, fontWeight: 500, lineHeight: 1, minWidth: 0"), 'le nom a 28 px');
   assert.ok(src.includes("style={{ position: 'relative', width: 34, height: 34, flexShrink: 0, display: 'inline-block' }}>"), 'les avatars a 34, toujours sur la ligne du nom');

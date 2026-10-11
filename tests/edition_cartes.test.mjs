@@ -145,7 +145,7 @@ test('un segment, pas deux boutons : un rail, deux moities jointes', () => {
    * moitie choisie posee dedans en accent plein. La largeur d'une carte et les
    * onglets d'un appareil partagent donc le meme composant. */
   const seg = bloc('function Segment(', NL + '}');
-  assert.ok(seg.includes("padding: 3, gap: 3, borderRadius: 12, background: 'var(--o-s1)'") && seg.includes("border: 'var(--o-bw,1px) solid var(--o-bd2)'"),
+  assert.ok(seg.includes("padding: 3, gap: 3, borderRadius: 12, background: 'var(--o-well)'") && seg.includes("border: 'var(--o-bw,1px) solid var(--o-bd2)'"),
     'le rail a perdu son fond ou son bord unique');
   assert.ok(seg.includes("border: 'none'") && seg.includes("background: on ? 'var(--o-accent-fond)' : 'transparent'") && seg.includes("color: on ? '#fff'"),
     'la moitie choisie n’est plus en accent plein, ou les moities ont repris un lisere');

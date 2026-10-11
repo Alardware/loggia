@@ -315,7 +315,7 @@ test('au téléphone, la mise en page cède, pas les mots : libellés, onglets, 
 
 test('en clair et en sombre : lavis du robot, onglets, lettres des barres, horloge, bouton Distribuer', () => {
   // Le lavis `--rb-` prend les gris « sur lavis » (ADR 0063) : « CETTE SEMAINE » était à 3,41:1 en clair.
-  assert.ok(CSS.includes('[style*="background: rgba(var(--rb-"], [style*="transparent 28%"]'), 'le lavis du robot et du distributeur n’est pas reconnu');
+  assert.ok(CSS.includes('[style*="background: rgba(var(--rb-"], [style*="72%), linear-gradient(180deg,var(--o-surfA)"]'), 'le lavis du robot et du distributeur n’est pas reconnu');
   // Les onglets non choisis : le gris de texte le plus soutenu (4,24:1 en clair avec --o-text2).
   assert.ok(COMMUNE.includes("color: actuel === id ? '#fff' : 'var(--o-text1)'"), 'onglet inactif en --o-text2');
   // Les lettres des jours sous les barres, et le nom sous « Réglages » : --o-text2 (4,16:1 en --o-text3).

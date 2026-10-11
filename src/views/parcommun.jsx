@@ -13,7 +13,7 @@
 import { Fi } from '../ui.jsx';
 import { tr, locale } from '../i18n.js';
 
-export const TITRE_PANNEAU = { fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 20, fontWeight: 500, lineHeight: 1.2, color: 'var(--o-text)', letterSpacing: '-.005em' };
+export const TITRE_PANNEAU = { fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 20, fontWeight: 500, lineHeight: 1.2, color: 'var(--o-text)', letterSpacing: '-.005em' };
 export const DESC_PANNEAU = { fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, lineHeight: 1.45, marginTop: 3 };
 export const CAPITALES = { fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-text3)' };
 export const MONO = { fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace' };

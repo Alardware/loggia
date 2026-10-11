@@ -10,7 +10,7 @@
  */
 import { Component, useState, useEffect, useRef, useMemo, useId, Fragment, createContext, useContext, cloneElement, Children } from 'react';
 import { createPortal } from 'react-dom';
-import { getHass } from './state.js';
+import { getHass, cfgVal, cfgSet } from './state.js';
 import { rendreFocus } from './focus.js';
 import { filtrerChoix, blocsChoix, placerMenu, SEUIL_RECHERCHE } from './choix.js';
 import { tr, comparerTextes } from './i18n.js';
@@ -105,18 +105,72 @@ export const HIDDEN_VIEWS = () => [
 // Vues retirées de la sidebar mais toujours routables (Pièces/Objets les couvrent) — exposées dans la recherche ⌘K.
 // Visibilité des vues de la sidebar, pilotée depuis Paramètres → Vues (design Claude Design 21/08).
 // hidden = vids masquées parmi les vues principales ; shown = vids réactivées parmi les vues retirées.
+/* Le menu suit le COMPTE, pas l'appareil (10/10).
+ *
+ * Ces trois clés parlaient au `localStorage` en direct : masquer « Scénarios »
+ * sur l'ordinateur ne changeait rien sur le téléphone, et chaque écran gardait
+ * son propre menu. Signalé deux fois le même jour — « j'ai activé désactivé des
+ * vues […] sur mobile, rien, aucun changement » et l'issue #30 de Gunther1643.
+ *
+ * `cfgVal` / `cfgSet` sont le chemin normal : le serveur fait foi dès qu'il
+ * répond, et ces clés ne sont pas déclarées personnelles (store.py :
+ * `PERSONAL_KEYS` ne garde que les marges d'écran et le dernier passage). Elles
+ * deviennent donc communes sans rien ajouter côté composant.
+ *
+ * Ce qui reste propre à l'appareil est ailleurs et le reste : la disposition
+ * des cartes par format (`disposition.js`), les panneaux repliés (« …panel »)
+ * et les marges d'écran.
+ *
+ * Et ce qui est propre au PROFIL le reste aussi : le menu de Luna n'est pas
+ * celui de Guillaume. La configuration est commune à la maison — on y range
+ * donc une part par profil, comme `disposition.js` range une part par format
+ * d'écran. Le même profil retrouve son menu sur tous ses écrans ; un autre
+ * profil garde le sien. */
+/* Le profil qui regarde. `loggia_active_user` est l'index du profil choisi —
+ * c'est lui que Loggia emploie partout ailleurs. */
+const profilCle = () => String(cfgVal('loggia_active_user', '0') ?? '0');
+
+/* Ce qu'UN profil a rangé, dans une clé qui les porte tous.
+ *
+ * Un TABLEAU est l'ancienne forme, d'avant le 10/10 : elle valait pour tout le
+ * monde, et c'est ainsi qu'on la relit — personne ne perd son menu. */
+const partProfil = (v, id) => {
+  if (Array.isArray(v)) return id === '0' ? v : [];
+  if (v && typeof v === 'object') {
+    if (Array.isArray(v[id])) return v[id];
+    // La part commune n'échoit qu'au PREMIER profil : c'est la sienne, réglée
+    // avant que les parts existent. Un profil qui n'a rien rangé démarre sur
+    // le menu par défaut — « un profil non admin ne doit avoir que les vues
+    // par défaut, et non les vues secondaires ». Sans cette règle, il héritait
+    // de la Climatisation que quelqu'un d'autre s'était ajoutée.
+    if (id === '0' && Array.isArray(v['*'])) return v['*'];
+  }
+  return [];
+};
+
 export function readViewsCfg() {
-  const rd = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
+  const id = profilCle();
+  const rd = (k) => partProfil(cfgVal(k, null), id);
   // `order` : l'ordre choisi des vues intégrées dans le menu (vide = ordre d'origine).
   return { hidden: new Set(rd('loggia-hiddenviews')), shown: new Set(rd('loggia-shownviews')), order: rd('loggia-vueordre') };
 }
 
 export function writeViewsCfg(cfg) {
-  try {
-    localStorage.setItem('loggia-hiddenviews', JSON.stringify([...cfg.hidden]));
-    localStorage.setItem('loggia-shownviews', JSON.stringify([...cfg.shown]));
-    localStorage.setItem('loggia-vueordre', JSON.stringify(cfg.order || []));
-  } catch {}
+  const id = profilCle();
+  /* On n'écrit QUE sa part : les autres profils gardent la leur. Un tableau
+   * trouvé là devient le réglage commun (`*`), que les profils sans part à eux
+   * continuent de lire. */
+  const poser = (k, val) => {
+    const v = cfgVal(k, null);
+    const base = (v && !Array.isArray(v) && typeof v === 'object') ? v
+      : (Array.isArray(v) && v.length ? { '*': v } : {});
+    return { ...base, [id]: val };
+  };
+  cfgSet({
+    'loggia-hiddenviews': poser('loggia-hiddenviews', [...cfg.hidden]),
+    'loggia-shownviews': poser('loggia-shownviews', [...cfg.shown]),
+    'loggia-vueordre': poser('loggia-vueordre', cfg.order || []),
+  });
   try { window.dispatchEvent(new Event('loggia-views-changed')); } catch {}
 }
 
@@ -1202,7 +1256,7 @@ export function useEtatServeur(hass, type, ms, siErreur) {
 
 export function RegleEntete({ nom, desc, on, cb, plie = false, onPlier = null, zone = null, note = null }) {
   // Le titre d'une regle parle comme celui d'un panneau de reglages (maquettes du 18/09).
-  const titre = { fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 20, fontWeight: 500, lineHeight: 1.2 };
+  const titre = { fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 20, fontWeight: 500, lineHeight: 1.2 };
   const sous = { fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, marginTop: 3, lineHeight: 1.45 };
   const pliable = !!(on && onPlier);
   return (

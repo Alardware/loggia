@@ -172,7 +172,7 @@ export function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, un
       * bouton par bouton : sur leur rangée, ses interstices le garderaient. */}
     <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, pointerEvents: 'none', transform: `translate(${decal.x}px, ${decal.y}px)`, opacity: nuit ? .55 : 1, transition: REDUCE_MOTION ? 'opacity 2s ease' : 'transform 6s ease, opacity 2s ease' }}>
       <div style={{ fontSize: 'clamp(72px, 17vw, 170px)', fontWeight: 800, letterSpacing: '-.03em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{hm}</div>
-      <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 'clamp(17px, 2.6vw, 24px)', color: '#8b95a7' }}>{dateStr}</div>
+      <div style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 'clamp(17px, 2.6vw, 24px)', color: '#8b95a7' }}>{dateStr}</div>
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 22px', borderRadius: 18, background: 'rgba(255,255,255,.035)', marginTop: 18, overflow: 'hidden' }}>
         <WxMini wx={wx} on={wxFx} />
         <WeatherIco wx={wx} size={46} />

@@ -201,3 +201,33 @@ test('le motif rendu : « Porte d’entrée, Verrouillée », un bouton qui anno
   const html = rendre(Surface, { onClick: () => {}, label: nomCarte('Porte d’entrée', 'Verrouillée') });
   assert.ok(html.startsWith('<button type="button" class="o-surface" aria-label="Porte d’entrée, Verrouillée" aria-haspopup="dialog"'), html);
 });
+
+test('le corps d’une carte de pièce n’a pas de marge : le volet s’aligne sur le média (09/10)', () => {
+  /* « Il y a un souci au niveau de l'organisation, arrange la carte volet que
+   * ce soit au meme niveau que l'Echo. »
+   *
+   * Mesure sur 38 cartes de la demonstration : SEULES les cartes volet
+   * debordaient, de 12 px. Le titre du volet tombait a 69 px du haut de sa
+   * carte quand celui du media etait a 57, et ses boutons a 148 contre 136 —
+   * presque colles au bord.
+   *
+   * La cause : le corps portait `marginTop: 14`. Or le parent est en
+   * `space-between`, donc le corps est DEJA colle en bas : la marge n'ajoute
+   * rien tant qu'il reste de la place, et pousse le corps DEHORS des que le
+   * contenu remplit la carte. Le volet est la seule a remplir — titre, etat,
+   * barre ET trois boutons font 111 px pour 112 de place.
+   *
+   * Sept cartes portaient cette marge, toutes inertes sauf celle-la. Les
+   * retirer ne change rien la ou elles ne servaient pas, et repare le volet :
+   * mesure apres, titre a 56 contre 57 et boutons a 135 contre 136. */
+  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const marges = app.match(/marginTop: 14 \}\}>\n\s+<div style=\{RM_NAME\}/g) || [];
+  assert.equal(marges.length, 0,
+    'une carte de pièce a repris une marge sur son corps : elle débordera dès que son contenu remplira la carte');
+  // La raison est écrite là où on la relira.
+  assert.ok(app.includes('PAS DE MARGE SUR LE CORPS (09/10)'), 'la raison a disparu du code');
+  /* Le pied du volet garde SON écart (12) : c'est l'espace entre la barre et
+   * les boutons, pas la marge du corps. */
+  assert.ok(app.includes("{[['open_cover', 'angle-up', tr('Ouvrir')], ['stop_cover', 'square', tr('Stop')], ['close_cover', 'angle-down', tr('Fermer')]]"),
+    'les trois boutons du volet ont changé');
+});

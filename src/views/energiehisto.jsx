@@ -37,7 +37,7 @@ const onglet = (actif) => ({
   fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap',
   background: actif ? 'var(--o-accent-fond)' : 'transparent', color: actif ? '#fff' : 'var(--o-text2)',
 });
-const TITRE = { fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 19, fontWeight: 500, marginTop: 2 };
+const TITRE = { fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 500, marginTop: 2 };
 const SURTITRE = { fontSize: 13.5, fontWeight: 700, color: 'var(--o-text2)' };
 /* Le titre du calendrier dit CE QU'IL MONTRE : « Consommation par jour ». Les
  * trois mots viennent du catalogue, pas d'une concatenation. */

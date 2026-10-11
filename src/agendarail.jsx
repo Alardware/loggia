@@ -105,7 +105,7 @@ export function CarteAgenda({ hass = null, evenements = null, jourChoisi = null,
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 800 }}>{tr('Agenda')}</div>
-          <div style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: 14, fontWeight: 500, color: 'var(--o-text2)', marginTop: 2 }}>{titreJour}</div>
+          <div style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 14, fontWeight: 500, color: 'var(--o-text2)', marginTop: 2 }}>{titreJour}</div>
         </div>
         {/* Le prochain lever ou coucher, s'il y a un `sun.sun` : rien sans source. */}
         {lever && (
@@ -297,12 +297,12 @@ function FeuilleLarge({ hass, evts, jourSel, allerA, vue, setVue, bouger, cals, 
       : ajoute(lundi, 0).toLocaleDateString(locale(), { day: 'numeric', month: 'short' }) + ' – ' + ajoute(lundi, 6).toLocaleDateString(locale(), { day: 'numeric', month: 'short' });
 
   return (
-    <BottomSheet large onClose={onClose}>
+    <BottomSheet large opaque onClose={onClose}>
       {() => (
         <div style={{ display: 'grid', gridTemplateColumns: '248px minmax(0,1fr)', gap: 0, margin: '0 -8px' }}>
           {/* Fond OPAQUE, comme la grille : à travers le verre de la feuille,
             * on lisait les cartes de l'Accueil sous le mois et les agendas. */}
-          <aside style={{ padding: '4px 16px 10px 8px', borderRight: '1px solid var(--o-bd2)', background: 'var(--o-bg2)', display: 'flex', flexDirection: 'column', gap: 22 }}>
+          <aside style={{ padding: '4px 16px 10px 8px', borderRight: '1px solid var(--o-bd2)', background: 'transparent', display: 'flex', flexDirection: 'column', gap: 22 }}>
             <MiniMois jourSel={jourSel} evts={evts} onChoisir={allerA} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-text3)', padding: '0 4px 6px' }}>{tr('Mes agendas')}</div>
@@ -339,7 +339,7 @@ function FeuilleLarge({ hass, evts, jourSel, allerA, vue, setVue, bouger, cals, 
               * l'arrière-plan suit aussi le mouvement, c'est pénible ». Arrivé
               * en bout de course, le navigateur passait la molette à la page
               * derrière la feuille. Le défilement s'arrête désormais ici. */}
-            <div ref={zone} style={{ height: 596, overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain', background: 'var(--o-bg2)' }}>
+            <div ref={zone} style={{ height: 596, overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain', background: 'transparent' }}>
               {vue === 'mois'
                 ? <GrilleMois jourSel={jourSel} evts={evts} hass={hass} onChoisir={allerA} />
                 : <GrilleHeures colonnes={colonnes} evts={evts} hass={hass} ouvert={ouvert} setOuvert={setOuvert} onChoisir={allerA} jourSel={jourSel} />}
@@ -475,7 +475,7 @@ function EnTete({ titre, vue, setVue, bouger, allerA, large = false, croix = nul
   const VUES = large ? [['mois', tr('Mois')], ['semaine', tr('Semaine')], ['jour', tr('Jour')]] : [['semaine', tr('Semaine')], ['mois', tr('Mois')]];
 
   const titreDOM = (
-    <div id={idTitre || undefined} style={{ fontFamily: "'Newsreader',serif", fontStyle: 'italic', fontSize: large ? 30 : 26, fontWeight: 500, whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{titre}</div>
+    <div id={idTitre || undefined} style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: large ? 30 : 26, fontWeight: 500, whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{titre}</div>
   );
   const aujourdhui = (
     <button type="button" onClick={() => allerA(cleJour(new Date()))}
@@ -491,7 +491,7 @@ function EnTete({ titre, vue, setVue, bouger, allerA, large = false, croix = nul
    * partagent : « Settimana » et « Miesiąc » sont bien plus longs que
    * « Semaine », et une largeur figée déborderait sur un écran de 320 px. */
   const vues = (
-    <div style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 12, background: 'var(--o-s2)', flexShrink: large ? 0 : 1, flexGrow: large ? 0 : 1, minWidth: 0 }}>
+    <div style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 12, background: 'var(--o-well)', flexShrink: large ? 0 : 1, flexGrow: large ? 0 : 1, minWidth: 0 }}>
       {VUES.map(([id, nom]) => (
         <button key={id} type="button" onClick={() => setVue(id)} aria-pressed={vue === id}
           style={{ height: 32, padding: large ? '0 14px' : '0 10px', borderRadius: 10, border: 'none', background: vue === id ? 'var(--o-accent-fond)' : 'transparent', color: vue === id ? '#fff' : 'var(--o-text1)', font: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flex: large ? '0 0 auto' : '0 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</button>
@@ -604,7 +604,7 @@ function GrilleHeures({ colonnes, evts, hass, ouvert, setOuvert, onChoisir, jour
         * dans un agenda d'ordinateur. Le fond est OPAQUE, sinon les heures
         * passent au travers. */}
       {!compacte && (
-        <div style={{ position: 'sticky', top: 0, zIndex: 5, background: 'var(--o-bg2)', borderBottom: '1px solid var(--o-bd2)' }}>
+        <div style={{ position: 'sticky', top: 0, zIndex: 5, background: 'linear-gradient(var(--o-surfA), var(--o-surfA)), var(--o-bg)', borderBottom: '1px solid var(--o-bd2)' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '56px ' + cols, gap: 0, padding: '0 18px 2px' }}>
           <div />
           {colonnes.map(d => {
@@ -762,7 +762,7 @@ function FicheEvenement({ e, hass, onFermer, aGauche = false }) {
      * toujours à droite : sur les derniers jours de la semaine elle partait
      * 244 px hors de la feuille, qui se mettait alors à défiler
      * horizontalement — « c'est rogné ». */
-    <div style={{ position: 'absolute', zIndex: 6, width: 280, top: 0, ...(aGauche ? { right: '100%', marginRight: 8 } : { left: '100%', marginLeft: 8 }), padding: 16, borderRadius: 18, background: 'var(--o-bg2)', border: '1px solid var(--o-bd1)', boxShadow: 'var(--o-shadow-hover)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ position: 'absolute', zIndex: 6, width: 280, top: 0, ...(aGauche ? { right: '100%', marginRight: 8 } : { left: '100%', marginLeft: 8 }), padding: 16, borderRadius: 18, background: 'var(--o-well0)', border: '1px solid var(--o-bd1)', boxShadow: 'var(--o-shadow-hover)', display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <div style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 800, lineHeight: 1.25 }}>{e.titre}</div>
         <button type="button" onClick={onFermer} aria-label={tr('Fermer')}

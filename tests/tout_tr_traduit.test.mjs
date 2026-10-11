@@ -84,7 +84,12 @@ const CORPUS = [
   ...parcourir(join(RACINE, 'src'), /\.(js|jsx)$/),
   ...parcourir(join(RACINE, 'custom_components', 'loggia'), /\.(py|json|yaml)$/)
     .filter(p => !/__pycache__|frontend/.test(p)),
-  ...readdirSync(join(RACINE, 'scripts')).map(f => join(RACINE, 'scripts', f)),
+  /* `scripts/` par le même chemin que les deux au-dessus (10/10) : il était lu
+   * à plat, dossiers compris, et `readFileSync` sur un dossier lève EISDIR.
+   * Invisible en intégration continue, où le dossier est propre ; mais lancer
+   * le pack une fois crée `scripts/__pycache__`, et le test tombait sur une
+   * machine de développement sans rien avoir à voir avec les traductions. */
+  ...parcourir(join(RACINE, 'scripts'), /\.(mjs|js|py)$/).filter(p => !/__pycache__/.test(p)),
 ].map(p => readFileSync(p, 'utf8')).join('\n');
 
 test('aucune clé de catalogue que plus rien n’appelle', () => {

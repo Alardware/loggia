@@ -36,7 +36,7 @@ function cssToRgb(c) {
   const m = c.match(/(\d+)[ ,]+(\d+)[ ,]+(\d+)/); return m ? `${m[1]},${m[2]},${m[3]}` : '';
 }
 
-const THEME_KEYS = ['--o-bg', '--o-bggrad', '--o-bg2', '--o-side1', '--o-side2', '--o-surfA', '--o-surfB', '--o-header', '--o-text', '--o-text1', '--o-text2', '--o-text3', '--o-bd1', '--o-bd2', '--o-bd3', '--o-s1', '--o-s2', '--o-s3', '--o-s4', '--o-s5', '--o-well', '--o-well2', '--o-well0', '--o-accent', '--o-accent-rgb', '--o-accent-soft', '--o-accent-soft-rgb', '--o-shadow', '--o-bw', '--o-font',
+const THEME_KEYS = ['--o-serif', '--o-bg', '--o-bggrad', '--o-bg2', '--o-side1', '--o-side2', '--o-surfA', '--o-surfB', '--o-header', '--o-text', '--o-text1', '--o-text2', '--o-text3', '--o-bd1', '--o-bd2', '--o-bd3', '--o-s1', '--o-s2', '--o-s3', '--o-s4', '--o-s5', '--o-well', '--o-well2', '--o-well0', '--o-accent', '--o-accent-rgb', '--o-accent-soft', '--o-accent-soft-rgb', '--o-shadow', '--o-bw', '--o-font',
   // tokens fins des presets (Atrium) — purgés au changement de thème comme les autres
   '--o-ok', '--o-ok-rgb', '--o-warn2', '--o-warn2-rgb', '--o-bad', '--o-bad-rgb', '--o-shadow-hover', '--o-shadow-rangee',
   // Le voile du bandeau meteo. Un preset qui le teinte sans qu'il figure
@@ -306,7 +306,11 @@ function applyVars(root, v) {
   set('--o-bd1', v.border); set('--o-bd2', v.border); set('--o-bd3', v.border);
   set('--o-s1', v.border); set('--o-s2', v.border); set('--o-s3', v.border); set('--o-s4', v.border); set('--o-s5', v.border);
   if (v.accent) { set('--o-accent', v.accent); const rgb = cssToRgb(v.accent); if (rgb) set('--o-accent-rgb', rgb); const at = v.accentText || v.accent; set('--o-accent-soft', at); const rgbS = cssToRgb(at); if (rgbS) set('--o-accent-soft-rgb', rgbS); }
-  set('--o-radius', v.radius); set('--o-shadow', v.shadow); set('--o-bw', v.borderWidth); set('--o-font', v.font); set('--o-bggrad', v.bggrad);
+  set('--o-radius', v.radius); set('--o-shadow', v.shadow); set('--o-bw', v.borderWidth); set('--o-font', v.font);
+  /* Les titres suivent le theme : un preset qui ne declare pas de serif a
+   * lui prend SA police courante, sinon ses titres resteraient en
+   * Newsreader pendant que tout le reste change. */
+  set('--o-serif', v.serif || v.font); set('--o-bggrad', v.bggrad);
   // Tokens fins d'un preset (7 niveaux de texte, traits ≠ remplissages, sémantique) :
   // appliqués en dernier, ils affinent le mapping grossier ci-dessus sans le remplacer.
   if (v.fine) Object.keys(v.fine).forEach(k => set(k, v.fine[k]));
