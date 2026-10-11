@@ -126,50 +126,27 @@ export const HIDDEN_VIEWS = () => [
  * donc une part par profil, comme `disposition.js` range une part par format
  * d'écran. Le même profil retrouve son menu sur tous ses écrans ; un autre
  * profil garde le sien. */
-/* Le profil qui regarde. `loggia_active_user` est l'index du profil choisi —
- * c'est lui que Loggia emploie partout ailleurs. */
-const profilCle = () => String(cfgVal('loggia_active_user', '0') ?? '0');
-
-/* Ce qu'UN profil a rangé, dans une clé qui les porte tous.
+/* Ces trois clés suivent le PROFIL, et c'est `state.js` qui s'en charge : elles
+ * figurent dans `PAR_PROFIL`, donc `cfgVal` rend déjà la part de qui regarde,
+ * et `cfgSet` n'écrit que la sienne.
  *
- * Un TABLEAU est l'ancienne forme, d'avant le 10/10 : elle valait pour tout le
- * monde, et c'est ainsi qu'on la relit — personne ne perd son menu. */
-const partProfil = (v, id) => {
-  if (Array.isArray(v)) return id === '0' ? v : [];
-  if (v && typeof v === 'object') {
-    if (Array.isArray(v[id])) return v[id];
-    // La part commune n'échoit qu'au PREMIER profil : c'est la sienne, réglée
-    // avant que les parts existent. Un profil qui n'a rien rangé démarre sur
-    // le menu par défaut — « un profil non admin ne doit avoir que les vues
-    // par défaut, et non les vues secondaires ». Sans cette règle, il héritait
-    // de la Climatisation que quelqu'un d'autre s'était ajoutée.
-    if (id === '0' && Array.isArray(v['*'])) return v['*'];
-  }
-  return [];
-};
-
+ * Elles avaient leur propre découpage ici, écrit à la main le 10/10. Il
+ * marchait — pour elles seules : les onze autres clés d'agencement, la grille
+ * de l'Accueil en tête, continuaient de synchroniser tous les profils.
+ * Remonter le tri au passage central l'a rendu inutile, et deux découpages
+ * superposés auraient indexé deux fois la même valeur. */
 export function readViewsCfg() {
-  const id = profilCle();
-  const rd = (k) => partProfil(cfgVal(k, null), id);
+  const rd = (k) => { const v = cfgVal(k, []); return Array.isArray(v) ? v : []; };
   // `order` : l'ordre choisi des vues intégrées dans le menu (vide = ordre d'origine).
   return { hidden: new Set(rd('loggia-hiddenviews')), shown: new Set(rd('loggia-shownviews')), order: rd('loggia-vueordre') };
 }
 
 export function writeViewsCfg(cfg) {
-  const id = profilCle();
-  /* On n'écrit QUE sa part : les autres profils gardent la leur. Un tableau
-   * trouvé là devient le réglage commun (`*`), que les profils sans part à eux
-   * continuent de lire. */
-  const poser = (k, val) => {
-    const v = cfgVal(k, null);
-    const base = (v && !Array.isArray(v) && typeof v === 'object') ? v
-      : (Array.isArray(v) && v.length ? { '*': v } : {});
-    return { ...base, [id]: val };
-  };
+  // On pose la valeur telle qu'on veut la voir ; la part est l'affaire de `cfgSet`.
   cfgSet({
-    'loggia-hiddenviews': poser('loggia-hiddenviews', [...cfg.hidden]),
-    'loggia-shownviews': poser('loggia-shownviews', [...cfg.shown]),
-    'loggia-vueordre': poser('loggia-vueordre', cfg.order || []),
+    'loggia-hiddenviews': [...cfg.hidden],
+    'loggia-shownviews': [...cfg.shown],
+    'loggia-vueordre': cfg.order || [],
   });
   try { window.dispatchEvent(new Event('loggia-views-changed')); } catch {}
 }

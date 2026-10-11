@@ -60,6 +60,23 @@ beforeEach(() => {
  * envoi. Le câblage lui-même se vérifie dans App.jsx, en bas de ce fichier. */
 const envoyer = (grille, lot) => cfgSet({ loggia_accueil: { ...ACCUEIL, ...grille }, ...lot });
 
+/* Ce que le serveur a reçu, vu du profil qui a fait le geste.
+ *
+ * Les RANGEMENTS se rangent par profil depuis le 11/10 — « toute modification
+ * est liée au même profil, il n'a pas à synchroniser les autres »
+ * (`PAR_PROFIL`, state.js). Ce qu'on vérifie ici ne change pas pour autant :
+ * la pièce et son rangement arrivent ENSEMBLE, et un refus ne laisse rien
+ * passer. On lit donc la part, au lieu de la racine.
+ *
+ * La part `*` est la valeur d'avant la bascule, que la maison de départ pose à
+ * plat : le premier geste la transforme là où elle est. */
+const part = (cle) => {
+  const v = serveur[cle];
+  if (!v || typeof v !== 'object' || Array.isArray(v) || !('__profils' in v)) return v;
+  const p = v.__profils;
+  return Object.prototype.hasOwnProperty.call(p, '0') ? p['0'] : p['*'];
+};
+
 test('renommer depuis un compte ordinaire : tout est refusé, la carte garde sa taille et sa place', async () => {
   const pris = await envoyer(grilleAvecPiece(ACCUEIL, 'Salon', 'Séjour', true), lotPiece('Salon', { room: 'Séjour' }));
   assert.equal(pris, false, 'le refus doit remonter jusqu’à l’Accueil, qui reprend sa grille à l’écran');
@@ -78,25 +95,25 @@ test('retirer depuis un compte ordinaire : la pièce reste, et sa place avec ell
 test('ajouter depuis un compte ordinaire : aucune taille orpheline', async () => {
   const pris = await envoyer(grilleAvecPiece(ACCUEIL, null, 'Grenier', true), lotPiece(null, { room: 'Grenier' }));
   assert.equal(pris, false);
-  assert.deepEqual(serveur.loggia_accueil, ACCUEIL, 'la première pièce « Grenier » venue hériterait de cette taille');
+  assert.deepEqual(part('loggia_accueil'), ACCUEIL, 'la première pièce « Grenier » venue hériterait de cette taille');
 });
 
 test('un administrateur : la pièce, la grille de sa vue et sa place arrivent ensemble', async () => {
   admin = true;
   assert.equal(await envoyer(grilleAvecPiece(ACCUEIL, 'Salon', 'Séjour', true), lotPiece('Salon', { room: 'Séjour' })), true);
   assert.deepEqual(serveur.loggia_rooms.map(r => r.room), ['Séjour', 'Cuisine']);
-  assert.deepEqual(serveur.loggia_roomlayout, { 'Séjour': { larges: ['light.plafonnier'] } }, 'la grille de la vue suit le nouveau nom');
-  assert.deepEqual(serveur.loggia_accueil.tailles, { Cuisine: 's', 'Séjour': 'c' });
-  assert.deepEqual(serveur.loggia_accueil.places['Séjour'], { c: 1, r: 1 }, 'la carte ne saute pas ailleurs');
-  assert.deepEqual(serveur.loggia_accueil.piecesOrdre, ['Séjour', 'Cuisine'], 'elle garde son rang');
+  assert.deepEqual(part('loggia_roomlayout'), { 'Séjour': { larges: ['light.plafonnier'] } }, 'la grille de la vue suit le nouveau nom');
+  assert.deepEqual(part('loggia_accueil').tailles, { Cuisine: 's', 'Séjour': 'c' });
+  assert.deepEqual(part('loggia_accueil').places['Séjour'], { c: 1, r: 1 }, 'la carte ne saute pas ailleurs');
+  assert.deepEqual(part('loggia_accueil').piecesOrdre, ['Séjour', 'Cuisine'], 'elle garde son rang');
 });
 
 test('retirer en administrateur : sa ligne, la grille de sa vue et sa place partent ensemble', async () => {
   admin = true;
   assert.equal(await envoyer(grilleSansPiece(ACCUEIL, 'Salon'), lotSansPiece('Salon')), true);
   assert.deepEqual(serveur.loggia_rooms.map(r => r.room), ['Cuisine']);
-  assert.equal(serveur.loggia_roomlayout, undefined, 'une table de grilles vide s’efface');
-  assert.deepEqual(serveur.loggia_accueil, { tailles: { Cuisine: 's' }, places: { Cuisine: { c: 2, r: 1 } }, piecesOrdre: ['Cuisine'] });
+  assert.equal(part('loggia_roomlayout'), undefined, 'une table de grilles vide s’efface');
+  assert.deepEqual(part('loggia_accueil'), { tailles: { Cuisine: 's' }, places: { Cuisine: { c: 2, r: 1 } }, piecesOrdre: ['Cuisine'] });
 });
 
 test('contre-épreuve : en deux envois, la grille passait sans la pièce', async () => {
@@ -104,7 +121,7 @@ test('contre-épreuve : en deux envois, la grille passait sans la pièce', async
   assert.equal(await cfgSet(lotSansPiece('Salon')), false, 'la pièce est refusée…');
   assert.equal(await cfgSet({ loggia_accueil: { ...ACCUEIL, ...grilleSansPiece(ACCUEIL, 'Salon') } }), true, '… la grille acceptée');
   assert.deepEqual(serveur.loggia_rooms, maison().loggia_rooms, 'le Salon existe toujours');
-  assert.equal(serveur.loggia_accueil.tailles.Salon, undefined, 'et la grille commune l’a oublié : le défaut, que la doublure sait donc voir');
+  assert.equal(part('loggia_accueil').tailles.Salon, undefined, 'et la grille commune l’a oublié : le défaut, que la doublure sait donc voir');
 });
 
 test('le module compose, il n’envoie rien, et ne touche pas la grille reçue', () => {

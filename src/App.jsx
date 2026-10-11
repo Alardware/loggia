@@ -16770,7 +16770,7 @@ export default function App() {
     <LoggiaContext.Provider value={loggiaRuntime}>
     {showOnboarding && <Suspense fallback={null}><Onboarding runtime={loggiaRuntime} onDone={closeOnboarding} onSkip={() => closeOnboarding(null)} /></Suspense>}
     <HeaderCtx.Provider value={{ light: lightMode, onToggleTheme: toggle, onToggleNav: () => setNavOpen(o => !o), onNav: setView, editMode, onToggleEdit: () => setEditMode(e => !e), users, userIdx, onSwitchUser: switchUser, peutEditer, droits, notifs, onLireNotifs: lireNotifs, customViews, rooms: (cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r)), lightsOn, onAssistant: assistantNs ? () => setAssistantOuvert(true) : null, onDictee: assistantNs ? poserQuestion : null, assistantAttendu, hass }}>
-    <div key={servi ? 'srv' : 'local'} className={navbar ? 'o-navbar-on' : undefined} style={{ display: 'flex', minHeight: '100vh', background: fondPhotoActif ? 'transparent' : 'var(--o-bggrad, var(--o-bg))', fontFamily: 'var(--o-font)', color: 'var(--o-text)',
+    <div key={(servi ? 'srv' : 'local') + ':' + userIdx} className={navbar ? 'o-navbar-on' : undefined} style={{ display: 'flex', minHeight: '100vh', background: fondPhotoActif ? 'transparent' : 'var(--o-bggrad, var(--o-bg))', fontFamily: 'var(--o-font)', color: 'var(--o-text)',
       // isolate : notre propre contexte d'empilement. Sans lui, le z-index
       // négatif du calque photo l'envoie sous le fond OPAQUE de tout wrapper
       // qu'une extension glisse entre body et #root — photo invisible, vécu.

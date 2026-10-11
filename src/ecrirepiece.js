@@ -35,10 +35,31 @@ import { cfgVal, normRooms } from './state.js';
  * que App.jsx nomme `ROOM_LAYOUT_KEY`. */
 const GRILLES = 'loggia_roomlayout';
 
-function grilles() {
-  const v = cfgVal(GRILLES, null);
-  return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};
-}
+/** Une table de grilles lisible, quoi qu'on ait reçu. */
+const table = (v) => ((v && typeof v === 'object' && !Array.isArray(v)) ? { ...v } : {});
+
+/* Ces deux transformations s'appliquent à CHAQUE part de profil (11/10).
+ *
+ * Renommer ou retirer une pièce est commun à la maison — « la seule chose
+ * commune à tous, c'est l'ajout, la suppression et la modification d'entités ».
+ * Mais la grille de sa vue est un RANGEMENT, propre à chaque profil, et elle la
+ * nomme. Transformer la seule part de qui renomme laisserait les autres avec
+ * une grille qui pointe une pièce disparue, et leur ferait perdre son rangement
+ * sans qu'ils y soient pour rien.
+ *
+ * `cfgSet` applique donc une valeur-fonction part par part : le nom change
+ * partout, chacun garde son rangement. Rendre `null` efface la part — une table
+ * vidée ne laisse pas de coquille. */
+const renommerGrille = (brut, avant, apres) => {
+  const g = table(brut);
+  if (g[avant]) { g[apres] = g[avant]; delete g[avant]; }
+  return Object.keys(g).length ? g : null;
+};
+const retirerGrille = (brut, nom) => {
+  const g = table(brut);
+  delete g[nom];
+  return Object.keys(g).length ? g : null;
+};
 
 /** Le lot qui enregistre une pièce : `loggia_rooms` entière — la liste
  *  normalisée, jamais une pièce seule, sa ligne remplacée ou ajoutée (nom,
@@ -52,19 +73,16 @@ export function lotPiece(avant, piece) {
   if (!entree.teinte) delete entree.teinte;
   if (i >= 0) liste[i] = entree; else liste.push(entree);
   const maj = { loggia_rooms: liste };
-  if (avant && avant !== piece.room) {
-    const all = { ...grilles() };
-    if (all[avant]) { all[piece.room] = all[avant]; delete all[avant]; maj[GRILLES] = all; }
-  }
+  if (avant && avant !== piece.room) maj[GRILLES] = (brut) => renommerGrille(brut, avant, piece.room);
   return maj;
 }
 
 /** Le lot qui retire une pièce : sa ligne, et la grille de sa vue. */
 export function lotSansPiece(nom) {
-  const maj = { loggia_rooms: normRooms(cfgVal('loggia_rooms', null)).filter(r => r.room !== nom) };
-  const all = { ...grilles() };
-  if (all[nom]) { delete all[nom]; maj[GRILLES] = Object.keys(all).length ? all : null; }
-  return maj;
+  return {
+    loggia_rooms: normRooms(cfgVal('loggia_rooms', null)).filter(r => r.room !== nom),
+    [GRILLES]: (brut) => retirerGrille(brut, nom),
+  };
 }
 
 /** La place d'une pièce enregistrée, dans la grille du format en cours : la
