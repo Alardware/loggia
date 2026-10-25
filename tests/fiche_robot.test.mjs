@@ -893,7 +893,8 @@ test('« Localiser » passe par son script quand il en désigne un qui répond �
   const f2 = await fiche(w2);
   f2.accueil().props.seconde.agir();
   w2.ws.find(x => x.type === 'loggia/robots/lancer').ko({ code: 'invalid_format', message: 'extra keys not allowed' });
-  await attendre(); await attendre();
+  // Le repli passe par un module charge a la demande : borne, pas deux tours fixes (CI, 25/10).
+  await jusqua(() => w2.appels.length > 0);
   assert.deepEqual([w2.appels, w2.rejets], [['vacuum.locate ' + ASP], []], '`locate` à sa place, rien au toast');
   // Son script indisponible ou disparu : le serveur ne le lance pas et ne note rien (`_etat_script`, `script_inconnu`) — `locate` à sa place.
   const w3 = poser({ etat: avecPieces(PIECES_SON_CAS(false)), retouche: (c) => { sonCas(c); c['script.robot_ou'].state = 'unavailable'; } });
@@ -901,7 +902,8 @@ test('« Localiser » passe par son script quand il en désigne un qui répond �
   const f3 = await fiche(w3);
   f3.accueil().props.seconde.agir();
   w3.ws.find(x => x.type === 'loggia/robots/lancer').ko({ code: 'script_inconnu', message: 'script inconnu de ce robot : ' + ASP });
-  await attendre(); await attendre();
+  // Le repli passe par un module charge a la demande : borne, pas deux tours fixes (CI, 25/10).
+  await jusqua(() => w3.appels.length > 0);
   assert.deepEqual([w3.appels, w3.rejets], [['vacuum.locate ' + ASP], []], '`locate` à sa place, rien au toast');
 })));
 
