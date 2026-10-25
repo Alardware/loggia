@@ -3,7 +3,9 @@
   "name": "Loggia Dashboard",
   "after_dependencies": [
     "automation",
+    "energy",
     "mqtt",
+    "recorder",
     "script"
   ],
   "codeowners": [

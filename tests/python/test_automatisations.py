@@ -462,6 +462,9 @@ def test_manifest_declare_automation_et_script():
     # hassfest refuse l'import d'une integration non declaree (validate.yml).
     manifest = json.loads((RACINE / "custom_components" / "loggia" / "manifest.json").read_text(encoding="utf-8"))
     assert {"mqtt", "automation", "script"} <= set(manifest.get("after_dependencies") or [])
+    # Le cout heure par heure des prises et le chauffage lisent l'historique et
+    # l'Energie a la demande (25/10, hassfest de la PR #36).
+    assert {"energy", "recorder"} <= set(manifest.get("after_dependencies") or [])
     assert not {"automation", "script"} & set(manifest.get("dependencies") or [])
 
 
