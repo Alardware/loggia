@@ -119,7 +119,7 @@ test('le français vouvoie ; l’allemand, l’espagnol, l’italien et le néer
 test('chaque clé de la tranche a un lecteur : l’écran, ou le journal du serveur', () => {
   const ecran = ['robotsfiche.js', 'refusrobots.js', 'ficherobot.jsx'].map(f => readFileSync(join(RACINE, 'src', f), 'utf8')).join('\n');
   const serveur = readFileSync(join(RACINE, 'custom_components', 'loggia', 'robots.py'), 'utf8');
-  const sans = TOUTES.filter(k => !ecran.includes("'" + k.replace(/'/g, "\\'") + "'") && !serveur.includes('"' + k + '"'));
+  const sans = TOUTES.filter(k => !ecran.includes("'" + k.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'") && !serveur.includes('"' + k + '"'));
   assert.deepEqual(sans, [], 'des clés dormantes');
   // Le détail du passage retenu derrière ses scripts est la phrase même de la popup : une seule clé, déjà traduite.
   assert.ok(serveur.includes('"Vos scripts gardent la main pour les pièces."'), 'le planning retenu dit la phrase de la popup');

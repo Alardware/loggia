@@ -21,6 +21,9 @@ import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+// Retire le balisage jusqu'a ce qu'il n'en reste plus (CodeQL, PR #36).
+const sansBalises = (h) => { let t = h, p; do { p = t; t = t.replace(/<[^>]+>/g, ''); } while (t !== p); return t; }
+
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -180,7 +183,7 @@ test('l’en-tête d’Objets › Volets : le compte des volets ; les puces Tout
   const course = renderToStaticMarkup(createElement(EnteteVolets, { hass: hassDe(...S), titre: 'Volets', ids }));
   /* ASSERTION MODIFIÉE (tâche 12 bis) : « · 1 en mouvement » vit dans son propre <span>, que le
    * téléphone tait (index.css) ; le texte, lui, ne change pas. */
-  assert.ok(course.replace(/<[^>]+>/g, '').includes('3 volets · 2 ouverts · 1 en mouvement'));
+  assert.ok(sansBalises(course).includes('3 volets · 2 ouverts · 1 en mouvement'));
   assert.ok(/aria-label="Tout arrêter"[^>]*background:var\(--o-accent-fond\)/.test(course));
   const fermes = renderToStaticMarkup(createElement(EnteteVolets, { hass: hassDe(st('cover.volet_chambre', 'closed', 0)), titre: 'Volets', ids: ['cover.volet_chambre'] }));
   assert.ok(fermes.includes('1 volet · tous fermés'));

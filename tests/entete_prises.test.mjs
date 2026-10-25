@@ -36,7 +36,7 @@ const PRISES = [{ id: 'switch.nas', puissance: 'sensor.nas_power' }, { id: 'swit
   { id: 'switch.lv', puissance: 'sensor.lv_power' }, { id: 'switch.sejour', puissance: null }, { id: 'switch.poele', puissance: 'sensor.poele_power' }];
 const html = (p) => renderToStaticMarkup(createElement(E.default, { hass: { states: S }, titre: 'Prises', prises: p }));
 // Ce que lit l'œil — sans le balisage — quand rien n'est masqué : le texte entier, « en ce moment » compris.
-const texte = (h) => h.replace(/<[^>]+>/g, '');
+const texte = (h) => { let t = h, p; do { p = t; t = t.replace(/<[^>]+>/g, ''); } while (t !== p); return t; };
 
 test('le compte : les allumées, la puissance de celles qui la disent (en watts), les muettes à part', () => {
   assert.deepEqual(E.comptePrises(PRISES, S), { allumees: 3, watts: 150, muettes: 1 });

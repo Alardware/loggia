@@ -174,7 +174,9 @@ export function appareilId() {
   try {
     let v = localStorage.getItem(CLE_ID_APPAREIL);
     if (!v || !/^[a-z0-9]{8,40}$/.test(v)) {
-      v = Array.from({ length: 16 }, () => Math.floor(Math.random() * 36).toString(36)).join('');
+      // Tire au hasard CRYPTOGRAPHIQUE : l'identifiant designe la fiche, donc le
+      // profil, de cet ecran ; un tirage previsible le laisserait deviner (CodeQL, PR #36).
+      v = Array.from(crypto.getRandomValues(new Uint8Array(16)), (o) => (o % 36).toString(36)).join('');
       localStorage.setItem(CLE_ID_APPAREIL, v);
     }
     return v;

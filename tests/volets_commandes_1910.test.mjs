@@ -26,6 +26,9 @@ import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+// Retire le balisage jusqu'a ce qu'il n'en reste plus (CodeQL, PR #36).
+const sansBalises = (h) => { let t = h, p; do { p = t; t = t.replace(/<[^>]+>/g, ''); } while (t !== p); return t; }
+
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -328,7 +331,7 @@ test('point 10 — la bibliothèque : un VOLET (sa classe) et un garage', () => 
 
 test('point 11 — l’en-tête d’Objets : tous muets, pas « tous fermés » ; aucun volet, pas « 0 volets »', () => {
   C.reglerCourses({ horloge: () => T, ...AU_REPOS });
-  const rendre = (sts, ids) => renderToStaticMarkup(createElement(ENTETE.default, { hass: hassOrdres([], sts), titre: 'Volets', ids })).replace(/<[^>]+>/g, '');
+  const rendre = (sts, ids) => sansBalises(renderToStaticMarkup(createElement(ENTETE.default, { hass: hassOrdres([], sts), titre: 'Volets', ids })));
   const muets = [st('cover.a', 'unavailable', null), st('cover.b', 'unknown', null)];
   assert.ok(rendre(muets, ['cover.a', 'cover.b']).includes('2 volets · 2 indisponibles') && !rendre(muets, ['cover.a', 'cover.b']).includes('tous fermés'));
   const melange = [st('cover.a', 'unavailable', null), st('cover.c', 'closed', 0)];

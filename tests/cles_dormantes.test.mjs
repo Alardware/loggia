@@ -58,7 +58,7 @@ const lecteurs = (cle) => FICHIERS
  * à voir avec l'ancien ciel étoilé (`loggia-ciel-qualite`, `-actuel`,
  * `-niveau-v2`). Ni l'un ni les autres ne lisent la clé morte. */
 const lecteursExacts = (cle) => {
-  const q = new RegExp('[\'"`]' + cle.replace(/[-_]/g, '\\$&') + '[\'"`]');
+  const q = new RegExp('[\'"`]' + cle.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&') + '[\'"`]');
   return FICHIERS
     .filter(([c]) => PORTEUSES.indexOf(c) < 0)
     .filter(([, t]) => q.test(t.replace(/customElements\.(get|define)\(\s*(['"])[^'"]+\2/g, '')))
