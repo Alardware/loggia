@@ -18,6 +18,15 @@ test('le calme : rien d’allume, rien d’ouvert', () => {
   assert.deepEqual(NIVEAUX_PIECE, ['probleme', 'actif', 'calme']);
 });
 
+test('une pièce sans lampe n’est pas « éteinte » : elle est calme (ticket #34)', () => {
+  assert.equal(ambiancePiece({ lampes: 0 }).texte, 'Tout est calme');
+  assert.equal(ambiancePiece({ lampes: 0 }).niveau, 'calme');
+  assert.equal(ambiancePiece({ lampes: 2 }).texte, 'Tout est éteint');
+  assert.equal(ambiancePiece({}).texte, 'Tout est éteint', 'sans le nombre de lampes, le texte d’avant');
+  // Une pièce sans lampe qui joue de la musique reste active.
+  assert.equal(ambiancePiece({ lampes: 0, medias: [{ tv: false }] }).niveau, 'actif');
+});
+
 test('l’activite : lumieres, TV, musique, chauffe — dans cet ordre, sans redite', () => {
   assert.equal(ambiancePiece({ lumieres: 1 }).texte, '1 lumière');
   assert.equal(ambiancePiece({ lumieres: 4, medias: [{ tv: true }] }).texte, '4 lumières · TV');

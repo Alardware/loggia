@@ -14,6 +14,7 @@ import { getHass, cfgVal, cfgSet } from './state.js';
 import { rendreFocus } from './focus.js';
 import { filtrerChoix, blocsChoix, placerMenu, SEUIL_RECHERCHE } from './choix.js';
 import { tr, comparerTextes } from './i18n.js';
+import { nombre } from './format.js';
 import { CARTE_MAISON, ICONE_CARTE, NOM_CARTE, SOUS_CARTE } from './styles.js';
 
 // Suit un min-width en live (layout PC : rail Accueil ≥ 1180 px)
@@ -194,7 +195,8 @@ export const editBtn = (accent) => ({ padding: '7px 12px', borderRadius: 10, fon
 // Reglages fins de l'utilisateur, appliques PAR-DESSUS le preset (et par-dessus
 // « Suivre HA »). Chaque cle ne surcharge que si elle s'ecarte du defaut, pour laisser
 // le preset decider du reste : Atrium n'a pas d'ombre, iOS est tres arrondi, etc.
-export const LOOK_DEF = { glass: false, radius: 'doux', shadow: true, hairline: true, contrast: false, accent: '', tint: 'douce', fond: 'aucun' };
+// `plan` (20/10) : le bouton « Plan » de la section Pieces de l'Accueil. Faux, les pieces restent en cartes.
+export const LOOK_DEF = { glass: false, radius: 'doux', shadow: true, hairline: true, contrast: false, accent: '', tint: 'douce', fond: 'aucun', plan: true };
 
 export const USER_COLORS = ['#4f8cff', 'var(--o-ok)', 'var(--o-purple)', '#ff8a4c', '#ec4899', '#22d3ee', '#ffb347', '#f87171'];
 // Un seul profil au départ, sans nom propre ni liaison à une personne : c'est à
@@ -555,8 +557,11 @@ export class Barriere extends Component {
 
   render() {
     const { err } = this.state;
-    const { children, ou = 'vue', titree = false, entete = null } = this.props;
+    const { children, ou = 'vue', titree = false, entete = null, repli = null } = this.props;
     if (!err) return children;
+    /* Une barrière LOCALE (correction bis du chantier Capteurs, point 4) : ce qui casse rend la place à son repli — les sections
+     * d'Objets › Capteurs, introuvables, à la grille ordinaire —, et la vue garde ses puces et ses cartes. */
+    if (repli) return repli;
     const vue = ou === 'vue';
     const titre = vue ? tr('Cette vue n’a pas pu s’afficher') : tr('Cette fiche n’a pas pu s’afficher');
     const styleTitre = { ...NOM_CARTE, whiteSpace: 'normal', margin: 0 };
@@ -1199,6 +1204,9 @@ export function usePli(cle) {
 export function useEtatServeur(hass, type, ms, siErreur) {
   const [etat, setEtat] = useState(null);
   const [err, setErr] = useState('');
+  /* Le CODE du dernier échec de lecture (`not_available` : le module absent ; `unauthorized`…), '' sinon : l'en-tête des
+   * lumières en tire ce qu'il peut faire sans la règle Nuit (ADR 0261). Le message, lui, reste le repli traduit. */
+  const [codeErr, setCodeErr] = useState('');
   const vivant = useRef(true);
   const hRef = useRef(null);
   const courant = hass && typeof hass.callWS === 'function' ? hass : null;
@@ -1217,18 +1225,18 @@ export function useEtatServeur(hass, type, ms, siErreur) {
      * pas encore relayé à la vue ne vaut pas une panne (relecture du lot 14). */
     if (!connecte) { const t = setTimeout(() => { if (!getHass()) setErr(tr('Home Assistant n’est pas joignable.')); }, 4000); return () => clearTimeout(t); }
     const lire = () => hRef.current.callWS({ type })
-      .then(r => { if (vivant.current) { setEtat(r); setErr(''); } })
+      .then(r => { if (vivant.current) { setEtat(r); setErr(''); setCodeErr(''); } })
       /* Le repli TRADUIT de la vue, jamais le motif du serveur (audit du
        * 03/10) : « regles de volets indisponibles », « Unknown command. »
        * s'affichaient tels quels, en français sans accents ou en anglais,
        * dans les sept langues. Une lecture ratée n'a rien de plus à dire. */
-      .catch(() => { if (vivant.current) setErr(siErreur || tr('Réglages indisponibles.')); });
+      .catch((e) => { if (vivant.current) { setErr(siErreur || tr('Réglages indisponibles.')); setCodeErr((e && typeof e.code === 'string' && e.code) || ''); } });
     lire();
     const t = setInterval(lire, ms);
     return () => { vivant.current = false; clearInterval(t); };
   }, [connecte, type, ms, siErreur]);
 
-  return { etat, setEtat, err, setErr, vivant };
+  return { etat, setEtat, err, setErr, vivant, codeErr };
 }
 
 export function RegleEntete({ nom, desc, on, cb, plie = false, onPlier = null, zone = null, note = null }) {
@@ -1271,10 +1279,12 @@ export function RegleEntete({ nom, desc, on, cb, plie = false, onPlier = null, z
  * Repris trait pour trait des trois copies locales : memes dimensions, memes
  * variables de couleur. Un composant partage qui change l'apparence en passant
  * n'est pas une extraction, c'est une refonte — et personne ne l'a demandee.
+ * `id`, facultatif : le focus peut y revenir (« Suivre le planning » de la
+ * fiche d'un chauffage, apres « Creer un planning ») ; sans lui, rien ne change.
  */
-export function Bascule({ on, cb, nom = null }) {
+export function Bascule({ on, cb, nom = null, id = undefined }) {
   return (
-    <button type="button" onClick={cb} role="switch" aria-checked={!!on} aria-label={nom || undefined}
+    <button type="button" id={id} onClick={cb} role="switch" aria-checked={!!on} aria-label={nom || undefined}
       style={{ width: 46, height: 26, borderRadius: 999, border: 'none', cursor: 'pointer', flexShrink: 0, padding: 3,
         background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start' }}>
       <span style={{ width: 20, height: 20, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)' }} />
@@ -1326,4 +1336,70 @@ export function nomCarte(...morceaux) {
     .map(m => String(m).replace(/\s+/g, ' ').trim())
     .filter(Boolean)
     .join(', ');
+}
+
+/* Un curseur au clavier (`role="slider"`) : les flèches, Page préc. / suiv.,
+ * Début et Fin le règlent au pas de `step`, dans [min, max]. Il vivait dans
+ * App.jsx ; la luminosité des Scènes, chargée à la demande depuis le 11/10
+ * (scenes.jsx), s'en sert aussi. La valeur dite garde ses décimales utiles
+ * sans en forcer — « 21 % », pas « 21,0 % » : `nombre(v, 1, 0)`, le `decMax`
+ * d'App.jsx.
+ *
+ * `aria-valuenow` est toujours posé (ARIA 1.2 l'exige d'un curseur) : la
+ * valeur, sinon le minimum — une lampe éteinte dont le serveur ne sait pas le
+ * niveau, un blanc que la lampe n'a pas réglé. `etat` (facultatif) : ce que la
+ * valeur seule ne dit pas, « Éteinte » ; le lecteur d'écran l'annonce avec elle,
+ * « Éteinte · 80 % », ou seul quand la valeur est inconnue. Sans `etat`, rien ne
+ * change pour les autres curseurs (volets, volume, thermostats, scènes).
+ *
+ * `differe` (audit du 19/10, B11 — les curseurs des lumières) : une touche TENUE
+ * se répète, et chaque répétition envoyait un ordre — des dizaines de `turn_on`
+ * pour une flèche gardée enfoncée. Différé, chaque touche vise un pas plus loin
+ * que la visée en cours (gardée sur l'élément, `__visee` : deux touches avant le
+ * rendu ne comptent pas pour une), `apercu(v, el)` dessine la visée sans rien
+ * envoyer, et UN seul ordre part — au relâcher de la touche (`onKeyUp`), ou
+ * `RAFALE_CLAVIER_MS` après la dernière sans relâcher. Sans `differe`, rien ne
+ * change pour les autres curseurs. */
+const RAFALE_CLAVIER_MS = 500;
+export function kbSlider(label, value, commit, { min = 0, max = 100, step = 5, unit = '%', etat = null, differe = false, apercu = null } = {}) {
+  const connu = value != null;
+  const dit = connu ? nombre(value, 1, 0) + (unit ? ' ' + unit : '') : undefined;
+  const borner = (v) => Math.max(min, Math.min(max, v));
+  // La rafale d'un curseur différé : l'ordre part une fois, avec la dernière visée.
+  const poser = (el) => {
+    if (!el) return;
+    clearTimeout(el.__rafale); el.__rafale = 0;
+    if (el.__visee == null) return;
+    const v = el.__visee; el.__visee = null;
+    commit(v);
+  };
+  const viser = (el, v) => {
+    if (!differe || !el) { commit(v); return; }
+    el.__visee = v;
+    if (apercu) apercu(v, el);
+    clearTimeout(el.__rafale);
+    el.__rafale = setTimeout(() => poser(el), RAFALE_CLAVIER_MS);
+  };
+  return {
+    role: 'slider', tabIndex: 0, 'aria-label': label,
+    'aria-valuemin': min, 'aria-valuemax': max,
+    'aria-valuenow': connu ? Math.round(value * 10) / 10 : min,
+    'aria-valuetext': etat ? (connu ? etat + ' · ' + dit : etat) : dit,
+    onKeyDown: (e) => {
+      const el = e.currentTarget;
+      let d;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowUp') d = step;
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') d = -step;
+      else if (e.key === 'PageUp') d = step * 2;
+      else if (e.key === 'PageDown') d = -step * 2;
+      else if (e.key === 'Home') { e.preventDefault(); e.stopPropagation(); viser(el, min); return; }
+      else if (e.key === 'End') { e.preventDefault(); e.stopPropagation(); viser(el, max); return; }
+      else return;
+      e.preventDefault(); e.stopPropagation();
+      // Différé, le pas part de la visée en cours ; sinon de la valeur dessinée.
+      const cur = differe && el && el.__visee != null ? el.__visee : value == null ? min : value;
+      viser(el, borner(Math.round((cur + d) / step) * step));
+    },
+    ...(differe ? { onKeyUp: (e) => poser(e.currentTarget) } : {}),
+  };
 }

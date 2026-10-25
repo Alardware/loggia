@@ -4,68 +4,22 @@
  * cette page. Elles continuent donc de tourner dashboard fermé, ce qui est
  * bien le moins pour un volet qui doit descendre au coucher du soleil.
  *
- * L'orientation se donne par point cardinal plutôt qu'en degrés : personne ne
- * sait que sa façade regarde à 232°, tout le monde sait qu'elle donne au
- * sud-ouest. Le serveur, lui, travaille en degrés.
+ * Ce qui règle UN volet — ses heures, ses jours, sa façade, la porte devant
+ * lui — vit dans sa fiche (chantier Volets, V2) : ici restent les réglages de
+ * la maison.
  */
 import {
   useState, useMemo
 } from 'react';
-import { BottomSheet, EntPicker, cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
+import { BottomSheet, EntPicker, RegleEntete, usePli , useEtatServeur, cvName } from '../ui.jsx';
+import { compteOrdinaire } from '../state.js';
 import { ZONE_REGLAGES, CAPITALES, MONO, quandCourt, majuscule } from './parcommun.jsx';
-import { tr, trN, comparerTextes } from '../i18n.js';
+import { tr, trN } from '../i18n.js';
 import { raisonEchec } from '../refus.js';
 import { puceHaute as puce } from '../styles.js';
-import { cfgVal, cfgSet } from '../state.js';
 import { uniteTemp, deCelsius } from '../unites.js';
 import { mot, pourquoi } from '../journalmots.js';
-
-/* Ce qu'est un volet, par sa `device_class` : MIROIR de
- * custom_components/loggia/ouvrants.py — tests/ouvrants_miroir.test.mjs
- * refuse que les deux listes divergent. */
-const CLASSES_VOLETS = ['shutter', 'blind', 'shade', 'curtain', 'awning'];
-
-/* ─────────────────────────────────────────────────────────────────────────────
- * Le seuil de fermeture — le seul reglage de cette page qui ne parte PAS au
- * composant serveur.
- *
- * C'est de l'affichage, pas une action : aucune regle ne l'attend, il ne
- * declenche rien, et il doit rester lisible meme quand le serveur ne repond
- * pas. Il passe donc par `cfgSet`, qui ecrit en local ET cote serveur — le
- * seuil suit donc l'utilisateur d'un ecran a l'autre, ce qui est juste : il
- * decrit le MATERIEL, pas la taille de l'ecran.
- *
- * Pourquoi il existe : un volet ne bute pas toujours a zero. Celui d'une
- * chambre s'arrete a 1 %, et Home Assistant le dit alors `open` — son
- * `is_closed` compare la position a zero. Loggia le dessinait ouvert sur un
- * volet visiblement ferme.
- * ───────────────────────────────────────────────────────────────────────────── */
-const SEUILS = [0, 1, 2, 5];
-const SEUIL_DEF = 2;
-const lireSeuil = () => { const n = +cfgVal('loggia_coverseuil', SEUIL_DEF); return SEUILS.indexOf(n) >= 0 ? n : SEUIL_DEF; };
-export function VoletsAffichage({ cardSt }) {
-  /* `cfgVal` n'est pas un etat React : sans ce miroir, la puce choisie ne
-   * s'allumait qu'au prochain rendu venu d'ailleurs. */
-  const [seuil, setSeuil] = useState(lireSeuil);
-  const choisir = (n) => { setSeuil(n); cfgSet({ loggia_coverseuil: n === SEUIL_DEF ? null : n }); };
-  return (
-    <div style={cardSt}>
-      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{tr('Considérer fermé en dessous de')}</div>
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginBottom: 12 }}>
-        {tr('Certains volets butent à 1 ou 2 % au lieu de zéro : Loggia les dirait ouverts. Le pourcentage affiché reste le vrai.')}
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {SEUILS.map(n => (
-          <button key={n} type="button" aria-pressed={seuil === n}
-            onClick={() => choisir(n)}
-            style={puce(seuil === n)}>
-            {n === 0 ? tr('Zéro pile') : n + ' %'}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
+import { rafraichirVolets } from '../voletsetat.js';
 
 /* `champ` et `Nombre` vivent ici, et non dans le composant.
  *
@@ -79,29 +33,35 @@ const champ = { padding: '9px 12px', borderRadius: 10, border: 'var(--o-bw,1px) 
 
 /* `nom` sert d'intitule : le champ n'a pas d'etiquette propre, et l'unite
  * affichee a cote (« min apres le lever ») ne dit pas de quoi il s'agit. */
-const Nombre = ({ v, min, max, pas = 1, unite, nom, cb }) => (
-  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-    <input aria-label={nom || unite} type="number" value={v} min={min} max={max} step={pas}
-      onChange={e => cb(Math.max(min, Math.min(max, Number(e.target.value) || 0)))}
-      style={{ ...champ, width: 78 }} />
-    <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{unite}</span>
-  </span>
-);
+/* `inerte` (compte ordinaire, V10) : le champ se lit, ne se change pas ; le
+ * toucher rappelle `cb` avec la valeur affichée, que `enregistrer` refuse en
+ * nommant sa clé, sous la rangée. */
+/* La saisie reste un BROUILLON jusqu'à la sortie du champ ou Entrée (relecture
+ * du 19/10) : bornée à chaque frappe, « 3 » devenait 5 puis « 30 » 50 — le
+ * seuil de vent ne se tapait plus —, et chaque valeur de passage partait au
+ * serveur. Vide ou illisible, elle ne change rien. */
+const Nombre = ({ v, min, max, pas = 1, unite, nom, cb, inerte = false }) => {
+  const [brouillon, setBrouillon] = useState(null);
+  const valider = () => {
+    if (brouillon == null) return;
+    const n = Number(brouillon);
+    setBrouillon(null);
+    if (String(brouillon).trim() === '' || !Number.isFinite(n)) return;
+    const borne = Math.max(min, Math.min(max, n));
+    if (borne !== v) cb(borne);
+  };
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+      <input aria-label={nom || unite} type="number" value={brouillon != null ? brouillon : v} min={min} max={max} step={pas}
+        readOnly={inerte} aria-disabled={inerte || undefined} onClick={inerte ? () => cb(v) : undefined}
+        onChange={e => { if (!inerte) setBrouillon(e.target.value); }}
+        onBlur={valider} onKeyDown={e => { if (e.key === 'Enter') valider(); }}
+        style={{ ...champ, width: 78, ...(inerte ? { opacity: 0.6, cursor: 'default' } : null) }} />
+      <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{unite}</span>
+    </span>
+  );
+};
 
-
-/* Les abréviations se traduisent (audit du 03/10) : « O » et « SO » ne disent
- * rien en anglais (W, SW), et l'allemand ou le néerlandais écrivent « O » pour
- * l'EST. Les huit passent donc par le catalogue. */
-const CARDINAUX = () => [
-  { deg: 0, court: tr('N') },
-  { deg: 45, court: tr('NE') },
-  { deg: 90, court: tr('E') },
-  { deg: 135, court: tr('SE') },
-  { deg: 180, court: tr('S') },
-  { deg: 225, court: tr('SO') },
-  { deg: 270, court: tr('O') },
-  { deg: 315, court: tr('NO') },
-];
 
 // Nomme ainsi, et non `JOURS`, pour ne pas se confondre avec le tableau du
 // meme nom dans meteo.jsx : l un s appelle, l autre s indexe.
@@ -113,19 +73,6 @@ const nomPriorite = (r) => ({
 
 const JOURS_COURTS = () => [tr('lun'), tr('mar'), tr('mer'), tr('jeu'), tr('ven'), tr('sam'), tr('dim')];
 
-/* Le point cardinal le plus proche d'un azimut — pour relire ce que le serveur
- * a stocké en degrés sans imposer une valeur pile sur un axe. */
-function cardinalDe(deg) {
-  if (deg == null) return null;
-  let meilleur = null;
-  let ecart = 999;
-  for (const c of CARDINAUX()) {
-    const d = Math.abs(((c.deg - deg + 540) % 360) - 180);
-    if (d < ecart) { ecart = d; meilleur = c; }
-  }
-  return meilleur;
-}
-
 /* Fusion locale, miroir de celle du serveur : une section reçoit un patch
  * partiel, le reste de la section survit. */
 function fusion(cfg, patch) {
@@ -136,11 +83,40 @@ function fusion(cfg, patch) {
   return n;
 }
 
+/* Défaire un patch refusé : chaque champ touché reprend la valeur d'avant le
+ * geste — la valeur affichée ne ment plus jusqu'au relevé suivant (V10). */
+export function defaire(cfg, avant, patch) {
+  const n = { ...cfg };
+  for (const section of Object.keys(patch || {})) {
+    const ancien = (avant && avant[section]) || {};
+    const remis = { ...(cfg[section] || {}) };
+    for (const champNom of Object.keys(patch[section] || {})) {
+      if (Object.prototype.hasOwnProperty.call(ancien, champNom)) remis[champNom] = ancien[champNom];
+      else delete remis[champNom];
+    }
+    n[section] = remis;
+  }
+  return n;
+}
+
+/* La rangée qu'un patch touche : `section.champ` (« planning.jours »). C'est
+ * là, sous elle, que se dit un refus — en bas de la page, il se lisait hors de
+ * vue, puis s'effaçait au relevé suivant (5 s). */
+export const rangeeDe = (patch) => {
+  const section = Object.keys(patch || {})[0] || '';
+  const champNom = Object.keys((patch && patch[section]) || {})[0];
+  return champNom ? section + '.' + champNom : section;
+};
+
+/* Ce qu'un compte ordinaire lit quand il touche un réglage : le refus, qui nomme
+ * la clé (V10) — le même que dans la popup d'un volet (fichevolet.jsx). */
+const refusLecture = () => raisonEchec(Object.assign(new Error('Unauthorized'), { code: 'unauthorized' }), 'loggia_volets');
+
 export function VoletsReglages({ hass, cardSt }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
-  const { etat, setEtat, err, setErr, vivant } =
+  const { etat, setEtat, err, vivant } =
     useEtatServeur(hass, 'loggia/volets/etat', 5000, tr('Réglages indisponibles.'));
-  const [picker, setPicker] = useState(null);   // { section, champ, domaines } — ou { domaines, poser }
+  const [picker, setPicker] = useState(null);   // { section, champ, domaines }
   /* Un pli par regle — avec les autres etats : un hook ne peut pas vivre
    * apres un retour conditionnel. */
   const [pliPlan, plierPlan] = usePli('volets:planning');
@@ -148,12 +124,24 @@ export function VoletsReglages({ hass, cardSt }) {
   const [pliVent, plierVent] = usePli('volets:vent');
   const [pliBaies, plierBaies] = usePli('volets:baies');
   const [pliVelux, plierVelux] = usePli('volets:velux');
+  /* Un refus d'écriture : `{ ou, texte }`, dit SOUS la rangée touchée (`ou`,
+   * `rangeeDe`). À part de `err`, que le relevé suivant efface : un refus
+   * reste jusqu'au geste suivant. */
+  const [refus, setRefus] = useState(null);
+  /* Un compte ordinaire lit tout et n'écrit rien (V10, comme la popup d'un
+   * volet) : les réglages sont inertes, et un appui dit pourquoi sans rien
+   * envoyer — le serveur refuserait (`require_admin`). */
+  const ordinaire = compteOrdinaire(hass);
 
 
   const cfg = (etat && etat.config) || null;
 
   const enregistrer = async (patch) => {
+    const ou = rangeeDe(patch);
+    if (ordinaire) { setRefus({ ou, texte: refusLecture() }); return; }
     if (!h || !cfg) return;
+    setRefus(null);
+    const avant = cfg;
     // On rend la main tout de suite : le sondage remettrait la vieille valeur
     // le temps de l'aller-retour, et la bascule reviendrait en arrière sous
     // le doigt.
@@ -161,32 +149,41 @@ export function VoletsReglages({ hass, cardSt }) {
     try {
       const r = await h.callWS({ type: 'loggia/volets/config', patch });
       if (vivant.current && r && r.config) setEtat(e => (e ? { ...e, config: r.config } : e));
+      // Les cartes ont leur cache (voletsetat.js, 60 s) : sans relecture, elles
+      // disaient encore « Ouvre à 07:47 » une minute après « Manuel » (audit du 19/10).
+      rafraichirVolets();
     } catch (e) {
+      if (!vivant.current) return;
+      // L'avance s'annule : la valeur d'avant revient tout de suite.
+      setEtat(x => (x ? { ...x, config: defaire(x.config, avant, patch) } : x));
       // Un refus se dit comme tel et nomme sa clé ; une panne reste une panne
       // (audit du 03/10, refus.js). Il s'affichait en « Unauthorized ».
-      setErr(raisonEchec(e, 'loggia_volets'));
+      setRefus({ ou, texte: raisonEchec(e, 'loggia_volets') });
     }
   };
+  /* Le refus de cette rangée, sous elle. */
+  const alerte = (ou) => (refus && refus.ou === ou
+    ? <div role="alert" style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{refus.texte}</div>
+    : null);
+  // Une puce inerte (compte ordinaire) : elle se lit, la choisie reste pleine.
+  const puceInerte = (on) => (ordinaire ? { cursor: 'default', opacity: on ? 1 : 0.4 } : null);
+  // Un capteur par son nom (friendly_name), comme partout ailleurs ; l'identifiant s'il n'existe plus.
+  const nomEntite = (id) => (hass && hass.states && hass.states[id] ? cvName(hass.states[id], id) : id);
 
-  /* Les volets, par leur CLASSE (ouvrants.py, audit du 03/10) : un garage, un
+  /* Les ouvrants, par leur CLASSE (ouvrants.py, audit du 03/10) : un garage, un
    * portail, une porte ne sont pas des volets — une classe absente non plus.
-   * Les fenêtres de toit s'y ajoutent quand l'option velux est prise. Le
-   * composant ne pilote que ceux-là : les montrer tous laissait croire qu'un
-   * portail suivait le planning. */
+   * Chaque volet se règle dans sa fiche (V2) : ici ne restent que deux comptes,
+   * les ouvrants sans classe (laissés de côté) et les fenêtres de toit. */
   const velux = !!(cfg && cfg.velux && cfg.velux.actif);
-  const { covers, sansClasse, fenetres } = useMemo(() => {
-    if (!hass || !hass.states) return { covers: [], sansClasse: 0, fenetres: 0 };
+  const { sansClasse, fenetres } = useMemo(() => {
+    if (!hass || !hass.states) return { sansClasse: 0, fenetres: 0 };
     const ids = Object.keys(hass.states).filter(id => id.indexOf('cover.') === 0);
     const classe = (id) => (hass.states[id].attributes || {}).device_class;
     return {
-      covers: ids
-        .filter(id => CLASSES_VOLETS.indexOf(classe(id)) >= 0 || (velux && classe(id) === 'window'))
-        .map(id => ({ id, nom: cvName(hass.states[id], id) }))
-        .sort((a, b) => comparerTextes(a.nom, b.nom)),
       sansClasse: ids.filter(id => !classe(id)).length,
       fenetres: ids.filter(id => classe(id) === 'window').length,
     };
-  }, [hass, velux]);
+  }, [hass]);
 
   if (!cfg) {
     return (
@@ -216,7 +213,19 @@ export function VoletsReglages({ hass, cardSt }) {
 
 
 
-  const choisirEntite = (section, champNom, domaines) => setPicker({ section, champ: champNom, domaines });
+  const choisirEntite = (section, champNom, domaines) => {
+    if (ordinaire) { setRefus({ ou: section + '.' + champNom, texte: refusLecture() }); return; }
+    setPicker({ section, champ: champNom, domaines });
+  };
+  /* La protection solaire ne baisse que les volets dont la façade est connue
+   * (volets.py) : allumée sans aucune, elle ne fait rien — le dire. Une façade
+   * se choisit dans la popup d'un volet (V2). */
+  const S = (hass && hass.states) || {};
+  const facades = sol.volets || {};
+  const sansFacade = !!sol.actif && !Object.keys(facades).some(id => S[id] && facades[id]
+    && facades[id].orientation != null && Number.isFinite(Number(facades[id].orientation)));
+  // Tous les jours décochés : le planning ne bouge plus aucun jour (le moteur suit l'écran).
+  const joursActifs = Array.isArray(plan.jours) ? plan.jours : [0, 1, 2, 3, 4, 5, 6];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -230,158 +239,78 @@ export function VoletsReglages({ hass, cardSt }) {
       {/* ── Le planning ── */}
       <div style={cardSt}>
         <RegleEntete nom={tr('Lever et coucher du soleil')}
-          desc={tr('Ouvrir le matin, fermer le soir, aux heures réelles du soleil chez toi.')}
+          desc={tr('Ouvrir le matin, fermer le soir, aux heures réelles du soleil chez vous.')}
           on={plan.actif} cb={() => enregistrer({ planning: { actif: !plan.actif } })} plie={pliPlan} onPlier={plierPlan} zone="volets-plan" />
+        {alerte('planning.actif')}
         {plan.actif && !pliPlan && (
           <div id="volets-plan" style={ZONE_REGLAGES}>
-            {/* Ce que la règle fait AUJOURD'HUI. Le même choix se retrouve en
-              * haut de la vue Volets : c'est celui qu'on change au quotidien,
-              * quand l'interrupteur ci-dessus se règle une fois. */}
+            {/* Ce que la règle fait AUJOURD'HUI. Il se choisit au quotidien dans
+              * la popup d'un volet et dans la vue « modes et planning » : ici il
+              * se DIT, sans troisième commande (sa règle « rien en double dans
+              * Paramètres », décision du 19/10). */}
             <div style={{ marginTop: 14 }}>
               <div style={label}>{tr('En ce moment')}</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {[['auto', tr('Auto lever/coucher'), tr('Ferme le soir, ouvre le matin')],
-                  ['nuit', tr('Fermeture nuit'), tr('Ferme le soir, laisse fermé le matin')],
-                  ['manuel', tr('Manuel'), tr('Ne touche à rien')]].map(([id, nom]) => (
-                    <button key={id} onClick={() => enregistrer({ planning: { mode: id } })}
-                      style={puce((plan.mode || 'auto') === id)}>{nom}</button>
-                  ))}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 7 }}>
-                {(plan.mode || 'auto') === 'nuit'
-                  ? tr('Ferme le soir, laisse fermé le matin')
-                  : ((plan.mode || 'auto') === 'manuel' ? tr('Ne touche à rien') : tr('Ferme le soir, ouvre le matin'))}
+              <div style={{ fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600 }}>
+                {tr('Mode : {mode}. Il se choisit dans la popup d’un volet, ou dans Volets › modes et planning.',
+                  { mode: (plan.mode || 'auto') === 'nuit' ? tr('Fermeture nuit') : (plan.mode || 'auto') === 'manuel' ? tr('Manuel') : tr('Auto lever/coucher') })}
               </div>
             </div>
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Ouverture')}</span>
-              <Nombre v={(plan.ouverture || {}).decalage || 0} nom={tr('Ouverture, décalage par rapport au lever du soleil')} min={-120} max={120} unite={tr('min après le lever')}
-                cb={n => enregistrer({ planning: { ouverture: { decalage: n } } })} />
+              {/* Les bornes de la popup d'un volet : −120 à +240 min. */}
+              <Nombre v={(plan.ouverture || {}).decalage || 0} nom={tr('Ouverture, décalage par rapport au lever du soleil')} min={-120} max={240} unite={tr('min après le lever')}
+                inerte={ordinaire} cb={n => enregistrer({ planning: { ouverture: { decalage: n } } })} />
             </div>
+            {alerte('planning.ouverture')}
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Fermeture')}</span>
-              <Nombre v={(plan.fermeture || {}).decalage || 0} nom={tr('Fermeture, décalage par rapport au coucher du soleil')} min={-120} max={120} unite={tr('min après le coucher')}
-                cb={n => enregistrer({ planning: { fermeture: { decalage: n } } })} />
+              <Nombre v={(plan.fermeture || {}).decalage || 0} nom={tr('Fermeture, décalage par rapport au coucher du soleil')} min={-120} max={240} unite={tr('min après le coucher')}
+                inerte={ordinaire} cb={n => enregistrer({ planning: { fermeture: { decalage: n } } })} />
             </div>
+            {alerte('planning.fermeture')}
             <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 7 }}>
               {tr('Un nombre négatif avance l’heure : −30 ferme une demi-heure avant le coucher.')}
-            </div>
-            {/* Un horaire par volet : on ne veut pas que la chambre s'ouvre
-              * au lever du soleil comme le salon. Le décalage propre remplace
-              * le général ; « jamais » retire le volet du planning. */}
-            <div style={{ marginTop: 16, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', paddingTop: 13 }}>
-              <div style={label}>{tr('Volet par volet')}</div>
-              <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>
-                {tr('Sans rien ici, tous suivent les heures ci-dessus.')}
-              </div>
-              {/* Un vrai volet sans classe n'est plus piloté (03/10) : le
-                * dire, sinon on cherche pourquoi il ne bouge plus. */}
-              {sansClasse > 0 && (
-                <div style={{ fontSize: 12, color: 'var(--o-warn2)', fontWeight: 700, marginBottom: 10 }}>
-                  {tr('Ouvrants sans classe dans Home Assistant, laissés de côté : {n}. Donne-leur une classe (volet, store…) pour que Loggia les pilote.', { n: sansClasse })}
-                </div>
-              )}
-              {covers.length === 0 && (
-                <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Aucun volet trouvé dans Home Assistant.')}</div>
-              )}
-              {covers.map(c => {
-                const r = (plan.volets || {})[c.id] || null;
-                const exclu = !!(r && r.exclu);
-                /* Le mode est MEMORISE, pas deduit des valeurs.
-                 *
-                 * Deduit, il disparaissait sous les doigts : vider le dernier
-                 * champ rendait `propre` faux, le bloc entier se demontait et
-                 * le volet retombait sur « Comme les autres » — alors que la
-                 * ligne juste en dessous dit que vide est un choix valable
-                 * (« suit l'heure generale pour ce sens »).
-                 *
-                 * `r.ouverture != null || r.fermeture != null` reste lu pour
-                 * les configurations ecrites avant ce drapeau. */
-                const propre = !!(r && !r.exclu && (r.perso || r.ouverture != null || r.fermeture != null));
-                const poser = (v) => enregistrer({ planning: { volets: { ...(plan.volets || {}), [c.id]: v } } });
-                const retirer = () => { const v = { ...(plan.volets || {}) }; delete v[c.id]; enregistrer({ planning: { volets: v } }); };
-                return (
-                  <div key={c.id} style={{ padding: '10px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 7 }}>{c.nom}</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      <button onClick={retirer} style={puce(!r)}>{tr('Comme les autres')}</button>
-                      <button onClick={() => poser({ perso: true, ouverture: 60, fermeture: null })} style={puce(propre)}>{tr('Heures à lui')}</button>
-                      <button onClick={() => poser({ exclu: true })} style={puce(exclu)}>{tr('Jamais')}</button>
-                    </div>
-                    {propre && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 9 }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('Ouverture')}</span>
-                          <input aria-label={tr('Ouverture, décalage en minutes')} type="number" value={r.ouverture != null ? r.ouverture : ''} min={-120} max={240} placeholder="—"
-                            onChange={e => poser({ ...r, ouverture: e.target.value === '' ? null : Math.max(-120, Math.min(240, Number(e.target.value) || 0)) })}
-                            style={{ ...champ, width: 74 }} />
-                          <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('min')}</span>
-                        </span>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('Fermeture')}</span>
-                          <input aria-label={tr('Fermeture, décalage en minutes')} type="number" value={r.fermeture != null ? r.fermeture : ''} min={-120} max={240} placeholder="—"
-                            onChange={e => poser({ ...r, fermeture: e.target.value === '' ? null : Math.max(-120, Math.min(240, Number(e.target.value) || 0)) })}
-                            style={{ ...champ, width: 74 }} />
-                          <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('min')}</span>
-                        </span>
-                      </div>
-                    )}
-                    {/* Les jours de CE volet, et separement selon le sens.
-                      *
-                      * Qui travaille de nuit ne veut pas que la chambre s'ouvre
-                      * le matin les jours ou il dort — mais veut qu'elle s'ouvre
-                      * les jours de repos, et que la fermeture du soir, elle, ne
-                      * change pas. Une seule liste pour les deux sens ne saurait
-                      * pas dire cela.
-                      *
-                      * Sept jours coches = on efface la liste plutot que de la
-                      * garder pleine : le volet redevient alors sujet aux jours
-                      * generaux, et les suivra s'ils changent. */}
-                    {propre && ['ouverture', 'fermeture'].map(sens => {
-                      const cle = 'jours_' + sens;
-                      const actifs = Array.isArray(r[cle]) ? r[cle] : null;
-                      return (
-                        <div key={sens} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
-                          <span style={{ fontSize: 11, color: 'var(--o-text3)', fontWeight: 700, minWidth: 72 }}>
-                            {sens === 'ouverture' ? tr('Ouvre les') : tr('Ferme les')}
-                          </span>
-                          {JOURS_COURTS().map((j, i) => {
-                            const on = actifs ? actifs.indexOf(i) >= 0 : true;
-                            return (
-                              <button key={j} onClick={() => {
-                                const base = actifs || [0, 1, 2, 3, 4, 5, 6];
-                                const suiv = on ? base.filter(x => x !== i) : [...base, i].sort((a, b) => a - b);
-                                poser({ ...r, [cle]: suiv.length === 7 ? null : suiv });
-                              }} style={{ ...puce(on), minWidth: 34, padding: '5px 7px', textAlign: 'center' }}>{j}</button>
-                            );
-                          })}
-                        </div>
-                      );
-                    })}
-                    {propre && (
-                      <div style={{ fontSize: 11, color: 'var(--o-text3)', fontWeight: 600, marginTop: 6 }}>
-                        {tr('Vide = suit l’heure générale pour ce sens. Un jour décoché : ce volet ne bouge pas ce jour-là, dans ce sens.')}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
             </div>
             <div style={{ marginTop: 13 }}>
               <div style={label}>{tr('Les jours')}</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {JOURS_COURTS().map((j, i) => {
-                  const actifs = Array.isArray(plan.jours) ? plan.jours : [0, 1, 2, 3, 4, 5, 6];
+                  const actifs = joursActifs;
                   const on = actifs.indexOf(i) >= 0;
                   return (
-                    <button key={j} onClick={() => enregistrer({ planning: { jours: on ? actifs.filter(x => x !== i) : [...actifs, i].sort() } })}
-                      style={{ ...puce(on), minWidth: 46, textAlign: 'center' }}>{j}</button>
+                    <button key={j} type="button" aria-pressed={on} aria-disabled={ordinaire || undefined}
+                      onClick={() => enregistrer({ planning: { jours: on ? actifs.filter(x => x !== i) : [...actifs, i].sort() } })}
+                      style={{ ...puce(on), minWidth: 46, textAlign: 'center', ...puceInerte(on) }}>{j}</button>
                   );
                 })}
               </div>
+              {joursActifs.length === 0 && (
+                <div style={{ fontSize: 12, color: 'var(--o-warn2)', fontWeight: 700, marginTop: 8 }}>
+                  {tr('Aucun jour choisi : le planning ne bouge les volets aucun jour.')}
+                </div>
+              )}
+              {alerte('planning.jours')}
             </div>
           </div>
         )}
+        {/* Chaque volet se règle dans sa fiche (chantier Volets, V2) : ses heures,
+          * ses jours, sa façade, la porte devant lui. Une ligne le dit, ici, à la
+          * place de la liste — la même phrase trois fois serait du bruit. Hors du
+          * pli et même planning coupé (audit du 19/10) : la façade et la porte se
+          * règlent aussi sans lui, et c'est là qu'on cherche pourquoi un ouvrant
+          * sans classe ne bouge pas. */}
+        <div style={{ marginTop: 16, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', paddingTop: 13 }}>
+          <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>
+            {tr('Chaque volet se règle dans sa popup : ses heures, sa façade, la porte devant lui.')}
+          </div>
+          {/* Un vrai volet sans classe n'est plus piloté (03/10) : le
+            * dire, sinon on cherche pourquoi il ne bouge plus. */}
+          {sansClasse > 0 && (
+            <div style={{ fontSize: 12, color: 'var(--o-warn2)', fontWeight: 700, marginTop: 10 }}>
+              {tr('Ouvrants sans classe dans Home Assistant, laissés de côté : {n}. Donnez-leur une classe (volet, store…) pour que Loggia les pilote.', { n: sansClasse })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── La protection solaire ── */}
@@ -389,6 +318,12 @@ export function VoletsReglages({ hass, cardSt }) {
         <RegleEntete nom={tr('Protection solaire')}
           desc={tr('Quand le soleil frappe une façade et qu’il fait chaud, baisser ses volets — puis les rouvrir quand il est passé.')}
           on={sol.actif} cb={() => enregistrer({ soleil: { actif: !sol.actif } })} plie={pliSol} onPlier={plierSol} zone="volets-sol" />
+        {alerte('soleil.actif')}
+        {sansFacade && (
+          <div style={{ marginTop: 10, fontSize: 12, color: 'var(--o-warn2)', fontWeight: 700 }}>
+            {tr('Aucun volet n’a de façade : la protection solaire ne baissera rien. La façade se choisit dans la popup d’un volet.')}
+          </div>
+        )}
         {etat.soleil && etat.soleil.azimut != null && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, margin: '14px -22px 0', padding: '12px 22px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
             <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: 'var(--o-lampe)' }} />
@@ -403,53 +338,31 @@ export function VoletsReglages({ hass, cardSt }) {
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Descendre à')}</span>
               <Nombre v={sol.position != null ? sol.position : 30} nom={tr('Position des volets sous le soleil, en pourcentage')} min={0} max={100} pas={5} unite="%"
-                cb={n => enregistrer({ soleil: { position: n } })} />
+                inerte={ordinaire} cb={n => enregistrer({ soleil: { position: n } })} />
             </div>
+            {alerte('soleil.position')}
+            {/* Un store banne, lui, se déploie en entier au soleil, et se replie quand il part (25/10). */}
+            <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 7 }}>{tr('Un store banne, lui, se déploie en entier, puis se replie quand le soleil quitte sa façade.')}</div>
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Au-dessus de')}</span>
               <Nombre v={sol.elevation_min != null ? sol.elevation_min : 15} nom={tr('Hauteur minimale du soleil, en degrés')} min={0} max={60} pas={5} unite={tr('° de hauteur')}
-                cb={n => enregistrer({ soleil: { elevation_min: n } })} />
+                inerte={ordinaire} cb={n => enregistrer({ soleil: { elevation_min: n } })} />
             </div>
+            {alerte('soleil.elevation_min')}
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Et au-delà de')}</span>
               <Nombre v={sol.temp_min != null && sol.temp_min !== '' ? sol.temp_min : 25} nom={tr('Température extérieure minimale, en °{u}', { u: uTSol })} min={bMinSol} max={bMaxSol} unite={tr('°{u} dehors', { u: uTSol })}
-                cb={n => enregistrer({ soleil: { temp_min: n } })} />
+                inerte={ordinaire} cb={n => enregistrer({ soleil: { temp_min: n } })} />
             </div>
+            {alerte('soleil.temp_min')}
             <div style={{ ...ligne, marginTop: 8 }}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Thermomètre')}</span>
-              <button onClick={() => choisirEntite('soleil', 'temp_entite', ['sensor'])}
-                style={{ ...champ, cursor: 'pointer', color: sol.temp_entite ? 'var(--o-text1)' : 'var(--o-text3)' }}>
-                {sol.temp_entite || tr('Choisir un capteur…')}
+              <button type="button" aria-disabled={ordinaire || undefined} onClick={() => choisirEntite('soleil', 'temp_entite', ['sensor'])}
+                style={{ ...champ, cursor: ordinaire ? 'default' : 'pointer', color: sol.temp_entite ? 'var(--o-text1)' : 'var(--o-text3)' }}>
+                {sol.temp_entite ? nomEntite(sol.temp_entite) : tr('Choisir un capteur…')}
               </button>
             </div>
-
-            <div style={{ marginTop: 16, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', paddingTop: 13 }}>
-              <div style={label}>{tr('Où donne chaque volet')}</div>
-              <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>
-                {tr('Un volet sans orientation est laissé tranquille par cette règle.')}
-              </div>
-              {covers.length === 0 && (
-                <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Aucun volet trouvé dans Home Assistant.')}</div>
-              )}
-              {covers.map(c => {
-                const reg = (sol.volets || {})[c.id] || null;
-                const card = reg ? cardinalDe(reg.orientation) : null;
-                return (
-                  <div key={c.id} style={{ padding: '10px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 7 }}>{c.nom}</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      <button onClick={() => { const v = { ...(sol.volets || {}) }; delete v[c.id]; enregistrer({ soleil: { volets: v } }); }}
-                        style={puce(!reg)}>{tr('aucune')}</button>
-                      {CARDINAUX().map(k => (
-                        <button key={k.deg}
-                          onClick={() => enregistrer({ soleil: { volets: { ...(sol.volets || {}), [c.id]: { orientation: k.deg, ouverture: (reg && reg.ouverture) || 90 } } } })}
-                          style={{ ...puce(!!card && card.deg === k.deg), minWidth: 44, textAlign: 'center' }}>{k.court}</button>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            {alerte('soleil.temp_entite')}
           </div>
         )}
       </div>
@@ -460,6 +373,7 @@ export function VoletsReglages({ hass, cardSt }) {
           desc={tr('Au-delà d’un seuil, remonter les volets et replier les stores bannes — un volet baissé dans une rafale est un volet plié.')}
           note={tr('Passe avant les deux règles ci-dessus')}
           on={vent.actif} cb={() => enregistrer({ vent: { actif: !vent.actif } })} plie={pliVent} onPlier={plierVent} zone="volets-vent" />
+        {alerte('vent.actif')}
         {etat.a_l_abri && (
           <div style={{ marginTop: 9, fontSize: 12, fontWeight: 800, color: 'var(--o-warn2)' }}>{tr('Volets à l’abri en ce moment.')}</div>
         )}
@@ -467,16 +381,18 @@ export function VoletsReglages({ hass, cardSt }) {
           <div id="volets-vent" style={ZONE_REGLAGES}>
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Anémomètre')}</span>
-              <button onClick={() => choisirEntite('vent', 'entite', ['sensor'])}
-                style={{ ...champ, cursor: 'pointer', color: vent.entite ? 'var(--o-text1)' : 'var(--o-text3)' }}>
-                {vent.entite || tr('Choisir un capteur…')}
+              <button type="button" aria-disabled={ordinaire || undefined} onClick={() => choisirEntite('vent', 'entite', ['sensor'])}
+                style={{ ...champ, cursor: ordinaire ? 'default' : 'pointer', color: vent.entite ? 'var(--o-text1)' : 'var(--o-text3)' }}>
+                {vent.entite ? nomEntite(vent.entite) : tr('Choisir un capteur…')}
               </button>
             </div>
+            {alerte('vent.entite')}
             <div style={ligne}>
               <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('À partir de')}</span>
-              <Nombre v={vent.seuil != null ? vent.seuil : 50} nom={tr('Seuil de vent, dans l’unité du capteur')} min={0} max={150} pas={5} unite={tr('dans l’unité du capteur')}
-                cb={n => enregistrer({ vent: { seuil: n } })} />
+              <Nombre v={vent.seuil != null ? vent.seuil : 50} nom={tr('Seuil de vent, dans l’unité du capteur')} min={5} max={150} pas={5} unite={tr('dans l’unité du capteur')}
+                inerte={ordinaire} cb={n => enregistrer({ vent: { seuil: n } })} />
             </div>
+            {alerte('vent.seuil')}
           </div>
         )}
       </div>
@@ -489,6 +405,7 @@ export function VoletsReglages({ hass, cardSt }) {
         <RegleEntete nom={tr('Fenêtres de toit (velux)')}
           desc={tr('Les fermer avec les volets : au coucher du soleil, par vent fort et dans les scénarios qui ferment. Loggia ne les ouvre jamais.')}
           on={velux} cb={() => enregistrer({ velux: { actif: !velux } })} plie={pliVelux} onPlier={plierVelux} zone="volets-velux" />
+        {alerte('velux.actif')}
         {velux && !pliVelux && (
           <div id="volets-velux" style={ZONE_REGLAGES}>
             <div style={{ marginTop: 9, fontSize: 12, fontWeight: 700, color: fenetres ? 'var(--o-text3)' : 'var(--o-warn2)' }}>
@@ -508,50 +425,35 @@ export function VoletsReglages({ hass, cardSt }) {
         <RegleEntete nom={tr('Volet bloqué')}
           desc={tr('Ne pas fermer un volet tant que la porte ou la fenêtre devant lui est ouverte : la fermeture attend qu’elle se referme.')}
           on={baies.actif} cb={() => enregistrer({ baies: { actif: !baies.actif } })} plie={pliBaies} onPlier={plierBaies} zone="volets-baies" />
+        {alerte('baies.actif')}
         {baies.actif && !pliBaies && (
           <div id="volets-baies" style={ZONE_REGLAGES}>
             <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 8, marginBottom: 4 }}>
               {tr('Un volet sans porte ni fenêtre désignée ferme comme avant. Un capteur muet ne retient rien : le volet ferme, et le journal le dit.')}
             </div>
-            {covers.length === 0 && (
-              <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Aucun volet trouvé dans Home Assistant.')}</div>
-            )}
-            {covers.map(c => {
-              const capteur = (baies.volets || {})[c.id] || '';
-              const nomCapteur = capteur && hass && hass.states && hass.states[capteur] ? cvName(hass.states[capteur], capteur) : capteur;
-              const retirer = () => { const v = { ...(baies.volets || {}) }; delete v[c.id]; enregistrer({ baies: { volets: v } }); };
-              return (
-                <div key={c.id} style={{ padding: '10px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 7 }}>{c.nom}</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                    <button onClick={() => setPicker({ domaines: ['binary_sensor'], poser: (id) => enregistrer({ baies: { volets: { ...(baies.volets || {}), [c.id]: id } } }) })}
-                      style={{ ...champ, cursor: 'pointer', color: capteur ? 'var(--o-text1)' : 'var(--o-text3)' }}>
-                      {capteur ? nomCapteur : tr('Choisir la porte ou la fenêtre…')}
-                    </button>
-                    {capteur && <button onClick={retirer} style={puce(false)}>{tr('aucune')}</button>}
-                  </div>
-                </div>
-              );
-            })}
           </div>
         )}
       </div>
 
       {/* ── Ordre non abouti (ADR 0007) ── */}
-      {/* Un volet injoignable attend son retour ; un volet joignable mais
-        * immobile deux minutes après l'ordre se voit redemander, puis le
-        * journal le dit en rouge. Un seul réglage : combien de fois. */}
+      {/* Un volet injoignable attend son retour ; un volet qui n'a pas répondu
+        * deux minutes après l'ordre se voit redemander ; un volet qui a répondu
+        * (il bouge, son état a basculé) est attendu jusqu'à six minutes
+        * (ADR 0192). Après la dernière tentative, le journal le dit en rouge.
+        * Un seul réglage : combien de fois. */}
       <div style={cardSt}>
         <div style={CAPITALES}>{tr('Manœuvre non confirmée')}</div>
         <div style={{ marginTop: 4, fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>
-          {tr('Deux minutes après un ordre, un volet joignable qui n’a pas bougé se voit redemander. Après la dernière tentative, la manœuvre est notée en rouge ci-dessous.')}
+          {tr('Deux minutes après un ordre, un volet qui n’a pas répondu se voit redemander ; un volet qui a répondu (il bouge, son état a changé) est attendu jusqu’à six minutes. Après la dernière tentative, la manœuvre est notée en rouge ci-dessous.')}
         </div>
         <div style={{ ...ligne, marginTop: 10 }}>
           <span style={{ ...label, marginBottom: 0, minWidth: 92 }}>{tr('Tentatives')}</span>
           {[1, 2, 3].map(n => (
-            <button key={n} type="button" aria-pressed={tentatives === n} onClick={() => enregistrer({ verification: { tentatives: n } })} style={puce(tentatives === n)}>{n}</button>
+            <button key={n} type="button" aria-pressed={tentatives === n} aria-disabled={ordinaire || undefined}
+              onClick={() => enregistrer({ verification: { tentatives: n } })} style={{ ...puce(tentatives === n), ...puceInerte(tentatives === n) }}>{n}</button>
           ))}
         </div>
+        {alerte('verification.tentatives')}
       </div>
 
       {/* ── Ce qui s'est passé ── */}
@@ -591,7 +493,7 @@ export function VoletsReglages({ hass, cardSt }) {
             * clic — la regle vise les champs focalises au CHARGEMENT d'une page,
             * ce qui n'est pas le cas. */}
             <EntPicker hass={hass} autoFocus domaines={picker.domaines}
-            onPick={(id) => { if (picker.poser) picker.poser(id); else enregistrer({ [picker.section]: { [picker.champ]: id } }); setPicker(null); }} />
+            onPick={(id) => { enregistrer({ [picker.section]: { [picker.champ]: id } }); setPicker(null); }} />
         </BottomSheet>
       )}
     </div>

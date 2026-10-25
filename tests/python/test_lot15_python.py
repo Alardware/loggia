@@ -61,6 +61,9 @@ def module_sur(nom, classe, magasin, garder=()):
     obj = getattr(mod, classe).__new__(getattr(mod, classe))
     obj.store, obj.hass, obj.regles, obj.cfg = magasin, _Hass(), _Regles(), {}
     obj.coupes, obj.attente, obj._minuteurs, obj._defait = {}, {}, {}, []
+    # Les volets que la protection solaire a baisses : l'enregistrement rend
+    # ceux qu'elle ne couvre plus (audit du 19/10).
+    obj.abaisses = {}
     for meth in ("_async_reabonner", "_async_reprogrammer"):
         if meth not in garder:
             setattr(obj, meth, _rien)
@@ -187,7 +190,7 @@ def test_le_planning_du_distributeur_s_ecrit_d_un_seul_tenant(store_module):
     temps qu'un enregistrement ne doit pas l'effacer ; deux enregistrements
     ensemble laissent l'une des deux listes ENTIERE, jamais un melange ni un
     planning vide."""
-    feeder = {"script": "script.nourrir_le_chat"}  # une commande : l'ajout est permis
+    feeder = {"script": "script.remplir_la_gamelle"}  # une commande : l'ajout est permis
 
     def un(ident, heure):
         return {"id": ident, "heure": heure, "jours": [0, 1, 2, 3, 4, 5, 6], "portions": 1, "actif": True}
@@ -220,24 +223,25 @@ def test_aucun_module_ne_relit_puis_ecrit_hors_du_verrou():
     memoire et ne relisent pas le magasin. Les scenarios en etaient ecartes
     pour leur verrou, qui ne voyait pas un import (relecture du lot 15)."""
     # Le planning du distributeur aussi, des sa naissance (05/10, ADR 0155).
-    for nom in ("distributeurs", "interrupteurs", "fenetres", "nuit", "presence", "robots", "scenarios",
-                "veilles", "volets"):
+    for nom in ("chauffage", "distributeurs", "interrupteurs", "fenetres", "nuit", "presence", "robots",
+                "scenarios", "veilles", "volets"):
         texte = (COMPOSANT / f"{nom}.py").read_text(encoding="utf-8")
         assert "async_set_shared" not in texte, f"{nom} ecrit encore hors de la primitive"
         assert "async_modifier_shared" in texte, nom
 
 
 def test_planning_volets_garde_sa_semantique(store_module):
-    """L'ecran envoie la table `planning.volets` ENTIERE, et « retirer un
-    volet » envoie la table sans lui. La primitive ne change pas cette fusion
-    au premier niveau : une fusion volet par volet ferait de ce retrait un
-    retrait sans effet."""
+    """ASSERTION MODIFIEE (25/10, sa demande : la fusion volet par volet). La
+    table `planning.volets` partait ENTIERE, et « retirer un volet » envoyait la
+    table sans lui ; deux ecrans qui reglaient deux volets ensemble, et le second
+    effacait le premier. Le serveur fusionne desormais volet par volet : retirer
+    un volet s'ecrit `None`, et un volet absent du patch reste ce qu'il est."""
     m = magasin_sur(store_module)
     v = module_sur("volets", "LoggiaVolets", m)
 
     async def scenario():
-        await v.async_enregistrer({"planning": {"volets": {"cover.a": {"exclu": True}, "cover.b": {"decalage": 10}}}})
-        await v.async_enregistrer({"planning": {"volets": {"cover.b": {"decalage": 10}}}})
+        await v.async_enregistrer({"planning": {"volets": {"cover.a": {"exclu": True}, "cover.b": {"decalage": 5}}}})
+        await v.async_enregistrer({"planning": {"volets": {"cover.a": None, "cover.b": {"decalage": 10}}}})
         return await v.async_config()
 
     assert lancer(scenario())["planning"]["volets"] == {"cover.b": {"decalage": 10}}

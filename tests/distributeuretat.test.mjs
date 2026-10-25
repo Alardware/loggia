@@ -151,3 +151,96 @@ test('le crochet : abonné tant que monté et configuré, jamais depuis la racin
   assert.ok(app.includes('useEtatDistributeur(distributeurConfigure());'), 'la carte, tant qu’elle est montée et le distributeur configuré');
   assert.ok(app.includes('useEtatDistributeur(distributeurConfigure(), { detail: true });'), 'la fiche, avec le détail');
 });
+
+/* TEST AJOUTÉ (étape 2 IoT, 19/10 ; la leçon du point 1 de l'étape 1, deux appuis sur « Pause » qui relançaient le robot) :
+ * « Distribuer » est UN geste pour tout l'écran — la carte large, l'étroite, la compacte et la popup lisent le même verrou, la
+ * variante partagée d'optimiste.js. Deux appuis rapprochés, d'où qu'ils viennent, ne font qu'une ration ; passé 2,5 s, on
+ * redistribue : le verrou expire, il ne tient rien d'autre. Un composant le lit et se redessine quand il se pose ou s'en va. */
+test('« Distribuer » : un verrou partagé de 2,5 s — deux appuis, une ration ; il expire ; un composant le lit', async () => {
+  const { reglerPartage } = await import('../src/optimiste.js');
+  const { monter } = await import('./crochets.mjs');
+  const h = horlogeFactice();
+  reglerPartage({ horloge: h });
+  try {
+    assert.equal(E.VERROU_DISTRIBUER_MS, 2500);
+    assert.equal(E.distributionEnVol(), null, 'témoin : rien en vol');
+    const carte = monter((p) => E.useDistribution(p.actif), { actif: true });
+    const ailleurs = monter((p) => E.useDistribution(p.actif), { actif: false });
+    assert.equal(carte.arbre, null);
+    // ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; point C) : l'appui permis rend le JETON de son verrou (vrai), refusé rien.
+    const jeton = E.poserDistribution();
+    assert.ok(jeton, 'le premier appui part');
+    assert.ok(E.distributionEnVol(), 'en vol, pour tout l’écran');
+    assert.equal(E.poserDistribution(), null, 'le second appui, d’où qu’il vienne, ne part pas');
+    carte.rendre(); ailleurs.rendre();
+    assert.ok(carte.arbre && typeof carte.arbre.t === 'number', 'la carte voit le geste en vol');
+    assert.equal(ailleurs.arbre, null, 'un composant qui n’est pas le distributeur n’écoute rien');
+    /* ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; point C) : tenu 2,5 s quoi qu'il arrive, et GARDÉ tant que Home Assistant
+     * n'a pas répondu (30 s au plus) ; la réponse venue (`relacherDistribution`), il prend son filet de 2,5 s, puis expire. */
+    assert.deepEqual(h.attentes().sort((a, b) => a - b), [2500, E.GARDE_DISTRIBUER_MS], 'la tenue, et la garde');
+    E.relacherDistribution(jeton);
+    assert.deepEqual(h.attentes(), [2500, 2500], 'la réponse venue : le filet, compté de là, à côté de la tenue');
+    h.tic();
+    carte.rendre();
+    assert.equal(E.distributionEnVol(), null, 'passé 2,5 s, le verrou tombe');
+    assert.equal(carte.arbre, null);
+    assert.ok(E.poserDistribution(), 'et l’on redistribue');
+  } finally {
+    reglerPartage();
+  }
+});
+
+/* TEST AJOUTÉ (passe bis de l'étape 2, 19/10 ; point C, sûreté) : le verrou tombait à 2,5 s quoi qu'il arrive — un distributeur en nuage
+ * qui répond en 3 s laissait passer un second appui, et servait DEUX rations (sonde A de la relecture qualité). Le geste
+ * (`lancerDistribution`) garde le verrou tant que Home Assistant n'a pas répondu, `GARDE_DISTRIBUER_MS` au plus, puis le rend à son
+ * filet ; un appel qui ÉCHOUE le relâche aussi — et la commande part par `commanderService`, qui rend désormais sa promesse. */
+test('point C : un appareil lent — un second appui à 3 s ne part pas ; le verrou tombe après la réponse, réussie ou non', async () => {
+  const { reglerPartage } = await import('../src/optimiste.js');
+  const h = horlogeFactice();
+  reglerPartage({ horloge: h });
+  try {
+    const appels = [];
+    let regler = null;
+    const FEED = 'select.x_feed';
+    const hass = {
+      states: { [FEED]: { entity_id: FEED, state: 'unknown', attributes: { options: ['', 'START'] } } },
+      callService: (d, s, data) => { appels.push(d + '.' + s + ' ' + data.option); return new Promise((ok, ko) => { regler = { ok, ko }; }); },
+    };
+    const envoi = { domaine: 'select', service: 'select_option', data: { entity_id: FEED, option: 'START' } };
+    assert.equal(E.GARDE_DISTRIBUER_MS, 30000);
+    assert.equal(E.lancerDistribution(hass, envoi), true, 'le premier appui part');
+    assert.deepEqual(appels, ['select.select_option START']);
+    // 2,5 s passent (la tenue) : la réponse n'est pas venue, le verrou tient toujours.
+    assert.deepEqual(h.attentes().sort((a, b) => a - b), [2500, 30000], 'la tenue, et la garde de 30 s');
+    for (const [id, m] of [...h.minuteurs]) if (m.ms === 2500) { h.minuteurs.delete(id); m.f(); }
+    assert.ok(E.distributionEnVol(), 'à 3 s, sans réponse, le verrou tient');
+    assert.equal(E.lancerDistribution(hass, envoi), false, 'le second appui ne part pas');
+    assert.equal(appels.length, 1, 'UNE seule ration');
+    // Home Assistant répond à 3,5 s : le verrou quitte sa garde et prend son filet (2,5 s), puis tombe.
+    regler.ok(); await attendre(); await attendre();
+    assert.deepEqual(h.attentes(), [2500], 'le filet, compté de la réponse');
+    h.tic();
+    assert.equal(E.distributionEnVol(), null, 'le verrou est tombé après le règlement');
+    assert.equal(E.lancerDistribution(hass, envoi), true, 'et l’on redistribue');
+    assert.equal(appels.length, 2);
+    /* Un appel qui ÉCHOUE relâche le verrou aussi. Le refus, lui, est relancé ORPHELIN pour l'écoute globale des rejets (le toast
+     * « Commande non exécutée ») : ici, c'est le test qui l'écoute, à la place de la fenêtre — un rejet orphelin ferait rougir le test. */
+    const rejets = [];
+    const vraiReject = Promise.reject;
+    Promise.reject = function (e) { const p = vraiReject.call(this, e); p.catch(r => rejets.push(r)); return p; };
+    try {
+      regler.ko(new Error('refus')); await attendre(); await attendre();
+      assert.deepEqual(h.attentes(), [2500, 2500], 'échoué : le filet aussi (à côté de la tenue de ce second geste), plus de garde');
+      h.tic();
+      assert.equal(E.distributionEnVol(), null);
+      assert.deepEqual(rejets.map(r => [r.message, r.code]), [['refus', 'service_error']], 'le refus n’est pas avalé : le toast le dira');
+    } finally {
+      Promise.reject = vraiReject;
+    }
+    // Sans commande à envoyer, rien ne part et rien ne se verrouille.
+    assert.equal(E.lancerDistribution(hass, null), false);
+    assert.equal(E.distributionEnVol(), null);
+  } finally {
+    reglerPartage();
+  }
+});

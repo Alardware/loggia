@@ -75,11 +75,12 @@ test('plus aucun écran ne retombe sur 20 ou sur 19', () => {
   assert.equal(compter(APP, 'const realTarget = consigneClimat(a);'), 2, 'carte et fiche du thermostat ne lisent plus par la même porte');
 });
 
-test('sans consigne lisible, rien ne part et les boutons sont inertes', () => {
+test('sans consigne lisible, rien ne part et les boutons sont inertes', async () => {
   for (const nom of ['RoomClimateCard', 'RoomClimateSheet']) {
     const f = corps(nom);
     assert.ok(f.includes('const reglable = target != null;'), nom + ' : rien ne dit plus si la consigne se règle');
-    assert.ok(f.includes("const setT = (d) => { if (!reglable) return; const v = commander(hass, id, 'set_temperature', target + d, 'temperature');"),
+    // ASSERTION MODIFIÉE (audit du 19/10) : un vrai cran du pas de l'appareil, plus ± 0,5 arrondi.
+    assert.ok(f.includes("const setT = (d) => { if (!reglable) return; const v = commander(hass, id, 'set_temperature', consigneVoisine(target, d, a, uT) ?? target + d, 'temperature');"),
       nom + ' : le « + » enverrait une consigne inventée');
     assert.equal(compter(f, 'disabled={!reglable}'), 2, nom + ' : les boutons ± restent actifs sans consigne');
   }
@@ -89,13 +90,34 @@ test('sans consigne lisible, rien ne part et les boutons sont inertes', () => {
     // Sans entité de consigne, l'appel partait vers personne.
     assert.ok(f.includes('const reglable = target != null && !!zone.tempCible;'), nom + ' : un appel partirait sans entité de consigne');
     assert.ok(f.includes('pasConsigne(target, d, ') && f.includes('if (v == null || !reglable) return;'), nom + ' : le « + » enverrait une consigne inventée');
-    assert.equal(compter(f, 'disabled={!reglable}'), 2, nom + ' : les boutons ± restent actifs sans consigne');
-    assert.ok(f.includes('z.current != null && target != null && z.current < target'), nom + ' : « Chauffe » se déciderait contre une consigne vide');
   }
+  assert.ok(corps('RoomPilotSheet').includes('z.current != null && target != null && z.current < target'), 'RoomPilotSheet : « Chauffe » se déciderait contre une consigne vide');
+  /* La carte suit LA règle « chauffe » des cartes et d'Objets (`enChauffe`,
+   * relecture de la partie A) : une zone décrite chauffe en marche, sa pièce
+   * sous sa consigne — toutes deux lisibles, jamais contre une consigne vide.
+   * ASSERTION MODIFIÉE (relecture de la dernière passe) : la carte et le
+   * compte d'Objets la lisent par UNE aide, `chauffeDeZone` — la carte lui
+   * passe sa consigne, avance comprise. */
+  assert.ok(corps('RoomPilotCard').includes('chauffeDeZone(S, zone, z, { marche, consigne: target })'), 'RoomPilotCard : « Chauffe » ne suit plus la consigne affichée');
+  assert.ok(corps('chauffeDeZone').includes("enChauffe({ famille: 'zone', muet: muette, marche, mesure: z.current, consigne })"), 'chauffeDeZone : « Chauffe » ne suit plus la règle partagée');
+  const { enChauffe } = await import('../src/chauffageecran.js');
+  assert.equal(enChauffe({ famille: 'zone', marche: true, mesure: 18, consigne: null }), false, '« Chauffe » se déciderait contre une consigne vide');
+  assert.equal(enChauffe({ famille: 'zone', marche: true, mesure: null, consigne: 19 }), false);
+  assert.equal(compter(corps('RoomPilotSheet'), 'disabled={!reglable}'), 2, 'RoomPilotSheet : les boutons ± restent actifs sans consigne');
+  /* La carte départage − et + depuis qu'un module fil pilote découvert y
+   * passe d'un mode à l'autre (plan 2 du chantier Chauffage, tâche 7) : au
+   * bout de ses modes, un seul des deux s'éteint. Une zone décrite à la main
+   * garde la règle de sa consigne, pour les deux. */
+  const carte = corps('RoomPilotCard');
+  assert.ok(carte.includes('const baisse = estModule ? ordonnable(moins) : reglable, monte = estModule ? ordonnable(plus) : reglable;'),
+    'RoomPilotCard : les boutons ± d’une zone décrite à la main ne suivent plus sa consigne');
+  assert.equal(compter(carte, 'disabled={!baisse}'), 1, 'RoomPilotCard : « − » reste actif sans consigne');
+  assert.equal(compter(carte, 'disabled={!monte}'), 1, 'RoomPilotCard : « + » reste actif sans consigne');
 });
 
 test('« — » à la place du chiffre, comme la compacte ; la plage se lit dans la fiche', () => {
-  assert.equal(compter(APP, "const consigne = target != null ? decMax(Number(target), 1) + ' °' + uT : '—';"), 2);
+  // Les cartes 1a (tâche 10 bis A) l'écrivent à une décimale, suivie de « ° » : « 20,0° ».
+  assert.equal(compter(APP, "const consigne = target != null ? nombre(Number(target), 1) + '°' : '—';"), 2);
   const fiche = corps('RoomClimateSheet');
   assert.ok(fiche.includes("{reglable ? fmt(target) : '—'}"), 'la fiche du thermostat affiche un chiffre inventé');
   assert.ok(fiche.includes("reglable ? tr('consigne {t} °{u}'"), 'l’en-tête de la fiche annonce une consigne vide');

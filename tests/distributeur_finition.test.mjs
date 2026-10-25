@@ -63,18 +63,13 @@ function evaluer(code, portee, rendu) {
   return new Function('__h', '__Frag', ...noms, js + '\nreturn ' + rendu + ';')(createElement, Fragment, ...noms.map(n => portee[n]));
 }
 
-/* La VRAIE fabrique `distributeur()` d'App.jsx, avec les vrais lecteurs de
- * distributeur.js, sur une maison donnée. */
-function carte({ states, index, cfg, etat }) {
-  const code = morceau('const heureDe = (iso) => {', '\n};\n') + morceau('  const numDe = ', '\n') + morceau('  const muet = ', '\n')
-    + morceau('  const distributeur = () => {', '\n  };\n');
-  return evaluer(code, {
-    S: states, tr, locale, LOGGIA_INDEX: index, loggiaEnt: () => cfg, croqHaids: () => cfg.haids || {}, croqMax: () => 1500,
-    lireDistributeur: D.lireDistributeur, niveauDuBac: D.niveauDuBac, envoiDistribuer: D.envoiDistribuer, dernierRepas: D.dernierRepas,
-    prochainRepas: D.prochainRepas, lireEtatDistributeur: () => ({ etat, erreur: false }), appel: () => {},
-  }, 'distributeur()');
-}
-const heureCarte = (iso) => evaluer(morceau('const heureDe = (iso) => {', '\n};\n'), { locale }, 'heureDe')(iso);
+/* La vue de la carte (`carteDistributeur`, distributeur.js), avec les vrais lecteurs, sur une maison donnée.
+ * ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; § 6) : elle remplace la fabrique `distributeur()` d'App.jsx, qui n'en garde qu'un appel ; le
+ * « dernier repas » de la carte est la dernière ligne de sa phrase (« Dernier repas à 07:30 »), quand ni repas à venir ni réserve ne se
+ * disent. */
+const { quandLumiere } = await import(new URL('../src/lumieres.js', import.meta.url));
+const carte = ({ states, index, cfg, etat }) => D.carteDistributeur({ index, states, cfg, etat });
+const heureCarte = (iso) => new Date(iso).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
 
 /* ════════════ 1. Le « dernier repas » de la carte ════════════ */
 
@@ -85,13 +80,16 @@ test('la carte : un compteur qui ne dit rien ne donne pas « dernier repas » à
   const cpt = m.feeder.haids.distribuees;
   assert.equal(m.states[cpt].state, 'unavailable', 'témoin : la variante horsligne a son compteur muet');
   const d = carte({ states: m.states, index, cfg: m.feeder, etat });
-  assert.notEqual(d.dernier, heureCarte(m.states[cpt].last_changed),
-    'la carte prend l’heure où le compteur est tombé pour le dernier repas : ' + d.sous);
-  // La carte dit ce que dit la fiche : le dernier repas que l'appareil ou les automatisations connaissent.
-  const lu = D.lireDistributeur(index, m.states, m.feeder);
-  const dr = D.dernierRepas(lu, m.states, etat);
-  assert.equal(d.dernier, dr ? heureCarte(new Date(dr.t).toISOString()) : null, 'la carte et la fiche ne disent plus deux heures');
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; § 6) : hors ligne, la phrase dit depuis quand l'appareil se tait — jamais un « dernier repas » à l'heure de sa chute.
+  assert.equal(d.phrase.texte, 'Indisponible depuis ' + quandLumiere(m.states[m.feeder.haid].last_changed));
+  assert.ok(!d.phrase.texte.includes('Dernier repas'), 'la carte prend l’heure où le compteur est tombé pour le dernier repas : ' + d.phrase.texte);
   assert.equal(d.mort, true, 'témoin : hors ligne, le liseré');
+  /* ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; point G) : le titre se tient par le calcul même — le dernier repas que la carte
+   * lit (`dernierRepas`) n'est jamais l'heure où le compteur est tombé ; l'automatisation reconnue prend le relais, à SON heure. */
+  const tombe = Date.parse(m.states[cpt].last_changed);
+  const dr = D.dernierRepas(d.lecture, m.states, etat);
+  assert.ok(dr == null || dr.t !== tombe, 'le dernier repas est l’heure de la chute du compteur');
+  assert.ok(dr && dr.source === 'automatisation', 'l’automatisation reconnue dit le dernier repas : ' + JSON.stringify(dr));
 });
 
 test('la carte : `unknown` et `unavailable` ne sont pas des repas ; un compteur qui compte, si', () => {
@@ -100,14 +98,12 @@ test('la carte : `unknown` et `unavailable` ne sont pas des repas ; un compteur 
   const tombe = new Date(); tombe.setHours(12, 1, 0, 0);
   const st = (id, state, attributes = {}) => ({ entity_id: id, state, last_changed: tombe.toISOString(), attributes });
   const cfg = { haid: FEED, haids: { distribuees: CPT } };
-  const etat = JSON.parse(lire('tests', 'fixtures', 'distributeurs.json')).contrat.etat_exemple;
-  etat.automatisations.forEach(a => { a.dernier = null; });
-  const avec = (v) => carte({ states: { [FEED]: st(FEED, 'STOP', { options: ['STOP', 'START'] }), [CPT]: st(CPT, v, { unit_of_measurement: 'g' }) }, index, cfg, etat });
-  assert.equal(avec('45').dernier, heureCarte(tombe.toISOString()), 'témoin : 45 g distribués, le dernier repas est l’heure du compteur');
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; § 6) : sans repas à venir ni réserve — le serveur n'a pas répondu —, la phrase dit le dernier repas, celui du compteur.
+  const avec = (v) => carte({ states: { [FEED]: st(FEED, 'STOP', { options: ['STOP', 'START'] }), [CPT]: st(CPT, v, { unit_of_measurement: 'g' }) }, index, cfg, etat: null });
+  assert.equal(avec('45').phrase.texte, 'Dernier repas à ' + heureCarte(tombe.toISOString()), 'témoin : 45 g distribués, le dernier repas est l’heure du compteur');
   for (const muet of ['unavailable', 'unknown', '']) {
     const d = avec(muet);
-    assert.equal(d.dernier, null, '« ' + muet + ' » : « dernier repas » à l’heure de la chute (' + d.sous + ')');
-    assert.ok(!d.sous.includes('dernier repas'), d.sous);
+    assert.ok(!d.phrase.texte.includes('Dernier repas'), '« ' + muet + ' » : « dernier repas » à l’heure de la chute (' + d.phrase.texte + ')');
   }
 });
 
@@ -142,10 +138,14 @@ function maison(admin, ents, etats) {
   const deviceMeta = new Map([['dev1', { id: 'dev1', name: 'Distributeur cuisine', manufacturer: 'Aqara', model: 'ZNCWWSQ01LM' }]]);
   return { index: { entityMeta, deviceMeta }, hass: { states: Object.fromEntries(etats.map(s => [s.entity_id, s])), user: { is_admin: admin }, callService: () => { throw new Error('rien ne doit partir'); } } };
 }
+/* ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; D1) : le number en grammes désigné comme « Poids d'une portion » est un POIDS ;
+ * la taille de ration de l'appareil est une sœur à part, en « portion » (la forme de Zigbee2MQTT) — c'est elle que le pas à pas règle,
+ * et sa valeur se dit « 2 portions · 90 g ». */
 const AQARA = (admin) => maison(admin,
-  [['select.distributeur_feed', 'mqtt', null], ['number.distributeur_portion', 'mqtt', null]],
+  [['select.distributeur_feed', 'mqtt', null], ['number.distributeur_portion', 'mqtt', null], ['number.distributeur_serving_size', 'mqtt', null]],
   [stF('select.distributeur_feed', 'STOP', { friendly_name: 'Distribuer', options: ['STOP', 'START'] }),
-    stF('number.distributeur_portion', '45', { friendly_name: 'Portion', min: 5, max: 100, step: 5, unit_of_measurement: 'g' })]);
+    stF('number.distributeur_portion', '45', { friendly_name: 'Portion', min: 5, max: 100, step: 5, unit_of_measurement: 'g' }),
+    stF('number.distributeur_serving_size', '2', { friendly_name: 'Taille de ration', min: 1, max: 10, step: 1, unit_of_measurement: 'portion' })]);
 const PETLIBRO = (admin) => maison(admin,
   [['button.granary_manual_feed', 'petlibro', 'manual_feed'], ['sensor.granary_remaining_desiccant', 'petlibro', 'remaining_desiccant'], ['button.granary_desiccant_reset', 'petlibro', 'desiccant_reset']],
   [stF('button.granary_manual_feed', 'unknown'), stF('sensor.granary_remaining_desiccant', '12', { unit_of_measurement: 'd' }), stF('button.granary_desiccant_reset', 'unknown')]);
@@ -162,10 +162,14 @@ const CFG_AQARA = { haids: { portionWeight: 'number.distributeur_portion' }, hai
 // Le pas à pas de la portion : « Moins », la valeur, « Plus ».
 // Il se nomme par ce qu'il règle (« Taille de la portion : Moins », 05/10).
 const regle = (html) => /aria-label="[^"]*Moins"/.test(html) && /aria-label="[^"]*Plus"/.test(html) && html.includes('45 g');
+// ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I23) : sur l'Accueil, la taille de ration vit dans « Servir maintenant », ses deux puces nommées
+// « Portion plus petite » et « Portion plus grande », les mots de sa maquette.
+// ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; D1) : la valeur est la taille de ration, « 2 portions · 90 g » — jamais le poids.
+const regleAccueil = (html) => html.includes('aria-label="Portion plus petite"') && html.includes('aria-label="Portion plus grande"') && html.includes('2 portions · 90 g');
 
 test('un compte ordinaire règle la portion dans Réglages comme sur l’Accueil, et « Remplacé » est à lui aussi', () => {
   const ordinaire = AQARA(false);
-  assert.ok(regle(rendre(ordinaire, CFG_AQARA, 'accueil')), 'témoin : l’Accueil laisse régler la portion à un compte ordinaire');
+  assert.ok(regleAccueil(rendre(ordinaire, CFG_AQARA, 'accueil')), 'témoin : l’Accueil laisse régler la portion à un compte ordinaire');
   assert.ok(regle(rendre(ordinaire, CFG_AQARA, 'reglages')), 'Réglages ne montre plus qu’en lecture ce que l’Accueil laisse régler');
   assert.ok(regle(rendre(AQARA(true), CFG_AQARA, 'reglages')), 'témoin : l’administrateur la règle');
   // « Remplacé » : un `button.press` de l'appareil, comme « Distribuer ».
@@ -298,19 +302,30 @@ test('au téléphone, la mise en page cède, pas les mots : libellés, onglets, 
   // Un mot composé allemand ne passe plus SOUS le pas à pas : il se coupe.
   const ligne = COMMUNE.slice(COMMUNE.indexOf('export function LigneReglage('), COMMUNE.indexOf('\n}\n', COMMUNE.indexOf('export function LigneReglage(')));
   assert.ok(/<span style=\{\{ fontSize: 14\.5, fontWeight: 700, minWidth: 0, overflowWrap: 'anywhere', hyphens: 'auto' \}\}>\{r\.nom\}/.test(ligne), '« Fütterungsmodus » passe sous le « − » à 320 px');
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I23) : la taille de ration a quitté sa ligne « Taille de la portion » pour le pas à pas de
+  // « Servir maintenant » ; c'est SA valeur (« 2 Portionen · 12 g ») qui revient à la ligne, au lieu de pousser le « + » hors de l'écran.
   const html = renderToStaticMarkup(createElement(Fiche, { hass: AQARA(true).hass, index: AQARA(true).index, cfg: CFG_AQARA, etat: ETAT_LOGGIA(), maintenant: MAINTENANT, ongletDepart: 'accueil' }));
-  assert.ok(/overflow-wrap:anywhere[^"]*">Taille de la portion</.test(html), '« Portionsgröße » passe sous le « − »');
+  // ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; D1) : la valeur du pas à pas est la taille de ration, « 2 portions · 90 g ».
+  assert.ok(/overflow-wrap:anywhere[^"]*">2 portions · 90 g</.test(html) && !/white-space:nowrap[^"]*">2 portions · 90 g</.test(html), '« 2 Portionen · 12 g » pousse le « + » hors de l’écran');
   // Les onglets : un mot plus long que sa part (« Harmonogram ») élargit SON onglet, les autres cèdent.
   assert.ok(CSS.includes('.rb-onglets > .rb-onglet { min-width: min-content; padding-left: 0; padding-right: 0; }'), '« Harmonogram » déborde de sa pastille bleue');
   // Les tuiles : l'heure revient à la ligne au lieu de disparaître (« Heute 19… »).
-  const tuile = FICHE.slice(FICHE.indexOf('{tuiles.map(t => ('), FICHE.indexOf('))}', FICHE.indexOf('{tuiles.map(t => (')));
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I22) : les tuiles de sa maquette sont une brique, `Tuile`, et leurs deux lignes une constante.
+  const tuile = FICHE.slice(FICHE.indexOf('function Tuile('), FICHE.indexOf('\n}\n', FICHE.indexOf('function Tuile(')));
   assert.ok(!tuile.includes("whiteSpace: 'nowrap'"), 'l’heure de la tuile est coupée par une ellipse');
-  assert.ok(tuile.includes('WebkitLineClamp: 2'), 'l’origine du repas tient sur deux lignes au plus');
+  assert.ok((tuile.match(/\.\.\.DEUX_LIGNES/g) || []).length === 2 && /const DEUX_LIGNES = \{[^}]*WebkitLineClamp: 2/.test(FICHE), 'l’origine du repas tient sur deux lignes au plus');
   // Le nom de la fiche : deux lignes, plus une ellipse sur une seule.
   const tete = COMMUNE.slice(COMMUNE.indexOf('export function EnteteFiche('), COMMUNE.indexOf('\n}\n', COMMUNE.indexOf('export function EnteteFiche(')));
   assert.ok(/<NomFeuille><div style=\{\{[^}]*WebkitLineClamp: 2/.test(tete) && !/<NomFeuille><div style=\{\{[^}]*whiteSpace: 'nowrap'/.test(tete), '« Distribute… » à 320 px hors ligne');
   // Entretien : la grille ne dépasse plus un écran de 320 px.
-  assert.ok(CSS.includes('.rb-pieces { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 14px; }'), 'le panneau d’Entretien déborde de 6 px à 320 px');
+  // ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; point G) : l'Entretien est la brique commune du robot (`OngletEntretien`,
+  // fichecommune.jsx) — un panneau pleine largeur, une rangée par pièce, qui ne déborde pas ; la grille `.rb-pieces` est partie.
+  const entretien = COMMUNE.slice(COMMUNE.indexOf('export function OngletEntretien('), COMMUNE.indexOf('\n}\n', COMMUNE.indexOf('export function OngletEntretien(')));
+  // ASSERTION MODIFIÉE (passe bis 2 de l'étape 2, 19/10) : le panneau de la brique est PLAT (`PANNEAU_PLAT` : `--o-s3`, le liseré, le
+  // rayon 18 — celui des autres onglets du robot et de l'Accueil du distributeur), plus celui du socle : son dégradé et son ombre n'ont
+  // jamais été dans sa maquette 1d, et l'Entretien du robot installé chez lui changeait de dessin (tests/fiche_robot_onglets.test.mjs).
+  assert.ok(entretien.includes("{pieces.length > 0 && (\n        <div style={{ ...PANNEAU_PLAT, padding: 0, overflow: 'hidden' }}>"), 'le panneau d’Entretien déborde de 6 px à 320 px');
+  assert.ok(!CSS.includes('.rb-pieces'), 'la grille d’Entretien du distributeur est restée dans la feuille');
 });
 
 test('en clair et en sombre : lavis du robot, onglets, lettres des barres, horloge, bouton Distribuer', () => {
@@ -318,16 +333,20 @@ test('en clair et en sombre : lavis du robot, onglets, lettres des barres, horlo
   assert.ok(CSS.includes('[style*="background: rgba(var(--rb-"], [style*="72%), linear-gradient(180deg,var(--o-surfA)"]'), 'le lavis du robot et du distributeur n’est pas reconnu');
   // Les onglets non choisis : le gris de texte le plus soutenu (4,24:1 en clair avec --o-text2).
   assert.ok(COMMUNE.includes("color: actuel === id ? '#fff' : 'var(--o-text1)'"), 'onglet inactif en --o-text2');
-  // Les lettres des jours sous les barres, et le nom sous « Réglages » : --o-text2 (4,16:1 en --o-text3).
-  const barres = COMMUNE.slice(COMMUNE.indexOf('export function BarresSemaine('), COMMUNE.indexOf('\n}\n', COMMUNE.indexOf('export function BarresSemaine(')));
-  assert.ok(!barres.includes('--o-text3'), 'les lettres des barres en --o-text3');
+  // Le nom sous « Réglages » : --o-text2 (4,16:1 en --o-text3).
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I25) : les barres de la semaine sont parties avec l'Historique de sa maquette — et leurs
+  // lettres avec elles ; elles ne reviennent pas.
+  assert.ok(!COMMUNE.includes('BarresSemaine') && !FICHE.includes('BarresSemaine'), 'les barres de la semaine sont revenues');
   const tete = COMMUNE.slice(COMMUNE.indexOf('export function EnteteFiche('), COMMUNE.indexOf('\n}\n', COMMUNE.indexOf('export function EnteteFiche(')));
   assert.ok(!tete.includes('--o-text3'), 'le nom sous « Réglages » en --o-text3');
   // L'horloge native du champ d'heure : dessinée pour le fond de la fiche.
   assert.ok(CSS.includes('.rb-fiche { color-scheme: dark; }') && CSS.includes('html.loggia-light .rb-fiche { color-scheme: light; }'), 'l’icône d’horloge est noire sur fond sombre');
   // « Distribuer » en clair : l'orange que la garde de contraste a déjà assombri, pas un brun presque noir.
-  assert.ok(CSS.includes('html.loggia-light .rb-distributeur { --rb-fond: var(--o-orange); }'), 'le bouton Distribuer passe au brun presque noir en clair');
-  assert.ok(!/!important/.test(CSS.slice(CSS.indexOf('/* Le distributeur (ADR 0155'), CSS.indexOf('/* ── La prise dit'))), 'pas de !important');
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I8) : la fiche n'a plus d'orange — « Distribuer » est au bleu plein de l'accent, qui porte
+  // déjà le blanc dans les deux thèmes, comme dans sa maquette.
+  assert.ok(!CSS.includes('.rb-distributeur') && FICHE.includes("const ACCENT = { background: 'var(--o-accent-fond)', color: '#fff' };"), 'le bouton Distribuer garde l’orange de l’ancienne fiche');
+  // Jusqu'aux appareils dessinés : le bloc de l'animation des prises, qui le suivait, est parti (chantier Prises, P11).
+  assert.ok(!/!important/.test(CSS.slice(CSS.indexOf('/* Le distributeur (ADR 0155'), CSS.indexOf('/* ── Les appareils dessines'))), 'pas de !important');
 });
 
 /* ════════════ 6. Contre-relecture de la finition (05/10) ════════════ */

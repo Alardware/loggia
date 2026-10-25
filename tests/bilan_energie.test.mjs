@@ -24,13 +24,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 // `i18n.js` résout sa langue à l'import : la fixer AVANT (règle du dépôt).
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 const { consoJourKwh, autosuffisance, resumeEnergie } = await import('../src/bilan.js');
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const APP = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8').replace(/\r\n/g, '\n');
+const APP = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES).replace(/\r\n/g, '\n');
 
 /** Le CODE d'une fonction d'App.jsx, sans ses commentaires. */
 const code = (debut) => {
@@ -78,7 +79,8 @@ test('l’en-tête de la vue Énergie ne dit que ce qui se lit', () => {
 });
 
 test('le branchement de la vue Énergie : ses chiffres muets ne valent plus 0', () => {
-  assert.ok(APP.includes("import { consoJourKwh, autosuffisance, resumeEnergie } from './bilan.js';"), 'App n’importe plus le bilan');
+  // ASSERTION MODIFIÉE (ADR 0274) : la vue Énergie, sortie du boot, importe elle-même ce qu'elle seule utilise.
+  assert.ok(APP.includes("import { consoJourKwh, autosuffisance, resumeEnergie } from '../bilan.js';"), 'la vue Énergie n’importe plus le bilan');
   const en = code('function EnergieContent(');
   assert.ok(!en.includes('(hcToday + hpToday) ||'), 'la somme des index muets revaut 0 kWh');
   assert.ok(en.includes('const totalToday = consoJourKwh({'), 'le total du jour ne passe plus par consoJourKwh');
@@ -112,10 +114,11 @@ test('le branchement de la vue Énergie : ses chiffres muets ne valent plus 0', 
 
 test('le branchement de l’Accueil et de la carte Énergie : sans compteur, ni tuile réseau ni « Solaire 100 % »', () => {
   const acc = code('function deriveAccueil(');
-  assert.ok(acc.includes('metricExport: gridVal == null ? null : {'), 'la tuile réseau doit disparaître quand rien ne se lit');
+  // ASSERTION MODIFIÉE (25/10) : la tuile dit la consommation de la maison, `metricConso`, plus l'import / export.
+  assert.ok(acc.includes('metricConso: consoW == null ? null : {'), 'la tuile doit disparaître quand rien ne se lit');
   assert.ok(!/raw: [^,]*\|\| 0/.test(acc), 'le `|| 0` repasse sous le « — » de Num');
   assert.ok(!acc.includes('? 100 : 0)'), 'l’autosuffisance de l’Accueil réinvente 100 % ou 0 %');
-  assert.ok(APP.includes('if (!a || a.metricExport) cases.push('), 'la bannière doit tester la tuile, pour qu’un null la retire');
+  assert.ok(APP.includes('if (!a || a.metricConso) cases.push('), 'la bannière doit tester la tuile, pour qu’un null la retire');
   const carte = code('function CvEnergie(');
   assert.ok(!carte.includes('grid || 0'), 'un compteur muet refait du solaire toute la maison');
   assert.ok(carte.includes('const maison = grid != null ?'), 'sans compteur réseau, la consommation de la maison est inconnue');

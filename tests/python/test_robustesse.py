@@ -247,8 +247,10 @@ def test_un_module_qui_rate_son_demarrage_le_dit_et_le_retient(caplog):
 def test_chaque_module_passe_par_le_demarrage_garde():
     """Neuf modules posaient la tache eux-memes, sans filet."""
     dossier = RACINE / "custom_components" / "loggia"
-    for f in ("distributeurs", "fenetres", "interrupteurs", "minuteurs", "nuit", "presence",
-              "robots", "scenarios", "sirene", "veilles", "volets"):
+    # ASSERTION MODIFIEE (chantier Mode enfant, tache 3) : `enfant` passe par
+    # le demarrage garde comme les autres.
+    for f in ("chauffage", "distributeurs", "enfant", "fenetres", "interrupteurs", "lumieres", "minuteurs", "nuit",
+              "presence", "prises", "robots", "scenarios", "sirene", "veilles", "volets"):
         src = (dossier / (f + ".py")).read_text(encoding="utf-8")
         assert "hass.async_create_task(self._async_demarrer())" not in src, f
         assert 'demarrer(hass, self, self._async_demarrer(), "' in src, f
@@ -269,8 +271,14 @@ def test_chaque_module_vivant_sait_s_arreter():
     noms = re.findall(r'"([a-z_]+)"', bloc)
     # Treize depuis le 03/10 : `rechargement` ecoute la configuration, il doit
     # se taire aussi. Quatorze depuis le 05/10 (ADR 0155) : `distributeurs`
-    # tient le planning de Loggia et son tic de minute.
-    assert len(noms) == 14, noms
+    # tient le planning de Loggia et son tic de minute. Quinze avec le moteur
+    # du chauffage (chantier Chauffage) : son minuteur, son ecoute, ses relances.
+    # Seize avec les prises (chantier Prises) : leur ecoute, leurs echeances.
+    # Dix-sept avec le carnet des lumieres (chantier Lumieres) : son ecoute,
+    # son ecriture differee. Dix-huit avec le mode enfant (chantier Mode
+    # enfant) : son ecoute, son tic de minute, ses echeances, son etat differe.
+    # ASSERTION MODIFIEE (chantier Mode enfant, tache 3) : 17 -> 18.
+    assert len(noms) == 18, noms
     for nom in noms:
         src = (dossier / (nom + ".py")).read_text(encoding="utf-8")
         assert "def async_arreter" in src or "def arreter" in src, nom

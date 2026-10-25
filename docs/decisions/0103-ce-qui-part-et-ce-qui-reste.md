@@ -87,11 +87,11 @@ peinture.
 
 ## Ce que je n'ai PAS fait
 
-- **`machines.wallE` et `machines.luba`** — des clés internes nommées d'après
-  l'aspirateur et la tondeuse de l'auteur. Les libellés, eux, viennent déjà de
-  Home Assistant (`friendly_name`). Renommer casserait
-  `tests/etats.test.mjs:95` pour un gain invisible à l'écran ; ces blocs
-  déménagent au découpage d'`App.jsx`, c'est là que ça se fera.
+- **Les clés internes de l'aspirateur et de la tondeuse** — nommées d'après les
+  robots de l'auteur. Les libellés, eux, viennent déjà de Home Assistant
+  (`friendly_name`). Renommer cassait `tests/etats.test.mjs` pour un gain
+  invisible à l'écran ; ce fut fait au chantier IoT (passe bis 2 du 18/10,
+  point L) : `machines.aspirateur` et `machines.tondeuse`, le test avec.
 - **`backups/` et son `.zip`** — 8,1 Mo qui doublent un instantané déjà
   décompressé à côté. Ce sont des fichiers de l'utilisateur, hors de git : à
   lui de les retirer.

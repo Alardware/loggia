@@ -25,7 +25,10 @@ def test_quatre_a_huit_chiffres(module):
 def test_le_hache_ne_dit_pas_le_code_et_le_verifie(module):
     e = module.hacher("1234")
     assert set(e) == {"sel", "hache", "iterations"}
-    assert "1234" not in e["hache"] and "1234" not in e["sel"]
+    # Le code n'est pas range en clair. Sur un sel tire au hasard, « 1234 » tombe
+    # dans l'hexadecimal environ une fois sur 700 (25/10, vu une fois) : sel fixe.
+    fixe = module.hacher("1234", sel=b"\0" * 16)
+    assert "1234" not in fixe["hache"] and "1234" not in fixe["sel"]
     assert module.verifier("1234", e) is True
     assert module.verifier("1235", e) is False
     assert module.verifier("0000", e) is False

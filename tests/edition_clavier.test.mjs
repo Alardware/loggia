@@ -2,6 +2,7 @@
  *
  * Le kit commun savait deja ; les trois rangements a part et la barre de
  * position d'un media suivent la meme regle : le focus, les fleches, un cran. */
+// ASSERTIONS MODIFIÉES (19/10, vouvoiement de l'interface générale) : les textes cités ici passent au « vous » ; seule la clé française change (tests/vouvoiement_interface_1910.test.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -74,14 +75,18 @@ test('l’appui long qui saisit ne selectionne pas le texte ni n’ouvre le menu
 
 test('le bandeau d’edition dit le geste, selon l’appareil', () => {
   const b = bloc('function BandeauEdition(');
-  assert.ok(b.includes("const tactile = useCoarse();") && b.includes("tactile ? tr('Au doigt : maintiens une carte, puis glisse-la.') : tr('Au clavier : Tab jusqu’à une carte, puis les flèches.')"), 'au doigt ou au clavier');
+  assert.ok(b.includes("const tactile = useCoarse();") && b.includes("tactile ? tr('Au doigt : maintenez une carte, puis glissez-la.') : tr('Au clavier : Tab jusqu’à une carte, puis les flèches.')"), 'au doigt ou au clavier');
   assert.ok(b.includes("<span style={{ color: 'var(--o-text3)' }}>{geste}</span>"), 'apres le texte de la vue');
   const en = readFileSync(new URL('../src/langues/en.js', import.meta.url), 'utf8');
 });
 
 test('la barre de position d’un media est un curseur, par l’aide de la barre de volume ; lecture / pause a un nom', () => {
-  assert.ok(app.includes("{...(np.dur ? kbSlider(tr('Position dans le morceau'), pct, chercher) : {})} aria-valuetext={np.dur ? fmtT(showPos) : undefined}"), 'kbSlider, et la valeur lue en temps');
-  assert.ok(app.includes("onPointerDown={np.dur ? bar(chercher, pct, 'data-sk') : undefined}"), 'le pointeur passe par le meme chemin');
-  assert.ok(app.includes("aria-label={np.playing ? tr('Pause') : tr('Lire')} onClick={() => commander(hass, np.ctl, 'play_pause')}"), 'le bouton dit ce qu’il fait');
+  // ASSERTION MODIFIÉE (passe téléphone, tâche 1) : la feuille d'un lecteur a quitté App.jsx pour fichemedia.jsx, chargée à la demande.
+  const media = readFileSync(new URL('../src/fichemedia.jsx', import.meta.url), 'utf8');
+  // ASSERTION MODIFIÉE (chantier Médias, tâche 6 ; M11, M13) : la progression ne se glisse que si le lecteur sait chercher (le bit SEEK) — au clavier par `kbSlider`, la valeur
+  // lue en temps ; lecture / pause passe par la vue de la carte (`v.lecture()` : `media_pause` si le lecteur joue, `media_play` sinon — jamais `play_pause`).
+  assert.ok(media.includes("<div {...kbSlider(tr('Position dans le morceau'), pct, chercher)} aria-valuetext={fmtTemps(pos)} onPointerDown={glisser(pct, chercher)}"), 'kbSlider, la valeur lue en temps, et le pointeur par le même chemin');
+  assert.ok(media.includes("aria-label={v.playing ? tr('Pause') : tr('Lire')} title={v.playing ? tr('Pause') : tr('Lire')} onClick={() => v.lecture()}"), 'le bouton dit ce qu’il fait, et la vue choisit le service');
+  assert.ok(!/'(media_)?play_pause'/.test(media), 'la fiche bascule à l’aveugle');
   const en = readFileSync(new URL('../src/langues/en.js', import.meta.url), 'utf8');
 });

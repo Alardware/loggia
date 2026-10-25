@@ -20,6 +20,8 @@
  * personne ne regarde — chez le lecteur, en silence.
  */
 import { integrationDe } from './telecommande.js';
+// L'une ou l'autre intégration d'une Echo (lecteur.js) : la garde du repli par le nom (`cibleAlexa`).
+import { estAlexa } from './lecteur.js';
 
 /** Douze : de quoi couvrir ce qu'on écoute vraiment, sans refaire une seconde
  *  bibliothèque à côté de celle du lecteur. */
@@ -156,20 +158,39 @@ const objetDe = (id) => String(id || '').slice(String(id || '').indexOf('.') + 1
  *
  * Deux signes STRICTS, et pas un rapprochement au jugé : viser la mauvaise
  * enceinte ferait parler une autre pièce, ce qui est pire que ne rien faire.
+ * D'où deux gardes de plus (passe bis du 17/10, ADR 0208) :
+ *  - la fin de l'identifiant se lit sur une FRONTIÈRE DE MOT : `salon_echo`
+ *    finit par `echo`, `salon_techo` non ;
+ *  - l'UNICITÉ : une officielle que DEUX jumelles HACS revendiquent (« Echo
+ *    Dot » et « Echo Dot 2 » au nom par défaut, `echo_dot` et `echo_dot_2`…)
+ *    n'est appariée à aucune. Dans le doute, pas de cible : la phrase n'est pas
+ *    proposée, plutôt que dite dans la mauvaise pièce.
+ *  - et la garde du REVENDICATEUR (passe bis 2, 17/10) : seule une Echo
+ *    OFFICIELLE (`estAlexa` sans `estEcho`) revendique une jumelle. Sans elle,
+ *    un Sonos `media_player.salon` revendiquait `media_player.echo_salon` — son
+ *    identifiant finit par `_salon` — : l'Echo disparaissait derrière la carte
+ *    « Salon », qui le commandait. Tout autre lecteur ne s'apparie jamais par
+ *    le nom.
+ * Ce n'est que le REPLI de `resolveMedia` : le signal premier est l'empreinte
+ * des identifiants d'appareil, que le serveur transmet (discovery.py).
  */
 export function cibleAlexa(id, etats, index) {
-  if (estEcho(integrationDe(id, index))) return id;
+  const integration = integrationDe(id, index);
+  if (estEcho(integration)) return id;
+  if (!estAlexa(integration)) return null;
   const nom = nomDe(etats, id);
   if (!nom) return null;
   const mots = motsDe(nom).join(' ');
   const objet = objetDe(id);
+  // `a` finit par `b` sur une frontière de mot : égaux, ou `b` précédé d'un `_`.
+  const finitPar = (a, b) => a === b || a.endsWith('_' + b);
+  const candidates = [];
   for (const autre of Object.keys(etats || {})) {
     if (autre === id || autre.indexOf('media_player.') !== 0) continue;
     if (!estEcho(integrationDe(autre, index))) continue;
     const o = objetDe(autre);
-    if (objet.endsWith(o) || o.endsWith(objet)) return autre;
     const n = nomDe(etats, autre);
-    if (n && motsDe(n).join(' ') === mots) return autre;
+    if (finitPar(objet, o) || finitPar(o, objet) || (n && motsDe(n).join(' ') === mots)) candidates.push(autre);
   }
-  return null;
+  return candidates.length === 1 ? candidates[0] : null;
 }

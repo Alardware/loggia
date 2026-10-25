@@ -18,21 +18,26 @@ import { fileURLToPath } from 'node:url';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8').replace(/\r\n/g, '\n');
-const APP = lire('src', 'App.jsx');
+/* La section des ambiances et sa brique `QuickBox` vivent dans scenes.jsx,
+ * chargé à la demande depuis le 11/10 (tâche 6 bis du chantier Chauffage) :
+ * les mêmes repères, lus à leur nouvelle place. */
+const MODULE = lire('src', 'scenes.jsx');
 const CSS = lire('src', 'index.css');
 // Le bloc des bandeaux au téléphone (≤ 760 px).
 const DEBUT_MOBILE = '@media (max-width: 760px) {\n  .o-bar {';
 const MOBILE = CSS.slice(CSS.indexOf(DEBUT_MOBILE), CSS.indexOf('\n}\n', CSS.indexOf(DEBUT_MOBILE)));
 const SCENES = (() => {
-  const i = APP.indexOf('\nfunction ScenesContent(');
-  return APP.slice(i, APP.indexOf('\nfunction ', i + 1));
+  const i = MODULE.indexOf('\nexport default function ScenesContent(');
+  const j = MODULE.indexOf('\nfunction ', i + 1);
+  return MODULE.slice(i, j < 0 ? undefined : j);
 })();
 
 test('la barre des ambiances et ses quatre groupes portent leurs classes', () => {
   assert.ok(CSS.indexOf(DEBUT_MOBILE) > 0, 'le bloc des bandeaux au téléphone a changé de forme');
-  assert.ok(APP.includes('const QuickBox = ({ label, children, className = null }) => ('));
-  assert.ok(APP.includes("<div className={'o-qb' + (className ? ' ' + className : '')} "));
-  assert.ok(APP.includes('<span className="o-qb-lbl" '), 'le libellé d’un groupe ne peut plus s’effacer au téléphone');
+  assert.ok(SCENES.startsWith('\nexport default function ScenesContent('), 'la section des ambiances a quitté scenes.jsx');
+  assert.ok(MODULE.includes('const QuickBox = ({ label, children, className = null }) => ('));
+  assert.ok(MODULE.includes("<div className={'o-qb' + (className ? ' ' + className : '')} "));
+  assert.ok(MODULE.includes('<span className="o-qb-lbl" '), 'le libellé d’un groupe ne peut plus s’effacer au téléphone');
   assert.ok(SCENES.includes('<div className="o-bar o-bar-scenes" '), 'la barre a perdu sa classe : au téléphone, elle glisserait de nouveau');
   // Les quatre libellés passent par `tr` depuis le 23/09 : « Direct » et
   // « Collection » restaient en français dans les sept langues.

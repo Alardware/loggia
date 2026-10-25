@@ -6,9 +6,10 @@ Assistant. Le client ne peut pas designer un autre utilisateur — aucune comman
 n'accepte de champ `user_id`. Un utilisateur ne lit et n'ecrit donc que sa propre
 configuration, et les permissions Home Assistant restent celles de sa session.
 
-Les 34 commandes, toutes prefixees `loggia/`. Le compte et la repartition
-entre ouvertes et reservees sont verrouilles par `test_websocket_api.py` :
-une commande nouvelle doit y etre rangee d'un cote ou de l'autre.
+Les 52 commandes, toutes prefixees `loggia/`. Le compte et la repartition
+entre ouvertes, reservees et ouvertes au code de la maison sont verrouilles
+par `test_websocket_api.py` : une commande nouvelle doit y etre rangee d'un
+cote ou de l'autre.
 
   La configuration
     config/get      -> {"config": {...}, "user": {...}}
@@ -25,9 +26,52 @@ une commande nouvelle doit y etre rangee d'un cote ou de l'autre.
   aux administrateurs : volets, fenetres, presence, nuit, veilles, scenarios,
   robots, distributeurs (ADR 0155 : `etat` rend un RESUME filtre par les
   droits du compte, jamais la configuration brute d'une automatisation).
+    volets/manoeuvres       -> les lignes du journal qui parlent d'un volet,
+                               pour l'historique de sa fiche (tous)
+  Le chauffage (chantier Chauffage, § 8.2)
+    chauffage/etat          -> l'etat calcule de chaque chauffage (tous)
+    chauffage/main          -> reprendre la main, ou rendre au planning (tous,
+                               bornes a ce que le compte peut piloter)
+    chauffage/maison        -> Planning, Absence, Vacances (tous) ; Ete (admin)
+    chauffage/config        -> plannings, temperatures, fenetre (admin)
+    chauffage/historique    -> l'historique RESUME d'un chauffage, 1 ou 7 jours
+                               (tous, sous leurs droits de lecture)
+  Les prises (chantier Prises, spec 6.1)
+    prises/etat             -> la configuration, et ce que chaque prise
+                               publie : son type, sa protection, ses cycles
+                               (tous)
+    prises/config           -> proteger, imposer le type, prevenir a la fin
+                               du cycle (admin)
+  Le carnet des lumieres (chantier Lumieres, spec 6.2)
+    lumieres/etat           -> le dernier niveau de chaque lampe (tous, sous
+                               leurs droits de lecture)
+    lumieres/journal        -> les notes d'une lampe depuis la veille (tous,
+                               s'ils peuvent la lire)
+  Le mode enfant (chantier Mode enfant, spec 7.4)
+    enfant/etat             -> les profils, leurs appareils, et ce que le mode
+                               fait de chaque lecteur (tous, sous leurs droits
+                               de lecture)
+    enfant/config           -> les profils par piece : plafond, heures, temps
+                               d'ecran (code de la maison, ou admin)
+    enfant/lever            -> lever les limites 30 min, ou les retablir (code
+                               de la maison, ou admin)
+    enfant/repondre         -> accorder ou refuser la demande en cours (code
+                               de la maison, ou admin)
+    enfant/demander         -> l'enfant demande 15 min de plus, au telephone
+                               (tous, bornes a ce qu'ils pilotent)
+    enfant/dormir           -> dire a l'Echo la phrase du son pour dormir
+                               (tous, bornes a ce qu'ils pilotent)
   Les gestes, ouverts a tout compte mais bornes a ce qu'il a le droit de
   piloter
     scenarios/lancer        -> lancer un scenario
+    robots/lancer           -> le depart d'un robot : des pieces, des aires,
+                               ou tout ; le carnet des passages le note
+                               (chantier IoT, I3 A) ; un script maison de
+                               l'aspirateur aussi (passe bis du 18/10, A)
+    robots/scripts          -> designer un script par role dans la roue de la
+                               popup : le role seul, fondu au serveur dans la
+                               description de la maison (admin ; passe bis 2
+                               de la tranche robots 2, 20/10)
     minuteurs/etat|poser|annuler -> le minuteur d'extinction d'un appareil
     sirene/tester           -> sonner trois secondes, tenu ici
   L'agencement, ouvert a tout compte (ADR 0125)
@@ -61,6 +105,7 @@ import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 
+from . import appareils
 from .code_admin import CODE_DEFAUT, LaissezPasser, Limiteur, code_valide, hacher, passage_admin, verifier
 from .discovery import async_index
 from .refus import RefusNomme
@@ -79,6 +124,7 @@ WS_INT_AFFECTER = "loggia/interrupteurs/affecter"
 WS_INT_ECOUTER = "loggia/interrupteurs/ecouter"
 WS_VOL_ETAT = "loggia/volets/etat"
 WS_VOL_CONFIG = "loggia/volets/config"
+WS_VOL_MANOEUVRES = "loggia/volets/manoeuvres"
 WS_FEN_ETAT = "loggia/fenetres/etat"
 WS_FEN_CONFIG = "loggia/fenetres/config"
 WS_PRE_ETAT = "loggia/presence/etat"
@@ -95,8 +141,25 @@ WS_SCN_LANCER = "loggia/scenarios/lancer"
 WS_SCN_ORDRE = "loggia/scenarios/ordre"
 WS_ROB_ETAT = "loggia/robots/etat"
 WS_ROB_CONFIG = "loggia/robots/config"
+WS_ROB_LANCER = "loggia/robots/lancer"
+WS_ROB_SCRIPTS = "loggia/robots/scripts"
 WS_DIS_ETAT = "loggia/distributeurs/etat"
 WS_DIS_CONFIG = "loggia/distributeurs/config"
+WS_CHA_ETAT = "loggia/chauffage/etat"
+WS_CHA_MAIN = "loggia/chauffage/main"
+WS_CHA_MAISON = "loggia/chauffage/maison"
+WS_CHA_CONFIG = "loggia/chauffage/config"
+WS_CHA_HISTORIQUE = "loggia/chauffage/historique"
+WS_PRI_ETAT = "loggia/prises/etat"
+WS_PRI_CONFIG = "loggia/prises/config"
+WS_LUM_ETAT = "loggia/lumieres/etat"
+WS_LUM_JOURNAL = "loggia/lumieres/journal"
+WS_ENF_ETAT = "loggia/enfant/etat"
+WS_ENF_CONFIG = "loggia/enfant/config"
+WS_ENF_LEVER = "loggia/enfant/lever"
+WS_ENF_REPONDRE = "loggia/enfant/repondre"
+WS_ENF_DEMANDER = "loggia/enfant/demander"
+WS_ENF_DORMIR = "loggia/enfant/dormir"
 WS_MIN_ETAT = "loggia/minuteurs/etat"
 WS_MIN_POSER = "loggia/minuteurs/poser"
 WS_MIN_ANNULER = "loggia/minuteurs/annuler"
@@ -154,7 +217,8 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
                    acces_presence=None, acces_nuit=None,
                    acces_veilles=None, acces_regles=None, acces_scenarios=None,
                    acces_robots=None, acces_minuteurs=None, acces_sirene=None,
-                   acces_distributeurs=None) -> None:
+                   acces_distributeurs=None, acces_chauffage=None, acces_prises=None,
+                   acces_lumieres=None, acces_enfant=None) -> None:
     """Declare les commandes aupres du serveur WebSocket.
 
     `acces_interrupteurs` est un APPELABLE, pas l'objet : ces commandes ne
@@ -185,8 +249,12 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
 
         La liste des profils illisible fait REFUSER : sans elle on ne sait pas
         ce que l'on ouvre (ADR 0079).
+
+        Le profil d'un ECRAN passe aussi par sa fiche d'appareil (ADR 0220) :
+        chaque profil qu'elle vise est garde de la meme facon.
         """
-        if "loggia_active_user" not in patch:
+        vises = appareils.profils_vises(patch.get(appareils.CLE_APPAREILS))
+        if "loggia_active_user" not in patch and not vises:
             return ""
         if connection.user.is_admin:
             return ""
@@ -199,7 +267,8 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
                 "Loggia : liste des profils illisible, le passage Admin est refuse",
                 exc_info=True)
             return "le code administrateur n'a pas pu etre verifie"
-        if not passage_admin(patch, profils):
+        if not (passage_admin(patch, profils)
+                or any(passage_admin({"loggia_active_user": v}, profils) for v in vises)):
             return ""
         return "le code administrateur est requis pour ce profil"
 
@@ -361,6 +430,29 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
             return
         connection.send_result(msg["id"], {"config": config})
 
+    # Les manoeuvres d'un volet (chantier Volets, spec 6.5) : des lignes du
+    # journal, en lecture, ouvertes a tout compte comme l'etat — sous ses
+    # droits de LECTURE (audit du 19/10) : une entite que le compte ne lit pas
+    # se refuse en `unauthorized`, comme le journal d'une lampe. Le compte
+    # vient de la session, jamais du message. `depuis` : des secondes depuis 1970.
+    @websocket_api.websocket_command({
+        vol.Required("type"): WS_VOL_MANOEUVRES,
+        vol.Required("entity_id"): str,
+        vol.Required("depuis"): vol.All(vol.Coerce(float), vol.Range(min=0)),
+    })
+    @websocket_api.async_response
+    async def handle_vol_manoeuvres(hass, connection, msg):
+        volets = acces_volets() if acces_volets else None
+        if volets is None:
+            connection.send_error(msg["id"], "not_available", "regles de volets indisponibles")
+            return
+        try:
+            manoeuvres = await volets.async_manoeuvres(msg["entity_id"], msg["depuis"], connection.user)
+        except PermissionError as err:
+            connection.send_error(msg["id"], "unauthorized", str(err))
+            return
+        connection.send_result(msg["id"], manoeuvres)
+
     # ── Fenetre ouverte, chauffage coupe ──────────────────────────────────
     @websocket_api.websocket_command({vol.Required("type"): WS_FEN_ETAT})
     @websocket_api.async_response
@@ -426,6 +518,9 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         connection.send_result(msg["id"], {"config": config})
 
     # ── La nuit ───────────────────────────────────────────────────────────
+    # L'etat se lit de tout compte, sous ses droits de LECTURE (audit du
+    # 19/10) : le module tait ce que le compte ne lit pas. Le compte vient de
+    # la session, jamais du message.
     @websocket_api.websocket_command({vol.Required("type"): WS_NUI_ETAT})
     @websocket_api.async_response
     async def handle_nui_etat(hass, connection, msg):
@@ -433,7 +528,7 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         if nuit is None:
             connection.send_error(msg["id"], "not_available", "regles de nuit indisponibles")
             return
-        connection.send_result(msg["id"], await nuit.async_etat())
+        connection.send_result(msg["id"], await nuit.async_etat(connection.user))
 
     @websocket_api.websocket_command(
         {vol.Required("type"): WS_NUI_CONFIG, vol.Required("patch"): dict}
@@ -636,7 +731,9 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
 
     # ── Le planning des robots (ADR 0043) ──────────────────────────────────
     # Lire est ouvert a tout compte connecte ; ecrire — le planning est celui
-    # de la maison — reste aux administrateurs.
+    # de la maison — reste aux administrateurs. Le carnet des passages (I3 A)
+    # se lit sous les droits de LECTURE du compte, et `lancer` — le depart
+    # d'un robot, le geste de tous les jours — est borne a ce qu'il PILOTE.
     @websocket_api.websocket_command({vol.Required("type"): WS_ROB_ETAT})
     @websocket_api.async_response
     async def handle_rob_etat(hass, connection, msg):
@@ -644,7 +741,7 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         if robots is None:
             connection.send_error(msg["id"], "not_available", "planning des robots indisponible")
             return
-        connection.send_result(msg["id"], await robots.async_etat())
+        connection.send_result(msg["id"], await robots.async_etat(connection.user))
 
     @websocket_api.websocket_command(
         {vol.Required("type"): WS_ROB_CONFIG, vol.Required("patch"): dict}
@@ -663,6 +760,71 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
             _relayer(connection, msg, err)
             return
         connection.send_result(msg["id"], {"config": config})
+
+    # Le robot se nomme `robot`, JAMAIS `id` : `id` est le numero du message.
+    # `zones` a la forme de celles d'un planning ; vide, c'est tout.
+    @websocket_api.websocket_command({
+        vol.Required("type"): WS_ROB_LANCER,
+        vol.Required("robot"): vol.All(str, vol.Length(min=1, max=128)),
+        vol.Optional("zones", default=list): list,
+        # Un script maison de l'aspirateur (passe bis du 18/10, point A ; sa reponse « Par le serveur ») : `script.turn_on`
+        # sous les memes droits, s'il est un des siens.
+        vol.Optional("script"): vol.All(str, vol.Length(min=1, max=128)),
+        # Le role que l'ecran DEMANDE au script — un depart, une reprise, la pause, la base, localiser (passe bis 2 du 18/10,
+        # point J ; `localiser` depuis la passe bis de la tranche robots 2, 20/10) : c'est lui qui dit si le script lance un
+        # passage, pas sa place dans une liste.
+        vol.Optional("role"): vol.In(["nettoyer_tout", "pieces_selectionnees", "pause", "reprendre", "retour_base", "localiser"]),
+    })
+    @websocket_api.async_response
+    async def handle_rob_lancer(hass, connection, msg):
+        robots = acces_robots() if acces_robots else None
+        if robots is None:
+            connection.send_error(msg["id"], "not_available", "planning des robots indisponible")
+            return
+        try:
+            etat = await robots.async_lancer_depart(msg["robot"], msg["zones"], user=connection.user,
+                                                    controle=controle_de(connection.user),
+                                                    **{k: msg[k] for k in ("script", "role") if k in msg})
+        except PermissionError as err:
+            connection.send_error(msg["id"], "unauthorized", str(err))
+            return
+        except ValueError as err:
+            # Injoignable, deja en route, des pieces que l'integration ne sait
+            # pas viser, une aire qui n'est pas la sienne, un appel refuse : le
+            # refus porte son code, l'ecran le dit (src/refusrobots.js).
+            _relayer(connection, msg, err)
+            return
+        connection.send_result(msg["id"], etat)
+
+    # La roue de la popup designe un script par ROLE (passe bis 2 de la tranche
+    # robots 2, 20/10 ; relecture de controle) : le role part SEUL, et le serveur
+    # le fond dans la description de la maison telle qu'elle est sur le disque.
+    # L'ecran reecrivait `loggia_entities` ENTIERE par `config/set` depuis son
+    # cache — vide ou perime tant que `config/get` n'avait pas repondu —, et une
+    # designation depuis un onglet lent effacait les dix-neuf autres cles. La
+    # description est celle de la maison : administrateurs seulement. Rend l'etat
+    # des robots, ou la roue lit les roles designes.
+    @websocket_api.websocket_command({
+        vol.Required("type"): WS_ROB_SCRIPTS,
+        vol.Required("role"): vol.In(["nettoyer_tout", "pieces_selectionnees", "pause", "reprendre", "retour_base", "localiser"]),
+        # Le script du role, ou None : « Aucun » retire le role.
+        vol.Required("script"): vol.Any(None, vol.All(str, vol.Length(min=1, max=128))),
+    })
+    @websocket_api.require_admin
+    @websocket_api.async_response
+    async def handle_rob_scripts(hass, connection, msg):
+        robots = acces_robots() if acces_robots else None
+        if robots is None:
+            connection.send_error(msg["id"], "not_available", "planning des robots indisponible")
+            return
+        try:
+            etat = await robots.async_designer_script(msg["role"], msg["script"], user=connection.user)
+        except ValueError as err:
+            # Un script qui n'en est pas un, une description illisible : rien ne
+            # s'ecrit, et le refus porte son code (un plafond du magasin aussi).
+            _relayer(connection, msg, err)
+            return
+        connection.send_result(msg["id"], etat)
 
     # ── Le distributeur de croquettes (05/10, ADR 0155) ────────────────────
     # `etat` est ouverte a tout compte connecte, comme celui des robots, mais
@@ -706,6 +868,345 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         # L'etat avec : l'ecran redessine sans attendre son sondage.
         connection.send_result(msg["id"], {"config": config,
                                            "etat": await distributeurs.async_etat(connection.user)})
+
+    # ── Le chauffage (chantier Chauffage, § 8.2) ───────────────────────────
+    # `etat` et `main` sont ouverts a tout compte connecte : reprendre la main
+    # sur un radiateur est un geste de tous les jours. Mais bornes a ce que CE
+    # compte peut lire et PILOTER — le moteur commande lui-meme, la
+    # verification que Home Assistant ferait d'un appel direct n'a pas lieu
+    # (comme les minuteurs). `maison` est ouverte pour Planning, Absence et
+    # Vacances ; Ete est une saison, il reste aux administrateurs (§ 8.3) et
+    # le refus le nomme. `config` ecrit la maison : administrateurs seulement.
+    # Les temperatures s'y disent en °C (ADR 0128) : l'ecran convertit.
+    def _chauffage(connection, msg):
+        chauffage = acces_chauffage() if acces_chauffage else None
+        if chauffage is None:
+            connection.send_error(msg["id"], "not_available", "chauffage indisponible")
+        return chauffage
+
+    @websocket_api.websocket_command({vol.Required("type"): WS_CHA_ETAT})
+    @websocket_api.async_response
+    async def handle_cha_etat(hass, connection, msg):
+        chauffage = _chauffage(connection, msg)
+        if chauffage is None:
+            return
+        connection.send_result(msg["id"], await chauffage.async_etat(connection.user))
+
+    # Le chauffage se nomme `chauffage`, JAMAIS `id` : `id` est le numero du
+    # message (voir le lancement d'un scenario plus haut).
+    @websocket_api.websocket_command({
+        vol.Required("type"): WS_CHA_MAIN,
+        vol.Required("chauffage"): vol.All(str, vol.Length(min=1, max=128)),
+        vol.Optional("mode"): vol.In(["confort", "confort_1", "confort_2", "eco", "hors_gel", "arret"]),
+        vol.Optional("temperature"): vol.Coerce(float),
+        vol.Optional("fin", default="prochain"): vol.Any("prochain", "relance", 60, 120, 240),
+        vol.Optional("reprendre", default=False): bool,
+    })
+    @websocket_api.async_response
+    async def handle_cha_main(hass, connection, msg):
+        chauffage = _chauffage(connection, msg)
+        if chauffage is None:
+            return
+        controle = controle_de(connection.user)
+        try:
+            if msg.get("reprendre"):
+                await chauffage.async_rendre_au_planning(msg["chauffage"], controle=controle)
+            else:
+                await chauffage.async_reprendre_la_main(
+                    msg["chauffage"], mode=msg.get("mode"), temperature=msg.get("temperature"),
+                    fin=msg["fin"], par=connection.user.id, nom=connection.user.name, controle=controle)
+        except PermissionError as err:
+            connection.send_error(msg["id"], "unauthorized", str(err))
+            return
+        except ValueError as err:
+            # Un mode que ce chauffage ne comprend pas, une consigne hors
+            # bornes : le refus porte son code et nomme ce qui ne va pas.
+            _relayer(connection, msg, err)
+            return
+        connection.send_result(msg["id"], await chauffage.async_etat(connection.user))
+
+    @websocket_api.websocket_command({
+        vol.Required("type"): WS_CHA_MAISON,
+        vol.Required("mode"): vol.In(["planning", "absence", "vacances", "ete"]),
+        vol.Optional("fin"): vol.Any(None, str),
+    })
+    @websocket_api.async_response
+    async def handle_cha_maison(hass, connection, msg):
+        chauffage = _chauffage(connection, msg)
+        if chauffage is None:
+            return
+        try:
+            # Le role vient de la connexion authentifiee, jamais du message.
+            await chauffage.async_maison(msg["mode"], msg.get("fin"), admin=bool(connection.user.is_admin),
+                                         nom=connection.user.name)
+        except MaisonReserveeError as err:
+            # La forme du magasin : `not_admin`, la cle apres les deux-points.
+            connection.send_error(msg["id"], "not_admin", str(err))
+            return
+        except ValueError as err:
+            _relayer(connection, msg, err)
+            return
+        connection.send_result(msg["id"], await chauffage.async_etat(connection.user))
+
+    @websocket_api.websocket_command(
+        {vol.Required("type"): WS_CHA_CONFIG, vol.Required("patch"): dict}
+    )
+    @websocket_api.require_admin
+    @websocket_api.async_response
+    async def handle_cha_config(hass, connection, msg):
+        chauffage = _chauffage(connection, msg)
+        if chauffage is None:
+            return
+        try:
+            config = await chauffage.async_enregistrer(msg["patch"])
+        except ValueError as err:
+            # Les refus nommes du planning (`chauffage_config.py`) et les
+            # plafonds du magasin : leur code, et la cle qu'ils nomment.
+            _relayer(connection, msg, err)
+            return
+        # L'etat avec : l'ecran redessine sans attendre son sondage.
+        connection.send_result(msg["id"], {"config": config, "etat": await chauffage.async_etat(connection.user)})
+
+    # L'historique d'un chauffage, RESUME par le serveur : la fiche lisait sept
+    # jours d'un `climate` avec tous ses attributs (3 a 14 Mo pour un poele ;
+    # audit du 19/10). Ouvert a tout compte, sous ses droits de LECTURE — comme
+    # `etat`. L'enregistreur arrete : « historique_indisponible », la fiche
+    # retombe sur `history/period`.
+    @websocket_api.websocket_command({
+        vol.Required("type"): WS_CHA_HISTORIQUE,
+        vol.Required("chauffage"): vol.All(str, vol.Length(min=1, max=128)),
+        vol.Optional("jours", default=1): vol.In([1, 7]),
+    })
+    @websocket_api.async_response
+    async def handle_cha_historique(hass, connection, msg):
+        chauffage = _chauffage(connection, msg)
+        if chauffage is None:
+            return
+        try:
+            resultat = await chauffage.async_historique(msg["chauffage"], msg["jours"], connection.user)
+        except PermissionError as err:
+            connection.send_error(msg["id"], "unauthorized", str(err))
+            return
+        except ValueError as err:
+            _relayer(connection, msg, err)
+            return
+        except Exception:  # noqa: BLE001
+            _LOGGER.warning("Loggia chauffage : historique illisible", exc_info=True)
+            connection.send_error(msg["id"], "historique_indisponible", "historique illisible")
+            return
+        connection.send_result(msg["id"], resultat)
+
+    # ── Les prises (chantier Prises, spec 6.1) ─────────────────────────────
+    # `etat` se lit de tout compte : la carte et la popup d'une prise. Il ne
+    # dit rien que `config/get` ne donne deja (`loggia_prises` est dans la
+    # configuration commune). `config` ecrit la maison - la protection, le
+    # type impose, l'alerte de fin de cycle : administrateurs seulement (P4).
+    def _prises(connection, msg):
+        prises = acces_prises() if acces_prises else None
+        if prises is None:
+            connection.send_error(msg["id"], "not_available", "prises indisponibles")
+        return prises
+
+    @websocket_api.websocket_command({vol.Required("type"): WS_PRI_ETAT})
+    @websocket_api.async_response
+    async def handle_pri_etat(hass, connection, msg):
+        prises = _prises(connection, msg)
+        if prises is None:
+            return
+        connection.send_result(msg["id"], await prises.async_etat())
+
+    @websocket_api.websocket_command(
+        {vol.Required("type"): WS_PRI_CONFIG, vol.Required("patch"): dict}
+    )
+    @websocket_api.require_admin
+    @websocket_api.async_response
+    async def handle_pri_config(hass, connection, msg):
+        prises = _prises(connection, msg)
+        if prises is None:
+            return
+        try:
+            config = await prises.async_enregistrer(msg["patch"])
+        except ValueError as err:
+            # Une valeur que l'ecran n'envoie pas, ou un plafond du magasin :
+            # son code, et la cle qu'il nomme (audit du 03/10).
+            _relayer(connection, msg, err)
+            return
+        # L'etat avec : l'ecran redessine sans attendre son sondage.
+        connection.send_result(msg["id"], {"config": config, "etat": await prises.async_etat()})
+
+    # ── Le carnet des lumieres (chantier Lumieres, spec 6.2) ───────────────
+    # Deux lectures, ouvertes a tout compte connecte, sous ses droits de
+    # LECTURE (`_lecture_autorisee`, la garde de l'etat du chauffage) : `etat`
+    # tait les lampes que le compte ne lit pas, `journal` les refuse. Le compte
+    # vient de la session, jamais du message.
+    def _lumieres(connection, msg):
+        lumieres = acces_lumieres() if acces_lumieres else None
+        if lumieres is None:
+            connection.send_error(msg["id"], "not_available", "carnet des lumieres indisponible")
+        return lumieres
+
+    @websocket_api.websocket_command({vol.Required("type"): WS_LUM_ETAT})
+    @websocket_api.async_response
+    async def handle_lum_etat(hass, connection, msg):
+        lumieres = _lumieres(connection, msg)
+        if lumieres is None:
+            return
+        connection.send_result(msg["id"], await lumieres.async_etat(connection.user))
+
+    @websocket_api.websocket_command(
+        {vol.Required("type"): WS_LUM_JOURNAL, vol.Required("entity_id"): str}
+    )
+    @websocket_api.async_response
+    async def handle_lum_journal(hass, connection, msg):
+        lumieres = _lumieres(connection, msg)
+        if lumieres is None:
+            return
+        try:
+            journal = await lumieres.async_journal(msg["entity_id"], connection.user)
+        except PermissionError as err:
+            connection.send_error(msg["id"], "unauthorized", str(err))
+            return
+        connection.send_result(msg["id"], journal)
+
+    # ── Le mode enfant (chantier Mode enfant, spec 7.4) ────────────────────
+    # Trois regimes. `etat` se lit de tout compte, sous ses droits de LECTURE
+    # (le module tait les lecteurs que le compte ne lit pas). `demander` et
+    # `dormir` sont les gestes de la chambre : ouverts, bornes a ce que le
+    # compte PILOTE. `config`, `lever` et `repondre` sont les gestes du PARENT
+    # (E2 B) : pas de `require_admin` - une tablette de famille porte un compte
+    # ordinaire, et c'est le code de la maison qui dit que c'est le parent. Le
+    # code verifie (`loggia/pin/verifier`) vaut laissez-passer cinq minutes
+    # pour CE compte, le meme que pour le passage vers un profil Admin ; un
+    # administrateur s'en passe. Le refus porte le code que l'ecran traduit
+    # deja (`code_admin_requis`, src/refus.js).
+    def _enfant(connection, msg):
+        enfant = acces_enfant() if acces_enfant else None
+        if enfant is None:
+            connection.send_error(msg["id"], "not_available", "mode enfant indisponible")
+        return enfant
+
+    def _code_ou_admin(connection, msg) -> bool:
+        """Le parent : administrateur, ou le code de la maison verifie il y a moins de cinq minutes."""
+        if connection.user.is_admin or laissez_passer.valide(connection.user.id):
+            return True
+        connection.send_error(msg["id"], "code_admin_requis", "le code de la maison est requis pour le mode enfant")
+        return False
+
+    @websocket_api.websocket_command({vol.Required("type"): WS_ENF_ETAT})
+    @websocket_api.async_response
+    async def handle_enf_etat(hass, connection, msg):
+        enfant = _enfant(connection, msg)
+        if enfant is None:
+            return
+        connection.send_result(msg["id"], await enfant.async_etat(connection.user))
+
+    @websocket_api.websocket_command(
+        {vol.Required("type"): WS_ENF_CONFIG, vol.Required("patch"): dict}
+    )
+    @websocket_api.async_response
+    async def handle_enf_config(hass, connection, msg):
+        enfant = _enfant(connection, msg)
+        if enfant is None or not _code_ou_admin(connection, msg):
+            return
+        # Le laissez-passer du code ouvre les PROFILS du mode enfant, rien d'autre (passe bis, 17/10) : « Observer
+        # sans agir » (`simulation`) est un reglage de la MAISON, aux administrateurs comme par `config/set` ; une cle
+        # que l'ecran n'envoie pas est un format inconnu — le module l'ignorerait en silence, on la refuse ici.
+        inconnues = [k for k in msg["patch"] if k not in ("profils", "simulation")]
+        if inconnues:
+            connection.send_error(msg["id"], "invalid_format", "mode enfant : clé inconnue : %s" % ", ".join(sorted(map(str, inconnues))))
+            return
+        if "simulation" in msg["patch"] and not connection.user.is_admin:
+            connection.send_error(msg["id"], "unauthorized", "« Observer sans agir » du mode enfant est aux administrateurs")
+            return
+        try:
+            config = await enfant.async_enregistrer(msg["patch"])
+        except ValueError as err:
+            # Une valeur que l'ecran n'envoie pas, ou un plafond du magasin :
+            # son code, et ce qu'il nomme.
+            _relayer(connection, msg, err)
+            return
+        # L'etat avec : l'ecran redessine sans attendre son sondage.
+        connection.send_result(msg["id"], {"config": config, "etat": await enfant.async_etat(connection.user)})
+
+    # Le profil se nomme `profil`, JAMAIS `id` : `id` est le numero du message
+    # (voir le lancement d'un scenario plus haut). 30 leve les limites une
+    # demi-heure, 0 les retablit (E14).
+    @websocket_api.websocket_command({
+        vol.Required("type"): WS_ENF_LEVER,
+        vol.Required("profil"): vol.All(str, vol.Length(min=1, max=128)),
+        vol.Required("minutes"): vol.In([0, 30]),
+    })
+    @websocket_api.async_response
+    async def handle_enf_lever(hass, connection, msg):
+        enfant = _enfant(connection, msg)
+        if enfant is None or not _code_ou_admin(connection, msg):
+            return
+        try:
+            etat = await enfant.async_lever(msg["profil"], msg["minutes"], connection.user)
+        except ValueError as err:
+            _relayer(connection, msg, err)
+            return
+        connection.send_result(msg["id"], etat)
+
+    @websocket_api.websocket_command({
+        vol.Required("type"): WS_ENF_REPONDRE,
+        vol.Required("profil"): vol.All(str, vol.Length(min=1, max=128)),
+        vol.Required("accorder"): bool,
+    })
+    @websocket_api.async_response
+    async def handle_enf_repondre(hass, connection, msg):
+        enfant = _enfant(connection, msg)
+        if enfant is None or not _code_ou_admin(connection, msg):
+            return
+        try:
+            etat = await enfant.async_repondre(msg["profil"], msg["accorder"], connection.user)
+        except ValueError as err:
+            # Aucune demande en attente : le refus du module, nomme.
+            _relayer(connection, msg, err)
+            return
+        connection.send_result(msg["id"], etat)
+
+    @websocket_api.websocket_command({
+        vol.Required("type"): WS_ENF_DEMANDER,
+        vol.Required("profil"): vol.All(str, vol.Length(min=1, max=128)),
+    })
+    @websocket_api.async_response
+    async def handle_enf_demander(hass, connection, msg):
+        enfant = _enfant(connection, msg)
+        if enfant is None:
+            return
+        try:
+            etat = await enfant.async_demander(msg["profil"], controle=controle_de(connection.user), user=connection.user)
+        except PermissionError as err:
+            connection.send_error(msg["id"], "unauthorized", str(err))
+            return
+        except ValueError as err:
+            # Aucun ecran bloque par le temps, une demande deja en cours.
+            _relayer(connection, msg, err)
+            return
+        connection.send_result(msg["id"], etat)
+
+    @websocket_api.websocket_command({
+        vol.Required("type"): WS_ENF_DORMIR,
+        vol.Required("profil"): vol.All(str, vol.Length(min=1, max=128)),
+        vol.Required("son"): vol.All(int, vol.Range(min=0)),
+    })
+    @websocket_api.async_response
+    async def handle_enf_dormir(hass, connection, msg):
+        enfant = _enfant(connection, msg)
+        if enfant is None:
+            return
+        try:
+            etat = await enfant.async_dormir(msg["profil"], msg["son"], controle=controle_de(connection.user),
+                                             user=connection.user)
+        except PermissionError as err:
+            connection.send_error(msg["id"], "unauthorized", str(err))
+            return
+        except ValueError as err:
+            # Un son que le profil n'a pas, aucune jumelle qui reponde.
+            _relayer(connection, msg, err)
+            return
+        connection.send_result(msg["id"], etat)
 
     # ── Suivre la configuration (22/09, ADR 0067) ──────────────────────────
     # Un ecran s'abonne une fois ; a chaque ecriture du magasin il apprend
@@ -759,7 +1260,8 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
             connection.send_error(msg["id"], "unauthorized", str(err))
             return
         except ValueError as err:
-            connection.send_error(msg["id"], "invalid_format", str(err))
+            # Un appareil deja eteint se refuse par son code (`minuteur_deja_eteint`).
+            _relayer(connection, msg, err)
             return
         connection.send_result(msg["id"], etat)
 
@@ -857,8 +1359,25 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
     websocket_api.async_register_command(hass, handle_scn_ordre)
     websocket_api.async_register_command(hass, handle_rob_etat)
     websocket_api.async_register_command(hass, handle_rob_config)
+    websocket_api.async_register_command(hass, handle_rob_lancer)
+    websocket_api.async_register_command(hass, handle_rob_scripts)
     websocket_api.async_register_command(hass, handle_dis_etat)
     websocket_api.async_register_command(hass, handle_dis_config)
+    websocket_api.async_register_command(hass, handle_cha_etat)
+    websocket_api.async_register_command(hass, handle_cha_main)
+    websocket_api.async_register_command(hass, handle_cha_maison)
+    websocket_api.async_register_command(hass, handle_cha_config)
+    websocket_api.async_register_command(hass, handle_cha_historique)
+    websocket_api.async_register_command(hass, handle_pri_etat)
+    websocket_api.async_register_command(hass, handle_pri_config)
+    websocket_api.async_register_command(hass, handle_lum_etat)
+    websocket_api.async_register_command(hass, handle_lum_journal)
+    websocket_api.async_register_command(hass, handle_enf_etat)
+    websocket_api.async_register_command(hass, handle_enf_config)
+    websocket_api.async_register_command(hass, handle_enf_lever)
+    websocket_api.async_register_command(hass, handle_enf_repondre)
+    websocket_api.async_register_command(hass, handle_enf_demander)
+    websocket_api.async_register_command(hass, handle_enf_dormir)
     websocket_api.async_register_command(hass, handle_min_etat)
     websocket_api.async_register_command(hass, handle_min_poser)
     websocket_api.async_register_command(hass, handle_min_annuler)
@@ -875,6 +1394,7 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
     websocket_api.async_register_command(hass, handle_fen_config)
     websocket_api.async_register_command(hass, handle_vol_etat)
     websocket_api.async_register_command(hass, handle_vol_config)
+    websocket_api.async_register_command(hass, handle_vol_manoeuvres)
     websocket_api.async_register_command(hass, handle_int_etat)
     websocket_api.async_register_command(hass, handle_int_affecter)
     websocket_api.async_register_command(hass, handle_int_ecouter)

@@ -68,6 +68,13 @@ CLES_PORTION = ("manual_feed_quantity", "manual_portions", "portions", "serving_
 MOTIF_SUFFIXE_PORTION = r"(^|_)(serving_size|portions|manual_portions)$"
 CLES_POIDS_PORTION = ("portion_weight",)
 MOTIF_SUFFIXE_POIDS_PORTION = r"(^|_)portion_weight$"
+# Une unite de MASSE : un number designe « Poids d'une portion » dans une masse
+# est un poids, pas une taille (passe bis de l'etape 2, 19/10 ; D1). Toutes les
+# masses de Home Assistant (UnitOfMass, « ug » pour µg) — seules g et kg
+# comptaient, et un poids en oz, en lb ou en mg devenait la taille, sur
+# laquelle l'ecran ecrit (passe bis 2, 19/10). L'ecran convertit en grammes
+# (`enGrammes`) ; le serveur ne convertit rien.
+UNITES_MASSE = ("g", "kg", "mg", "µg", "ug", "oz", "lb", "st")
 
 # Le programme de l'appareil.
 CLES_PROGRAMME: dict[str, tuple[str, ...]] = {
@@ -105,6 +112,9 @@ CLES_ANOMALIE_BLOQUE = ("barn_door_error", "door_blocked", "error_detected",
                         "food_dispenser_state", "food_outlet_state", "rotor_stuck")
 MOTIF_BAS = r"food_(low|shortage|empty|level)|hopper_low|not_enough_food|pet_food_left_level"
 MOTIF_BLOQUE = r"block|jam|stuck|clog"
+# Le `_error` qu'un Aqara publie sous Zigbee2MQTT n'a pas de device_class :
+# son suffixe suffit, parmi les seules soeurs (passe bis de l'etape 2, 19/10 ; B).
+MOTIF_ANOMALIE_SANS_CLASSE = r"(^|_)error$"
 
 # R3 — les consommables (sensor seulement) et leur remise a zero (button).
 CLES_CONSOMMABLE: dict[str, tuple[str, ...]] = {
@@ -516,26 +526,45 @@ def _mode_aqara(s: dict) -> bool:
     return all(o in vues for o in OPTIONS_MODE_Z2M)
 
 
+def _unite(s: dict) -> str | None:
+    return _attrs(s).get("unit_of_measurement") or None
+
+
+def _number_designe(soeurs: Iterable[dict], etats: Any, cfg: Any, registre: Any,
+                    appareil: str | None) -> dict | None:
+    """Le number designe « Poids d'une portion » (`haids.portionWeight`) : une
+    soeur, ou une entite connue qui n'est pas posee sur un AUTRE appareil
+    (05/10, contradicteur : le serveur aurait regle la portion de l'aquarium
+    voisin) ; None sinon. L'ecran (`numberDesigne`) lit la meme regle."""
+    designe = _id(_haids(_cfg(cfg)).get("portionWeight"))
+    if not designe or _domaine(designe) != "number":
+        return None
+    s = next((s for s in _tries(soeurs) if s["entity_id"] == designe), None)
+    if s is not None:
+        return s
+    ailleurs = getattr(_entree(registre, designe), "device_id", None)
+    etat = _etat(etats, designe)
+    if etat is None or (ailleurs and appareil and ailleurs != appareil):
+        return None
+    return _soeur(designe, _entree(registre, designe), etat)
+
+
 def portion(soeurs: Iterable[dict], etats: Any = None, cfg: Any = None,
             registre: Any = None, appareil: str | None = None) -> dict | None:
     """La taille de la portion : `{entity_id, unite, min, max, pas}`.
 
     Le number designe (`haids.portionWeight`) s'il existe — et s'il n'est pas
-    pose sur un AUTRE appareil —, sinon la soeur number de cle CLES_PORTION,
-    sinon de suffixe MOTIF_SUFFIXE_PORTION. L'unite vient de l'entite
-    (unit_of_measurement), jamais un « g » en dur : le serving_size d'Aqara
-    compte des portions.
+    pose sur un AUTRE appareil — ET si son unite n'est pas une masse, sinon la
+    soeur number de cle CLES_PORTION, sinon de suffixe MOTIF_SUFFIXE_PORTION.
+    L'unite vient de l'entite (unit_of_measurement), jamais un « g » en dur :
+    le serving_size d'Aqara compte des portions. Un number designe en g ou en
+    kg est le POIDS d'une portion, ce que le champ de Parametres demande
+    (passe bis de l'etape 2, 19/10 ; D1) : la taille se cherche alors parmi les
+    soeurs — avant, l'ecran prenait ce poids pour la portion.
     """
     liste = _tries(soeurs)
-    choisie = None
-    designe = _id(_haids(_cfg(cfg)).get("portionWeight"))
-    if designe and _domaine(designe) == "number":
-        choisie = next((s for s in liste if s["entity_id"] == designe), None)
-        if choisie is None:
-            ailleurs = getattr(_entree(registre, designe), "device_id", None)
-            etat = _etat(etats, designe)
-            if etat is not None and not (ailleurs and appareil and ailleurs != appareil):
-                choisie = _soeur(designe, _entree(registre, designe), etat)
+    designe = _number_designe(liste, etats, cfg, registre, appareil)
+    choisie = designe if designe is not None and _unite(designe) not in UNITES_MASSE else None
     if choisie is None:
         choisie = (_premiere(liste, lambda s: s["domaine"] == "number" and _cle(s) in CLES_PORTION)
                    or _premiere(liste, lambda s: s["domaine"] == "number"
@@ -543,18 +572,24 @@ def portion(soeurs: Iterable[dict], etats: Any = None, cfg: Any = None,
     if choisie is None:
         return None
     a = _attrs(choisie)
-    return {"entity_id": choisie["entity_id"], "unite": a.get("unit_of_measurement") or None,
+    return {"entity_id": choisie["entity_id"], "unite": _unite(choisie),
             "min": _nombre(a.get("min")), "max": _nombre(a.get("max")), "pas": _nombre(a.get("step"))}
 
 
-def poids_portion(soeurs: Iterable[dict]) -> dict | None:
-    """Le poids d'une portion, quand l'appareil le dit : `{entity_id, unite}`."""
-    s = (_premiere(soeurs, lambda s: s["domaine"] == "number" and _cle(s) in CLES_POIDS_PORTION)
-         or _premiere(soeurs, lambda s: s["domaine"] == "number"
-                      and _trouve(MOTIF_SUFFIXE_POIDS_PORTION, s["suffixe"])))
+def poids_portion(soeurs: Iterable[dict], etats: Any = None, cfg: Any = None,
+                  registre: Any = None, appareil: str | None = None) -> dict | None:
+    """Le poids d'une portion : `{entity_id, unite}` — le number designe dont
+    l'unite est une masse (D1), sinon la soeur qui le dit (Aqara :
+    `portion_weight`, en g)."""
+    designe = _number_designe(soeurs, etats, cfg, registre, appareil)
+    s = designe if designe is not None and _unite(designe) in UNITES_MASSE else None
+    if s is None:
+        s = (_premiere(soeurs, lambda s: s["domaine"] == "number" and _cle(s) in CLES_POIDS_PORTION)
+             or _premiere(soeurs, lambda s: s["domaine"] == "number"
+                          and _trouve(MOTIF_SUFFIXE_POIDS_PORTION, s["suffixe"])))
     if s is None:
         return None
-    return {"entity_id": s["entity_id"], "unite": _attrs(s).get("unit_of_measurement") or None}
+    return {"entity_id": s["entity_id"], "unite": _unite(s)}
 
 
 def cibles_de_commande(soeurs: Iterable[dict], etats: Any = None, cfg: Any = None,
@@ -861,7 +896,11 @@ def anomalies(soeurs: Iterable[dict]) -> list[dict]:
     """R2 : `{entity_id, type: bas | bloque | autre, actif}`, triees.
 
     Par la cle quelle que soit la classe ; sinon la classe `problem` est
-    exigee, puis MOTIF_BAS, MOTIF_BLOQUE, ou « autre » sous son propre nom.
+    exigee, puis MOTIF_BAS, MOTIF_BLOQUE, ou « autre » sous son propre nom ;
+    sinon le suffixe `_error` d'un Aqara sous Zigbee2MQTT, SANS classe, vaut
+    « autre » (passe bis de l'etape 2, 19/10 ; B) — l'ABSENCE de classe est
+    exigee (passe bis 2) : un `_link_error` de classe connectivity a « on »
+    dit « connecte », pas « probleme ».
     """
     sortie = []
     for s in _tries(soeurs):
@@ -873,7 +912,9 @@ def anomalies(soeurs: Iterable[dict]) -> list[dict]:
         elif cle in CLES_ANOMALIE_BLOQUE:
             genre = "bloque"
         elif s.get("classe") != "problem":
-            continue
+            if s.get("classe") or not _trouve(MOTIF_ANOMALIE_SANS_CLASSE, suf):
+                continue
+            genre = "autre"
         elif _trouve(MOTIF_BAS, suf):
             genre = "bas"
         elif _trouve(MOTIF_BLOQUE, suf):
@@ -995,7 +1036,7 @@ def decrire_appareil(cfg_feeder: Any, registre: Any, etats: Any, services: Any =
         "commande": commande,
         "une_portion": une_portion(commande),
         "portion": portion(liste, etats, cfg_feeder, registre, appareil),
-        "poids_portion": poids_portion(liste),
+        "poids_portion": poids_portion(liste, etats, cfg_feeder, registre, appareil),
         "cibles_de_commande": cibles_de_commande(liste, etats, cfg_feeder, commande, registre, appareil),
         "cibles_de_repas": cibles_de_repas(commande, cfg_feeder),
         "programme": programme_appareil(liste, etats, services, tuya),

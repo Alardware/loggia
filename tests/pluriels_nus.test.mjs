@@ -116,8 +116,10 @@ test('un compte ne se tranche pas à la française : `n > 1 ? tr(…) : tr(…)`
     for (const m of s.matchAll(motif)) fautifs.push(nom(f) + ':' + s.slice(0, m.index).split('\n').length + '  ' + m[0].slice(0, 70));
   }
   assert.deepEqual(fautifs, [], 'zéro prend la forme du pluriel hors du français : trN(n, singulier, pluriel)');
-  assert.equal(trN(0, '{n} sélectionnée', '{n} sélectionnées'), '0 wybranych', 'zéro, en polonais');
-  assert.equal(trN(1, '{n} sélectionnée', '{n} sélectionnées'), '1 wybrana');
+  /* ASSERTION MODIFIÉE (chantier IoT, tâche 8, 18/10 ; I16) : « {n} sélectionnée » est parti avec la fiche du robot d'avant — son
+   * Accueil dit « Nettoyer 2 pièces » — ; le même compte se joue sur « {n} pièce », que le polonais a aussi en plusieurs formes. */
+  assert.equal(trN(0, '{n} pièce', '{n} pièces'), '0 pokoi', 'zéro, en polonais');
+  assert.equal(trN(1, '{n} pièce', '{n} pièces'), '1 pokój');
 });
 
 test('la cloche annonce le nombre des NON LUES, pas la longueur du journal', () => {

@@ -1,9 +1,9 @@
 /* ── Le distributeur de croquettes, ce qui se CALCULE (ADR 0155, 05/10) ──────
  *
- * La fiche du distributeur devient une feuille à onglets sur le modèle du
- * robot (Accueil, Planning, Historique, Entretien, roue Réglages). Ce fichier
- * porte tout ce qui s'y calcule ; pas de React, pas de Home Assistant : la vue
- * lui passe des entités déjà lues et la réponse du serveur
+ * La fiche du distributeur est une feuille à onglets sur le modèle du robot
+ * (Accueil, Repas, Historique, Entretien s'il y a de quoi, roue Réglages ;
+ * ADR 0216). Ce fichier porte ce qui s'y calcule ; pas de React, pas de Home
+ * Assistant : la vue lui passe des entités déjà lues et la réponse du serveur
  * (`loggia/distributeurs/etat`), les tests aussi.
  *
  * Trois règles, toutes du 05/10 :
@@ -17,15 +17,37 @@
  * Les tables sont celles de `custom_components/loggia/distributeur_appareil.py`,
  * À L'IDENTIQUE : une seule fixture (`tests/fixtures/distributeurs.json`) les
  * fige des deux côtés — si le Python et le JS divergent, l'un des deux rougit.
+ * Ici, celles que le DÉMARRAGE lit ; celles que seule la popup emploie, ou que
+ * seul le serveur lit (le programme de l'appareil, les consommables), vivent dans
+ * `TABLES_FICHE` (distributeurfiche.js) : la fixture fige l'union des deux
+ * (passe bis de l'étape 2, 19/10 : le démarrage n'en porte rien).
  * Les motifs se testent sur le SUFFIXE en minuscules (la partie de l'entity_id
  * après le point), jamais sur le nom affiché, qui change avec la langue.
+ *
+ * Ce fichier ne garde que ce que la CARTE lit au démarrage (chantier IoT, tâche 1 ; § 12 de la
+ * conception) : l'appareil et ses sœurs, la commande, la portion, les anomalies, le bac, le prochain et le
+ * dernier repas. L'historique reconstruit, son résumé, le planning affiché, les libellés d'heures et de
+ * jours et les scripts candidats de Paramètres vivent dans `distributeurfiche.js`, que la fiche et
+ * Paramètres — tous deux à la demande — importent.
+ *
+ * La carte y prend aussi (étape 2 du chantier IoT, 19/10 ; I10, § 6) ce qu'elle dit et ce qu'elle offre :
+ * sa phrase (`phraseDistributeur`), « Distribuer 12 g » (`grammesRation`), sa vue entière
+ * (`carteDistributeur`) — et pour elles la mesure d'une portion et la réserve en jours, revenues de
+ * `distributeurfiche.js` : la carte dit « ≈ 8 j ».
  */
-import { tr, trN } from './i18n.js';
+import { tr, locale } from './i18n.js';
 import { sansAccents } from './outils.js';
+import { jourPlanning, heureValide } from './robots.js';
 import { joursDeReserve } from './objets.js';
-import { jourPlanning, heureValide, resumeJours, dureeLisible } from './robots.js';
+import { quandLumiere } from './lumieres.js';
 
 /* ════════════ Les tables (égales à `tables` de la fixture, clé par clé) ════════════ */
+
+/* Les grammes d'une unité de MASSE de Home Assistant (`UnitOfMass`, avec « ug » pour µg) : ce qui pèse, par opposition à ce qui
+ * compte des portions. Seules g et kg comptaient (passe bis 2 de l'étape 2, 19/10) : un « Poids d'une portion » désigné en oz, en lb
+ * ou en mg devenait la TAILLE de la ration, et le pas à pas de « Servir maintenant » aurait écrit sur un poids — l'étalonnage de
+ * l'appareil. `UNITES_MASSE` en est la liste, que la fixture fige des deux côtés ; `enGrammes` convertit. */
+const GRAMMES_PAR_UNITE = { g: 1, kg: 1000, mg: 0.001, 'µg': 0.000001, ug: 0.000001, oz: 28.349523125, lb: 453.59237, st: 6350.29318 };
 
 export const TABLES = Object.freeze({
   CLES_BOUTON: ['feed', 'manual_feed'],
@@ -38,34 +60,19 @@ export const TABLES = Object.freeze({
   PLATEFORMES_TEXT_ECRIT: ['petkit'],
   MOTIF_SELECT_FEED: '_feed$',
   OPTION_START: 'START',
-  DOMAINES_ACTION_APPAREIL: ['button', 'number', 'select', 'text'],
   CLES_PORTION: ['manual_feed_quantity', 'manual_portions', 'portions', 'serving_size'],
   MOTIF_SUFFIXE_PORTION: '(^|_)(serving_size|portions|manual_portions)$',
   CLES_POIDS_PORTION: ['portion_weight'],
   MOTIF_SUFFIXE_POIDS_PORTION: '(^|_)portion_weight$',
+  UNITES_MASSE: Object.keys(GRAMMES_PAR_UNITE),
   CLES_PROGRAMME: { petlibro: ['feeding_schedule'], petkit: ['raw_distribution_data'], aqara_mode: ['feeding_mode'], tuya_local: ['meal_plan', 'schedule'] },
-  MOTIF_MODE_Z2M: '_mode$',
-  OPTIONS_MODE_Z2M: ['manual', 'schedule'],
   MOTIF_SCHEDULE_Z2M: '_schedule$',
-  MODES: { manual: 'manuel', schedule: 'programme' },
-  JOURS_Z2M: {
-    everyday: [0, 1, 2, 3, 4, 5, 6], workdays: [0, 1, 2, 3, 4], weekend: [5, 6],
-    mon: [0], tue: [1], wed: [2], thu: [3], fri: [4], sat: [5], sun: [6],
-    'mon-wed-fri-sun': [0, 2, 4, 6], 'tue-thu-sat': [1, 3, 5],
-  },
-  JOURS_TUYA: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
-  SERVICES_PETSAFE: ['petsafe.add_schedule'],
-  SERVICE_TUYA_PROGRAMME: 'tuya.get_feeder_meal_plan',
   CLES_ANOMALIE_BAS: ['food_level', 'food_level_1', 'food_level_2', 'food_low', 'left_food_low', 'right_food_low', 'tank_empty'],
   CLES_ANOMALIE_BLOQUE: ['barn_door_error', 'door_blocked', 'error_detected', 'food_dispenser_state', 'food_outlet_state', 'rotor_stuck'],
   MOTIF_BAS: 'food_(low|shortage|empty|level)|hopper_low|not_enough_food|pet_food_left_level',
   MOTIF_BLOQUE: 'block|jam|stuck|clog',
-  CLES_CONSOMMABLE: { deshydratant: ['desiccant_left_days', 'remaining_desiccant'], filtre: ['remaining_filter_days'], nettoyage: ['remaining_cleaning_days'] },
-  UNITES_JOURS: ['d'],
+  MOTIF_ANOMALIE_SANS_CLASSE: '(^|_)error$',
   MOTIF_CONSOMMABLE: { deshydratant: 'desiccant', filtre: 'filter', nettoyage: 'clean' },
-  MOTIF_CONSOMMABLE_PCT: { deshydratant: 'desiccant.*level', filtre: 'filter_percent' },
-  CLES_RESET: { deshydratant: ['desiccant_reset', 'reset_desiccant'], filtre: ['filter_reset', 'reset_filter'], nettoyage: ['cleaning_reset'] },
-  MOTIF_RESET: { deshydratant: 'reset.*desiccant|desiccant.*reset' },
   CLES_CONNECTIVITE: ['online'],
   CLES_EN_COURS: ['feeding'],
   CLES_PROCHAIN: ['next_feed_time'],
@@ -199,13 +206,6 @@ export function appareilDistributeur(index, cfg) {
   return trouverDistributeur(index);
 }
 
-/** Une entité désignée posée sur un AUTRE appareil : ignorée, et signalée. */
-export function notesAppareil(index, cfg, deviceId) {
-  if (!deviceId) return [];
-  return designees(cfg).filter(id => { const m = meta(index, id); return m && m.deviceId && m.deviceId !== deviceId; })
-    .map(id => ({ code: 'appareil_divergent', entity_id: id }));
-}
-
 /**
  * Les sœurs : les entités de l'appareil, décrites une fois. Une entité MASQUÉE
  * en reste une — tuya-local masque son `meal_plan`, l'écarter ferait croire à
@@ -334,69 +334,69 @@ export function envoiDistribuer(commande, n = 1) {
 
 /* ════════════ La portion, le mode, les cibles ════════════ */
 
+/** Une unité de MASSE (`UNITES_MASSE` : g, kg, mg, µg, oz, lb, st) : ce qui pèse, par opposition à ce qui compte des portions. */
+export const estMasse = (u) => dans(T.UNITES_MASSE, u);
+/** Des grammes : la valeur telle quelle sans unité (l'ancienne aide en grammes), convertie depuis une unité de masse, rien sinon.
+ * La fiche et `distributeurfiche.js` l'importent (passe bis 2) : une seule table de conversion. */
+export const enGrammes = (v, u) => (v == null ? null : u == null || u === '' ? v : estMasse(u) ? v * GRAMMES_PAR_UNITE[u] : null);
+const uniteDe = (e) => (e && e.attributs && e.attributs.unit_of_measurement) || null;
+
+/* Le number désigné « Poids d'une portion » (`haids.portionWeight`) : une sœur, ou une entité connue de `states` qui n'est pas
+ * posée sur un AUTRE appareil — `index` (LOGGIA_INDEX) dit où elle est posée ; sans lui, on la croit, comme le Python sans registre
+ * (05/10, contradicteur : l'écran aurait réglé la portion de l'aquarium voisin). Une sœur désignée sans état compte quand même. */
+function numberDesigne(soeurs, states, cfg, deviceId, index) {
+  const pw = idDe(cfg && cfg.haids && cfg.haids.portionWeight);
+  if (!pw || pw.indexOf('number.') !== 0) return null;
+  const e = (soeurs || []).find(x => x.id === pw);
+  if (e) return e;
+  const st = (states || {})[pw];
+  const ailleurs = (meta(index, pw) || {}).deviceId || null;
+  return st && !(ailleurs && deviceId && ailleurs !== deviceId) ? { id: pw, attributs: st.attributes || {} } : null;
+}
+
 /**
  * La taille de la portion : le number désigné (`haids.portionWeight`) s'il
- * existe, sinon la sœur number de clé ou de suffixe de portion. L'unité vient
- * de l'ENTITÉ — un `serving_size` d'Aqara compte des portions, jamais un « g »
- * en dur.
- * Le number désigné posé sur un AUTRE appareil est ignoré, comme côté serveur
- * (05/10, contradicteur : l'écran aurait réglé la portion de l'aquarium voisin).
- * `index` (LOGGIA_INDEX) dit où il est posé ; sans lui, on le croit — comme le
- * Python sans registre. Une sœur désignée sans état reste la portion.
+ * existe et si son unité n'est PAS une masse, sinon la sœur number de clé ou
+ * de suffixe de portion. L'unité vient de l'ENTITÉ — un `serving_size`
+ * d'Aqara compte des portions, jamais un « g » en dur.
+ * Un number désigné en g ou en kg est le POIDS d'une portion, ce que le champ
+ * de Paramètres demande (passe bis de l'étape 2, 19/10 ; D1) : la taille se
+ * cherche alors parmi les sœurs. Avant, la carte prenait ce poids pour la
+ * portion (« Distribuer 6 g » au lieu de 12), et le pas à pas de « Servir
+ * maintenant » aurait réglé l'étalonnage de l'appareil.
  */
 export function portionDistributeur(soeurs, states, cfg, deviceId = null, index = null) {
-  const S = states || {};
-  const pw = idDe(cfg && cfg.haids && cfg.haids.portionWeight);
-  let e = null;
-  if (pw && pw.indexOf('number.') === 0) {
-    e = (soeurs || []).find(x => x.id === pw) || null;
-    const ailleurs = (meta(index, pw) || {}).deviceId || null;
-    if (!e && S[pw] && !(ailleurs && deviceId && ailleurs !== deviceId)) e = { id: pw, attributs: S[pw].attributes || {} };
-  }
-  if (!e) e = (soeurs || []).find(x => x.domaine === 'number' && dans(T.CLES_PORTION, cleDe(x))) || null;
-  if (!e) e = (soeurs || []).find(x => x.domaine === 'number' && rx(T.MOTIF_SUFFIXE_PORTION, x.objet)) || null;
+  const s = soeurs || [];
+  const d = numberDesigne(s, states, cfg, deviceId, index);
+  const e = (d && !estMasse(uniteDe(d)) ? d : null)
+    || s.find(x => x.domaine === 'number' && dans(T.CLES_PORTION, cleDe(x)))
+    || s.find(x => x.domaine === 'number' && rx(T.MOTIF_SUFFIXE_PORTION, x.objet));
   if (!e) return null;
   const a = e.attributs || {};
-  return { entity_id: e.id, unite: a.unit_of_measurement || null, min: nombre(a.min), max: nombre(a.max), pas: nombre(a.step) };
+  return { entity_id: e.id, unite: uniteDe(e), min: nombre(a.min), max: nombre(a.max), pas: nombre(a.step) };
 }
 
-/** Le poids d'une portion (Aqara : `portion_weight`, en g). */
-export function poidsPortion(soeurs) {
+/** Le poids d'une portion : le number désigné dont l'unité est une masse (D1), sinon la sœur (Aqara : `portion_weight`, en g). */
+export function poidsPortion(soeurs, states = null, cfg = null, deviceId = null, index = null) {
   const s = soeurs || [];
-  const e = s.find(x => x.domaine === 'number' && dans(T.CLES_POIDS_PORTION, cleDe(x)))
-    || s.find(x => x.domaine === 'number' && rx(T.MOTIF_SUFFIXE_POIDS_PORTION, x.objet));
-  return e ? { entity_id: e.id, unite: (e.attributs && e.attributs.unit_of_measurement) || null } : null;
+  const d = numberDesigne(s, states, cfg, deviceId, index);
+  const e = d && estMasse(uniteDe(d)) ? d
+    : s.find(x => x.domaine === 'number' && dans(T.CLES_POIDS_PORTION, cleDe(x))) || s.find(x => x.domaine === 'number' && rx(T.MOTIF_SUFFIXE_POIDS_PORTION, x.objet));
+  return e ? { entity_id: e.id, unite: uniteDe(e) } : null;
 }
 
-/** Le select du mode de distribution (Aqara : ZHA par sa clé, Zigbee2MQTT par son suffixe et ses options). */
-export function selectMode(soeurs) {
-  const s = soeurs || [];
-  const cles = T.CLES_PROGRAMME.aqara_mode;
-  // Les deux options attendues, AU MOINS (une option de plus ne l'écarte pas), comme le Python.
-  const aLesModes = (e) => {
-    const vues = new Set((Array.isArray(e.attributs && e.attributs.options) ? e.attributs.options : []).map(o => String(o).toLowerCase()));
-    return T.OPTIONS_MODE_Z2M.every(o => vues.has(o));
-  };
-  return s.find(e => e.domaine === 'select' && (dans(cles, cleDe(e))
-    || (e.plateforme === 'mqtt' && rx(T.MOTIF_MODE_Z2M, e.objet) && aLesModes(e))))
-    || null;
-}
+/* Le select du mode (Aqara), les cibles de commande et les notes d'une entité désignée ailleurs : des briques que seule la popup, ou
+ * seul le serveur, emploient — elles vivent dans distributeurfiche.js (passe bis de l'étape 2, 19/10). */
 
-/** Les cibles de COMMANDE : la commande, la portion, le mode et le script
- * désigné, triés. Jamais un capteur ni le réservoir : une automatisation qui
- * ne fait que lire le bac n'est pas un repas. */
-export function ciblesDeCommande({ commande = null, portion = null, mode = null, cfg = null } = {}) {
-  const reservoir = idDe(cfg && cfg.haids && cfg.haids.reservoir);
-  const ids = [commande && commande.entity_id, portion && portion.entity_id, mode && mode.id, scriptDesigne(cfg)]
-    .filter(id => id && id !== reservoir && !/^(binary_)?sensor\./.test(id));
-  return [...new Set(ids)].sort();
-}
-
-/* ════════════ Anomalies, consommables, capteurs ════════════ */
+/* ════════════ Anomalies, capteurs ════════════ */
 
 /** Les anomalies (binary_sensor) : bac presque vide, distribution bloquée, ou
  * un autre problème sous son propre nom. Par la clé d'abord, quelle que soit
- * la classe ; sinon la classe `problem` exigée. */
+ * la classe ; sinon la classe `problem` exigée ; sinon le suffixe `_error`
+ * qu'un Aqara publie sous Zigbee2MQTT SANS classe (passe bis de l'étape 2,
+ * 19/10 ; B) — son erreur ne s'affichait nulle part. L'ABSENCE de classe est
+ * exigée (passe bis 2) : un `_link_error` de classe connectivity à « on » dit
+ * « connecté », pas « problème ». */
 export function anomaliesDistributeur(soeurs) {
   const out = [];
   (soeurs || []).forEach(e => {
@@ -405,69 +405,23 @@ export function anomaliesDistributeur(soeurs) {
     if (dans(T.CLES_ANOMALIE_BAS, cleDe(e))) type = 'bas';
     else if (dans(T.CLES_ANOMALIE_BLOQUE, cleDe(e))) type = 'bloque';
     else if (e.classe === 'problem') type = rx(T.MOTIF_BAS, e.objet) ? 'bas' : rx(T.MOTIF_BLOQUE, e.objet) ? 'bloque' : 'autre';
+    else if (!e.classe && rx(T.MOTIF_ANOMALIE_SANS_CLASSE, e.objet)) type = 'autre';
     if (type) out.push({ entity_id: e.id, type, actif: e.etat === 'on' });
   });
   return out;
 }
 
 /**
- * L'alerte que la CARTE porte : la première anomalie ACTIVE, sous le mot de la
- * fiche (« Bac presque vide », « Distribution bloquée », sinon le nom de
- * l'entité). `{ type, entity_id, mot }` ou `null`. 05/10, relecture « écran » :
- * un Petlibro n'a pas de réservoir en % — rien ne passait au rouge, et le bac
- * presque vide ne se voyait qu'en ouvrant la fiche.
+ * L'alerte que la CARTE porte : la première anomalie ACTIVE, `{ type,
+ * entity_id }` ou `null` — son mot est celui de la phrase (`MOT_ALERTE`) ; la
+ * popup dit les siens, le nom propre de l'entité compris. 05/10, relecture
+ * « écran » : un Petlibro n'a pas de réservoir en % — rien ne passait au rouge,
+ * et le bac presque vide ne se voyait qu'en ouvrant la fiche.
  */
 export function alerteDistributeur(lecture) {
   const anomalies = lecture && Array.isArray(lecture.anomalies) ? lecture.anomalies : [];
   const a = anomalies.find(x => x && x.actif) || null;
-  if (!a) return null;
-  const soeur = (lecture && Array.isArray(lecture.soeurs) ? lecture.soeurs : []).find(s => s && s.id === a.entity_id);
-  const mot = a.type === 'bas' ? tr('Bac presque vide') : a.type === 'bloque' ? tr('Distribution bloquée') : ((soeur && soeur.nom) || a.entity_id);
-  return { type: a.type, entity_id: a.entity_id, mot };
-}
-
-/* Les mots d'un script qui distribue, ceux qu'on devinait avant le 05/10. */
-const MOTS_SCRIPT = /(nourri|croquette|ration|gamelle|feed|distribu)/;
-
-/**
- * Les scripts dont l'identifiant ou le nom dit qu'ils distribuent, triés : des
- * CANDIDATS que Paramètres PROPOSE en tête de la liste « Script de
- * distribution », jamais une commande (seul le script désigné en est une).
- * 05/10, relecture « données » : celui dont le script était deviné à son nom
- * perdait « Distribuer » et voyait ses automatisations réduites à des indices,
- * sans qu'un mot le lui dise.
- */
-export function scriptsCandidats(states) {
-  const S = states && typeof states === 'object' ? states : {};
-  return Object.keys(S).filter(id => id.indexOf('script.') === 0 && MOTS_SCRIPT.test(sansAccents(
-    id.slice(7) + ' ' + ((S[id] && S[id].attributes && S[id].attributes.friendly_name) || ''),
-  ))).sort();
-}
-
-/** Les consommables (sensor) : déshydratant, filtre, nettoyage — en jours
- * restants ou en pourcentage —, et le bouton qui les remet à neuf. */
-export function consommablesDistributeur(soeurs) {
-  const s = soeurs || [];
-  const out = [];
-  s.forEach(e => {
-    if (e.domaine !== 'sensor') return;
-    // Comme `_role_consommable` du Python (05/10, contradicteur) : reconnu par
-    // sa CLÉ, il se lit en % si son unité est « % » — un `remaining_desiccant`
-    // en pourcentage ne devient pas « 62 jours ». La valeur est rendue telle
-    // quelle, sans troncature : l'écran l'arrondit pour l'afficher.
-    const u = (e.attributs && e.attributs.unit_of_measurement) || null;
-    let role = Object.keys(T.CLES_CONSOMMABLE).find(r => dans(T.CLES_CONSOMMABLE[r], cleDe(e))) || null;
-    let mesure = role ? (u === '%' ? 'pct' : 'jours') : null;
-    if (!role && dans(T.UNITES_JOURS, u)) { role = Object.keys(T.MOTIF_CONSOMMABLE).find(r => rx(T.MOTIF_CONSOMMABLE[r], e.objet)) || null; mesure = 'jours'; }
-    if (!role && u === '%') { role = Object.keys(T.MOTIF_CONSOMMABLE_PCT).find(r => rx(T.MOTIF_CONSOMMABLE_PCT[r], e.objet)) || null; mesure = 'pct'; }
-    if (!role) return;
-    const v = nombre(e.etat);
-    // Le bouton de remise à neuf : par sa clé d'abord, sinon par son nom — deux passes, comme `_reset`.
-    const reset = s.find(b => b.domaine === 'button' && dans(T.CLES_RESET[role] || [], cleDe(b)))
-      || (T.MOTIF_RESET[role] ? s.find(b => b.domaine === 'button' && rx(T.MOTIF_RESET[role], b.objet)) : null);
-    out.push({ entity_id: e.id, role, jours: mesure === 'jours' ? v : null, pct: mesure === 'pct' ? v : null, reset: reset ? reset.id : null });
-  });
-  return out;
+  return a ? { type: a.type, entity_id: a.entity_id } : null;
 }
 
 const premier = (s, domaine, cles, motif = null) => {
@@ -504,79 +458,54 @@ export function sourcesHistorique(soeurs) {
  * Le réservoir seul ne suffisait plus : chez l'utilisateur, c'est un
  * `input_number` qui ne tombe jamais.
  */
+/* La connectivité de l'appareil COUPÉE : son binary_sensor de classe connectivity, ou de clé `online`, à « off » — lue ici et par la
+ * carte (depuis quand l'appareil se tait). */
+const coupee = (e) => e.domaine === 'binary_sensor' && e.etat === 'off' && (e.classe === 'connectivity' || dans(T.CLES_CONNECTIVITE, cleDe(e)));
+
 export function enLigne(soeurs, states, cfg, commande = commandeDistribuer(soeurs, states, cfg)) {
   const S = states || {};
   if (commande && muette(S[commande.entity_id])) return { mort: true, raison: 'commande' };
-  if ((soeurs || []).some(e => e.domaine === 'binary_sensor' && (e.classe === 'connectivity' || dans(T.CLES_CONNECTIVITE, cleDe(e))) && e.etat === 'off')) return { mort: true, raison: 'connectivite' };
+  if ((soeurs || []).some(coupee)) return { mort: true, raison: 'connectivite' };
   const r = cfg && cfg.haids && cfg.haids.reservoir;
   if (estId(r) && muette(S[r])) return { mort: true, raison: 'reservoir' };
   return { mort: false, raison: null };
-}
-
-/* ════════════ Les réglages ════════════ */
-
-/* Ce qu'on règle d'abord sur un distributeur. Contrairement au robot, la voix,
- * le son et le voyant en font partie : sur un distributeur posé dans une
- * cuisine, l'annonce sonore de chaque repas est LE réglage qu'on cherche. */
-const REGLAGE_DISTRIBUTEUR = /serving_size|manual_feed_quantity|portions?|portion_weight|mode|slow_feed|child_lock|lock|voice|sound|volume|led|light|indicator|desiccant_frequency/;
-
-/**
- * Les réglages de l'appareil, sur le gabarit de `reglagesRobot` :
- * `{ principaux, autres }`, chaque réglage `{ id, domaine, type, nom, texte,
- * actif | valeur, options, min, max, pas, unite }`. `domaine` dit quel service
- * appeler — un voyant peut être une `light`, pas un `switch`. La commande de
- * distribution n'en est pas un : l'écrire DISTRIBUE.
- */
-export function reglagesDistributeur(soeurs, commande = null) {
-  const vivant = (s) => s.etat != null && s.etat !== 'unavailable' && s.etat !== 'unknown' && s.etat !== '';
-  const exclu = commande ? commande.entity_id : null;
-  const tous = (soeurs || []).filter(s => vivant(s) && s.id !== exclu && ['switch', 'light', 'select', 'number'].indexOf(s.domaine) >= 0).map(s => {
-    const a = s.attributs || {};
-    if (s.domaine === 'switch' || s.domaine === 'light') return { id: s.id, domaine: s.domaine, type: 'bascule', nom: s.nom, texte: s.texte, actif: s.etat === 'on' };
-    if (s.domaine === 'select') return { id: s.id, domaine: 'select', type: 'choix', nom: s.nom, texte: s.texte, valeur: s.etat, options: Array.isArray(a.options) ? a.options : [] };
-    return { id: s.id, domaine: 'number', type: 'nombre', nom: s.nom, texte: s.texte, valeur: nombre(s.etat), min: nombre(a.min), max: nombre(a.max), pas: nombre(a.step) || 1, unite: s.unite || null };
-  }).filter(r => r.type !== 'choix' || r.options.length > 1).filter(r => r.type !== 'nombre' || r.valeur != null);
-  const principaux = tous.filter(r => REGLAGE_DISTRIBUTEUR.test(r.texte)).slice(0, 8);
-  const pris = new Set(principaux.map(r => r.id));
-  return { principaux, autres: tous.filter(r => !pris.has(r.id)) };
 }
 
 /* ════════════ Tout l'appareil, d'un coup ════════════ */
 
 /**
  * Ce que la carte et la fiche lisent de l'appareil, en un appel :
- * `{ appareil, notes, soeurs, commande, portion, poidsPortion, mode, cibles,
- * anomalies, alerte, consommables, enLigne, enCours, distribue, prochainCapteur,
- * historique, reglages }`. `index` est `LOGGIA_INDEX` (son `entityMeta`),
- * `cfg` la clé `loggia_feeder` telle quelle.
+ * `{ appareil, soeurs, commande, portion, poidsPortion, anomalies, alerte,
+ * enLigne, enCours, distribue, prochainCapteur, historique }`. `index` est
+ * `LOGGIA_INDEX` (son `entityMeta`), `cfg` la clé `loggia_feeder` telle quelle.
+ * Ce que seule la popup lit — les consommables, les réglages, le select du mode
+ * — ou que seul le serveur emploie — les cibles de commande, les notes — se
+ * calcule dans `distributeurfiche.js` sur `soeurs` (passe bis de l'étape 2,
+ * 19/10 : le démarrage n'en porte rien).
  */
 export function lireDistributeur(index, states, cfg) {
   const S = states || {};
   const appareil = appareilDistributeur(index, cfg);
   const soeurs = soeursDistributeur(index, S, appareil, cfg);
   const commande = commandeDistribuer(soeurs, S, cfg);
-  const portion = portionDistributeur(soeurs, S, cfg, appareil, index);
-  const mode = selectMode(soeurs);
   const enCours = capteurEnCours(soeurs);
   const anomalies = anomaliesDistributeur(soeurs);
   return {
-    appareil, notes: notesAppareil(index, cfg, appareil), soeurs, commande, portion, poidsPortion: poidsPortion(soeurs), mode,
-    cibles: ciblesDeCommande({ commande, portion, mode, cfg }),
-    anomalies, alerte: alerteDistributeur({ anomalies, soeurs }), consommables: consommablesDistributeur(soeurs),
+    appareil, soeurs, commande, portion: portionDistributeur(soeurs, S, cfg, appareil, index), poidsPortion: poidsPortion(soeurs, S, cfg, appareil, index),
+    anomalies, alerte: alerteDistributeur({ anomalies }),
     enLigne: enLigne(soeurs, S, cfg, commande), enCours, distribue: !!enCours && !!S[enCours] && S[enCours].state === 'on',
-    prochainCapteur: capteurProchain(soeurs), historique: sourcesHistorique(soeurs), reglages: reglagesDistributeur(soeurs, commande),
+    prochainCapteur: capteurProchain(soeurs), historique: sourcesHistorique(soeurs),
   };
 }
 
 /* ════════════ Le bac, la portion en grammes ════════════ */
 
-const enGrammes = (v, u) => (v == null ? null : u === 'kg' ? v * 1000 : u === 'g' || u == null || u === '' ? v : null);
-
 /**
  * Le niveau du bac : `{ pct, grammes }`. En %, le pourcentage est la valeur et
- * les grammes ne se savent pas (la contenance n'est écrite nulle part) ; en g
- * (ou sans unité, l'ancienne aide en grammes), le pourcentage se rapporte au
- * maximum que l'aide déclare, `maxDefaut` sinon.
+ * les grammes ne se savent pas (la contenance n'est écrite nulle part) ; dans
+ * une masse (ou sans unité, l'ancienne aide en grammes), le pourcentage se
+ * rapporte au maximum que l'aide déclare, `maxDefaut` sinon — en grammes
+ * (`enGrammes`).
  */
 export function niveauDuBac(states, reservoir, maxDefaut = 1500) {
   const st = estId(reservoir) && states ? states[reservoir] : null;
@@ -589,24 +518,6 @@ export function niveauDuBac(states, reservoir, maxDefaut = 1500) {
   const max = enGrammes(nombre(a.max), u);
   const plein = max > 0 ? max : maxDefaut;
   return { pct: g == null ? null : Math.max(0, Math.min(100, Math.round(g / plein * 100))), grammes: g };
-}
-
-/**
- * Combien de grammes fait une portion, et combien de portions part un appui :
- *  - une portion réglée en g (la démo, un number « portion » en grammes) :
- *    un appui = cette quantité ;
- *  - un poids de portion (Aqara `portion_weight`, en g) : g par portion, et la
- *    taille de portion (sans unité) dit combien de portions part un appui ;
- *  - rien de tel : `null` — les jours de réserve ne se devinent pas.
- */
-export function mesurePortion(states, portion, poids) {
-  const S = states || {};
-  const val = (o) => (o && S[o.entity_id] ? nombre(S[o.entity_id].state) : null);
-  const vp = val(portion);
-  if (portion && vp != null && (portion.unite === 'g' || portion.unite === 'kg')) return { grammesParPortion: enGrammes(vp, portion.unite), portionsParAppui: 1 };
-  const vg = poids && (poids.unite === 'g' || poids.unite === 'kg') ? enGrammes(val(poids), poids.unite) : null;
-  if (vg == null || !(vg > 0)) return null;
-  return { grammesParPortion: vg, portionsParAppui: portion && !portion.unite && vp > 0 ? vp : 1 };
 }
 
 /* ════════════ Les repas à heure fixe ════════════ */
@@ -689,270 +600,7 @@ export function prochainRepas(etat, maintenant = Date.now(), { allumee = null, c
   return null;
 }
 
-/**
- * Les repas d'une journée moyenne, en grammes, pour `joursDeReserve` :
- * `[{ g }]`. g = portions × grammes d'une portion, sur les seuls repas à heure
- * fixe des sources ACTIVES ; un repas qui ne part que certains jours compte au
- * prorata de la semaine. Un appui (bouton, select START, script) part
- * `portionsParAppui` portions, quel que soit le repas. Sans mesure de portion :
- * `[]`, et la fiche dit « Ce qu'il reste dans le bac ».
- */
-export function repasPourReserve(etat, mesure, { allumee = null } = {}) {
-  if (!mesure || !(mesure.grammesParPortion > 0)) return [];
-  const parAppui = mesure.portionsParAppui > 0 ? mesure.portionsParAppui : 1;
-  const ecrit = !!(etat && etat.commande && etat.commande.quantite);
-  return repasActifs(etat, { allumee }).map(r => {
-    // Le planning de Loggia ne fixe une quantité que si la commande l'ÉCRIT ;
-    // sinon une pression = une ration.
-    const portions = r.source === 'loggia' ? (ecrit && r.portions > 0 ? r.portions : parAppui) : (r.portions > 0 ? r.portions : parAppui);
-    return { g: Math.round(portions * mesure.grammesParPortion * (new Set(r.jours).size / 7) * 10) / 10 };
-  });
-}
-
-/** Les jours de réserve du bac : `null` quand on ne sait pas. */
-export function joursDeReserveDistributeur(grammes, etat, mesure, options = {}) {
-  return joursDeReserve(grammes, repasPourReserve(etat, mesure, options));
-}
-
-/* ════════════ Le Planning : ce qui s'affiche, et ses états vides ════════════ */
-
-/**
- * Ce que l'onglet Planning montre, d'après la réponse du serveur :
- * `{ vide, blocs: { programme, automatisations, loggia }, deuxSources, pause,
- * peutAjouter, miseEnGarde, ancienneListe }`.
- * `vide` vaut 'indisponible' (serveur muet : HA pas redémarré), 'sans_commande'
- * (ni bloc ni commande : « Loggia ne sait pas commander… »), 'aucun' (une
- * commande, rien de programmé), ou `null` quand un bloc s'affiche.
- * « Deux sources » ne s'allume que pour un programme LISIBLE actif à côté
- * d'automatisations actives : un programme illisible ne crie pas au loup.
- * Ajouter un repas : seulement si le serveur le permet (`peutPlanifier` :
- * aucune source PRÉSENTE et une commande) ET si le compte n'est pas ordinaire
- * (ADR 0144) ; la mise en garde fixe quand le programme de l'appareil est inconnu.
- */
-export function planningAffiche(etat, { ordinaire = false, allumee = null } = {}) {
-  const sans = { programme: false, automatisations: false, loggia: false };
-  if (!etat || typeof etat !== 'object') return { vide: 'indisponible', blocs: sans, deuxSources: false, pause: false, peutAjouter: false, miseEnGarde: false, ancienneListe: false };
-  const on = typeof allumee === 'function' ? allumee : (a) => a.etat === 'on';
-  const p = etat.programme || null;
-  const autos = Array.isArray(etat.automatisations) ? etat.automatisations.filter(Boolean) : [];
-  const repasLoggia = etat.planning && Array.isArray(etat.planning.repas) ? etat.planning.repas : [];
-  const blocs = {
-    programme: !!(p && p.source && (p.presente || p.mode != null || p.note === 'capteur_diagnostic' || p.note === 'non_lisible')),
-    automatisations: autos.length > 0,
-    loggia: repasLoggia.length > 0,
-  };
-  const autoActive = autos.some(on);
-  const progLisibleActif = !!(p && p.lisible && p.active);
-  const peutAjouter = !!etat.peutPlanifier && !ordinaire;
-  const rien = !blocs.programme && !blocs.automatisations && !blocs.loggia;
-  return {
-    vide: rien ? (etat.commande ? 'aucun' : 'sans_commande') : null,
-    blocs,
-    deuxSources: progLisibleActif && autoActive,
-    pause: blocs.loggia && (progLisibleActif || autoActive || !!(etat.sources && ((etat.sources.programme && etat.sources.programme.active) || (etat.sources.automatisations && etat.sources.automatisations.active)))),
-    peutAjouter,
-    miseEnGarde: peutAjouter && !!p && p.connu === false,
-    // « Votre ancienne liste ne distribuait rien par elle-même. », quand le
-    // planning de Loggia est proposé — et seulement s'il reste un repas qui
-    // n'était relié à RIEN (05/10, relecture « données ») : une liste dont
-    // tous les repas étaient reliés à des automatisations distribuait, même
-    // si ces automatisations, renommées ou supprimées dans HA, ne se voient
-    // plus ; la phrase y serait fausse.
-    ancienneListe: peutAjouter && !!(etat.ancienne_liste && Number(etat.ancienne_liste.n) > (Number(etat.ancienne_liste.relies) || 0)),
-  };
-}
-
-/* ════════════ Les libellés d'heure et de jours ════════════ */
-
-// Le moins typographique, et le plus : une table plutôt qu'un ternaire de deux
-// chaînes, que la garde des deux-points collés (deux_points.test) prendrait
-// pour un libellé collé à sa valeur.
-const SIGNES = ['−', '+'];
-
-/** « +30 min », « −1 h 15 » ; rien pour un décalage nul. */
-export function libelleDecalage(minutes) {
-  const n = Math.round(Number(minutes) || 0);
-  if (!n) return '';
-  return SIGNES[n > 0 ? 1 : 0] + dureeLisible(Math.abs(n));
-}
-
-/** Le libellé d'un déclencheur résumé par le serveur. */
-export function libelleDeclencheur(d) {
-  if (!d || typeof d !== 'object') return tr('Déclenchée autrement');
-  if (d.type === 'heure' && heureValide(d.heure)) return d.heure;
-  if (d.type === 'soleil') {
-    const dec = libelleDecalage(d.decalage);
-    if (d.evenement === 'sunset') return dec ? tr('Coucher du soleil {d}', { d: dec }) : tr('Coucher du soleil');
-    return dec ? tr('Lever du soleil {d}', { d: dec }) : tr('Lever du soleil');
-  }
-  const n = Number(d.toutes);
-  if (d.type === 'periodique' && n > 0) return trN(n, 'Toutes les {n} h', 'Toutes les {n} h');
-  return tr('Déclenchée autrement');
-}
-
-/**
- * Les heures d'une automatisation, telles que sa ligne les dit :
- * « 07:30 · 19:00 », sinon ses déclencheurs (« Lever du soleil −30 min »,
- * « Toutes les 8 h », « Déclenchée autrement »), « Sans heure fixe » sans
- * déclencheur lisible.
- */
-export function libelleHeures(a) {
-  const heures = a && Array.isArray(a.heures) ? a.heures.filter(heureValide) : [];
-  const autres = (a && Array.isArray(a.declencheurs) ? a.declencheurs : []).filter(d => !(d && d.type === 'heure' && heureValide(d.heure))).map(libelleDeclencheur);
-  const tout = [...new Set([...heures, ...autres])];
-  return tout.length ? tout.join(' · ') : tr('Sans heure fixe');
-}
-
-/** Les jours, dans l'ordre de la langue : `null` = tous les jours. */
-export function libelleJours(jours, premier = 1, loc = 'fr-FR') {
-  const j = joursValides(jours);
-  return j == null ? tr('Tous les jours') : resumeJours(j, premier, loc);
-}
-
-/* ════════════ L'historique ════════════ */
-
-/* La source d'un repas d'après ce que l'appareil en dit (`last_feeding_source`
- * d'Aqara, `feeding_source` de Zigbee2MQTT) : programmé, manuel (le bouton de
- * l'appareil), à distance (l'application, ou Home Assistant). */
-export function sourceDeValeur(v) {
-  const s = String(v == null ? '' : v).toLowerCase();
-  if (/schedul|plan|timer|auto/.test(s)) return 'programme';
-  if (/manual|button|key|local/.test(s)) return 'manuel';
-  if (/remote|app|cloud/.test(s)) return 'distance';
-  return null;
-}
-const RANG_SOURCE = { loggia: 0, automatisation: 1, programme: 2, manuel: 3, distance: 4 };
-const tempsDe = (e) => Date.parse((e && (e.last_changed || e.last_updated)) || '');
-
-/**
- * Les repas des derniers jours, reconstruits depuis l'historique de Home
- * Assistant (`history/period`, `brut` : une liste par entité) :
- *  - une hausse de COMPTEUR = un repas (la remise à zéro de minuit n'en est
- *    pas un ; un compteur qui retombe SANS passer par zéro a repris à zéro
- *    puis compté : un repas de sa nouvelle valeur) ;
- *  - un changement du capteur « dernier repas » = un repas, à SON heure ;
- *  - une entité `event` qui change = un repas ;
- *  - un `last_triggered` d'automatisation reconnue (son historique AVEC
- *    attributs) = un repas ;
- *  - un « distribuer » du journal de Loggia = un repas.
- * Ce qui tombe dans la même `fenetre` (2 min) est UN repas : le compteur, le
- * capteur et l'automatisation qui l'a lancé disent le même. Sa source, la plus
- * précise : Loggia, l'automatisation, sinon ce que l'appareil en dit.
- * `[{ t, source, quantites: [{ valeur, unite }], grammes, origines }]`, du plus
- * récent au plus ancien. `states` donne les unités (l'historique minimal n'a
- * pas d'attributs).
- */
-export function repasDepuisHistorique(brut, {
-  compteurs = [], dernier = null, evenements = [], automatisations = [], journal = [],
-  states = {}, depuis = null, maintenant = Date.now(), fenetre = 120000,
-} = {}) {
-  const listes = new Map();
-  (Array.isArray(brut) ? brut : []).forEach(l => {
-    if (!Array.isArray(l) || !l.length) return;
-    const id = l[0] && l[0].entity_id;
-    if (id) listes.set(id, l.filter(e => e && !isNaN(tempsDe(e))).sort((a, b) => tempsDe(a) - tempsDe(b)));
-  });
-  const S = states || {};
-  const brutes = [];
-  const pousser = (t, source, origine, q = null) => { if (!isNaN(t)) brutes.push({ t, source, origine, q }); };
-
-  (compteurs || []).forEach(id => {
-    const unite = (S[id] && S[id].attributes && S[id].attributes.unit_of_measurement) || null;
-    let avant = null;
-    (listes.get(id) || []).forEach(e => {
-      const v = nombre(e.state);
-      if (v == null) return; // muet : la valeur d'avant reste la référence
-      if (avant != null) {
-        // La hausse ; sinon, retombé sans passer par zéro, sa nouvelle valeur ;
-        // sinon (égal, ou remis à zéro) rien. Écrit sans « > … < » sur une ligne :
-        // rien_en_francais y lirait un nœud de texte JSX.
-        const delta = Math.max(0, v - avant) || ((avant - v) && v);
-        if (delta > 0) pousser(tempsDe(e), null, id, { id, valeur: Math.round(delta * 1000) / 1000, unite });
-      }
-      avant = v;
-    });
-  });
-  const parHorodatage = (id, source) => {
-    const vus = new Set();
-    (listes.get(id) || []).forEach(e => {
-      const t = Date.parse(e.state);
-      if (isNaN(t) || vus.has(t)) return;
-      vus.add(t); pousser(t, source, id);
-    });
-  };
-  if (dernier) parHorodatage(dernier, null);
-  (evenements || []).filter(id => String(id).indexOf('event.') === 0).forEach(id => parHorodatage(id, null));
-  (automatisations || []).forEach(id => {
-    const vus = new Set();
-    (listes.get(id) || []).forEach(e => {
-      const t = Date.parse((e.attributes && e.attributes.last_triggered) || '');
-      if (isNaN(t) || vus.has(t)) return;
-      vus.add(t); pousser(t, 'automatisation', id);
-    });
-  });
-  // `regles.agir` note « distribuer » même quand RIEN n'est parti — commande
-  // refusée par Home Assistant, entité gelée : `n` vaut alors 0 (05/10,
-  // contradicteur). Un repas qui n'est pas parti n'entre pas dans l'historique.
-  (Array.isArray(journal) ? journal : []).forEach(j => {
-    if (j && j.module === 'distributeurs' && j.quoi === 'distribuer' && !j.simule && Number(j.ts) > 0
-      && (j.n == null || Number(j.n) > 0)) pousser(Number(j.ts) * 1000, 'loggia', 'journal');
-  });
-
-  // Ce que l'appareil dit de la source du dernier repas, à l'heure d'un repas.
-  const capteursSource = (evenements || []).filter(id => String(id).indexOf('sensor.') === 0 && /source/.test(id));
-  const sourceA = (t) => {
-    for (const id of capteursSource) {
-      const l = (listes.get(id) || []).filter(e => tempsDe(e) <= t + fenetre);
-      const s = l.length ? sourceDeValeur(l[l.length - 1].state) : null;
-      if (s) return s;
-    }
-    return null;
-  };
-
-  const lignes = [];
-  brutes.sort((a, b) => a.t - b.t).forEach(b => {
-    const l = lignes.length ? lignes[lignes.length - 1] : null;
-    if (l && b.t - l.t0 <= fenetre) {
-      if (b.source && (!l.source || RANG_SOURCE[b.source] < RANG_SOURCE[l.source])) l.source = b.source;
-      if (b.origine !== 'journal' && l.origines.indexOf(b.origine) < 0) l.origines.push(b.origine);
-      if (b.q) l.q.push(b.q);
-      return;
-    }
-    lignes.push({ t0: b.t, t: b.t, source: b.source, origines: b.origine === 'journal' ? [] : [b.origine], q: b.q ? [b.q] : [] });
-  });
-  const fin = (maintenant instanceof Date ? maintenant.getTime() : Number(maintenant)) + fenetre;
-  const debut = depuis == null ? -Infinity : (depuis instanceof Date ? depuis.getTime() : Number(depuis));
-  return lignes.filter(l => l.t >= debut && l.t <= fin).map(l => {
-    // Plusieurs hausses du même compteur s'additionnent ; deux compteurs de même unité disent la même chose.
-    const parId = new Map();
-    l.q.forEach(q => parId.set(q.id, { valeur: (parId.has(q.id) ? parId.get(q.id).valeur : 0) + q.valeur, unite: q.unite }));
-    const parUnite = new Map();
-    parId.forEach(q => { const k = q.unite || ''; if (!parUnite.has(k) || parUnite.get(k).valeur < q.valeur) parUnite.set(k, q); });
-    const quantites = [...parUnite.values()].map(q => ({ valeur: Math.round(q.valeur * 1000) / 1000, unite: q.unite }));
-    const g = quantites.find(q => q.unite === 'g' || q.unite === 'kg');
-    return { t: l.t, source: l.source || sourceA(l.t), quantites, grammes: g ? enGrammes(g.valeur, g.unite) : null, origines: l.origines };
-  }).sort((a, b) => b.t - a.t);
-}
-
 const minuit = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d; };
-
-/** La semaine en cours, du premier jour de la langue au dernier : un jour par
- * barre, le nombre de repas et, si l'appareil les compte, les grammes. */
-export function resumeSemaineRepas(lignes, maintenant = Date.now(), premier = 1) {
-  const auj = minuit(maintenant);
-  const recul = (auj.getDay() - (premier % 7) + 7) % 7;
-  const debut = new Date(auj); debut.setDate(debut.getDate() - recul);
-  const jours = Array.from({ length: 7 }, (_, i) => { const d = new Date(debut); d.setDate(d.getDate() + i); return { date: d, n: 0, grammes: 0, aujourdhui: d.getTime() === auj.getTime() }; });
-  const limite = new Date(debut); limite.setDate(limite.getDate() + 7);
-  const dansSemaine = (lignes || []).filter(l => l && l.t >= debut.getTime() && l.t < limite.getTime());
-  const aGrammes = dansSemaine.some(l => l.grammes != null);
-  dansSemaine.forEach(l => {
-    const j = jours.find(x => minuit(l.t).getTime() === x.date.getTime());
-    if (j) { j.n += 1; j.grammes += l.grammes || 0; }
-  });
-  if (!aGrammes) jours.forEach(j => { j.grammes = null; });
-  return { jours, n: dansSemaine.length, grammes: aGrammes ? dansSemaine.reduce((s, l) => s + (l.grammes || 0), 0) : null };
-}
 
 /**
  * Le dernier repas, pour la tuile de l'Accueil : le capteur « dernier repas »
@@ -982,30 +630,153 @@ export function dernierRepas(lecture, states, etat = null, maintenant = Date.now
   return mieux == null ? null : { t: mieux, source: 'automatisation' };
 }
 
+/* ════════════ La portion en grammes, les jours de réserve (revenus pour la carte) ════════════
+ *
+ * Étape 2 du chantier IoT (19/10 ; I10, § 6) : la carte dit « Distribuer 12 g » et « ≈ 8 j ». Ces trois
+ * fonctions avaient quitté le démarrage pour `distributeurfiche.js` (étape 1, tâche 1) quand seule la
+ * fiche les lisait ; elles reviennent telles quelles, et `distributeurfiche.js` les reprend d'ici — la
+ * fiche et Paramètres n'y voient rien changer. */
+
 /**
- * « Aujourd'hui : {n} repas · {g} g », si l'appareil a un compteur du jour :
- * `{ repas, portions, grammes }`, chacun `null` quand rien ne le compte.
- * Le TOTAL du jour passe avant ses parts (05/10, contradicteur) : chez PetKit,
- * `total_dispensed` est le total de la journée et `manual_dispensed` /
- * `planned_dispensed` ses deux moitiés — prendre la première par ordre
- * alphabétique affichait les seules rations manuelles. Le compteur se reconnaît
- * à sa clé de traduction, à défaut à son entity_id (qu'on peut renommer).
+ * Combien de grammes fait une portion, et combien de portions part un appui :
+ *  - une taille de ration réglée en g ou en kg : un appui = cette quantité ;
+ *  - un poids de portion (Aqara `portion_weight`, en g ; ou le number désigné
+ *    en grammes) : g par portion, et la taille de ration dit combien de
+ *    portions part un appui — toute unité qui n'est PAS une masse (aucune,
+ *    « portion », « portions »…) compte des portions (passe bis de l'étape 2,
+ *    19/10 ; D1 : Zigbee2MQTT donne l'unité « portion » au `serving_size`, et la
+ *    carte disait « Distribuer 6 g » au lieu de 12) ;
+ *  - rien de tel : `null` — les jours de réserve ne se devinent pas.
  */
-export function compteDuJour(lecture, states) {
+export function mesurePortion(states, portion, poids) {
   const S = states || {};
-  const out = { repas: null, portions: null, grammes: null };
-  const soeurs = new Map(((lecture && lecture.soeurs) || []).map(s => [s.id, s]));
-  const texte = (id) => { const s = soeurs.get(id); return ((s && s.cle) || '') + ' ' + id; };
-  const rang = (id) => (/total/.test(texte(id)) ? 0 : /manual|planned/.test(texte(id)) ? 2 : 1);
-  [...((lecture && lecture.historique && lecture.historique.compteurs) || [])].sort((a, b) => rang(a) - rang(b)).forEach(id => {
-    const e = S[id];
-    const v = e ? nombre(e.state) : null;
-    if (v == null) return;
-    const u = (e.attributes && e.attributes.unit_of_measurement) || null;
-    const g = u ? enGrammes(v, u) : null;
-    if (g != null) { if (out.grammes == null) out.grammes = g; }
-    else if (/times/.test(texte(id))) { if (out.repas == null) out.repas = v; }
-    else if (/portion|dispensed/.test(texte(id)) && out.portions == null) out.portions = v;
+  const val = (o) => (o && S[o.entity_id] ? nombre(S[o.entity_id].state) : null);
+  const vp = val(portion);
+  if (portion && vp != null && estMasse(portion.unite)) return { grammesParPortion: enGrammes(vp, portion.unite), portionsParAppui: 1 };
+  const vg = poids && estMasse(poids.unite) ? enGrammes(val(poids), poids.unite) : null;
+  if (vg == null || !(vg > 0)) return null;
+  return { grammesParPortion: vg, portionsParAppui: portion && vp > 0 ? vp : 1 };
+}
+
+/**
+ * Les repas d'une journée moyenne, en grammes, pour `joursDeReserve` :
+ * `[{ g }]`. g = portions × grammes d'une portion, sur les seuls repas à heure
+ * fixe des sources ACTIVES ; un repas qui ne part que certains jours compte au
+ * prorata de la semaine. Un appui (bouton, select START, script) part
+ * `portionsParAppui` portions, quel que soit le repas. Sans mesure de portion :
+ * `[]`, et la fiche dit « Ce qu'il reste dans le bac ».
+ */
+export function repasPourReserve(etat, mesure, { allumee = null } = {}) {
+  if (!mesure || !(mesure.grammesParPortion > 0)) return [];
+  const parAppui = mesure.portionsParAppui > 0 ? mesure.portionsParAppui : 1;
+  const ecrit = !!(etat && etat.commande && etat.commande.quantite);
+  return repasActifs(etat, { allumee }).map(r => {
+    // Le planning de Loggia ne fixe une quantité que si la commande l'ÉCRIT ;
+    // sinon une pression = une ration.
+    const portions = r.source === 'loggia' ? (ecrit && r.portions > 0 ? r.portions : parAppui) : (r.portions > 0 ? r.portions : parAppui);
+    return { g: Math.round(portions * mesure.grammesParPortion * (new Set(r.jours).size / 7) * 10) / 10 };
   });
-  return out;
+}
+
+/** Les jours de réserve du bac : `null` quand on ne sait pas. */
+export function joursDeReserveDistributeur(grammes, etat, mesure, options = {}) {
+  return joursDeReserve(grammes, repasPourReserve(etat, mesure, options));
+}
+
+/* ════════════ La carte (étape 2 du chantier IoT, 19/10 ; I10, I22, § 6 de la conception) ════════════ */
+
+/** Les grammes d'un appui sur « Distribuer » (I10) : `n` portions pour une commande qui ÉCRIT une quantité — la carte en part une ;
+ *  ce qui part VRAIMENT, la valeur relevée au minimum de l'entité (`valeurPortions`, en pas) —, sinon ce que l'appareil sert d'un
+ *  appui (`portionsParAppui`, sa taille de ration). `null` sans mesure : « Distribuer », sans grammes inventés. */
+export function grammesRation(mesure, commande, n = 1) {
+  if (!mesure || !(mesure.grammesParPortion > 0)) return null;
+  const portions = commande && commande.quantite ? valeurPortions(commande, n) / (commande.pas > 0 ? commande.pas : 1) : (mesure.portionsParAppui > 0 ? mesure.portionsParAppui : 1);
+  return Math.round(portions * mesure.grammesParPortion * 10) / 10;
+}
+
+const heureLocale = (t) => new Date(t).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+
+/** « Repas à 19:00 » aujourd'hui, « Repas demain 07:30 », « Repas mercredi 07:30 » au-delà — le patron de `libellePassage` (robots.js). */
+function libelleRepas(date, maintenant = Date.now()) {
+  const t = new Date(date).getTime();
+  const ecart = Math.round((minuit(t).getTime() - minuit(maintenant).getTime()) / 86400000);
+  const h = heureLocale(t);
+  if (ecart <= 0) return tr('Repas à {h}', { h });
+  if (ecart === 1) return tr('Repas demain {h}', { h });
+  return tr('Repas {jour} {h}', { jour: new Date(t).toLocaleDateString(locale(), { weekday: 'long' }), h });
+}
+
+/* Le mot COURT d'une anomalie, dans la phrase d'une carte ; la popup dit « Problème signalé par l'appareil » en entier. */
+const MOT_ALERTE = { bas: () => tr('Bac presque vide'), bloque: () => tr('Distribution bloquée'), autre: () => tr('Problème signalé') };
+
+/**
+ * La phrase d'état du distributeur (I7, § 6), la première ligne qui s'applique, et son encre — la carte large, l'étroite et la
+ * compacte la partagent :
+ *  1. hors ligne (`enLigne`) : « Indisponible depuis 14:20 », en rouge, le liseré qui respire (`panne`) ; l'aide du bac seule muette
+ *     — la vis répond encore — : « Réservoir indisponible » ;
+ *  2. une anomalie active (`alerte` : `bas`, `bloque`, `autre`) : « Bac presque vide · Repas à 19:00 », en ambre ;
+ *  3. le jour ordinaire : « Repas à 19:00 · ≈ 8 j », « Repas demain 07:30 · ≈ 8 j » ; sans prochain repas « ≈ 8 j de réserve » ;
+ *     sans réserve « Repas à 19:00 » ; sinon le dernier repas du jour, « Dernier repas à 07:30 » — en gris, en ambre sous 15 % de bac.
+ * Rien ne rassure, et rien ne s'invente : un programme que l'appareil tient sans le montrer (`programme`) se nomme au lieu de
+ * « Aucun repas prévu » ; tant que le serveur n'a pas répondu (`sources` faux), un tiret. Rend `{ texte, encre, panne }`.
+ */
+export function phraseDistributeur({ mort = false, raison = null, depuis = null, alerte = null, prochain = null, jours = null, pct = null, dernier = null, programme = false, sources = true, maintenant = Date.now() } = {}) {
+  if (mort && raison === 'reservoir') return { texte: tr('Réservoir indisponible'), encre: 'var(--o-bad)', panne: true };
+  if (mort) {
+    const q = depuis ? quandLumiere(depuis, maintenant) : null;
+    return { texte: q ? tr('Indisponible depuis {h}', { h: q }) : tr('Indisponible'), encre: 'var(--o-bad)', panne: true };
+  }
+  const repas = prochain && prochain.date ? libelleRepas(prochain.date, maintenant) : null;
+  if (alerte && MOT_ALERTE[alerte]) return { texte: [MOT_ALERTE[alerte](), repas].filter(Boolean).join(' · '), encre: 'var(--o-warn)', panne: false };
+  const encre = pct != null && pct < 15 ? 'var(--o-warn)' : 'var(--o-text2)';
+  const duJour = dernier != null && minuit(dernier).getTime() === minuit(maintenant).getTime();
+  const texte = repas && jours != null ? repas + ' · ' + tr('≈ {n} j', { n: jours })
+    : repas || (jours != null ? tr('≈ {n} j de réserve', { n: jours })
+      : duJour ? tr('Dernier repas à {h}', { h: heureLocale(dernier) })
+        : !sources ? '—' : programme ? tr('Programme de l’appareil') : tr('Aucun repas prévu'));
+  return { texte, encre, panne: false };
+}
+
+/**
+ * Ce que la carte du distributeur montre et offre (I5, I6, I10, I22 ; § 6), lu sur l'APPAREIL désigné et la réponse du serveur
+ * (`loggia/distributeurs/etat`, ou null tant qu'elle manque) : la lecture de l'appareil (`lecture`), le réservoir NOMMÉ (`pct`,
+ * `grammes`), le prochain repas des sources actives (l'état VIVANT d'une automatisation, sinon celui de la réponse), la réserve en
+ * jours, « Distribuer » (`envoi` : une portion par la commande de l'appareil, absente quand il ne répond pas — un réservoir muet,
+ * lui, n'empêche pas la vis), ses grammes (`ration`), la panne et sa raison, l'anomalie active, et la phrase. « Je l'ai rempli »
+ * n'est pas à la carte : la popup l'offre, sur une aide `input_number` vivante (fichedistributeur.jsx).
+ */
+export function carteDistributeur({ index = null, states = null, cfg = null, etat = null, maintenant = Date.now(), maxDefaut = 1500 } = {}) {
+  const S = states || {};
+  const lecture = lireDistributeur(index, S, cfg);
+  const reservoir = idDe(cfg && cfg.haids && cfg.haids.reservoir);
+  const stRes = reservoir ? S[reservoir] : null;
+  const reservoirMort = !!reservoir && muette(stRes);
+  const maxAide = stRes && stRes.attributes ? nombre(stRes.attributes.max) : null;
+  const max = maxAide > 0 ? maxAide : maxDefaut;
+  const niveau = reservoirMort ? { pct: null, grammes: null } : niveauDuBac(S, reservoir, max);
+  const allumee = (a) => (S[a.entity_id] ? S[a.entity_id].state === 'on' : a.etat === 'on');
+  const capteur = lecture.prochainCapteur && S[lecture.prochainCapteur] ? S[lecture.prochainCapteur].state : null;
+  const prochain = prochainRepas(etat, maintenant, { allumee, capteur });
+  const mesure = mesurePortion(S, lecture.portion, lecture.poidsPortion);
+  const jours = etat ? joursDeReserveDistributeur(niveau.grammes, etat, mesure, { allumee }) : null;
+  const { mort, raison } = lecture.enLigne;
+  const envoi = lecture.commande && !(mort && raison !== 'reservoir') ? envoiDistribuer(lecture.commande, 1) : null;
+  // Depuis quand l'appareil se tait : sa commande muette, ou sa connectivité coupée.
+  const tu = raison === 'commande' && lecture.commande ? lecture.commande.entity_id
+    : raison === 'connectivite' ? ((lecture.soeurs.find(coupee) || {}).id || null) : null;
+  /* Le dernier repas : le compteur DÉSIGNÉ dans Paramètres (`haids.distribuees`), s'il a compté aujourd'hui — un compteur à zéro
+   * (sa remise à minuit), muet ou sans valeur n'a rien servi (05/10) —, sinon ce que l'appareil ou les automatisations en disent. */
+  const designe = idDe(cfg && cfg.haids && cfg.haids.distribuees);
+  const stD = designe ? S[designe] : null;
+  const tD = stD && nombre(stD.state) > 0 ? Date.parse(stD.last_changed || '') : NaN;
+  const dr = !isNaN(tD) && tD >= minuit(maintenant).getTime() ? { t: tD } : dernierRepas(lecture, S, etat, maintenant);
+  const alerte = lecture.alerte ? lecture.alerte.type : null;
+  const programme = !!(etat && etat.programme && etat.programme.presente && !etat.programme.lisible);
+  return {
+    lecture, reservoir, reservoirMort, max, pct: niveau.pct, grammes: niveau.grammes, prochain, mesure, jours, envoi,
+    ration: envoi ? grammesRation(mesure, lecture.commande, 1) : null,
+    mort, raison, alerte,
+    phrase: phraseDistributeur({ mort, raison, depuis: tu && S[tu] ? S[tu].last_changed : null, alerte, prochain, jours, pct: niveau.pct,
+      dernier: dr ? dr.t : null, programme, sources: etat != null, maintenant }),
+  };
 }

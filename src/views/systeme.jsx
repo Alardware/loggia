@@ -545,7 +545,7 @@ function SystemeContent({ hass }) {
 
       {tuiles.length > 0
         ? <div className="grid-sys-mesures" style={{ '--sys-n': tuiles.length }}>{tuiles.map(t => <TuileMesure key={t.cle} t={t} />)}</div>
-        : <div style={{ ...SYS_PANNEAU, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Aucun capteur de charge trouvé : active l’intégration System Monitor (ou Glances) pour suivre le processeur, la mémoire et la température.')}</div>}
+        : <div style={{ ...SYS_PANNEAU, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Aucun capteur de charge trouvé : activez l’intégration System Monitor (ou Glances) pour suivre le processeur, la mémoire et la température.')}</div>}
 
       {(series.length > 0 || versions.length > 0) && (
         <div className="grid-sys-duo">

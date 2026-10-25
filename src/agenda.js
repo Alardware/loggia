@@ -85,6 +85,16 @@ export function plageSemaine(d, n = JOURS_AGENDA) {
   return { debut, fin: jourPlus(debut, n) };
 }
 
+/** La semaine qui contient `d`, du lundi minuit au lundi suivant (exclu) :
+ * ce que lisent les vues Semaine et Jour de la feuille. Les sept jours du
+ * rail partent d'AUJOURD'HUI — un dimanche, ils ne couvraient que le dernier
+ * jour de la semaine montrée, et les six autres colonnes sortaient vides. */
+export function plageDeLaSemaine(d) {
+  const x = jourPlus(d, 0);
+  const debut = jourPlus(x, -((x.getDay() + 6) % 7));
+  return { debut, fin: jourPlus(debut, 7) };
+}
+
 /** Les jours de la bande : aujourd'hui puis les suivants, à minuit local. */
 export function joursAgenda(d, n = JOURS_AGENDA) {
   const j0 = new Date(d);

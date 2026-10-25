@@ -8,9 +8,10 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resumeSecurite, comptesSecurite } from '../src/attention.js';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
 const en = readFileSync(join(RACINE, 'src', 'langues', 'en.js'), 'utf8');
 const NL = String.fromCharCode(10);
 const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = src.indexOf(fin, d + 1); return src.slice(d, f < 0 ? undefined : f); };
@@ -52,9 +53,10 @@ test('l’Accueil mene a la vue par la tuile Alarme de la banniere, plus par une
 test('la vue : l’etat en une seconde, A surveiller, un ouvrant par carte illustree, les fiches', () => {
   assert.ok(src.includes('function SecuriteView({ hass, edit = false, onEnt, onNav = null }) {') && src.includes('<SecuriteContent hass={hass} edit={edit} onEnt={onEnt} onNav={onNav} />') && src.includes("onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} onNav={setView} />"), 'la navigation arrive jusqu’a la vue');
   const vue = bloc('function SecuriteContent(', NL + '}');
-  assert.ok(vue.includes("const camsInfoSec = (camsCfg || camList).map(c => ({ nom: c.name || c.label, online: S[c.haid] ? S[c.haid].state !== 'unavailable' : c.online !== false }));") && vue.includes("cfgVal('loggia_cameras', null)") && vue.includes('const comptesSecVue = comptesSecurite(S, camsInfoSec);') && vue.includes('const tuilesSecVue = tuilesSecurite(comptesSecVue);'), 'les comptes de l’Accueil, sur les cameras de la vue');
+  assert.ok(vue.includes("const camsInfoSec = (camsCfg || camList).map(c => ({ nom: c.name || c.label, online: S[c.haid] ? S[c.haid].state !== 'unavailable' : c.online !== false }));") && vue.includes("cfgVal('loggia_cameras', null)") && vue.includes('const comptesSecVue = comptesSecurite(S, camsInfoSec, { plateforme: plateformeDe, masque: masqueDe });') && vue.includes('const tuilesSecVue = tuilesSecurite(comptesSecVue);'), 'les comptes de l’Accueil, sur les cameras de la vue');
   assert.ok(vue.includes("{tr('Alarme')} {alarmWord} · {resumeSecurite(comptesSecVue)}") && vue.includes("color: comptesSecVue.ok ? 'var(--o-ok)' : 'var(--o-warn)'"), 'la sous-ligne : l’alarme et la securite, verte ou ambre');
-  assert.ok(vue.includes('const pointsSec = pointsAttention({ S, cams: camsInfoSec });') && vue.includes("{pointsSec.length > 0 && <CarteAttention points={pointsSec} onNav={(v) => { if (v !== 'securite' && onNav) onNav(v); }} />}"), '« A surveiller » : seulement quand il y a un point, seulement la securite, jamais vers soi-meme');
+  // ASSERTIONS MODIFIÉES (audit du 19/10, M14) : la vue écarte, comme Objets, les groupes de Home Assistant et les entités masquées.
+  assert.ok(vue.includes('const pointsSec = pointsAttention({ S, cams: camsInfoSec, plateforme: plateformeDe, masque: masqueDe });') && vue.includes("{pointsSec.length > 0 && <CarteAttention points={pointsSec} onNav={(v) => { if (v !== 'securite' && onNav) onNav(v); }} />}"), '« A surveiller » : seulement quand il y a un point, seulement la securite, jamais vers soi-meme');
   assert.ok(vue.includes('const ouvrantsIds = [...ouvrantsDe(S)].sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0)).map(o => o.id);') && vue.includes("if (k.indexOf('binary_sensor.') === 0) return <RoomGenericCard id={k} hass={hass} onOpen={dc.ouvrir} label={ed.labelOf(k)} />;"), 'un ouvrant par carte des pieces (la porte dessinee), les ouverts d’abord');
   assert.ok(!vue.includes('<CvOuvrants hass={hass} />'), 'le resume de trois lignes a quitte la vue');
   assert.ok(vue.includes('<CvPresence hass={hass} />'), 'la presence reste (dans la rangee des trois cartes depuis l’ADR 0034)');

@@ -144,15 +144,21 @@ export const JETONS_GARDE = ['--o-text', '--o-text2', '--o-text3', '--o-text3-rg
  * lisible sur le lavis qu'elle pose elle-même : une ampoule ambrée sur un
  * thème clair devenait invisible sur sa propre carte. La carte garde la
  * couleur vraie ; l'icône et la jauge prennent celle-ci.
+ *
+ * `lavis` (facultatif) : la couleur qui TEINTE le fond, quand ce n'est pas
+ * `couleur` — l'encre d'un blanc froid se tire d'un blanc plus chaud (le
+ * sien, assombri, virait au rouge), mais la plaque et la carte restent teintées
+ * de la teinte vraie : c'est contre CE fond-là qu'elle doit se lire.
  */
-export function lisibleSurLavis(couleur, clair, alpha = 0.3) {
+export function lisibleSurLavis(couleur, clair, alpha = 0.3, lavis = couleur) {
   const c = lireCouleur(couleur);
   if (!c) return couleur;
+  const l = lireCouleur(lavis) || c;
   // La carte d'un thème clair n'est pas blanche : elle tire vers son fond.
   const base = clair ? [242, 244, 247] : [18, 24, 36];
   // Le lavis garde la couleur VRAIE de l'appareil : c'est contre celui-là que
   // l'icône doit se lire, pas contre un lavis de la couleur déjà corrigée.
-  const fondTeinte = composer(base, [c[0], c[1], c[2], alpha]);
+  const fondTeinte = composer(base, [l[0], l[1], l[2], alpha]);
   return versHex(ajuster(c.slice(0, 3), [fondTeinte], SEUILS.surLavis, clair ? -1 : 1));
 }
 

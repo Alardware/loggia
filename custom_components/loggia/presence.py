@@ -42,7 +42,10 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
 
-from .regles import demarrer, niveau
+from .const import DOMAIN
+from .lumieres_maison import (a_epargner, async_interrupteurs_declares, async_veilleuses, attributs_des_lumieres,
+                              lumieres_de_la_maison, par_service, registre_de)
+from .regles import demarrer, entites_propres, est_entite, niveau
 from .unites import depuis_celsius, unite_temperature
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
@@ -101,6 +104,11 @@ MODES_ALARME = {"away": "alarm_arm_away", "home": "alarm_arm_home",
 # sous la surete. Le depart TIENT ce qu'il eteint et ce qu'il baisse, jusqu'au
 # retour : la veilleuse ou l'eclairage doux ne rallument pas une maison vide.
 PRIORITE = niveau("presence")
+
+# Le registre change par rafales : on se reabonne une fois, un peu apres
+# (audit du 19/10, M4). Le delai laisse a l'entite neuve le temps d'ecrire son
+# premier etat — c'est lui qui dit si c'est un indice (`device_class`).
+DELAI_REGISTRE = 5.0
 
 
 def tous_absents(etats: dict, personnes) -> bool:
@@ -183,6 +191,18 @@ def indice_dit_oui(etat) -> bool:
 class LoggiaPresence:
     """Met la maison en veille quand elle se vide, et la reveille au retour."""
 
+    # Valeur de CLASSE : un objet bati sans passer par `__init__` - ce que
+    # font les tests - la trouve quand meme. Les interrupteurs declares
+    # lumieres, relus avant chaque geste qui les commande.
+    _interrupteurs: frozenset = frozenset()
+
+    # Ce que le constructeur pose apres coup (audit du 19/10, M4) : des valeurs
+    # simples, que chaque instance remplace par les siennes.
+    _au_demarrage = None
+    _defait_registre = None
+    _reabonnement = None
+    _arrete = False
+
     def __init__(self, hass: HomeAssistant, store: "LoggiaStore", regles=None) -> None:
         self.hass = hass
         self.store = store
@@ -209,11 +229,76 @@ class LoggiaPresence:
         self._minuteur_invite = None
         self._absents_avant: bool | None = None
         self._defait: list[Any] = []
+        # Le rattrapage, une fois Home Assistant demarre (audit du 19/10).
+        self._au_demarrage = None
         demarrer(hass, self, self._async_demarrer(), "presence")
 
     async def _async_demarrer(self) -> None:
         self.cfg = await self.async_config()
         await self._async_reabonner()
+        # `dehors` n'est qu'en memoire : apres un redemarrage pendant l'absence, le
+        # premier evenement serait le RETOUR, lu avec `dehors` faux — la maison
+        # restait en Absence. On fait le point une fois Home Assistant demarre, les
+        # personnes relues (audit du 19/10). Les indices aussi s'y relisent
+        # (audit des capteurs du 19/10, M4) : au setup, Zigbee n'a souvent pas
+        # encore cree ses capteurs de mouvement, et rien ne les reposait.
+        from homeassistant.helpers.start import async_at_started
+
+        self._au_demarrage = async_at_started(self.hass, self._async_rattraper)
+
+    async def _async_rattraper(self, _hass=None) -> None:
+        """Le point au demarrage. La maison est VIDE : on l'evalue comme a chaque
+        changement — le depart se rearme, et le retour se verra. Quelqu'un est LA
+        (rentre pendant le redemarrage) : seule l'Absence que la presence avait
+        posee au chauffage se leve ; lumieres et alarme, on ne sait pas ce que le
+        depart en avait fait, on n'y touche pas.
+
+        D'abord, l'ecoute du registre, une fois, et les abonnements reposes sur
+        ce qui existe maintenant (audit des capteurs du 19/10, M4)."""
+        self._au_demarrage = None
+        if self._arrete:
+            return
+        bus = getattr(self.hass, "bus", None)
+        if bus is not None and self._defait_registre is None:
+            self._defait_registre = bus.async_listen("entity_registry_updated", self._sur_registre)
+        await self._async_reabonner()
+        if not self.cfg.get("actif"):
+            return
+        etats = self._etats()
+        invite = self._invite_present()
+        if tous_absents(etats, self.cfg.get("personnes")) and not invite:
+            await self._async_evaluer()
+            return
+        if not (quelquun_est_la(etats, self.cfg.get("personnes")) or invite):
+            return                                  # on ne sait pas : on ne fait rien
+        if not (self.cfg.get("retour") or {}).get("chauffage"):
+            return
+        chef = self._chef()
+        if chef is None or not chef.absence_par_presence():
+            return
+        try:
+            await chef.async_presence(False, simuler=self._simule())
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia presence : le moteur du chauffage n'a pas pris le retour")
+
+    @callback
+    def _sur_registre(self, event) -> None:
+        """Un capteur arrive, part ou change de nom : on se reabonne — une
+        fois par rafale, un peu apres. Un capteur de mouvement appaire apres
+        le demarrage devient un indice (audit du 19/10, M4)."""
+        d = getattr(event, "data", None) or {}
+        haid = str(d.get("entity_id") or "")
+        if self._arrete or self._reabonnement is not None or not haid.startswith("binary_sensor."):
+            return
+        from homeassistant.helpers.event import async_call_later
+
+        @callback
+        def echu(_now) -> None:
+            self._reabonnement = None
+            if not self._arrete:
+                self.hass.async_create_task(self._async_reabonner())
+
+        self._reabonnement = async_call_later(self.hass, DELAI_REGISTRE, echu)
 
     async def _async_reabonner(self) -> None:
         for defaire in self._defait:
@@ -238,7 +323,9 @@ class LoggiaPresence:
         self._defait.append(
             async_track_state_change_event(self.hass, suivis, self._sur_personne)
         )
-        _LOGGER.info("Loggia presence : %d personnes suivies", len(suivis))
+        # En debug (relecture du lot 2, point 7) : une rafale du registre
+        # reabonne la presence, le journal de HA n'a pas a l'ecrire a chaque fois.
+        _LOGGER.debug("Loggia presence : %d personnes suivies", len(suivis))
         # Les indices (§10) : les capteurs de mouvement et d'ouverture, et les
         # mains que le socle voit passer.
         ind = self.cfg.get("indices") or {}
@@ -294,14 +381,28 @@ class LoggiaPresence:
                                            {"nom": self._nom(haid)}))
         await self._async_armer_depart(relance=True)
 
+    # ── Les lumieres de la maison (lumieres_maison, audit du 19/10) ────────
+    async def _async_relire_interrupteurs(self) -> None:
+        """Les interrupteurs declares lumieres, relus au magasin : `_declarer`
+        est synchrone, il lit la copie."""
+        self._interrupteurs = frozenset(await async_interrupteurs_declares(self.store))
+
+    def _lumieres(self) -> tuple[dict[str, dict[str, Any]], list[str]]:
+        """({haid: attributs}, les lumieres de la maison) - la definition
+        commune a toutes les regles : ni la LED d'une borne (`config`), ni une
+        lampe cachee ; l'interrupteur declare lumiere compris ; un groupe
+        s'efface devant ses membres. Des etats illisibles levent."""
+        attributs = attributs_des_lumieres(self.hass, self._interrupteurs)
+        return attributs, lumieres_de_la_maison(attributs, registre_de(self.hass), self._interrupteurs)
+
     def _declarer(self) -> None:
-        """Declare au socle ce que le depart pilote : les lumieres, les
-        chauffages, l'alarme. Rappele a chaque evaluation — les entites
-        peuvent ne pas exister au demarrage."""
+        """Declare au socle ce que le depart pilote : les lumieres de la
+        maison, les chauffages, l'alarme. Rappele a chaque evaluation — les
+        entites peuvent ne pas exister au demarrage."""
         pilotes = []
         if self.cfg.get("actif"):
             try:
-                pilotes += list(self.hass.states.async_entity_ids("light"))
+                pilotes += self._lumieres()[1]
             except Exception:  # noqa: BLE001
                 _LOGGER.warning("Loggia presence : lampes illisibles, le depart ne les suivra pas", exc_info=True)
             pilotes += self._climats()
@@ -318,6 +419,7 @@ class LoggiaPresence:
     async def _async_evaluer(self) -> None:
         if not self.cfg.get("actif"):
             return
+        await self._async_relire_interrupteurs()
         self._declarer()
         etats = self._etats()
         absents = tous_absents(etats, self.cfg.get("personnes"))
@@ -433,19 +535,34 @@ class LoggiaPresence:
         d = self.cfg.get("depart") or {}
 
         if d.get("lumieres"):
-            allumees = self._allumees()
+            allumees = await self._async_allumees()
             if allumees:
                 # Ne retenir que ce qui est vraiment parti : une lampe sous la
                 # main de quelqu'un n'a pas ete eteinte, et n'est pas a rallumer.
-                partis = await self._async_service("light", "turn_off", allumees,
-                                                   regle="depart", quoi="eteindre",
-                                                   motif="maison vide", tenir=True,
-                                                   jusqu_a_relacher=True)
+                # Par service (lumieres_maison) : l'interrupteur declare lumiere
+                # recoit `homeassistant.turn_off`, pas `light.turn_off`.
+                partis: list = []
+                for domaine, service, lot in par_service(allumees, False):
+                    partis += await self._async_service(domaine, service, lot,
+                                                        regle="depart", quoi="eteindre",
+                                                        motif="maison vide", tenir=True,
+                                                        jusqu_a_relacher=True)
                 self.eteintes = {haid: "on" for haid in partis}
 
         chauffage = d.get("chauffage") or {}
         if chauffage.get("actif"):
-            cibles = self._climats()
+            # Un chauffage au planning allume n'a qu'un chef : le moteur. La
+            # presence lui donne le fait — la maison se vide — et il met la
+            # maison en Absence s'il le faut (chantier Chauffage, § 6). Une panne
+            # du moteur ne prive ni de l'alarme ni du reste du depart (relecture
+            # finale du 12/10) : elle s'ecrit au journal de Home Assistant.
+            chef = self._chef()
+            if chef is not None:
+                try:
+                    await chef.async_presence(True, simuler=self._simule())
+                except Exception:  # noqa: BLE001
+                    _LOGGER.exception("Loggia presence : le moteur du chauffage n'a pas pris le depart")
+            cibles = [h for h in self._climats() if chef is None or not chef.pilote(h)]
             if cibles:
                 try:
                     consigne = float(chauffage.get("consigne", 17))
@@ -472,15 +589,19 @@ class LoggiaPresence:
             await self._async_service("alarm_control_panel", service, [alarme["entite"]],
                                       regle="depart", quoi="armer", motif="maison vide")
 
-    def _allumees(self) -> list:
-        """Les lumieres allumees en ce moment."""
+    async def _async_allumees(self) -> list:
+        """Les lumieres de la maison allumees en ce moment - moins ce qu'on
+        epargne : les veilleuses de la regle Nuit, et le groupe qui en contient
+        une (sa decision du 19/10 : les veilleuses sont epargnees partout)."""
+        await self._async_relire_interrupteurs()
         try:
-            ids = self.hass.states.async_entity_ids("light")
+            attributs, lumieres = self._lumieres()
         except Exception:  # noqa: BLE001
             _LOGGER.warning("Loggia presence : lampes illisibles, rien ne sera eteint au depart", exc_info=True)
             return []
-        return [i for i in sorted(ids)
-                if str(getattr(self.hass.states.get(i), "state", "")).lower() == "on"]
+        epargnees = a_epargner(attributs, await async_veilleuses(self.store))
+        return [h for h in lumieres if h not in epargnees
+                and str(getattr(self.hass.states.get(h), "state", "")).lower() == "on"]
 
     def _capteurs_indices(self) -> list:
         """Les capteurs de mouvement et d'ouverture de la maison, par `device_class`."""
@@ -521,10 +642,21 @@ class LoggiaPresence:
                 a_rendre = [h for h in sorted(self.eteintes)
                             if str(getattr(etats.get(h), "state", "")).lower() == "off"
                             and self.regles.tient("presence", "depart", h)]
-                if a_rendre:
-                    await self._async_service("light", "turn_on", a_rendre,
+                # Chacun par son service (lumieres_maison) : l'interrupteur
+                # declare lumiere par `homeassistant.turn_on`.
+                for domaine, service, lot in par_service(a_rendre, True):
+                    await self._async_service(domaine, service, lot,
                                               regle="retour", quoi="rallumer", motif="retour")
                 self.eteintes = {}
+
+        if r.get("chauffage"):
+            chef = self._chef()
+            if chef is not None:
+                # Comme au depart : une panne du moteur ne retient ni les consignes ni l'alarme.
+                try:
+                    await chef.async_presence(False, simuler=self._simule())
+                except Exception:  # noqa: BLE001
+                    _LOGGER.exception("Loggia presence : le moteur du chauffage n'a pas pris le retour")
 
         if r.get("chauffage") and self.consignes:
             # Les consignes d'AVANT le depart, telles quelles — pas un defaut,
@@ -549,6 +681,12 @@ class LoggiaPresence:
         self.regles.relacher("presence")
 
     # ── Outils ─────────────────────────────────────────────────────────────
+    def _chef(self):
+        """Le moteur du chauffage, cherche au moment de servir — comme
+        `rechargement.py` : un rechargement de l'integration le rebatit."""
+        data = getattr(self.hass, "data", None)
+        return (data.get(DOMAIN) or {}).get("chauffage") if isinstance(data, dict) else None
+
     def _etats(self, ids=None) -> dict:
         if ids is None:
             ids = list(self.cfg.get("personnes") or [])
@@ -617,7 +755,23 @@ class LoggiaPresence:
                             cfg[k][kk] = vv
                 else:
                     cfg[k] = v
+        self._nettoyer(cfg)
         return cfg
+
+    @staticmethod
+    def _nettoyer(cfg: dict[str, Any]) -> None:
+        """Seulement des identifiants d'entite (audit du 19/10, M24) : les
+        personnes suivies, l'interrupteur invite, l'alarme du depart. Ce qui
+        n'en est pas un est ecarte — jamais ecrit, et une configuration deja
+        abimee se relit propre. Un entier parmi les personnes faisait lever
+        l'abonnement, au redemarrage aussi."""
+        cfg["personnes"] = entites_propres(cfg.get("personnes"))
+        for section, cle in (("invite", None), ("depart", "alarme")):
+            bloc = cfg.get(section)
+            if cle is not None:
+                bloc = bloc.get(cle) if isinstance(bloc, dict) else None
+            if isinstance(bloc, dict) and "entite" in bloc and not est_entite(bloc["entite"]):
+                bloc["entite"] = ""
 
     async def async_etat(self) -> dict[str, Any]:
         return {
@@ -649,6 +803,8 @@ class LoggiaPresence:
                         cfg[k][kk] = vv
             else:
                 cfg[k] = v
+        # Ce qui n'est pas une entite est ecarte, jamais ecrit (audit du 19/10, M24).
+        self._nettoyer(cfg)
 
     async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:
         # D'un seul tenant, sous le verrou du magasin (lot 15 de l'audit du
@@ -676,8 +832,22 @@ class LoggiaPresence:
 
     @callback
     def async_arreter(self) -> None:
+        # L'attente du demarrage, l'ecoute du registre et le reabonnement en
+        # attente partent avec le reste (audit du 19/10, M4).
+        self._arrete = True
+        for nom in ("_au_demarrage", "_defait_registre", "_reabonnement"):
+            defaire = getattr(self, nom, None)
+            if defaire is not None:
+                try:
+                    defaire()
+                except Exception:  # noqa: BLE001
+                    _LOGGER.debug("Loggia presence : %s deja retire", nom)
+                setattr(self, nom, None)
         self._desarmer()
         self._desarmer_invite()
+        annule, self._au_demarrage = getattr(self, "_au_demarrage", None), None
+        if annule:
+            annule()
         for defaire in self._defait:
             try:
                 defaire()

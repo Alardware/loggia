@@ -83,9 +83,10 @@ def regles_module():
 def creer(module, store_module, regles_module):
     faits = []
 
-    def fabrique(config=None, etats=None, temperature_unit="°C"):
+    def fabrique(config=None, etats=None, temperature_unit="°C", partage=None):
         magasin = store_module.LoggiaStore.__new__(store_module.LoggiaStore)
-        magasin._store = FauxStore({"users": {}, "shared": {"loggia_presence": config or {}}, "migrated": True})
+        magasin._store = FauxStore({"users": {}, "shared": {"loggia_presence": config or {}, **(partage or {})},
+                                    "migrated": True})
         magasin._ancien = FauxStore(None)
         magasin._data = None
         magasin._lock = asyncio.Lock()
@@ -811,3 +812,208 @@ def test_couper_la_regle_rend_ce_que_le_depart_tenait(creer):
     lancer(p.async_enregistrer({"actif": False}))
     assert not p.regles.tient("presence", "depart", "climate.salon")
     p.hass.abandonner()
+
+
+# ── Un seul chef par chauffage (chantier Chauffage, § 6) ────────────────────
+
+class FauxChef:
+    """Le moteur du chauffage, vu de la presence."""
+
+    def __init__(self, pilotes=(), par_presence=False):
+        self.pilotes = set(pilotes)
+        self.faits = []
+        self.par_presence = par_presence
+
+    def absence_par_presence(self):
+        return self.par_presence
+
+    def pilote(self, haid):
+        return haid in self.pilotes
+
+    async def async_presence(self, vide, simuler=False):
+        self.faits.append((vide, simuler))
+        return True
+
+
+def test_planning_allume_le_depart_donne_le_fait_et_ne_baisse_que_les_autres(creer):
+    c = cfg(depart={"lumieres": False, "chauffage": {"actif": True, "consigne": 16}},
+            retour={"lumieres": False, "chauffage": True})
+    p = creer(c, {**DEHORS, "climate.poele": FauxEtat("heat", {"temperature": 20}),
+                  "climate.salon": FauxEtat("heat", {"temperature": 21})})
+    chef = FauxChef(pilotes=["climate.poele"])
+    p.hass.data = {"loggia": {"chauffage": chef}}
+    lancer(p._async_depart())
+    assert chef.faits == [(True, False)]
+    assert p.hass.services.appels == [
+        ("climate", "set_temperature", {"entity_id": ["climate.salon"], "temperature": 16.0})]
+    lancer(p._async_retour())
+    assert chef.faits[-1] == (False, False)
+    assert [a[2]["entity_id"] for a in p.hass.services.appels] == [["climate.salon"], ["climate.salon"]], \
+        "le poele n'est jamais commande par la presence"
+
+
+def test_le_depart_sans_chauffage_ne_touche_pas_au_mode_de_la_maison(creer):
+    p = creer(cfg(depart={"lumieres": False, "chauffage": {"actif": False}}), DEHORS)
+    chef = FauxChef(pilotes=["climate.poele"])
+    p.hass.data = {"loggia": {"chauffage": chef}}
+    lancer(p._async_depart())
+    assert chef.faits == []
+
+
+def test_en_simulation_la_presence_le_dit_au_moteur(creer):
+    c = cfg(depart={"lumieres": False, "chauffage": {"actif": True}}, simulation={"actif": True})
+    p = creer(c, DEHORS)
+    chef = FauxChef()
+    p.hass.data = {"loggia": {"chauffage": chef}}
+    lancer(p._async_depart())
+    assert chef.faits == [(True, True)]
+
+
+# ── Le rattrapage au demarrage (audit du 19/10) ─────────────────────────────
+# `dehors` n'est qu'en memoire ; l'Absence du chauffage, elle, est ecrite. Apres
+# un redemarrage pendant l'absence, le premier evenement etait le RETOUR, lu avec
+# `dehors` faux : la maison restait en Absence jusqu'a un geste a la main.
+
+RATTRAPAGE = cfg(depart={"lumieres": False, "chauffage": {"actif": True}},
+                 retour={"lumieres": False, "chauffage": True})
+
+
+def test_maison_vide_au_demarrage_le_depart_se_rearme_et_le_retour_se_voit(creer):
+    p = creer(RATTRAPAGE, DEHORS)
+    chef = FauxChef(par_presence=True)
+    p.hass.data = {"loggia": {"chauffage": chef}}
+    lancer(p._async_rattraper())
+    assert p.dehors is True, "la maison est vide : le depart est refait"
+    p.hass.states.table["person.a"] = FauxEtat("home")
+    lancer(p._async_evaluer())
+    assert chef.faits[-1] == (False, False), "le retour remet le chauffage au planning"
+
+
+def test_rentre_pendant_le_redemarrage_l_absence_de_la_presence_est_levee(creer):
+    p = creer(RATTRAPAGE, {"person.a": FauxEtat("home")})
+    chef = FauxChef(par_presence=True)
+    p.hass.data = {"loggia": {"chauffage": chef}}
+    lancer(p._async_rattraper())
+    assert chef.faits == [(False, False)]
+    assert p.hass.services.appels == [], "ni lumieres ni alarme : on ne sait pas ce que le depart avait fait"
+
+
+@pytest.mark.parametrize("cas", ["absence_a_la_main", "retour_sans_chauffage", "presence_eteinte", "personne_muette"])
+def test_le_rattrapage_ne_touche_pas_a_ce_qui_n_est_pas_a_lui(creer, cas):
+    c = cfg(**{**RATTRAPAGE, "actif": cas != "presence_eteinte",
+               "retour": {"lumieres": False, "chauffage": cas != "retour_sans_chauffage"}})
+    etats = {"person.a": FauxEtat("unavailable" if cas == "personne_muette" else "home")}
+    p = creer(c, etats)
+    chef = FauxChef(par_presence=cas != "absence_a_la_main")
+    p.hass.data = {"loggia": {"chauffage": chef}}
+    lancer(p._async_rattraper())
+    assert chef.faits == [] and p.dehors is False
+
+
+class ChefEnPanne(FauxChef):
+    """Un moteur du chauffage qui leve quand la presence lui donne le fait."""
+
+    async def async_presence(self, vide, simuler=False):
+        self.faits.append((vide, simuler))
+        raise RuntimeError("moteur du chauffage en panne")
+
+
+def test_un_moteur_du_chauffage_en_panne_n_empeche_ni_l_alarme_ni_le_reste(creer, caplog):
+    """Relecture finale du 12/10, point 2 : la presence attendait le moteur sans filet. S'il
+    levait, le depart n'armait pas l'alarme et le retour ne la desarmait pas. L'erreur va au
+    journal de Home Assistant ; l'alarme, et le reste, se font."""
+    alarme = "alarm_control_panel.maison"
+    c = cfg(depart={"lumieres": False, "chauffage": {"actif": True, "consigne": 16},
+                    "alarme": {"actif": True, "entite": alarme, "mode": "away"}},
+            retour={"lumieres": False, "chauffage": True, "desarmer": True})
+    p = creer(c, {**DEHORS, "climate.salon": FauxEtat("heat", {"temperature": 21})})
+    chef = ChefEnPanne()
+    p.hass.data = {"loggia": {"chauffage": chef}}
+    lancer(p._async_depart())
+    assert chef.faits == [(True, False)]
+    assert p.hass.services.appels == [
+        ("climate", "set_temperature", {"entity_id": ["climate.salon"], "temperature": 16.0}),
+        ("alarm_control_panel", "alarm_arm_away", {"entity_id": [alarme]})], "le reste du depart, et l'alarme"
+    lancer(p._async_retour())
+    assert chef.faits[-1] == (False, False)
+    assert p.hass.services.appels[2:] == [
+        ("climate", "set_temperature", {"entity_id": ["climate.salon"], "temperature": 21.0}),
+        ("alarm_control_panel", "alarm_disarm", {"entity_id": [alarme]})], "le reste du retour, et l'alarme"
+    pannes = [r for r in caplog.records if r.exc_info and "en panne" in str(r.exc_info[1])]
+    assert len(pannes) == 2, "l'erreur est ecrite au journal de Home Assistant, au depart comme au retour"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Une seule idee de la lumiere de la maison (audit du 19/10, ADR 0260) : le
+# depart eteint les lumieres de la maison - l'interrupteur declare par SON
+# service -, ni la LED d'une borne ni une lampe cachee ; les veilleuses sont
+# epargnees PARTOUT ; le retour rend chacun par son service.
+# ─────────────────────────────────────────────────────────────────────────────
+
+import sys as _sys  # noqa: E402
+import types as _types  # noqa: E402
+
+EXTERIEUR = "switch.lumiere_exterieur"
+LED = "light.u6_lr_led"
+
+
+def _entree(haid, categorie=None, cache=None):
+    return _types.SimpleNamespace(entity_id=haid, entity_category=categorie, hidden_by=cache, disabled_by=None)
+
+
+def registre(monkeypatch, *entrees):
+    reg = _types.SimpleNamespace(entities={e.entity_id: e for e in entrees})
+    monkeypatch.setattr(_sys.modules["homeassistant.helpers.entity_registry"], "async_get", lambda _h: reg)
+
+
+QUARTIER = {"light.salon": FauxEtat("on"), "light.cuisine": FauxEtat("off"), "light.veilleuse": FauxEtat("on"),
+            "light.chambre_tout": FauxEtat("on", {"entity_id": ["light.chambre", "light.veilleuse"]}),
+            "light.chambre": FauxEtat("on"), LED: FauxEtat("on"), "light.cachee": FauxEtat("on"),
+            EXTERIEUR: FauxEtat("on"), "switch.prise_nas": FauxEtat("on")}
+
+
+def test_le_depart_eteint_les_lumieres_de_la_maison_et_epargne_les_veilleuses(creer, monkeypatch):
+    registre(monkeypatch, _entree(LED, categorie="config"), _entree("light.cachee", cache="user"),
+             _entree("light.salon"), _entree(EXTERIEUR), _entree("switch.prise_nas"))
+    c = cfg(retour={"lumieres": True, "seulement_la_nuit": False, "chauffage": False})
+    p = creer(c, {**DEHORS, **QUARTIER},
+              partage={"loggia_switchlights": [EXTERIEUR],
+                       "loggia_nuit": {"veilleuse": {"actif": False, "lampes": ["light.veilleuse"]}}})
+    lancer(p._async_depart())
+    assert p.hass.services.appels == [
+        ("light", "turn_off", {"entity_id": ["light.chambre", "light.salon"]}),
+        ("homeassistant", "turn_off", {"entity_id": [EXTERIEUR]}),
+    ]
+    assert p.eteintes == {"light.chambre": "on", "light.salon": "on", EXTERIEUR: "on"}
+    lignes = lancer(p.regles.journal(module="presence"))
+    assert [(l["quoi"], l["n"]) for l in lignes] == [("eteindre", 1), ("eteindre", 2)], "les vraies lampes"
+    # Le socle suit les lumieres de la maison, l'interrupteur compris - ni la LED, ni la cachee, ni le groupe.
+    p._declarer()
+    assert p.regles._pilotees["presence"] == {"light.salon", "light.cuisine", "light.veilleuse", "light.chambre",
+                                              EXTERIEUR}
+    # Le retour rend chacun par son service - ce qui est encore eteint et tenu.
+    for h in ("light.chambre", "light.salon", EXTERIEUR):
+        p.hass.states.table[h] = FauxEtat("off")
+    lancer(p._async_retour())
+    assert p.hass.services.appels[2:] == [
+        ("light", "turn_on", {"entity_id": ["light.chambre", "light.salon"]}),
+        ("homeassistant", "turn_on", {"entity_id": [EXTERIEUR]}),
+    ]
+    assert p.eteintes == {} and p.regles.tenues("presence") == {}
+
+
+def test_sans_registre_le_depart_garde_tout_sauf_les_veilleuses(creer):
+    """Le registre illisible : on ne filtre rien - la LED y passe, plutot que
+    de ne rien eteindre. Les veilleuses restent epargnees ; une veilleuse
+    absente ou une liste vide ne genent pas."""
+    p = creer(cfg(), {**DEHORS, **QUARTIER}, partage={"loggia_nuit": {"veilleuse": {"lampes": ["light.veilleuse"]}}})
+    lancer(p._async_depart())
+    assert p.hass.services.appels == [("light", "turn_off", {"entity_id": ["light.cachee", "light.chambre",
+                                                                           "light.salon", LED]})]
+    p = creer(cfg(), {**DEHORS, "light.salon": FauxEtat("on")},
+              partage={"loggia_nuit": {"veilleuse": {"lampes": ["light.partie"]}}})
+    lancer(p._async_depart())
+    assert p.hass.services.appels == [("light", "turn_off", {"entity_id": ["light.salon"]})]
+    p = creer(cfg(), {**DEHORS, "light.salon": FauxEtat("on")}, partage={"loggia_nuit": {"veilleuse": {"lampes": []}}})
+    lancer(p._async_depart())
+    assert p.hass.services.appels == [("light", "turn_off", {"entity_id": ["light.salon"]})]

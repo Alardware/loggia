@@ -3,7 +3,7 @@
 //
 // Les cas de départ viennent d'une installation réelle (87 automatisations,
 // 25 familles avant correction) : « Lumière » et « Lumières » se retrouvaient
-// dans deux groupes distincts, et « Force veilleuse Liam » dans un groupe
+// dans deux groupes distincts, et « Force veilleuse Lino » dans un groupe
 // « Force » qui ne voulait rien dire.
 // ─────────────────────────────────────────────────────────────────────────────
 import test from 'node:test';
@@ -17,7 +17,7 @@ test('le pluriel ne fait plus une famille a part', () => {
 });
 
 test('un verbe en tete ne devient pas une famille', () => {
-  assert.equal(autoFamille('Force veilleuse Liam'), 'Lumières');
+  assert.equal(autoFamille('Force veilleuse Lino'), 'Lumières');
   assert.equal(autoFamille('Allume lampe entrée'), 'Lumières');
   assert.equal(autoFamille('Coupe le chauffage la nuit'), 'Climat');
 });

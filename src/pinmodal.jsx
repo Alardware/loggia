@@ -13,7 +13,10 @@ import { inerterAutour } from './ui.jsx';
 // Le code n'est PLUS dans le navigateur (18/09) : il est vérifié par le
 // composant (`loggia/pin/verifier`), qui compte les essais ratés et bloque.
 // Un seul code pour la maison, le même sur chaque appareil et chaque accès.
-export function PinModal({ hass, onClose, onSuccess }) {
+// `sousTitre` (chantier Mode enfant, E19) : POURQUOI le code est demandé —
+// « Requis pour ce profil » par défaut, « Requis pour les réglages du mode
+// enfant » quand la fiche d'un lecteur ouvre le pavé.
+export function PinModal({ hass, onClose, onSuccess, sousTitre = null }) {
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
   const [attente, setAttente] = useState(false);
@@ -100,8 +103,8 @@ export function PinModal({ hass, onClose, onSuccess }) {
           * message glissé au-dessus des points ferait descendre le pavé, puis
           * remonter à la première touche, au milieu de la saisie. Tu le temps
           * de l'erreur : la région d'alerte le dit déjà, une fois suffit. */}
-        <div aria-hidden={faux || undefined} style={{ textAlign: 'center', fontSize: 12, color: faux ? 'var(--o-bad)' : 'var(--o-text2)', fontWeight: faux ? 700 : undefined, marginTop: 4 }}>{faux ? tr('Code incorrect') : tr('Requis pour ce profil')}</div>
-        {bloque > 0 && <div role="alert" style={{ textAlign: 'center', fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)', marginTop: 10 }}>{tr('Trop d’essais. Réessaie dans {n} s.', { n: bloque })}</div>}
+        <div aria-hidden={faux || undefined} style={{ textAlign: 'center', fontSize: 12, color: faux ? 'var(--o-bad)' : 'var(--o-text2)', fontWeight: faux ? 700 : undefined, marginTop: 4 }}>{faux ? tr('Code incorrect') : (sousTitre || tr('Requis pour ce profil'))}</div>
+        {bloque > 0 && <div role="alert" style={{ textAlign: 'center', fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)', marginTop: 10 }}>{tr('Trop d’essais. Réessayez dans {n} s.', { n: bloque })}</div>}
         {horsLigne && <div role="alert" style={{ textAlign: 'center', fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)', marginTop: 10 }}>{tr('Home Assistant n’est pas joignable : le code ne peut pas être vérifié.')}</div>}
         {/* « Code incorrect », pour le lecteur d'écran (audit du 03/10) : un
           * code faux et un code en cours de saisie s'y ressemblaient exactement.

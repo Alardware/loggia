@@ -170,7 +170,6 @@ export function versEnregistrement(s) {
       if (b.portee === 'piece' && a.piece) b.piece = a.piece;
       if (a.valeur != null && (a.famille === 'lumieres' || a.famille === 'chauffage')) b.valeur = a.valeur;
       if (a.si === 'nuit' || a.si === 'jour') b.si = a.si;
-      if (a.sauf_veilleuses) b.sauf_veilleuses = true;
       return b;
     }),
   };

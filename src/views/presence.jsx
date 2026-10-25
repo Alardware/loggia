@@ -8,15 +8,14 @@
  * la désarmer parce qu'un téléphone approche en est un, et cette case ne doit
  * pas se cocher distraitement au milieu des autres.
  */
-import {
-  useMemo
-} from 'react';
-import { cvName, RegleEntete, usePli , useEtatServeur, ListeChoix } from '../ui.jsx';
+import { useMemo, useState, useEffect } from 'react';
+import { cvName, RegleEntete, usePli, useEtatServeur, ListeChoix, Bascule } from '../ui.jsx';
 import { ZONE_REGLAGES, CAPITALES, TITRE_PANNEAU } from './parcommun.jsx';
 import { tr, trN, locale, comparerTextes } from '../i18n.js';
 import { raisonEchec } from '../refus.js';
 import { puce } from '../styles.js';
 import { uniteTemp, deCelsius } from '../unites.js';
+import { CLASSES_MOUVEMENT, CLASSES_OUVRANT } from '../attention.js';
 
 /* Au niveau du module, et non dans le composant.
  *
@@ -26,11 +25,30 @@ import { uniteTemp, deCelsius } from '../unites.js';
  * travail etait refait pour rien a chaque frappe, et toute transition CSS en
  * cours repartait de zero. Voir `tests/composants.test.mjs`. */
 
-const Bascule = ({ on, cb, nom }) => (
-  <button aria-label={nom} onClick={cb} style={{ width: 46, height: 24, borderRadius: 999, border: 'none', cursor: 'pointer', flexShrink: 0, padding: 2, background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start' }}>
-    <span style={{ width: 20, height: 20, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)' }} />
-  </button>
-);
+/* La bascule est celle de toutes les règles (`Bascule`, ui.jsx ; audit du 19/10, lot 4) : `role="switch"`, son état annoncé,
+ * `type="button"`. La copie d'ici n'avait ni rôle ni état, et faisait 24 px de haut. */
+
+/** Un champ NOMBRE qui part à la sortie, ou sur Entrée (le motif de `ChampHeure aLaSortie`, fichecommune.jsx ; audit du 19/10, M20).
+ *  Il partait à chaque frappe : en tapant « 16 », la consigne d'absence passait d'abord à 1 °C ; vidé, le délai valait 0 min.
+ *  Borné (`min`, `max`), arrondi au `pas` ; la virgule se lit ; vide ou illisible, il redit la valeur d'avant — jamais 0. */
+export function ChampNombre({ valeur, onValide, nom, min, max, pas = 1, style = null }) {
+  const [v, setV] = useState(String(valeur));
+  useEffect(() => { setV(String(valeur)); }, [valeur]);
+  const sortir = (brut) => {
+    // Rien de changé, rien ne part : en °F, passer dans le champ écrivait 41 (la borne basse) — relecture du lot 4.
+    if (String(brut == null ? '' : brut).trim() === String(valeur)) { setV(String(valeur)); return; }
+    const t = String(brut == null ? '' : brut).trim().replace(',', '.');
+    const n = t === '' ? NaN : Number(t);
+    if (!Number.isFinite(n)) { setV(String(valeur)); return; }
+    const borne = Math.round(Math.min(max, Math.max(min, n)) / pas) * pas;
+    const juste = Math.round(borne * 100) / 100;
+    setV(String(juste));
+    if (juste !== valeur) onValide(juste);
+  };
+  return <input aria-label={nom} type="number" inputMode="decimal" value={v} min={min} max={max} step={pas} style={style || undefined}
+    onChange={(e) => setV(e.target.value)} onBlur={(e) => sortir(e.target.value)}
+    onKeyDown={(e) => { if (e.key === 'Enter') sortir(e.currentTarget.value); }} />;
+}
 
 const Rangee = ({ nom, desc, on, cb }) => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
@@ -108,7 +126,8 @@ export function PresenceReglages({ hass, cardSt }) {
    * nom — le miroir de `presence.INDICES` côté serveur. */
   const capteurs = useMemo(() => {
     if (!hass || !hass.states) return [];
-    const classes = ['motion', 'occupancy', 'presence', 'door', 'window', 'opening', 'garage_door'];
+    // LA table des classes (attention.js, audit du 19/10) : la présence et les ouvrants.
+    const classes = [...CLASSES_MOUVEMENT, ...CLASSES_OUVRANT];
     return Object.keys(hass.states).filter(id => id.indexOf('binary_sensor.') === 0
       && classes.indexOf(String((hass.states[id].attributes || {}).device_class || '').toLowerCase()) >= 0);
   }, [hass]);
@@ -165,9 +184,8 @@ export function PresenceReglages({ hass, cardSt }) {
           <div id="presence-pres-1" style={ZONE_REGLAGES}>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 88 }}>{tr('Attendre')}</span>
-              <input aria-label={tr('Attendre avant la mise en veille, en minutes')} type="number" value={cfg.delai_depart != null ? cfg.delai_depart : 5} min={0} max={60}
-                onChange={e => enregistrer({ delai_depart: Math.max(0, Math.min(60, Number(e.target.value) || 0)) })}
-                style={{ ...champ, width: 74 }} />
+              <ChampNombre nom={tr('Attendre avant la mise en veille, en minutes')} valeur={cfg.delai_depart != null ? cfg.delai_depart : 5} min={0} max={60}
+                onValide={n => enregistrer({ delai_depart: n })} style={{ ...champ, width: 74 }} />
               <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>
                 {tr('min — un téléphone qui accroche une autre antenne ne doit pas vider la maison')}
               </span>
@@ -183,7 +201,7 @@ export function PresenceReglages({ hass, cardSt }) {
                 {gens.map(g => {
                   const on = suivies.indexOf(g.id) >= 0;
                   return (
-                    <button key={g.id} onClick={() => enregistrer({ personnes: on ? suivies.filter(x => x !== g.id) : [...suivies, g.id] })}
+                    <button key={g.id} type="button" aria-pressed={on} onClick={() => enregistrer({ personnes: on ? suivies.filter(x => x !== g.id) : [...suivies, g.id] })}
                       style={puce(on)}>{g.nom}</button>
                   );
                 })}
@@ -204,9 +222,8 @@ export function PresenceReglages({ hass, cardSt }) {
             {chauf.actif && (
               <div style={{ ...ligne, marginTop: 4, paddingBottom: 8 }}>
                 <span style={{ ...label, minWidth: 88 }}>{tr('Absence')}</span>
-                <input aria-label={tr('Température en absence, en °{u}', { u: uT })} type="number" value={chauf.consigne != null ? chauf.consigne : 17} min={bMin} max={bMax} step={0.5}
-                  onChange={e => enregistrer({ depart: { chauffage: { consigne: Number(e.target.value) || 17 } } })}
-                  style={{ ...champ, width: 74 }} />
+                <ChampNombre nom={tr('Température en absence, en °{u}', { u: uT })} valeur={chauf.consigne != null ? chauf.consigne : 17} min={bMin} max={bMax} pas={0.5}
+                  onValide={n => enregistrer({ depart: { chauffage: { consigne: n } } })} style={{ ...champ, width: 74 }} />
                 <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>°{uT}</span>
               </div>
             )}
@@ -218,7 +235,7 @@ export function PresenceReglages({ hass, cardSt }) {
                   options={alarmes.map(a => ({ id: a.id, label: a.nom }))} style={{ ...champ, minWidth: 200 }} />
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {[['away', tr('Absent')], ['home', tr('Présent')], ['night', tr('Nuit')]].map(([id, nom]) => (
-                    <button key={id} onClick={() => enregistrer({ depart: { alarme: { mode: id } } })}
+                    <button key={id} type="button" aria-pressed={(alarme.mode || 'away') === id} onClick={() => enregistrer({ depart: { alarme: { mode: id } } })}
                       style={puce((alarme.mode || 'away') === id)}>{nom}</button>
                   ))}
                 </div>
@@ -314,7 +331,7 @@ export function PresenceReglages({ hass, cardSt }) {
         </div>
         {!invite.entite && (
           <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 8 }}>
-            {tr('Aucun interrupteur désigné : crée une entrée « Interrupteur » (input_boolean) nommée Invité dans Home Assistant, puis désigne-la ici.')}
+            {tr('Aucun interrupteur désigné : créez une entrée « Interrupteur » (input_boolean) nommée Invité dans Home Assistant, puis désignez-la ici.')}
           </div>
         )}
         {invite.entite && (

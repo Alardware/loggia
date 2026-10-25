@@ -1,5 +1,7 @@
 # ADR 0007 — Un seul mécanisme « ordre non abouti »
 
+*Nuancée par l'ADR 0192 (12/10) : un volet qui a répondu à l'ordre sans être arrivé est attendu, jusqu'à deux tours de 120 s, avant qu'on le redemande.*
+
 **Statut** : décidé le 2026-09-12 ; appliqué le 2026-09-22 (v3.67.0).
 
 ## Contexte

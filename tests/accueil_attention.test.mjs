@@ -7,9 +7,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
 const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
 const en = readFileSync(join(RACINE, 'src', 'langues', 'en.js'), 'utf8');
 const demo = readFileSync(join(RACINE, 'src', 'demo.js'), 'utf8');
@@ -29,9 +30,14 @@ test('« A surveiller » est une section du rail, la premiere, et n’existe que
   assert.ok(c.includes("{resumeAttention(points)}") && c.includes("<Fi i={niveau === 'danger' ? 'triangle-warning' : 'exclamation'}"), 'le resume et l’icone du pire niveau');
 });
 
-test('la banniere porte la couleur du pire point et dit « Tout va bien » sinon', () => {
+test('la banniere porte la couleur du pire point, et se tait quand il n’y en a pas', () => {
   assert.ok(src.includes("const couleurAcc = points.length ? couleurNiveau(niveauMax(points)).col : 'var(--o-ok)';"), 'la couleur du point');
-  assert.ok(src.includes("{[points.length ? resumeAttention(points) : tr('Tout va bien'), ...faits.txt].join(' · ')}"), 'le resume devant les faits');
+  // Ticket #34, sa réponse « B » (18/10) : jamais de « Tout va bien » sous le
+  // prénom, et rien quand la section « À surveiller » est masquée.
+  assert.ok(src.includes("const attentionLigne = points.length > 0 && !sectionMasquee('attention');"), 'la ligne ne suit plus la section');
+  assert.ok(src.includes("{[...(attentionLigne ? [resumeAttention(points)] : []), ...faits.txt].join(' · ')}"), 'le resume devant les faits');
+  assert.ok(!src.includes("resumeAttention(points) : tr('Tout va bien')"), '« Tout va bien » revient sous le prénom');
+  assert.ok(src.includes("role=\"status\">{attentionLigne ?"), 'le lecteur d’écran annonce une section masquée');
   assert.ok(src.includes("background: couleurAcc, boxShadow: '0 0 8px ' + couleurAcc, animation: animationNiveau(niveauMax(points))"), 'la pastille suit — et ne bat qu’en danger (v3.49.0)');
 });
 
@@ -39,7 +45,8 @@ test('les points viennent des etats, des cameras, du CO2 des pieces, du diagnost
   const d = bloc('function Dashboard(', NL + '}');
   assert.ok(d.includes("const veillesEtat = useEtatServeur(dashHass, 'loggia/veilles/etat', 30000, '').etat;") && d.includes("const fenetresEtat = useEtatServeur(dashHass, 'loggia/fenetres/etat', 30000, '').etat;"), 'les veilles et les fenetres du serveur, toutes les 30 s');
   assert.ok(d.includes('const points = pointsAttention({'), 'comptes et points');
-  assert.ok(d.includes("pieces: (a && a.rooms) ? a.rooms.map(r => ({ nom: r.name, co2: r.co2, haid: r.co2Id || null })) : [],") && d.includes('sante, veilles: veillesEtat, fenetres: fenetresEtat,') && d.includes('plantes: plantsCfg().map(p => p.base).filter(Boolean),'), 'le CO2 des pieces (et son capteur, pour le dedoublonnage), le diagnostic, les plantes epargnees');
+  // ASSERTION MODIFIÉE (audit du 19/10, H7) : chaque pièce apporte aussi son seuil CO₂.
+  assert.ok(d.includes("pieces: (a && a.rooms) ? a.rooms.map(r => ({ nom: r.name, co2: r.co2, haid: r.co2Id || null, seuil: r.co2Seuil })) : [],") && d.includes('sante, veilles: veillesEtat, fenetres: fenetresEtat,') && d.includes('plantes: plantsCfg().map(p => p.base).filter(Boolean),'), 'le CO2 des pieces (et son capteur, pour le dedoublonnage), le diagnostic, les plantes epargnees');
   // Le diagnostic est recalcule en direct : celui de la decouverte est un
   // instantane du demarrage, une passerelle revenue y resterait hors service.
   assert.ok(src.includes("() => (view === 'accueil' && discovery.devices && discovery.index) ? healthReport(discovery.devices, { states: (hass && hass.states) || {}, meta: discovery.index.entityMeta }) : null,"), 'health.js en direct, sur l’Accueil seulement');
@@ -67,11 +74,19 @@ test('l’accueil surveille ce que la carte Securite et « A surveiller » lisen
   const k = bloc('const bannerKeys = () => {', NL + '};');
   assert.ok(k.includes("dom === 'camera' || dom === 'alarm_control_panel'"), 'cameras et panneaux');
   assert.ok(k.includes('OUVRANT_DCS.indexOf(dc) >= 0 || CLASSES_MOUVEMENT.indexOf(dc) >= 0 || CLASSES_SURETE.indexOf(dc) >= 0'), 'ouvrants, mouvement, surete — par device_class');
-  assert.ok(src.includes("import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, tuileAlarme, estSirene, ICONES_ARMEMENT, pointsAttention, niveauMax, resumeAttention, couleurNiveau, niveauPile, animationNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';"), 'une seule source pour les classes');
+  // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 11 ; C32) : la couleur d'une pile et le seuil de la veille viennent de la même source.
+  // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 12 ; ADR 0022) : et la règle du `moisture` calculé.
+  // ASSERTION MODIFIÉE (relecture de la passe bis du 17/10) : la racine part du seuil en vigueur (`seuilsPile`) avant le premier relevé.
+  // ASSERTION MODIFIÉE (audit des capteurs du 19/10, lot 4) : et les mots d'un danger — `motsSurete`, la table que deriveNotifs ne recopie plus.
+  // ASSERTION MODIFIÉE (ADR 0274) : la vue Sécurité, sortie du boot, importe elle-même ce qu'elle seule utilise.
+  assert.ok(src.includes("import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, estSirene, pointsAttention } from '../attention.js';") && src.includes("import { tuileAlarme, estSirene, ICONES_ARMEMENT, pointsAttention, niveauMax, resumeAttention, couleurNiveau, niveauPile, couleurPile, reglerSeuilPile, seuilsPile, fuiteCalculee, animationNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE, CLASSES_OUVRANT, motsSurete } from './attention.js';"), 'une seule source pour les classes');
+  // ASSERTION AJOUTÉE (audit du 19/10, point 14) : les ouvrants aussi — `OUVRANT_DCS` n'est plus une copie.
+  assert.ok(src.includes('const OUVRANT_DCS = CLASSES_OUVRANT;'), 'les ouvrants viennent de la table');
 });
 
 test('la demo a de quoi montrer la carte, et les mots ont leur traduction', () => {
-  assert.ok(demo.includes("['chambre', 'Chambre', 19.6, 49, 1480],"), 'une chambre au palier « Élevé » en CO2 (1 400 ppm, captures du 19/09)');
+  // ASSERTION MODIFIÉE (chantier Capteurs, tâche 3) : la chambre de sa maquette « Cartes capteurs », 1 659 ppm — au palier « Confiné », toujours au-dessus des 1 400 ppm d'« À surveiller ».
+  assert.ok(demo.includes("['chambre', 'Chambre', 19.6, 49, 1659],"), 'une chambre au-dessus de 1 400 ppm en CO2 (captures du 19/09)');
   /* Le nom est celui d'un LIEU : la demo le traduit (23/09), la table est
    * donc devenue une fonction. Ce qui compte ici reste la camera eteinte. */
   assert.ok(demo.includes("{ name: lieu('Jardin'), online: false }"), 'une camera hors ligne');

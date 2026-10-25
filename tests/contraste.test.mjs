@@ -87,7 +87,8 @@ test('sur une carte teintée, les gris ont une variante à 4,5:1 — et Loggia g
    * change, la règle ne prend plus. Depuis le thème v2 ce dégradé est fabriqué
    * en UN seul endroit, et on compte les cartes qui y passent — une carte qui
    * se repeindrait à la main sortirait du compte, donc de la garde. */
-  assert.ok(src.includes('function lavisCarte(teinte, base = .2) {'), 'le lavis commun a disparu');
+  // ASSERTION MODIFIÉE (chantier Lumières, tâche 5) : le bas du lavis devient un réglage (`bas`, le quart du haut sans lui) ; la carte d'une lumière le veut à 0,03 (L6).
+  assert.ok(src.includes('function lavisCarte(teinte, base = .2, bas = base / 4) {'), 'le lavis commun a disparu');
   assert.ok(src.includes('rgba(${teinte},${a})') || src.includes('`rgba(${teinte},${a})`'), 'lavisCarte ne compose plus la teinte');
   assert.ok(src.includes("} 72%), ${SURF_CARTE}`"), 'le dégradé ne finit plus par « 72%), » : le sélecteur ne prendrait plus');
   assert.ok(src.split('lavisCarte(').length - 1 >= 12, 'des cartes ont cessé de passer par le lavis commun');
@@ -180,7 +181,15 @@ test('la garde est branchée, purgée, et les thèmes sans ombre gardent un file
   assert.ok(themeSeul.includes("import { garde, JETONS_GARDE } from './contraste.js';"),
     'le thème n’importe plus la garde de contraste ni les jetons qu’elle pose');
   // La couleur vraie d'une ampoule habille sa carte ; l'icône prend la lisible.
-  assert.ok(src.includes('const accentLu = (rgb && color) ? lisibleSurLavis(color, estClair(), .7) : accent;'), 'la carte lumière d’une pièce');
+  // ASSERTION MODIFIÉE (chantier Lumières, tâche 5) : la teinte de la VRAIE lumière (L6), un blanc comme une couleur, rendue lisible sur son lavis ; l'or reste un jeton, déjà gardé.
+  /* ASSERTION MODIFIÉE (chantier Lumières, 9 bis A, point 1) : l'encre se tire de `encreLumiere` (lumieres.js) et non plus de `lisibleSurLavis(couleurs.col, …, .22)` :
+   * (1) la garde se calcule contre le fond VRAI de la glyphe — la plaque (0,22) posée sur le lavis de la carte, au plus 0,22 en haut, fois le réglage « Teinte »
+   * (`lav`) — et non à 0,22 seul, qui laissait un rouge ou un bleu saturé à 3,4 – 3,8:1 ; (2) un blanc froid se tire du blanc de 4 000 K, car le sien, rosé à
+   * 100 % de saturation, virait au rouge ou au magenta une fois assombri en thème clair ; (3) en thème clair, la barre se peint de l'encre gardée. */
+  assert.ok(src.includes('const { encre, degrade } = encreLumiere(on ? a : null, on ? dernier : null, { clair: estClair(), lavis: lav(lavisLumiere(100).haut) });'), 'la carte lumière d’une pièce');
+  const lumieres = readFileSync(join(RACINE, 'src', 'lumieres.js'), 'utf8');
+  assert.ok(lumieres.includes("const encre = lisibleSurLavis('rgb(' + teinteLumiere(a, dernier, ENCRE_BLANC_MAX).join(',') + ')', clair, 1 - (1 - lavis) * (1 - PLAQUE), c.col);"), 'l’encre d’une lumière : le blanc plafonné, contre le fond vrai');
+  assert.ok(lumieres.includes('const ENCRE_BLANC_MAX = 4000;') && lumieres.includes('const PLAQUE = 0.22;'), 'le plafond des blancs et la plaque');
   assert.ok(src.includes("const teinteLu = rgbHex ? lisibleSurLavis(rgbHex, estClair(), .28) : teinte;"), 'la carte compacte');
   assert.ok(src.includes('const corrige = garde(t => csFinal.getPropertyValue(t).trim());') && src.includes('Object.keys(corrige).forEach(k => root.style.setProperty(k, corrige[k]));'), 'applyLook pose ce que la garde rend');
   assert.ok(src.includes('JETONS_GARDE.forEach(k => root.style.removeProperty(k));'), 'applyTheme les purge : la correction d’un thème ne suit pas au suivant');

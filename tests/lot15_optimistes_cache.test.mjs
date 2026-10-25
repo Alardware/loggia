@@ -45,9 +45,11 @@ const parcourir = (rep, out = []) => {
 /* `ScenesContent` est intouchable (règle maison : la bibliothèque Hue reste
  * telle quelle). Ses deux miroirs — la pièce et la scène choisies — n'ont pas
  * d'autre lecture que l'`input_select` qu'ils recopient ; ils restent, et ce
- * filet ne les lit pas. Tout le reste de `src/` passe. */
+ * filet ne les lit pas. Tout le reste de `src/` passe. Depuis le 11/10, la
+ * section vit dans scenes.jsx, chargé à la demande (tâche 6 bis du chantier
+ * Chauffage) : c'est là, et seulement dans son corps, que le filet passe. */
 const sansScenes = (chemin, t) => {
-  if (chemin !== 'src/App.jsx') return t;
+  if (chemin !== 'src/scenes.jsx') return t;
   const i = t.indexOf('function ScenesContent(');
   return i < 0 ? t : t.slice(0, i) + t.slice(t.indexOf('\n}\n', i));
 };
@@ -56,7 +58,7 @@ const SOURCES = parcourir(join(RACINE, 'src'))
   .filter(([c]) => !c.startsWith('src/langues/'))
   .map(([c, t]) => [c, sansScenes(c, t)]);
 const source = (c) => (SOURCES.find(([x]) => x === c) || [])[1] || '';
-const APP = source('src/App.jsx');
+const APP = source('src/App.jsx') + source('src/views/voletsplan.jsx'); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
 const PAR = source('src/views/parametres.jsx');
 const DIST = source('src/fichedistributeur.jsx');
 const compter = (s, motif) => s.split(motif).length - 1;

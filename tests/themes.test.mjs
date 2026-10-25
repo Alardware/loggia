@@ -28,13 +28,19 @@ const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const app = ['App.jsx', 'theme.js'].map(f => lire('src', f)).join(String.fromCharCode(10));
 const par = lire('src', 'views', 'parametres.jsx');
 
-/** Le bloc source de `LOGGIA_PRESETS`, des accolades à la fonction suivante. */
+/* Saphir, Acier et Givre vivent dans `themes-bleus.js`, chargé à la demande
+ * (25/10 : le boot n'avait plus la place). Ils passent par les mêmes
+ * contrôles que les autres : leur fichier entier s'ajoute à la table. */
+const bleus = lire('src', 'themes-bleus.js');
+
+/** Le bloc source de `LOGGIA_PRESETS`, des accolades à la fonction suivante,
+ *  suivi du fichier des thèmes bleus. */
 function blocPresets() {
   const i = app.indexOf('const LOGGIA_PRESETS = {');
   assert.notEqual(i, -1, 'la table des thèmes a disparu');
   const j = app.indexOf('\nfunction lum(', i);
   assert.ok(j > i, 'la fin de la table des thèmes est introuvable');
-  return app.slice(i, j);
+  return app.slice(i, j) + '\n' + bleus;
 }
 
 /** Les identifiants déclarés dans la table, dans l'ordre du fichier. */
@@ -242,7 +248,7 @@ test('le theme vit dans son fichier, et n’est plus un morceau du monolithe', (
   /* Trois dépendances, pas une de plus — et `LOOK_DEF` reste dans `ui.jsx`,
    * d'où `views/parametres.jsx` le lit aussi. */
   for (const dep of ["import { garde, JETONS_GARDE } from './contraste.js';",
-    "import { cfgVal } from './state.js';", "import { LOOK_DEF } from './ui.jsx';"]) {
+    "import { cfgVal, apparence } from './state.js';", "import { LOOK_DEF } from './ui.jsx';"]) {
     assert.ok(theme.includes(dep), 'src/theme.js a perdu : ' + dep);
   }
 
@@ -253,4 +259,31 @@ test('le theme vit dans son fichier, et n’est plus un morceau du monolithe', (
     'App.jsx n’importe plus du thème exactement ce qu’il lit');
   assert.ok(!/^export function lum\(/m.test(theme), '`lum` est exporté sans client : il ne sert qu’au thème');
   assert.ok(!/^export function cssToRgb\(/m.test(theme), '`cssToRgb` est exporté sans client');
+});
+
+test('les thèmes bleus arrivent à la demande, et le thème se rejoue à leur arrivée', () => {
+  // Saphir, Acier, Givre sont sortis du boot, qui n'avait plus que 2,5 Ko
+  // sous sa borne. Un import statique les y ramènerait sans bruit.
+  const theme = lire('src', 'theme.js');
+  assert.ok(!/^import [^;]*themes-bleus/m.test(theme),
+    'themes-bleus.js est importé au démarrage : il retombe dans le boot');
+  assert.ok(theme.includes("import('./themes-bleus.js')"),
+    'plus rien ne charge themes-bleus.js : choisir Saphir, Acier ou Givre ne ferait rien');
+
+  // La liste qui déclenche le chargement doit nommer EXACTEMENT les thèmes du
+  // fichier : un oublié resterait au défaut, sans erreur.
+  const liste = theme.match(/const BLEUS = \[([^\]]*)\]/);
+  assert.ok(liste, 'la liste des thèmes chargés à la demande a disparu');
+  const declares = [...liste[1].matchAll(/'([a-z]+)'/g)].map(m => m[1]).sort();
+  const fichier = [...bleus.matchAll(/\n {2}([a-z]+): \{/g)].map(m => m[1]).sort();
+  assert.deepEqual(declares, fichier,
+    'BLEUS ne nomme pas les mêmes thèmes que themes-bleus.js : celui qui manque ne se chargera jamais');
+
+  // On rejoue avec les DERNIERS réglages : le mode ou le thème ont pu changer
+  // pendant le chargement. Retenus en tête d'applyTheme, avant tout retour.
+  const i = theme.indexOf('export function applyTheme(opts, hass) {');
+  assert.match(theme.slice(i, i + 120), /\{\s*dernierTheme = \[opts, hass\];/,
+    'applyTheme ne retient plus ses derniers réglages en premier : le thème chargé se rejouerait sur un état périmé');
+  assert.match(theme, /applyTheme\(\.\.\.dernierTheme\)/,
+    'le thème n’est plus rejoué à l’arrivée des thèmes bleus : il reste au défaut jusqu’au prochain changement');
 });

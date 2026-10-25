@@ -1,0 +1,460 @@
+{
+ "_lisez_moi": "Parité JS / Python du planning des volets (chantier Volets, § 6.2). Lue par tests/voletsplanning.test.mjs (src/voletsplanning.js) ET par tests/python/test_volets_calcul.py (custom_components/loggia/volets_calcul.py) ; ses plans servent aussi à tests/python/test_volets.py, qui les rejoue sur le vrai moteur. Si l'un bouge, l'autre rougit.",
+ "volets": ["cover.chambre", "cover.cuisine", "cover.groupe", "cover.salon"],
+ "soleils": {
+  "octobre": [
+   {"date": "2026-10-19", "lever": "2026-10-19T08:14:10+02:00", "coucher": "2026-10-19T18:58:40+02:00"},
+   {"date": "2026-10-20", "lever": "2026-10-20T08:15:35+02:00", "coucher": "2026-10-20T18:56:50+02:00"},
+   {"date": "2026-10-21", "lever": "2026-10-21T08:17:00+02:00", "coucher": "2026-10-21T18:55:00+02:00"},
+   {"date": "2026-10-22", "lever": "2026-10-22T08:18:25+02:00", "coucher": "2026-10-22T18:53:10+02:00"},
+   {"date": "2026-10-23", "lever": "2026-10-23T08:19:50+02:00", "coucher": "2026-10-23T18:51:20+02:00"},
+   {"date": "2026-10-24", "lever": "2026-10-24T08:21:15+02:00", "coucher": "2026-10-24T18:49:30+02:00"},
+   {"date": "2026-10-25", "lever": "2026-10-25T07:22:40+01:00", "coucher": "2026-10-25T17:47:40+01:00"},
+   {"date": "2026-10-26", "lever": "2026-10-26T07:24:05+01:00", "coucher": "2026-10-26T17:45:50+01:00"},
+   {"date": "2026-10-27", "lever": "2026-10-27T07:25:30+01:00", "coucher": "2026-10-27T17:44:00+01:00"},
+   {"date": "2026-10-28", "lever": "2026-10-28T07:26:55+01:00", "coucher": "2026-10-28T17:42:10+01:00"},
+   {"date": "2026-10-29", "lever": "2026-10-29T07:28:20+01:00", "coucher": "2026-10-29T17:40:20+01:00"}
+  ],
+  "juin": [
+   {"date": "2026-06-14", "lever": "2026-06-14T05:45:55+02:00", "coucher": "2026-06-14T21:57:22+02:00"},
+   {"date": "2026-06-15", "lever": "2026-06-15T05:46:02+02:00", "coucher": "2026-06-15T21:57:31+02:00"},
+   {"date": "2026-06-16", "lever": "2026-06-16T05:46:09+02:00", "coucher": "2026-06-16T21:57:40+02:00"},
+   {"date": "2026-06-17", "lever": "2026-06-17T05:46:16+02:00", "coucher": "2026-06-17T21:57:49+02:00"},
+   {"date": "2026-06-18", "lever": "2026-06-18T05:46:23+02:00", "coucher": "2026-06-18T21:57:58+02:00"},
+   {"date": "2026-06-19", "lever": "2026-06-19T05:46:30+02:00", "coucher": "2026-06-19T21:58:07+02:00"},
+   {"date": "2026-06-20", "lever": "2026-06-20T05:46:37+02:00", "coucher": "2026-06-20T21:58:16+02:00"},
+   {"date": "2026-06-21", "lever": "2026-06-21T05:46:44+02:00", "coucher": "2026-06-21T21:58:25+02:00"},
+   {"date": "2026-06-22", "lever": "2026-06-22T05:46:51+02:00", "coucher": "2026-06-22T21:58:34+02:00"}
+  ],
+  "polaire": [
+   {"date": "2026-12-21", "lever": null, "coucher": null},
+   {"date": "2026-12-22", "lever": "2026-12-22T11:58:40+01:00", "coucher": "2026-12-22T12:31:05+01:00"},
+   {"date": "2026-12-23", "lever": null, "coucher": "2026-12-23T12:40:00+01:00"}
+  ],
+  "abime": [
+   {"date": "2026-10-19", "lever": "07:47", "coucher": "2026-10-19T18:58:40Z"},
+   {"date": "19/10/2026", "lever": "2026-10-20T08:15:35+02:00", "coucher": "2026-10-20T18:56:50+02:00"},
+   "2026-10-21",
+   {"date": "2026-10-22", "lever": "2026-10-22T08:18:25+02:00", "coucher": "2026-10-22T18:53:10+02:00"},
+   {"date": "2026-10-22", "lever": "2026-10-22T08:20:00+02:00", "coucher": null},
+   {"date": "2026-10-23", "lever": "2026-10-23T08:19:50.5+02:00", "coucher": "2026-10-23T18:51:20+02:00"}
+  ]
+ },
+ "plans": {
+  "chez_lui": {"actif": true, "mode": "auto", "ouverture": {"decalage": 30}, "fermeture": {"decalage": 30}, "jours": [0, 1, 2, 3, 4, 5, 6], "volets": {"cover.chambre": {"perso": true, "ouverture": null, "fermeture": 30, "jours_ouverture": []}, "cover.salon": {"ouverture": 30, "fermeture": 30}, "cover.groupe": {"exclu": true}}},
+  "nuit": {"actif": true, "mode": "nuit", "ouverture": {"decalage": 0}, "fermeture": {"decalage": 15}, "jours": [0, 1, 2, 3, 4, 5, 6], "volets": {}},
+  "maison_sans_jours": {"actif": true, "mode": "auto", "ouverture": {"decalage": 0}, "fermeture": {"decalage": 0}, "jours": [], "volets": {"cover.chambre": {"perso": true, "ouverture": 0, "fermeture": 0, "jours_ouverture": [0, 1, 2, 3, 4, 5, 6], "jours_fermeture": [0, 1, 2, 3, 4, 5, 6]}}},
+  "manuel": {"actif": true, "mode": "manuel", "ouverture": {"decalage": 0}, "fermeture": {"decalage": 0}, "jours": [0, 1, 2, 3, 4, 5, 6], "volets": {}},
+  "coupe": {"actif": false, "mode": "auto", "ouverture": {"decalage": 0}, "fermeture": {"decalage": 0}, "jours": [0, 1, 2, 3, 4, 5, 6], "volets": {}},
+  "semaine_maison": {"actif": true, "mode": "auto", "ouverture": {"decalage": 0}, "fermeture": {"decalage": 0}, "jours": [0, 1, 2, 3, 4], "volets": {"cover.chambre": {"perso": true, "ouverture": 30, "jours_ouverture": [5, 6]}, "cover.cuisine": {"perso": true, "fermeture": -15, "jours_fermeture": []}}},
+  "negatifs": {"actif": true, "mode": "auto", "ouverture": {"decalage": -45}, "fermeture": {"decalage": 0}, "jours": [0, 1, 2, 3, 4, 5, 6], "volets": {"cover.chambre": {"perso": true, "ouverture": null, "fermeture": -120}}},
+  "ancienne_forme": {"actif": true, "mode": "auto", "ouverture": {"decalage": 0}, "fermeture": {"decalage": 0}, "jours": [0, 1, 2, 3, 4, 5, 6], "volets": {"cover.salon": {"ouverture": 45}}},
+  "tard": {"actif": true, "mode": "auto", "ouverture": {"decalage": 0}, "fermeture": {"decalage": 240}, "jours": [0, 1, 2, 3, 4], "volets": {}},
+  "jours_sans_perso": {"actif": true, "mode": "auto", "ouverture": {"decalage": 0}, "fermeture": {"decalage": 0}, "jours": [0, 1, 2, 3, 4], "volets": {"cover.salon": {"jours_ouverture": [5, 6]}}},
+  "chaines": {"actif": true, "mode": "auto", "ouverture": {"decalage": 0}, "fermeture": {"decalage": 0}, "jours": [0, 1, 2, 3, 4, 5, 6], "volets": {"cover.chambre": {"perso": true, "fermeture": null, "jours_fermeture": ["5", " 6 ", "x", null]}}},
+  "abime": {"actif": 1, "mode": "NUIT", "ouverture": 15, "fermeture": {"decalage": "dix"}, "jours": "tous", "volets": []}
+ },
+ "instants": [
+  ["2026-10-19T08:14:10+02:00", 1792390450],
+  ["2026-10-25T07:23:00+01:00", 1792909380],
+  ["2026-10-19T06:14:10+00:00", 1792390450],
+  ["2026-10-19T06:14:10-00:00", 1792390450],
+  ["2026-10-19T11:59:10+05:45", 1792390450],
+  ["2026-10-18T23:44:10-06:30", 1792390450],
+  ["2026-10-19T08:14:10Z", null],
+  ["2026-10-19T08:14+02:00", null],
+  ["2026-10-19T08:14:10.5+02:00", null],
+  ["2026-10-19 08:14:10+02:00", null],
+  [" 2026-10-19T08:14:10+02:00", null],
+  ["2026-02-30T08:00:00+01:00", null],
+  ["2026-10-19T24:00:00+02:00", null],
+  ["2026-10-19T08:60:00+02:00", null],
+  ["2026-10-19T08:14:60+02:00", null],
+  ["2026-10-19T08:14:10+24:00", null],
+  ["2026-10-19T08:14:10+02:60", null],
+  ["0999-10-19T08:14:10+02:00", null],
+  ["2026-10-19T08:14:10+0200", null],
+  ["٢026-10-19T08:14:10+02:00", null],
+  [1760854450, null],
+  [null, null]
+ ],
+ "regles": [
+  {"id": "absent", "plan": {"volets": {}}, "attendu": "comme"},
+  {"id": "perso", "plan": {"volets": {"cover.x": {"perso": true}}}, "attendu": "perso"},
+  {"id": "perso_vide", "plan": {"volets": {"cover.x": {"perso": true, "ouverture": null, "fermeture": null}}}, "attendu": "perso"},
+  {"id": "ancienne_forme", "plan": {"volets": {"cover.x": {"ouverture": 30}}}, "attendu": "perso"},
+  {"id": "perso_faux_avec_decalage", "plan": {"volets": {"cover.x": {"perso": false, "fermeture": 0}}}, "attendu": "perso"},
+  {"id": "chaine_vide", "plan": {"volets": {"cover.x": {"ouverture": ""}}}, "attendu": "perso"},
+  {"id": "exclu", "plan": {"volets": {"cover.x": {"exclu": true}}}, "attendu": "jamais"},
+  {"id": "exclu_et_decalage", "plan": {"volets": {"cover.x": {"exclu": true, "perso": true, "ouverture": 90}}}, "attendu": "jamais"},
+  {"id": "exclu_faux", "plan": {"volets": {"cover.x": {"exclu": false, "perso": true}}}, "attendu": "perso"},
+  {"id": "exclu_liste_vide", "plan": {"volets": {"cover.x": {"exclu": [], "perso": true}}}, "attendu": "perso"},
+  {"id": "jours_seuls", "plan": {"volets": {"cover.x": {"jours_ouverture": [5, 6]}}}, "attendu": "comme"},
+  {"id": "reglage_vide", "plan": {"volets": {"cover.x": {}}}, "attendu": "comme"},
+  {"id": "reglage_pas_une_table", "plan": {"volets": {"cover.x": 30}}, "attendu": "comme"},
+  {"id": "volets_pas_une_table", "plan": {"volets": ["cover.x"]}, "attendu": "comme"},
+  {"id": "plan_absent", "plan": null, "attendu": "comme"}
+ ],
+ "decalages": [
+  {"id": "neuf_chiffres", "plan": {"volets": {"cover.x": {"ouverture": "999999999"}}}, "sens": "ouverture", "attendu": 999999999},
+  {"id": "neuf_chiffres_signe_et_blancs", "plan": {"volets": {"cover.x": {"fermeture": " -000000045\n"}}}, "sens": "fermeture", "attendu": -45},
+  {"id": "dix_chiffres_la_maison_prend", "plan": {"ouverture": {"decalage": 20}, "volets": {"cover.x": {"ouverture": "1234567890"}}}, "sens": "ouverture", "attendu": 20},
+  {"id": "dix_chiffres_a_la_maison", "plan": {"fermeture": {"decalage": "-1234567890"}}, "sens": "fermeture", "attendu": 0}
+ ],
+ "a_venir": [
+  {"id": "chez_lui_salon", "plan": "chez_lui", "volet": "cover.salon", "soleil": "octobre", "maintenant": "2026-10-21T12:00:00+02:00", "attendu": [
+   {"sens": "fermeture", "heure": "2026-10-21T19:25:00+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-22T08:48:25+02:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-22T19:23:10+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-23T08:49:50+02:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-23T19:21:20+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-24T08:51:15+02:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-24T19:19:30+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-25T07:52:40+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-25T18:17:40+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-26T07:54:05+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-26T18:15:50+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-27T07:55:30+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-27T18:14:00+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-28T07:56:55+01:00", "source": "lever", "decalage": 30}
+  ]},
+  {"id": "chez_lui_chambre", "plan": "chez_lui", "volet": "cover.chambre", "soleil": "octobre", "maintenant": "2026-10-21T12:00:00+02:00", "attendu": [
+   {"sens": "fermeture", "heure": "2026-10-21T19:25:00+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-22T19:23:10+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-23T19:21:20+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-24T19:19:30+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-25T18:17:40+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-26T18:15:50+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-27T18:14:00+01:00", "source": "coucher", "decalage": 30}
+  ]},
+  {"id": "chez_lui_groupe", "plan": "chez_lui", "volet": "cover.groupe", "soleil": "octobre", "maintenant": "2026-10-21T12:00:00+02:00", "attendu": []},
+  {"id": "chez_lui_cuisine_le_soir", "plan": "chez_lui", "volet": "cover.cuisine", "soleil": "octobre", "maintenant": "2026-10-22T20:00:00+02:00", "attendu": [
+   {"sens": "ouverture", "heure": "2026-10-23T08:49:50+02:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-23T19:21:20+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-24T08:51:15+02:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-24T19:19:30+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-25T07:52:40+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-25T18:17:40+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-26T07:54:05+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-26T18:15:50+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-27T07:55:30+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-27T18:14:00+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-28T07:56:55+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-28T18:12:10+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-29T07:58:20+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-29T18:10:20+01:00", "source": "coucher", "decalage": 30}
+  ]},
+  {"id": "heure_exacte_exclue", "plan": "chez_lui", "volet": "cover.salon", "soleil": "octobre", "maintenant": "2026-10-21T08:47:00+02:00", "attendu": [
+   {"sens": "fermeture", "heure": "2026-10-21T19:25:00+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-22T08:48:25+02:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-22T19:23:10+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-23T08:49:50+02:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-23T19:21:20+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-24T08:51:15+02:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-24T19:19:30+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-25T07:52:40+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-25T18:17:40+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-26T07:54:05+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-26T18:15:50+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-27T07:55:30+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-27T18:14:00+01:00", "source": "coucher", "decalage": 30}
+  ]},
+  {"id": "borne_haute_incluse", "plan": "chez_lui", "volet": "cover.salon", "soleil": "octobre", "maintenant": "2026-10-21T08:56:55+02:00", "attendu": [
+   {"sens": "fermeture", "heure": "2026-10-21T19:25:00+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-22T08:48:25+02:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-22T19:23:10+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-23T08:49:50+02:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-23T19:21:20+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-24T08:51:15+02:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-24T19:19:30+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-25T07:52:40+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-25T18:17:40+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-26T07:54:05+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-26T18:15:50+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-27T07:55:30+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-27T18:14:00+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-28T07:56:55+01:00", "source": "lever", "decalage": 30}
+  ]},
+  {"id": "maintenant_ecrit_en_utc", "plan": "chez_lui", "volet": "cover.salon", "soleil": "octobre", "maintenant": "2026-10-21T10:00:00+00:00", "attendu": [
+   {"sens": "fermeture", "heure": "2026-10-21T19:25:00+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-22T08:48:25+02:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-22T19:23:10+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-23T08:49:50+02:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-23T19:21:20+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-24T08:51:15+02:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-24T19:19:30+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-25T07:52:40+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-25T18:17:40+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-26T07:54:05+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-26T18:15:50+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-27T07:55:30+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-27T18:14:00+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-28T07:56:55+01:00", "source": "lever", "decalage": 30}
+  ]},
+  {"id": "nuit", "plan": "nuit", "volet": "cover.salon", "soleil": "octobre", "maintenant": "2026-10-21T12:00:00+02:00", "attendu": [
+   {"sens": "fermeture", "heure": "2026-10-21T19:10:00+02:00", "source": "coucher", "decalage": 15},
+   {"sens": "fermeture", "heure": "2026-10-22T19:08:10+02:00", "source": "coucher", "decalage": 15},
+   {"sens": "fermeture", "heure": "2026-10-23T19:06:20+02:00", "source": "coucher", "decalage": 15},
+   {"sens": "fermeture", "heure": "2026-10-24T19:04:30+02:00", "source": "coucher", "decalage": 15},
+   {"sens": "fermeture", "heure": "2026-10-25T18:02:40+01:00", "source": "coucher", "decalage": 15},
+   {"sens": "fermeture", "heure": "2026-10-26T18:00:50+01:00", "source": "coucher", "decalage": 15},
+   {"sens": "fermeture", "heure": "2026-10-27T17:59:00+01:00", "source": "coucher", "decalage": 15}
+  ]},
+  {"id": "maison_sans_jours_salon", "plan": "maison_sans_jours", "volet": "cover.salon", "soleil": "octobre", "maintenant": "2026-10-21T12:00:00+02:00", "attendu": []},
+  {"id": "maison_sans_jours_chambre", "plan": "maison_sans_jours", "volet": "cover.chambre", "soleil": "octobre", "maintenant": "2026-10-21T12:00:00+02:00", "attendu": [
+   {"sens": "fermeture", "heure": "2026-10-21T18:55:00+02:00", "source": "coucher", "decalage": 0},
+   {"sens": "ouverture", "heure": "2026-10-22T08:18:25+02:00", "source": "lever", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-10-22T18:53:10+02:00", "source": "coucher", "decalage": 0},
+   {"sens": "ouverture", "heure": "2026-10-23T08:19:50+02:00", "source": "lever", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-10-23T18:51:20+02:00", "source": "coucher", "decalage": 0},
+   {"sens": "ouverture", "heure": "2026-10-24T08:21:15+02:00", "source": "lever", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-10-24T18:49:30+02:00", "source": "coucher", "decalage": 0},
+   {"sens": "ouverture", "heure": "2026-10-25T07:22:40+01:00", "source": "lever", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-10-25T17:47:40+01:00", "source": "coucher", "decalage": 0},
+   {"sens": "ouverture", "heure": "2026-10-26T07:24:05+01:00", "source": "lever", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-10-26T17:45:50+01:00", "source": "coucher", "decalage": 0},
+   {"sens": "ouverture", "heure": "2026-10-27T07:25:30+01:00", "source": "lever", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-10-27T17:44:00+01:00", "source": "coucher", "decalage": 0},
+   {"sens": "ouverture", "heure": "2026-10-28T07:26:55+01:00", "source": "lever", "decalage": 0}
+  ]},
+  {"id": "manuel", "plan": "manuel", "volet": "cover.salon", "soleil": "octobre", "maintenant": "2026-10-21T12:00:00+02:00", "attendu": []},
+  {"id": "coupe", "plan": "coupe", "volet": "cover.salon", "soleil": "octobre", "maintenant": "2026-10-21T12:00:00+02:00", "attendu": []},
+  {"id": "semaine_maison_chambre", "plan": "semaine_maison", "volet": "cover.chambre", "soleil": "octobre", "maintenant": "2026-10-21T12:00:00+02:00", "attendu": [
+   {"sens": "fermeture", "heure": "2026-10-21T18:55:00+02:00", "source": "coucher", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-10-22T18:53:10+02:00", "source": "coucher", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-10-23T18:51:20+02:00", "source": "coucher", "decalage": 0},
+   {"sens": "ouverture", "heure": "2026-10-24T08:51:15+02:00", "source": "lever", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-25T07:52:40+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-26T17:45:50+01:00", "source": "coucher", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-10-27T17:44:00+01:00", "source": "coucher", "decalage": 0}
+  ]},
+  {"id": "semaine_maison_cuisine", "plan": "semaine_maison", "volet": "cover.cuisine", "soleil": "octobre", "maintenant": "2026-10-21T12:00:00+02:00", "attendu": [
+   {"sens": "ouverture", "heure": "2026-10-22T08:18:25+02:00", "source": "lever", "decalage": 0},
+   {"sens": "ouverture", "heure": "2026-10-23T08:19:50+02:00", "source": "lever", "decalage": 0},
+   {"sens": "ouverture", "heure": "2026-10-26T07:24:05+01:00", "source": "lever", "decalage": 0},
+   {"sens": "ouverture", "heure": "2026-10-27T07:25:30+01:00", "source": "lever", "decalage": 0},
+   {"sens": "ouverture", "heure": "2026-10-28T07:26:55+01:00", "source": "lever", "decalage": 0}
+  ]},
+  {"id": "negatifs", "plan": "negatifs", "volet": "cover.chambre", "soleil": "octobre", "maintenant": "2026-10-26T12:00:00+01:00", "attendu": [
+   {"sens": "fermeture", "heure": "2026-10-26T15:45:50+01:00", "source": "coucher", "decalage": -120},
+   {"sens": "ouverture", "heure": "2026-10-27T06:40:30+01:00", "source": "lever", "decalage": -45},
+   {"sens": "fermeture", "heure": "2026-10-27T15:44:00+01:00", "source": "coucher", "decalage": -120},
+   {"sens": "ouverture", "heure": "2026-10-28T06:41:55+01:00", "source": "lever", "decalage": -45},
+   {"sens": "fermeture", "heure": "2026-10-28T15:42:10+01:00", "source": "coucher", "decalage": -120},
+   {"sens": "ouverture", "heure": "2026-10-29T06:43:20+01:00", "source": "lever", "decalage": -45},
+   {"sens": "fermeture", "heure": "2026-10-29T15:40:20+01:00", "source": "coucher", "decalage": -120}
+  ]},
+  {"id": "tard", "plan": "tard", "volet": "cover.salon", "soleil": "juin", "maintenant": "2026-06-17T23:00:00+02:00", "attendu": [
+   {"sens": "fermeture", "heure": "2026-06-18T01:57:49+02:00", "source": "coucher", "decalage": 240},
+   {"sens": "ouverture", "heure": "2026-06-18T05:46:23+02:00", "source": "lever", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-06-19T01:57:58+02:00", "source": "coucher", "decalage": 240},
+   {"sens": "ouverture", "heure": "2026-06-19T05:46:30+02:00", "source": "lever", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-06-22T01:58:25+02:00", "source": "coucher", "decalage": 240},
+   {"sens": "ouverture", "heure": "2026-06-22T05:46:51+02:00", "source": "lever", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-06-23T01:58:34+02:00", "source": "coucher", "decalage": 240}
+  ]},
+  {"id": "polaire", "plan": "chez_lui", "volet": "cover.cuisine", "soleil": "polaire", "maintenant": "2026-12-20T12:00:00+01:00", "attendu": [
+   {"sens": "ouverture", "heure": "2026-12-22T12:28:40+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-12-22T13:01:05+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-12-23T13:10:00+01:00", "source": "coucher", "decalage": 30}
+  ]},
+  {"id": "abime", "plan": "chez_lui", "volet": "cover.cuisine", "soleil": "abime", "maintenant": "2026-10-18T12:00:00+02:00", "attendu": [
+   {"sens": "ouverture", "heure": "2026-10-22T08:50:00+02:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-23T19:21:20+02:00", "source": "coucher", "decalage": 30}
+  ]},
+  {"id": "maintenant_illisible", "plan": "chez_lui", "volet": "cover.salon", "soleil": "octobre", "maintenant": "2026-10-21 12:00", "attendu": []},
+  {"id": "plan_abime", "plan": "abime", "volet": "cover.salon", "soleil": "octobre", "maintenant": "2026-10-21T12:00:00+02:00", "attendu": [
+   {"sens": "fermeture", "heure": "2026-10-21T18:55:00+02:00", "source": "coucher", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-10-22T18:53:10+02:00", "source": "coucher", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-10-23T18:51:20+02:00", "source": "coucher", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-10-24T18:49:30+02:00", "source": "coucher", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-10-25T17:47:40+01:00", "source": "coucher", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-10-26T17:45:50+01:00", "source": "coucher", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-10-27T17:44:00+01:00", "source": "coucher", "decalage": 0}
+  ]},
+  {"id": "quatorze_au_plus", "plan": "chez_lui", "volet": "cover.salon", "soleil": "octobre", "maintenant": "2026-10-21T19:20:00+02:00", "attendu": [
+   {"sens": "fermeture", "heure": "2026-10-21T19:25:00+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-22T08:48:25+02:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-22T19:23:10+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-23T08:49:50+02:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-23T19:21:20+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-24T08:51:15+02:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-24T19:19:30+02:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-25T07:52:40+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-25T18:17:40+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-26T07:54:05+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-26T18:15:50+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-27T07:55:30+01:00", "source": "lever", "decalage": 30},
+   {"sens": "fermeture", "heure": "2026-10-27T18:14:00+01:00", "source": "coucher", "decalage": 30},
+   {"sens": "ouverture", "heure": "2026-10-28T07:56:55+01:00", "source": "lever", "decalage": 30}
+  ]},
+  {"id": "veille_du_lundi", "plan": "tard", "volet": "cover.salon", "soleil": "juin", "maintenant": "2026-06-15T00:30:00+02:00", "attendu": [
+   {"sens": "fermeture", "heure": "2026-06-15T01:57:22+02:00", "source": "coucher", "decalage": 240},
+   {"sens": "ouverture", "heure": "2026-06-15T05:46:02+02:00", "source": "lever", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-06-16T01:57:31+02:00", "source": "coucher", "decalage": 240},
+   {"sens": "ouverture", "heure": "2026-06-16T05:46:09+02:00", "source": "lever", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-06-17T01:57:40+02:00", "source": "coucher", "decalage": 240},
+   {"sens": "ouverture", "heure": "2026-06-17T05:46:16+02:00", "source": "lever", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-06-18T01:57:49+02:00", "source": "coucher", "decalage": 240},
+   {"sens": "ouverture", "heure": "2026-06-18T05:46:23+02:00", "source": "lever", "decalage": 0},
+   {"sens": "fermeture", "heure": "2026-06-19T01:57:58+02:00", "source": "coucher", "decalage": 240},
+   {"sens": "ouverture", "heure": "2026-06-19T05:46:30+02:00", "source": "lever", "decalage": 0}
+  ]}
+ ],
+ "semaine": [
+  {"id": "chez_lui_salon_heure_d_hiver", "plan": "chez_lui", "volet": "cover.salon", "soleil": "octobre", "lundi": "2026-10-19", "attendu": [
+   {"date": "2026-10-19", "ouverture": "08:44", "fermeture": "19:28"},
+   {"date": "2026-10-20", "ouverture": "08:45", "fermeture": "19:26"},
+   {"date": "2026-10-21", "ouverture": "08:47", "fermeture": "19:25"},
+   {"date": "2026-10-22", "ouverture": "08:48", "fermeture": "19:23"},
+   {"date": "2026-10-23", "ouverture": "08:49", "fermeture": "19:21"},
+   {"date": "2026-10-24", "ouverture": "08:51", "fermeture": "19:19"},
+   {"date": "2026-10-25", "ouverture": "07:52", "fermeture": "18:17"}
+  ]},
+  {"id": "chez_lui_chambre", "plan": "chez_lui", "volet": "cover.chambre", "soleil": "octobre", "lundi": "2026-10-19", "attendu": [
+   {"date": "2026-10-19", "ouverture": null, "fermeture": "19:28"},
+   {"date": "2026-10-20", "ouverture": null, "fermeture": "19:26"},
+   {"date": "2026-10-21", "ouverture": null, "fermeture": "19:25"},
+   {"date": "2026-10-22", "ouverture": null, "fermeture": "19:23"},
+   {"date": "2026-10-23", "ouverture": null, "fermeture": "19:21"},
+   {"date": "2026-10-24", "ouverture": null, "fermeture": "19:19"},
+   {"date": "2026-10-25", "ouverture": null, "fermeture": "18:17"}
+  ]},
+  {"id": "chez_lui_groupe", "plan": "chez_lui", "volet": "cover.groupe", "soleil": "octobre", "lundi": "2026-10-19", "attendu": [
+   {"date": "2026-10-19", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-20", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-21", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-22", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-23", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-24", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-25", "ouverture": null, "fermeture": null}
+  ]},
+  {"id": "jours_sans_soleil", "plan": "chez_lui", "volet": "cover.salon", "soleil": "octobre", "lundi": "2026-10-26", "attendu": [
+   {"date": "2026-10-26", "ouverture": "07:54", "fermeture": "18:15"},
+   {"date": "2026-10-27", "ouverture": "07:55", "fermeture": "18:14"},
+   {"date": "2026-10-28", "ouverture": "07:56", "fermeture": "18:12"},
+   {"date": "2026-10-29", "ouverture": "07:58", "fermeture": "18:10"},
+   {"date": "2026-10-30", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-31", "ouverture": null, "fermeture": null},
+   {"date": "2026-11-01", "ouverture": null, "fermeture": null}
+  ]},
+  {"id": "semaine_maison_chambre", "plan": "semaine_maison", "volet": "cover.chambre", "soleil": "octobre", "lundi": "2026-10-19", "attendu": [
+   {"date": "2026-10-19", "ouverture": null, "fermeture": "18:58"},
+   {"date": "2026-10-20", "ouverture": null, "fermeture": "18:56"},
+   {"date": "2026-10-21", "ouverture": null, "fermeture": "18:55"},
+   {"date": "2026-10-22", "ouverture": null, "fermeture": "18:53"},
+   {"date": "2026-10-23", "ouverture": null, "fermeture": "18:51"},
+   {"date": "2026-10-24", "ouverture": "08:51", "fermeture": null},
+   {"date": "2026-10-25", "ouverture": "07:52", "fermeture": null}
+  ]},
+  {"id": "semaine_maison_salon", "plan": "semaine_maison", "volet": "cover.salon", "soleil": "octobre", "lundi": "2026-10-19", "attendu": [
+   {"date": "2026-10-19", "ouverture": "08:14", "fermeture": "18:58"},
+   {"date": "2026-10-20", "ouverture": "08:15", "fermeture": "18:56"},
+   {"date": "2026-10-21", "ouverture": "08:17", "fermeture": "18:55"},
+   {"date": "2026-10-22", "ouverture": "08:18", "fermeture": "18:53"},
+   {"date": "2026-10-23", "ouverture": "08:19", "fermeture": "18:51"},
+   {"date": "2026-10-24", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-25", "ouverture": null, "fermeture": null}
+  ]},
+  {"id": "semaine_maison_cuisine", "plan": "semaine_maison", "volet": "cover.cuisine", "soleil": "octobre", "lundi": "2026-10-19", "attendu": [
+   {"date": "2026-10-19", "ouverture": "08:14", "fermeture": null},
+   {"date": "2026-10-20", "ouverture": "08:15", "fermeture": null},
+   {"date": "2026-10-21", "ouverture": "08:17", "fermeture": null},
+   {"date": "2026-10-22", "ouverture": "08:18", "fermeture": null},
+   {"date": "2026-10-23", "ouverture": "08:19", "fermeture": null},
+   {"date": "2026-10-24", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-25", "ouverture": null, "fermeture": null}
+  ]},
+  {"id": "ancienne_forme", "plan": "ancienne_forme", "volet": "cover.salon", "soleil": "octobre", "lundi": "2026-10-19", "attendu": [
+   {"date": "2026-10-19", "ouverture": "08:59", "fermeture": "18:58"},
+   {"date": "2026-10-20", "ouverture": "09:00", "fermeture": "18:56"},
+   {"date": "2026-10-21", "ouverture": "09:02", "fermeture": "18:55"},
+   {"date": "2026-10-22", "ouverture": "09:03", "fermeture": "18:53"},
+   {"date": "2026-10-23", "ouverture": "09:04", "fermeture": "18:51"},
+   {"date": "2026-10-24", "ouverture": "09:06", "fermeture": "18:49"},
+   {"date": "2026-10-25", "ouverture": "08:07", "fermeture": "17:47"}
+  ]},
+  {"id": "jours_sans_perso", "plan": "jours_sans_perso", "volet": "cover.salon", "soleil": "octobre", "lundi": "2026-10-19", "attendu": [
+   {"date": "2026-10-19", "ouverture": "08:14", "fermeture": "18:58"},
+   {"date": "2026-10-20", "ouverture": "08:15", "fermeture": "18:56"},
+   {"date": "2026-10-21", "ouverture": "08:17", "fermeture": "18:55"},
+   {"date": "2026-10-22", "ouverture": "08:18", "fermeture": "18:53"},
+   {"date": "2026-10-23", "ouverture": "08:19", "fermeture": "18:51"},
+   {"date": "2026-10-24", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-25", "ouverture": null, "fermeture": null}
+  ]},
+  {"id": "chaines", "plan": "chaines", "volet": "cover.chambre", "soleil": "octobre", "lundi": "2026-10-19", "attendu": [
+   {"date": "2026-10-19", "ouverture": "08:14", "fermeture": null},
+   {"date": "2026-10-20", "ouverture": "08:15", "fermeture": null},
+   {"date": "2026-10-21", "ouverture": "08:17", "fermeture": null},
+   {"date": "2026-10-22", "ouverture": "08:18", "fermeture": null},
+   {"date": "2026-10-23", "ouverture": "08:19", "fermeture": null},
+   {"date": "2026-10-24", "ouverture": "08:21", "fermeture": "18:49"},
+   {"date": "2026-10-25", "ouverture": "07:22", "fermeture": "17:47"}
+  ]},
+  {"id": "tard", "plan": "tard", "volet": "cover.salon", "soleil": "juin", "lundi": "2026-06-15", "attendu": [
+   {"date": "2026-06-15", "ouverture": "05:46", "fermeture": "01:57"},
+   {"date": "2026-06-16", "ouverture": "05:46", "fermeture": "01:57"},
+   {"date": "2026-06-17", "ouverture": "05:46", "fermeture": "01:57"},
+   {"date": "2026-06-18", "ouverture": "05:46", "fermeture": "01:57"},
+   {"date": "2026-06-19", "ouverture": "05:46", "fermeture": null},
+   {"date": "2026-06-20", "ouverture": null, "fermeture": null},
+   {"date": "2026-06-21", "ouverture": null, "fermeture": "01:58"}
+  ]},
+  {"id": "negatifs", "plan": "negatifs", "volet": "cover.chambre", "soleil": "octobre", "lundi": "2026-10-19", "attendu": [
+   {"date": "2026-10-19", "ouverture": "07:29", "fermeture": "16:58"},
+   {"date": "2026-10-20", "ouverture": "07:30", "fermeture": "16:56"},
+   {"date": "2026-10-21", "ouverture": "07:32", "fermeture": "16:55"},
+   {"date": "2026-10-22", "ouverture": "07:33", "fermeture": "16:53"},
+   {"date": "2026-10-23", "ouverture": "07:34", "fermeture": "16:51"},
+   {"date": "2026-10-24", "ouverture": "07:36", "fermeture": "16:49"},
+   {"date": "2026-10-25", "ouverture": "06:37", "fermeture": "15:47"}
+  ]},
+  {"id": "nuit", "plan": "nuit", "volet": "cover.cuisine", "soleil": "octobre", "lundi": "2026-10-19", "attendu": [
+   {"date": "2026-10-19", "ouverture": null, "fermeture": "19:13"},
+   {"date": "2026-10-20", "ouverture": null, "fermeture": "19:11"},
+   {"date": "2026-10-21", "ouverture": null, "fermeture": "19:10"},
+   {"date": "2026-10-22", "ouverture": null, "fermeture": "19:08"},
+   {"date": "2026-10-23", "ouverture": null, "fermeture": "19:06"},
+   {"date": "2026-10-24", "ouverture": null, "fermeture": "19:04"},
+   {"date": "2026-10-25", "ouverture": null, "fermeture": "18:02"}
+  ]},
+  {"id": "manuel", "plan": "manuel", "volet": "cover.cuisine", "soleil": "octobre", "lundi": "2026-10-19", "attendu": [
+   {"date": "2026-10-19", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-20", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-21", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-22", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-23", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-24", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-25", "ouverture": null, "fermeture": null}
+  ]},
+  {"id": "coupe", "plan": "coupe", "volet": "cover.cuisine", "soleil": "octobre", "lundi": "2026-10-19", "attendu": [
+   {"date": "2026-10-19", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-20", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-21", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-22", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-23", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-24", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-25", "ouverture": null, "fermeture": null}
+  ]},
+  {"id": "polaire", "plan": "chez_lui", "volet": "cover.cuisine", "soleil": "polaire", "lundi": "2026-12-21", "attendu": [
+   {"date": "2026-12-21", "ouverture": null, "fermeture": null},
+   {"date": "2026-12-22", "ouverture": "12:28", "fermeture": "13:01"},
+   {"date": "2026-12-23", "ouverture": null, "fermeture": "13:10"},
+   {"date": "2026-12-24", "ouverture": null, "fermeture": null},
+   {"date": "2026-12-25", "ouverture": null, "fermeture": null},
+   {"date": "2026-12-26", "ouverture": null, "fermeture": null},
+   {"date": "2026-12-27", "ouverture": null, "fermeture": null}
+  ]},
+  {"id": "abime", "plan": "chez_lui", "volet": "cover.cuisine", "soleil": "abime", "lundi": "2026-10-19", "attendu": [
+   {"date": "2026-10-19", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-20", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-21", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-22", "ouverture": "08:50", "fermeture": null},
+   {"date": "2026-10-23", "ouverture": null, "fermeture": "19:21"},
+   {"date": "2026-10-24", "ouverture": null, "fermeture": null},
+   {"date": "2026-10-25", "ouverture": null, "fermeture": null}
+  ]},
+  {"id": "lundi_illisible", "plan": "chez_lui", "volet": "cover.salon", "soleil": "octobre", "lundi": "19/10/2026", "attendu": []}
+ ]
+}

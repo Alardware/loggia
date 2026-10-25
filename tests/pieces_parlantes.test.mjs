@@ -20,7 +20,7 @@ test('la carte piece : une ligne d’etat a priorite, dans ses deux variantes, s
   assert.ok(src.includes("import { ambiancePiece, ambiancesParPiece } from './ambiance.js';"), 'le module pur');
   const c = bloc('function PieceCard(', NL + '}');
   assert.ok(c.includes('idx = 0, ambiance = null })'), 'la carte recoit l’ambiance de sa piece');
-  const calcul = "const amb = lights ? ambiancePiece({ lumieres: n, ...(ambiance || {}), co2: p.live && p.live.co2 }) : null;";
+  const calcul = "const amb = lights ? ambiancePiece({ lumieres: n, lampes: lights.length, ...(ambiance || {}), co2: p.live && p.live.co2 }) : null;";
   assert.equal(c.split(calcul).length - 1, 2, 'compacte et standard calculent la meme ligne (lumieres de la carte + ambiance + CO2 de la piece)');
   assert.ok(c.includes("const etat = amb ? amb.texte : '—';") && c.includes("color: amb ? amb.couleur : 'var(--o-text2)'"), 'compacte : le texte et sa couleur — le gris SECONDAIRE, lisible sur le lavis de la pièce');
   assert.ok(c.includes("{amb && amb.icone ? <Fi i={amb.icone} size={11} style={{ marginRight: 4 }} /> : null}{etat}"), 'compacte : le triangle devant un probleme');

@@ -1,5 +1,7 @@
 # 0105 — La carte ne ment plus longtemps
 
+*Remplacée en partie par l'ADR 0190 (12/10) : le seuil de fermeture n'est plus un réglage, il vaut 2 %.*
+
 Date : 27/09/2026. Statut : appliqué. **Redémarrage de Home Assistant requis**
 (mise à jour d'un composant personnalisé) ; le paquet est rebâti. Dixième point, ajouté à l'audit du
 27/09 par deux retours pendant la mise en production.

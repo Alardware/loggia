@@ -14,9 +14,14 @@
 import {
   useState, useMemo, useEffect
 } from 'react';
-import { BottomSheet, EntPicker, cvName, useEtatServeur, Fi } from '../ui.jsx';
+import { BottomSheet, EntPicker, cvName, useEtatServeur, Fi, Bascule } from '../ui.jsx';
 import { tr, trN } from '../i18n.js';
 import { raisonEchec } from '../refus.js';
+import { LOGGIA_INDEX } from '../state.js';
+import { estPontZigbee } from '../prises.js';
+import { commanderService } from '../actions.js';
+import { useOptimiste } from '../optimiste.js';
+import { BoutonConfirme } from '../fichecommune.jsx';
 import { puceHaute } from '../styles.js';
 import { entityCaps } from '../capabilities.js';
 import { versHex } from '../contraste.js';
@@ -52,7 +57,7 @@ const GESTES = () => [
   { id: 'scene', nom: tr('Lancer une scène'), service: 'scene.turn_on', domaines: ['scene'] },
   { id: 'script', nom: tr('Lancer un script'), service: 'script.turn_on', domaines: ['script'] },
   { id: 'libre', nom: tr('Service libre'), service: '', libre: true,
-    aide: tr('Pour tout le reste : écris le service et sa cible') },
+    aide: tr('Pour tout le reste : écrivez le service et sa cible') },
 ];
 
 /* Retrouve le geste d'une affectation déjà posée, pour rouvrir le formulaire
@@ -118,6 +123,40 @@ const SOURCES = { z2m: 'Zigbee2MQTT', zha: 'ZHA', deconz: 'deCONZ' };
 export function gestesRegles(affectations) {
   return Object.values(affectations || {}).reduce((n, a) => n
     + Object.values((a && a.actions) || {}).filter(g => Array.isArray(g) && g.length > 0).length, 0);
+}
+
+/** Le switch du pont de Zigbee2MQTT — son « Permit join » — : celui d'un
+ * appareil Zigbee2MQTT / Bridge (la règle des prises, P1), sans catégorie ;
+ * celui dont l'identifiant dit `permit_join` d'abord. `null` sans pont. */
+export function switchDuPont(index) {
+  const e = index && index.entityMeta, d = index && index.deviceMeta;
+  if (!e || !d) return null;
+  const ids = [...e.keys()].filter((id) => {
+    const m = e.get(id) || {};
+    const dev = m.deviceId ? d.get(m.deviceId) : null;
+    return id.indexOf('switch.') === 0 && !m.category && !!dev && estPontZigbee({ fabricant: dev.manufacturer, modele: dev.model });
+  }).sort();
+  return ids.find(id => id.indexOf('permit_join') >= 0) || ids[0] || null;
+}
+
+/* L'appairage Zigbee (chantier Prises, § 9) : la bascule du pont de
+ * Zigbee2MQTT, sortie d'Objets › Prises, en tête de la section. L'ouvrir
+ * laisse n'importe quel appareil rejoindre le réseau : deux appuis
+ * (`BoutonConfirme`) ; la fermer, un seul. Un compte ordinaire voit l'état,
+ * sans geste, comme l'écoute. Pas de pont : pas de rangée. */
+export function RangeeAppairage({ hass, admin }) {
+  const id = switchDuPont(LOGGIA_INDEX);
+  const st = id && hass && hass.states ? hass.states[id] || null : null;
+  const [ov, poser] = useOptimiste(st ? st.state : null);
+  if (!st) return null;
+  const ouvert = ov != null ? ov : st.state === 'on';
+  const commander = (oui) => { poser(oui); commanderService(hass, id, 'switch', oui ? 'turn_on' : 'turn_off', { entity_id: id }); };
+  return (
+    <Panneau titre={tr('Appairage Zigbee')} desc={ouvert ? tr('Appairage ouvert') : tr('Autorise un nouvel appareil à rejoindre le réseau')}
+      droite={!admin ? <Pastille niveau={ouvert ? 'ok' : 'neutre'} point>{ouvert ? tr('Appairage ouvert') : tr('Appairage fermé')}</Pastille>
+        : ouvert ? <Bascule on nom={tr('Fermer l’appairage')} cb={() => commander(false)} />
+          : <BoutonConfirme libelle={tr('Ouvrir')} nom={tr('Ouvrir l’appairage')} onConfirme={() => commander(true)} />} />
+  );
 }
 
 export function InterrupteursSection({ hass, onCompte = null }) {
@@ -215,9 +254,10 @@ export function InterrupteursSection({ hass, onCompte = null }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <RangeeAppairage hass={hass} admin={admin} />
       {/* Apprentissage : la page ne sait rien tant qu'on n'a pas appuyé. */}
       <Panneau titre={tr('Apprendre un bouton')}
-        desc={ecoute ? tr('Appuie sur un bouton : il apparaît ici, avec son nom. C’est ce nom qu’on affecte.') : tr('L’écoute est coupée : aucun nouvel appui n’apparaît. Les boutons déjà réglés marchent toujours.')}
+        desc={ecoute ? tr('Appuyez sur un bouton : il apparaît ici, avec son nom. C’est ce nom qu’on affecte.') : tr('L’écoute est coupée : aucun nouvel appui n’apparaît. Les boutons déjà réglés marchent toujours.')}
         droite={err ? <Pastille niveau="danger" point>{tr('hors d’écoute')}</Pastille>
           : !admin ? <Pastille niveau={ecoute ? 'ok' : 'neutre'} point>{ecoute ? tr('à l’écoute') + ' · ' + mmss(reste) : tr('écoute coupée')}</Pastille>
             : ecoute
@@ -229,7 +269,7 @@ export function InterrupteursSection({ hass, onCompte = null }) {
           * personne n'appuyait ou si personne n'ecoutait (retour 03/09). */}
         {sources && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '0 22px 16px', marginTop: -4 }}>
-            {puce('Zigbee2MQTT', sources.z2m, sources.mqtt_present ? tr('MQTT est là, mais l’abonnement a échoué — regarde le journal de Home Assistant') : tr('Pas d’intégration MQTT sur cette installation'))}
+            {puce('Zigbee2MQTT', sources.z2m, sources.mqtt_present ? tr('MQTT est là, mais l’abonnement a échoué — regardez le journal de Home Assistant') : tr('Pas d’intégration MQTT sur cette installation'))}
             {puce('ZHA', sources.zha, '')}
             {puce('deCONZ', sources.deconz, '')}
           </div>
@@ -239,7 +279,7 @@ export function InterrupteursSection({ hass, onCompte = null }) {
         <Intertitre>{tr('Derniers appuis')}</Intertitre>
         {derniers.length === 0 && !err && (
           <div style={{ fontSize: 12.5, color: 'var(--o-text3)', fontWeight: 600, padding: '4px 22px 16px' }}>
-            {tr('Rien encore. Appuie sur un bouton de ta télécommande : il se montrera ici.')}
+            {tr('Rien encore. Appuyez sur un bouton de votre télécommande : il se montrera ici.')}
           </div>
         )}
         {derniers.slice(0, 8).map(v => (

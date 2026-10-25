@@ -66,73 +66,78 @@ function racine(src, classe) {
 }
 const sansGeste = (b) => !b.includes('onClick=') && !b.includes('onKeyDown=') && !b.includes('tabIndex=') && !b.includes('aria-label=') && !b.includes('role=');
 
-const RMCARD = "className={'o-rmcard' + (mort ? ' o-panne' : '')}";
-const DENSE = "className={'o-piece o-cvdense' + (mort ? ' o-panne' : '')}";
 // Les boutons SEULS passent au-dessus de la surface, jamais leur rangée
 // (relecture du lot 13) : positionnée, elle la couvrait sur toute sa largeur,
 // et un appui entre deux boutons ne faisait plus rien.
-const RANGEE = "<div style={{ display: 'flex', gap: 8, marginTop: 11 }}>";
+// ASSERTION MODIFIÉE (étape 2 IoT, 19/10) : `RMCARD`, `DENSE` et `RANGEE` partent avec l'ancienne carte du distributeur, qui seule les lisait.
 const RANGEE_POSEE = "<div style={{ position: 'relative', display: 'flex', gap: 8";
 const BOUTON_POSE = /\nconst RM_BTN = \{ position: 'relative', /;
 
-test('la carte machine : ses commandes ne sont plus enfermées dans un bouton, la surface dit ce qu’elle affiche', () => {
-  const c = corps('RoomMachineCard');
-  assert.ok(!c.includes('role="button"') && !c.includes('onKeyDown'), 'Démarrer, Dock, Localiser restent dans un rôle bouton (nested-interactive)');
+test('la carte d’un robot : ses commandes ne sont plus enfermées dans un bouton, la surface dit ce qu’elle affiche', () => {
+  /* ASSERTION MODIFIÉE (chantier IoT, tâche 6, 18/10 ; I5, I9) : `RoomMachineCard` est partie ; la carte d'un robot est
+   * `RoomRobotCard`, au gabarit commun. Le motif ne change pas : pas de rôle bouton autour des commandes, la surface en premier
+   * enfant sous ce que la carte affiche — le nom, la phrase, la batterie —, les puces seules positionnées (`RM_BTN`), nommées
+   * avec l'appareil. Ce que la carte dessine se joue dans tests/carte_robot.test.mjs. */
+  const c = corps('RoomRobotCard');
+  assert.ok(!c.includes('role="button"') && !c.includes('onKeyDown'), 'Démarrer, Pause, Base restent dans un rôle bouton (nested-interactive)');
   assert.ok(!c.includes("tr('Ouvrir')"), 'le nom « Ouvrir Aspirateur » taisait l’état et prenait le mot d’un bouton');
-  const { b, suite } = racine(c, RMCARD);
+  const { b, suite } = racine(c, "className={'o-rmcard o-gabarit' + (v.panne ? ' o-panne' : '')}");
   assert.ok(sansGeste(b), 'la racine ne porte plus le geste : ' + b);
   assert.ok(b.includes("position: 'relative'"), 'la racine borne la surface');
-  assert.ok(suite.startsWith('{onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(nom, etatAff)} />}'), 'la surface, premier enfant : la tabulation la prend avant les boutons');
-  // Le nom reprend la ligne MÊME de l'écran, pas un résumé.
-  assert.ok(c.includes("const etatAff = mort ? tr('Indisponible') : etat;") && c.includes('{etatAff}</div>'), 'l’état du nom n’est plus celui que la carte affiche');
-  assert.ok(c.includes('<div style={RM_NAME}>{nom}</div>'), 'le nom affiché et le nom lu viennent de la même variable');
-  // Les boutons : au-dessus de la surface, nommés avec l'appareil.
-  assert.ok(c.includes(RANGEE) && !c.includes(RANGEE_POSEE), 'la rangée de boutons couvre la surface : un appui entre deux boutons ne fait plus rien');
+  assert.ok(suite.startsWith("{onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(v.nom, v.phrase.texte, pile == null ? null : tr('batterie {p} %', { p: pile }))} />}"),
+    'la surface, premier enfant : la tabulation la prend avant les puces');
+  // Le nom lu reprend ce que la carte affiche : la même vue.
+  assert.ok(c.includes('{v.nom}</div>') && c.includes('{v.phrase.texte}</div>'), 'le nom affiché et le nom lu viennent de la même vue');
+  // Les puces : au-dessus de la surface, nommées avec l'appareil ; leur rangée ne l'est pas.
+  assert.ok(c.includes(`<div className="o-puces-robot" data-n={n} style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 'var(--o-pied-haut, 9px)' }}>`) && !c.includes(RANGEE_POSEE),
+    'la rangée de puces couvre la surface : un appui entre deux puces ne fait plus rien');
   assert.ok(BOUTON_POSE.test(app), 'les boutons ne sont plus positionnés : ils passeraient sous la surface, et « Pause » ouvrirait la fiche');
-  assert.ok(c.includes('style={{ ...RM_BTN, display:'), 'le bouton du robot ne tient plus sa position de RM_BTN');
-  assert.ok(c.includes("aria-label={lbl2 + ' ' + nom}") && c.includes('title={lbl2}'), '« Pause Tondeuse » : le geste, puis l’appareil ; l’infobulle ne change pas');
-  assert.ok(c.includes('e.stopPropagation(); call(svc);'), 'le bouton garde son arrêt de propagation');
+  assert.ok(/\nconst RM_PUCE_ROBOT = \{ \.\.\.RM_BTN, /.test(app), 'la puce du robot ne tient plus sa position de RM_BTN');
+  assert.ok(c.includes("aria-label={p.mot + ' ' + v.nom} title={p.mot}"), '« Pause Tondeuse » : le geste, puis l’appareil ; l’infobulle dit le geste');
+  assert.ok(c.includes('e.stopPropagation(); p.agir();'), 'la puce garde son arrêt de propagation');
 });
 
 test('la carte du distributeur, compacte et standard : la même structure', () => {
+  /* ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I5, I10, I12) : `RoomFeederCard` lit sa vue (`v`) et passe dans la grille commune ;
+   * « Rempli » quitte la carte (il vit près du réservoir, dans la popup). Le motif ne change pas : pas de rôle bouton autour de la
+   * commande, la surface en premier enfant sous ce que la carte affiche — le nom, la phrase, le réservoir —, la puce seule positionnée,
+   * nommée avec l'appareil. Ce que la carte dessine, et ce qu'un appui envoie, se jouent dans tests/carte_distributeur.test.mjs. */
   const c = corps('RoomFeederCard');
-  assert.ok(!c.includes('role="button"') && !c.includes('onKeyDown'), 'Distribuer et Rempli restent dans un rôle bouton (nested-interactive)');
+  assert.ok(!c.includes('role="button"') && !c.includes('onKeyDown'), 'Distribuer reste dans un rôle bouton (nested-interactive)');
   assert.ok(!c.includes("tr('Ouvrir')"), 'plus de « Ouvrir Distributeur »');
   assert.equal(compter(c, '<Surface '), 2, 'une surface par gabarit');
-  for (const classe of [DENSE, RMCARD]) {
+  for (const classe of ["className={'o-piece o-cvdense' + (v.mort ? ' o-panne' : '')}", "className={'o-rmcard o-gabarit' + (v.mort ? ' o-panne' : '')}"]) {
     const { b, suite } = racine(c, classe);
     assert.ok(sansGeste(b) && b.includes("position: 'relative'"), 'la racine ' + classe + ' : ' + b);
-    assert.ok(suite.startsWith('{onOpen && <Surface onClick={() => onOpen()} label={nomCarte(nom, ligne)} />}'), 'la surface en premier enfant de ' + classe);
+    assert.ok(suite.startsWith('{onOpen && <Surface onClick={() => onOpen()} label={label} />}'), 'la surface en premier enfant de ' + classe);
   }
-  // Chaque gabarit garde SA ligne : la ration d'abord en compacte, le bac d'abord en standard.
-  assert.ok(c.includes('const ligne = prochaine || sub;') && c.includes('const ligne = sub || prochaine;'), 'la ligne affichée a changé d’ordre');
-  assert.equal(compter(c, "{ligne || '—'}"), 2, 'le nom lu et la ligne affichée viennent de la même variable');
-  // La compacte : le bouton SEUL au-dessus, le nom reste sous la surface.
-  assert.ok(c.includes("aria-label={tr('Distribuer une ration') + ' ' + nom}"), 'le bouton de la compacte ne nomme pas l’appareil');
-  assert.ok(c.includes("style={{ position: 'relative', width: 38, height: 26"), 'le bouton de la compacte passe sous la surface');
+  // Le nom lu reprend ce que la carte affiche : le nom, la phrase, le réservoir — la même vue pour les deux gabarits.
+  assert.ok(c.includes("const label = nomCarte(v.nom, v.phrase.texte, v.pct == null ? null : tr('réservoir {p} %', { p: v.pct }));"), 'le nom lu et la ligne affichée viennent de la même vue');
+  assert.equal(compter(c, '{v.phrase.texte}</div>'), 2, 'la phrase affichée, dans les deux gabarits');
   /* L'écart a quitté la ligne pour la feuille (05/10) : la requête de
    * conteneur le resserre quand la carte est étroite, et un style en ligne
    * aurait gagné contre elle. La rangée reste SANS position. */
   assert.ok(c.includes(`<div className="o-cvrow" style={{ display: 'flex', alignItems: 'center' }}>`), 'la rangée de la compacte ne doit pas passer au-dessus : un appui sur le nom n’ouvrirait plus rien');
-  // La standard : les boutons au-dessus, pas leur rangée ; des noms qui commencent par le texte visible.
-  assert.ok(c.includes(RANGEE) && !c.includes(RANGEE_POSEE), 'la rangée Distribuer / Rempli couvre la surface : l’écart entre eux ne fait plus rien');
-  assert.equal(compter(c, 'style={RM_BTN}'), 2, 'Distribuer et Rempli ne tiennent plus leur position de RM_BTN : ils passeraient sous la surface');
-  assert.ok(c.includes("aria-label={tr('Distribuer') + ' ' + nom}") && c.includes("{tr('Distribuer')}</button>"), '« Distribuer … » : le texte visible en tête du nom');
-  assert.ok(c.includes("aria-label={tr('Rempli') + ' ' + nom}") && c.includes("{tr('Rempli')}</button>"), '« Rempli … » : le texte visible en tête du nom');
+  // La puce : au-dessus de la surface, pas sa rangée ; « Distribuer 12 g Distributeur » — le texte visible, puis l'appareil.
+  assert.ok(c.includes(`<div className="o-puces-robot" data-n={1} style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 'var(--o-pied-haut, 9px)' }}>`) && !c.includes(RANGEE_POSEE),
+    'la rangée de la puce couvre la surface');
+  assert.ok(c.includes('puce(RM_PUCE_ROBOT,') && c.includes('puce(RM_MINI_DISTRIBUER,'), 'la puce de la carte et le mini de la compacte');
+  assert.ok(/\nconst RM_MINI_DISTRIBUER = \{ position: 'relative', /.test(app) && /\nconst RM_PUCE_ROBOT = \{ \.\.\.RM_BTN, /.test(app), 'positionnés, ils passent au-dessus de la surface');
+  assert.ok(c.includes("aria-label={mot + ' ' + v.nom} title={mot}"), '« Distribuer … » : le texte visible en tête du nom, puis l’appareil');
+  assert.ok(c.includes('e.stopPropagation(); v.distribuer();'), 'la puce garde son arrêt de propagation');
+  assert.ok(!c.includes("tr('Rempli')"), '« Rempli » a quitté la carte');
 });
 
 test('la carte de plante : sans commande, elle reste un bouton — c’est son nom qui change', () => {
   const c = corps('RoomPlantCard');
   assert.ok(!c.includes('<button') && !c.includes('<Surface'), 'la plante n’a pas de commande : rien à séparer');
-  // Relecture du lot 13 : l'humidité affichée en chiffres entre dans le nom, à
-  // sa place dans chaque gabarit — après le verdict en compacte, avant lui en
-  // standard.
-  assert.equal(compter(c, 'role="button" tabIndex={0} aria-label={nomCarte(nom, ligne, humLue)} aria-haspopup="dialog"'), 1, 'compacte : le nom, le verdict, l’humidité affichés, et la fiche annoncée');
-  assert.equal(compter(c, 'role="button" tabIndex={0} aria-label={nomCarte(nom, humLue, ligne)} aria-haspopup="dialog"'), 1, 'standard : le nom, l’humidité, le verdict affichés, et la fiche annoncée');
-  assert.ok(c.includes("const humLue = hum != null ? Math.round(hum) + ' %' : null;") && compter(c, '{Math.round(hum)}%</span>') === 2, 'le chiffre lu est celui qu’on voit');
+  /* Relecture du lot 13 : le sol affiché en chiffres entre dans le nom, dans les deux gabarits.
+   * ASSERTIONS MODIFIÉES (chantier Capteurs, étapes 2 et 3, tâche 10 ; C30) : la carte lit sa vue (`vuePlante`) — le nom, le sol, la phrase, le même nom
+   * pour la compacte et la standard ; le chiffre lu (`v.chiffre`) est celui qu'on voit. */
+  assert.equal(compter(c, 'role="button" tabIndex={0} aria-label={label} aria-haspopup="dialog"'), 2, 'compacte et standard : le nom, le sol, la phrase affichés, et la fiche annoncée');
+  assert.ok(c.includes('const label = nomCarte(nom, v.sol == null ? null : v.chiffre, v.phrase);') && compter(c, '{v.chiffre}</span>') === 2, 'le chiffre lu est celui qu’on voit');
   assert.ok(!c.includes("tr('Ouvrir')"), 'plus de « Ouvrir Monstera », qui taisait le verdict');
-  assert.equal(compter(c, 'const ligne = verdict || sub;'), 2, 'le verdict, sinon le lieu — comme à l’écran');
-  assert.equal(compter(c, "{ligne || '—'}"), 2, 'le nom lu et la ligne affichée viennent de la même variable');
+  assert.equal(compter(c, '{v.phrase}</div>'), 2, 'la phrase lue et la phrase affichée viennent de la même vue');
 });
 
 test('ce que la surface fait entendre : le nom puis l’état, et la fiche qu’elle ouvre', async () => {

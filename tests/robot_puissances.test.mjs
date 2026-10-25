@@ -111,10 +111,14 @@ test('la table porte ses clés à sens, et les valeurs existantes ne changent pa
 });
 
 test('la fiche et la carte du robot lisent ces mots par trSens', () => {
-  const robot = lire('src', 'ficherobot.jsx');
-  const appels = (robot.match(/vacOption\(/g) || []).length;
-  assert.ok(appels >= 2, 'la fiche ne montre plus ses options');
-  assert.equal((robot.match(/\btrSens\(vacOption\(/g) || []).length, appels, 'une option du robot se lit sans son sens');
+  /* ASSERTION MODIFIÉE (chantier IoT, tâche 8, 18/10 ; I15) : les réglages du robot passent par la page du socle commun
+   * (`LigneReglage`, fichecommune.jsx), qui dit l'option par le même `trSens(vacOption(…))` ; la fiche garde la puissance. */
+  for (const f of ['ficherobot.jsx', 'fichecommune.jsx']) {
+    const src = lire('src', f);
+    const appels = (src.match(/vacOption\(/g) || []).length;
+    assert.ok(appels >= 1, f + ' : la fiche ne montre plus ses options');
+    assert.equal((src.match(/\btrSens\(vacOption\(/g) || []).length, appels, f + ' : une option du robot se lit sans son sens');
+  }
   const fan = lire('src', 'App.jsx').split('\n').find(l => l.startsWith('const FAN_FR = () => ({'));
   assert.ok(fan, 'FAN_FR introuvable');
   assert.ok(!fan.includes("tr('Normal')") && fan.split("trSens('Normal · réglage')").length === 3, 'la carte du robot dit « Normalnie » en polonais');

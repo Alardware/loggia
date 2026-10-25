@@ -35,9 +35,15 @@ import { nomJour, heureValide } from './robots.js';
 export const FOND = 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';
 // Le liseré du réglage (04/10), comme les panneaux de Paramètres et du robot.
 export const PANNEAU = { background: FOND, border: LISERE, borderRadius: 'var(--o-radius,18px)', padding: '18px 20px', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', boxSizing: 'border-box', minWidth: 0 };
-export const TITRE_SECTION = { fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' };
+// Les titres de bloc de la fiche du distributeur sont des petites capitales depuis sa maquette (étape 2 du chantier IoT) : le titre
+// en italique de section est parti avec eux.
 export const PETITES_CAPITALES = petitesCapitales(10.5);
-export const BOUTON_DOUX = { padding: '9px 14px', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text1)', fontFamily: 'inherit' };
+/* Le repère gauche d'un historique sur 7 jours : sept phrases ENTIÈRES — « domenica
+ * scorsa » s'accorde —, lues au rendu. Une seule copie pour le chauffage et les
+ * volets (25/10) : chacune avait la sienne. */
+export const JOURS_DERNIERS = () => [tr('lundi dernier'), tr('mardi dernier'), tr('mercredi dernier'), tr('jeudi dernier'), tr('vendredi dernier'), tr('samedi dernier'), tr('dimanche dernier')];
+// Le bouton doux du socle (« Confirmer ? », « Retour ») ; la fiche du distributeur ne le lit plus (étape 2 du chantier IoT) : il n'est plus exporté.
+const BOUTON_DOUX = { padding: '9px 14px', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text1)', fontFamily: 'inherit' };
 export const CHAMP_HEURE = { padding: '9px 12px', borderRadius: 12, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 15, fontWeight: 700, fontFamily: 'inherit', fontVariantNumeric: 'tabular-nums', colorScheme: 'inherit' };
 // Une ligne de liste dans un panneau : le filet du dessus sauf pour la première.
 export const LIGNE = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, padding: '13px 18px' };
@@ -47,13 +53,19 @@ export const filet = (i) => (i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none');
 /* ════════════ Les briques ════════════ */
 
 /* Un geste qui ne se rattrape pas (remettre un compteur à neuf, supprimer un
- * repas) : deux appuis. */
-export function BoutonConfirme({ libelle, onConfirme }) {
+ * repas, copier une journée du planning de chauffe sur la semaine) : deux
+ * appuis. `nom` nomme le bouton quand `libelle` ne dit pas tout (« Lun – ven »
+ * : « Copier cette journée sur : Lun – ven ») ; armé, « Confirmer ? » se lit,
+ * et c'est lui qui se dit. `style` : le dessin de qui l'emploie (la puce de
+ * 40 px du planning) — le fond, l'encre et le rouge d'armement restent les
+ * siens. */
+export function BoutonConfirme({ libelle, onConfirme, nom = null, style = null }) {
   const [arme, setArme] = useState(false);
   useEffect(() => { if (!arme) return undefined; const t = setTimeout(() => setArme(false), 4000); return () => clearTimeout(t); }, [arme]);
+  const nomme = nom && !arme ? nom : undefined;
   return (
-    <button type="button" onClick={() => { if (arme) { setArme(false); onConfirme(); } else setArme(true); }}
-      style={{ ...BOUTON_DOUX, background: arme ? 'rgba(var(--o-bad-rgb),.16)' : 'var(--o-s1)', color: arme ? 'var(--o-bad)' : 'var(--o-text1)' }}>{arme ? tr('Confirmer ?') : libelle}</button>
+    <button type="button" aria-label={nomme} title={nomme} onClick={() => { if (arme) { setArme(false); onConfirme(); } else setArme(true); }}
+      style={{ ...BOUTON_DOUX, ...style, background: arme ? 'rgba(var(--o-bad-rgb),.16)' : 'var(--o-s1)', color: arme ? 'var(--o-bad)' : 'var(--o-text1)' }}>{arme ? tr('Confirmer ?') : libelle}</button>
   );
 }
 
@@ -117,30 +129,24 @@ export const PuceJour = ({ j, on, onClick, taille = 30, disabled = false, attenu
       background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text3)' }}>{nomJour(j, locale(), 'narrow')}</button>
 );
 
-/* Un champ d'heure qui ne rend la valeur que lorsqu'elle est entière. */
-export function ChampHeure({ valeur, onValide, nom }) {
+/* Un champ d'heure qui ne rend la valeur que lorsqu'elle est entière.
+ * `aLaSortie` : seulement quand on QUITTE le champ, ou par Entrée — une liste
+ * rangée par heure ne se réordonne plus sous les doigts, et une heure à
+ * moitié tapée (« 00:30 » en route vers « 09:30 ») ne part pas. Laissée
+ * incomplète, elle redevient celle d'avant. Sans lui, chaque heure entière
+ * part aussitôt (les repas du distributeur). `onValide` qui rend `false` :
+ * l'heure est refusée (une heure déjà prise du planning de chauffe), le champ
+ * redit celle d'avant. `style` : par-dessus son dessin (l'heure d'un
+ * changement du planning, 17 px, sans cadre). */
+export function ChampHeure({ valeur, onValide, nom, aLaSortie = false, style = null }) {
   const [v, setV] = useState(valeur);
   useEffect(() => { setV(valeur); }, [valeur]);
-  return <input type="time" value={v} aria-label={nom} style={CHAMP_HEURE}
-    onChange={(e) => { const n = e.target.value; setV(n); if (heureValide(n) && n !== valeur) onValide(n); }} />;
-}
-
-/* Les barres de la semaine : un jour par barre, aujourd'hui en plein. */
-export function BarresSemaine({ jours, valeur, nom }) {
-  const max = Math.max(1, ...jours.map(j => valeur(j) || 0));
-  return (
-    <div role="img" aria-label={nom} style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 6, alignItems: 'end', height: 86 }}>
-      {jours.map(j => {
-        const v = valeur(j) || 0;
-        return (
-          <div key={j.date.getTime()} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', gap: 6, height: '100%' }}>
-            <div style={{ width: '100%', height: Math.max(4, Math.round(60 * v / max)), borderRadius: 8, background: j.aujourdhui ? 'var(--rb-fond)' : v ? 'rgba(var(--rb-rgb),.22)' : 'var(--o-s2)' }} />
-            <span style={{ ...PETITES_CAPITALES, fontSize: 9.5, color: j.aujourdhui ? 'var(--o-text)' : 'var(--o-text2)' }}>{j.date.toLocaleDateString(locale(), { weekday: 'narrow' })}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
+  const rendre = (n) => { if (heureValide(n) && n !== valeur && onValide(n) === false) setV(valeur); };
+  const sortir = (n) => { if (heureValide(n)) rendre(n); else setV(valeur); };
+  return <input type="time" value={v} aria-label={nom} style={style ? { ...CHAMP_HEURE, ...style } : CHAMP_HEURE}
+    onChange={(e) => { const n = e.target.value; setV(n); if (!aLaSortie) rendre(n); }}
+    onBlur={aLaSortie ? (e) => sortir(e.target.value) : undefined}
+    onKeyDown={aLaSortie ? (e) => { if (e.key === 'Enter') sortir(e.currentTarget.value); } : undefined} />;
 }
 
 /**
@@ -174,6 +180,27 @@ export function useHistoriquePeriode(hass, { ids = [], idsAttributs = [], jours 
   return reponse;
 }
 
+/* L'historique d'un `climate`, RÉSUMÉ par le serveur (`loggia/chauffage/historique`,
+ * audit du 19/10) : sept jours d'un poêle pesaient 3 à 14 Mo par `history/period`,
+ * tous ses attributs à chaque mise à jour. Même forme qu'une lecture de
+ * `history/period` (`[[{ state, last_updated, attributes }]]`). La commande
+ * absente — Home Assistant pas encore redémarré, la démo — ou en panne :
+ * 'repli', et la fiche lit `history/period` comme avant. */
+export function useHistoriqueClimat(hass, cle, jours, recharge, actif) {
+  const [reponse, setReponse] = useState(null);
+  const hRef = useRef(hass);
+  useEffect(() => { hRef.current = hass; });
+  useEffect(() => {
+    if (!actif || !cle) { setReponse(null); return undefined; }
+    let vivant = true;
+    Promise.resolve().then(() => hRef.current.callWS({ type: 'loggia/chauffage/historique', chauffage: cle, jours }))
+      .then((r) => { if (vivant) setReponse(r && Array.isArray(r.points) ? [r.points] : 'repli'); })
+      .catch(() => { if (vivant) setReponse('repli'); });
+    return () => { vivant = false; };
+  }, [actif, cle, jours, recharge]);
+  return reponse;
+}
+
 /* ════════════ L'en-tête, les onglets, la page des réglages ════════════ */
 
 /**
@@ -199,11 +226,25 @@ export function focaliser(...ids) {
  * réglages compris), l'épingle, la roue des réglages, puis la croix — la
  * même, en dernier, partout. `panne` : l'appareil ne répond plus ; la ligne
  * porte le liseré `o-panne` (ADR 0048) et le dit sous le nom.
+ *
+ * Deux props facultatives, sans lesquelles rien ne change (la fiche d'un
+ * chauffage, tâche 10 bis B) : `plaque`, `{ icone, fond, encre }`, la plaque
+ * de la carte de l'appareil à gauche du nom — 40 × 40, arrondi 12, glyphe de
+ * 18 px ; `plaque.glyphe`, facultatif, le remplace : l'icône choisie pour la
+ * carte, que la coquille passe (relecture de la partie B) ; `sousNom`, une
+ * ligne sous le nom (« Bureau · fil pilote »), en 12 px au gris secondaire,
+ * qui passe à la ligne plutôt que de se couper.
  */
-export function EnteteFiche({ nom, reglages = false, enReglages = false, onReglages = null, epingle = null, panne = null, idRoue = undefined }) {
+export function EnteteFiche({ nom, reglages = false, enReglages = false, onReglages = null, epingle = null, panne = null, idRoue = undefined, plaque = null, sousNom = null }) {
   return (
     <div className={panne ? 'o-panne' : undefined}
       style={{ display: 'flex', alignItems: 'center', gap: 12, ...(panne ? { padding: '6px 6px 6px 14px', borderRadius: 30 } : null) }}>
+      {plaque && (
+        <span aria-hidden="true" data-plaque=""
+          style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: plaque.fond, color: plaque.encre }}>
+          {plaque.glyphe || <Fi i={plaque.icone} size={18} />}
+        </span>
+      )}
       <div style={{ flex: 1, minWidth: 0 }}>
         {/* Le nom est la seule identité de la feuille : deux lignes au téléphone plutôt
           * qu'une ellipse (« Distribute… » à 320 px hors ligne, 05/10). Coupé aux espaces
@@ -212,6 +253,11 @@ export function EnteteFiche({ nom, reglages = false, enReglages = false, onRegla
         <NomFeuille><div style={{ fontSize: 19, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', hyphens: 'auto', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{enReglages ? tr('Réglages') : nom}</div></NomFeuille>
         {/* Le gris secondaire : le tertiaire tombait à 4,16:1 en clair (05/10). */}
         {enReglages && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>}
+        {/* `break-word`, pas `anywhere` : à 320 px en allemand, « Schlafzimmer · Lautsprecher » se coupait en « Schlafzimm / er » — `anywhere`
+          * laisse la colonne rétrécir sous le mot le plus long. Un mot ne se coupe qu'en dernier recours, quand il ne tient pas même seul sur
+          * sa ligne — et alors avec un trait d'union, à la règle de la langue (`hyphens`), comme le nom au-dessus : « Kinder-modus » dans la
+          * colonne de 72 px d'une TV à 320 px (passe bis du 17/10, point 12). */}
+        {!enReglages && sousNom && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2, minWidth: 0, overflowWrap: 'break-word', hyphens: 'auto' }}>{sousNom}</div>}
         {!enReglages && panne && <div role="status" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 }}>{panne}</div>}
       </div>
       {!enReglages && epingle}
@@ -269,6 +315,79 @@ export const PanneauOnglet = ({ idBase, actuel, avecOnglets, children }) => (
  * services de l'appareil, que Home Assistant ouvre à un compte ordinaire
  * (ADR 0144, 05/10). La configuration de Loggia n'a rien à faire ici.
  */
+/* ════════════ L'entretien (I20 ; sa maquette 1d) — le robot et le distributeur (passe bis de l'étape 2, 19/10 ; point G) ════════════
+ *
+ * La phrase, seulement quand une pièce presse (jamais de « Tout va bien » permanent) ; un panneau, une rangée par pièce : le nom
+ * (« 43 h sur 60 h », « 12 jours restants » dessous), le pourcentage et la barre de 6 px — rouge sous 15, ambre sous 35, neutre
+ * au-dessus (`niveau` : bas, moyen, bon). « Remplacé » n'existe que si l'appareil a le bouton de remise à zéro et pas à 100 % — rien
+ * d'inerte ; il DEMANDE sur sa rangée, « Remettre Filtre à 100 % ? » · « Annuler » · « Oui, 100 % » : une remise à zéro ne se
+ * rattrape pas (ADR 0042). Puis les compteurs, tels que l'appareil les nomme. Les pièces : `{ id, nom, pct, texte, niveau, reset }`
+ * (`piecesUsure` du robot, les consommables du distributeur sur le même gabarit). */
+
+const ENCRE_USURE = { bas: 'var(--o-bad)', moyen: 'var(--o-warn)', bon: 'var(--o-text1)' };
+const BARRE_USURE = { bas: 'var(--o-bad)', moyen: 'var(--o-warn)', bon: 'var(--o-text3)' };
+/* Le panneau PLAT des fiches IoT (sa maquette 1d, § 7.5 ; passe bis 2 de l'étape 2, 19/10) : `--o-s3`, le liseré de la maison, le
+ * rayon 18 — celui des autres onglets du robot (ficherobot.jsx) et de l'Accueil du distributeur (`CADRE`), sans le dégradé ni l'ombre
+ * du socle (`PANNEAU`, la page des réglages). En devenant brique commune, l'Entretien avait pris le panneau du socle : chez lui,
+ * l'onglet installé le matin même changeait de dessin. */
+const PANNEAU_PLAT = { background: 'var(--o-s3)', border: LISERE, borderRadius: 18, boxSizing: 'border-box', minWidth: 0 };
+// « Remplacé » et les puces de sa question : la puce de sa maquette (`ChipButton`, rayon 10 ; passe bis du 18/10, point 13).
+const PUCE_RANGEE = { height: 36, padding: '0 12px', borderRadius: 10, border: 'none', cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit', fontSize: 12, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text1)' };
+
+export function OngletEntretien({ hass, pieces, compteurs = [], phrase = null }) {
+  const [question, setQuestion] = useState(null); // la pièce dont on demande la remise à 100 %
+  const presser = (id) => { setQuestion(null); commanderService(hass, id, 'button', 'press', { entity_id: id }); };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {phrase && <div style={{ fontSize: 12.5, color: 'var(--o-text2)', lineHeight: 1.45, textWrap: 'pretty' }}>{phrase}</div>}
+      {pieces.length > 0 && (
+        <div style={{ ...PANNEAU_PLAT, padding: 0, overflow: 'hidden' }}>
+          {pieces.map((p, i) => {
+            const remplacer = p.reset && p.pct !== 100;
+            const demande = remplacer && question === p.id;
+            return (
+              <div key={p.id} style={{ padding: '14px 16px', borderTop: filet(i) }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nom}</span>
+                    {/* Le sous-texte ne porte la couleur que s'il est le SEUL signal — des jours sans pourcentage (le distributeur) ; sous un
+                      * pourcentage et sa barre, il reste gris : « 43 h sur 60 h » d'une pièce à 28 % passait à l'ambre chez lui (passe bis 2). */}
+                    {p.texte && <span style={{ display: 'block', fontSize: 12, color: p.pct == null && p.niveau && p.niveau !== 'bon' ? ENCRE_USURE[p.niveau] : 'var(--o-text2)', marginTop: 2 }}>{p.texte}</span>}
+                  </span>
+                  {p.pct != null && <span style={{ fontSize: 16, fontWeight: 800, color: ENCRE_USURE[p.niveau], fontVariantNumeric: 'tabular-nums' }}>{p.pct + ' %'}</span>}
+                  {remplacer && !demande && <button type="button" onClick={() => setQuestion(p.id)} style={PUCE_RANGEE}>{tr('Remplacé')}</button>}
+                </div>
+                {p.pct != null && (
+                  <div aria-hidden="true" style={{ position: 'relative', height: 6, marginTop: 10, borderRadius: 3, background: 'var(--o-s1)', overflow: 'hidden' }}>
+                    <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: p.pct + '%', borderRadius: 3, background: BARRE_USURE[p.niveau] }} />
+                  </div>
+                )}
+                {demande && (
+                  <div role="group" aria-label={tr('Remettre {piece} à 100 % ?', { piece: p.nom })} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700 }}>{tr('Remettre {piece} à 100 % ?', { piece: p.nom })}</span>
+                    <button type="button" onClick={() => setQuestion(null)} style={{ ...PUCE_RANGEE, height: 40 }}>{tr('Annuler')}</button>
+                    <button type="button" onClick={() => presser(p.reset)} style={{ ...PUCE_RANGEE, height: 40, background: 'var(--o-accent-fond)', color: '#fff' }}>{tr('Oui, 100 %')}</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {compteurs.length > 0 && (
+        <div style={{ ...PANNEAU_PLAT, padding: 0, overflow: 'hidden' }}>
+          {compteurs.map((c, i) => (
+            <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 16px', borderTop: filet(i), fontSize: 13 }}>
+              <span style={{ color: 'var(--o-text2)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nom}</span>
+              <span style={{ fontWeight: 800, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{c.valeur.toLocaleString(locale(), { maximumFractionDigits: 1 }) + (c.unite ? ' ' + c.unite : '')}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PageReglagesAppareil({ hass, nom, libelleNom, reglages, fiche = [], retour, onFiche = null, avant = null, motOption = null, idRetour = undefined }) {
   const [tout, setTout] = useState(false);
   return (

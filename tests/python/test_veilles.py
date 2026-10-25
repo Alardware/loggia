@@ -7,6 +7,7 @@ de la lire.
 from __future__ import annotations
 
 import asyncio
+import sys
 
 import pytest
 
@@ -72,8 +73,19 @@ def regles_module():
     return charger("regles")
 
 
+def _registre_illisible(_hass):
+    raise RuntimeError("registre illisible")
+
+
 @pytest.fixture
-def creer(module, store_module, regles_module):
+def creer(module, store_module, regles_module, monkeypatch):
+    # Un registre ILLISIBLE par defaut (audit du 19/10, lot 3) : la veille des
+    # piles ecarte desormais une pile que le registre ne connait pas, comme
+    # l'ecran. `test_discovery.py` laisse ses registres factices poses apres
+    # lui : sans ce repli, ces tests dependaient de l'ordre ou ils tournent. Un
+    # test qui veut un registre le pose lui-meme (`registre`, apres celui-ci).
+    for nom in ("entity_registry", "device_registry"):
+        monkeypatch.setattr(sys.modules["homeassistant.helpers." + nom], "async_get", _registre_illisible)
     faits = []
 
     def fabrique(config=None, etats=None, notify='mobile', services=None, calme=None):
@@ -99,6 +111,8 @@ def creer(module, store_module, regles_module):
         # tient le journal, et ces tests doivent voir ce que verra la maison.
         v.regles = regles_module.Regles(v.hass, magasin)
         v.regles._depot = FauxStore(None)
+        # Le fichier de ce qui a ete signale (audit du 19/10, M2) : en memoire.
+        v._depot = FauxStore(None)
         faits.append(v)
         return v
 

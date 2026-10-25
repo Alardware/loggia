@@ -112,7 +112,7 @@ test('les cinq endroits passent par le gabarit', () => {
   const lire = (f) => readFileSync(join(SRC, f), 'utf8');
   const app = lire('App.jsx');
   assert.ok(app.includes("{alarmeTuile ? tr('{a} : {b}', { a: tr('Alarme'), b: alarmeTuile.texte }) : ''}"), 'l’état de l’alarme, dit au lecteur d’écran');
-  assert.ok(app.includes("{points.length ? tr('{a} : {b}', { a: tr('À surveiller'), b: resumeAttention(points) }) : ''}"), 'la carte « À surveiller », dite au lecteur d’écran');
+  assert.ok(app.includes("{attentionLigne ? tr('{a} : {b}', { a: tr('À surveiller'), b: resumeAttention(points) }) : ''}"), 'la carte « À surveiller », dite au lecteur d’écran');
   const ui = lire('ui.jsx');
   // `nom` ne sert qu'au bouton que l'appelant dessine (lot 13 de l'audit du
   // 03/10) : sans lui, le nom composé par le gabarit reste celui du bouton.

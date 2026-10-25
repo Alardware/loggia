@@ -16,7 +16,8 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
-const { echelleMesure, jaugeMesure, cleMesure, barresPile, verdictMesure } = await import('../src/confort.js');
+// ASSERTION MODIFIÉE (audit du 19/10, point 14) : `jaugeMesure` (code mort) et `barresPile` (une seconde règle des piles) sont partis.
+const { echelleMesure, barreMesure, cleMesure, verdictMesure } = await import('../src/confort.js');
 const { SEUIL_CO2 } = await import('../src/attention.js');
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -51,26 +52,29 @@ test('les couleurs des photos, dans leur ordre : bleu idéal, puis vert, jaune, 
   }
 });
 
+/* ASSERTIONS MODIFIÉES (audit du 19/10, point 14) : portées de `jaugeMesure` sur `barreMesure`, la barre que les cartes dessinent —
+ * son repère reste sur la barre, de 1 à 99 %. */
 test('le trait suit la valeur sur une échelle linéaire, bornée aux extrémités', () => {
-  const co2 = (v) => jaugeMesure('co2', v).pos;
+  const co2 = (v) => barreMesure('co2', v).pos;
   assert.ok(co2(900) < co2(1150) && co2(1150) < co2(1400) && co2(1400) < co2(1600));
   // Sous l'échelle, le trait reste au bout gauche — comme 447 ppm sur la photo.
-  assert.equal(co2(447), 0);
-  assert.equal(co2(5000), 100);
+  assert.equal(co2(447), 1);
+  assert.equal(co2(5000), 99);
   // Le trait tombe dans la bande de son verdict.
   for (const [cle, v] of [['co2', 1280], ['co2', 1480], ['temp', 20], ['hum', 47], ['bruit', 67]]) {
-    const j = jaugeMesure(cle, v);
-    const bande = j.bandes.find(b => j.pos >= b.de && j.pos <= b.a);
-    assert.equal(bande.c, j.verdict.c, cle + ' ' + v + ' : le trait et le mot ne disent pas la même chose');
+    const b = barreMesure(cle, v);
+    assert.equal(b.zones[b.i].c, verdictMesure(cle, v).c, cle + ' ' + v + ' : le trait et le mot ne disent pas la même chose');
+    const debut = b.zones.slice(0, b.i).reduce((n, z) => n + z.part, 0);
+    assert.ok(b.pos >= Math.floor(debut) && b.pos <= Math.ceil(debut + b.zones[b.i].part), cle + ' ' + v + ' : le repère hors de sa bande');
   }
-  assert.equal(jaugeMesure('co2', null), null);
-  assert.equal(jaugeMesure('co2', 'unknown'), null);
+  assert.equal(barreMesure('co2', null), null);
+  assert.equal(barreMesure('co2', 'unknown'), null);
 });
 
 test('les chiffres ne se chevauchent pas, même dans une carte de téléphone (barre de 144 px)', () => {
-  // 10 px, gras, chiffres à chasse fixe : environ 6 px par chiffre.
-  for (const cle of ['co2', 'temp', 'hum', 'bruit']) {
-    const r = echelleMesure(cle).reperes;
+  // 10 px, gras, chiffres à chasse fixe : environ 6 px par chiffre. Les échelles du dehors aussi (passe 1 ter, 16/10 ; C15 révisé).
+  for (const [cle, dehors] of [['co2'], ['temp'], ['hum'], ['bruit'], ['temp', true], ['hum', true]]) {
+    const r = echelleMesure(cle, 'C', dehors).reperes;
     for (let i = 1; i < r.length; i++) {
       const ecart = (r[i].pos - r[i - 1].pos) / 100 * 144;
       const place = (String(r[i].v).length + String(r[i - 1].v).length) * 3 + 2;
@@ -79,35 +83,39 @@ test('les chiffres ne se chevauchent pas, même dans une carte de téléphone (b
   }
 });
 
-test('la pile en cinq barres, comme la capture : 100 → 5 vertes … 20 → 1 rouge', () => {
-  assert.deepEqual([100, 80, 60, 40, 20].map(p => barresPile(p).n), [5, 4, 3, 2, 1]);
-  assert.deepEqual([100, 80, 60, 40, 20].map(p => barresPile(p).c), ['var(--o-ok)', 'color-mix(in srgb, var(--o-ok) 55%, var(--o-warn))', 'var(--o-warn)', 'var(--o-warn2)', 'var(--o-bad)']);
-  assert.equal(barresPile(81).n, 4, 'au plus proche : 81 % se lit comme 80 %');
-  assert.equal(barresPile(3).n, 1, 'jamais moins d’une barre');
-  assert.equal(barresPile(null), null);
+/* ASSERTION MODIFIÉE (audit du 19/10, point 13) : UNE règle de pile (`couleurPile`, ADR 0206) — les barres gardent leur nombre (une par
+ * 20 %, au plus proche, jamais moins d'une), leur couleur est celle de la pile : ambre au seuil de la veille, rouge au critique, vert sinon. */
+test('la pile en cinq barres, comme la capture : une par 20 %, dans la couleur de LA règle des piles', () => {
+  const carte = APP.slice(APP.indexOf('function RoomGenericCard('), APP.indexOf("/* ── La carte d'une MESURE"));
+  assert.ok(carte.includes("barres = { n: Math.max(1, Math.min(5, Math.round(n / 20))), c: couleurPile(n, 'var(--o-ok)') };"), 'les barres lisent couleurPile');
+  assert.ok(!APP.includes('barresPile') && !lire('src', 'confort.js').includes('barresPile'), 'la seconde règle est revenue');
 });
 
 test('les classes Home Assistant qui ont une jauge', () => {
-  assert.deepEqual(['temperature', 'humidity', 'carbon_dioxide', 'sound_pressure', 'battery', 'illuminance'].map(cleMesure), ['temp', 'hum', 'co2', 'bruit', null, null]);
+  // ASSERTION MODIFIÉE (chantier Capteurs, tâche 2) : la luminosité a sa famille dans la table (§ 6) ; une pile n'en a toujours pas.
+  assert.deepEqual(['temperature', 'humidity', 'carbon_dioxide', 'sound_pressure', 'battery', 'illuminance'].map(dc => cleMesure(dc)), ['temp', 'hum', 'co2', 'bruit', null, 'lux']);
 });
 
+/* ASSERTIONS MODIFIÉES (chantier Capteurs, tâche 4 ; C11) : la jauge de la carte d'une mesure est la barre des zones de
+ * sa maquette (`BarreMesure`) — le trait devient un repère de 4 px sur 16, les bandes de 8 px se séparent de 2 px. */
 test('la jauge : un TRAIT à la valeur, pas un rond, sur une barre de 8 px ; pas de jauge dans la compacte', () => {
-  const j = fonction('JaugeMesure');
-  assert.ok(j.includes('className="o-jauge-trait"') && j.includes('width: 3, height: haut, borderRadius: 2'), 'le repère est un trait');
+  assert.ok(!APP.includes('\nfunction JaugeMesure('), 'l’ancienne jauge est restée');
+  const j = fonction('BarreMesure');
+  assert.ok(j.includes("data-repere=\"\" style={{ position: 'absolute', top: 0, left: barre.pos + '%', width: 4, height: 16, marginLeft: -2, borderRadius: 2,"), 'le repère est un trait');
   assert.ok(!/borderRadius: '50%'/.test(j), 'un rond est revenu');
-  // « Épaissis légèrement la graduation » (19/09) : 6 → 8 px, le trait la dépasse encore.
-  assert.ok(j.includes('const h = 8, haut = 18;'), 'la barre a changé d’épaisseur');
+  assert.ok(j.includes("top: 4, height: 8, display: 'flex', gap: 2"), 'la barre a changé d’épaisseur');
   assert.ok(j.includes("left: 'clamp(' + demi + 'px, ' + r.pos + '%, calc(100% - ' + demi + 'px))'"), 'les chiffres restent dans la barre');
   assert.ok(j.includes('aria-hidden="true"'), 'la valeur et son mot sont déjà écrits : la jauge ne se lit pas');
   // « Laisse comme sur la 2e photo » : la compacte garde son dessin — icône, nom, valeur.
   const c = fonction('CvCard');
-  assert.ok(!c.includes('JaugeMesure') && !c.includes('JaugePile') && !c.includes('jaugeMesure('), 'une jauge est revenue dans la compacte');
+  assert.ok(!c.includes('BarreMesure') && !c.includes('JaugePile') && !c.includes('barreMesure('), 'une jauge est revenue dans la compacte');
 });
 
 test('une seule table : « Élevé » commence à 1 400 ppm partout', () => {
   assert.equal(verdictMesure('co2', SEUIL_CO2).t, 'Élevé', 'le point « À surveiller » tombe au début de « Élevé »');
   assert.equal(verdictMesure('co2', SEUIL_CO2 - 1).t, 'Moyen');
-  assert.ok(APP.includes('function airPalier(co2) { return co2 == null || co2 < 1150 ? 0 : co2 < ' + SEUIL_CO2 + ' ? 1 : 2; }'), 'la bannière et le badge');
+  // ASSERTION MODIFIÉE (audit du 19/10, M16) : la bannière et le badge lisent la table elle-même — plus de paliers à part.
+  assert.ok(!APP.includes('function airPalier') && APP.includes("const zoneCo2 = (co2) => (co2 == null ? null : zoneMesure('co2', co2));"), 'la bannière et le badge');
   assert.ok(fonction('CvAir').includes("const vAir = air.co2V == null ? null : verdictMesure('co2', air.co2V);"), 'la carte « Qualité air » du catalogue');
   assert.ok(!APP.includes("tr('Mauvais'), 'var(--o-bad)'"), 'plus de seconde échelle 800 / 1200 dans la carte « Qualité air »');
   const py = lire('custom_components', 'loggia', 'veilles.py');

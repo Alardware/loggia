@@ -61,7 +61,7 @@ redémarrer, puis ajouter l'intégration depuis l'interface. Le mode historique
 | Lumières | domaine `light`, regroupées par zone |
 | Climat | domaine `climate`, avec le capteur de température de l'appareil ou de la zone |
 | Volets | domaine `cover` |
-| Aspirateur, tondeuse | domaines `vacuum` et `lawn_mower` et les entités du même appareil (batterie, carte ou zones, consommables, réglages) — leur fiche s'ouvre depuis leur carte, dans Objets : accueil, carte, planning, historique, entretien |
+| Aspirateur, tondeuse | domaines `vacuum` et `lawn_mower` et les entités du même appareil (batterie, carte ou zones, consommables, réglages) — leur fiche s'ouvre depuis leur carte, dans Objets : accueil (« Où » : les zones de Home Assistant associées au robot, ou les pièces qu'il publie), planning, historique, entretien |
 | Médias | domaine `media_player` |
 | Sécurité | `alarm_control_panel`, `camera` (flux dédoublonnés), `person` ; détecteurs pris parmi les `binary_sensor` de la même caméra |
 | Énergie | **préférences du tableau de bord Énergie natif** — compteur, injection, production solaire, appareils suivis |
@@ -135,8 +135,9 @@ rougeoie — et **fonds d'écran** discrets dans la palette du thème. Les
 ambiances lumineuses de la bibliothèque Hue portent un dégradé de leurs
 couleurs ; une photo se pose par scène dans `config/www/hue_scenes/`,
 nommée par l'identifiant Hue de la scène (`<uuid>.jpeg`). Le mode
-« Suivre Home Assistant » calque le thème actif de HA. Tous ces réglages sont
-propres à l'appareil.
+« Suivre Home Assistant » calque le thème actif de HA. Ces réglages suivent
+votre profil d'un écran à l'autre ; un écran peut garder les siens
+(Paramètres → Appareils), une tablette murale par exemple.
 
 Si le pire arrive, l'écran d'erreur propose de **repartir sans les vues
 custom** ou de revenir aux **réglages d'usine** — le dashboard sait se
@@ -153,8 +154,9 @@ Sécurité) :
   automatique) qu'aucune convention ne permet de deviner ;
 - le **planning des volets** (mode d'automatisme, jours) ;
 - un **distributeur de croquettes** : son appareil, ou son réservoir, sa
-  portion et, si besoin, le script qui distribue. Sa fiche — Accueil,
-  Planning, Historique, Entretien — lit les repas dans le **programme de
+  portion et, si besoin, le script qui distribue. Sa fiche — Accueil, Repas,
+  Historique, et Entretien quand l'appareil a des consommables — lit les
+  repas dans le **programme de
   l'appareil** quand il se lit (Petlibro, PetKit, Aqara, Tuya), et dans les
   **automatisations** de Home Assistant qui le commandent, reconnues à ce
   qu'elles font, jamais à leur nom. Sans l'un ni l'autre, et si Loggia sait
@@ -201,7 +203,7 @@ seuils que la barre de confort des pièces.
   retire aucun. Un compte ne peut donc rien faire ici qu'il ne puisse déjà
   faire ailleurs dans Home Assistant.
 - Les commandes qui écrivent la configuration de la maison sont **réservées
-  aux administrateurs** (`require_admin`, sur les douze commandes WebSocket
+  aux administrateurs** (`require_admin`, sur les quinze commandes WebSocket
   concernées — un test verrouille la liste). L'identité vient de la
   connexion authentifiée, jamais d'un champ envoyé par le navigateur.
 - Les règles n'appellent que des services **écrits en dur** dans le composant
@@ -211,8 +213,16 @@ seuils que la barre de confort des pièces.
     tout son intérêt, et affecter demande d'être administrateur ;
   - une **notification** part vers le service `notify.…` que vous avez désigné
     dans Alertes ;
-  - un **robot** est commandé d'après sa plateforme, lue au registre de Home
-    Assistant, parce que les aspirateurs ne parlent pas tous la même langue.
+  - un **robot** nettoie des pièces par les zones de Home Assistant qu'on lui a
+    associées, une fois, dans ses réglages (`vacuum.clean_area`, Home Assistant
+    2026.3 et après) ; sans association, ou avant, il est commandé d'après sa
+    plateforme, lue au registre de Home Assistant, parce que les aspirateurs ne
+    parlent pas tous la même langue — avec une exception nommée : un Ecovacs
+    dont la bibliothèque n'a pas de commande de pièces, qui publie ses pièces et
+    pour lequel aucun script de départ n'est désigné, part par la commande brute
+    que ses propres scripts envoient (`clean_V2`). Vos scripts gardent la main :
+    dès qu'un script de départ est désigné dans la roue de sa popup, Loggia ne
+    commande pas les pièces elle-même.
 - Le jeton d'accès Home Assistant n'est lu que **pour les images** : les
   instantanés et le flux d'une caméra, la carte d'un robot aspirateur,
   auprès du proxy d'images de Home Assistant. Il n'est ni stocké, ni envoyé

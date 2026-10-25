@@ -176,9 +176,9 @@ test('le résumé d’accueil s’enroule à côté de la pastille, pas dessous'
   const bloc = src.slice(i, src.indexOf('</span></span>', i));
   // Le texte doit être un item À LUI, capable de s'enrouler à l'intérieur de
   // sa propre colonne.
-  // Depuis la v3.29, le résumé commence par « Tout va bien » ou le compte des
-  // points à surveiller (ADR 0028) — toujours dans SA colonne.
-  assert.match(bloc, /<span style=\{\{ flex: 1, minWidth: 0 \}\}>\{\[points\.length \? resumeAttention\(points\) : tr\('Tout va bien'\), \.\.\.faits\.txt\]\.join/,
+  // Le résumé commence par le compte des points à surveiller s'il y en a
+  // (ADR 0028 ; ticket #34, réponse « B ») — toujours dans SA colonne.
+  assert.match(bloc, /<span style=\{\{ flex: 1, minWidth: 0 \}\}>\{\[\.\.\.\(attentionLigne \? \[resumeAttention\(points\)\] : \[\]\), \.\.\.faits\.txt\]\.join/,
     'le résumé redevient un nœud texte nu : il rebasculera sous la pastille');
   // Et la pastille s'aligne sur la première ligne, pas au milieu du bloc.
   assert.match(bloc, /alignItems: 'flex-start'/, 'la pastille se recentre sur tout le bloc');

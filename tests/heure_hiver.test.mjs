@@ -117,8 +117,9 @@ test('aucun jour de calendrier compté en 24 h dans l’agenda et la feuille Cal
   const agenda = readFileSync(join(RACINE, 'src', 'agenda.js'), 'utf8');
   assert.ok(!/getTime\(\) \+ (n \* )?864e5/.test(agenda), 'agenda.js ajoute encore 24 h à un minuit');
   const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
-  const debut = app.indexOf('function FeuilleCalendrier(');
-  const feuille = app.slice(debut, app.indexOf('\nfunction ', debut + 10));
+  // ASSERTION MODIFIÉE (boot, 19/10) : la feuille du mois vit dans feuillecalendrier.jsx, chargé à la demande ; son code n'a pas changé.
+  const feuille = readFileSync(join(RACINE, 'src', 'feuillecalendrier.jsx'), 'utf8');
+  assert.ok(feuille.includes('function FeuilleCalendrierContent('), 'la feuille Calendrier a quitté son module');
   assert.ok(!/864e5/.test(feuille), 'la feuille Calendrier compte encore ses jours en 24 h');
   const lecture = app.slice(app.indexOf('const lire = async () => {'), app.indexOf('const lire = async () => {') + 600);
   assert.ok(!/\* 864e5/.test(lecture), 'la plage de l’agenda compte encore sept fois 24 h');

@@ -28,13 +28,18 @@ pas de fondu du tout.
 """
 from __future__ import annotations
 
+import copy
 import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
 
 from .presence import CLE as CLE_PRESENCE, invite_present
 from .const import DOMAIN
+from .lumieres_maison import (MUETS, a_epargner, async_interrupteurs_declares, attributs_des_lumieres,
+                              lumieres_de_la_maison, par_service, registre_de, service_de, veilleuses_de)
+from .refus import RefusNomme
 from .regles import demarrer, niveau
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
@@ -104,6 +109,69 @@ def a_eteindre(etats: dict, sauf) -> list:
                   and str(getattr(st, "state", "")).lower() == "on")
 
 
+# Les listes d'entites de la configuration, par section : des textes seulement
+# (`_poser_patch`). `jours` est a part : des entiers de 0 a 6.
+LISTES = {"veilleuse": ("lampes",), "coucher": ("sauf",)}
+LISTES_PIECE = ("capteurs", "lampes")
+
+
+def _liste_de_textes(section: str, cle: str, valeur: Any) -> None:
+    """Refuse (`nuit_format`) ce qui n'est pas une liste de textes."""
+    if not isinstance(valeur, list) or not all(isinstance(h, str) for h in valeur):
+        raise RefusNomme("nuit_format", "une liste d'entites est attendue", section + "." + cle)
+
+
+def verifier_patch(patch: Any) -> None:
+    """Le patch de l'ecran, verifie AVANT d'ecrire (audit du 19/10) : les
+    listes d'entites sont des listes de textes, les jours des entiers de 0 a
+    6. Un patch qui n'en est pas un se refuse par son code - `nuit_format`,
+    un code NOMME que l'ecran sait dire (src/refus.js), jamais le
+    `invalid_format` generique -, et rien ne s'ecrit - avant, `lampes: "light.x"` s'ecrivait tel quel, et la veilleuse
+    suivait chaque lettre."""
+    if not isinstance(patch, dict):
+        raise RefusNomme("nuit_format", "un patch est une table")
+    for section, valeurs in patch.items():
+        if not isinstance(valeurs, dict):
+            continue
+        for cle in LISTES.get(section, ()):
+            if cle in valeurs:
+                _liste_de_textes(section, cle, valeurs[cle])
+        if section == "coucher" and "jours" in valeurs:
+            jours = valeurs["jours"]
+            if (not isinstance(jours, list)
+                    or not all(isinstance(j, int) and not isinstance(j, bool) and 0 <= j <= 6 for j in jours)):
+                raise RefusNomme("nuit_format", "des jours de 0 a 6 sont attendus", "coucher.jours")
+        if section == "eclairage" and isinstance(valeurs.get("pieces"), dict):
+            for nom, piece in valeurs["pieces"].items():
+                if not isinstance(piece, dict):
+                    continue
+                for cle in LISTES_PIECE:
+                    if cle in piece:
+                        _liste_de_textes("eclairage.pieces." + str(nom), cle, piece[cle])
+
+
+def lisible_par(lecture: Any, cfg: dict[str, Any]) -> dict[str, Any]:
+    """La configuration telle qu'un compte la LIT (audit du 19/10) : ses listes
+    d'entites - veilleuses, lampes epargnees, lampes et capteurs des pieces -
+    ne gardent que ce que `lecture` autorise. La liste des veilleuses reste
+    rendue : l'ecran en a besoin pour epargner. `lecture` None : tout."""
+    if lecture is None:
+        return cfg
+    cfg = copy.deepcopy(cfg)
+    for section, cles in LISTES.items():
+        for cle in cles:
+            liste = (cfg.get(section) or {}).get(cle)
+            if isinstance(liste, list):
+                cfg[section][cle] = [h for h in liste if not isinstance(h, str) or lecture(h)]
+    for piece in ((cfg.get("eclairage") or {}).get("pieces") or {}).values():
+        if not isinstance(piece, dict):
+            continue
+        for cle in LISTES_PIECE:
+            if isinstance(piece.get(cle), list):
+                piece[cle] = [h for h in piece[cle] if not isinstance(h, str) or lecture(h)]
+    return cfg
+
+
 def fait_nuit(etat_soleil) -> bool:
     """Le soleil est-il couche ? Sans `sun.sun`, on suppose qu'il fait jour :
     se tromper vers le jour n'omet qu'un eclairage, se tromper vers la nuit
@@ -140,6 +208,16 @@ class LoggiaNuit:
     """Eteint la veilleuse apres son delai, les lampes oubliees a l'heure dite,
     et eclaire le passage la nuit."""
 
+    # Valeurs de CLASSE : un objet bati sans passer par `__init__` - ce que
+    # font les tests - les trouve quand meme. Immuables : une table de classe
+    # serait partagee entre les instances.
+    # Les interrupteurs declares lumieres, relus avant chaque geste qui les
+    # commande (`_async_relire_interrupteurs`).
+    _interrupteurs: frozenset = frozenset()
+    # L'echeance de chaque veilleuse armee, en secondes depuis 1970 : ce qui
+    # reste quand la lampe se tait (`_sur_lampe`).
+    _echeances: dict[str, float] | None = None
+
     def __init__(self, hass: HomeAssistant, store: "LoggiaStore", regles=None) -> None:
         self.hass = hass
         self.store = store
@@ -148,6 +226,7 @@ class LoggiaNuit:
         self.cfg: dict[str, Any] = {}
         # Une minuterie par lampe : deux veilleuses ne partagent pas la leur.
         self._minuteurs: dict[str, Any] = {}
+        self._echeances = {}
         # L'eclairage nocturne : une minuterie par piece, et ce que la regle y
         # a allume — elle n'eteint que cela.
         self._minuteurs_pieces: dict[str, Any] = {}
@@ -168,6 +247,7 @@ class LoggiaNuit:
                 except Exception:  # noqa: BLE001
                     _LOGGER.debug("Loggia nuit : abonnement deja retire")
             source.clear()
+        await self._async_relire_interrupteurs()
         self._declarer()
 
         v = self.cfg.get("veilleuse") or {}
@@ -231,10 +311,25 @@ class LoggiaNuit:
             if etat is not None and str(getattr(etat, "state", "")).lower() == "on":
                 await self._async_armer(haid)
 
+    # ── Les lumieres de la maison (lumieres_maison, audit du 19/10) ────────
+    async def _async_relire_interrupteurs(self) -> None:
+        """Les interrupteurs declares lumieres, relus au magasin : `_declarer`
+        et le coucher sont synchrones, ils lisent la copie."""
+        self._interrupteurs = frozenset(await async_interrupteurs_declares(self.store))
+
+    def _lumieres(self) -> tuple[dict[str, dict[str, Any]], list[str]]:
+        """({haid: attributs} des `light.*` et des interrupteurs declares,
+        les lumieres de la maison) - la definition commune a toutes les
+        regles : ni la LED d'une borne (`config`), ni une lampe cachee ; un
+        groupe s'efface devant ses membres. Des etats illisibles levent."""
+        attributs = attributs_des_lumieres(self.hass, self._interrupteurs)
+        return attributs, lumieres_de_la_maison(attributs, registre_de(self.hass), self._interrupteurs)
+
     def _declarer(self) -> None:
         """Declare au socle ce que la nuit pilote : les veilleuses, et toutes
-        les lampes que l'extinction peut toucher. Rappele au coucher — les
-        lampes peuvent ne pas exister au demarrage."""
+        les lumieres de la maison que l'extinction peut toucher - l'interrupteur
+        declare lumiere compris. Rappele au coucher — les lampes peuvent ne pas
+        exister au demarrage."""
         pilotes = []
         v = self.cfg.get("veilleuse") or {}
         if v.get("actif"):
@@ -246,27 +341,64 @@ class LoggiaNuit:
                     pilotes += list(piece.get("lampes") or [])
         if (self.cfg.get("coucher") or {}).get("actif"):
             try:
-                pilotes += list(self.hass.states.async_entity_ids("light"))
+                pilotes += self._lumieres()[1]
             except Exception:  # noqa: BLE001
                 _LOGGER.warning("Loggia nuit : lampes illisibles, l'extinction ne les suivra pas", exc_info=True)
         self.regles.suivre("nuit", pilotes)
 
     # ── La veilleuse ───────────────────────────────────────────────────────
+    def _les_echeances(self) -> dict[str, float]:
+        if self._echeances is None:
+            self._echeances = {}
+        return self._echeances
+
     @callback
     def _sur_lampe(self, event) -> None:
+        """La veilleuse change d'etat. Un ALLUMAGE arme la minuterie ; une
+        extinction la desarme. Deux cas que l'audit du 19/10 a tranches :
+
+          * un evenement d'attribut seul (`on` → `on`, un reglage de
+            luminosite) n'est pas un allumage : une lampe allumee avant la
+            plage ne s'arme pas parce qu'on la baisse a 20 h ;
+          * une lampe qui se TAIT (`unavailable`, `unknown`) garde sa
+            minuterie et son echeance ; a son retour, l'echeance d'origine
+            tient - pas une duree pleine -, et passee pendant le silence,
+            la lampe s'eteint tout de suite. Sans echeance connue, le retour
+            vaut un allumage : mieux vaut une veilleuse qui s'eteint trop tot
+            qu'une qui brule toute la nuit."""
         d = event.data or {}
         haid = d.get("entity_id")
         if not haid:
             return
         neuf = d.get("new_state")
         etat = str(getattr(neuf, "state", "")).lower() if neuf else ""
+        ancien = d.get("old_state")
+        avant = str(getattr(ancien, "state", "")).lower() if ancien else ""
         if etat == "on":
+            if avant == "on":
+                return
+            if avant in MUETS and haid in self._minuteurs:
+                return
+            echeance = self._les_echeances().get(haid)
+            if avant in MUETS and echeance is not None:
+                reste = echeance - time.time()
+                if reste <= 0:
+                    self.hass.async_create_task(self._async_eteindre_veilleuse(haid))
+                else:
+                    self.hass.async_create_task(self._async_armer(haid, reste))
+                return
             self.hass.async_create_task(self._async_armer(haid))
+        elif etat in MUETS:
+            # Muette : on ne sait rien de plus. La minuterie et l'echeance restent.
+            return
         else:
             # Eteinte a la main : la minuterie n'a plus lieu d'etre.
             self._desarmer(haid)
+            self._les_echeances().pop(haid, None)
 
-    async def _async_armer(self, haid: str) -> None:
+    async def _async_armer(self, haid: str, duree: float | None = None) -> None:
+        """Arme la minuterie de la veilleuse : la duree reglee, ou `duree`
+        (secondes) - ce qui reste d'une echeance d'avant une panne."""
         from homeassistant.util import dt as dt_util
 
         v = self.cfg.get("veilleuse") or {}
@@ -276,11 +408,12 @@ class LoggiaNuit:
             return
         if haid in self._minuteurs:
             return
-        try:
-            duree = max(0, int(v.get("duree", 30))) * 60
-        except (TypeError, ValueError):
-            duree = 1800
-        if duree == 0:
+        if duree is None:
+            try:
+                duree = max(0, int(v.get("duree", 30))) * 60
+            except (TypeError, ValueError):
+                duree = 1800
+        if duree <= 0:
             await self._async_eteindre_veilleuse(haid)
             return
         from homeassistant.helpers.event import async_call_later
@@ -290,6 +423,7 @@ class LoggiaNuit:
             self._minuteurs.pop(haid, None)
             self.hass.async_create_task(self._async_eteindre_veilleuse(haid))
 
+        self._les_echeances()[haid] = time.time() + duree
         self._minuteurs[haid] = async_call_later(self.hass, duree, echu)
 
     def _desarmer(self, haid: str) -> None:
@@ -310,17 +444,27 @@ class LoggiaNuit:
 
     async def _async_eteindre_veilleuse(self, haid: str) -> None:
         st = self.hass.states.get(haid)
-        # Eteinte entre temps : rien a faire.
-        if st is None or str(getattr(st, "state", "")).lower() != "on":
+        etat = str(getattr(st, "state", "")).lower() if st is not None else ""
+        if etat != "on":
+            # Eteinte entre temps : rien a faire, l'echeance s'oublie. Muette : on
+            # ne sait pas ; l'echeance reste, son retour la trouvera passee.
+            if etat not in MUETS:
+                self._les_echeances().pop(haid, None)
             return
+        self._les_echeances().pop(haid, None)
         v = self.cfg.get("veilleuse") or {}
         data: dict[str, Any] = {}
         try:
             fondu = max(0, int(v.get("fondu", 0)))
         except (TypeError, ValueError):
             fondu = 0
-        # On ne demande une transition qu'a une lampe qui sait la faire.
-        if fondu and self._sait_fondre(haid):
+        # Chacun par son service (lumieres_maison, retouches du 19/10, R5) : une
+        # veilleuse peut etre un interrupteur declare lumiere - `light.turn_off`
+        # sur un `switch.*`, Home Assistant le refuse. On ne demande une
+        # transition qu'a une LAMPE qui sait la faire : un interrupteur n'en a
+        # pas, quoi que dise son `supported_features`.
+        domaine, service = service_de(haid, False)
+        if fondu and domaine == "light" and self._sait_fondre(haid):
             data["transition"] = fondu * 60
         try:
             duree = max(0, int(v.get("duree", 30)))
@@ -331,7 +475,7 @@ class LoggiaNuit:
         # retient donc pas — sans quoi une veilleuse de trente minutes ne
         # s'eteindrait jamais, le gel durant trente minutes lui aussi.
         self.regles.degeler(haid)
-        await self._async_service("light", "turn_off", [haid], data,
+        await self._async_service(domaine, service, [haid], data,
                                   regle="veilleuse", quoi="eteindre",
                                   motif=("{n} min", {"n": duree}), priorite=PRIORITES["veilleuse"])
 
@@ -382,11 +526,15 @@ class LoggiaNuit:
             luminosite = max(1, min(100, int(e.get("luminosite", 10))))
         except (TypeError, ValueError):
             luminosite = 10
-        partis = await self._async_service("light", "turn_on", cibles,
-                                           {"brightness_pct": luminosite},
-                                           regle="eclairage", quoi="allumer",
-                                           motif=("mouvement : {piece}", {"piece": piece}),
-                                           priorite=PRIORITES["eclairage"])
+        # Par service (lumieres_maison) : une lampe a faible intensite, un
+        # interrupteur declare lumiere tel quel - il n'a pas de niveau.
+        partis: list = []
+        for domaine, service, lot in par_service(cibles, True):
+            partis += await self._async_service(domaine, service, lot,
+                                                {"brightness_pct": luminosite} if domaine == "light" else None,
+                                                regle="eclairage", quoi="allumer",
+                                                motif=("mouvement : {piece}", {"piece": piece}),
+                                                priorite=PRIORITES["eclairage"])
         if partis:
             self.allumees[piece] = sorted(set(self.allumees.get(piece, [])) | set(partis))
 
@@ -436,10 +584,11 @@ class LoggiaNuit:
             duree = max(0, int(e.get("duree", 3)))
         except (TypeError, ValueError):
             duree = 3
-        await self._async_service("light", "turn_off", cibles, None,
-                                  regle="eclairage", quoi="eteindre",
-                                  motif=("{n} min sans mouvement", {"n": duree}),
-                                  priorite=PRIORITES["eclairage"])
+        for domaine, service, lot in par_service(cibles, False):
+            await self._async_service(domaine, service, lot, None,
+                                      regle="eclairage", quoi="eteindre",
+                                      motif=("{n} min sans mouvement", {"n": duree}),
+                                      priorite=PRIORITES["eclairage"])
 
     # ── Les lampes oubliees ────────────────────────────────────────────────
     @callback
@@ -471,19 +620,28 @@ class LoggiaNuit:
         if invite and invite_present(self.hass.states, invite):
             await self.regles.noter("nuit", "coucher", "retenir", n=0, motif="mode invite")
             return
+        # Les lumieres de la maison, par la definition commune (lumieres_maison,
+        # audit du 19/10) : ni la LED d'une borne ni une lampe cachee, mais
+        # l'interrupteur declare lumiere - par SON service.
+        await self._async_relire_interrupteurs()
         try:
-            ids = self.hass.states.async_entity_ids("light")
+            attributs, lumieres = self._lumieres()
         except Exception:  # noqa: BLE001
             _LOGGER.warning("Loggia nuit : lampes illisibles ce soir, extinction du coucher ignoree", exc_info=True)
             return
-        etats = {i: self.hass.states.get(i) for i in ids}
+        etats = {h: self.hass.states.get(h) for h in lumieres}
         self._declarer()
-        cibles = a_eteindre(etats, c.get("sauf"))
+        # Sa decision : les veilleuses sont epargnees PARTOUT - et le groupe
+        # qui en contient une avec elles -, en plus de ce que `sauf` nomme.
+        epargnees = set(h for h in (c.get("sauf") or []) if isinstance(h, str))
+        epargnees |= a_epargner(attributs, veilleuses_de(self.cfg))
+        cibles = a_eteindre(etats, epargnees)
         if not cibles:
             return
-        await self._async_service("light", "turn_off", cibles, None,
-                                  regle="coucher", quoi="eteindre",
-                                  motif=str(c.get("heure") or ""), priorite=PRIORITES["coucher"])
+        for domaine, service, lot in par_service(cibles, False):
+            await self._async_service(domaine, service, lot, None,
+                                      regle="coucher", quoi="eteindre",
+                                      motif=str(c.get("heure") or ""), priorite=PRIORITES["coucher"])
 
     # ── Outils ─────────────────────────────────────────────────────────────
     async def _async_service(self, domaine: str, service: str, cibles: list, data=None, *,
@@ -524,17 +682,35 @@ class LoggiaNuit:
                     cfg[section].update(valeurs)
         return cfg
 
-    async def async_etat(self) -> dict[str, Any]:
+    async def async_etat(self, user: Any = None) -> dict[str, Any]:
+        """`loggia/nuit/etat`, sous les droits de LECTURE du compte
+        (`_lecture_autorisee`, la garde de l'etat du chauffage ; audit du
+        19/10) : un compte restreint ne voit, dans les listes de la
+        configuration, les minuteries, les pieces eclairees et le journal, que
+        ce qu'il peut lire - une ligne du journal se tait des qu'une de ses
+        cibles lui est fermee. La liste des veilleuses reste rendue, filtree :
+        l'ecran en a besoin pour epargner. Sans compte, ou sans restriction :
+        tout, comme avant."""
+        from .discovery import _lecture_autorisee
+
+        lecture = _lecture_autorisee(user)
+        cfg = self.cfg or await self.async_config()
+        journal = await self.regles.journal(limite=40, module="nuit")
+        if lecture is not None:
+            journal = [l for l in journal
+                       if all(lecture(h) for h in (l.get("cibles") or []) if isinstance(h, str))]
         return {
-            "config": self.cfg or await self.async_config(),
-            "en_cours": sorted(self._minuteurs),
+            "config": lisible_par(lecture, cfg),
+            "en_cours": sorted(h for h in self._minuteurs if lecture is None or lecture(h)),
             # Ce que l'eclairage nocturne a allume, piece par piece.
-            "eclairees": {p: list(l) for p, l in self.allumees.items()},
-            "journal": await self.regles.journal(limite=40, module="nuit"),
+            "eclairees": {p: [h for h in l if lecture is None or lecture(h)] for p, l in self.allumees.items()},
+            "journal": journal,
         }
 
     def _poser_patch(self, cfg: dict[str, Any], patch: dict[str, Any]) -> None:
-        """Le patch de l'ecran, pose sur `cfg`. Synchrone : sous le verrou."""
+        """Le patch de l'ecran, pose sur `cfg`. Synchrone : sous le verrou.
+        Verifie d'abord (`verifier_patch`) : un patch mal forme ne pose rien."""
+        verifier_patch(patch)
         for section, valeurs in (patch or {}).items():
             if section not in cfg or not isinstance(valeurs, dict):
                 continue

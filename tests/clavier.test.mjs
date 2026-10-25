@@ -194,8 +194,10 @@ test('rien ne se vise sous 24 px', () => {
   // L'interrupteur d'une tuile pièce : zone de 24, pastille de 21.
   assert.match(app, /alignItems: 'center', height: 24, cursor: 'pointer', flexShrink: 0, margin: '-1\.5px 0'/,
     'l’interrupteur d’une tuile pièce a reperdu sa zone de 24');
-  // Les boutons « − / + » : 22 avant, 24 depuis.
-  assert.ok(!/width: 22, height: 22, borderRadius: 10/.test(app), 'un bouton « − / + » est retombé à 22 px');
+  // Les boutons « − / + » : 22 avant, 24 depuis — ceux de la luminosité des
+  // Scènes compris, qui vivent depuis le 11/10 dans scenes.jsx (chargé à la demande).
+  const scenes = readFileSync(join(RACINE, 'src', 'scenes.jsx'), 'utf8');
+  assert.ok(![app, scenes].some(s => /width: 22, height: 22, borderRadius: 10/.test(s)), 'un bouton « − / + » est retombé à 22 px');
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

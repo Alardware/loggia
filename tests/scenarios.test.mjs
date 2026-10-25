@@ -93,6 +93,15 @@ test('visibles et sur l’accueil : un scenario masque disparait, un scenario sa
   assert.deepEqual(scenariosVisibles(undefined), []);
 });
 
+test('« Sauf les veilleuses » n’est plus une option : ni bouton, ni texte, ni champ écrit (19/10)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const lire = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
+  assert.ok(!lire('src/fichescenario.jsx').includes('sauf_veilleuses'), 'plus de bouton dans l’éditeur');
+  assert.ok(!lire('src/scenarios.js').includes('sauf_veilleuses'), 'plus de champ écrit');
+  assert.ok(!/sauf_veilleuses/.test(lire('src/demo.js')), 'la démo ne la porte plus');
+  for (const lg of ['en', 'de', 'nl', 'it', 'es', 'pl']) assert.ok(!lire('src/langues/' + lg + '.js').includes("'Sauf les veilleuses'"), lg + ' : clé orpheline');
+});
+
 test('ce que la fiche envoie : le scenario sans ce qu’il a calcule', () => {
   const s = {
     id: 'nuit', nom: '  ', icone: 'moon', teinte: 'chambre', lien: null, piece: null, integre: true, modifie: false,
@@ -101,9 +110,11 @@ test('ce que la fiche envoie : le scenario sans ce qu’il a calcule', () => {
       { famille: 'lumieres', geste: 'allumer', portee: 'piece', piece: 'Salon', valeur: 10, si: 'nuit' },
       { famille: 'volets', geste: 'fermer', portee: 'piece', valeur: 4, si: 'toujours' }],
   };
+  // ASSERTION MODIFIÉE (19/10) : « Sauf les veilleuses » a quitté l'éditeur — les veilleuses sont épargnées
+  // par toute extinction (ADR 0260) ; le champ d'un ancien scénario ne repart plus.
   assert.deepEqual(versEnregistrement(s), {
     id: 'nuit', nom: null, icone: 'moon', teinte: 'chambre', lien: null, piece: null, accueil: true, masque: false,
-    actions: [{ famille: 'lumieres', geste: 'eteindre', portee: 'maison', sauf_veilleuses: true, valeur: 30 },
+    actions: [{ famille: 'lumieres', geste: 'eteindre', portee: 'maison', valeur: 30 },
       { famille: 'lumieres', geste: 'allumer', portee: 'piece', piece: 'Salon', valeur: 10, si: 'nuit' },
       { famille: 'volets', geste: 'fermer', portee: 'piece' }],
   });
@@ -117,8 +128,9 @@ test('ce que la fiche envoie : le scenario sans ce qu’il a calcule', () => {
 // ── Ce qu'App.jsx en fait (assertions sur les sources) ──────────────────────
   /* + l'ecran de veille et la modale du code : sortis d'App.jsx le 23/09
    * (plan M1). Ce que ce fichier verifie n'a pas bouge, seulement son
-   * adresse — on relit donc le monolithe ET ce qui en est sorti. */
-const app = ['App.jsx', 'ecranveille.jsx', 'pinmodal.jsx'].map(f => readFileSync(join(RACINE, 'src', f), 'utf8')).join(String.fromCharCode(10));
+   * adresse — on relit donc le monolithe ET ce qui en est sorti. Les
+   * ambiances Hue en sont sorties le 11/10 (scenes.jsx, chargé à la demande). */
+const app = ['App.jsx', 'ecranveille.jsx', 'pinmodal.jsx', 'scenes.jsx'].map(f => readFileSync(join(RACINE, 'src', f), 'utf8')).join(String.fromCharCode(10));
 const NL = String.fromCharCode(10);
 const bloc = (debut, fin) => { const d = app.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = app.indexOf(fin, d + 1); return app.slice(d, f < 0 ? undefined : f); };
 
@@ -188,12 +200,42 @@ test('la vue Scenarios : cartes standard, edition avec fleches et crayon, la bib
   const v = bloc('function ScenariosView(', NL + '}');
   assert.ok(v.includes("sansDernier={edit}") && v.includes("position: 'absolute', right: 12, top: 12"), 'les outils prennent la place du repère');
   assert.ok(v.includes("<ScenesContent hass={hass} />"), 'les ambiances Hue restent, dessous');
+  // Chargées à la demande depuis le 11/10 : elles attendent sous un repli qui garde leur place.
+  assert.match(v, /<Suspense fallback=\{<div style=\{\{ marginTop: 8, minHeight: \d+ \}\} \/>\}>\s*<ScenesContent hass=\{hass\} \/>\s*<\/Suspense>/,
+    'les ambiances Hue, chargées à la demande, n’ont plus de repli qui tienne leur place : la page sauterait à leur arrivée');
   // Les fleches rangent sur CE type d'ecran : l'ordinateur au composant, les autres chez eux (ADR 0052).
   assert.ok(v.includes("sc.ordonner(ids);") && !v.includes('sc.ordonner(ids).catch'), 'l’ordre se range par les flèches, et son refus ne s’avale plus');
   assert.ok(app.includes("view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} />"), 'la route `scenes` mène à la vue');
   assert.ok(app.includes("<h2 style={sectionTitle}>{tr('Ambiances lumineuses')}</h2>"), 'la bibliothèque Hue devient une section');
-  const f = bloc('function FicheScenario(', NL + '}');
+  // ASSERTION MODIFIÉE (contre-relecture du lot 3 des capteurs) : la fiche d'un scénario est chargée à la demande — fichescenario.jsx.
+  const fs = readFileSync(new URL('../src/fichescenario.jsx', import.meta.url), 'utf8');
+  const f = fs.slice(fs.indexOf('export default function FicheScenario('));
+  assert.ok(app.includes("const FicheScenario = lazyRecharge(() => import('./fichescenario.jsx'));"), 'la fiche quitte le démarrage');
   assert.ok(f.includes("{ reinitialiser: scenario.id }") && f.includes("{ supprimer: scenario.id }") && f.includes("{ enregistrer: doc }"), 'les trois gestes de la fiche');
+});
+
+test('la bibliothèque Hue, chargée à la demande, garde ses 55 ambiances', () => {
+  /* Règle de la maison : « Garder la bibliothèque Hue » — rien n'en est
+   * retiré. Le 11/10 (tâche 6 bis du chantier Chauffage), elle quitte le boot
+   * pour scenes.jsx, chargé à la première ouverture des Scénarios : les mêmes
+   * sept collections, les mêmes 55 ambiances, chacune avec ses cinq couleurs
+   * (le dégradé), sa luminosité et son image. Lue comme du texte : une
+   * ambiance par ligne, chaque ligne relue entière. */
+  const src = readFileSync(join(RACINE, 'src', 'scenes.jsx'), 'utf8');
+  const d = src.indexOf('\nconst HUE_SCENES = {\n');
+  assert.ok(d >= 0, 'la bibliothèque Hue a quitté scenes.jsx');
+  const lib = src.slice(d, src.indexOf('\n};\n', d));
+  assert.deepEqual([...lib.matchAll(/^ {2}(\w+): \{ label: /gm)].map(m => m[1]),
+    ['classics', 'cosy', 'party', 'romance', 'halloween', 'winter', 'misc'], 'une collection a disparu, ou changé de place');
+  const COULEUR = String.raw`\[\d{1,3},\d{1,3},\d{1,3}\]`;
+  const AMBIANCE = new RegExp(String.raw`^ {4}\{ name: '([^']+)', uuid: '[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', colors: \[${COULEUR}(?:,${COULEUR}){4}\], brightness: \d{1,3} \},$`, 'gm');
+  const noms = [...lib.matchAll(AMBIANCE)].map(m => m[1]);
+  assert.equal((lib.match(/\buuid: '/g) || []).length, 55, 'une ambiance a été retirée de la bibliothèque Hue');
+  assert.equal(noms.length, 55, 'une ambiance a perdu ses cinq couleurs, sa luminosité ou son image');
+  assert.equal(new Set(noms).size, 55, 'deux ambiances portent le même nom : la scène active ne se retrouverait plus');
+  // Le dégradé dessiné, et la luminosité qui part avec la scène.
+  assert.ok(src.includes('const sceneGradient = (colors) => {') && src.includes('brightness_pct: sc.brightness });'),
+    'le dégradé ou la luminosité d’une ambiance s’est perdu en route');
 });
 
 test('la veille et la recherche passent aux scenarios ; les liens sont sondes avec l’Accueil', () => {

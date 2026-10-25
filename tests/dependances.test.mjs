@@ -62,19 +62,40 @@ const VERIFIE = {
    * Lot 15 de l'audit du 03/10 : `autoOn` (les repas) et `derivedCovers`
    * (les volets) sont partis avec les miroirs qui les recopiaient — les deux
    * états passent par `useOptimiste`. Disparus, pas déménagés. */
+  /* ASSERTION MODIFIÉE (boot, 19/10) : la feuille du Calendrier a quitté `App.jsx` pour `feuillecalendrier.jsx`, chargée à la
+   * demande (la borne du démarrage). Ses quatre omissions la suivent — un `S`, `ancre`, `choisis and tousCals`,
+   * `debutGrille and finGrille` : les agendas se relisent quand leur NOMBRE change, la grille quand ses bornes changent.
+   * Déménagées, pas disparues. */
+  /* ASSERTION MODIFIÉE (19/10, audit des volets) : la vue « modes et planning » a quitté `App.jsx` pour
+   * `views/voletsplan.jsx`, chargée à la demande (borne du boot). Ses deux omissions la suivent — `S` et `hass`.
+   * Déménagées, pas disparues. */
   'src/App.jsx': [
-    'S', 'S', 'S',
+    'S',
     'S and dc', 'S and ids', 'S, domaineOk, and nomEnt',
-    'a and dashHass', 'ancre', 'api and plage', 'applyUser',
-    'choisis and tousCals', 'cle and hass', 'cv.name',
-    'dc', 'debutGrille and finGrille', 'derived',
+    'a and dashHass', 'api and plage', 'applyUser',
+    'cle and hass', 'cv.name',
+    'dc', 'derived',
     'discovery', 'discovery',
-    'hass', 'hass', 'hass',
-    'hass and live', 'hass, ids, and metrics', 'hidden', 'keys and noisyKeys',
+    /* ASSERTION MODIFIÉE (chantier Médias, tâche 1 ; § 10) : le navigateur de médias a quitté `App.jsx` pour
+     * `navigateurmedias.jsx`, chargé à la demande. Son omission le suit : l'arbre se relit quand le NIVEAU change
+     * (`id`, `niveau.cid`, `niveau.ctype`), pas à chaque `hass` neuf. Déménagée, pas disparue. */
+    'hass',
+    /* ASSERTION MODIFIÉE (audit des capteurs du 19/10, lot 4) : `hidden` est parti avec `loggia_roomhidden` — la vue d'une pièce
+     * ne relit plus de pièces masquées. Disparue, pas déménagée. */
+    'hass and live', 'keys and noisyKeys',
     'loggiaRuntime.index', 'noms', 'seulement',
     'vuesAutorisees',
   ],
+  // La feuille du Calendrier (boot, 19/10) : les omissions d'App.jsx, déménagées avec elle.
+  'src/feuillecalendrier.jsx': ['S', 'ancre', 'choisis and tousCals', 'debutGrille and finGrille'],
   'src/historique.jsx': ['hass', 'ids'],
+  // La vue « modes et planning » (19/10) : les deux omissions d'App.jsx, déménagées avec elle.
+  'src/views/voletsplan.jsx': ['S', 'hass'],
+  /* `src/ficheconfort.jsx` figurait ici avec « hass, ids, and metrics » (l'historique se relisait quand la PIÈCE changeait).
+   * L'audit des capteurs du 19/10 (lot 4, M18) l'a corrigée : l'historique dépend de la SIGNATURE des capteurs lisibles, et
+   * `hass` se lit par une référence vivante. L'omission a disparu, elle n'a pas déménagé. */
+  // Le navigateur de médias (chantier Médias, tâche 1) : l'omission d'App.jsx, déménagée avec lui.
+  'src/navigateurmedias.jsx': ['hass'],
   /* `src/views/systeme.jsx` figurait ici avec « HIST_IDS, SYS.host.online, and
    * hass ». La vue a été refaite (17/09/2026, ADR 0037) : toutes ses lectures
    * passent par une référence vivante, comme `useEtatServeur` — l'omission a

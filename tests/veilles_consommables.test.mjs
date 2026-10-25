@@ -22,6 +22,7 @@ test('l’onglet Veilles designe les capteurs par un selecteur, jamais par un no
 test('la veille cote serveur ne lit que ce qui est designe', () => {
   const p = lire('custom_components/loggia/veilles.py');
   assert.ok(p.includes('"consommables": {"actif": False, "seuil": 10, "capteurs": []}'), 'les defauts');
-  assert.ok(p.includes('for haid in [h for h in (c.get("capteurs") or []) if isinstance(h, str)]:'), 'les capteurs designes, et eux seuls');
+  // ASSERTION MODIFIÉE (relecture du lot 2, point 6) : la liste des désignés est nommée, la purge de `signales` la relit aussi.
+  assert.ok(p.includes('designes = [h for h in (c.get("capteurs") or []) if isinstance(h, str)]') && p.includes('for haid in designes:'), 'les capteurs designes, et eux seuls');
   assert.ok(!p.includes('capteurs_de(etats, "consommable'), 'pas de classe inventee');
 });

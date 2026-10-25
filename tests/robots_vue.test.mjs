@@ -14,7 +14,10 @@ import { fileURLToPath } from 'node:url';
 
 // La langue de la machine ne doit pas changer le résultat (garde-fou de la CI).
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
-const R = await import('../src/robots.js');
+/* ASSERTION MODIFIÉE (chantier IoT, tâche 1, 18/10 ; § 12) : ce que la popup seule calcule — les sœurs, l'entretien, les sessions,
+ * les réglages, la fiche technique — a quitté `robots.js` (au démarrage) pour `robotsfiche.js` (à la demande). Les deux modules
+ * se lisent ensemble : chaque fonction est la même, à sa nouvelle adresse. */
+const R = { ...(await import('../src/robots.js')), ...(await import('../src/robotsfiche.js')) };
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
@@ -37,17 +40,28 @@ test('la phase, le mot et le geste d’un robot', () => {
   assert.equal(R.phaseRobot('vacuum', 'error'), 'erreur');
   assert.equal(R.phaseRobot('vacuum', 'idle'), 'repos');
   for (const vide of ['unavailable', 'unknown', '', null, undefined]) assert.equal(R.phaseRobot('vacuum', vide), 'absent');
-  assert.equal(R.motEtatRobot('vacuum', 'docked', { enCharge: true }), 'À la base · en charge');
-  assert.equal(R.motEtatRobot('vacuum', 'docked'), 'À la base', '« en charge » ne se dit que si un capteur le dit');
-  assert.equal(R.motEtatRobot('vacuum', 'cleaning'), 'Nettoyage en cours');
-  assert.equal(R.motEtatRobot('lawn_mower', 'mowing'), 'Tonte en cours');
-  assert.equal(R.motEtatRobot('lawn_mower', 'unavailable'), 'Injoignable');
-  assert.deepEqual(R.actionPrincipale('vacuum', 'docked', 0), { cle: 'demarrer', service: 'start', libelle: 'Démarrer' });
-  assert.deepEqual(R.actionPrincipale('vacuum', 'idle', 1), { cle: 'demarrer', service: 'start', libelle: 'Démarrer · 1 zone' });
-  assert.deepEqual(R.actionPrincipale('lawn_mower', 'docked', 3), { cle: 'demarrer', service: 'start_mowing', libelle: 'Démarrer · 3 zones' });
-  assert.deepEqual(R.actionPrincipale('vacuum', 'cleaning', 2), { cle: 'pause', service: 'pause', libelle: 'Mettre en pause' });
-  assert.deepEqual(R.actionPrincipale('lawn_mower', 'paused', 0), { cle: 'reprendre', service: 'start_mowing', libelle: 'Reprendre' });
-  assert.equal(R.actionPrincipale('vacuum', 'unavailable', 0).service, null, 'un robot injoignable ne reçoit pas d’ordre');
+  /* ASSERTION MODIFIÉE (chantier IoT, tâche 8, 18/10 ; I16, § 7.6) : le mot d'état de la fiche et sa puce principale suivent sa maquette
+   * (1b). `motEtatRobot` (« À la base », « Injoignable ») et `actionPrincipale` (« Démarrer · 1 zone ») partent : le mot et sa phrase
+   * viennent d'`etatAccueil`, la puce principale nomme ce qu'elle fait (`libelleDepart`) ; la pause, la reprise et la base passent par
+   * les puces de la carte (`commandesRobot`, tests/robots_carte.test.mjs). */
+  const T = new Date(2026, 8, 17, 18, 0).getTime();
+  const e = (x) => R.etatAccueil({ maintenant: T, ...x });
+  // ASSERTION MODIFIÉE (passe bis du 18/10, point 13) : au repos, le mot d'état prend l'encre de sa maquette, `--o-text` (`stateInk`), pas `--o-text1`.
+  assert.deepEqual(e({ phase: 'base', charge: true, choisir: true }), { mot: 'Sur la base · en charge', encre: 'var(--o-text)', phrase: 'Choisissez où, ou lancez tout.' });
+  assert.equal(e({ phase: 'base' }).phrase, null, '« en charge » ne se dit que si un capteur le dit ; sans « Où », rien à choisir');
+  const a1640 = new Date(2026, 8, 17, 16, 40).getTime();
+  assert.deepEqual(e({ phase: 'travail', pieces: ['Salon', 'Cuisine'], surface: 42, depuis: a1640 }), { mot: 'Nettoyage en cours', encre: 'var(--o-accent-soft)', phrase: 'Salon, Cuisine · 42 m² depuis 16:40' });
+  assert.equal(e({ phase: 'travail', pieces: ['Salon'], depuis: a1640 }).phrase, 'Salon · depuis 16:40', 'sans capteur de surface');
+  assert.equal(e({ phase: 'travail', depuis: a1640 }).phrase, 'depuis 16:40', 'les pièces ne se savent pas : rien ne s’invente');
+  assert.deepEqual(e({ domaine: 'lawn_mower', phase: 'travail', tout: true, surface: 140, depuis: a1640 }), { mot: 'Tonte en cours', encre: 'var(--o-ok)', phrase: 'Tout le jardin · 140 m² depuis 16:40' });
+  assert.equal(e({ phase: 'pause', pieces: ['Salon', 'Cuisine'], surface: 42 }).phrase, 'Salon, Cuisine · 42 m² faits');
+  assert.deepEqual(e({ phase: 'retour' }), { mot: 'Retour à la base', encre: 'var(--o-text)', phrase: 'Il rentre se recharger' }); // ASSERTION MODIFIÉE (passe bis du 18/10, point 13) : `--o-text`, sa maquette
+  assert.deepEqual(e({ phase: 'base', bipe: true }), { mot: 'Il bipe', encre: 'var(--o-accent-soft)', phrase: 'Suivez le son' });
+  assert.deepEqual(e({ phase: 'erreur', erreur: 'Brosse coincée' }), { mot: 'En erreur', encre: 'var(--o-bad)', phrase: 'Brosse coincée' });
+  assert.deepEqual(e({ phase: 'absent', depuis: new Date(2026, 8, 17, 14, 20).getTime() }), { mot: 'Indisponible', encre: 'var(--o-text2)', phrase: 'Depuis 14:20' }, 'muet : sans rouge, le liseré le dit');
+  assert.equal(e({ phase: 'repos', choisir: true }).mot, 'À l’arrêt');
+  assert.deepEqual([R.libelleDepart('vacuum', 0), R.libelleDepart('vacuum', 1), R.libelleDepart('vacuum', 2)], ['Nettoyer tout le logement', 'Nettoyer 1 pièce', 'Nettoyer 2 pièces']);
+  assert.deepEqual([R.libelleDepart('lawn_mower', 0), R.libelleDepart('lawn_mower', 1), R.libelleDepart('lawn_mower', 3)], ['Tondre tout le jardin', 'Tondre 1 zone', 'Tondre 3 zones']);
   assert.equal(R.serviceRetour('vacuum'), 'return_to_base');
   assert.equal(R.serviceRetour('lawn_mower'), 'dock');
 });
@@ -80,19 +94,29 @@ test('les sœurs d’un robot : celles de SON appareil, décrites une fois', () 
 });
 
 test('la batterie et la charge : l’attribut d’abord, le capteur ensuite, rien sinon', () => {
-  assert.equal(R.batterieRobot({ attributes: { battery_level: 82.4 } }, []), 82);
-  assert.equal(R.batterieRobot({ attributes: {} }, [soeur('sensor.r_batterie', 64, { classe: 'battery' })]), 64);
-  assert.equal(R.batterieRobot({ attributes: {} }, [soeur('sensor.r_batterie', 'unavailable', { classe: 'battery' })]), null, 'indisponible : pas un faux 0 %');
-  assert.equal(R.batterieRobot({ attributes: { battery_level: 140 } }, []), 100);
-  assert.equal(R.batterieRobot(null, []), null);
-  assert.equal(R.enCharge([soeur('binary_sensor.r_charge', 'on', { classe: 'battery_charging' })]), true);
-  assert.equal(R.enCharge([soeur('binary_sensor.r_charge', 'off', { classe: 'battery_charging' })]), false);
-  assert.equal(R.enCharge([soeur('binary_sensor.r_porte', 'on', { classe: 'door' })]), false);
+  /* ASSERTION MODIFIÉE (chantier IoT, tâche 8, 18/10 ; I15) : la fiche reçoit la vue de la carte (`useVueRobot`, App.jsx), qui lit la
+   * batterie et la charge — `batterieRobot` et `enCharge` partent avec la lecture que la fiche faisait d'elle-même. La règle ne change
+   * pas : l'attribut d'abord, la sœur `battery` ensuite, la charge seulement si un capteur `battery_charging` le dit.
+   * ASSERTION MODIFIÉE (passe bis du 18/10, point 8) : ce test lisait des CHAÎNES d'App.jsx, et la borne de 0 à 100 s'était perdue —
+   * un attribut vide (« ») se lisait 0 %. Il redevient un test de COMPORTEMENT : `batterieRobot` (robots.js), ce que la vue lit. */
+  assert.equal(R.batterieRobot({ battery_level: 92 }), 92, 'l’attribut d’abord');
+  assert.equal(R.batterieRobot({ battery_level: '64.4' }), 64);
+  assert.equal(R.batterieRobot({ battery_level: 92 }, '10'), 92, 'l’attribut passe avant la sœur');
+  assert.deepEqual([R.batterieRobot({ battery_level: 130 }), R.batterieRobot({ battery_level: -4 })], [100, 0], 'bornée de 0 à 100');
+  assert.equal(R.batterieRobot({ battery_level: '' }), null, 'vide : inconnue, pas 0 %');
+  assert.equal(R.batterieRobot({ battery_level: 'abc' }), null, 'pas un nombre : inconnue');
+  assert.equal(R.batterieRobot({}, '45.6'), 46, 'la sœur ensuite');
+  assert.equal(R.batterieRobot({ battery_level: '' }, '45'), 45, 'un attribut illisible laisse parler la sœur');
+  assert.deepEqual([R.batterieRobot({}, 'unavailable'), R.batterieRobot({}, ''), R.batterieRobot(null, null)], [null, null, null], 'rien sinon');
+  // Que la carte la lise ainsi — sa sœur `battery`, sa charge — se JOUE dans tests/carte_robot.test.mjs (point 8).
 });
 
 test('nettoyer des pièces : la commande de l’intégration, ou rien', () => {
-  assert.deepEqual(R.commandeZones({ plateforme: 'ecovacs', idRobot: 'vacuum.r', segments: [1, '3'] }),
-    { domaine: 'vacuum', service: 'send_command', data: { entity_id: 'vacuum.r', command: 'spot_area', params: { rooms: '1,3', cleanings: 1 } } });
+  /* ASSERTION MODIFIÉE (tranche robots 2, 19/10 ; R1, R4) : deebot-client 18 (HA ≥ 2026.3) attend une LISTE — « 1,3 » y devenait
+   * « 1,,,3 » — ; la chaîne reste pour un Home Assistant d'avant 2026.3 ; chez Ecovacs, le bit CLEAN_AREA conditionne `spot_area`. */
+  assert.deepEqual(R.commandeZones({ plateforme: 'ecovacs', idRobot: 'vacuum.r', segments: [1, '3'], bits: 16384 }),
+    { domaine: 'vacuum', service: 'send_command', data: { entity_id: 'vacuum.r', command: 'spot_area', params: { rooms: [1, 3], cleanings: 1 } } });
+  assert.deepEqual(R.commandeZones({ plateforme: 'ecovacs', idRobot: 'vacuum.r', segments: [1, '3'], versionHa: '2026.2.0' }).data.params, { rooms: '1,3', cleanings: 1 });
   assert.deepEqual(R.commandeZones({ plateforme: 'roborock', idRobot: 'vacuum.r', segments: [16, 17] }).data, { entity_id: 'vacuum.r', command: 'app_segment_clean', params: [16, 17] });
   assert.deepEqual(R.commandeZones({ plateforme: 'dreame_vacuum', services: { dreame_vacuum: { vacuum_clean_segment: {} } }, idRobot: 'vacuum.r', segments: [2] }),
     { domaine: 'dreame_vacuum', service: 'vacuum_clean_segment', data: { entity_id: 'vacuum.r', segments: [2] } });
@@ -129,11 +153,12 @@ test('les pièces d’usure : un % est une jauge ; des heures n’en sont une qu
     soeur('binary_sensor.r_serpilliere_fixee', 'on', { cle: 'water_mop_attached' }),
     soeur('number.r_seuil_du_filtre', 20, { cle: 'filter_alert_threshold', unite: '%' }), // un réglage, pas une mesure
   ];
+  // ASSERTION MODIFIÉE (chantier IoT, tâche 9, 18/10 ; I20) : les seuils de sa maquette — bas sous 15 %, moyen sous 35 % : le filtre à 32 % est « moyen », 58 et 47 sont « bons ».
   assert.deepEqual(R.piecesUsure(asp).map(p => [p.role, p.nom, p.pct, p.niveau, p.reset]), [
-    ['filtre', 'Filtre', 32, 'bas', 'button.r_reinitialiser_le_filtre'],
-    ['brosse_principale', 'Brosse principale', 58, 'moyen', null],
+    ['filtre', 'Filtre', 32, 'moyen', 'button.r_reinitialiser_le_filtre'],
+    ['brosse_principale', 'Brosse principale', 58, 'bon', null],
     ['brosse_laterale', 'Brosse latérale', 81, 'bon', null],
-    ['serpilliere', 'Serpillière', 47, 'moyen', null],
+    ['serpilliere', 'Serpillière', 47, 'bon', null],
   ], 'l’ordre de lecture des maquettes ; un bouton « unknown » compte (jamais pressé), un « unavailable » non ; un capteur indisponible ne se dessine pas');
 
   // Une tondeuse : les lames s’usent en HEURES, avec un seuil d’alerte.
@@ -143,7 +168,8 @@ test('les pièces d’usure : un % est une jauge ; des heures n’en sont une qu
     soeur('sensor.t_hauteur_des_lames', 40, { cle: 'blade_height', unite: 'mm' }),
     soeur('number.t_hauteur_des_lames', 40, { cle: 'blade_height', unite: 'mm' }),
   ];
-  assert.deepEqual(R.piecesUsure(tond), [{ id: 'sensor.t_duree_d_utilisation_de_la_lame', role: 'lames', nom: 'Lames', pct: 28, texte: '43 h sur 60 h', niveau: 'bas', reset: null }], 'la hauteur de coupe n’est pas une usure');
+  // ASSERTION MODIFIÉE (chantier IoT, tâche 9, 18/10 ; I20) : des lames à 28 % sont « moyennes » (l'ambre), plus « basses ».
+  assert.deepEqual(R.piecesUsure(tond), [{ id: 'sensor.t_duree_d_utilisation_de_la_lame', role: 'lames', nom: 'Lames', pct: 28, texte: '43 h sur 60 h', niveau: 'moyen', reset: null }], 'la hauteur de coupe n’est pas une usure');
   assert.equal(R.piecesUsure([soeur('sensor.t_usage', 70, { cle: 'blade_used_time', unite: 'h' }), soeur('sensor.t_seuil', 60, { cle: 'blade_used_warn_time', unite: 'h' })])[0].pct, 0, 'au-delà du seuil : 0 %, pas un négatif');
   assert.equal(R.piecesUsure([soeur('sensor.t_hauteur_lame', 40, { cle: 'blade_height_pct', unite: '%' })]).length, 0, 'une hauteur en % n’est pas une usure non plus');
 
@@ -164,12 +190,15 @@ test('les pièces d’usure : un % est une jauge ; des heures n’en sont une qu
   assert.deepEqual(R.piecesUsure(null), []);
 });
 
-test('les seuils : bas sous 35 %, moyen sous 65 % ; l’alerte est la pièce la plus usée', () => {
-  assert.deepEqual([0, 34, 35, 64, 65, 100].map(R.niveauUsure), ['bas', 'bas', 'moyen', 'moyen', 'bon', 'bon']);
+/* ASSERTION MODIFIÉE (chantier IoT, tâche 9, 18/10 ; I20) : les seuils de sa maquette (1d) — rouge sous 15 %, ambre sous 35 %,
+ * neutre au-dessus (35 / 65 et la teinte du robot, avant) ; l'alerte de l'Accueil vaut sous 35 %, la rouge comme l'ambre. */
+test('les seuils : bas sous 15 %, moyen sous 35 % ; l’alerte est la pièce la plus usée sous 35 %', () => {
+  assert.deepEqual([0, 14, 15, 34, 35, 100].map(R.niveauUsure), ['bas', 'bas', 'moyen', 'moyen', 'bon', 'bon']);
   assert.equal(R.niveauUsure(null), null);
-  const pieces = [{ nom: 'Filtre', pct: 32, niveau: 'bas' }, { nom: 'Lames', pct: 12, niveau: 'bas' }, { nom: 'Brosse', pct: 58, niveau: 'moyen' }, { nom: 'Sans jauge', pct: null, niveau: null }];
+  const pieces = [{ nom: 'Filtre', pct: 32, niveau: 'moyen' }, { nom: 'Lames', pct: 12, niveau: 'bas' }, { nom: 'Brosse', pct: 58, niveau: 'bon' }, { nom: 'Sans jauge', pct: null, niveau: null }];
   assert.equal(R.alerteEntretien(pieces).nom, 'Lames');
-  assert.equal(R.alerteEntretien([{ nom: 'Brosse', pct: 58, niveau: 'moyen' }]), null, 'rien ne presse : pas d’alerte');
+  assert.equal(R.alerteEntretien([{ nom: 'Filtre', pct: 32, niveau: 'moyen' }]).nom, 'Filtre', 'l’ambre presse aussi');
+  assert.equal(R.alerteEntretien([{ nom: 'Brosse', pct: 58, niveau: 'bon' }]), null, 'rien ne presse : pas d’alerte');
   assert.equal(R.alerteEntretien([]), null);
 });
 
@@ -223,26 +252,23 @@ test('les sessions se lisent dans l’historique de l’état du robot', () => {
   assert.deepEqual(['termine', 'erreur', 'en_cours', 'interrompu'].map(R.motIssue), ['Terminé', 'Erreur', 'En cours', 'Interrompu']);
 });
 
-test('la semaine : du premier jour de la langue au dernier, un jour par barre', () => {
+/* ASSERTION MODIFIÉE (chantier IoT, tâche 9, 18/10 ; I19) : l'Historique ne compte plus la semaine du calendrier, un jour par barre
+ * (`resumeSemaine`, parti avec ses barres) ; il compte les sept jours GLISSANTS (`septJours`) — les 7 × 24 h qui finissent
+ * maintenant, la session en cours comprise : un passage compte s'il finit dans la fenêtre. */
+test('les sept derniers jours : glissants, la session en cours comprise', () => {
   const sessions = [
-    { debut: new Date(2026, 8, 17, 8, 31).getTime(), dureeMin: 48, surface: 42, issue: 'termine' },
-    { debut: new Date(2026, 8, 16, 8, 30).getTime(), dureeMin: 51, surface: 42, issue: 'termine' },
-    { debut: new Date(2026, 8, 14, 8, 30).getTime(), dureeMin: 22, surface: 19, issue: 'interrompu' },
-    { debut: new Date(2026, 8, 13, 14, 2).getTime(), dureeMin: 94, surface: 68, issue: 'termine' }, // dimanche : la semaine d’avant
+    { debut: new Date(2026, 8, 17, 17, 30).getTime(), fin: null, dureeMin: 30, surface: 12, issue: 'en_cours' },
+    { debut: new Date(2026, 8, 16, 8, 30).getTime(), fin: new Date(2026, 8, 16, 9, 21).getTime(), dureeMin: 51, surface: 42, issue: 'termine' },
+    { debut: new Date(2026, 8, 10, 17, 30).getTime(), fin: new Date(2026, 8, 10, 18, 10).getTime(), dureeMin: 40, surface: 30, issue: 'termine' }, // fini dans la fenêtre
+    { debut: new Date(2026, 8, 10, 16, 0).getTime(), fin: new Date(2026, 8, 10, 17, 0).getTime(), dureeMin: 60, surface: 50, issue: 'termine' }, // fini avant
   ];
-  const r = R.resumeSemaine(sessions, MAINTENANT, 1);
-  assert.deepEqual([r.n, r.dureeMin, r.surface], [3, 121, 103]);
-  assert.deepEqual(r.jours.map(j => j.date.getDate()), [14, 15, 16, 17, 18, 19, 20]);
-  assert.deepEqual(r.jours.map(j => j.surface), [19, 0, 42, 42, 0, 0, 0]);
-  assert.deepEqual(r.jours.map(j => j.dureeMin), [22, 0, 51, 48, 0, 0, 0]);
-  assert.deepEqual(r.jours.map(j => j.n), [1, 0, 1, 1, 0, 0, 0]);
-  assert.deepEqual(r.jours.filter(j => j.aujourdhui).map(j => j.date.getDate()), [17]);
-  const dim = R.resumeSemaine(sessions, MAINTENANT, 7);
-  assert.deepEqual([dim.n, dim.surface, dim.jours[0].date.getDate()], [4, 171, 13], 'une semaine qui commence le dimanche le compte');
-  const sansSurface = R.resumeSemaine(sessions.map(s => ({ ...s, surface: null })), MAINTENANT, 1);
+  const r = R.septJours(sessions, MAINTENANT);
+  assert.deepEqual([r.n, r.dureeMin, r.surface, r.sessions.length], [3, 121, 84, 3]);
+  const sansSurface = R.septJours(sessions.map(s => ({ ...s, surface: null })), MAINTENANT);
   assert.equal(sansSurface.surface, null, 'un robot qui ne publie pas sa surface n’affiche pas « 0 m² »');
   assert.equal(sansSurface.dureeMin, 121);
-  assert.deepEqual([R.resumeSemaine([], MAINTENANT, 1).n, R.resumeSemaine(null, MAINTENANT, 1).surface], [0, null]);
+  assert.deepEqual([R.septJours([], MAINTENANT).n, R.septJours(null, MAINTENANT).surface], [0, null]);
+  assert.equal(R.resumeSemaine, undefined, 'la semaine du calendrier est partie avec ses barres');
 });
 
 test('les durées et les jours se disent court', () => {
@@ -298,8 +324,11 @@ test('la fiche : une feuille pour les deux robots, ouverte depuis leur carte —
   assert.ok(app.includes("const FicheRobotContent = lazyRecharge(() => import('./ficherobot.jsx'));"), 'chargée à la demande, derrière le rechargement unique (audit du 03/10)');
   assert.ok(!existsSync(join(RACINE, 'src', 'views', 'robot.jsx')) && !existsSync(join(RACINE, 'src', 'views', 'aspirateur.jsx')), 'plus de vue : une fiche, comme les autres appareils (18/09)');
   const f = bloc(app, 'function FicheRobot(', NL + '}');
-  assert.ok(f.includes('<BottomSheet onClose={onClose} onglets>') && f.includes('<Suspense fallback=') && f.includes('<FicheRobotContent hass={H} idRobot={id} domaine={domaine} onFiche={setFiche} epingle={<BoutonEpingle id={id} />} />'),
+  /* ASSERTION MODIFIÉE (chantier IoT, tâche 8, 18/10 ; I15) : la coquille passe à la fiche la VUE de sa carte (15 s fiche ouverte), la
+   * plaque de la carte et « {pièce} · robot aspirateur ». */
+  assert.ok(f.includes('<BottomSheet onClose={onClose} onglets>') && f.includes('<Suspense fallback=') && f.includes('<FicheRobotContent hass={H} idRobot={id} domaine={domaine} vue={vue} plaque={plaque} sousNom={sousNom} onFiche={setFiche} epingle={<BoutonEpingle id={id} />} />'),
     'une feuille, le contenu chargé DANS une frontière, l’épingle dans l’en-tête');
+  assert.ok(f.includes('const vue = useVueRobot(H, id, null, true, { rapide: true });'), 'la fiche lit ce que lit la carte');
   assert.ok(f.includes('useHass([id, ...siblingsOf(LOGGIA_INDEX, id)])'), 'la fiche suit en direct les sœurs du robot : le poll de la vue derrière ne les connaît pas');
   assert.ok(f.includes('{fiche && <FicheAppareil id={fiche} hass={H} onClose={() => setFiche(null)} />}'), 'la fiche universelle (Stop, Localiser, entités) s’ouvre par-dessus');
   assert.ok(app.includes('else if (DOMAINES_ROBOT.indexOf(d) >= 0) setRobotPop(id);'), 'la carte d’un robot ouvre sa fiche, partout — plus de condition sur la navigation');
@@ -311,25 +340,35 @@ test('la fiche : une feuille pour les deux robots, ouverte depuis leur carte —
   const ui = lire('src', 'ui.jsx');
   assert.ok(!ui.includes("vid: 'aspirateur'") && !ui.includes("vid: 'tondeuse'"), 'plus rien à activer dans le menu');
   const fiche = lire('src', 'ficherobot.jsx');
-  assert.ok(fiche.includes("onFiche={onFiche ? () => onFiche(idRobot) : null}") && fiche.includes("{tr('Fiche de l’appareil')}"), 'la fiche universelle par les réglages du robot');
-  assert.ok(fiche.includes("export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', onFiche = null, epingle = null }) {"), 'le robot est celui de la carte tapée');
+  /* ASSERTION MODIFIÉE (chantier IoT, tâche 8, 18/10 ; I15) : la page des réglages est celle du socle commun (`PageReglagesAppareil`) —
+   * sa rangée « L’appareil » ouvre la fiche universelle — et l'en-tête aussi (`EnteteFiche`, qui pose l'épingle avant la roue). */
+  assert.ok(fiche.includes("onFiche={onFiche ? () => onFiche(idRobot) : null}") && fiche.includes('<PageReglagesAppareil hass={hass} nom={nom} libelleNom={tr(\'Nom du robot\')}'), 'la fiche universelle par les réglages du robot');
+  assert.ok(fiche.includes("export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', vue, plaque = null, sousNom = null, onFiche = null, epingle = null }) {"), 'le robot est celui de la carte tapée');
   assert.ok(!fiche.includes('useLarge') && !fiche.includes('sessionStorage'), 'un seul agencement, celui du téléphone ; plus de robot mémorisé');
-  assert.ok(fiche.includes("{actuel !== 'reglages' && epingle}"), 'l’épingle dans l’en-tête, comme sur la fiche universelle');
+  assert.ok(fiche.includes('<EnteteFiche nom={nom} plaque={plaque} sousNom={sousNom} epingle={epingle} reglages'), 'l’épingle dans l’en-tête, comme sur la fiche universelle');
 });
 
 test('le dessin : les teintes de Loggia, la couleur qui dit l’état, rien sans source', () => {
   const vue = lire('src', 'ficherobot.jsx');
   assert.ok(!/#[0-9a-fA-F]{6}\b/.test(vue), 'aucune couleur en dur : les maquettes donnent une disposition, pas une palette (seul le blanc du texte posé sur l’accent y est)');
-  const anneau = bloc(vue, 'function Anneau(', NL + '}');
-  const regle = anneau.slice(anneau.indexOf('const couleur ='), anneau.indexOf(';', anneau.indexOf('const couleur =')));
-  const rang = (motif) => { const i = regle.indexOf(motif); assert.notEqual(i, -1, motif + ' a disparu de la règle de couleur'); return i; };
-  assert.ok(rang("'erreur'") < rang("'travail'") && rang('pct < 20') < rang("'travail'"), 'la panne et la batterie à plat passent AVANT l’activité (règle de la fiche des robots)');
-  assert.ok(regle.includes('o-bad') && regle.includes('o-ok') && regle.includes('o-warn') && regle.includes('--rb-doux'));
-  assert.ok(vue.includes('{robot.batterie != null && <Anneau'), 'sans batterie publiée, pas d’anneau');
-  assert.ok(vue.includes("...(zones.length || idCarte ? [['zones', idCarte ? tr('Carte') : tr('Zones'), 'map']] : []),") && vue.includes("...(usure.length || compteurs.length ? [['entretien', tr('Entretien'), 'wrench-simple']] : []),"), 'un onglet sans donnée n’existe pas');
-  assert.ok(vue.includes('{p.reset && <div') && vue.includes("<BoutonConfirme libelle={tr('Remplacé')}"), '« Remplacé » seulement si l’appareil a le bouton, et en deux appuis');
-  assert.ok(vue.includes('carte={idCarte ? planDe() : null}') && !vue.includes('carte={idCarte && large'), 'la carte vit dans son onglet, sur tous les écrans');
-  assert.ok(vue.includes("if (parInterrupteurs) { appel('script', 'turn_on', { entity_id: scripts.pieces_selectionnees }); return; }"), 'le script maison garde la main quand il existe');
+  /* ASSERTION MODIFIÉE (chantier IoT, tâche 8, 18/10 ; I16, I2 A) : l'anneau de batterie part — la batterie s'écrit à droite du mot
+   * d'état, son glyphe à la règle des piles (`glyphePile`), et ne s'écrit pas sans batterie publiée ni pour un robot muet ; l'onglet
+   * Carte part — « Voir la carte » ouvre le plan dans une seconde feuille, seulement s'il y a une image (tests/fiche_robot.test.mjs). */
+  assert.ok(vue.includes('{vue.batterie != null && !vue.panne && (') && vue.includes('<Fi i={glyphePile(vue.batterie)} size={14} color="var(--o-text3)"'), 'sans batterie publiée, pas de chiffre');
+  assert.ok(!vue.includes("['zones',") && vue.includes("...(usure.length || compteurs.length ? [['entretien', tr('Entretien'), 'wrench-simple']] : []),"), 'un onglet sans donnée n’existe pas');
+  // ASSERTION MODIFIÉE (chantier IoT, tâche 9, 18/10 ; I20) : « Remplacé » n'existe pas à 100 %, et il DEMANDE sur sa rangée (« Remettre Filtre à 100 % ? ») au lieu de deux appuis.
+  // ASSERTION MODIFIÉE (passe bis de l'étape 2 IoT, 19/10 ; point G) : l'Entretien est une brique du socle commun (`OngletEntretien`,
+  // fichecommune.jsx), que la fiche du distributeur reprend telle quelle ; le robot lui passe ses pièces, ses compteurs et sa phrase.
+  const commune = lire('src', 'fichecommune.jsx');
+  assert.ok(commune.includes('const remplacer = p.reset && p.pct !== 100;') && commune.includes("{remplacer && !demande && <button type=\"button\" onClick={() => setQuestion(p.id)} style={PUCE_RANGEE}>{tr('Remplacé')}</button>}"),
+    '« Remplacé » seulement si l’appareil a le bouton, et pas à 100 %');
+  assert.ok(vue.includes("<OngletEntretien hass={hass} pieces={usure} compteurs={compteurs} phrase={phraseEntretien(usure)} />") && !vue.includes('function OngletEntretien('), 'le robot reprend la brique commune');
+  assert.ok(vue.includes('{carteOuverte && idCarte && (') && !vue.includes('carte={idCarte && large'), 'la carte, dans sa seconde feuille, sur tous les écrans');
+  /* ASSERTION MODIFIÉE (passe bis du 18/10, point A ; sa réponse « Par le serveur ») : le script maison garde la main quand il existe,
+   * mais il part par le serveur (`loggia/robots/lancer`, `script`) — plus de `script.turn_on` direct ; le geste se JOUE dans
+   * tests/fiche_robot.test.mjs (point A).
+   * ASSERTION MODIFIÉE (passe bis 2 du 18/10, points J et E) : il part avec le RÔLE qu'on lui demande, et le jeton de son geste. */
+  assert.ok(vue.includes("parScript(scripts.pieces_selectionnees, 'pieces_selectionnees', jeton, {") && !vue.includes("appel('script', 'turn_on', { entity_id: scripts.pieces_selectionnees })"), 'le script maison garde la main quand il existe');
   const css = lire('src', 'index.css');
   for (const r of ['.rb-aspirateur { --rb-rgb: var(--o-accent-rgb); --rb-doux: var(--o-accent-soft); --rb-fond: var(--o-accent-fond); }', '.rb-tondeuse { --rb-fond: color-mix(in srgb, var(--o-ok) 62%, #000); }', '.rb-onglet { flex: 1 1 0; min-width: 0; flex-direction: column;']) {
     assert.ok(css.includes(r), r + ' manque à index.css');

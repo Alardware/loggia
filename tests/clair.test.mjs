@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
@@ -22,7 +23,7 @@ const css = lire('src', 'index.css');
   /* + l'ecran de veille et la modale du code : sortis d'App.jsx le 23/09
    * (plan M1). Ce que ce fichier verifie n'a pas bouge, seulement son
    * adresse — on relit donc le monolithe ET ce qui en est sorti. */
-const app = ['App.jsx', 'ecranveille.jsx', 'pinmodal.jsx', 'theme.js'].map(f => lire('src', f)).join(String.fromCharCode(10));
+const app = (['App.jsx', 'ecranveille.jsx', 'pinmodal.jsx', 'theme.js'].map(f => lire('src', f)).join(String.fromCharCode(10)) + VUES_SORTIES);
 
 const bloc = (debut) => { const i = css.indexOf(debut); return css.slice(i, css.indexOf('\n}', i)); };
 const jetons = (texte) => { const m = {}; for (const [, k, v] of texte.matchAll(/(--o-[a-z0-9-]+):\s*(#[0-9a-fA-F]{6})\b/g)) m[k] = v; return m; };
@@ -113,16 +114,28 @@ test('le thème est posé AVANT la première peinture', () => {
 });
 
 test('« ne répond plus » se dit d’une seule façon : le liseré', async () => {
-  assert.ok(app.includes("function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onRempli = null, onOpen, extra = null, chip = false, mort = false })"));
-  assert.ok(app.includes("function RoomPlantCard({ mort = false, nom, sub, hum, verdict, verdictCol,"));
-  assert.equal(compter(app, "className={'o-piece o-cvdense' + (mort ? ' o-panne' : '')}"), 2, 'distributeur et plante, compacts');
-  assert.equal(compter(app, "className={'o-rmcard' + (mort ? ' o-panne' : '')}"), 8, 'toutes les cartes de pièce (la lampe porte aussi o-light-card)');
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I5, I12) : la carte du distributeur lit sa vue (`v`) ; muette, `v.mort` — sa compacte comme la large.
+  assert.ok(app.includes("function RoomFeederCard({ v, onOpen, chip = false }) {"));
+  // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 10 ; C30) : la carte d'une plante lit sa plante (`pl`) ; muette (`pl.mort`), le liseré.
+  assert.ok(app.includes("function RoomPlantCard({ pl, nom, onOpen, chip = false }) {") && app.includes("mort: muet(c.hum)") && app.includes('const mort = v.muette;'));
+  assert.equal(compter(app, "className={'o-piece o-cvdense' + (mort ? ' o-panne' : '')}"), 1, 'la plante, compacte');
+  assert.equal(compter(app, "className={'o-piece o-cvdense' + (v.mort ? ' o-panne' : '')}"), 1, 'le distributeur, compact');
+  // ASSERTION MODIFIÉE (passe téléphone, tâche 4) : le thermostat et le fil pilote portent aussi la classe de la grille commune (`o-gabarit`) — les huit cartes, six et deux.
+  // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 10 ; C30) : la carte d'une plante prend la grille commune — cinq et trois.
+  // ASSERTION MODIFIÉE (chantier Médias, tâche 4 ; M5) : la carte d'un lecteur passe dans la grille commune (`o-rmcard o-gabarit`, sa panne nommée `v.indispo`) — quatre cartes gardent cette écriture.
+  // ASSERTION MODIFIÉE (chantier IoT, tâche 6, 18/10 ; I5) : la carte d'un robot passe dans la grille commune (`o-rmcard o-gabarit`, sa panne nommée `v.panne`) — trois cartes gardent cette écriture.
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I5) : la carte du distributeur passe dans la grille commune (`o-rmcard o-gabarit`, sa panne lue dans sa vue, `v.mort`) — deux cartes gardent cette écriture.
+  assert.equal(compter(app, "className={'o-rmcard' + (mort ? ' o-panne' : '')}"), 2, 'toutes les cartes de pièce (la lampe porte aussi o-light-card)');
+  assert.equal(compter(app, "className={'o-rmcard o-gabarit' + (v.panne ? ' o-panne' : '')}"), 1, 'le robot, dans la grille commune');
+  assert.equal(compter(app, "className={'o-rmcard o-gabarit' + (v.indispo ? ' o-panne' : '')}"), 1, 'le lecteur, dans la grille commune');
+  assert.equal(compter(app, "className={'o-rmcard o-gabarit' + (mort ? ' o-panne' : '')}"), 3, 'le thermostat, le fil pilote et la plante');
   assert.ok(app.includes("const mort = !!(estClimate(zone) && (!S || !S[zone.haid] || S[zone.haid].state === 'unavailable'));"), 'la zone de chauffage');
   /* Le distributeur (05/10, ADR 0155) : le réservoir muet ne suffisait pas —
    * chez l'utilisateur, c'est une aide `input_number` qui ne tombe jamais, et
    * son distributeur débranché n'aurait jamais eu de liseré. `enLigne` y ajoute
    * la commande muette et la connectivité de l'appareil. */
-  assert.ok(app.includes("mort: lu.enLigne.mort };") && app.includes("mort={d.mort}"), 'le distributeur');
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I5) : la carte au gabarit commun lit la panne de sa vue (`carteDistributeur` : `mort`, d'`enLigne`).
+  assert.ok(app.includes("className={'o-rmcard o-gabarit' + (v.mort ? ' o-panne' : '')}") && readFileSync(new URL('../src/distributeur.js', import.meta.url), 'utf8').includes('const { mort, raison } = lecture.enLigne;'), 'le distributeur');
   const { enLigne } = await import('../src/distributeur.js');
   const RES = 'input_number.bac', FEED = 'select.distributeur_feed';
   const commande = { domaine: 'select', entity_id: FEED };
@@ -132,10 +145,17 @@ test('« ne répond plus » se dit d’une seule façon : le liseré', async () 
   assert.equal(enLigne([], { ...vivant, [RES]: { state: 'unavailable' } }, cfg, commande).mort, true, 'le réservoir muet');
   assert.equal(enLigne([], { ...vivant, [FEED]: { state: 'unavailable' } }, cfg, commande).mort, true, 'la commande muette, réservoir vivant');
   assert.equal(enLigne([{ domaine: 'binary_sensor', classe: 'connectivity', etat: 'off' }], vivant, cfg, commande).mort, true, 'l’appareil hors ligne');
-  assert.ok(app.includes("mort: muet(plantCapteur(S, p.base, 'moisture'))") && app.includes("mort={pl.mort}"), 'la plante');
+  // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 2 ; C29) : le sol d'une plante se lit par son appareil, ou par sa base.
+  // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 10 ; C30) : la carte lit `pl.mort` à travers sa vue (`v.muette`).
+  assert.ok(app.includes("mort: muet(c.hum)") && app.includes("const mort = v.muette;"), 'la plante');
   assert.ok(app.includes("<div className={mort ? 'o-panne' : undefined} style={{ ...CV_CADRE, opacity: mort ? .55 : 1 }}>"), 'le hero d’une machine');
   // La croix, en dernier sur la ligne (19/09) : le rembourrage passe à gauche.
-  assert.ok(lire('src', 'ficherobot.jsx').includes("<div className=\"o-panne\" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 6px 6px 14px', borderRadius: 30 }}>"), 'la fiche du robot');
+  /* ASSERTION MODIFIÉE (chantier IoT, tâche 8, 18/10 ; I15, I16) : la fiche du robot passe sur le socle commun. Muet, c'est le panneau
+   * de tête de son Accueil qui porte le liseré ; un robot que Home Assistant ne connaît plus, l'en-tête commun (`EnteteFiche`), au
+   * même rembourrage, la croix en dernier. */
+  const robot = lire('src', 'ficherobot.jsx');
+  assert.ok(robot.includes("<div className={'rb-a-hero' + (vue.panne ? ' o-panne' : '')} style={PANNEAU}>") && robot.includes("panne={tr('Ce robot ne répond plus.')} />"), 'la fiche du robot');
+  assert.ok(lire('src', 'fichecommune.jsx').includes("...(panne ? { padding: '6px 6px 6px 14px', borderRadius: 30 } : null)"), 'l’en-tête commun en panne');
   assert.ok(css.includes('.o-cam-tuile.o-panne::before { inset: 0; }'), 'le liseré de la caméra reste dans ses coins');
 });
 

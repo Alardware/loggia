@@ -8,6 +8,8 @@ pendant que l'alarme est armee, elle, attend son heure comme les autres.
 from __future__ import annotations
 
 import asyncio
+import sys
+import types
 from datetime import datetime
 
 import pytest
@@ -81,14 +83,15 @@ def creer(module, store_module):
     regles_module = charger("regles")
     faits = []
 
-    def fabrique(config=None, etats=None, quand=None):
+    def fabrique(config=None, etats=None, quand=None, partage=None):
         cfg = {"actif": True, "service": "mobile",
                "categories": {"fumee": True, "gaz": True, "co": True, "fuite": True,
                               "alarme": True, "portes": True},
                "cooldown_min": 5}
         cfg.update(config or {})
         magasin = store_module.LoggiaStore.__new__(store_module.LoggiaStore)
-        magasin._store = FauxStore({"users": {}, "shared": {"loggia_alertes": cfg}, "migrated": True})
+        magasin._store = FauxStore({"users": {}, "shared": {"loggia_alertes": cfg, **(partage or {})},
+                                    "migrated": True})
         magasin._ancien = FauxStore(None)
         magasin._data = None
         magasin._lock = asyncio.Lock()
@@ -101,6 +104,18 @@ def creer(module, store_module):
         a._dangers = {}
         a._avant = {}
         a._vanne_coupee = None
+        # Audit du 19/10 : le dernier etat connu avant un silence (H5), les
+        # detecteurs muets guettes et deja signales (M5), l'attente du
+        # demarrage (H4) — le vrai constructeur les pose, la fabrique aussi.
+        a._connu = {}
+        a._rendus_au_silence = set()
+        a._muets = {}
+        a._muets_dits = set()
+        a._au_demarrage = None
+        # Relecture du lot 2 : Home Assistant tourne deja (une apparition est un
+        # evenement), et les detecteurs muets deja dits vivent dans un fichier.
+        a._demarre = True
+        a._depot = FauxStore(None)
         a._regles = regles_module.Regles(a._hass, magasin)
         a._regles._depot = FauxStore(None)
         if quand is not None:
@@ -513,3 +528,177 @@ def test_un_ouvrant_sans_classe_ne_s_ouvre_pas_sur_une_alerte(module, creer):
     assert a._entites("cover", module.VOLETS_CLASSES) == ["cover.volet"]
     # Sans classes demandees, tout le domaine repond — les lumieres, la vanne.
     assert a._entites("cover") == ["cover.inconnu", "cover.portail", "cover.volet"]
+
+
+def test_une_alerte_n_ouvre_jamais_une_fenetre_de_toit(module, creer):
+    """Audit du 19/10 (point 14). La liste des alertes ouvrait aussi les
+    fenetres de toit (`window`) : sur une alerte fumee, en pleine pluie. Une
+    fenetre de toit ne s'ouvre jamais par Loggia (ouvrants.py) ; la liste est
+    celle des volets, et un volet « tilt seul » reste hors de l'appel groupe,
+    qu'il ferait refuser en entier (point 11)."""
+    ouvrants = charger("ouvrants")
+    assert "window" not in module.VOLETS_CLASSES
+    # ASSERTION MODIFIÉE (19/10) : le lot 2 des capteurs (H6) écarte aussi le store banne — une alerte ne
+    # déploie pas une toile au-dessus d'une fenêtre en feu. La liste reste celle d'ouvrants.py, moins lui.
+    assert tuple(module.VOLETS_CLASSES) == tuple(c for c in ouvrants.CLASSES_VOLETS if c != ouvrants.STORE_BANNE)
+    a = creer(etats={
+        "cover.volet": FauxEtat("cover.volet", "closed", {"device_class": "shutter", "supported_features": 15}),
+        "cover.velux": FauxEtat("cover.velux", "closed", {"device_class": "window", "supported_features": 15}),
+        "cover.lames": FauxEtat("cover.lames", "open", {"device_class": "blind", "supported_features": 16 | 32 | 128}),
+    })
+    lancer(a._reagir(FUMEE, "fumee"))
+    covers = [x for x in a._hass.services.appels if x[0] == "cover"]
+    assert covers == [("cover", "open_cover", {"entity_id": ["cover.volet"]})]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Un `moisture` CALCULE n'est pas une fuite (16/10, ADR 0022).
+#
+# Chez l'utilisateur, `binary_sensor.dracaena_besoin_eau` et
+# `binary_sensor.schefflera_besoin_eau` sont des modeles (`template`) de classe
+# `moisture`, sans appareil : « la plante a soif ». Allumes, ils disaient « Fuite
+# d'eau detectee » et coupaient la vanne. La meme famille d'erreur que le
+# `safety` de Meteoalarm (ADR 0157). La plateforme vient du registre des
+# entites ; une entite qu'il ne connait pas reste une fuite.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class FauxRegistre:
+    """Le registre des entites : `async_get(entity_id)` rend l'entree, ou None."""
+
+    def __init__(self, plateformes):
+        self.plateformes = dict(plateformes)
+
+    def async_get(self, haid):
+        p = self.plateformes.get(haid)
+        return None if p is None else types.SimpleNamespace(entity_id=haid, platform=p)
+
+
+def registre(monkeypatch, plateformes):
+    reg = FauxRegistre(plateformes)
+    monkeypatch.setattr(sys.modules["homeassistant.helpers.entity_registry"], "async_get", lambda _h: reg)
+    return reg
+
+
+def binaire(haid, classe, etat="on"):
+    return FauxEtat(haid, etat, {"device_class": classe, "friendly_name": haid})
+
+
+def basculer(a, haid, classe):
+    """Allume puis eteint le binaire : les taches de chaque moitie, comptees a part."""
+    a._on_state(FauxEvenement(binaire(haid, classe), binaire(haid, classe, "off")))
+    allume = len(a._hass.taches)
+    a._hass.abandonner()
+    a._on_state(FauxEvenement(binaire(haid, classe, "off"), binaire(haid, classe)))
+    eteint = len(a._hass.taches)
+    a._hass.abandonner()
+    return allume, eteint
+
+
+def test_un_moisture_de_modele_n_est_pas_une_fuite(creer, monkeypatch):
+    """Son cas : « la plante a soif » n'envoie rien, ne coupe rien, ne rend rien."""
+    registre(monkeypatch, {"binary_sensor.dracaena_besoin_eau": "template",
+                           "binary_sensor.schefflera_besoin_eau": "template",
+                           "binary_sensor.fuites": "group"})
+    a = creer(etats=maison())
+    for haid in ("binary_sensor.dracaena_besoin_eau", "binary_sensor.schefflera_besoin_eau", "binary_sensor.fuites"):
+        assert basculer(a, haid, "moisture") == (0, 0), haid
+    assert a._dangers == {} and a._hass.services.appels == []
+
+
+def test_un_vrai_detecteur_de_fuite_reste_une_fuite(creer, monkeypatch):
+    """Un appareil (Zigbee, MQTT…) : le telephone ET la vanne, puis la fin du danger."""
+    registre(monkeypatch, {"binary_sensor.sdb_fuite": "mqtt"})
+    a = creer(etats=maison())
+    assert basculer(a, "binary_sensor.sdb_fuite", "moisture") == (2, 1)
+
+
+def test_hors_du_registre_ou_registre_illisible_c_est_une_fuite(creer, monkeypatch):
+    """Une entite YAML sans `unique_id` n'est pas au registre : elle reste une
+    fuite — on ne perd aucun vrai detecteur. Un registre illisible non plus."""
+    registre(monkeypatch, {})
+    a = creer(etats=maison())
+    assert basculer(a, "binary_sensor.fuite_yaml", "moisture") == (2, 1)
+
+    def casse(_h):
+        raise RuntimeError("registre indisponible")
+
+    monkeypatch.setattr(sys.modules["homeassistant.helpers.entity_registry"], "async_get", casse)
+    b = creer(etats=maison())
+    assert basculer(b, "binary_sensor.sdb_fuite", "moisture") == (2, 1)
+
+
+def test_la_regle_ne_touche_que_les_fuites(creer, module, monkeypatch):
+    """Une fumee de modele reste une fumee : la regle ne vaut que pour `moisture`,
+    et ne nomme que ce qui CALCULE — un modele, un groupe."""
+    registre(monkeypatch, {"binary_sensor.fumee_calculee": "template"})
+    a = creer(etats=maison())
+    assert basculer(a, "binary_sensor.fumee_calculee", "smoke") == (2, 1)
+    assert module.PLATEFORMES_CALCULEES == ("template", "group")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Une seule idee de la lumiere de la maison (audit du 19/10, ADR 0260) : le
+# danger allume les lumieres de la maison - ni la LED d'une borne (`config`)
+# ni une lampe cachee -, l'interrupteur declare lumiere par SON service, et
+# un groupe s'efface devant ses membres. Le danger passe, chacun revient.
+# ─────────────────────────────────────────────────────────────────────────────
+
+EXTERIEUR = "switch.lumiere_exterieur"
+LED = "light.u6_lr_led"
+
+
+def _entree_lumiere(haid, categorie=None, cache=None):
+    return types.SimpleNamespace(entity_id=haid, entity_category=categorie, hidden_by=cache, disabled_by=None)
+
+
+def registre_des_lumieres(monkeypatch, *entrees):
+    reg = types.SimpleNamespace(entities={e.entity_id: e for e in entrees})
+    monkeypatch.setattr(sys.modules["homeassistant.helpers.entity_registry"], "async_get", lambda _h: reg)
+
+
+def quartier():
+    return {
+        "light.salon": FauxEtat("light.salon", "on", {"brightness": 80}),
+        "light.couloir": FauxEtat("light.couloir", "off"),
+        "light.tout": FauxEtat("light.tout", "on", {"entity_id": ["light.salon", "light.couloir"]}),
+        LED: FauxEtat(LED, "on", {"brightness": 255}),
+        "light.cachee": FauxEtat("light.cachee", "off"),
+        EXTERIEUR: FauxEtat(EXTERIEUR, "off"),
+        "switch.prise_nas": FauxEtat("switch.prise_nas", "on"),
+    }
+
+
+def test_le_danger_n_allume_ni_la_led_ni_la_cachee_mais_l_interrupteur_declare(creer, monkeypatch):
+    """La LED de la borne UniFi (`config`) passait a 100 % sur une fumee. Elle
+    n'est pas une lumiere de la maison ; la cachee non plus ; le groupe
+    s'efface devant ses membres ; l'interrupteur declare lumiere s'allume, par
+    `homeassistant` - il n'a pas de niveau a monter."""
+    registre_des_lumieres(monkeypatch, _entree_lumiere(LED, categorie="config"),
+                          _entree_lumiere("light.cachee", cache="user"), _entree_lumiere("light.salon"),
+                          _entree_lumiere(EXTERIEUR), _entree_lumiere("switch.prise_nas"))
+    a = creer(etats=quartier(), partage={"loggia_switchlights": [EXTERIEUR]})
+    lancer(a._reagir(FUMEE, "fumee"))
+    assert appels(a) == [
+        ("light", "turn_on", ["light.couloir", "light.salon"], {"brightness_pct": 100}),
+        ("homeassistant", "turn_on", [EXTERIEUR], {}),
+    ]
+    assert a._regles.tenues("alertes") == {"light.couloir": "danger", "light.salon": "danger", EXTERIEUR: "danger"}
+    assert [(l["quoi"], l["n"]) for l in lancer(a._regles.journal())] == [("allumer", 1), ("allumer", 2)]
+    # Le danger passe : le couloir et l'interrupteur, eteints avant, s'eteignent - chacun par son service.
+    a._hass.services.appels.clear()
+    lancer(a._danger_passe(FUMEE.entity_id))
+    assert appels(a) == [
+        ("light", "turn_off", ["light.couloir"], {}),
+        ("homeassistant", "turn_off", [EXTERIEUR], {}),
+        ("light", "turn_on", ["light.salon"], {"brightness": 80}),
+    ]
+    assert a._regles.tenues("alertes") == {}
+
+
+def test_sans_registre_le_danger_allume_tout_ce_qui_est_une_lampe(creer):
+    """Le registre illisible : on ne filtre rien - la LED y passe, plutot que
+    de laisser la maison dans le noir. Le groupe s'efface quand meme."""
+    a = creer(etats=quartier())
+    lancer(a._reagir(FUMEE, "fumee"))
+    assert appels(a)[0] == ("light", "turn_on", ["light.cachee", "light.couloir", "light.salon", LED],
+                            {"brightness_pct": 100})

@@ -19,17 +19,22 @@
 export function uniteTemp(attrs, hass) {
   const u = (attrs && (attrs.temperature_unit || attrs.unit_of_measurement))
     || (hass && hass.config && hass.config.unit_system && hass.config.unit_system.temperature);
-  return u === '°F' || u === 'F' ? 'F' : 'C';
+  /* Le kelvin (audit du 19/10) : une température en K se lisait comme des °C — 294 « Trop chaud ». Seule l'unité de l'ENTITÉ le dit ;
+   * une installation n'est jamais réglée en kelvins. */
+  return u === '°F' || u === 'F' ? 'F' : u === 'K' && attrs && attrs.unit_of_measurement === 'K' ? 'K' : 'C';
 }
+
+/** Le signe d'une unité de température : « °C », « °F », mais « K » — un kelvin n'a pas de degré (audit du 19/10). */
+export const signeTemp = (u) => (u === 'K' ? 'K' : '°' + u);
 
 export function versCelsius(valeur, unite) {
   if (valeur == null) return valeur;
-  return unite === 'F' ? (valeur - 32) * 5 / 9 : valeur;
+  return unite === 'F' ? (valeur - 32) * 5 / 9 : unite === 'K' ? valeur - 273.15 : valeur;
 }
 
 export function deCelsius(valeur, unite) {
   if (valeur == null) return valeur;
-  return unite === 'F' ? valeur * 9 / 5 + 32 : valeur;
+  return unite === 'F' ? valeur * 9 / 5 + 32 : unite === 'K' ? valeur + 273.15 : valeur;
 }
 
 /** La moyenne de températures venues de capteurs DIFFÉRENTS, `[{ v, unite }]`
@@ -54,9 +59,27 @@ export function uniteVent(attrs) {
   return u === 'mph' ? 'mph' : 'km/h';
 }
 
+/* Un CAPTEUR de vent, lui, publie dans l'unité de son intégration (chantier
+ * Capteurs, § 6) : des m/s, des nœuds, des pieds par seconde. Une unité absente
+ * ou inconnue se lit en km/h, facteur 1, comme avant — mais la carte d'une mesure
+ * ne la juge pas (`uniteVentConnue`, correction bis, point 11) : un Beaufort lu
+ * en km/h, « 9 », serait « Calme » quand c'est une tempête. */
+const VERS_KMH = { 'm/s': 3.6, mph: 1.609344, kn: 1.852, 'ft/s': 1.09728 };
+
+/** Une unité de vent que la table sait ramener au km/h : km/h, m/s, mph, nœuds, pieds par seconde. */
+export function uniteVentConnue(unite) {
+  return unite === 'km/h' || Object.prototype.hasOwnProperty.call(VERS_KMH, unite);
+}
+
 export function versKmh(valeur, unite) {
   if (valeur == null) return valeur;
-  return unite === 'mph' ? valeur * 1.609344 : valeur;
+  return valeur * (VERS_KMH[unite] || 1);
+}
+
+/** L'inverse : des km/h redits dans l'unité du capteur (les chiffres sous la barre d'une carte). */
+export function deKmh(valeur, unite) {
+  if (valeur == null) return valeur;
+  return valeur / (VERS_KMH[unite] || 1);
 }
 
 /* ── Puissance et énergie : le watt et le kilowattheure (audit du 03/10) ────

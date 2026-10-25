@@ -23,7 +23,7 @@ test('les sections : Securite en tete de la colonne, En ce moment en tete du rai
   const o = bloc('  const ordreDe = (zone) => {', NL + '  };');
   assert.ok(o.includes('.map(s => ACC_RENOMME[s] || s)'), 'un ordre enregistre est traduit');
   assert.ok(o.includes("const tete = (zone === 'main' ? [] : ['attention', 'meteo']).filter(s => manquants.indexOf(s) >= 0);") && o.includes("return [...tete, ...sauve, ...manquants.filter(s => tete.indexOf(s) < 0)];"), 'Securite en tete de la colonne, « A surveiller » en tete du rail, sur un accueil deja range');
-  assert.ok(home.includes('(grille.caches || []).map(s => ACC_RENOMME[s] || s).indexOf(id) >= 0;'), 'un masquage enregistre suit le nouveau nom (un widget en option, lui, se lit dans `ajoutees` — ADR 0041)');
+  assert.ok(home.includes('(grille.caches || []).map(s => ACC_RENOMME[s] || s).indexOf(id) >= 0);'), 'un masquage enregistre suit le nouveau nom (un widget en option, lui, se lit dans `ajoutees` — ADR 0041)');
 });
 
 test('plus de carte Securite sur l’Accueil : la banniere mene a la vue (ADR 0035)', () => {
@@ -33,12 +33,21 @@ test('plus de carte Securite sur l’Accueil : la banniere mene a la vue (ADR 00
 });
 
 test('En ce moment : une ligne par chose qui tourne, avec son geste, et rien d’invente', () => {
-  assert.ok(home.includes('const np = mpRead(S0, id); if (!np.playing) return;') && home.includes("commande(id, 'media_player', 'media_play_pause')"), 'un lecteur en lecture, et sa pause');
+  // ASSERTION MODIFIÉE (chantier Médias, tâche 9 ; M13, M14, M16) : un lecteur se lit avec son jumeau (`lireLecteur`), et « Mettre en pause » envoie `media_pause` à l'entité qui commande — jamais `media_play_pause`.
+  assert.ok(home.includes('const l = lireLecteur(S0, m); if (l.indispo || !l.playing) return;') && home.includes("commande(l.ctl, 'media_player', 'media_pause')") && !home.includes("'media_play_pause'"), 'un lecteur en lecture, et sa pause — explicite');
   assert.ok(home.includes("if (dom !== 'vacuum' && dom !== 'lawn_mower') return;") && home.includes('const test = APPAREIL_ACTIF[dom]; if (!test || !test(e.state)) return;'), 'un appareil en marche : la regle de la banniere');
   assert.ok(home.includes("commande(id, 'vacuum', 'return_to_base')") && home.includes("commande(id, 'lawn_mower', 'dock')"), 'dock et arret : les gestes qui existent');
   assert.ok(home.includes('if (mLv && mLv.active && (!a || aEnt(notifIds().dishwasher)))'), 'le lave-vaisselle seulement en cours');
-  assert.ok(home.includes("['heating', 'cooling'].indexOf((S0[z.haid].attributes || {}).hvac_action) >= 0"), 'les zones qui chauffent vraiment');
-  assert.ok(home.includes('if (!bouge) return;') && home.includes("commande(c.haid, 'cover', 'stop_cover')"), 'un volet entre deux ou en mouvement, et son stop');
+  /* ASSERTION MODIFIÉE (tâche 12 du chantier Chauffage — la même que dans
+   * tests/accueil_essentiel.test.mjs) : « les zones qui chauffent vraiment »
+   * se comptent par LA règle des cartes (`zonesQuiChauffent` : un module à
+   * plus de 10 W, un thermostat qui chauffe — jamais le froid d'un
+   * climatiseur), sans les chauffages au planning allumé. L'ancienne
+   * condition comptait le chaud ET le froid des seuls `climate`. */
+  assert.ok(home.includes('const chauffe = zonesQuiChauffent(S0, etatCh);') && !home.includes("['heating', 'cooling']"), 'les zones qui chauffent vraiment');
+  /* ASSERTION MODIFIÉE (19/10) : le mouvement se lit aussi dans la course jouée, et Stop — s'il le sait (`gestesCover`) — fige
+   * la course là où elle est (`ordreEtArret`), qu'un refus de Home Assistant oublie. */
+  assert.ok(home.includes('if (!sens) return;') && home.includes('ordreEtArret(c.haid, e, envoyerGeste(dashHass, c.haid, stop))'), 'un volet en mouvement, et son stop');
   assert.ok(home.includes('const nEnCours = momentRows.length;') && home.includes('nEnCours > 8'), 'compte reel, huit lignes au plus');
   assert.ok(home.includes("railPanel(tr('En ce moment'),") && home.includes("tr('RIEN EN COURS')") && home.includes('moment: railMoment,'), 'le panneau du rail, meme vide');
   assert.ok(!home.includes("tr('Mode volets')") && !home.includes("railRow('we'") && !home.includes("railRow('lu'"), 'plus de lignes de robots ni de mode volets dans le rail');

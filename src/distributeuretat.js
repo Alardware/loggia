@@ -18,9 +18,18 @@
  *
  * Pas de React ici hormis le crochet : la mécanique se teste à sec
  * (`tests/distributeuretat.test.mjs`), source et horloge doublées.
+ *
+ * Et « Distribuer », UN geste pour tout l'écran (étape 2 du chantier IoT,
+ * 19/10) : le verrou de 2,5 s que la carte tenait seule devient la variante
+ * PARTAGÉE d'optimiste.js — la carte large, l'étroite, la compacte et la
+ * popup lisent le même. Deux appuis rapprochés, d'où qu'ils viennent, ne font
+ * qu'une ration (la leçon du point 1 de l'étape 1) ; et le verrou tient tant
+ * que Home Assistant n'a pas répondu (passe bis, point C).
  */
 import { useEffect, useSyncExternalStore } from 'react';
 import { getHass } from './state.js';
+import { commanderService } from './actions.js';
+import { poserPartage, lirePartage, relacherPartage, useOptimistePartage } from './optimiste.js';
 
 const TYPE_ETAT = 'loggia/distributeurs/etat';
 const SONDAGE_CARTE_MS = 60000;
@@ -148,3 +157,41 @@ export function reglerDistributeurEtat({ hass = undefined, horloge: h = undefine
 
 /** Combien d'abonnés, et à quelle cadence (lecture seule, pour les tests). */
 export function compteDistributeur() { return { abonnes, detailles, periode }; }
+
+/* ── « Distribuer » : un verrou pour tout l'écran (étape 2 du chantier IoT, 19/10) ──
+ * Un appui pose le verrou — l'avance PARTAGÉE d'optimiste.js, sous une seule clé — et part ; tout autre appui, de la carte, de la
+ * compacte ou de la popup, le lit au moment même et ne part pas. Il tient 2,5 s quoi qu'il arrive, et tant que Home Assistant n'a
+ * pas répondu — 30 s au plus (sa GARDE ; passe bis de l'étape 2, 19/10, point C : il tombait à 2,5 s, et un distributeur en nuage
+ * qui répond en 3 s servait DEUX rations) ; la réponse venue, réussie ou non, il prend son filet de 2,5 s, puis expire : la règle
+ * « tout état optimiste passe par optimiste.js, et il expire » tient ici aussi. Rien d'autre n'y vit : le compteur de l'appareil dit
+ * ensuite ce qui est tombé. */
+const GESTE_DISTRIBUER = 'distributeur';
+/** Le verrou de « Distribuer », celui que la carte tenait seule depuis l'audit du 18/09 : la tenue, et le filet après la réponse. */
+export const VERROU_DISTRIBUER_MS = 2500;
+/** Tant que Home Assistant n'a pas répondu, le verrou tient — au plus ceci (point C). */
+export const GARDE_DISTRIBUER_MS = 30000;
+/** Un appui sur « Distribuer » : permis, il pose le verrou et rend son jeton ; pendant le verrou, il rend null, et rien ne doit partir. */
+export function poserDistribution(t = Date.now()) {
+  if (lirePartage(GESTE_DISTRIBUER)) return null;
+  return poserPartage(GESTE_DISTRIBUER, Object.freeze({ t }), { filet: VERROU_DISTRIBUER_MS, tenue: VERROU_DISTRIBUER_MS, garde: GARDE_DISTRIBUER_MS });
+}
+/** Home Assistant a répondu, réussi ou non : le verrou de CE jeton quitte sa garde et prend son filet, compté de là. */
+export const relacherDistribution = (jeton) => relacherPartage(GESTE_DISTRIBUER, jeton);
+/**
+ * « Distribuer », d'où que vienne l'appui — la carte large, l'étroite, la compacte, la popup — : le verrou d'abord, puis la commande
+ * de l'appareil (`envoi`, ce qu'`envoiDistribuer` rend) par `commanderService`, dont la promesse relâche le verrou. Rend vrai si la
+ * ration est partie, faux si le verrou tenait (ou sans commande).
+ */
+export function lancerDistribution(hass, envoi) {
+  const jeton = envoi ? poserDistribution() : null;
+  if (!jeton) return false;
+  let p;
+  try { p = commanderService(hass, envoi.data.entity_id, envoi.domaine, envoi.service, envoi.data); } catch (e) { relacherDistribution(jeton); throw e; }
+  const fin = () => relacherDistribution(jeton);
+  Promise.resolve(p).then(fin, fin);
+  return true;
+}
+/** Le geste en vol, `{ t }`, ou null. */
+export const distributionEnVol = () => lirePartage(GESTE_DISTRIBUER);
+/** Pour un composant : le geste en vol, et il se redessine quand le verrou se pose ou tombe ; `actif` faux, il n'écoute rien. */
+export const useDistribution = (actif = true) => useOptimistePartage(actif ? GESTE_DISTRIBUER : null, {});

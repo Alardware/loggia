@@ -144,7 +144,9 @@ test('la carte d’entité : une surface nommée de ce qu’elle affiche, sœur 
   // Le nom : la MÊME variable que le sous-titre affiché.
   assert.ok(c.includes('const sousTitre = '), 'le sous-titre n’est plus une variable');
   assert.ok(c.includes('{sousTitre}'), 'le sous-titre affiché n’est plus celui qu’on nomme');
-  const s = c.indexOf('{ouvrable && <Surface onClick={() => onOpen(id)} label={nomCarte(name, sousTitre)} />}');
+  // ASSERTION MODIFIÉE (chantier Capteurs, tâche 5) : une mesure compacte dit aussi son chiffre, affiché à la place d'une commande.
+  // ASSERTION MODIFIÉE (chantier IoT, tâche 6, 18/10 ; I12) : un robot compact dit sa phrase, puis sa batterie — l'ordre de sa carte.
+  const s = c.indexOf("{ouvrable && <Surface onClick={() => onOpen(id)} label={vr ? nomCarte(name, sousTitre, vr.panne || vr.batterie == null ? null : tr('batterie {p} %', { p: vr.batterie })) : nomCarte(name, vm && vm.chiffre != null ? vm.chiffre + (vm.unite ? ' ' + vm.unite : '') : null, sousTitre)} />}");
   assert.ok(s > i, 'la surface manque, ou ne porte pas le nom affiché');
   assert.ok(s < c.indexOf('className="o-cvrow"'), 'la surface doit être le PREMIER enfant : les commandes passent après elle');
   assert.ok(!c.includes("tr('Ouvrir') + ' ' + name :"), 'l’ancien nom « Ouvrir … » est revenu');
@@ -164,7 +166,8 @@ test('la carte d’entité : chaque commande passe sur la surface et nomme l’a
   assert.ok(tags.length >= 14, 'les boutons de la carte ne sont plus lus : ' + tags.length);
   for (const t of tags) {
     const court = t.replace(/\s+/g, ' ').slice(0, 80);
-    assert.ok(t.includes("position: 'relative'") || /style=\{mini(Accent|Clim)?\}/.test(t), 'non positionné, il passe sous la surface : ' + court);
+    // ASSERTION MODIFIÉE (chantier Médias, tâche 5 ; M17) : le mini d'un lecteur étale `miniAccent` (`{ ...miniAccent, … }`) pour y poser l'inertie : la position vient avec lui.
+    assert.ok(t.includes("position: 'relative'") || /style=\{mini(Accent|Clim)?\}/.test(t) || /style=\{\{ \.\.\.mini(Accent|Clim)?,/.test(t), 'non positionné, il passe sous la surface : ' + court);
     const nom = attribut(t, 'aria-label');
     assert.ok(nom && /\bname\b/.test(nom), 'sans le nom de l’appareil : ' + court);
   }

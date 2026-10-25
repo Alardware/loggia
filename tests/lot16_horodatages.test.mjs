@@ -120,7 +120,9 @@ test('tuile : une date seule se dit dans la langue, une heure seule telle quelle
 
 test('tuile : une mesure reste une mesure (témoin)', () => {
   const html = tuile(etat('sensor.salon_t', '21.5', { unit_of_measurement: '°C', device_class: 'temperature' }), true);
-  assert.ok(montre(html, '21.5 °C'));
+  // ASSERTION MODIFIÉE (chantier Capteurs, tâche 5) : la compacte d'une mesure écrit son chiffre à la place d'une commande,
+  // à la française et insécable, et sa ligne dit la phrase de sa zone.
+  assert.ok(montre(html, '21,5' + String.fromCharCode(160) + '°C') && montre(html, 'Idéal'));
   assert.ok(ouvrable(html), 'une mesure s’ouvre');
 });
 

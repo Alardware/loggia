@@ -45,12 +45,15 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
+import re
 import time
 from typing import Any
 
 from homeassistant.core import Context, HomeAssistant, callback
 
+from .const import DOMAIN
 from .textes import joindre, langue_serveur, parties, rendre_fr, traduire
+from .volets_calcul import cible_de
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -72,6 +75,14 @@ MAX_JOURNAL = 500
 # L'ecriture est differee : une soiree de volets, ce sont quelques dizaines
 # d'entrees en deux minutes, et autant d'ecritures disque pour rien.
 DELAI_ECRITURE = 20.0
+# Un rechargement de l'integration : `arreter()` lance l'ecriture de ce qui
+# attendait, et l'instance suivante relirait le fichier PENDANT cette
+# ecriture, puis l'ecraserait de ce qu'elle a lu. La tache reste donc dans
+# `hass.data[DOMAIN]` (le dechargement n'en retire que les modules), et la
+# suivante l'attend avant de relire - ATTENTE_ECRITURE_S au plus -, sur le
+# patron du carnet des lumieres et des robots (audit du 19/10).
+CLE_ECRITURE_FINALE = "regles_ecriture"
+ATTENTE_ECRITURE_S = 10.0
 
 # Combien de temps une entite touchee a la main echappe aux regles.
 GEL_DEFAUT = 30 * 60
@@ -113,6 +124,34 @@ def niveau(palier: str, rang: int = 0) -> int:
     if palier not in ECHELLE:
         raise ValueError("palier inconnu : %r" % (palier,))
     return ECHELLE[palier] + max(0, min(19, int(rang)))
+
+
+# La forme d'un identifiant d'entite : `domaine.objet`, en minuscules, chiffres
+# et soulignes — ce que Home Assistant ecrit lui-meme.
+ENTITE = re.compile(r"^[a-z0-9_]+\.[a-z0-9_]+$")
+
+
+def est_entite(valeur: Any) -> bool:
+    """Un identifiant d'entite, et rien d'autre (audit du 19/10, M24).
+    `fullmatch`, pas `match` : avec `^…$`, `match` laissait passer
+    « sensor.a\n » — le `$` accepte un saut de ligne final (relecture du lot 2,
+    point 5)."""
+    return isinstance(valeur, str) and len(valeur) <= 255 and ENTITE.fullmatch(valeur) is not None
+
+
+def entites_propres(liste: Any) -> list[str]:
+    """Une liste recue, relue : seulement des identifiants d'entite.
+
+    Les veilles et la presence ecrivaient ce que l'ecran envoyait sans le
+    relire (audit du 19/10, M24) : un entier glisse dans `capteurs` etait
+    ecrit, puis `sorted` levait TypeError au reabonnement — la veille
+    n'ecoutait plus rien, au redemarrage pas davantage. Meme principe que
+    `fenetres.piece_propre`, la forme en plus : ce qui n'est pas un
+    identifiant est ecarte, une liste qui n'en est pas une devient vide.
+    """
+    if not isinstance(liste, list):
+        return []
+    return [h for h in liste if est_entite(h)]
 
 # La configuration des alertes — le telephone choisi, et les heures calmes —
 # vit sous cette cle, ecrite par Parametres > Alertes.
@@ -191,6 +230,10 @@ class Regles:
         self._sur_main: list = []
         self.derniere_main: float = 0.0
         self._ecriture = None
+        # L'ecriture EN VOL : l'echeance a sonne, la tache est partie. Un
+        # arret qui arrive la la depose pour l'instance suivante (`arreter`).
+        self._ecriture_en_cours = None
+        self._ecriture_jeton = 0
         self._depot = None
         # A l'arret de Home Assistant, ce que l'ecriture differee retient
         # encore doit partir : sinon les dernieres lignes disparaissaient (audit 18/09).
@@ -231,12 +274,33 @@ class Regles:
             self._depot = Store(self.hass, VERSION_JOURNAL, CLE_JOURNAL)
         return self._depot
 
+    async def _async_attendre_ecriture_retiree(self) -> None:
+        """L'ecriture finale de l'instance que celle-ci remplace (rechargement
+        de l'integration), s'il y en a une : on l'attend, ATTENTE_ECRITURE_S au
+        plus. Elle ne s'attend qu'une fois."""
+        donnees = getattr(self.hass, "data", None)
+        propres = donnees.get(DOMAIN) if isinstance(donnees, dict) else None
+        tache = propres.pop(CLE_ECRITURE_FINALE, None) if isinstance(propres, dict) else None
+        if tache is None:
+            return
+        try:
+            _, restantes = await asyncio.wait({asyncio.ensure_future(tache)}, timeout=ATTENTE_ECRITURE_S)
+        except Exception:  # noqa: BLE001
+            _LOGGER.warning("Loggia regles : ecriture de l'instance retiree impossible a attendre", exc_info=True)
+            return
+        if restantes:
+            _LOGGER.warning("Loggia regles : l'ecriture du journal de l'instance retiree n'a pas fini en %s s, "
+                            "on relit le fichier quand meme", ATTENTE_ECRITURE_S)
+
     async def _charger(self) -> None:
         if self._charge:
             return
         async with self._verrou_charge:
             if self._charge:
                 return
+            # Un rechargement : l'instance retiree finit d'ecrire ses dernieres
+            # lignes. On relit APRES elle, pas pendant.
+            await self._async_attendre_ecriture_retiree()
             try:
                 brut = await self._store_journal().async_load()
             except Exception:  # noqa: BLE001
@@ -256,9 +320,25 @@ class Regles:
         @callback
         def ecrire(_now):
             self._ecriture = None
-            self.hass.async_create_task(self._ecrire())
+            self._ecriture_jeton = getattr(self, "_ecriture_jeton", 0) + 1
+            self._ecriture_en_cours = self.hass.async_create_task(self._ecrire_en_vol(self._ecriture_jeton))
 
         self._ecriture = async_call_later(self.hass, DELAI_ECRITURE, ecrire)
+
+    async def _ecrire_en_vol(self, jeton: int) -> None:
+        """L'ecriture de l'echeance, qui s'oublie une fois finie - la sienne
+        seulement (`jeton`), pas une plus recente."""
+        try:
+            await self._ecrire()
+        finally:
+            if getattr(self, "_ecriture_jeton", 0) == jeton:
+                self._ecriture_en_cours = None
+
+    def _ecriture_en_vol(self) -> Any:
+        """La tache d'ecriture partie et pas encore finie, s'il y en a une."""
+        tache = getattr(self, "_ecriture_en_cours", None)
+        fini = getattr(tache, "done", None)
+        return None if tache is None or (callable(fini) and fini()) else tache
 
     async def _ecrire(self) -> None:
         try:
@@ -269,7 +349,9 @@ class Regles:
     async def noter(self, module: str, regle: str, quoi: str, *,
                     cibles=(), n: int | None = None, motif: str = "",
                     detail: str = "", simule: bool = False,
-                    echec: bool = False) -> dict[str, Any]:
+                    echec: bool = False, cible: int | None = None,
+                    orientation: int | None = None,
+                    dehors: float | None = None) -> dict[str, Any]:
         """Une ligne de journal, commune a toutes les regles.
 
         `motif` est ce qui a declenche — « lever + 30 », « vent 62 km/h »,
@@ -279,6 +361,12 @@ class Regles:
 
         `echec` : la ligne rouge — un ordre qui n'a pas abouti (ADR 0007).
         Le drapeau n'est pose que sur ces lignes-la.
+
+        `cible`, `orientation`, `dehors` (chantier Volets, spec 6.4) : la
+        position que vise un ordre de volet, et, sur les lignes de la
+        protection solaire, la facade du volet et la temperature dehors a cet
+        instant. Une ligne ne les porte que s'ils sont donnes : les autres
+        modules, et les lignes d'avant, n'en ont pas.
         """
         await self._charger()
         cibles = [h for h in cibles if isinstance(h, str)]
@@ -295,6 +383,9 @@ class Regles:
             # pour qu'on ne cherche pas pourquoi rien n'a bouge.
             "simule": bool(simule),
         }
+        for champ, valeur in (("cible", cible), ("orientation", orientation), ("dehors", dehors)):
+            if valeur is not None:
+                entree[champ] = valeur
         # Un texte compose — un gabarit et ses arguments — garde ses parties
         # a cote du francais rendu : c'est ce que l'ecran traduit (ADR 0070).
         # Un mot fixe n'en a pas besoin, sa cle suffit.
@@ -451,6 +542,16 @@ class Regles:
         t = self._tenue(haid)
         return t is not None and t["module"] == module and t["regle"] == regle
 
+    def tenu_par_plus_fort(self, module: str, regle: str, haid: str, priorite: int):
+        """La regle qui tient cette entite et l'emporte sur (`module`, `regle`)
+        a ce rang - celle qui la retiendrait dans `agir` -, ou None. A demander
+        avant de RETENTER : un ordre qui sera retenu n'a pas a partir, ni a
+        noter une ligne de plus a chaque passage (audit du 19/10)."""
+        t = self._tenue(haid)
+        if t is not None and (t["module"], t["regle"]) != (module, regle) and t["priorite"] > priorite:
+            return t["regle"]
+        return None
+
     def tenues(self, module: str) -> dict[str, str]:
         """Ce que tiennent les regles d'un module : {entity_id: regle}."""
         return {h: t["regle"] for h, t in list(self._tenues.items())
@@ -461,6 +562,14 @@ class Regles:
         {entity_id: {"module", "regle"}}. Les tenues echues n'y sont pas."""
         return {h: {"module": t["module"], "regle": t["regle"]}
                 for h, t in list(self._tenues.items()) if self._tenue(h) is not None}
+
+    def tenir(self, module: str, regle: str, cibles, priorite: int = 0) -> None:
+        """Tenir sans commander, jusqu'a `relacher` : ce qu'une autre regle a deja
+        fait et qu'on reprend a son compte — la coupure qu'un moteur laisse a la
+        regle des fenetres (audit du 19/10)."""
+        for haid in cibles or ():
+            if isinstance(haid, str):
+                self._tenues[haid] = {"module": module, "regle": regle, "priorite": priorite, "fin": None}
 
     def relacher(self, module: str, regle: str | None = None, cibles=None) -> None:
         """Rend ce qu'une regle tenait — tout le module si `regle` est None."""
@@ -523,7 +632,8 @@ class Regles:
 
     async def prevenir(self, module: str, regle: str, message: str, *,
                        titre: str = "Loggia", critique: bool = False,
-                       motif: str = "", simuler: bool = False) -> bool:
+                       motif: str = "", simuler: bool = False,
+                       data: dict | None = None) -> bool:
         """Previent quelqu'un, par le telephone choisi dans Parametres > Alertes.
 
         Deux regimes, et rien entre les deux :
@@ -533,6 +643,11 @@ class Regles:
             qui contourne les heures calmes ;
           * tout le reste. Pendant les heures calmes, la notification part
             quand meme — on la lira au reveil — mais ne sonne pas.
+
+        `data` (chantier Mode enfant, E13) : ce que l'application compagnon lit
+        en plus du texte — les BOUTONS d'une notification (`actions`), que
+        l'appui renvoie en `mobile_app_notification_action`. Il s'ajoute au
+        regime du son, sans l'ecraser.
 
         Chaque envoi laisse une ligne au journal, avec son regime : quand rien
         n'a sonne cette nuit, on sait si c'etait voulu. Rend vrai si quelque
@@ -563,6 +678,8 @@ class Regles:
         elif self.dans_la_plage(cfg.get("calme"), self._maintenant()):
             charge["data"] = copy.deepcopy(SILENCIEUSE)
             regime = "silencieuse, heures calmes"
+        if data:
+            charge["data"] = {**charge.get("data", {}), **copy.deepcopy(data)}
         if not simuler:
             try:
                 await self.hass.services.async_call("notify", service, charge, blocking=False)
@@ -580,7 +697,8 @@ class Regles:
                    cibles, data: dict | None = None, *,
                    quoi: str = "", motif: str = "", priorite: int = 0,
                    tenir: bool = False, jusqu_a_relacher: bool = False,
-                   simuler: bool = False) -> list:
+                   simuler: bool = False, orientation: int | None = None,
+                   dehors: float | None = None, attendre: bool = False) -> list:
         """Commande, en respectant ce que les regles doivent toutes respecter.
 
         Rend la liste des entites REELLEMENT commandees — jamais la liste
@@ -605,6 +723,15 @@ class Regles:
         `simuler` : rien ne part. Le journal note ce qui SERAIT parti, et les
         tenues bougent comme en vrai — la simulation raconte la meme histoire
         que le reel, sans toucher a la maison.
+
+        Un ordre de volet porte au journal la position qu'il vise (`cible`,
+        chantier Volets, spec 6.4), quel que soit le module qui le donne ;
+        `orientation` et `dehors` passent tels quels a `noter`.
+
+        `attendre` : l'appel ATTEND la fin du service (`blocking=True`) — ce
+        qui doit etre fait avant l'ordre suivant, et dont l'echec doit se
+        savoir : les aires d'une tondeuse avant qu'elle ne tonde (chantier IoT,
+        passe bis du 18/10, point 4). Sans lui, l'appel part sans attendre.
         """
         await self._charger()
         demandees = [h for h in cibles if isinstance(h, str)]
@@ -614,10 +741,9 @@ class Regles:
         for h in demandees:
             if h in geles:
                 continue
-            t = self._tenue(h)
-            if (t is not None and (t["module"], t["regle"]) != (module, regle)
-                    and t["priorite"] > priorite):
-                tenus_par[t["regle"]] = tenus_par.get(t["regle"], 0) + 1
+            autre = self.tenu_par_plus_fort(module, regle, h, priorite)
+            if autre is not None:
+                tenus_par[autre] = tenus_par.get(autre, 0) + 1
                 continue
             retenues.append(h)
 
@@ -636,7 +762,7 @@ class Regles:
                 charge.update(data)
             try:
                 await self.hass.services.async_call(
-                    domaine, service, charge, blocking=False, context=ctx)
+                    domaine, service, charge, blocking=attendre, context=ctx)
             except Exception:  # noqa: BLE001
                 _LOGGER.exception("Loggia regles : %s.%s a echoue", domaine, service)
                 retenues = []
@@ -660,7 +786,9 @@ class Regles:
             details.append(("{n} tenu par {regle}" if nb == 1 else "{n} tenus par {regle}",
                             {"n": nb, "regle": autre}))
         await self.noter(module, regle, quoi or service, cibles=retenues,
-                         motif=motif, detail=details, simule=simuler)
+                         motif=motif, detail=details, simule=simuler,
+                         cible=cible_de(service, data) if domaine == "cover" else None,
+                         orientation=orientation, dehors=dehors)
         return retenues
 
     @callback
@@ -691,7 +819,13 @@ class Regles:
         # On n'ecrit que si une ecriture ETAIT en attente. `_entrees` porte tout
         # le journal, deja relu du magasin : sans cette garde, chaque
         # rechargement reecrirait a l'identique un fichier de cinq cents lignes.
+        #
+        # Et la tache reste a la portee de l'instance suivante, qui l'attend
+        # avant de relire le fichier (`_async_attendre_ecriture_retiree`, audit
+        # du 19/10) - une ecriture deja EN VOL, dont l'echeance vient de
+        # sonner, se depose de meme.
         differee = self._ecriture is not None
+        tache = None
         if differee:
             try:
                 self._ecriture()
@@ -699,4 +833,10 @@ class Regles:
                 _LOGGER.debug("Loggia regles : ecriture deja annulee")
             self._ecriture = None
             if self._entrees:
-                self.hass.async_create_task(self._ecrire())
+                tache = self.hass.async_create_task(self._ecrire())
+        else:
+            tache = self._ecriture_en_vol()
+        if tache is not None:
+            donnees = getattr(self.hass, "data", None)
+            if isinstance(donnees, dict):
+                donnees.setdefault(DOMAIN, {})[CLE_ECRITURE_FINALE] = tache

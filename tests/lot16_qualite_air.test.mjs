@@ -30,11 +30,12 @@ const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const APP = lire('src', 'App.jsx');
 const PUR = lire('src', 'confort.js');
 
-/* Le mot du bandeau tel que l'Accueil le calcule : `airPalier` et `airLabel`,
- * lus dans App.jsx. */
-const debut = APP.indexOf('\nfunction airPalier(');
-const finLabel = APP.indexOf('\n', APP.indexOf('\nfunction airLabel(') + 1);
-assert.ok(debut > 0 && finLabel > debut, 'airPalier / airLabel introuvables');
+/* Le mot du bandeau tel que l'Accueil le calcule : `zoneCo2` et `motCo2`, lus dans App.jsx.
+ * ASSERTION MODIFIÉE (audit du 19/10, M16) : `airPalier` et `airLabel` sont partis — le bandeau dit le mot de la TABLE (`zoneMesure`),
+ * en capitales : cinq paliers, les mêmes que la carte, et plus « ÉLEVÉ » à 1 700 ppm quand la carte dit « Confiné ». */
+const debut = APP.indexOf('\nconst zoneCo2 = (co2)');
+const finLabel = APP.indexOf('\n', APP.indexOf('\nconst motCo2 = (co2)') + 1);
+assert.ok(debut > 0 && finLabel > debut, 'zoneCo2 / motCo2 introuvables');
 const AIR = APP.slice(debut, finLabel);
 
 const SONDE = `
@@ -42,14 +43,15 @@ const code = process.env.LOGGIA_L;
 const url = (p) => new URL(p, process.env.LOGGIA_R).href;
 Object.defineProperty(globalThis, 'navigator', { value: { language: code + '-' + code.toUpperCase() }, configurable: true });
 globalThis.window = code === 'fr' ? {} : { __loggiaCatalogue: { code, cat: (await import(url('src/langues/' + code + '.js'))).default } };
-const { verdictMesure, jaugeMesure } = await import(url('src/confort.js'));
+const { verdictMesure, barreMesure, zoneMesure } = await import(url('src/confort.js'));
 const { tr, langue, locale } = await import(url('src/i18n.js'));
-const airLabel = new Function('tr', process.env.LOGGIA_AIR + '\\nreturn airLabel;')(tr);
+const airLabel = new Function('zoneMesure', 'locale', process.env.LOGGIA_AIR + '\\nreturn motCo2;')(zoneMesure, locale);
+const b = barreMesure('co2', 1500);
 const carte = (v) => verdictMesure('co2', v).t;
 process.stdout.write(JSON.stringify({
   langue: langue(),
   carte: [800, 1000, 1300, 1399, 1400, 1500, 1700].map(carte),
-  capitales: jaugeMesure('co2', 1500).verdict.t.toLocaleUpperCase(locale()),
+  capitales: b.zones[b.i].t.toLocaleUpperCase(locale()),
   bandeau: [800, 1000, 1300, 1399, 1400, 1500, 1700].map(airLabel),
   temp: verdictMesure('temp', 17.5).t, hum: verdictMesure('hum', 35).t,
   nus: [tr('Bon'), tr('Moyen'), tr('Élevé')],
@@ -68,14 +70,15 @@ const E = Object.fromEntries(['fr', 'en', 'de', 'nl', 'es', 'it', 'pl'].map(l =>
 
 /* Les sept écrans, palier par palier : 800 · 1000 · 1300 · 1399 · 1400 · 1500 · 1700 ppm. */
 const ATTENDU = {
-  fr: { carte: ['Excellent', 'Bon', 'Moyen', 'Moyen', 'Élevé', 'Élevé', 'Confiné'], bandeau: ['BON', 'BON', 'MOYEN', 'MOYEN', 'ÉLEVÉ', 'ÉLEVÉ', 'ÉLEVÉ'], capitales: 'ÉLEVÉ' },
-  en: { carte: ['Excellent', 'Good', 'Fair', 'Fair', 'Poor', 'Poor', 'Stuffy'], bandeau: ['GOOD', 'GOOD', 'FAIR', 'FAIR', 'POOR', 'POOR', 'POOR'], capitales: 'POOR' },
-  de: { carte: ['Ausgezeichnet', 'Gut', 'Mittel', 'Mittel', 'Schlecht', 'Schlecht', 'Stickig'], bandeau: ['GUT', 'GUT', 'MITTEL', 'MITTEL', 'SCHLECHT', 'SCHLECHT', 'SCHLECHT'], capitales: 'SCHLECHT' },
-  nl: { carte: ['Uitstekend', 'Goed', 'Matig', 'Matig', 'Slecht', 'Slecht', 'Bedompt'], bandeau: ['GOED', 'GOED', 'MATIG', 'MATIG', 'SLECHT', 'SLECHT', 'SLECHT'], capitales: 'SLECHT' },
-  es: { carte: ['Excelente', 'Buena', 'Regular', 'Regular', 'Mala', 'Mala', 'Cargada'], bandeau: ['BUENA', 'BUENA', 'REGULAR', 'REGULAR', 'MALA', 'MALA', 'MALA'], capitales: 'MALA' },
-  it: { carte: ['Eccellente', 'Buona', 'Media', 'Media', 'Scarsa', 'Scarsa', 'Viziata'], bandeau: ['BUONA', 'BUONA', 'MEDIA', 'MEDIA', 'SCARSA', 'SCARSA', 'SCARSA'], capitales: 'SCARSA' },
-  // Seba882, inchangé : la carte et le bandeau gardent ses mots.
-  pl: { carte: ['Doskonale', 'Dobra', 'Średnia', 'Średnia', 'Wysoki', 'Wysoki', 'Duszno'], bandeau: ['DOBRA', 'DOBRA', 'ŚREDNIA', 'ŚREDNIA', 'WYSOKIE', 'WYSOKIE', 'WYSOKIE'], capitales: 'WYSOKI' },
+  // ASSERTIONS MODIFIÉES (audit du 19/10, M16) : le bandeau dit le mot de la carte, en capitales — les cinq paliers de la table.
+  fr: { carte: ['Excellent', 'Bon', 'Moyen', 'Moyen', 'Élevé', 'Élevé', 'Confiné'], bandeau: ['EXCELLENT', 'BON', 'MOYEN', 'MOYEN', 'ÉLEVÉ', 'ÉLEVÉ', 'CONFINÉ'], capitales: 'ÉLEVÉ' },
+  en: { carte: ['Excellent', 'Good', 'Fair', 'Fair', 'Poor', 'Poor', 'Stuffy'], bandeau: ['EXCELLENT', 'GOOD', 'FAIR', 'FAIR', 'POOR', 'POOR', 'STUFFY'], capitales: 'POOR' },
+  de: { carte: ['Ausgezeichnet', 'Gut', 'Mittel', 'Mittel', 'Schlecht', 'Schlecht', 'Stickig'], bandeau: ['AUSGEZEICHNET', 'GUT', 'MITTEL', 'MITTEL', 'SCHLECHT', 'SCHLECHT', 'STICKIG'], capitales: 'SCHLECHT' },
+  nl: { carte: ['Uitstekend', 'Goed', 'Matig', 'Matig', 'Slecht', 'Slecht', 'Bedompt'], bandeau: ['UITSTEKEND', 'GOED', 'MATIG', 'MATIG', 'SLECHT', 'SLECHT', 'BEDOMPT'], capitales: 'SLECHT' },
+  es: { carte: ['Excelente', 'Buena', 'Regular', 'Regular', 'Mala', 'Mala', 'Cargada'], bandeau: ['EXCELENTE', 'BUENA', 'REGULAR', 'REGULAR', 'MALA', 'MALA', 'CARGADA'], capitales: 'MALA' },
+  it: { carte: ['Eccellente', 'Buona', 'Media', 'Media', 'Scarsa', 'Scarsa', 'Viziata'], bandeau: ['ECCELLENTE', 'BUONA', 'MEDIA', 'MEDIA', 'SCARSA', 'SCARSA', 'VIZIATA'], capitales: 'SCARSA' },
+  // Seba882, inchangé : la carte garde ses mots, et le bandeau les dit en capitales.
+  pl: { carte: ['Doskonale', 'Dobra', 'Średnia', 'Średnia', 'Wysoki', 'Wysoki', 'Duszno'], bandeau: ['DOSKONALE', 'DOBRA', 'ŚREDNIA', 'ŚREDNIA', 'WYSOKI', 'WYSOKI', 'DUSZNO'], capitales: 'WYSOKI' },
 };
 
 test('à 1 500 ppm, l’air est « Poor », « Schlecht », « Slecht », « Mala », « Scarsa » — plus « High »', () => {
@@ -126,7 +129,7 @@ test('la table du CO₂ passe par trSens, et le bandeau ne retraduit pas son mot
     const ligne = PUR.split('\n').find(l => l.trimStart().startsWith(nom + ': () => ['));
     assert.ok(ligne.includes("tr('Bon')") && !ligne.includes('· air'), nom + ' garde le « Bon » nu');
   }
-  // `airLabel` rend un mot déjà traduit : `tr(airLabel(…))` le retraduisait.
-  assert.ok(!APP.includes('tr(airLabel('), 'le mot du bandeau repasse par tr');
-  assert.equal(APP.split("? airLabel(a.maxCo2) : tr('BON')").length - 1, 2, 'le nom et le dessin de la tuile');
+  // ASSERTION MODIFIÉE (audit du 19/10, M16) : `motCo2` rend un mot déjà traduit, et rien sans mesure — plus de « BON » au chargement.
+  assert.ok(!APP.includes('tr(motCo2('), 'le mot du bandeau repasse par tr');
+  assert.equal(APP.split("a.maxCo2 != null ? ' · ' + motCo2(a.maxCo2) : ''").length - 1, 2, 'le nom et le dessin de la tuile');
 });

@@ -12,7 +12,8 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { transform } from 'esbuild';
 
-const IMAGES = /\.(svg|webp|png|jpe?g|gif)$/;
+// Une image importée avec un suffixe de Vite (`?no-inline`) reste une image.
+const IMAGES = /\.(svg|webp|png|jpe?g|gif)(\?[\w-]+)?$/;
 
 export async function load(url, context, nextLoad) {
   if (url.endsWith('.jsx')) {

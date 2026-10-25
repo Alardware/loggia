@@ -56,6 +56,13 @@ def test_le_planning_du_distributeur_se_recharge(rechargement):
     assert "loggia_feeder" not in rechargement.CLES_DES_MODULES
 
 
+def test_le_chauffage_se_recharge(rechargement):
+    """Chantier Chauffage : un import remplace `loggia_chauffage` ; le moteur
+    reprend ses plannings tout de suite (son `async_enregistrer({})`)."""
+    assert rechargement.CLES_DES_MODULES["loggia_chauffage"] == "chauffage"
+    assert rechargement.modules_a_recharger(["loggia_chauffage", "loggia_rooms"]) == ["chauffage"]
+
+
 def test_chaque_cle_nommee_est_bien_celle_de_son_module(rechargement):
     """La table ne vaut que si elle dit vrai : la cle d'un module, c'est sa
     constante `CLE`. Un renommage d'un cote seul couperait le rechargement."""
@@ -151,3 +158,29 @@ def test_un_module_qui_echoue_n_empeche_pas_les_autres(signal, rechargement):
         rappel({"communes": ["loggia_nuit", "loggia_volets"]})
     _executer(hass)
     assert recharges == ["volets"]
+
+
+def test_les_prises_se_rechargent(rechargement):
+    """Chantier Prises : un import remplace `loggia_prises` ; le module reprend
+    la protection, les types imposes et les alertes tout de suite (son
+    `async_enregistrer({})`)."""
+    assert rechargement.CLES_DES_MODULES["loggia_prises"] == "prises"
+    assert rechargement.modules_a_recharger(["loggia_prises", "loggia_rooms"]) == ["prises"]
+
+
+def test_un_interrupteur_declare_lumiere_recharge_le_carnet(rechargement):
+    """Chantier Lumieres : Parametres > Entites, ou un import, ecrit
+    `loggia_switchlights` ; le carnet recense aussitot (son
+    `async_enregistrer({})`), et l'interrupteur declare se suit."""
+    assert rechargement.CLES_DES_MODULES["loggia_switchlights"] == "lumieres"
+    assert rechargement.modules_a_recharger(["loggia_switchlights", "loggia_prises"]) == ["lumieres", "prises"]
+
+
+def test_le_mode_enfant_se_recharge(rechargement):
+    """Chantier Mode enfant : un import, ou une remise a zero, remplace
+    `loggia_enfant` ; le module recense ses profils et leurs lecteurs tout de
+    suite (son `async_enregistrer({})`). L'ETAT du jour (`loggia_enfant_etat`)
+    n'est pas une configuration : rien a recharger pour lui."""
+    assert rechargement.CLES_DES_MODULES["loggia_enfant"] == "enfant"
+    assert rechargement.modules_a_recharger(["loggia_enfant", "loggia_rooms"]) == ["enfant"]
+    assert "loggia_enfant_etat" not in rechargement.CLES_DES_MODULES

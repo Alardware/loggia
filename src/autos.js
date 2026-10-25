@@ -7,7 +7,7 @@
 //
 //   1. le PLURIEL. « Lumière salon » et « Lumières cuisine » faisaient deux
 //      familles côte à côte, pour la même chose ;
-//   2. le VERBE en tête. « Force veilleuse Liam » atterrissait dans une famille
+//   2. le VERBE en tête. « Force veilleuse Lino » atterrissait dans une famille
 //      « Force », alors qu'une veilleuse, c'est de la lumière.
 //
 // D'où l'ordre suivi ici : on cherche d'abord un mot de MÉTIER dans le nom

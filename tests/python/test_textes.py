@@ -67,6 +67,17 @@ def test_traduire_lit_le_catalogue_de_la_langue_puis_l_anglais_puis_le_francais(
     assert textes.traduire("critique", "de") == "critique"
 
 
+def test_la_langue_rendue_est_celle_que_traduire_ecrit_vraiment(monkeypatch):
+    """Relecture des prises du 13/10 : un nombre ecrit dans le message (« 1,95
+    kWh ») suit la langue du texte rendu, pas celle demandee."""
+    monkeypatch.setitem(textes.TEXTES, "en", {"{nom} : pile a {v} %": "{nom}: battery at {v} %"})
+    monkeypatch.setitem(textes.TEXTES, "de", {"{nom} : pile a {v} %": "{nom}: Batterie bei {v} %"})
+    assert textes.langue_rendue("{nom} : pile a {v} %", "fr") == "fr"
+    assert textes.langue_rendue("{nom} : pile a {v} %", "de") == "de"
+    assert textes.langue_rendue("{nom} : pile a {v} %", "cs") == "en", "sans catalogue, le filet anglais"
+    assert textes.langue_rendue("inconnu {x}", "de") == "fr", "sans rien, le francais"
+
+
 # ── Le journal garde le francais ET les parties ────────────────────────────
 def test_le_journal_ecrit_le_francais_et_garde_les_parties():
     r = regles.Regles(FauxHass(), FauxMagasin(None))

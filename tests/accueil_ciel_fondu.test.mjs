@@ -13,12 +13,24 @@ const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
 const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
 const regle = (sel) => { const d = css.indexOf(sel + ' {'); assert.ok(d >= 0, sel + ' introuvable'); return css.slice(d, css.indexOf('}', d) + 1); };
 
-test('le ciel s’efface par un masque : il laisse voir le fond du theme, quel qu’il soit', () => {
+test('le ciel s’efface sur le fond du theme, quel qu’il soit', () => {
+  /* Depuis le ciel du handoff du 17/10, le shader se fond LUI-MEME dans la
+   * couleur du theme (`uFond`, lu sur `--o-bg`) et finit exactement sur elle :
+   * sur un fond uni, pas de masque — il hatait le fondu. */
   const ciel = regle('.o-wx3d');
-  assert.ok(ciel.includes('-webkit-mask-image: linear-gradient(180deg, #000 0%, #000 30%,') && ciel.includes('\n  mask-image: linear-gradient(180deg, #000 0%, #000 30%,'), 'le masque, prefixe pour Safari');
-  assert.ok(ciel.includes('rgba(0,0,0,.06) 90%, transparent 100%);'), 'il finit transparent : c’est le fond de la page qu’on voit dessous');
-  // Le fond de la page est `--o-bggrad` : un voile qui finit sur `--o-bg`
-  // butait sur une marche nette sur les themes a fond degrade.
+  const ciel3d = readFileSync(join(RACINE, 'src', 'ciel.js'), 'utf8');
+  assert.ok(ciel3d.includes("getPropertyValue('--o-bg')") && ciel3d.includes('uniform vec3 uFond'), 'le ciel ne se fond plus dans la couleur du theme');
+  assert.ok(ciel3d.includes('float f=smoothstep(uZone+.14,0.,uv.y)'), 'le shader ne finit plus sur la couleur du fond a sa derniere ligne');
+  assert.ok(!ciel.includes('mask-image'), 'sur fond uni, un masque en plus du fondu du shader hate la transition');
+  /* Mais la page est peinte de `--o-bggrad` — ou d'une photo : le shader y
+   * finirait sur une couleur unie, la marche que l'ADR 0059 a retiree. Pour
+   * eux, le masque long revient et rend le vrai fond. */
+  const long = css.slice(css.indexOf('html[style*="--o-bggrad"] .o-wx3d, body:has(.o-fond-photo) .o-wx3d {'));
+  assert.ok(long.length < css.length, 'les fonds degrades et la photo n’ont plus leur masque long');
+  const blocLong = long.slice(0, long.indexOf('}'));
+  assert.ok(blocLong.includes('-webkit-mask-image: linear-gradient(180deg, #000 0%, #000 30%,') && blocLong.includes('rgba(0,0,0,.06) 90%, transparent 100%);'), 'le masque long d’ADR 0059, prefixe, qui finit transparent');
+  assert.ok(src.includes('<div className="o-fond-photo" aria-hidden="true"'), 'le calque de la photo ne se reconnait plus : le masque long ne s’y appliquerait pas');
+  assert.ok(readFileSync(join(RACINE, 'src', 'theme.js'), 'utf8').includes("set('--o-bggrad', v.bggrad)"), 'un theme a degrade ne pose plus `--o-bggrad` sur <html> : le selecteur du masque long ne le verrait pas');
   assert.ok(src.includes("background: fondPhotoActif ? 'transparent' : 'var(--o-bggrad, var(--o-bg))'"), 'la page est peinte du degrade du theme');
   for (const sel of ['.o-wx3d-veil', 'html.loggia-light .o-wx3d-veil']) {
     assert.ok(!regle(sel).includes('var(--o-bg) 100%'), sel + ' ne recouvre plus le bas du ciel d’une couleur opaque');
@@ -29,15 +41,32 @@ test('le ciel s’efface par un masque : il laisse voir le fond du theme, quel q
   assert.ok(css.includes('main:has(.o-wx3d) .loggia-hdr { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }'), 'au-dessus du ciel meteo, l’en-tete ne floute toujours pas');
 });
 
-test('le voile et la barre du haut prennent la teinte du theme, pas le bleu nuit de Loggia', () => {
-  const d = css.indexOf('@supports (background: color-mix(in srgb, red 50%, transparent)) {\n  .o-wx3d-veil');
-  assert.ok(d >= 0, 'le bloc color-mix du voile');
+test('la barre du haut prend la teinte du theme, aux dosages de la maquette ; le voile ne voile plus', () => {
+  const d = css.indexOf('@supports (background: color-mix(in srgb, red 50%, transparent)) {\n  main:has(.o-wx3d) .loggia-hdr');
+  assert.ok(d >= 0, 'le bloc color-mix de la barre du haut');
   const bloc = css.slice(d, css.indexOf('\n}', d));
-  assert.ok(bloc.includes('.o-wx3d-veil { background: linear-gradient(180deg, color-mix(in srgb, var(--o-bg) 10%, transparent) 0%, color-mix(in srgb, var(--o-bg) 32%, transparent) 46%, color-mix(in srgb, var(--o-bg) 60%, transparent) 100%); }'), 'le voile sombre');
-  assert.ok(bloc.includes('html.loggia-light .o-wx3d-veil { background: linear-gradient(180deg, color-mix(in srgb, var(--o-bg) 6%, transparent) 0%,'), 'le voile clair');
-  assert.ok(bloc.includes('main:has(.o-wx3d) .loggia-hdr,') && bloc.includes('{ background: color-mix(in srgb, var(--o-bg) 38%, transparent) !important; }'), 'la barre du haut posee sur le ciel');
-  // Sans color-mix, le repli garde l'ancienne teinte : rien ne casse.
-  assert.ok(regle('.o-wx3d-veil').includes('rgba(11,16,27,.10) 0%'), 'le repli');
+  // « Loggia Vues v2 » : 30 % du fond en sombre, 40 % en clair, 80 % en clair sous un ciel sombre.
+  assert.ok(bloc.includes('main:has(.o-wx3d) .loggia-hdr { background: color-mix(in srgb, var(--o-bg) 30%, transparent) !important; }'), 'la barre du haut, en sombre');
+  assert.ok(bloc.includes('html.loggia-light main:has(.o-wx3d) .loggia-hdr { background: color-mix(in srgb, var(--o-bg) 40%, transparent) !important; }'), 'en clair');
+  assert.ok(bloc.includes('html.loggia-light main:has(.o-wx3d-sombre) .loggia-hdr { background: color-mix(in srgb, var(--o-bg) 80%, transparent) !important; }'), 'en clair, sous un ciel sombre');
+  // Sans color-mix, un repli : rien ne casse.
+  assert.ok(css.includes('main:has(.o-wx3d) .loggia-hdr { background: rgba(11, 16, 27, .30) !important; }'), 'le repli');
+  // Le voile de la maquette : une ombre sous l'en-tete en sombre, rien en clair. Le ciel s'eclaire lui-meme.
+  assert.ok(regle('.o-wx3d-veil').includes('linear-gradient(180deg, rgba(0,0,0,.18) 0%, transparent 26%)'), 'le voile sombre de la maquette');
+  assert.ok(regle('html.loggia-light .o-wx3d-veil').includes('background: none;'), 'pas de voile en clair');
+});
+
+test('theme clair sous un ciel sombre : le texte pose sur le ciel passe au blanc', () => {
+  /* Le voile clair d'avant eclaircissait le ciel de nuit, et le texte fonce
+   * restait lisible. Le ciel du 17/10 n'en a plus : la nuit, l'orage, l'averse
+   * et la grele le rendent sombre en theme clair aussi. */
+  assert.ok(src.includes("className={'o-wx3d' + (cielSombre ? ' o-wx3d-sombre' : '')}"), 'le calque ne dit plus quand le ciel est sombre');
+  for (const sel of ['.o-greet-hi', '.o-greet-facts', '.o-greet-name', '.o-banner-metrics div']) {
+    assert.ok(css.includes('html.loggia-light main:has(.o-wx3d-sombre) ' + sel), sel + ' reste fonce sur un ciel sombre');
+  }
+  assert.ok(css.includes('html.loggia-light .o-sur-ciel > h2 { color: rgba(255, 255, 255, .92) !important;'), 'les titres de section poses sur le ciel restent fonces');
+  const hote = readFileSync(join(RACINE, 'src', 'wx3d.jsx'), 'utf8');
+  assert.ok(hote.includes("l.classList.toggle('o-sur-ciel', (r.top + r.bottom) / 2 < lim)"), 'plus rien ne mesure quels titres sont poses sur le ciel');
 });
 
 test('la rangee des scenarios ne rogne plus d’ombre en rectangle, a TOUTES les largeurs', () => {

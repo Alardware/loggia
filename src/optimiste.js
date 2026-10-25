@@ -27,7 +27,7 @@
  * optimiste pour les automatisations — sans minuteur : une automatisation que
  * HA refusait de couper restait « coupee » tant qu'on ne quittait pas la page.
  * ───────────────────────────────────────────────────────────────────────────── */
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useSyncExternalStore } from 'react';
 
 const OPTIMISTE_MS = 6000;
 export function useOptimiste(reel, delai = OPTIMISTE_MS) {
@@ -113,4 +113,100 @@ export function useDemandes(delai = OPTIMISTE_MS) {
   }, [demandes, delai]);
   const demander = useCallback((id, v, etat, reel) => setDemandes(o => ({ ...o, [id]: demandeCle(v, etat, o && o[id], reel) })), []);
   return [demandes, demander];
+}
+
+/* ── La variante PARTAGÉE : une avance pour tout l'écran (chantier IoT, passe bis 2 du 18/10, point N) ──
+ *
+ * `useOptimiste` tient l'avance d'UNE carte. Un robot a la sienne sur sa carte large, son étroite, sa compacte, sa popup et sa
+ * fiche universelle : chacune la tenait à part, et un second appui tombait sur la puce inverse — deux appuis sur « Pause »
+ * relançaient le robot. Puis un magasin à lui (robotsetat.js), une exception à la règle. La variante partagée tient l'avance par
+ * CLÉ, pour tout l'écran, au contrat de `useOptimiste` :
+ *  - elle EXPIRE : `filet` ms après l'appui ; tant qu'une réponse est attendue (`garde`, un départ par le serveur), `garde` ms au
+ *    plus — `relacherPartage` la rend au filet, compté de là ;
+ *  - l'état réel la lève dès qu'il RÉPOND — `reel`, sa signature, n'est plus celle de l'appui, ou son `last_changed` (`change`) a
+ *    avancé — et c'est ACQUIS : la maison revenue à l'état d'avant ne la réarme pas ; un relevé plus vieux que l'appui ne compte pas ;
+ *  - quoi qu'il arrive, elle tient `tenue` ms : une intégration locale répond parfois entre deux appuis d'un doigt qui hésite ;
+ *  - avec une `cible` (les lumières, audit du 19/10, B3), l'état réel ne répond qu'en l'ATTEIGNANT : allumée → appui (off) →
+ *    appui (on), l'écho du premier ordre — `off`, son `last_changed` avancé — effaçait l'avance du second, et la carte disait
+ *    « éteinte » le temps d'un relevé ; les paliers d'un fondu (48) faisaient sauter le 60 posé sous le doigt. C'est l'idée de
+ *    `useDemandes` : l'écho d'un ordre remplacé n'est pas une réponse. Un ordre jamais atteint tombe au filet, comme avant.
+ * Lue au moment même (`lirePartage`) : un second appui la voit avant le prochain rendu. Un refus n'oublie que SON avance
+ * (`oublierPartage(cle, jeton)`) : un refus tardif ne fait pas tomber le geste qui l'a remplacée. Les minuteurs seuls font passer
+ * le temps, comme ceux de `useOptimiste`. */
+const HORLOGE = { plusTard: (f, ms) => setTimeout(f, ms), annuler: (t) => clearTimeout(t) };
+let horloge = HORLOGE;
+const PARTAGES = new Map(); // clé → { id, v, reel, change, filet, tenu, garde, mTenue, mFin }
+const REPONDUES = new Set(); // les jetons dont l'état réel a répondu : acquis
+const ECOUTES = new Map();
+let jetons = 0;
+const prevenir = (cle) => (ECOUTES.get(cle) || []).forEach(f => { try { f(); } catch { /* un écouteur tombé n'arrête pas les autres */ } });
+const instant = (x) => (x == null ? NaN : Date.parse(x));
+function retirer(cle, e) {
+  horloge.annuler(e.mTenue); horloge.annuler(e.mFin);
+  REPONDUES.delete(e.id);
+  if (PARTAGES.get(cle) === e) { PARTAGES.delete(cle); prevenir(cle); }
+}
+const finir = (cle, e, ms) => { horloge.annuler(e.mFin); e.mFin = horloge.plusTard(() => retirer(cle, e), ms); };
+
+/** Pose l'avance de `cle` — elle remplace celle d'avant. Rend son jeton (`oublierPartage`, `relacherPartage`).
+ *  `cible` (facultative) : la valeur que l'état réel doit ATTEINDRE pour répondre — `undefined` : toute réponse compte. */
+export function poserPartage(cle, v, { reel, change = null, filet = OPTIMISTE_MS, tenue = 0, garde = 0, cible = undefined } = {}) {
+  const avant = PARTAGES.get(cle);
+  if (avant) retirer(cle, avant);
+  const e = { id: ++jetons, v, reel, change, filet, tenu: tenue > 0, garde: garde > 0, cible };
+  if (e.tenu) e.mTenue = horloge.plusTard(() => { e.tenu = false; if (REPONDUES.has(e.id)) retirer(cle, e); }, tenue);
+  finir(cle, e, garde || filet);
+  PARTAGES.set(cle, e);
+  prevenir(cle);
+  return e.id;
+}
+
+/** L'avance de `cle` encore en vol, ou null : l'état réel (`reel`, `change`) a répondu — sa tenue passée —, ou son filet aussi.
+ *  Avec une `cible`, répondre, c'est l'atteindre : un relevé qui dit autre chose — l'écho d'un ordre plus ancien, un palier — ne compte pas. */
+export function lirePartage(cle, { reel, change } = {}) {
+  const e = PARTAGES.get(cle);
+  if (!e) return null;
+  const a = instant(change), b = instant(e.change);
+  const repondu = e.cible !== undefined ? reel === e.cible && (a > b || reel !== e.reel) : (a > b || (reel !== undefined && reel !== e.reel));
+  if (!(a < b) && repondu) REPONDUES.add(e.id);
+  return e.tenu || !REPONDUES.has(e.id) ? e.v : null;
+}
+
+/** Un refus : l'avance de CE jeton tombe tout de suite — pas celle qui l'a remplacée. */
+export function oublierPartage(cle, jeton) {
+  const e = PARTAGES.get(cle);
+  if (e && jeton != null && e.id === jeton) retirer(cle, e);
+}
+
+/** La réponse attendue est venue : l'avance de CE jeton quitte sa garde et prend son filet, compté de maintenant. */
+export function relacherPartage(cle, jeton) {
+  const e = PARTAGES.get(cle);
+  if (e && e.id === jeton && e.garde) { e.garde = false; finir(cle, e, e.filet); }
+}
+
+/** L'avance brute de `cle` (le même objet tant qu'elle ne change pas), ou null. */
+export const brutPartage = (cle) => PARTAGES.get(cle) || null;
+/** Les clés des avances posées. */
+export const clesPartagees = () => [...PARTAGES.keys()];
+/** S'abonner aux avances de `cle` (posée, partie). Rend la fonction qui cesse. */
+export function ecouterPartage(cle, f) {
+  if (!ECOUTES.has(cle)) ECOUTES.set(cle, new Set());
+  ECOUTES.get(cle).add(f);
+  return () => { const s = ECOUTES.get(cle); if (s) { s.delete(f); if (!s.size) ECOUTES.delete(cle); } };
+}
+const ABONNER = new Map();
+const rien = () => () => {};
+/** Pour un composant : l'avance de `cle` encore en vol (`lirePartage`), et il se redessine quand elle se pose ou s'en va. */
+export function useOptimistePartage(cle, signature) {
+  if (cle && !ABONNER.has(cle)) ABONNER.set(cle, (f) => ecouterPartage(cle, f));
+  const lire = () => (cle ? PARTAGES.get(cle) || null : null);
+  useSyncExternalStore(cle ? ABONNER.get(cle) : rien, lire, lire);
+  return cle ? lirePartage(cle, signature) : null;
+}
+
+/** Pour les tests : les avances vidées, leurs minuteurs arrêtés, l'horloge doublée (`plusTard`, `annuler`). */
+export function reglerPartage({ horloge: h = null } = {}) {
+  PARTAGES.forEach(e => { horloge.annuler(e.mTenue); horloge.annuler(e.mFin); });
+  PARTAGES.clear(); REPONDUES.clear(); ECOUTES.clear();
+  horloge = h ? { ...HORLOGE, ...h } : HORLOGE;
 }

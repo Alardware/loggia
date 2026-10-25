@@ -322,11 +322,11 @@ def test_un_number_ecrit_les_portions_en_pas(creer):
 
 
 def test_le_script_designe_recoit_ses_portions(creer):
-    etats = {"script.nourrir_le_chat": ("off", {})}
-    d = creer(feeder={"script": "script.nourrir_le_chat"}, planning={"repas": [repas(portions=2)]},
+    etats = {"script.remplir_la_gamelle": ("off", {})}
+    d = creer(feeder={"script": "script.remplir_la_gamelle"}, planning={"repas": [repas(portions=2)]},
               etats=etats, registre=[])
     assert lancer(d.async_lancer(d.cfg["repas"][0])) is True
-    assert d.hass.services.appels == [("script", "turn_on", {"entity_id": ["script.nourrir_le_chat"],
+    assert d.hass.services.appels == [("script", "turn_on", {"entity_id": ["script.remplir_la_gamelle"],
                                                              "variables": {"portions": 2}})]
 
 

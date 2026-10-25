@@ -21,23 +21,60 @@
  * Pur : pas de React, pas de Home Assistant, testable à sec. Le seul import
  * est `tr`, le test le vérifie aussi.
  */
-import { tr, comparerTextes } from './i18n.js';
+import { tr, comparerTextes, locale } from './i18n.js';
 
-export const CLASSES_PORTE = ['door', 'garage_door', 'gate'];
+/* LA table des classes de capteurs binaires (audit du 19/10) : l'Accueil, les groupes d'Objets (groupes.js), la vue d'une pièce, la
+ * journée d'un binaire et la vue Présence lisent ces listes, et n'en recopient plus. `gate` n'est pas une classe de `binary_sensor` :
+ * c'est celle d'un `cover` (un portail motorisé), lu par sa carte de volet. */
+export const CLASSES_PORTE = ['door', 'garage_door'];
 export const CLASSES_FENETRE = ['window', 'opening'];
+export const CLASSES_OUVRANT = [...CLASSES_PORTE, ...CLASSES_FENETRE];
 export const CLASSES_MOUVEMENT = ['motion', 'occupancy', 'presence'];
 /* Les clés de la table de sûreté de `deriveNotifs`, dans son ordre : c'est à
  * ces binaires-là que l'Accueil s'abonne. */
 export const CLASSES_SURETE = ['smoke', 'carbon_monoxide', 'gas', 'moisture', 'safety', 'tamper'];
+/* Un `moisture` CALCULÉ n'est pas une fuite (ADR 0022, 16/10) : les modèles « Besoin Eau » de ses plantes sont des `template` de classe
+ * `moisture`, sans appareil — « la plante a soif ». La même règle que le serveur (`alertes.py`, PLATEFORMES_CALCULEES), lue à la
+ * plateforme que l'index donne ; une entité que le registre ne connaît pas (plateforme nulle) reste une fuite — on ne perd aucun vrai
+ * détecteur. L'Accueil, « En ce moment » et Paramètres › Alertes la lisent (chantier Capteurs, étapes 2 et 3, tâche 12). */
+const PLATEFORMES_CALCULEES = ['template', 'group'];
+export const fuiteCalculee = (plateforme) => PLATEFORMES_CALCULEES.indexOf(plateforme) >= 0;
 /* « Élevé » : le palier de la table de `confort.js` où le CO₂ passe à
- * l'orange (captures du 19/09 : 1 400 ppm), et le palier haut d'`airPalier`
- * (App.jsx). Un seul chiffre pour toute la maison, sinon l'Accueil et la carte
- * se contrediraient. C'est aussi le défaut de la veille CO₂ du serveur ; un
- * seuil qu'on y règle reste le sien. */
+ * l'orange (captures du 19/09 : 1 400 ppm). C'est le défaut de la veille CO₂
+ * du serveur ; un seuil qu'on y règle reste le sien, et l'Accueil le lit
+ * (`seuilCo2`, audit du 19/10, M16), comme celui d'une pièce (H7). */
 export const SEUIL_CO2 = 1400;
-/* Une pile : visible (ambre) à 20 %, rouge à 5 % — les mêmes chiffres pour la
- * plante, le robot et le point d'attention (v3.49.0). */
-export const SEUILS_PILE = { alerte: 20, danger: 5 };
+/** Le seuil d'aération : celui de la veille CO₂ du serveur, sinon celui de la maison. */
+export function seuilCo2(veilles) {
+  const s = veilles && veilles.config && veilles.config.co2 ? nombre(veilles.config.co2.seuil) : null;
+  return s != null && s > 0 ? Math.round(s) : SEUIL_CO2;
+}
+/* Une pile : visible (ambre) au seuil de la veille des piles — 15 % par défaut, le
+ * réglage de Règles › Veilles —, rouge à 5 %. UN seul seuil (chantier Capteurs,
+ * § 19.8) : la carte Piles, le coin d'un capteur, les fiches, la plante, le robot
+ * et le point d'attention lisent le même ; `reglerSeuilPile` le relit avec les
+ * veilles du serveur, UNE fois, à la racine de l'écran (App.jsx, passe bis du
+ * 17/10) : réglé depuis une carte ou une popup, l'Accueil jugeait au défaut tant
+ * qu'on n'avait pas ouvert Objets › Capteurs, et chaque montage le remettait à
+ * zéro le temps que la veille réponde. */
+export const SEUILS_PILE = { alerte: 15, danger: 5 };
+let SEUIL_REGLE = null;
+/** Retient le seuil de la veille des piles (`loggia/veilles/etat` → `config.batterie.seuil`) et rend les seuils en vigueur. Une réponse
+ *  vide ou illisible — pas encore reçue, un seuil hors de 1 à 99 — ne défait pas le dernier seuil connu. */
+export function reglerSeuilPile(veilles) {
+  const s = veilles && veilles.config && veilles.config.batterie ? nombre(veilles.config.batterie.seuil) : null;
+  if (s != null && s > 0 && s < 100) SEUIL_REGLE = Math.round(s);
+  return seuilsPile();
+}
+/** Oublie le seuil relu : le défaut reprend. Pour les tests, qui règlent puis rendent la règle telle qu'ils l'ont trouvée. */
+export function oublierSeuilPile() {
+  SEUIL_REGLE = null;
+  return seuilsPile();
+}
+/** Les seuils en vigueur : celui de la veille s'il est lu, sinon le défaut ; le critique ne bouge pas. */
+export function seuilsPile() {
+  return { alerte: SEUIL_REGLE != null ? SEUIL_REGLE : SEUILS_PILE.alerte, danger: SEUILS_PILE.danger };
+}
 /* Du plus grave au plus doux : c'est aussi l'ordre de tri des points.
  * C'est le vocabulaire de TOUT l'écran : `danger` = action nécessaire (rouge,
  * lavis, point qui bat), `alerte` = attention (ambre, visible, sans battre),
@@ -45,17 +82,26 @@ export const SEUILS_PILE = { alerte: 20, danger: 5 };
  * discret, dans la couleur du texte. */
 export const NIVEAUX = ['danger', 'alerte', 'info'];
 
-/* Les mots de `deriveNotifs`, à l'identique : [le danger, ce qui s'est passé].
- * Le titre d'un point est la seconde forme — « Fumée détectée » se lit seul,
- * « Fumée » non. */
+/* LA table de sûreté de l'écran : [la famille, ce qui s'est passé]. Le titre d'un
+ * point est la seconde forme — « Fumée détectée » se lit seul, « Fumée » non.
+ * `deriveNotifs` (l'Accueil), la fiche et la carte d'un binaire (`BIN_ETATS()`) et
+ * la carte Sécurité la lisent toutes : un danger porte UN mot à l'écran (audit
+ * du 19/10, lot 4) — il y en avait trois pour le monoxyde (« CO détecté »,
+ * « Monoxyde détecté »…) et deux pour un sabotage. Le téléphone garde ses
+ * phrases longues (« Monoxyde de carbone détecté : … », textes_catalogue.py). */
 const TABLE_SURETE = {
   smoke: ['Fumée', 'Fumée détectée'],
-  carbon_monoxide: ['Monoxyde de carbone', 'CO détecté'],
+  carbon_monoxide: ['Monoxyde de carbone', 'Monoxyde détecté'],
   gas: ['Gaz', 'Gaz détecté'],
   moisture: ["Fuite d'eau", 'Fuite détectée'],
   safety: ['Sécurité', 'Alerte de sécurité'],
-  tamper: ['Sabotage', 'Boîtier ouvert ou déplacé'],
+  tamper: ['Sabotage', 'Boîtier ouvert'],
 };
+/** Les mots d'une famille de sûreté, `[la famille, ce qui s'est passé]` — « Fumée », « Fumée détectée » —, ou null : la carte
+ *  Sécurité d'Objets › Capteurs (groupes.js) parle comme l'Accueil (chantier Capteurs, étape 2, C23). */
+export function motsSurete(classe) {
+  return TABLE_SURETE[classe] || null;
+}
 /* Ce qui brûle ou empoisonne est un danger ; l'eau et le sabotage, une alerte :
  * on ne réveille pas la maison pour une fuite sous l'évier, on la lui montre. */
 const NIVEAU_SURETE = { smoke: 'danger', carbon_monoxide: 'danger', gas: 'danger', moisture: 'alerte', safety: 'alerte', tamper: 'alerte' };
@@ -77,7 +123,13 @@ const MUETS = ['unavailable', 'unknown'];
 const estObjet = (v) => !!v && typeof v === 'object';
 const estMuet = (st) => !estObjet(st) || st.state == null || MUETS.indexOf(String(st.state)) >= 0;
 const attrs = (st) => (estObjet(st) && estObjet(st.attributes)) ? st.attributes : {};
-const nombre = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
+/* Un nombre, LU STRICTEMENT (audit du 19/10) : « 21,5 » vaut 21,5, « 1,659 » ne vaut plus 1, « 12 % » et « nan » ne valent rien. */
+const nombre = (v) => { const t = typeof v === 'number' ? v : String(v == null ? '' : v).trim().replace(/^(-?\d+),(\d+)$/, '$1.$2'); const n = t === '' ? NaN : Number(t); return Number.isFinite(n) ? n : null; };
+// Un chiffre écrit à la manière de la langue, l'unité après une espace insécable : « 1 480 ppm », « 12 % ».
+const chiffre = (n, unite) => Math.round(n).toLocaleString(locale()) + '\u00a0' + unite;
+/* Un binaire que l'Accueil ne compte pas (audit du 19/10, M14), comme Objets : un GROUPE de Home Assistant — sa plateforme, ou ses
+ * membres en attribut (`entity_id`) — redirait ce que ses membres disent déjà ; une entité masquée ou désactivée (`masque`, l'index). */
+const ecarte = (id, st, plateforme, masque) => Array.isArray(attrs(st).entity_id) || plateforme(id) === 'group' || !!masque(id);
 const idsDe = (S) => (estObjet(S) ? Object.keys(S) : []);
 
 function nomDe(id, st) {
@@ -105,14 +157,14 @@ export function familleOuvrant(deviceClass) {
  * Une famille sans capteur vaut `null` : une maison sans caméra n'a pas
  * « 0/0 caméras en ligne », elle n'a pas de tuile. `ok` ne regarde que ce qui
  * doit être clos ou joignable : du mouvement chez soi n'est pas un problème. */
-export function comptesSecurite(S, cams = []) {
+export function comptesSecurite(S, cams = [], { plateforme = () => null, masque = () => false } = {}) {
   const portes = { total: 0, ouverts: 0, noms: [] };
   const fenetres = { total: 0, ouverts: 0, noms: [] };
   const mouvement = { total: 0, actifs: 0, noms: [] };
   idsDe(S).forEach(id => {
     if (id.indexOf('binary_sensor.') !== 0) return;
     const st = S[id];
-    if (estMuet(st)) return;
+    if (estMuet(st) || ecarte(id, st, plateforme, masque)) return;
     const dc = attrs(st).device_class;
     const on = st.state === 'on';
     const fam = familleOuvrant(dc);
@@ -208,16 +260,24 @@ export function tuileAlarme(st) {
   return { texte: tr('Armée'), icone: 'shield-check', couleur: 'var(--o-warn2)', rgb: 'var(--o-warn2-rgb)' };
 }
 
+/** Les mots du type `siren` de `MOTS_PRISE` (src/prises.js), recopiés tels
+ *  quels : ce module n'importe que i18n. tests/python/test_prises_types.py et
+ *  tests/prises.test.mjs tiennent les trois listes d'accord (audit du 19/10). */
+const MOTS_SIRENE = ['sirene', 'siren', 'alarme sonore', 'syrena', 'sirena'];
+
 /** Une sirène : le domaine `siren`, ou un interrupteur qui se nomme ainsi —
  * beaucoup de sirènes Zigbee n'arrivent dans Home Assistant qu'en `switch`
  * (ADR 0035). Le nom se lit sans accent ni casse, dans l'identifiant et le
- * nom affiché. */
+ * nom affiché : « siren » n'importe où, ou un mot ENTIER de `MOTS_SIRENE`
+ * (« Alarme sonore », « Syrena ») — le jumeau du serveur, `est_sirene`, lit
+ * pareil. */
 export function estSirene(id, st) {
   const dom = String(id || '').split('.')[0];
   if (dom === 'siren') return true;
   if (dom !== 'switch' && dom !== 'input_boolean') return false;
   const texte = (String(id) + ' ' + String(attrs(st).friendly_name || '')).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  return /siren/.test(texte);
+  const mots = ' ' + texte.replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+  return /siren/.test(texte) || MOTS_SIRENE.some(m => mots.indexOf(' ' + m + ' ') >= 0);
 }
 
 /** Les tuiles de la rangée, dans l'ordre de lecture : portes, fenêtres,
@@ -273,7 +333,7 @@ function compteIncident(i) {
 
 /** Les points d'attention, du plus grave au plus doux puis par titre.
  *
- * ctx = { S, cams, pieces, sante, veilles, fenetres, plantes } — chaque
+ * ctx = { S, cams, pieces, sante, veilles, fenetres, plantes, plateforme } — chaque
  * morceau peut manquer : l'Accueil se dessine avant que le serveur ait répondu,
  * et un ctx vide donne simplement une liste vide.
  *
@@ -307,47 +367,55 @@ export function pointsAttention(ctx) {
 
   /* 2. La sûreté, sans configuration : la device_class porte le sens, jamais
    * le nom. Deux exclusions, celles de `deriveNotifs` :
-   * — `moisture` d'une plante (binaire `<base>_besoin_eau`) : une dracaena
-   *   assoiffée n'est pas un dégât des eaux ;
+   * — `moisture` d'une plante (binaire `<base>_besoin_eau`), ou calculé par un
+   *   modèle ou un groupe (`plateforme(id)`, l'index ; ADR 0022, 16/10) : une
+   *   dracaena assoiffée n'est pas un dégât des eaux ;
    * — `safety` de MeteoAlarm, `on` des jours entiers en vigilance jaune : une
    *   vigilance à part, rouge seulement en Severe/Extreme.
    * 3. Un ouvrant ouvert PENDANT que l'alarme est armée : de jour, alarme
    *   désarmée, une fenêtre ouverte n'est qu'une fenêtre ouverte. */
   const bases = (Array.isArray(c.plantes) ? c.plantes : []).filter(b => typeof b === 'string' && b);
   const estPlante = (id) => bases.some(b => id.indexOf(b) === 0 && (id.length === b.length || id.charAt(b.length) === '_'));
+  const plateforme = typeof c.plateforme === 'function' ? c.plateforme : () => null;
+  const masque = typeof c.masque === 'function' ? c.masque : () => false;
   ids.forEach(id => {
     if (id.indexOf('binary_sensor.') !== 0) return;
     const st = S[id];
-    if (!estObjet(st) || st.state !== 'on') return;
+    if (!estObjet(st) || st.state !== 'on' || ecarte(id, st, plateforme, masque)) return;
     const a = attrs(st);
     const dc = a.device_class;
     const nom = nomDe(id, st);
     if (CLASSES_SURETE.indexOf(dc) >= 0) {
       if (dc === 'safety' && (a.awareness_level != null || /meteoalarm/i.test(id) || /meteoalarm/i.test(a.attribution || ''))) {
+        // Au niveau vert, MeteoAlarm n'alerte pas (audit du 19/10) : la carte Vigilance dit « Vigilance verte », l'Accueil se tait.
+        if (/;\s*green\s*(;|$)/i.test(String(a.awareness_level || ''))) return;
         const grave = a.severity === 'Severe' || a.severity === 'Extreme';
         ajouter('meteo:' + id, grave ? 'danger' : 'alerte', tr('Vigilance météo'), a.event || a.headline || tr('Alerte météo en cours'), 'securite', id);
         return;
       }
-      if (dc === 'moisture' && estPlante(id)) return;
+      if (dc === 'moisture' && (estPlante(id) || fuiteCalculee(plateforme(id)))) return;
       ajouter('surete:' + dc + ':' + id, NIVEAU_SURETE[dc], tr(TABLE_SURETE[dc][1]), nom, 'securite', id);
       return;
     }
     if (armee && familleOuvrant(dc)) ajouter('ouvrant:' + id, 'alerte', tr('Ouvert, alarme armée'), nom, 'securite', id);
   });
 
-  /* 4. L'air d'une pièce : au palier « chargé », on le dit. `haid` (le capteur
-   * de la pièce) sert à ne pas redire la même chose depuis la veille du
-   * serveur, règle 7. */
+  /* 4. L'air d'une pièce : au seuil, on le dit — celui de la pièce s'il est
+   * réglé (`seuil`, H7), sinon celui de la veille CO₂ (`seuilCo2`, M16). `haid`
+   * (le capteur de la pièce) sert à ne pas redire la même chose depuis la veille
+   * du serveur, règle 7. */
   const co2Haids = new Set();
+  const seuilMaison = seuilCo2(c.veilles);
   (Array.isArray(c.pieces) ? c.pieces : []).forEach(p => {
     if (!estObjet(p)) return;
     const nom = p.nom != null ? String(p.nom) : (p.name != null ? String(p.name) : '');
     const co2 = nombre(p.co2);
-    const niv = niveauCo2(co2);
+    const sp = nombre(p.seuil);
+    const niv = niveauCo2(co2, sp != null && sp > 0 ? Math.round(sp) : seuilMaison);
     if (!nom || !niv) return;
     const haid = typeof p.haid === 'string' ? p.haid : null;
     if (haid) co2Haids.add(haid);
-    ajouter('co2:' + nom, niv, tr('CO₂ élevé'), nom + ' · ' + Math.round(co2) + ' ppm', 'room:' + nom, haid);
+    ajouter('co2:' + nom, niv, tr('CO₂ élevé'), nom + ' · ' + chiffre(co2, 'ppm'), 'room:' + nom, haid);
   });
 
   /* 5. Une caméra injoignable : on ne voit plus, c'est une alerte. */
@@ -383,10 +451,10 @@ export function pointsAttention(ctx) {
     if (genre === 'bat') {
       // Le serveur signale au seuil réglé ; la couleur suit la charge réelle :
       // une pile à 4 % est une action, pas une information.
-      ajouter('pile:' + haid, niveauPile(val) || 'info', tr('Pile faible'), val != null ? nom + ' · ' + Math.round(val) + ' %' : nom, 'objets', haid);
+      ajouter('pile:' + haid, niveauPile(val) || 'info', tr('Pile faible'), val != null ? nom + ' · ' + chiffre(val, '%') : nom, 'objets', haid);
     } else if (genre === 'co2') {
       if (co2Haids.has(haid) || cles.has('co2:' + haid)) return;
-      ajouter('co2:' + haid, 'alerte', tr('CO₂ élevé'), val != null ? nom + ' · ' + Math.round(val) + ' ppm' : nom, null, haid);
+      ajouter('co2:' + haid, 'alerte', tr('CO₂ élevé'), val != null ? nom + ' · ' + chiffre(val, 'ppm') : nom, null, haid);
     }
   });
 
@@ -423,15 +491,16 @@ export function pointsAttention(ctx) {
 export function niveauPile(pct) {
   const n = nombre(pct);
   if (n == null) return null;
-  if (n <= SEUILS_PILE.danger) return 'danger';
-  if (n <= SEUILS_PILE.alerte) return 'alerte';
+  const s = seuilsPile();
+  if (n <= s.danger) return 'danger';
+  if (n <= s.alerte) return 'alerte';
   return null;
 }
 
-/** Le niveau d'un CO₂ : une alerte au palier « chargé », sinon rien. */
-export function niveauCo2(ppm) {
+/** Le niveau d'un CO₂ : une alerte au seuil — celui de la maison par défaut —, sinon rien. */
+export function niveauCo2(ppm, seuil = SEUIL_CO2) {
   const n = nombre(ppm);
-  return n != null && n >= SEUIL_CO2 ? 'alerte' : null;
+  return n != null && n >= seuil ? 'alerte' : null;
 }
 
 /** Le point qui bat est réservé à l'action : ailleurs, l'œil n'a rien à
@@ -459,4 +528,12 @@ export function couleurNiveau(niveau) {
   if (niveau === 'alerte') return { col: 'var(--o-warn)', rgb: 'var(--o-warn-rgb)' };
   if (niveau === 'info') return { col: 'var(--o-accent)', rgb: 'var(--o-accent-rgb)' };
   return { col: 'var(--o-ok)', rgb: 'var(--o-ok-rgb)' };
+}
+
+/** La couleur d'une pile : celle de son niveau ; sinon `calme` (le texte secondaire par défaut) ; sans valeur, le texte effacé.
+ *  La seule règle (C32) : la carte Piles, le coin d'un capteur, la rangée Pile des fiches, la plante et les robots. */
+export function couleurPile(pct, calme = 'var(--o-text2)') {
+  const n = niveauPile(pct);
+  if (n) return couleurNiveau(n).col;
+  return pct == null ? 'var(--o-text3)' : calme;
 }

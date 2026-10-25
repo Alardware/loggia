@@ -31,6 +31,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 const { nombre } = await import('../src/format.js');
@@ -38,7 +39,7 @@ const { locale } = await import('../src/i18n.js');
 const dec = (n, d) => nombre(n, d);
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
 
 /** La flèche `const <nom> = …;` telle qu'écrite, rendue exécutable. */
 function formateur(nom) {
@@ -51,20 +52,24 @@ function formateur(nom) {
   return new Function('dec', 'return ' + corps + ';')(dec);
 }
 
-const fmtW = formateur('fmtW');
 const fmtChipW = formateur('fmtChipW');
 const fmtKW = formateur('fmtKW');
 
-test('prise mesurante (fmtW) : 999,6 W est un kilowatt, pas « 1000 W »', () => {
-  assert.equal(fmtW(999.6), '1,0 kW');
-  assert.equal(fmtW(999.5), '1,0 kW');
-  assert.equal(fmtW(999.4), '999 W', 'arrondi en dessous : on reste en watts');
-  assert.equal(fmtW(999), '999 W');
-  assert.equal(fmtW(1000), '1,0 kW', 'au seuil exact, rien ne change');
-  assert.equal(fmtW(1250), '1,3 kW');
-  assert.equal(fmtW(460), '460 W');
-  assert.equal(fmtW(0), '0 W');
-  assert.equal(fmtW(-0.4), '0 W', 'jamais « -0 W »');
+/* TEST RÉÉCRIT (chantier Prises, tâche 7) : `fmtW` est parti avec le
+ * sous-titre de la carte générique. La carte d'une prise écrit sa puissance
+ * par `puissancePrise` (prises.js), au format de `fmtWatts` : deux décimales
+ * en kilowatts, comme la maquette — l'unité, toujours, après l'arrondi. */
+test('prise mesurante (puissancePrise) : 999,6 W est un kilowatt, pas « 1000 W »', async () => {
+  const { puissancePrise } = await import('../src/prises.js');
+  const ecrit = (w) => { const p = puissancePrise(w); return p.v + ' ' + p.u; };
+  assert.equal(ecrit(999.6), '1,00 kW');
+  assert.equal(ecrit(999.5), '1,00 kW');
+  assert.equal(ecrit(999.4), '999 W', 'arrondi en dessous : on reste en watts');
+  assert.equal(ecrit(1000), '1,00 kW', 'au seuil exact, rien ne change');
+  assert.equal(ecrit(1250), '1,25 kW');
+  assert.equal(ecrit(460), '460 W');
+  assert.equal(ecrit(-0.4), '0 W', 'jamais « -0 W »');
+  assert.ok(!src.includes('const fmtW = ('), 'le formateur d’avant est revenu dans App.jsx');
 });
 
 test('schéma de la maison (fmtChipW) : 999,6 W est un kilowatt', () => {

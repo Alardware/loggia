@@ -13,7 +13,9 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { cfgVal, cfgSet, compteOrdinaire } from './state.js';
 import { tr, trN } from './i18n.js';
+import { Fi } from './ui.jsx';
 import { detecterPieces } from './vacplan_pixels.js';
+import { migrerAssociationPlan } from './robotsfiche.js';
 
 /** Cle de configuration : { "<couleur hex>": "<id de zone>" }. */
 const CLE_ASSOC = 'loggia_vacplan';
@@ -48,9 +50,14 @@ function poser(ctx, img, rot, w, h) {
  * `zones` arrive deja resolu par `vacRooms` : pieces declarees par le robot,
  * rattachees chacune a son interrupteur. Le plan n'a donc pas sa propre liste —
  * cliquer une zone ici et cliquer son bouton dans la liste font le meme geste.
+ * `nPieces` : le nombre de pieces du ROBOT sur sa carte (passe bis de la tranche
+ * robots 2, 20/10, point 6) — quand les zones sont celles de Home Assistant, une
+ * zone peut porter plusieurs pieces, et la detection compte des pieces, pas des
+ * zones. Sans lui, le nombre de zones, comme avant.
  */
-export default function VacPlan({ hass, haid, zones = [], selection = {}, onToggle }) {
+export default function VacPlan({ hass, haid, zones = [], selection = {}, onToggle, nPieces = null }) {
   const pieces = zones;
+  const attendues = Number.isInteger(nPieces) && nPieces > 0 ? nPieces : pieces.length;
   const [src, setSrc] = useState(null);
   const [regions, setRegions] = useState([]);
   const [aAssocier, setAAssocier] = useState(null);
@@ -126,7 +133,7 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
       c.height = Math.max(1, Math.round(nh * ech));
       const ctx = c.getContext('2d', { willReadFrequently: true });
       poser(ctx, img, rot, c.width, c.height);
-      setRegions(detecterPieces(ctx.getImageData(0, 0, c.width, c.height).data, c.width, c.height, pieces.length));
+      setRegions(detecterPieces(ctx.getImageData(0, 0, c.width, c.height).data, c.width, c.height, attendues));
     } catch {
       // Image d'une autre origine : la lecture des pixels est refusee. On
       // retombe simplement sur une carte non cliquable.
@@ -136,7 +143,7 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
 
   // Nouvelle liste de pieces, ou quart de tour : on redessine et on relit.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { analyser(); }, [sigPieces, rot]);
+  useEffect(() => { analyser(); }, [sigPieces, rot, attendues]);
 
   const pivoter = () => {
     const v = (rot + 90) % 360;
@@ -160,6 +167,16 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
    * l'invite et « Reassocier les pieces » ne lui sont pas montres. Pivoter
    * reste : le quart de tour (`loggia_vacrot`) est de l'apparence. */
   const ordinaire = compteOrdinaire(hass);
+  /* La migration (tranche robots 2, R7 ; ADR 0218) : les pieces sont devenues les ZONES de Home Assistant (`zone:cuisine`), et une
+   * association ecrite avant par numero de segment (`seg:1`) se reprend d'elle-meme — la zone dont un segment porte ce numero,
+   * quand une seule y repond ; sinon elle est oubliee et la region redit « ? ». Une fois, par un administrateur — celui qui ouvre
+   * la carte — : un compte ordinaire ne peut pas ecrire `loggia_vacplan`. Sans zones de Home Assistant, rien ne bouge. */
+  useEffect(() => {
+    if (ordinaire) return;
+    const m = migrerAssociationPlan(assoc, pieces);
+    if (m.change) { setAssoc(m.assoc); cfgSet({ [CLE_ASSOC]: m.assoc }); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sigPieces, ordinaire]);
   const libres = useMemo(
     () => pieces.filter(z => !Object.values(assoc).includes(z.id)),
     [pieces, assoc]
@@ -217,6 +234,8 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
                 boxShadow: '0 2px 8px rgba(0,0,0,.45)',
                 transition: 'background .15s, color .15s',
               }}>
+              {/* L'icone CHOISIE de la piece de Loggia (R6, passe bis du 20/10) devant son nom, quand elle en a une. */}
+              {z && z.icon && <Fi i={z.icon} size={10} style={{ marginRight: 5, flexShrink: 0 }} />}
               {z ? z.name : '?'}
             </button>
           );
@@ -225,7 +244,8 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 10, fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', flexWrap: 'wrap' }}>
         <span>{regions.length ? trN(regions.length, '{n} pièce détectée', '{n} pièces détectées') : tr('Analyse de la carte…')}</span>
-        {!ordinaire && regions.some(r => !zoneDe(r.couleur)) && <span style={{ color: 'var(--o-warn2)' }}>{tr('Clique une zone « ? » pour la nommer')}</span>}
+        {/* « Vous » partout, le principe de sa maquette (passe bis du 18/10, point 14) : la carte tutoyait. */}
+        {!ordinaire && regions.some(r => !zoneDe(r.couleur)) && <span style={{ color: 'var(--o-warn2)' }}>{tr('Touchez une zone « ? » pour la nommer')}</span>}
         <span style={{ flex: 1 }} />
         <button onClick={pivoter} title={tr('Pivoter la carte d’un quart de tour')}
           style={{ padding: '5px 11px', borderRadius: 10, cursor: 'pointer', fontSize: 11, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)' }}>

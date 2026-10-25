@@ -132,3 +132,50 @@ export function prochainTarif(plages, maintenant, enHc = null) {
   const suivante = plages.find(p => p.debut > maintenant);
   return suivante ? { versHc: true, instant: suivante.debut } : null;
 }
+
+/* ── Le prix de chaque heure (chantier Prises, P7) ────────────────────────────
+ *
+ * « Les euros se comptent heure par heure » (son choix du 13/10) : les kWh
+ * d'une heure se paient au prix du tarif qui TOURNAIT cette heure-là — celui
+ * dont le compteur a avancé : la règle de l'ADR 0173, heure par heure.
+ *
+ * `connexions` : `[{ prix, heures }]` — le prix du kWh d'un tarif, et ce que
+ * son compteur a compté à chaque heure (`{ [début de l'heure, en ms]: kWh }`,
+ * les statistiques horaires de Home Assistant).
+ *  - aucun prix : `null` — on n'affiche pas d'euros ;
+ *  - un seul prix (ou des prix égaux) : ce prix, à toute heure ;
+ *  - plusieurs : à chaque heure, celui des compteurs qui ont avancé, au
+ *    prorata de ce qu'ils ont compté ; une heure où aucun n'a bougé garde le
+ *    prix de la précédente — avant la première, celui de la suivante. Aucun
+ *    compteur n'a bougé de toute la période : `null`, on ne devine pas.
+ * Rend `prix(debutDeLHeure)`, ou `null`. */
+export function prixParHeure(connexions) {
+  const tarifs = (Array.isArray(connexions) ? connexions : []).filter(c => c && typeof c.prix === 'number' && isFinite(c.prix));
+  if (!tarifs.length) return null;
+  if (new Set(tarifs.map(c => c.prix)).size === 1) return () => tarifs[0].prix;
+  const parHeure = new Map();
+  for (const c of tarifs) {
+    for (const [h, k] of Object.entries(c.heures || {})) {
+      const kwh = Number(k);
+      if (!(kwh > 0)) continue;
+      const e = parHeure.get(Number(h)) || { kwh: 0, euros: 0 };
+      e.kwh += kwh;
+      e.euros += kwh * c.prix;
+      parHeure.set(Number(h), e);
+    }
+  }
+  const connues = [...parHeure].sort((a, b) => a[0] - b[0]).map(([h, e]) => [h, e.euros / e.kwh]);
+  if (!connues.length) return null;
+  return (debut) => {
+    let p = connues[0][1];
+    for (const [h, q] of connues) { if (h > debut) break; p = q; }
+    return p;
+  };
+}
+
+/** Ce que coûtent des kWh comptés heure par heure (`[{ debut, kwh }]`), au prix de chaque heure ; `null` sans prix. */
+export function coutHoraire(kwhParHeure, connexions) {
+  const prix = prixParHeure(connexions);
+  if (!prix) return null;
+  return (Array.isArray(kwhParHeure) ? kwhParHeure : []).reduce((s, x) => (x && Number(x.kwh) > 0 ? s + Number(x.kwh) * prix(Number(x.debut)) : s), 0);
+}

@@ -86,12 +86,19 @@ test('la vue Croquettes est partie de partout', () => {
   assert.ok(!lire('src', 'Onboarding.jsx').includes('croquettes:'), 'le premier lancement la liste encore');
 });
 
-test('« Distribuer » garde une seule portion : les boutons 2 et 3 portions sont partis avec la vue', () => {
+test('« Distribuer » garde une seule portion : les boutons 2 et 3 portions sont partis avec la vue', async () => {
   assert.ok(!APP.includes('[1, 2, 3].map(n =>') && !APP.includes('variables: { portions'), 'la distribution de plusieurs portions est restée');
-  // La carte : UNE portion, la commande de l'appareil désigné (ADR 0155).
-  const dc = morceau('  const distributeur = () => {', '\n  };\n');
-  assert.ok(dc.includes('const envoi = vis ? envoiDistribuer(lu.commande, 1) : null;'), 'la carte lance une portion, par la commande de l’appareil');
-  assert.ok(!dc.includes("Object.keys(S).find(x => x.indexOf('select.') === 0") && !APP.includes('feederScript('), 'la carte prend encore le premier select feed de la maison, ou un script deviné');
+  /* La carte : UNE portion, la commande de l'appareil désigné (ADR 0155).
+   * ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I10) : la carte lit sa vue dans distributeur.js (`carteDistributeur`), qui ne garde de la
+   * fabrique d'App.jsx qu'un appel : on la JOUE — une portion, par le select de l'appareil, jamais le premier `select.*feed` de la maison. */
+  const D = await import(new URL('../src/distributeur.js', import.meta.url));
+  const FEED = 'select.distributeur_feed', AUTRE = 'select.aquarium_feed';
+  const etat = (id, state, attributes) => ({ entity_id: id, state, last_changed: '2026-10-04T06:00:00.000Z', attributes });
+  const c = D.carteDistributeur({ index: { entityMeta: new Map([[FEED, { deviceId: 'dev1', platform: 'mqtt' }], [AUTRE, { deviceId: 'dev2', platform: 'mqtt' }]]) },
+    states: { [AUTRE]: etat(AUTRE, 'STOP', { options: ['START'] }), [FEED]: etat(FEED, 'STOP', { options: ['STOP', 'START'] }) }, cfg: { haid: FEED } });
+  assert.deepEqual(c.envoi, D.envoiDistribuer(c.lecture.commande, 1), 'la carte lance une portion, par la commande de l’appareil');
+  assert.equal(c.envoi.data.entity_id, FEED, 'la carte prend encore le premier select feed de la maison');
+  assert.ok(!APP.includes('feederScript('), 'un script deviné');
   // La fiche : un seul « Distribuer » ; plusieurs portions SEULEMENT pas à pas, pour une commande qui écrit une quantité.
   const debut = SRC_FICHE.indexOf('function OngletAccueil(');
   const fiche = SRC_FICHE.slice(debut, SRC_FICHE.indexOf('\n}\n', debut));
@@ -202,10 +209,11 @@ test('l’interrupteur montre tout de suite ce qu’on a demandé, puis la répo
  * « Environ 8 jours de réserve » au-dessus de « 0 actifs ». */
 test('les jours de réserve ne comptent que les repas allumés, et suivent l’interrupteur', () => {
   // 760 g ; matin et soir (45 g chacun) allumés, le midi coupé : 90 g par jour.
-  assert.ok(fiche({ onglet: 'accueil' }).html.includes('Environ 8 jours de réserve'), 'un repas coupé pèse dans la réserve : 760 g et deux repas de 45 g font 8 jours');
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I22) : la réserve de sa maquette, « ≈ 8 jours de réserve · 760 g », sous le chiffre du réservoir.
+  assert.ok(fiche({ onglet: 'accueil' }).html.includes('≈ 8 jours de réserve · 760 g'), 'un repas coupé pèse dans la réserve : 760 g et deux repas de 45 g font 8 jours');
   // Le midi rallumé (HA a répondu) : il compte, cinq jours sur sept.
   const midi = fiche({ onglet: 'accueil', states: { ...ETATS, [MIDI]: st(MIDI, 'on', {}, '2026-10-04T06:00:01.000Z') } }).html;
-  assert.ok(!midi.includes('Environ 8 jours de réserve') && midi.includes('jours de réserve'), 'un repas rallumé ne pèse pas');
+  assert.ok(!midi.includes('≈ 8 jours de réserve') && midi.includes('jours de réserve'), 'un repas rallumé ne pèse pas');
   // Matin et soir coupé à l'instant, HA n'a pas répondu : plus aucun repas qui pèse.
   const demandes = { [MATIN]: demandeCle(false, ETATS[MATIN], undefined, true) };
   const html = fiche({ onglet: 'accueil', demandes }).html;
@@ -225,9 +233,9 @@ test('la coquille : la feuille à onglets, l’abonnement aux sœurs ET aux auto
 });
 
 /* Contradicteur du 05/10 (ADR 0155). La CARTE n'était épinglée que par du
- * texte : on exécute ici la vraie fabrique `distributeur()` d'App.jsx, avec les
- * vrais lecteurs de distributeur.js, sur un appareil Zigbee2MQTT et un
- * réservoir en aide `input_number` — la maison de l'utilisateur. */
+ * texte : on joue ici sa vue (`carteDistributeur`, distributeur.js — ce que la
+ * fabrique d'App.jsx lit), avec les vrais lecteurs, sur un appareil Zigbee2MQTT
+ * et un réservoir en aide `input_number` — la maison de l'utilisateur. */
 test('la carte : « Distribuer » par l’appareil, le liseré, « Rempli », le prochain repas et un compteur remis à zéro', async () => {
   const D = await import(new URL('../src/distributeur.js', import.meta.url));
   const { locale } = await import(new URL('../src/i18n.js', import.meta.url));
@@ -248,47 +256,41 @@ test('la carte : « Distribuer » par l’appareil, le liseré, « Rempli », le
   // Midi, heure locale : le prochain repas des automatisations allumées est 19:00.
   const midi = new Date(); midi.setHours(12, 0, 0, 0);
   const etatSrv = ETAT(); etatSrv.automatisations.forEach(a => { a.dernier = null; });
-  const carte = (states, cfg = { haid: FEED, haids: { reservoir: RES, distribuees: CPT } }) => {
-    const appels = [];
-    const code = morceau('const heureDe = (iso) => {', '\n};\n') + morceau('  const numDe = ', '\n') + morceau('  const muet = ', '\n')
-      + morceau('  const distributeur = () => {', '\n  };\n');
-    const d = evaluer(code, {
-      S: states, tr, locale, LOGGIA_INDEX: index, loggiaEnt: () => cfg, croqHaids: () => cfg.haids || {}, croqMax: () => 1500,
-      lireDistributeur: D.lireDistributeur, niveauDuBac: D.niveauDuBac, envoiDistribuer: D.envoiDistribuer, dernierRepas: D.dernierRepas,
-      prochainRepas: (e, _t, o) => D.prochainRepas(e, midi.getTime(), o), lireEtatDistributeur: () => ({ etat: etatSrv, erreur: false }),
-      appel: (...a) => appels.push(a),
-    }, 'distributeur()');
-    return { d, appels };
-  };
-  // Vivant : une portion par le select de L'APPAREIL, le bac, le dernier repas du compteur.
-  const { d, appels } = carte(vivants);
+  /* ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I10, I22, § 6) : la carte ne lit plus la fabrique d'App.jsx — `pct`, `feed`, `onRempli`,
+   * `sous` — mais sa vue (`carteDistributeur`, distributeur.js), qu'on joue ici : « Distribuer » est son envoi, « Rempli » quitte la
+   * carte pour la popup, et la phrase remplace le sous-titre. Les garanties restent.
+   * ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; point G) : `rempli` n'est plus à la carte du tout — la popup seule décide
+   * (une aide `input_number` vivante, pas déjà pleine : tests/fiche_distributeur_accueil.test.mjs) ; la carte dit le réservoir et son
+   * maximum (`reservoir`, `max`, `reservoirMort`). */
+  const carte = (states, cfg = { haid: FEED, haids: { reservoir: RES, distribuees: CPT } }, etat = etatSrv) => ({ d: D.carteDistributeur({ index, states, cfg, etat, maintenant: midi.getTime() }) });
+  // Vivant : une portion par le select de L'APPAREIL, le bac, le prochain repas des automatisations allumées.
+  const { d } = carte(vivants);
   assert.equal(d.mort, false, 'témoin : vivant');
-  assert.equal(typeof d.feed, 'function', 'témoin : Distribuer');
-  d.feed();
-  assert.deepEqual(appels, [['select', 'select_option', { entity_id: FEED, option: 'START' }]], 'Distribuer = START sur le select de l’appareil');
-  assert.equal(typeof d.onRempli, 'function', 'témoin : Rempli sur une aide vivante');
-  assert.ok(d.sous.startsWith('Réservoir 51 % · dernier repas '), d.sous);
+  assert.deepEqual(d.envoi, { domaine: 'select', service: 'select_option', data: { entity_id: FEED, option: 'START' } }, 'Distribuer = START sur le select de l’appareil');
+  assert.deepEqual([d.reservoir, d.max, d.reservoirMort, 'rempli' in d], [RES, 1500, false, false], 'témoin : l’aide vivante, que la popup remplit');
+  assert.equal(d.pct, 51);
+  assert.equal(d.phrase.texte, 'Repas à 19:00', 'le prochain repas, celui des automatisations allumées (le midi est coupé)');
   // Un select feed `unknown` est son état normal sous Zigbee2MQTT : ni liseré, ni bouton perdu.
   const inconnu = carte({ ...vivants, [FEED]: st(FEED, 'unknown', { options: ['STOP', 'START'] }) }).d;
-  assert.ok(inconnu.mort === false && typeof inconnu.feed === 'function', 'un select `unknown` passe pour mort');
+  assert.ok(inconnu.mort === false && inconnu.envoi, 'un select `unknown` passe pour mort');
   // La commande muette : liseré, et plus de bouton qui ne ferait rien — le réservoir est pourtant vivant.
   const muette = carte({ ...vivants, [FEED]: st(FEED, 'unavailable', { options: ['STOP', 'START'] }) }).d;
-  assert.ok(muette.mort === true && muette.feed === null, 'commande muette : liseré et pas de « Distribuer »');
+  assert.ok(muette.mort === true && muette.envoi === null, 'commande muette : liseré et pas de « Distribuer »');
   // L'appareil hors ligne : pareil.
   const coupe = carte({ ...vivants, [NET]: st(NET, 'off', { device_class: 'connectivity' }) }).d;
-  assert.ok(coupe.mort === true && coupe.feed === null, 'appareil hors ligne : liseré et pas de « Distribuer »');
-  // Le réservoir muet : liseré, ni « Réservoir … % » ni « Rempli » — mais la vis répond, « Distribuer » reste.
+  assert.ok(coupe.mort === true && coupe.envoi === null, 'appareil hors ligne : liseré et pas de « Distribuer »');
+  // Le réservoir muet : liseré, ni pourcentage ni « Rempli » — mais la vis répond, « Distribuer » reste.
   const bac = carte({ ...vivants, [RES]: st(RES, 'unavailable') }).d;
-  assert.ok(bac.mort === true && typeof bac.feed === 'function' && bac.onRempli === null, 'réservoir muet');
-  assert.ok(!bac.sous.includes('Réservoir'), 'un réservoir muet ne dit pas « Réservoir 0 % » : ' + bac.sous);
+  assert.ok(bac.mort === true && bac.envoi && bac.reservoirMort === true && bac.pct === null, 'réservoir muet');
+  assert.equal(bac.phrase.texte, 'Réservoir indisponible', 'un réservoir muet ne dit pas « 0 % »');
   // Sans réservoir (un Petlibro) : aucun pourcentage inventé.
   const sans = carte(vivants, { haid: FEED, haids: { distribuees: CPT } }).d;
-  assert.ok(sans.pct === null && !sans.sous.includes('%') && sans.onRempli === null, 'sans réservoir : ' + sans.sous);
-  // Le compteur du jour remis à zéro à minuit n'a rien distribué : pas de « dernier repas 00:00 »,
-  // la carte dit le prochain repas, celui des automatisations allumées (le midi est coupé).
-  const zero = carte({ ...vivants, [CPT]: st(CPT, '0', { unit_of_measurement: 'g' }, minuit.toISOString()) }).d;
-  assert.equal(zero.dernier, null, 'un compteur à zéro donne « dernier repas » à minuit');
-  assert.ok(zero.sous.endsWith('prochaine ration 19:00'), zero.sous);
+  assert.ok(sans.pct === null && !sans.phrase.texte.includes('%') && sans.reservoir === null, 'sans réservoir : ' + sans.phrase.texte);
+  /* Le compteur du jour remis à zéro à minuit n'a rien distribué : pas de « Dernier repas à 00:00 ». Sans prochain repas (le serveur
+   * muet), la carte le tait ; avec 45 g comptés à 09:15, elle le dit. */
+  const zero = carte({ ...vivants, [CPT]: st(CPT, '0', { unit_of_measurement: 'g' }, minuit.toISOString()) }, undefined, null).d;
+  assert.equal(zero.phrase.texte, '—', 'un compteur à zéro donne « dernier repas » à minuit');
+  assert.equal(carte(vivants, undefined, null).d.phrase.texte, 'Dernier repas à ' + aujourdhui.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }), 'le compteur désigné dit le dernier repas');
   assert.equal(d.alerte, null, 'témoin : aucune anomalie active, aucune alerte');
 });
 
@@ -297,7 +299,6 @@ test('la carte : « Distribuer » par l’appareil, le liseré, « Rempli », le
  * ouvrant la fiche. La carte porte maintenant le mot de la fiche, en tête. */
 test('la carte d’un Petlibro dit « Bac presque vide » en tête, comme la fiche', async () => {
   const D = await import(new URL('../src/distributeur.js', import.meta.url));
-  const { locale } = await import(new URL('../src/i18n.js', import.meta.url));
   const BTN = 'button.granary_manual_feed', BAS = 'binary_sensor.granary_food_low', BLOC = 'binary_sensor.granary_food_dispenser_state';
   const index = { entityMeta: new Map([
     [BTN, { deviceId: 'dev_petlibro', platform: 'petlibro', translationKey: 'manual_feed' }],
@@ -305,25 +306,19 @@ test('la carte d’un Petlibro dit « Bac presque vide » en tête, comme la fic
     [BLOC, { deviceId: 'dev_petlibro', platform: 'petlibro', translationKey: 'food_dispenser_state' }],
   ]) };
   const cfg = { appareil: 'dev_petlibro', haid: BTN, haids: {} };
-  const carte = (states) => {
-    const code = morceau('const heureDe = (iso) => {', '\n};\n') + morceau('  const numDe = ', '\n') + morceau('  const muet = ', '\n')
-      + morceau('  const distributeur = () => {', '\n  };\n');
-    return evaluer(code, {
-      S: states, tr, locale, LOGGIA_INDEX: index, loggiaEnt: () => cfg, croqHaids: () => cfg.haids, croqMax: () => 1500,
-      lireDistributeur: D.lireDistributeur, niveauDuBac: D.niveauDuBac, envoiDistribuer: D.envoiDistribuer, dernierRepas: D.dernierRepas,
-      prochainRepas: () => null, lireEtatDistributeur: () => ({ etat: null, erreur: false }), appel: () => {},
-    }, 'distributeur()');
-  };
+  /* ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; § 6) : la carte lit sa vue (`carteDistributeur`), qu'on joue ici ; l'anomalie se dit par son
+   * genre (`alerte` : `bas`, `bloque`) et la phrase la met en tête, en ambre — « Bac presque vide » —, au lieu du sous-titre d'avant. */
+  const carte = (states) => D.carteDistributeur({ index, states, cfg, etat: null });
   const vivants = { [BTN]: st(BTN, 'unknown'), [BAS]: st(BAS, 'off'), [BLOC]: st(BLOC, 'off') };
   assert.equal(carte(vivants).alerte, null, 'témoin : bac plein, rien à signaler');
   const bas = carte({ ...vivants, [BAS]: st(BAS, 'on') });
   assert.equal(bas.pct, null, 'un Petlibro n’a pas de réservoir en % : rien ne passait au rouge');
-  assert.equal(bas.alerte, 'Bac presque vide');
-  assert.ok(bas.sous.startsWith('Bac presque vide'), bas.sous);
-  assert.equal(typeof bas.feed, 'function', 'un bac presque vide distribue encore : « Distribuer » reste');
-  assert.equal(carte({ ...vivants, [BLOC]: st(BLOC, 'on') }).alerte, 'Distribution bloquée');
-  // Le mot vient de la LECTURE de l'appareil (`lireDistributeur(…).alerte`), le même que la fiche.
-  assert.equal(bas.alerte, D.lireDistributeur(index, { ...vivants, [BAS]: st(BAS, 'on') }, cfg).alerte.mot);
+  assert.equal(bas.alerte, 'bas');
+  assert.deepEqual([bas.phrase.texte, bas.phrase.encre], ['Bac presque vide', 'var(--o-warn)']);
+  assert.ok(bas.envoi, 'un bac presque vide distribue encore : « Distribuer » reste');
+  assert.equal(carte({ ...vivants, [BLOC]: st(BLOC, 'on') }).phrase.texte, 'Distribution bloquée');
+  // Le genre vient de la LECTURE de l'appareil (`lireDistributeur(…).alerte`), le même que la fiche.
+  assert.equal(bas.alerte, D.lireDistributeur(index, { ...vivants, [BAS]: st(BAS, 'on') }, cfg).alerte.type);
 });
 
 /* Relecture du 04/10. Sept mots n'étaient lus que par la vue partie ; ils

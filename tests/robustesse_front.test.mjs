@@ -11,6 +11,7 @@
 // le prochain nettoyage « inutile » ne doit pas retirer sans le savoir.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ASSERTIONS MODIFIÉES (19/10, vouvoiement de l'interface générale) : les textes cités ici passent au « vous » ; seule la clé française change (tests/vouvoiement_interface_1910.test.mjs).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -72,11 +73,17 @@ test('le compteur de règles ignore les réponses d’un effet dépassé', () =>
 });
 
 test('deux appuis rapprochés sur Distribuer ne font qu’une ration', () => {
+  /* ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; la leçon du point 1 de l'étape 1) : le verrou de 2,5 s n'est plus à la carte — c'est le geste
+   * PARTAGÉ de distributeuretat.js (`poserDistribution`, la variante partagée d'optimiste.js), que la carte large, l'étroite, la compacte
+   * et la popup lisent ensemble ; la vue de la carte n'envoie rien sans lui. Joué dans tests/carte_distributeur.test.mjs. */
   const debut = app.indexOf('function RoomFeederCard');
   const corps = app.slice(debut, app.indexOf('\n}', debut));
-  assert.ok(corps.includes('verrou.current = t + 2500; onFeed();'));
-  assert.equal(compter(corps, 'onFeed()'), 1, 'les boutons passent par le verrou');
-  assert.equal(compter(corps, 'distribuer()'), 2, 'les deux gabarits (compact et standard)');
+  assert.equal(compter(corps, 'v.distribuer()'), 1, 'la puce de la carte et le mini de la compacte passent par la vue');
+  /* ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; point C) : le geste est `lancerDistribution` (distributeuretat.js) — le verrou,
+   * puis la commande, et le verrou tenu jusqu'à la réponse de Home Assistant ; la vue ne pose rien elle-même. */
+  const d = app.indexOf('function useVueDistributeur(');
+  assert.ok(app.slice(d, app.indexOf('\n}', d)).includes('distribuer: () => { lancerDistribution(hass, c.envoi); }'), 'la vue passe par le verrou partagé');
+  assert.ok(!app.includes('poserDistribution('), 'la vue pose le verrou elle-même, hors du geste commun');
 });
 
 test('l’écoute des rejets reste dans la fenêtre du panneau, et parle la langue choisie', () => {
@@ -108,7 +115,13 @@ test('les heures du journal et des règles suivent la langue choisie, pas celle 
   // `widgetsrail.jsx` a quitte la liste le 02/10 : les heures qu'il formatait
   // etaient celles du widget « calendrier » (decision 0132). L'heure qui reste
   // s'ecrit chiffre par chiffre (`chiffresHeure`), sans passer par Intl.
-  const fichiers = ['src/App.jsx', 'src/ficherobot.jsx', 'src/agendarail.jsx', 'src/views/parcommun.jsx'];
+  /* ASSERTION MODIFIÉE (chantier IoT, tâche 9, 18/10 ; I19) : la fiche d'un robot ne formate plus d'heure elle-même — les rangées de
+   * son Historique et son mot d'état les prennent à `heureDe` (robotsfiche.js), qui passe par `locale()` ; elle passe `locale()` à
+   * ce qui écrit un jour (« Auj. », « Mer »). */
+  const fichiers = ['src/App.jsx', 'src/agendarail.jsx', 'src/views/parcommun.jsx'];
+  const fiche = lire('src', 'robotsfiche.js');
+  assert.ok(fiche.includes("const heureDe = (t) => new Date(t).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });") && fiche.includes('const heure = heureDe(s.debut);'), 'robotsfiche.js : l’heure d’un passage');
+  assert.ok(lire('src', 'ficherobot.jsx').includes('const rangees = rangeesHistorique(sept.sessions, { domaine, maintenant, loc: locale() });'), 'ficherobot.jsx : le jour d’un passage');
   for (const f of fichiers) {
     const s = lire(...f.split('/'));
     const appels = s.match(/toLocaleTimeString\([^)]*\)/g) || [];
@@ -137,7 +150,9 @@ test('un scénario refusé ou raté ne rend pas `null` : il remonte à l’écou
 });
 
 test('exclure un volet du planning ne cache plus un refus', () => {
-  assert.ok(app.includes("hass.callWS({ type: 'loggia/volets/config', patch });"));
+  /* La bascule d'exclusion vivait dans la fiche d'un ouvrant qui n'est pas un
+   * volet : elle est partie avec la rangée « Auto lever / coucher » (audit du
+   * 19/10). Ce qui reste vrai : aucune écriture de la config ne tait son refus. */
   assert.ok(!app.includes("hass.callWS({ type: 'loggia/volets/config', patch }).catch(() => {});"));
 });
 
@@ -171,5 +186,5 @@ test('une découverte interrompue se dit, en console et à l’écran', () => {
   assert.ok(disc.includes("console.error('Loggia : découverte interrompue', e);"));
   assert.ok(disc.includes("echec: true, errors: [{ type: 'decouverte', message:"), 'la forme des erreurs de registre est gardée');
   assert.ok(app.includes("discovery.echec && <div role=\"alert\""));
-  assert.ok(en.includes("'La découverte de la maison a été interrompue — recharge la page':"));
+  assert.ok(en.includes("'La découverte de la maison a été interrompue — rechargez la page':"));
 });

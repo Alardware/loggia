@@ -15,6 +15,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SEUILS_PILE, SEUIL_CO2, niveauPile, niveauCo2, animationNiveau, couleurNiveau } from '../src/attention.js';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
@@ -22,15 +23,17 @@ const compter = (s, motif) => s.split(motif).length - 1;
   /* + l'ecran de veille et la modale du code : sortis d'App.jsx le 23/09
    * (plan M1). Ce que ce fichier verifie n'a pas bouge, seulement son
    * adresse — on relit donc le monolithe ET ce qui en est sorti. */
-const app = ['App.jsx', 'ecranveille.jsx', 'pinmodal.jsx', 'theme.js'].map(f => lire('src', f)).join(String.fromCharCode(10));
+const app = (['App.jsx', 'ecranveille.jsx', 'pinmodal.jsx', 'theme.js'].map(f => lire('src', f)).join(String.fromCharCode(10)) + VUES_SORTIES);
 
-test('une pile : rien tant qu’elle tient, attention à 20 %, action à 5 %', () => {
-  assert.deepEqual(SEUILS_PILE, { alerte: 20, danger: 5 });
+/* ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 11 ; C32, § 19.8) : UN seul seuil, celui de la veille des piles — 15 % par défaut, relu
+ * avec les veilles (`reglerSeuilPile`) ; le critique ne bouge pas. */
+test('une pile : rien tant qu’elle tient, attention à 15 % (le seuil de la veille des piles), action à 5 %', () => {
+  assert.deepEqual(SEUILS_PILE, { alerte: 15, danger: 5 });
   assert.equal(niveauPile(null), null);
   assert.equal(niveauPile('abc'), null);
   assert.equal(niveauPile(100), null);
-  assert.equal(niveauPile(21), null);
-  assert.equal(niveauPile(20), 'alerte');
+  assert.equal(niveauPile(16), null);
+  assert.equal(niveauPile(15), 'alerte');
   assert.equal(niveauPile('14'), 'alerte');
   assert.equal(niveauPile(6), 'alerte');
   assert.equal(niveauPile(5), 'danger');
@@ -42,8 +45,10 @@ test('le CO₂ : une attention au palier « chargé », le même chiffre partout
   assert.equal(niveauCo2(SEUIL_CO2 - 1), null);
   assert.equal(niveauCo2(SEUIL_CO2), 'alerte');
   assert.equal(niveauCo2(4000), 'alerte');
-  // Le badge d'une carte pièce lit le palier d'airPalier — plus de seconde échelle 600 / 900.
-  assert.ok(app.includes("function co2Style(co2) { return airPalier(co2) === 2 ? { bc: 'var(--o-warn)'"));
+  // ASSERTION MODIFIÉE (audit du 19/10, M16) : le badge d'une carte pièce lit la table (`zoneCo2` → `zoneMesure('co2')`), plus `co2Style`.
+  assert.ok(!app.includes('function co2Style') && app.includes("out.bc = z && !z.bon ? z.c : 'var(--o-text2)'"));
+  assert.equal(niveauCo2(1500, 1800), null, 'le seuil réglé dans la veille');
+  assert.equal(niveauCo2(1800, 1800), 'alerte');
   assert.ok(!app.includes('co2 < 600 ?'));
 });
 
@@ -60,8 +65,14 @@ test('le point qui bat est réservé à l’action', () => {
 });
 
 test('les piles de l’écran passent par la même table', () => {
-  assert.equal(compter(app, 'couleurPile('), 3, 'la plante, l’aspirateur, la tondeuse');
-  assert.ok(app.includes("const couleurPile = (pct) => { const n = niveauPile(pct); if (n) return couleurNiveau(n).col;"));
+  // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 10 ; C30, C31) : la carte et la fiche d'une plante lisent la pile à la source
+  // (`niveauPile`, `couleurNiveau` — ficheplante.jsx) ; restent l'aspirateur et la tondeuse.
+  // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 11 ; C32) : `couleurPile` vit dans attention.js — la seule règle — et sert aussi au coin
+  // d'un capteur, à la rangée Pile des fiches et à la valeur d'une pile dans la fiche universelle.
+  // ASSERTION MODIFIÉE (chantier IoT, tâche 6, 18/10 ; I8, I12) : la batterie de la carte d'un robot et de sa compacte suit la même règle.
+  // ASSERTION MODIFIÉE (audit du 19/10, point 13) : les cinq barres d'une pile prennent elles aussi `couleurPile` (`barresPile` est parti).
+  assert.equal(compter(app, 'couleurPile('), 8, 'l’aspirateur, la tondeuse, le coin d’un capteur, les barres d’une pile, la rangée Pile, la fiche universelle, la carte d’un robot et sa compacte');
+  assert.ok(app.includes("couleurPile, reglerSeuilPile,") && !app.includes('const couleurPile ='), 'la règle vient d’attention.js');
   assert.deepEqual(couleurNiveau('danger'), { col: 'var(--o-bad)', rgb: 'var(--o-bad-rgb)' });
 });
 
@@ -91,7 +102,10 @@ test('plus de couleur d’état en dur : les jetons du thème, lisibles en clair
 
 test('la tondeuse porte son nom, comme l’aspirateur', () => {
   assert.ok(!app.includes("label: 'Luba'"));
-  assert.ok(app.includes("machines.luba = { label: (lm && lm.attributes && lm.attributes.friendly_name) || tr('Tondeuse')"));
+  /* ASSERTION MODIFIÉE (chantier IoT, passe bis 2 du 18/10, point L) : les clés de ces deux machines portaient les surnoms des
+   * robots de l'installation d'origine ; elles disent leur nature (`machines.aspirateur`, `machines.tondeuse`). */
+  assert.ok(app.includes("machines.tondeuse = { label: (lm && lm.attributes && lm.attributes.friendly_name) || tr('Tondeuse')"));
+  assert.ok(app.includes("machines.aspirateur = { label: (rVac && rVac.name) || tr('Aspirateur')"), 'la clé de l’aspirateur dit sa nature');
 });
 
 test('les styles partagés vivent une fois, dans styles.js', () => {

@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildIndex, capabilities, siblingsOf, pickSibling, cameraModes } from '../src/discovery.js';
+import { buildIndex, capabilities, siblingsOf, pickSibling, cameraModes, registresDuComposant } from '../src/discovery.js';
 import {
   emptyHome, simpleHome, inheritedArea, threeVacuums, hiddenDisabled,
   energyHome, systemHome, cameraHome, indexOf, capsOf,
@@ -67,6 +67,84 @@ test('nom lisible : friendly_name d’abord, identifiant en dernier recours', ()
   const ix = indexOf(simpleHome());
   assert.equal(ix.nameOf('light.salon'), 'Lampe salon');
   assert.equal(ix.nameOf('binary_sensor.routeur'), 'binary_sensor.routeur');
+});
+
+// ── Famille d'un chauffage ───────────────────────────────────────────────────
+// Le serveur reconnait un chauffage par ce que l'ecran ne voit pas (l'`unique_id`
+// qui dit « pilot wire », les options du module) et pose sa `famille` dans
+// l'index. L'ecran la garde telle quelle dans `entityMeta` ; sans le composant,
+// les registres de Home Assistant n'en disent aucune.
+
+/** Ce que `loggia/discovery` repond : un module fil pilote, un thermostat, une lampe. */
+function reponseDuComposant() {
+  const entite = (id, plus = {}) => ({
+    id, name: null, device: null, area: null, platform: null, key: null,
+    category: null, device_class: null, unit: null, hidden: false, ...plus,
+  });
+  return {
+    index: {
+      version: 1, areas: [], floors: [], devices: [], services: {},
+      entities: [
+        entite('select.radiateur_salon', { platform: 'mqtt', famille: 'fil_pilote' }),
+        entite('climate.poele', { platform: 'maestro_mcz', famille: 'thermostat' }),
+        entite('light.salon', { platform: 'hue' }),   // pas de clé : le serveur n'en pose que pour un chauffage
+      ],
+    },
+  };
+}
+
+test('la famille posée par le composant arrive jusqu’à l’index de l’écran', async () => {
+  const hass = {
+    callWS: async (msg) => { assert.equal(msg.type, 'loggia/discovery'); return reponseDuComposant(); },
+  };
+  const registres = await registresDuComposant(hass);
+  // Recopiée telle quelle dans l'entité convertie, et nulle (jamais absente) quand le serveur n'en dit aucune.
+  const convertie = (id) => registres.entities.find(e => e.entity_id === id);
+  assert.equal(convertie('select.radiateur_salon').famille, 'fil_pilote');
+  assert.equal(convertie('light.salon').famille, null);
+  const ix = buildIndex({ ...registres, states: {} });
+  assert.equal(ix.entityMeta.get('select.radiateur_salon').famille, 'fil_pilote');
+  assert.equal(ix.entityMeta.get('climate.poele').famille, 'thermostat');
+  assert.equal(ix.entityMeta.get('light.salon').famille, null, 'sans famille côté serveur : nulle, jamais absente');
+});
+
+test('sans le composant, les registres de Home Assistant ne disent aucune famille', () => {
+  // La forme des registres de Home Assistant (repli quand le composant manque) :
+  // aucun champ `famille`, ni même vide.
+  const ix = buildIndex({
+    entities: [
+      { entity_id: 'select.radiateur_salon', platform: 'mqtt' },
+      { entity_id: 'climate.poele', platform: 'maestro_mcz' },
+    ],
+  });
+  assert.equal(ix.entityMeta.get('select.radiateur_salon').famille, null);
+  assert.equal(ix.entityMeta.get('climate.poele').famille, null);
+});
+
+// ── Les empreintes d'un lecteur (chantier Médias, passe bis du 17/10 ; ADR 0208) ──
+// Le serveur pose `empreintes` sur un appareil qui porte un `media_player` : le
+// hachage court de la valeur de chaque identifiant. L'écran les garde dans
+// `deviceMeta` ; sans le composant, ou pour tout autre appareil, une liste vide.
+
+test('les empreintes posées par le composant arrivent jusqu’à `deviceMeta` ; vides sans lui', async () => {
+  const reponse = { index: { version: 1, areas: [], floors: [], services: {}, entities: [],
+    devices: [
+      { id: 'd_off', name: 'Echo Dot', area: null, manufacturer: 'Amazon', model: 'Echo Dot', integration: 'alexa_devices', via: null, entry_type: null, empreintes: ['3f9a1c7e5b2d'] },
+      { id: 'd_hacs', name: 'Echo Dot', area: null, manufacturer: 'Amazon', model: 'Echo Dot (Gen3)', integration: 'alexa_media', via: null, entry_type: null, empreintes: ['3f9a1c7e5b2d', 'a0b1c2d3e4f5'] },
+      { id: 'd_lampe', name: 'Lampe', area: null, manufacturer: null, model: null, integration: 'hue', via: null, entry_type: null },
+      { id: 'd_bizarre', name: 'Bizarre', area: null, manufacturer: null, model: null, integration: 'demo', via: null, entry_type: null, empreintes: 'pas une liste' },
+    ] } };
+  const registres = await registresDuComposant({ callWS: async () => reponse });
+  const converti = (id) => registres.devices.find(d => d.id === id);
+  assert.deepEqual([converti('d_off').empreintes, converti('d_hacs').empreintes, converti('d_lampe').empreintes, converti('d_bizarre').empreintes],
+    [['3f9a1c7e5b2d'], ['3f9a1c7e5b2d', 'a0b1c2d3e4f5'], null, null], 'recopiées telles quelles ; nulles quand le serveur n’en pose pas, ou pose autre chose qu’une liste');
+  const ix = buildIndex({ ...registres, states: {} });
+  assert.deepEqual(ix.deviceMeta.get('d_off').empreintes, ['3f9a1c7e5b2d']);
+  assert.deepEqual(ix.deviceMeta.get('d_hacs').empreintes, ['3f9a1c7e5b2d', 'a0b1c2d3e4f5']);
+  assert.deepEqual([ix.deviceMeta.get('d_lampe').empreintes, ix.deviceMeta.get('d_bizarre').empreintes], [[], []], 'sans empreintes : une liste vide, jamais absente');
+  // Les registres de Home Assistant (le repli sans composant) n'en portent aucune.
+  const sans = buildIndex({ devices: [{ id: 'd', name: 'D' }], entities: [], states: {} });
+  assert.deepEqual(sans.deviceMeta.get('d').empreintes, []);
 });
 
 // ── Capacites ────────────────────────────────────────────────────────────────

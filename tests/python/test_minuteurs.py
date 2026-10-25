@@ -67,6 +67,11 @@ class Rendezvous:
         self._n = 0
 
     def __call__(self, hass, delai, rappel):
+        # L'ecriture differee du journal (regles.py) n'est pas un minuteur :
+        # depuis que la pose se note (chantier Prises, spec 6.3), elle passe
+        # ici aussi, et ces tests ne regardent que les rendez-vous du module.
+        if getattr(rappel, "__name__", "") == "ecrire":
+            return lambda: None
         self._n += 1
         cle = self._n
         self.poses[cle] = (delai, rappel)
@@ -225,7 +230,7 @@ def test_a_l_heure_la_lampe_s_eteint_de_la_main_de_celui_qui_l_a_voulu(creer, ev
     assert m.hass.services.appels == [("homeassistant", "turn_off", {"entity_id": ["light.a"]}, "u1")]
     assert m.table == {}
     assert lancer(m.store.async_get_shared("loggia_minuteurs")) == {}
-    assert journal(m) == [("eteindre", "minuteur de 30 min", ["light.a"])]
+    assert journal(m) == [("eteindre", "minuteur de 30 min", ["light.a"]), ("poser", "30 min", ["light.a"])]
 
 
 def test_deja_eteinte_rien_a_faire(creer):
@@ -234,7 +239,7 @@ def test_deja_eteinte_rien_a_faire(creer):
     m.hass.states.table["light.a"] = FauxEtat("off")
     lancer(m._async_echoir("light.a"))
     assert m.hass.services.appels == []
-    assert journal(m) == []
+    assert journal(m) == [("poser", "30 min", ["light.a"])], "rien de plus que la pose"
 
 
 def test_eteinte_a_la_main_le_minuteur_s_efface(creer, evenements):
@@ -352,3 +357,51 @@ def test_un_minuteur_echu_attend_que_sa_lampe_existe(creer, monkeypatch, module)
     lancer(rappels[0](m.hass))
     assert m.hass.services.appels == [("homeassistant", "turn_off", {"entity_id": ["light.a"]}, "u1")]
     assert m.table == {}
+
+
+# ── La pose se note au journal (chantier Prises, spec 6.3) ──────────────────
+
+def test_la_pose_se_note_au_journal(creer):
+    """Le journal du jour d'une prise la dit : « Minuteur · 30 min ». Un appui de
+    plus se note aussi, avec SES minutes."""
+    m = creer({"switch.prise_cafe": "on"})
+    lancer(m.async_poser("switch.prise_cafe", 30, par="u1"))
+    lancer(m.async_poser("switch.prise_cafe", 15, par="u1"))
+    assert journal(m) == [("poser", "15 min", ["switch.prise_cafe"]), ("poser", "30 min", ["switch.prise_cafe"])]
+    ligne = lancer(m.regles.journal(module="minuteurs"))[0]
+    assert (ligne["regle"], ligne["n"], ligne["g"]) == ("minuteur", 1, {"motif": [["{n} min", {"n": 15}]]})
+    assert "u1" not in str(ligne), "qui a pose le minuteur ne sort pas du serveur"
+
+
+@pytest.mark.parametrize("haid,etat", [("switch.prise_cafe", "off"), ("media_player.tv", "standby"),
+                                       ("light.a", "OFF")])
+def test_un_minuteur_ne_se_pose_pas_sur_un_appareil_deja_eteint(creer, haid, etat):
+    """Audit du 19/10 : pose sur une prise coupee, le minuteur la coupait de
+    nouveau une fois rallumee, a l'heure d'un geste qu'on avait oublie. Le refus
+    porte son code (`RefusNomme`, refus.py) et nomme l'appareil ; rien ne se
+    garde, rien ne s'arme, rien ne se note."""
+    m = creer({haid: etat})
+    with pytest.raises(ValueError) as refus:
+        lancer(m.async_poser(haid, 30, par="u1"))
+    assert refus.value.code == "minuteur_deja_eteint" and refus.value.nomme == haid
+    assert m.table == {} and m._rdv == {} and journal(m) == []
+    assert not lancer(m.store.async_get_shared("loggia_minuteurs"))
+
+
+def test_un_appareil_qui_ne_repond_plus_garde_son_minuteur(creer):
+    """« unavailable » n'est pas « eteint » : une lampe Zigbee qui decroche une
+    minute revient allumee, et son minuteur doit l'eteindre a l'heure."""
+    m = creer({"light.a": "unavailable"})
+    assert list(lancer(m.async_poser("light.a", 30))["minuteurs"]) == ["light.a"]
+
+
+def test_une_pose_refusee_ne_se_note_pas(creer):
+    """Elle passe deja avant le code de la tache : c'est une garde."""
+    m = creer({"light.a": "on"})
+    with pytest.raises(ValueError):
+        lancer(m.async_poser("light.a", 0))
+    with pytest.raises(PermissionError):
+        lancer(m.async_poser("light.a", 30, controle=lambda _haid: False))
+    with pytest.raises(ValueError):
+        lancer(m.async_poser("light.inconnue", 30))
+    assert journal(m) == []

@@ -12,8 +12,9 @@
 // qu'elle affiche (WCAG 2.5.3). Elle s'annonce désormais comme elle se lit,
 // « Enceinte salon, En pause », par le bouton de SURFACE (`Surface`, ui.jsx).
 //
-// RoomMediaCard et ScenesContent ne sont pas exportés : leur source se lit
-// comme du texte. Le bouton de surface, lui, se rend.
+// RoomMediaCard n'est pas exporté, et ScenesContent vit depuis le 11/10 dans
+// scenes.jsx, chargé à la demande (tâche 6 bis du chantier Chauffage) : leur
+// source se lit comme du texte. Le bouton de surface, lui, se rend.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { test } from 'node:test';
@@ -26,6 +27,7 @@ import { composant, rendre } from './rendu.mjs';
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8').replace(/\r\n/g, '\n');
 const APP = lire('src', 'App.jsx');
+const SCENES_JSX = lire('src', 'scenes.jsx');
 
 /** Le source d'une fonction de premier niveau d'App.jsx, jusqu'à la suivante. */
 function fonction(nom) {
@@ -98,8 +100,12 @@ function premierEnfant(c) {
   }
 }
 
+/* ASSERTIONS MODIFIÉES (chantier Médias, tâche 4 ; M2 A, M5, M13) : la carte d'un lecteur est celle de sa maquette — dans la grille
+ * commune (`o-rmcard o-gabarit`, sa panne nommée `v.indispo`), UNE puce de lecture ou pause dans son propre composant (`PuceLecture`),
+ * la barre de volume ; précédent et suivant sont dans la popup. Ce que le lot 13 tenait tient toujours : pas de rôle bouton à la
+ * racine, la surface en premier, les commandes positionnées et nommées de l'appareil, des services explicites. */
 const MEDIA = fonction('RoomMediaCard');
-const RACINE_MEDIA = MEDIA.indexOf("<div className={'o-rmcard'");
+const RACINE_MEDIA = MEDIA.indexOf("<div className={'o-rmcard o-gabarit'");
 
 test('la carte lecteur n’est plus un bouton qui enferme ses commandes', () => {
   assert.ok(RACINE_MEDIA > 0, 'la racine de la carte lecteur a changé de forme');
@@ -110,17 +116,19 @@ test('la carte lecteur n’est plus un bouton qui enferme ses commandes', () => 
   // La surface se pose en `inset: 0` : sans racine positionnée, elle
   // couvrirait la grille entière.
   assert.ok(t.includes("position: 'relative'"), 'la racine n’est plus positionnée');
-  // Le gabarit ne bouge pas : la carte garde sa classe (index.css, tests/clair).
-  assert.ok(t.includes("className={'o-rmcard' + (mort ? ' o-panne' : '')}") && t.includes('...RM_CARD'));
+  // Le gabarit ne bouge pas : la carte garde sa classe (index.css, tests/clair) — et la grille commune (ADR 0202).
+  assert.ok(t.includes("className={'o-rmcard o-gabarit' + (v.indispo ? ' o-panne' : '')}") && t.includes('...RM_CARD'));
 });
 
 test('la carte lecteur s’ouvre par sa surface, qui dit ce que la carte affiche', async () => {
   const c = contenu(MEDIA, RACINE_MEDIA);
-  assert.equal(premierEnfant(c), '{onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(nom, texte)} />}',
+  /* ASSERTION MODIFIÉE (chantier Mode enfant, tâche 4 ; E15) : la surface dit aussi le temps d'écran d'un écran à budget (à la place du
+   * volume), le plafond dans le mot du volume (`texteVolume`), et la pastille « Mode enfant » ; le volume écrit au pied est ce même
+   * `texteVolume`, qui reste `volumeTexte(v.vol, v.muted)` hors profil. */
+  assert.equal(premierEnfant(c), '{onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(v.nom, v.phrase.texte, pied ? (temps ? texteTemps : v.vol != null ? texteVolume : null) : null, motPastille)} />}',
     'le premier enfant doit être la surface : peinte d’abord, elle passe sous les commandes');
-  // `texte` est la ligne d'état écrite sous le nom : le nom lu et le texte vu
-  // sont la même variable.
-  assert.ok(c.includes('<div style={RM_NAME}>{nom}</div>') && /\}\}>\{texte\}<\/div>/.test(c), 'la carte n’affiche plus `texte` sous son nom');
+  // La phrase est la ligne d'état écrite sous le nom : le nom lu et le texte vu sont la même variable ; le volume écrit au pied aussi.
+  assert.ok(c.includes('{v.nom}</div>') && c.includes('{v.phrase.texte}</div>') && c.includes('{texteVolume}</div>') && MEDIA.includes('volumeTexte(v.vol, v.muted)'), 'la carte n’affiche plus ce que sa surface dit');
   assert.ok(!MEDIA.includes("tr('Ouvrir') + ' ' + nom"), '« Ouvrir Enceinte salon » taisait l’état affiché');
   // Ce que la surface devient à l'écran.
   const Surface = await composant('ui.jsx', 'Surface');
@@ -132,32 +140,43 @@ test('la carte lecteur s’ouvre par sa surface, qui dit ce que la carte affiche
 });
 
 test('les commandes de la carte lecteur passent au-dessus de la surface et nomment l’appareil', () => {
-  const boutons = [...MEDIA.matchAll(/<button\b/g)].map(m => balise(MEDIA, m.index).texte);
-  assert.equal(boutons.length, 3, 'piste précédente, lecture / pause, piste suivante');
+  const PUCE = fonction('PuceLecture');
+  const boutons = [...PUCE.matchAll(/<button\b/g)].map(m => balise(PUCE, m.index).texte);
+  assert.equal(boutons.length, 1, 'une seule commande de lecture sur la carte : lecture ou pause (M2 A)');
+  // ASSERTION MODIFIÉE (chantier Médias, tâche 5 ; M10, M17) : la carte étroite éteinte porte UN autre bouton, « Allumer », sur sa ligne de
+  // commandes — positionné comme la puce (RM_MEDIA_PUCE), nommé de l'appareil, explicite (`turn_on`, jamais une bascule à l'aveugle).
+  const autres = [...MEDIA.matchAll(/<button\b/g)].map(m => balise(MEDIA, m.index).texte);
+  assert.equal(autres.length, 1, 'la carte ne dessine qu’un autre bouton : précédent et suivant sont dans la popup');
+  assert.ok(autres[0].includes("aria-label={tr('Allumer') + ' ' + v.nom}") && autres[0].includes('v.marche(true)') && autres[0].includes('e.stopPropagation()') && autres[0].includes('style={{ ...RM_MEDIA_PUCE,'),
+    '« Allumer » : nommé de l’appareil, explicite, au-dessus de la surface');
   for (const b of boutons) {
-    assert.match(b, /aria-label=\{[^}]*\+ ' ' \+ nom\}/, 'un bouton de lecture ne dit pas quel lecteur il commande : ' + b.slice(0, 80));
+    assert.match(b, /aria-label=\{[^}]*\+ ' ' \+ v\.nom\}/, 'un bouton de lecture ne dit pas quel lecteur il commande : ' + b.slice(0, 80));
     assert.ok(b.includes('e.stopPropagation()'), 'le clic d’un bouton remonte à la carte');
   }
-  // « Lecture » est l'état écrit sur la carte (« Playing ») : le geste est « Lire ».
-  const lecture = boutons.find(b => b.includes("'media_play_pause'"));
-  assert.ok(lecture.includes("tr('Lire')") && !lecture.includes("tr('Lecture')"), 'le bouton de lecture porte le nom d’un état');
+  // « Lecture » est l'état écrit sur la carte (« Playing ») : le geste est « Lire ». Et le service est explicite (M13) : jamais `media_play_pause`.
+  assert.ok(boutons[0].includes("tr('Lire')") && !boutons[0].includes("tr('Lecture')"), 'le bouton de lecture porte le nom d’un état');
+  assert.ok(!MEDIA.includes('play_pause') && !PUCE.includes('play_pause') && APP.includes("appel(l.ctl, playing ? 'media_pause' : 'media_play')"), 'la carte bascule à l’aveugle : `media_pause` si le lecteur joue, `media_play` sinon');
   // Relecture du lot 13 : même règle pour le mini de la compacte CvCard, un
   // bouton à icône seule — son nom est tout ce qu'il dit.
+  // ASSERTION MODIFIÉE (chantier Médias, tâche 5 ; M13, M17) : le mini de la compacte passe par la vue du lecteur (`vd.lecture()`) — explicite, plus de `play_pause`.
+  // ASSERTION MODIFIÉE (passe bis 2, 17/10 ; M11) : le mini n'a plus d'état inerte à étaler sur `miniAccent` — il n'est dessiné que s'il y a
+  // quelque chose à reprendre, et son style est `miniAccent` tel quel.
   const cv = fonction('CvCard');
-  const minis = [...cv.matchAll(/<button\b/g)].map(m => balise(cv, m.index).texte).filter(b => b.includes("'play_pause'") && b.includes('style={miniAccent}'));
+  const minis = [...cv.matchAll(/<button\b/g)].map(m => balise(cv, m.index).texte).filter(b => b.includes('vd.lecture()') && b.includes('miniAccent'));
   assert.equal(minis.length, 1, 'le mini lecture / pause de la compacte a disparu');
   assert.ok(minis[0].includes("tr('Lire')") && !minis[0].includes("tr('Lecture')"), '« Playing Enceinte salon » : le mini de la compacte porte le nom d’un état');
-  // Les boutons SEULS sont positionnés (`btn` hérite de RM_BTN), pas leur
-  // rangée : positionnée, elle couvrait la surface, et un appui entre deux
-  // boutons ne faisait plus rien (relecture du lot 13).
-  const i = MEDIA.indexOf('<button');
-  const rangee = balise(MEDIA, MEDIA.lastIndexOf('<div', i)).texte;
-  assert.ok(!rangee.includes("position: 'relative'"), 'la rangée des boutons couvre la surface : l’écart entre deux boutons ne fait plus rien');
+  assert.ok(!cv.includes("'play_pause'"), 'la compacte bascule à l’aveugle');
+  // La puce SEULE est positionnée (`RM_MEDIA_PUCE` hérite de RM_BTN), pas le pied : positionné, il couvrirait la surface, et un appui
+  // à côté de la puce ne ferait plus rien (relecture du lot 13).
+  const pied = balise(MEDIA, MEDIA.indexOf('<div className="o-seul-large" style={{ display: \'flex\', alignItems: \'flex-end\'')).texte;
+  assert.ok(!pied.includes("position: 'relative'"), 'le pied couvre la surface : l’écart à côté de la puce ne fait plus rien');
   assert.ok(/\nconst RM_BTN = \{ position: 'relative', /.test(APP), 'RM_BTN n’est plus positionné : un clic sur « Pause » ouvrirait la fiche');
-  assert.ok(MEDIA.includes('const btn = { ...RM_BTN,') && boutons.every(b => b.includes('style={btn}')), 'un bouton de lecture ne tient plus sa position de RM_BTN : il passerait sous la surface');
+  // ASSERTION MODIFIÉE (passe bis 2, 17/10 ; M11) : la puce n'a plus d'état inerte à étaler — elle n'est dessinée que s'il y a quelque
+  // chose à reprendre — et son style est `RM_MEDIA_PUCE` tel quel, qui hérite toujours sa position de RM_BTN.
+  assert.ok(APP.includes('const RM_MEDIA_PUCE = { ...RM_BTN,') && boutons[0].includes('style={RM_MEDIA_PUCE}'), 'la puce ne tient plus sa position de RM_BTN : elle passerait sous la surface');
   // La bascule et la jauge le sont d'elles-mêmes, et nomment l'appareil aussi.
-  assert.ok(MEDIA.includes('<RmBascule on={marche} nom={nom} onToggle={basculer} />'));
-  assert.ok(MEDIA.includes("label={tr('Volume') + ' ' + nom}"));
+  assert.ok(MEDIA.includes('<RmBascule className="o-seul-large" on={v.on} nom={v.nom} onToggle={() => v.marche(!v.on)} />'));
+  assert.ok(MEDIA.includes("label={tr('Volume') + ' ' + v.nom}"));
   for (const f of ['RmBascule', 'RmJauge']) {
     // Le premier élément rendu, commentaires de bloc retirés.
     const corps = fonction(f).replace(/\/\*[\s\S]*?\*\//g, '');
@@ -167,7 +186,11 @@ test('les commandes de la carte lecteur passent au-dessus de la surface et nomme
 });
 
 test('Scènes : le curseur de luminosité ne contient plus ses boutons', () => {
-  const scenes = fonction('ScenesContent');
+  // La section, de son export jusqu'à la fonction suivante (ou la fin du module).
+  const d0 = SCENES_JSX.indexOf('\nexport default function ScenesContent(');
+  assert.ok(d0 >= 0, 'ScenesContent a disparu de scenes.jsx');
+  const f0 = SCENES_JSX.indexOf('\nfunction ', d0 + 1);
+  const scenes = SCENES_JSX.slice(d0, f0 < 0 ? undefined : f0);
   const i = scenes.indexOf("kbSlider(tr('Luminosité des scènes')");
   assert.ok(i > 0, 'le curseur de luminosité des scènes a disparu');
   const d = scenes.lastIndexOf('<', i);

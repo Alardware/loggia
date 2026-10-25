@@ -42,7 +42,8 @@ const corps = (nom) => {
  *  de son style — et ce qui la suit. */
 const FIN = "border: LISERE }}>";
 const racine = (f, nom) => {
-  const i = f.indexOf("<div className={'o-rmcard'");
+  // ASSERTION MODIFIÉE (passe téléphone, tâche 4) : la classe du thermostat et du fil pilote continue — « o-rmcard o-gabarit », la grille commune.
+  const i = f.indexOf("<div className={'o-rmcard");
   assert.ok(i >= 0, nom + ' : la carte a perdu sa classe o-rmcard');
   const j = f.indexOf(FIN, i);
   assert.ok(j > i, nom + ' : la fin de la balise de la carte ne se lit plus');
@@ -75,23 +76,34 @@ test('la fiche s’ouvre par la surface, premier enfant, nommée de ce que la ca
       `${nom} : la surface n’est plus le premier enfant de la carte — attendu ${attendu}`);
     // `nom` et `sub` sont ce que la carte ÉCRIT, sous l'icône : le nom de la
     // surface est le texte affiché, pas un résumé fait pour l'occasion.
-    assert.ok(f.includes('<div style={RM_NAME}>{nom}</div>'), nom + ' : le nom affiché n’est plus `nom`');
-    assert.ok(/<div style=\{\{ \.\.\.RM_SUB, [^\n]*\}\}>\{sub\}<\/div>/.test(f), nom + ' : l’état affiché n’est plus `sub`');
+    // ASSERTION MODIFIÉE (passe téléphone, tâche 4) : le nom et la phrase du thermostat et du fil pilote portent les classes de la grille commune ; ce qu'ils disent ne change pas.
+    assert.ok(f.includes('<div style={RM_NAME}>{nom}</div>') || f.includes('<div className="o-gab-nom" style={RM_NAME}>{nom}</div>'), nom + ' : le nom affiché n’est plus `nom`');
+    assert.ok(/<div (className="o-gab-phrase" )?style=\{\{ \.\.\.RM_SUB, [^\n]*\}\}>\{sub\}<\/div>/.test(f), nom + ' : l’état affiché n’est plus `sub`');
   }
 });
 
 test('« Ouvrir Volet salon » est le bouton qui lève le volet, et lui seul', () => {
   const volet = corps('RoomCoverCard');
-  for (const [mot, geste] of [['Ouvrir', "setOv(100); commander(hass, id, 'open');"], ['Stop', "commander(hass, id, 'stop');"], ['Fermer', "setOv(0); commander(hass, id, 'close');"]]) {
+  // ASSERTION MODIFIÉE (19/10) : chaque geste est celui que le cover ACCEPTE (`gestesCover`) — `envoyer` le fait partir, avec son avance.
+  for (const [mot, geste] of [['Ouvrir', 'envoyer(gestes.monter, 100);'], ['Stop', 'envoyer(gestes.stop, null);'], ['Fermer', 'envoyer(gestes.descendre, 0);']]) {
     assert.ok(volet.includes(`<button aria-label={tr('${mot}') + ' ' + nom} title={tr('${mot}')} onClick={(e) => { e.stopPropagation(); ${geste} }}`),
       `« ${mot} » ne commence plus par le mot de sa bulle, ne nomme plus le volet, ou n’est plus son propre geste`);
   }
   assert.equal(compter(volet, "tr('Ouvrir') + ' ' + nom"), 1, 'la carte et le bouton « Ouvrir » portent de nouveau le même nom');
-  for (const nom of ['RoomClimateCard', 'RoomPilotCard']) {
+  /* Un module fil pilote découvert n'a pas de consigne : ses − / + changent
+   * son MODE, et le disent (plan 2 du chantier Chauffage, tâche 7) ; une zone
+   * décrite à la main garde ses mots. Chacun nomme l'appareil. */
+  const PLUS_MOINS = {
+    RoomClimateCard: ["<button aria-label={tr('Baisser la consigne') + ' ' + nom} disabled={!reglable}",
+      "<button aria-label={tr('Monter la consigne') + ' ' + nom} disabled={!reglable}"],
+    RoomPilotCard: ["<button aria-label={(estModule ? tr('Mode plus froid') : tr('Baisser la consigne')) + ' ' + nom} disabled={!baisse}",
+      "<button aria-label={(estModule ? tr('Mode plus chaud') : tr('Monter la consigne')) + ' ' + nom} disabled={!monte}"],
+  };
+  for (const [nom, [moins, plus]] of Object.entries(PLUS_MOINS)) {
     const f = corps(nom);
     assert.ok(!f.includes("tr('Ouvrir')"), nom + ' : la carte s’appelle de nouveau « Ouvrir … »');
-    assert.ok(f.includes("<button aria-label={tr('Baisser la consigne') + ' ' + nom} disabled={!reglable}"), nom + ' : « − » ne nomme plus l’appareil');
-    assert.ok(f.includes("<button aria-label={tr('Monter la consigne') + ' ' + nom} disabled={!reglable}"), nom + ' : « + » ne nomme plus l’appareil');
+    assert.ok(f.includes(moins), nom + ' : « − » ne nomme plus l’appareil');
+    assert.ok(f.includes(plus), nom + ' : « + » ne nomme plus l’appareil');
   }
 });
 
@@ -108,15 +120,25 @@ test('les commandes passent au-dessus de la surface, le dessin laisse passer le 
   };
   const volet = corps('RoomCoverCard');
   assert.ok(/\nconst RM_BTN = \{ position: 'relative', /.test(APP), 'RM_BTN n’est plus positionné : chaque bouton passerait sous la surface');
-  assert.ok(!rangee(volet, "commander(hass, id, 'open')").includes("position: 'relative'"), 'la rangée Ouvrir / Stop / Fermer couvre la surface : l’écart entre deux boutons ne fait plus rien');
-  assert.equal(compter(volet, 'className="o-rmbtn" style={{ ...RM_BTN,'), 3, 'Ouvrir, Stop ou Fermer ne tient plus sa position de RM_BTN');
+  // ASSERTION MODIFIÉE (19/10) : la classe et le style de chaque bouton viennent de `bouton(g)` — RM_BTN, inerte s'il ne sait pas.
+  assert.ok(!rangee(volet, 'envoyer(gestes.monter, 100)').includes("position: 'relative'"), 'la rangée Ouvrir / Stop / Fermer couvre la surface : l’écart entre deux boutons ne fait plus rien');
+  assert.ok(volet.includes("className: 'o-rmbtn', style: { ...RM_BTN,"), 'Ouvrir, Stop ou Fermer ne tient plus sa position de RM_BTN');
+  assert.equal(compter(volet, '{...bouton(gestes.'), 3, 'Ouvrir, Stop ou Fermer ne tient plus sa position de RM_BTN');
+
+  /* La valeur entre − et + — la consigne, le mode — et son étiquette vivent
+   * dans un bloc à elles (cartes 1a de la maquette, tâche 10 bis A) : jamais
+   * positionné, un appui sur lui ouvre la fiche. */
+  const valeur = /\nconst RM_VALEUR = (\{[^\n]*\});/.exec(APP);
+  assert.ok(valeur && !valeur[1].includes('position'), 'la valeur se positionne : un appui sur elle n’ouvrirait plus la fiche');
   for (const nom of ['RoomClimateCard', 'RoomPilotCard']) {
     const f = corps(nom);
     assert.ok(!rangee(f, 'setT(-0.5)').includes("position: 'relative'"), nom + ' : la rangée repasse au-dessus de la surface, la consigne n’ouvre plus la fiche');
     assert.equal(compter(f, 'className="o-rmbtn" style={{ ...RM_BTN,'), 2, nom + ' : − ou + ne tient plus sa position de RM_BTN, il passerait sous la surface');
-    const sp = f.indexOf("<span style={{ flex: '0 0 auto', minWidth: 58,");
-    assert.ok(sp > 0 && !f.slice(sp, f.indexOf('}}>', sp)).includes('position'), nom + ' : la consigne se positionne, un appui sur elle n’ouvrirait plus la fiche');
+    // ASSERTION MODIFIÉE (passe téléphone, tâche 4) : la valeur et son étiquette vivent dans `ValeurEtiquette`, un bloc qui ne se positionne pas.
+    assert.equal(compter(f, '<ValeurEtiquette '), 1, nom + ' : la valeur a quitté son bloc, qui ne se positionne pas');
   }
+  // ASSERTION MODIFIÉE (passe téléphone, tâche 5) : les kWh d'une prise s'alignent à droite (`kwh`) ; le bloc reste RM_VALEUR, jamais positionné.
+  assert.equal(compter(corps('ValeurEtiquette'), "<div style={kwh ? { ...RM_VALEUR, textAlign: 'right' } : RM_VALEUR}>"), 1, 'le bloc de la valeur');
   // La glissière et l'interrupteur sont positionnés d'eux-mêmes.
   assert.ok(corps('RmJauge').includes("position: 'relative'"), 'la glissière n’est plus positionnée : elle passerait sous la surface');
   assert.ok(corps('RmBascule').includes("position: 'relative'"), 'l’interrupteur n’est plus positionné : il passerait sous la surface');
@@ -131,8 +153,10 @@ test('la consigne se lit telle qu’elle s’affiche', () => {
   for (const nom of ['RoomClimateCard', 'RoomPilotCard']) {
     const f = corps(nom);
     assert.ok(!f.includes("aria-label={tr('Consigne')}"), nom + ' : la consigne cache de nouveau son chiffre');
-    assert.ok(f.includes("<span className=\"o-vh\">{tr('Consigne') + ' '}</span>{consigne}</span>"), nom + ' : la consigne ne s’annonce plus « Consigne 19 °C »');
+    // ASSERTION MODIFIÉE (passe téléphone, tâche 4) : la carte passe à `ValeurEtiquette` ce que la valeur est (`dit`) ; la paire l'écrit en texte masqué devant le chiffre.
+    assert.ok(/dit=\{(parMode|estModule) \? tr\('Mode'\) : tr\('Consigne'\)\}/.test(f), nom + ' : la consigne ne s’annonce plus « Consigne 19 °C »');
   }
+  assert.ok(corps('ValeurEtiquette').includes("{dit != null && <span className=\"o-vh\">{dit + ' '}</span>}{valeur}</span>"), 'le mot masqué, puis le chiffre que l’on voit');
   // Le mot masqué sort du flux : la rangée « − 19 °C + » ne bouge pas.
   assert.match(lire('src', 'index.css'), /\.o-vh \{ position: absolute !important;/, 'le texte masqué reprend de la place dans la rangée');
 });

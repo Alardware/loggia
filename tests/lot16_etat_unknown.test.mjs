@@ -140,7 +140,21 @@ test('une seule règle : CvCard, Objets et la découverte passent par enPanne', 
   assert.ok(/^import \{[^}]*\benPanne\b[^}]*\} from '\.\/outils\.js';$/m.test(disc), 'discovery.js prend enPanne à outils.js');
   const i = app.indexOf('\nfunction CvCard(');
   const cv = app.slice(i, app.indexOf('\nfunction ', i + 1));
-  assert.ok(/const dead = enPanne\(id, st\);/.test(cv), 'CvCard : dead = enPanne(id, st)');
+  /* ASSERTION MODIFIÉE (chantier Lumières, 9 bis A, point 13) : une lumière compacte lit sa panne dans SA vue (`vl.muette`), celle de sa phrase et de sa bascule,
+   * et non dans le `hass` du parent, qui peut avoir un tic de retard. La règle reste UNE : cette vue la tient de `enPanne` (ci-dessous) ; tout le reste de CvCard passe
+   * toujours par `enPanne(id, st)`. */
+  // ASSERTION MODIFIÉE (chantier Capteurs, tâche 5) : une mesure compacte lit sa panne dans SA vue (`vm.muette`), comme une lumière.
+  // ASSERTION MODIFIÉE (chantier Médias, tâche 5 ; M17) : un lecteur compact lit sa panne dans SA vue (`vd.indispo`), celle de sa phrase et de sa teinte ; cette vue la tient de `lireLecteur`, qui la tient d'`enPanne` (ci-dessous).
+  // ASSERTION MODIFIÉE (chantier IoT, tâche 6, 18/10 ; I12) : un robot compact lit sa panne dans SA vue (`vr.panne`), celle de sa phrase et de ses puces ; cette vue la tient d'`enPanne` (ci-dessous).
+  assert.ok(/const dead = vl \? vl\.muette : vm \? vm\.muette : vd \? vd\.indispo : vr \? vr\.panne : enPanne\(id, st\);/.test(cv), 'CvCard : dead = vl ? vl.muette : vm ? vm.muette : vd ? vd.indispo : vr ? vr.panne : enPanne(id, st)');
+  const r = app.indexOf('\nfunction useVueRobot(');
+  assert.ok(/const panne = enPanne\(id, st\);/.test(app.slice(r, app.indexOf('\n}\n', r))), 'la vue d’un robot : panne = enPanne(id, st)');
+  const lecteur = readFileSync(new URL('../src/lecteur.js', import.meta.url), 'utf8');
+  assert.ok(/^import \{ enPanne \} from '\.\/outils\.js';$/m.test(lecteur) && lecteur.includes('const vivant = (id, st) => !enPanne(id, st);'), 'la lecture d’un lecteur : vivant = !enPanne(id, st)');
+  const j = app.indexOf('\nfunction useVueLumiere(');
+  assert.ok(/const muette = enPanne\(id, st\);/.test(app.slice(j, app.indexOf('\n}\n', j))), 'la vue d’une lumière : muette = enPanne(id, st)');
+  const k = app.indexOf('\nfunction vueMesure(');
+  assert.ok(/const muette = enPanne\(id, st\);/.test(app.slice(k, app.indexOf('\n}\n', k))), 'la vue d’une mesure : muette = enPanne(id, st)');
   assert.ok(!/=== 'unknown'/.test(cv), 'plus de « unknown » en dur dans CvCard');
   assert.ok(/absent: type === 'entite' \? enPanne\(o\.id, st\) : false,/.test(app), 'Objets : « entités absentes »');
 });

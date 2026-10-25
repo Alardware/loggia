@@ -7,6 +7,7 @@
  * dashboard lui passe des objets deja lus, les tests aussi. */
 
 import { comparerTextes } from './i18n.js';
+import { coverActif } from './voletecran.js';
 
 /** Les filtres, dans l'ordre des puces — « Tous » et « Favoris » a part.
  *
@@ -38,16 +39,22 @@ const CLASSES_PRESENCE = ['motion', 'occupancy', 'presence'];
  *
  * « Capteurs » recoit la presence et les plantes — une plante EST un bouquet
  * de capteurs.
+ *
+ * « Que des prises » (chantier Prises, P1, 13/10) : une prise est un switch
+ * qui MESURE — `estPrise`, la règle de prises.js. Les autres switch rejoignent
+ * IoT. Un `input_boolean` n'est pas découvert : il n'arrive dans Objets que
+ * si on l'ajoute à la main, et il est alors rangé sous IoT.
  */
-export function filtresObjet({ domaine, type = 'entite', estLumiere = false, epingle = false }) {
-  const dom = type === 'zone' ? 'climate' : type === 'feeder' ? 'feeder' : type === 'plant' ? 'plant' : String(domaine || '');
+export function filtresObjet({ domaine, type = 'entite', estLumiere = false, estPrise = false, epingle = false }) {
+  // Un groupe de capteurs binaires (chantier Capteurs, C20) est sous « Capteurs », comme ses membres l'étaient.
+  const dom = type === 'zone' ? 'climate' : type === 'feeder' ? 'feeder' : type === 'plant' ? 'plant' : type === 'groupe' ? 'groupe' : String(domaine || '');
   const principal = dom === 'light' || (dom === 'switch' && estLumiere) ? 'lumieres'
     : dom === 'cover' ? 'volets'
       : dom === 'climate' || dom === 'water_heater' ? 'chauffage'
-        : dom === 'switch' || dom === 'input_boolean' ? 'prises'
+        : dom === 'switch' && estPrise ? 'prises'
           : dom === 'media_player' ? 'multimedia'
-            : DOMAINES_IOT.indexOf(dom) >= 0 ? 'iot'
-              : dom === 'binary_sensor' || dom === 'sensor' || dom === 'plant' ? 'capteurs'
+            : DOMAINES_IOT.indexOf(dom) >= 0 || dom === 'switch' || dom === 'input_boolean' ? 'iot'
+              : dom === 'binary_sensor' || dom === 'sensor' || dom === 'plant' || dom === 'groupe' ? 'capteurs'
                 : null;
   const f = principal ? [principal] : [];
   if (epingle) f.push('favoris');
@@ -69,11 +76,8 @@ export function objetActif({ domaine, etat, attributs = {} }) {
     if (action) return action !== 'off' && action !== 'idle';
     return s !== 'off';
   }
-  if (dom === 'cover') {
-    const pos = attributs.current_position;
-    if (typeof pos === 'number') return pos > 0;
-    return s === 'open' || s === 'opening';
-  }
+  // Le verdict des cartes (V12) : un volet qui bute à 1 % est fermé, pas actif.
+  if (dom === 'cover') return coverActif({ state: s, attributes: attributs || {} });
   if (dom === 'vacuum') return s === 'cleaning';
   if (dom === 'lawn_mower') return s === 'mowing';
   if (dom === 'valve') return s === 'open';
@@ -81,16 +85,38 @@ export function objetActif({ domaine, etat, attributs = {} }) {
   return s === 'on';
 }
 
-/** Les chiffres de tete : appareils, pieces distinctes, actifs, absents. */
+/* Ce qui « tourne », pour l'en-tête d'Objets › IoT (chantier IoT, I14 ; passe bis du 18/10, point 9) : une liste FERMÉE — un robot
+ * au travail, un ventilateur ou un humidificateur allumé. Le filtre IoT range aussi les interrupteurs qui ne mesurent pas et les
+ * `input_boolean` : allumés, ils ne disent pas qu'un appareil travaille. Et jamais une vanne ouverte : l'eau qui coule n'est pas
+ * un appareil qui tourne. */
+const EN_MARCHE_IOT = { vacuum: 'cleaning', lawn_mower: 'mowing', fan: 'on', humidifier: 'on' };
+/** Cet appareil d'Objets › IoT est-il « en marche » ? */
+export function enMarcheIot(domaine, etat) {
+  const voulu = EN_MARCHE_IOT[String(domaine || '')];
+  return !!voulu && String(etat == null ? '' : etat).toLowerCase() === voulu;
+}
+
+/** Ce qu'une carte pèse dans les chiffres d'Objets : un groupe de capteurs compte ses MEMBRES (chantier Capteurs, C20) — le
+ *  compte ne baisse pas quand quatre portes deviennent une carte ; toute autre carte compte un. */
+export const poidsObjet = (o) => (o && Array.isArray(o.membres) ? o.membres.length : 1);
+
+/** Le compte d'une puce : les objets d'un filtre (« tous » : tous), à leur poids. */
+export function compteObjets(objets, filtre) {
+  return (objets || []).filter(o => filtre === 'tous' || (o.filtres || []).indexOf(filtre) >= 0).reduce((n, o) => n + poidsObjet(o), 0);
+}
+
+/** Les chiffres de tete : appareils, pieces distinctes, actifs, absents. Un groupe compte ses membres : ceux qui détectent sont
+ *  actifs, ceux qui ne répondent plus, absents (C20). */
 export function statsObjets(objets) {
   const pieces = new Set();
   let actifs = 0, absentes = 0;
   (objets || []).forEach(o => {
     if (o.piece) pieces.add(String(o.piece));
+    if (Array.isArray(o.membres)) { actifs += Number(o.actifsMembres) || 0; absentes += Number(o.muetsMembres) || 0; return; }
     if (o.actif) actifs += 1;
     if (o.absent) absentes += 1;
   });
-  return { appareils: (objets || []).length, pieces: pieces.size, actifs, absentes };
+  return { appareils: compteObjets(objets, 'tous'), pieces: pieces.size, actifs, absentes };
 }
 
 /**
@@ -99,8 +125,8 @@ export function statsObjets(objets) {
  */
 export function pucesObjets(objets) {
   const n = {};
-  (objets || []).forEach(o => (o.filtres || []).forEach(f => { n[f] = (n[f] || 0) + 1; }));
-  const out = [{ id: 'tous', n: (objets || []).length }];
+  (objets || []).forEach(o => (o.filtres || []).forEach(f => { n[f] = (n[f] || 0) + poidsObjet(o); }));
+  const out = [{ id: 'tous', n: compteObjets(objets, 'tous') }];
   if (n.favoris) out.push({ id: 'favoris', n: n.favoris });
   OBJ_ORDRE.forEach(f => { if (n[f]) out.push({ id: f, n: n[f] }); });
   return out;
@@ -128,6 +154,7 @@ export function domaineEdition(cle, { estLumiere = false, classe = '' } = {}) {
   const k = String(cle || '');
   if (k.indexOf('zone:') === 0) return 'chauffage';
   if (k.indexOf('plant:') === 0) return 'plante';
+  if (k.indexOf('groupe:') === 0) return 'capteur';
   if (k === 'obj:feeder') return 'animaux';
   if (k.indexOf('sect:') === 0) return 'titre';
   if (k === 'carte:presence') return 'presence';
@@ -172,13 +199,19 @@ export function joursDeReserve(grammes, repas) {
  * (froid / ok / chaud), la lumiere (faible / ok / plein), l'engrais (peu / ok
  * / trop). `null` quand la mesure manque. `presse` liste ce qui presse.
  */
-export function verdictsPlante({ hum = null, temp = null, lux = null, cond = null } = {}) {
-  const v = (x, bas, haut, mots) => (x == null || isNaN(x)) ? null : x < bas ? mots[0] : x > haut ? mots[2] : mots[1];
+/* Les reperes, la SEULE table d'une plante (chantier Capteurs, C30) : le sol de 15 a 70 %, 10 a 32 °C, 500 a 20 000 lx,
+ * 350 a 2 000 µS/cm. La fiche en ecrit la plage (« Ideal : 15 a 70 % ») et en tire ses conseils. */
+export const PLAGES_PLANTE = { hum: [15, 70], temp: [10, 32], lux: [500, 20000], cond: [350, 2000] };
+/* La LUMIÈRE ne se juge pas à l'instant (audit du 19/10, M6) : la nuit, toutes les plantes passaient « Lumière faible ». `luxJour`
+ * (lirePlante, App.jsx) : le maximum du jour s'il est connu, sinon le lux du moment quand le soleil est levé, sinon null — la
+ * lumière ne presse pas. Absent (une plante d'exemple), le lux du moment. */
+export function verdictsPlante({ hum = null, temp = null, lux = null, cond = null, luxJour } = {}) {
+  const v = (x, [bas, haut], mots) => (x == null || isNaN(x)) ? null : x < bas ? mots[0] : x > haut ? mots[2] : mots[1];
   const out = {
-    hum: v(hum, 15, 70, ['sec', 'ok', 'humide']),
-    temp: v(temp, 10, 32, ['froid', 'ok', 'chaud']),
-    lux: v(lux, 500, 20000, ['faible', 'ok', 'plein']),
-    cond: v(cond, 350, 2000, ['peu', 'ok', 'trop']),
+    hum: v(hum, PLAGES_PLANTE.hum, ['sec', 'ok', 'humide']),
+    temp: v(temp, PLAGES_PLANTE.temp, ['froid', 'ok', 'chaud']),
+    lux: v(luxJour === undefined ? lux : luxJour, PLAGES_PLANTE.lux, ['faible', 'ok', 'plein']),
+    cond: v(cond, PLAGES_PLANTE.cond, ['peu', 'ok', 'trop']),
   };
   const presse = [];
   if (out.hum === 'sec') presse.push('arroser');
@@ -187,4 +220,3 @@ export function verdictsPlante({ hum = null, temp = null, lux = null, cond = nul
   out.presse = presse;
   return out;
 }
-

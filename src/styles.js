@@ -46,3 +46,11 @@ export const puce = (on) => ({ padding: '6px 12px', borderRadius: 10, cursor: 'p
  * (lot 15 de l’audit du 03/10). L'écart reste à découvert ; le choix — bleu
  * plein, texte blanc — ne se recopie plus. */
 export const puceHaute = (on) => ({ ...puce(on), padding: '7px 12px', ...(on ? null : { color: 'var(--o-text1)' }) });
+
+/* Un VRAI titre (`<h2>`) depuis le 20/09 : un lecteur d'écran saute de section
+ * en section par les titres, et un bloc stylé n'en est pas un. `margin` et
+ * `fontWeight` annulent ce que le navigateur donne à un h2 — rien ne bouge à l'œil.
+ *
+ * Il vivait dans App.jsx ; la section des ambiances Hue, chargée à la
+ * demande depuis le 11/10 (scenes.jsx), le partage. */
+export const sectionTitle = { margin: 0, fontWeight: 400, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' };

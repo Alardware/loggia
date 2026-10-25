@@ -60,7 +60,11 @@ test('l’écran d’avant la connexion garde ses valeurs de vitrine', () => {
 test('la vue Pièce, la fiche et l’Accueil ne prêtent plus rien du modèle', () => {
   assert.ok(!app.includes(': base.temp') && !app.includes(': base.hum'), 'la vue Pièce reprend encore les valeurs du modèle');
   assert.ok(app.includes("temp: lv && lv.temp != null ? dec(lv.temp, 1) + '°' : null, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : null,"), 'une mesure absente de la vue Pièce ne reste pas null');
-  const fiche = bloc('function RoomComfortModal(', NL + '}');
+  // ASSERTION MODIFIÉE (chantier Capteurs, tâche 1) : la fiche de confort est chargée à la demande, de son propre fichier.
+  const fc = readFileSync(join(RACINE, 'src', 'ficheconfort.jsx'), 'utf8');
+  const d = fc.indexOf('export default function RoomComfortModal(');
+  assert.ok(d >= 0, 'la fiche de confort introuvable');
+  const fiche = fc.slice(d, fc.indexOf(NL + '}', d));
   assert.ok(fiche.includes('const mesures = mesuresFiche(live, piece);') && fiche.includes('temp: versCelsius(mesures.temp, uniteT),') && fiche.includes('hum: mesures.hum,') && fiche.includes('co2: mesures.co2,'), 'la fiche ne passe pas par mesuresFiche');
   assert.ok(!fiche.includes('parseNum(piece.'), 'la fiche relit encore les chaînes de la pièce');
   assert.ok(app.includes("{ ...p, temp: '—', hum: '—', badge: null, live: { temp: null, hum: null, co2: null } }"), 'une pièce sans capteurs de l’Accueil garde les valeurs du modèle');

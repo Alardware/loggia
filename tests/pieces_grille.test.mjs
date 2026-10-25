@@ -150,7 +150,8 @@ test('le câblage : l’Accueil envoie la pièce et sa grille en UN lot, et rien
   assert.ok(sauver.includes('cfgSet({ loggia_accueil: n, ...avec })'), 'la grille et la pièce repartiraient en deux envois');
   assert.ok(sauver.includes('if (pris !== false) return;') && sauver.includes('setAccL(cur => (cur === n ? avant : cur));'),
     'refusée, la grille resterait à l’écran — et le geste suivant la réécrirait dans le commun');
-  assert.equal(corps('const saveGrille = (g, avec) => {').split(', avec);').length - 1, 2, 'un format perd le lot en route');
+  // Un seul passage depuis l'ADR 0221, pour l'ordinateur comme pour un format.
+  assert.ok(APP.includes('const saveGrille = (g, avec) => saveAccL(poserGrille(accL, formatGrille, g, appareilAcc), avec);'), 'un format perd le lot en route');
   for (const [geste, appel] of [
     ['const enregistrerPieceIci = (', 'saveGrille(grilleAvecPiece(grille, avant, piece.room, compacte), lotPiece(avant, piece));'],
     ['const retirerPiece = (', 'saveGrille(grilleSansPiece(grille, nom), lotSansPiece(nom));'],

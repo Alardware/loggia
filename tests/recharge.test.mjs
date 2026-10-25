@@ -191,6 +191,51 @@ test('les modules à la demande : chacun derrière le rechargement, les décors 
     ['ViewEntSheet', './views/parametres.jsx', false],
     ['FicheRobotContent', './ficherobot.jsx', false],
     ['FicheDistributeurContent', './fichedistributeur.jsx', false],
+    // La fiche d'un chauffage (plan 2 du chantier Chauffage, tâche 8).
+    ['FicheChauffageContent', './fichechauffage.jsx', false],
+    // La barre « Maison » d'Objets › Chauffage (plan 2 du chantier Chauffage, tâche 11).
+    ['BarreMaison', './barremaison.jsx', false],
+    // Les ambiances Hue sous les scénarios (11/10, tâche 6 bis du chantier Chauffage).
+    ['ScenesContent', './scenes.jsx', false],
+    // La feuille de l'agenda (plan 2 du chantier Prises, tâche 2 : la borne).
+    ['FeuilleAgenda', './feuilleagenda.jsx', false],
+    // La fiche d'un volet (plan 2 du chantier Volets, tâche 10).
+    ['FicheVoletContent', './fichevolet.jsx', false],
+    // La fiche d'une prise (plan 2 du chantier Prises, tâche 10).
+    ['FichePriseContent', './ficheprise.jsx', false],
+    // La fiche d'une lumière (plan 2 du chantier Lumières, tâche 2 : la borne).
+    ['FicheLumiereContent', './fichelumiere.jsx', false],
+    // La feuille du Calendrier (audit des lumières, 19/10 : la borne). ASSERTION MODIFIÉE (boot, 19/10) : un module de plus.
+    ['FeuilleCalendrierContent', './feuillecalendrier.jsx', false],
+    // Les fiches d'un capteur et la fiche de confort d'une pièce (plan 1 du chantier Capteurs, tâche 1 : la borne).
+    ['FicheCapteurContent', './fichecapteur.jsx', false],
+    ['FicheBinaireContent', './fichecapteur.jsx', false],
+    ['FicheConfortContent', './ficheconfort.jsx', false],
+    // La feuille d'un lecteur (passe téléphone, tâche 1 : la borne).
+    ['FicheMediaContent', './fichemedia.jsx', false],
+    // L'en-tête d'Objets › Volets (plan 2 du chantier Volets, tâche 9).
+    ['EnteteVolets', './entetevolets.jsx', false],
+    // L'en-tête d'Objets › Prises (plan 2 du chantier Prises, tâche 9).
+    ['EntetePrises', './enteteprises.jsx', false],
+    // L'en-tête d'Objets › Lumières (plan 2 du chantier Lumières, tâche 7).
+    ['EnteteLumieres', './entetelumieres.jsx', false],
+    // L'en-tête d'Objets › Multimédia (chantier Médias, tâche 8 ; M15). ASSERTION MODIFIÉE : un module de plus.
+    ['EnteteMedias', './entetemedias.jsx', false],
+    // Objets › Capteurs en sections (plan 1 du chantier Capteurs, tâche 7).
+    ['SectionsCapteurs', './capteurssections.jsx', false],
+    // Les popups des groupes de capteurs (chantier Capteurs, étapes 2 et 3, tâche 5).
+    ['FicheGroupeContent', './fichegroupe.jsx', false],
+    // La fiche d'une plante (chantier Capteurs, étapes 2 et 3, tâche 10 : C31, C34).
+    ['FichePlanteContent', './ficheplante.jsx', false],
+    // Les aides du mode enfant sur la carte d'un lecteur (passe bis du chantier Mode enfant, 17/10, point 14) : UN import, la pièce par `quoi` ; monté sous profil seulement.
+    // ASSERTION MODIFIÉE (passe bis 2 du 17/10, point 4) : un DÉCOR de carte, comme `OrbeMini` et `WeatherGL` — `false` jetait quand le morceau manquait après le
+    // rechargement unique, et aucune barrière ne sépare la carte de la vue (« Cette vue n'a pas pu s'afficher » pour toute maison sous profil). Introuvable, il ne rend rien.
+    ['CarteEnfant', './carteenfant.jsx', true],
+    // Ce que l'Accueil n'affiche pas au démarrage (plan 2 du chantier Volets, tâche 6 : la borne).
+    ['AmbientOverlay', './ecranveille.jsx', true],
+    ['PinModal', './pinmodal.jsx', false],
+    // ASSERTION MODIFIÉE (boot, 19/10) : `NouvelEvenement` a quitté App.jsx avec la feuille du Calendrier, sa seule usagère ici
+    // (feuillecalendrier.jsx, épinglé plus bas) ; le rail a le sien dans feuilleagenda.jsx.
     ['AssistantSheet', './views/assistant.jsx', false],
     ['OrbeMini', './orbe.jsx', true],
     ['Onboarding', './Onboarding.jsx', false],
@@ -203,8 +248,17 @@ test('les modules à la demande : chacun derrière le rechargement, les décors 
   }
   assert.ok(lire('src', 'ficherobot.jsx').includes(`const VacPlan = lazyRecharge(() => import('./vacplan.jsx'));`),
     'le plan du robot est chargé par lazyRecharge');
+  assert.ok(lire('src', 'feuilleagenda.jsx').includes(`const NouvelEvenement = lazyRecharge(() => import('./formevenement.jsx')`),
+    'le formulaire d’un rendez-vous du rail est chargé par lazyRecharge');
+  // ASSERTION MODIFIÉE (boot, 19/10) : le formulaire de la feuille du Calendrier, dans son module.
+  assert.ok(lire('src', 'feuillecalendrier.jsx').includes(`const NouvelEvenement = lazyRecharge(() => import('./formevenement.jsx')`),
+    'le formulaire d’un rendez-vous de la feuille du Calendrier est chargé par lazyRecharge');
   assert.ok(lire('src', 'views', 'assistant.jsx').includes(`const Orbe = lazyRecharge(() => import('../orbe.jsx'), { decor: true });`),
     'l’orbe de la popup est un décor, comme la miniature');
+  // La feuille « Réglages parent » du mode enfant (chantier Mode enfant, tâche 5 ; E19) : chargée par la fiche d'un lecteur, à l'ouverture seulement.
+  // ASSERTION MODIFIÉE (passe bis du 17/10, point 10) : son CONTENU seul est à la demande ; la coquille `FicheEnfant` (le BottomSheet) vit dans fichemedia.jsx.
+  assert.ok(lire('src', 'fichemedia.jsx').includes(`const ContenuEnfant = lazyRecharge(() => import('./ficheenfant.jsx'));`),
+    'le contenu de la feuille des réglages du mode enfant est chargé par lazyRecharge');
 });
 
 test('l’amorce écoute vite:preloadError avant le premier rendu', () => {

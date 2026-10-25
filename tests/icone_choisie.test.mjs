@@ -13,9 +13,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const app = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
 const etat = readFileSync(join(RACINE, 'src', 'state.js'), 'utf8');
 
 test('le choix se range dans la maison, et voyage avec elle', () => {
@@ -46,7 +47,7 @@ test('le choix passe devant la devinette, sur TOUTES les cartes', () => {
   assert.ok(r.includes('if (mienne) return mienne;'), 'le choix ne rend pas la main');
   // Les deux endroits qui court-circuitaient le resolveur.
   assert.ok(app.includes("const ico = dom === 'switch' ? (iconeChoisie(id) || (cvEstLumiere(id) ? 'bulb' : null))"), 'une prise gardait son dessin de prise malgre le choix');
-  assert.ok(app.includes("const ico = iconeChoisie(id) || (dom === 'camera' ? 'camera' : carteDePrise ? tp.ico : cvIcoEntite(dom, id, st, nom));"),
+  assert.ok(app.includes("const ico = iconeChoisie(id) || (dom === 'camera' ? 'camera' : cvIcoEntite(dom, id, st, nom));"),
     'la carte d’objet court-circuitait le choix — camera, ou glyphe de l’appareil au bout de la prise');
 });
 
@@ -129,14 +130,22 @@ test('toutes les familles de cartes demandent l’icône choisie', () => {
    * se voyait nulle part. */
   const g = app.slice(app.indexOf('const GlypheCarte = '), app.indexOf('\n};', app.indexOf('const GlypheCarte = ')));
   assert.ok(g.includes('const mien = iconeChoisie(id);'), 'le glyphe commun ne lit plus le choix');
-  assert.ok(g.includes('return mien ? <Ico name={mien} size={size} anime={anime} /> : children;'), 'le dessin d’origine n’est plus un simple défaut');
+  // ASSERTION MODIFIÉE (25/10, sa demande) : l'icône choisie peut suivre l'état de l'appareil (`selon`) — un volet roulant.
+  assert.ok(g.includes('return mien ? <Ico name={selon ? selon(mien) : mien} size={size} anime={anime} /> : children;'), 'le dessin d’origine n’est plus un simple défaut');
   // Les cinq familles qui dessinaient le leur.
   for (const [quoi, bout] of [
-    ['la lumière', '<GlypheCarte id={id} size={19}><LightIcon'],
+    // ASSERTION MODIFIÉE (chantier Lumières, tâche 5) : la glyphe de la carte d'une lumière passe à 17 px (§ 3.1), comme celle d'une prise.
+    // ASSERTION MODIFIÉE (chantier Lumières, 9 bis A, point 9) : toute lumière porte la même ampoule (`Fi i="bulb"`), quel que soit son nom, au lieu d'un dessin par type (`LightIcon`) ; l'icône choisie passe toujours devant (`GlypheCarte`).
+    ['la lumière', '<GlypheCarte id={id} size={17}><Fi i="bulb"'],
     ['l’aspirateur et la tondeuse', "<GlypheCarte id={id} size={17}><Ico name={dom === 'vacuum'"],
-    ['le climat', "<GlypheCarte id={id} size={17}><Fi i={heating ?"],
+    // Le thermostat et le fil pilote (cartes 1a) : plus de flamme à la chauffe, un seul glyphe chacun.
+    ['le climat', '<GlypheCarte id={id} size={17}><Fi i="thermometer-half"'],
+    ['le fil pilote', "<GlypheCarte id={'zone:' + zone.id} size={17}><Fi i=\"heat\""],
     ['le volet', "<GlypheCarte id={id} size={18}><Ico name={(a.device_class === 'garage'"],
-    ['le média', "<GlypheCarte id={id} size={17}><Fi i={a.device_class === 'tv'"],
+    // La carte du volet (cartes 1a) : son icône choisie suit l'état (25/10).
+    ['la carte du volet', '<GlypheCarte id={id} size={17} selon={(n) => iconeSelonEtat(n, vue)}><Fi i={vue.glyphe}'],
+    // ASSERTION MODIFIÉE (chantier Médias, tâche 4 ; M5) : la carte d'un lecteur est celle de sa maquette ; son glyphe (écran ou enceinte) vient de `glypheLecteur` (lecteur.js), l'icône choisie toujours devant.
+    ['le média', '<GlypheCarte id={id} size={17}><Fi i={glypheLecteur(l)}'],
   ]) assert.ok(app.includes(bout), quoi + ' : la carte ignore de nouveau l’icône choisie');
   // Et l'écran se redessine : le choix ne passe par aucun état de React.
   assert.ok(app.includes('{ declarerIcone(brut, monIcone); if (ed.rafraichir) ed.rafraichir(); }'), 'le choix reste invisible jusqu’au rechargement');
@@ -150,7 +159,8 @@ test('un dessin ne bouge que là où quelque chose travaille', () => {
   // 16 a 19 unites sur 24, la ou un glyphe de la fonte remplit son cadratin.
   assert.ok(ico.includes('const ECHELLE_DESSIN = 1.18;'), 'les dessins reviennent a la taille ou ils paraissaient trop petits');
   assert.ok(ico.includes("OUVRE_GRANDI + DESSINS[name] + '</g>'"), 'le tracé n’est plus agrandi dans sa boîte');
-  assert.ok(app.includes('<Ico name={ico} size={17} anime={priseVive} />'), 'la carte de prise n’anime plus son appareil quand il travaille');
+  // La carte d'une prise (chantier Prises) : l'icône choisie d'abord, sinon le glyphe de son appareil, immobile (P11).
+  assert.ok(app.includes('<GlypheCarte id={id} size={17}>{tp.ico ? <Ico name={tp.ico} size={17} /> : <PlugIcon size={17} />}</GlypheCarte>'), 'la carte de prise n’écoute plus l’icône choisie');
   const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
   assert.ok(css.includes('.o-ico-fige svg *, .o-ico-fige * { animation: none !important; }'), 'la règle qui fige un dessin a disparu');
   assert.ok(css.includes('[style*="animation:o-ic-"] { animation: none !important; }'), 'les dessins ignorent prefers-reduced-motion');
@@ -198,10 +208,14 @@ test('la fiche cherche, range par famille, et se souvient des dernières', () =>
   assert.ok(f.includes("tr('Familles précédentes')") && f.includes("tr('Familles suivantes')"), 'la bande des familles n’a pas ses deux flèches');
   assert.ok(f.includes("gridTemplateColumns: 'repeat(auto-fill, minmax(52px, 1fr))'"), 'la grille ne remplit plus la largeur qu’elle a');
   assert.ok(f.includes('maxHeight: 244, overflowY: \'auto\''), 'la grille ne défile plus chez elle : elle pousse la fiche hors de l’écran');
-  for (const [quoi, bout] of [
-    ['une pièce', '<ChoixIcone valeur={icone} onChoisir={setIcone} suggerees={ICONES_PIECE}'],
-    ['un scénario', '<ChoixIcone valeur={s.icone} onChoisir={(ic) => maj({ icone: ic })} suggerees={ICONES_SCENARIO} />'],
-  ]) assert.ok(app.includes(bout), 'la fiche d’' + quoi + ' garde l’ancienne grille');
+  // ASSERTION MODIFIÉE (audit du 19/10) : la fiche d'une pièce est chargée à la demande (fichepiece.jsx) ; App.jsx lui passe `ChoixIcone`.
+  const fp = readFileSync(new URL('../src/fichepiece.jsx', import.meta.url), 'utf8');
+  assert.ok(app.includes('const BRIQUES_PIECE = { habillagePiece, TEINTES_PIECE, ICONES_PIECE, ChoixIcone, FicheRangee, RmBascule };'), 'la fiche d’une pièce reçoit le sélecteur');
+  for (const [quoi, code, bout] of [
+    ['une pièce', fp, '<ChoixIcone valeur={icone} onChoisir={setIcone} suggerees={ICONES_PIECE}'],
+    // ASSERTION MODIFIÉE (contre-relecture du lot 3 des capteurs) : la fiche d'un scénario est chargée à la demande — fichescenario.jsx.
+    ['un scénario', readFileSync(new URL('../src/fichescenario.jsx', import.meta.url), 'utf8'), '<ChoixIcone valeur={s.icone} onChoisir={(ic) => maj({ icone: ic })} suggerees={ICONES_SCENARIO} />'],
+  ]) assert.ok(code.includes(bout), 'la fiche d’' + quoi + ' garde l’ancienne grille');
 
   /* La recherche cherche dans TOUTE la bibliothèque, et passe devant la
    * famille ouverte : on tape « lave » sans se demander sous quel onglet le
@@ -230,4 +244,11 @@ test('l’aperçu de la fiche montre le dessin en mouvement, et ne commande rien
   assert.ok(f.includes('<Ico name={icoApercu} size={24} anime={apercuAllume} />'), 'l’aperçu ne s’anime pas');
   assert.ok(f.includes('const icoApercu = monIcone || (domActuel && domActuel.ico) || null;'), 'sans icône choisie, l’aperçu ne retombe pas sur celle du domaine');
   assert.ok(!f.includes('onToggle={() => setApercuAllume') || !f.includes('hass.callService'), 'l’aperçu commande la maison');
+});
+
+test('passe téléphone, tâche 3 : la carte d’une lumière porte l’icône choisie sur ses DEUX plaques — le dessin de la carte large, l’interrupteur de la carte étroite', () => {
+  const i = app.indexOf('function RoomLightCard(');
+  const carte = app.slice(i, app.indexOf('\n}\n', i));
+  assert.equal(carte.split('<GlypheCarte id={id} size={17}><Fi i="bulb" size={17} /></GlypheCarte>').length - 1, 2, 'deux plaques, le même glyphe, que l’icône choisie remplace sur l’une comme sur l’autre');
+  assert.ok(carte.includes('<PlaqueBascule on={v.on}') && carte.includes('<span className="o-seul-large" style={RM_ICO(fond, encre)}>'), 'la plaque-interrupteur de la carte étroite et le dessin de la carte large');
 });

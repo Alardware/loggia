@@ -67,7 +67,10 @@ async function rejetsPendant(geste) {
     return p;
   };
   try {
-    const rendu = geste();
+    /* ASSERTION MODIFIÉE (passe bis de l'étape 2 IoT, 19/10 ; point C) : `commanderService` rend désormais la PROMESSE de l'appel,
+     * réglée quand Home Assistant a répondu — à ce qui a été envoyé par la route vérifiée, à `null` par la route directe ou sur un
+     * échec ; `commander` garde sa valeur synchrone. On attend l'une comme l'autre. */
+    const rendu = await geste();
     // `runPlan` est asynchrone : la relance part quelques micro-tâches plus tard.
     await new Promise(r => setImmediate(r));
     return { rendu, vus };

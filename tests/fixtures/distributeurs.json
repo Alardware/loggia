@@ -10,11 +10,11 @@
     "QUANTITÉ ÉCRITE : une portion = UN PAS de l'entité. valeur(n) = min(max, max(min, n × pas)) ; pas absent = 1, min absent = 1, max absent = pas de plafond. Écrire « 2 » dans un number en grammes au pas de 20 (PetKit) serait refusé ou distribuerait 2 g. attendu.une_portion = valeur(1), ce qu'envoie le bouton de la carte. Un text reçoit la valeur en chaîne, sans bornes connues. Un bouton, un select START ou un script : quantite = false ; un bouton ou un select partent UNE fois, quelle que soit n ; le script reçoit variables {portions: n}.",
     "PROGRAMME : {source, connu, presente, active, lisible, mode, note, repas}. source ∈ petlibro | petkit | aqara | tuya | tuya_local | petsafe | null. connu = false quand on ne PEUT pas savoir si l'appareil distribue seul (le formulaire du planning Loggia porte alors sa mise en garde fixe). presente = la source existe ; active = elle distribue (voir ADR 0155). Un programme ILLISIBLE est presente et NON active : il bloque l'ajout d'un repas Loggia, il n'allume pas « deux sources », il ne retient pas un repas Loggia déjà là. mode ∈ manuel | programme | null. note ∈ capteur_diagnostic | mode_manuel | tenu_par_appareil | a_lire | non_lisible | null.",
     "REPAS d'un programme : {heure 'HH:MM', jours [0 = lundi … 6], portions (valeur de l'appareil, telle quelle), actif, etat_jour (Petlibro seulement, sinon null)}, triés par heure puis par premier jour.",
-    "ANOMALIES : binary_sensor seulement. Type par la clé (CLES_ANOMALIE_BAS, CLES_ANOMALIE_BLOQUE) quelle que soit la classe ; sinon, classe problem exigée : MOTIF_BAS, puis MOTIF_BLOQUE, puis « autre ». {entity_id, type: bas | bloque | autre, actif: etat == 'on'}, triées par entity_id.",
+    "ANOMALIES : binary_sensor seulement. Type par la clé (CLES_ANOMALIE_BAS, CLES_ANOMALIE_BLOQUE) quelle que soit la classe ; sinon, classe problem exigée : MOTIF_BAS, puis MOTIF_BLOQUE, puis « autre » ; sinon (passe bis de l'étape 2, 19/10) un suffixe MOTIF_ANOMALIE_SANS_CLASSE — le `_error` qu'un Aqara publie sous Zigbee2MQTT, SANS device_class — vaut « autre » : l'ABSENCE de classe est exigée (passe bis 2, 19/10 : un `_link_error` de classe connectivity à « on » dit « connecté », pas « problème » ; une classe qui n'est pas problem n'est jamais une anomalie). {entity_id, type: bas | bloque | autre, actif: etat == 'on'}, triées par entity_id.",
     "CONSOMMABLES : sensor seulement. Par la clé (CLES_CONSOMMABLE), sinon unité 'd' + MOTIF_CONSOMMABLE (jours), sinon unité '%' + MOTIF_CONSOMMABLE_PCT (pourcentage). Le bouton de remise à zéro du même rôle (CLES_RESET, MOTIF_RESET). {entity_id, role: deshydratant | filtre | nettoyage, jours, pct, reset}, triés par entity_id.",
     "EN LIGNE : {mort, raison}, raison dans cet ordre : 'commande' (entité de commande unavailable ou absente — 'unknown' est l'état normal d'un select feed de Z2M, pas une panne), 'connectivite' (binary_sensor de classe connectivity ou de clé online à 'off'), 'reservoir' (réservoir désigné unavailable ou absent ; 'unknown' est un réservoir SANS VALEUR, pas une panne : health.js sépare les deux, et la carte d'avant le 05/10 ne mettait le liseré qu'à unavailable ou absent). Sans commande, le premier critère ne s'applique pas.",
     "AUTOMATISATIONS : le bloc `automatisations` sert à automatisations.py (T1) et aux réponses fabriquées des tests d'écran. `references` = ce que HA range dans referenced_entities / referenced_devices de l'AUTOMATISATION (déclencheurs + conditions + actions) : c'est ce que voient automations_with_entity / automations_with_device. `action_script` = la même chose pour les seules ACTIONS (null : UnavailableAutomationEntity, repli sur raw_config). Un appareil trouvé dans action_script.referenced_devices ne suffit pas : une device action de lumière l'y met aussi ; on le confirme par les actions : la device action se résout par le registre et vise une cible de REPAS, ou, non résolue, porte un domaine de DOMAINES_ACTION_APPAREIL (et l'option START pour un select). Viser la portion ou le mode est un réglage, pas un repas (contradicteur, 05/10 ; règle complète dans automatisations._lisezmoi).",
-    "PORTION : le number désigné (config.haids.portionWeight) s'il existe, sinon la sœur number de clé CLES_PORTION, sinon de suffixe MOTIF_SUFFIXE_PORTION ; {entity_id, unite (unit_of_measurement, null sinon — jamais un « g » en dur), min, max, pas}. POIDS D'UNE PORTION : la sœur number CLES_POIDS_PORTION / MOTIF_SUFFIXE_POIDS_PORTION, {entity_id, unite}. CIBLES DE COMMANDE : la commande, la portion, le select de mode (aqara) et le script désigné, triés ; jamais un sensor, un binary_sensor ni le réservoir.",
+    "PORTION : le number désigné (config.haids.portionWeight) s'il existe ET si son unité n'est PAS une masse (UNITES_MASSE ; passe bis de l'étape 2, 19/10 : un number désigné en g ou en kg est le POIDS d'une portion, pas sa taille ; passe bis 2 : TOUTE unité de masse de Home Assistant — g, kg, mg, µg et son « ug », oz, lb, st — est un poids, seules g et kg l'étaient), sinon la sœur number de clé CLES_PORTION, sinon de suffixe MOTIF_SUFFIXE_PORTION ; {entity_id, unite (unit_of_measurement, null sinon — jamais un « g » en dur), min, max, pas}. Toute unité qui n'est pas une masse (aucune, « portion », « portions »…) compte des PORTIONS. POIDS D'UNE PORTION : le number désigné dont l'unité est une masse — une sœur, ou une entité connue qui n'est pas posée sur un AUTRE appareil —, sinon la sœur number CLES_POIDS_PORTION / MOTIF_SUFFIXE_POIDS_PORTION, {entity_id, unite}. CIBLES DE COMMANDE : la commande, la portion, le select de mode (aqara) et le script désigné, triés ; jamais un sensor, un binary_sensor, le réservoir ni un poids.",
     "PROGRAMME, CAS PAR CAS : Petlibro = binary_sensor de clé feeding_schedule, attribut schedule (repeat_days 1 = lundi) ; active = état 'on' ET un repas enabled. PetKit = sensor de clé raw_distribution_data, attribut feed_daily_list ; absent (désactivé) avec une commande PetKit trouvée → note capteur_diagnostic, connu false. Aqara = mode lu sur le select de clé feeding_mode (ZHA) ou le select mqtt de suffixe MOTIF_MODE_Z2M aux options OPTIONS_MODE_Z2M (Z2M), casse ignorée ; un mode illisible (unavailable, unknown, autre valeur — un Z2M hors ligne) → source aqara, connu false, rien d'autre : on ne sait pas, on ne dit ni « manuel » ni « tenu par l'appareil » ; manuel → pas de source (note mode_manuel) ; programmé + sensor mqtt MOTIF_SCHEDULE_Z2M en JSON complet → lisible (JOURS_Z2M ; une valeur de jours inconnue rend toute la liste illisible ; une liste au format Python, guillemets simples — ce que HA affiche d'un gabarit qui rend une liste —, reste ILLISIBLE en v1 même complète : jamais de guillemets remplacés) ; programmé sans liste lisible → présent, illisible, non actif. PetSafe = un service SERVICES_PETSAFE + plateforme petsafe → présent illisible. tuya-local = text de clé CLES_PROGRAMME.tuya_local non vide → présent illisible ; vide → connu, non présent ; JAMAIS de décodage. Tuya officielle = plateforme tuya + number de clé feed : sans le service, connu false ; avec, rien au sondage (note a_lire), la réponse lue seulement en détail (reponse_tuya, jours JOURS_TUYA) — la fiche ouverte, ET le départ d'un repas Loggia, qui recalcule les sources comme en détail (délai 5 s, cache 10 min) : le sondage de la carte est le seul exclu —, une erreur → note non_lisible. Tout le reste : source null, connu false.",
     "EN COURS : binary_sensor de clé CLES_EN_COURS (Tuya). PROCHAIN : sensor de clé CLES_PROCHAIN ou de suffixe MOTIF_PROCHAIN. HISTORIQUE : {dernier : sensor CLES_DERNIER / MOTIF_DERNIER ; compteurs : sensors CLES_COMPTEUR / MOTIF_COMPTEUR_Z2M, triés ; evenements : sensors CLES_SOURCE_REPAS / MOTIF_SOURCE_REPAS, triés (plus les entités event de l'appareil, absentes de la fixture)}.",
     "APPAREIL : config.appareil s'il est donné ; sinon le device_id de la première entité désignée qui en a un, dans l'ordre haid > portionWeight > distribuees > reservoir. Une autre entité désignée posée sur un AUTRE appareil est ignorée et signalée : notes [{code: 'appareil_divergent', entity_id}]. Une entité sans appareil (un helper) n'est pas une divergence.",
@@ -39,6 +39,7 @@
     "MOTIF_SUFFIXE_PORTION": "(^|_)(serving_size|portions|manual_portions)$",
     "CLES_POIDS_PORTION": ["portion_weight"],
     "MOTIF_SUFFIXE_POIDS_PORTION": "(^|_)portion_weight$",
+    "UNITES_MASSE": ["g", "kg", "mg", "µg", "ug", "oz", "lb", "st"],
     "CLES_PROGRAMME": {
       "petlibro": ["feeding_schedule"],
       "petkit": ["raw_distribution_data"],
@@ -61,6 +62,7 @@
     "CLES_ANOMALIE_BLOQUE": ["barn_door_error", "door_blocked", "error_detected", "food_dispenser_state", "food_outlet_state", "rotor_stuck"],
     "MOTIF_BAS": "food_(low|shortage|empty|level)|hopper_low|not_enough_food|pet_food_left_level",
     "MOTIF_BLOQUE": "block|jam|stuck|clog",
+    "MOTIF_ANOMALIE_SANS_CLASSE": "(^|_)error$",
     "CLES_CONSOMMABLE": {
       "deshydratant": ["desiccant_left_days", "remaining_desiccant"],
       "filtre": ["remaining_filter_days"],
@@ -638,6 +640,106 @@
     },
 
     {
+      "id": "aqara_z2m_poids_designe",
+      "description": "Aqara C1 sous Zigbee2MQTT tel qu'il se publie (passe bis de l'étape 2, 19/10 ; D1, B) : la taille de ration porte l'unité « portion », le poids d'une portion est en g, le select de distribution propose « » et START, l'erreur est un binary_sensor de suffixe _error SANS device_class. « Poids d'une portion » de Paramètres désigne l'entité de POIDS, comme son libellé y invite : c'est le poids, et la taille reste celle des sœurs — le pas à pas de « Servir maintenant » n'écrit jamais sur un poids. Noms inventés.",
+      "appareils": [{"device_id": "dev_mangeoire", "nom": "Mangeoire", "fabricant": "Aqara", "modele": "ZNCWWSQ01LM"}],
+      "config": {"appareil": null, "haid": "select.mangeoire_feed", "haids": {"reservoir": "input_number.croquettes_reservoir", "portionWeight": "number.mangeoire_portion_weight", "distribuees": "sensor.mangeoire_weight_per_day"}},
+      "entites": [
+        {"entity_id": "select.mangeoire_feed", "device_id": "dev_mangeoire", "plateforme": "mqtt", "etat": "unknown", "attributs": {"options": ["", "START"]}},
+        {"entity_id": "select.mangeoire_mode", "device_id": "dev_mangeoire", "plateforme": "mqtt", "etat": "manual", "attributs": {"options": ["schedule", "manual"]}},
+        {"entity_id": "number.mangeoire_serving_size", "device_id": "dev_mangeoire", "plateforme": "mqtt", "etat": "2", "attributs": {"min": 1, "max": 10, "step": 1, "unit_of_measurement": "portion"}},
+        {"entity_id": "number.mangeoire_portion_weight", "device_id": "dev_mangeoire", "plateforme": "mqtt", "etat": "6", "attributs": {"min": 1, "max": 20, "step": 1, "unit_of_measurement": "g"}},
+        {"entity_id": "sensor.mangeoire_schedule", "device_id": "dev_mangeoire", "plateforme": "mqtt", "etat": "[]"},
+        {"entity_id": "sensor.mangeoire_feeding_source", "device_id": "dev_mangeoire", "plateforme": "mqtt", "etat": "remote"},
+        {"entity_id": "sensor.mangeoire_portions_per_day", "device_id": "dev_mangeoire", "plateforme": "mqtt", "etat": "4", "attributs": {"state_class": "total_increasing"}},
+        {"entity_id": "sensor.mangeoire_weight_per_day", "device_id": "dev_mangeoire", "plateforme": "mqtt", "etat": "24", "attributs": {"unit_of_measurement": "g", "state_class": "total_increasing"}},
+        {"entity_id": "binary_sensor.mangeoire_error", "device_id": "dev_mangeoire", "plateforme": "mqtt", "etat": "on"},
+        {"entity_id": "switch.mangeoire_child_lock", "device_id": "dev_mangeoire", "plateforme": "mqtt", "categorie": "config", "etat": "off"},
+        {"entity_id": "input_number.croquettes_reservoir", "plateforme": "input_number", "etat": "450", "attributs": {"min": 0, "max": 1500, "step": 1, "unit_of_measurement": "g"}}
+      ],
+      "attendu": {
+        "appareil": "dev_mangeoire",
+        "notes": [],
+        "commande": {"domaine": "select", "service": "select_option", "entity_id": "select.mangeoire_feed", "donnees": {"option": "START"}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "select", "service": "select_option", "data": {"entity_id": "select.mangeoire_feed", "option": "START"}},
+        "portion": {"entity_id": "number.mangeoire_serving_size", "unite": "portion", "min": 1, "max": 10, "pas": 1},
+        "poids_portion": {"entity_id": "number.mangeoire_portion_weight", "unite": "g"},
+        "cibles_de_commande": ["number.mangeoire_serving_size", "select.mangeoire_feed", "select.mangeoire_mode"],
+        "programme": {"source": "aqara", "connu": true, "presente": false, "active": false, "lisible": false, "mode": "manuel", "note": "mode_manuel", "repas": []},
+        "anomalies": [
+          {"entity_id": "binary_sensor.mangeoire_error", "type": "autre", "actif": true}
+        ],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": ["sensor.mangeoire_portions_per_day", "sensor.mangeoire_weight_per_day"], "evenements": ["sensor.mangeoire_feeding_source"]}
+      }
+    },
+
+    {
+      "id": "poids_designe_en_onces",
+      "description": "Passe bis 2 de l'étape 2 (19/10 ; relecture de contrôle) : une mangeoire maison (ESPHome) dont le poids d'une portion se règle en ONCES, désigné « Poids d'une portion » dans Paramètres. Toute unité de masse de Home Assistant (UNITES_MASSE : g, kg, mg, µg, oz, lb, st) est un poids, jamais une taille — seules g et kg l'étaient, et le pas à pas de « Servir maintenant » aurait écrit sur l'étalonnage. La taille reste la sœur `portions` (sans unité) ; le poids n'est pas une cible de commande. Noms inventés.",
+      "appareils": [{"device_id": "dev_cabanon", "nom": "Mangeoire du cabanon", "fabricant": "Espressif", "modele": "esp32dev"}],
+      "config": {"appareil": null, "haid": "button.cabanon_feed", "haids": {"portionWeight": "number.cabanon_poids_portion"}},
+      "entites": [
+        {"entity_id": "button.cabanon_feed", "device_id": "dev_cabanon", "plateforme": "esphome", "etat": "unknown"},
+        {"entity_id": "number.cabanon_portions", "device_id": "dev_cabanon", "plateforme": "esphome", "etat": "3", "attributs": {"min": 1, "max": 8, "step": 1}},
+        {"entity_id": "number.cabanon_poids_portion", "device_id": "dev_cabanon", "plateforme": "esphome", "etat": "0.2", "attributs": {"min": 0.1, "max": 2, "step": 0.1, "unit_of_measurement": "oz"}}
+      ],
+      "attendu": {
+        "appareil": "dev_cabanon",
+        "notes": [],
+        "commande": {"domaine": "button", "service": "press", "entity_id": "button.cabanon_feed", "donnees": {}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "button", "service": "press", "data": {"entity_id": "button.cabanon_feed"}},
+        "portion": {"entity_id": "number.cabanon_portions", "unite": null, "min": 1, "max": 8, "pas": 1},
+        "poids_portion": {"entity_id": "number.cabanon_poids_portion", "unite": "oz"},
+        "cibles_de_commande": ["button.cabanon_feed", "number.cabanon_portions"],
+        "programme": {"source": null, "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
+        "anomalies": [],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
+      "id": "erreur_de_classe_connectivite",
+      "description": "Passe bis 2 de l'étape 2 (19/10 ; relecture de contrôle) : le suffixe `_error` ne vaut anomalie que SANS device_class — un `binary_sensor.*_link_error` de classe connectivity à « on » dit « connecté », pas « Problème signalé » ; une classe qui n'est pas problem n'est jamais une anomalie. L'erreur sans classe de l'appareil, elle, en est une. Noms inventés.",
+      "appareils": [{"device_id": "dev_mangeoire", "nom": "Mangeoire", "fabricant": "Aqara", "modele": "ZNCWWSQ01LM"}],
+      "config": {"appareil": "dev_mangeoire", "haids": {}},
+      "entites": [
+        {"entity_id": "select.mangeoire_feed", "device_id": "dev_mangeoire", "plateforme": "mqtt", "etat": "unknown", "attributs": {"options": ["", "START"]}},
+        {"entity_id": "binary_sensor.mangeoire_link_error", "device_id": "dev_mangeoire", "plateforme": "mqtt", "classe": "connectivity", "etat": "on"},
+        {"entity_id": "binary_sensor.mangeoire_motor_error", "device_id": "dev_mangeoire", "plateforme": "mqtt", "classe": "running", "etat": "on"},
+        {"entity_id": "binary_sensor.mangeoire_error", "device_id": "dev_mangeoire", "plateforme": "mqtt", "etat": "off"}
+      ],
+      "attendu": {
+        "appareil": "dev_mangeoire",
+        "notes": [],
+        "commande": {"domaine": "select", "service": "select_option", "entity_id": "select.mangeoire_feed", "donnees": {"option": "START"}, "quantite": false, "min": null, "max": null, "pas": null},
+        "une_portion": null,
+        "envoi_2_portions": {"domaine": "select", "service": "select_option", "data": {"entity_id": "select.mangeoire_feed", "option": "START"}},
+        "portion": null,
+        "poids_portion": null,
+        "cibles_de_commande": ["select.mangeoire_feed"],
+        "programme": {"source": null, "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
+        "anomalies": [
+          {"entity_id": "binary_sensor.mangeoire_error", "type": "autre", "actif": false}
+        ],
+        "consommables": [],
+        "en_ligne": {"mort": false, "raison": null},
+        "en_cours": null,
+        "prochain_capteur": null,
+        "historique": {"dernier": null, "compteurs": [], "evenements": []}
+      }
+    },
+
+    {
       "id": "catlink",
       "description": "Catlink (HACS hasscc) : bouton au suffixe feed, portion au suffixe portions ; aucun programme exposé : inconnu.",
       "appareils": [{"device_id": "dev_catlink", "nom": "Catlink", "fabricant": "CATLINK", "modele": "CATLINK-FEEDER"}],
@@ -894,21 +996,21 @@
       "id": "script_seul",
       "description": "Aucun appareil : un réservoir en helper et le script DÉSIGNÉ dans Paramètres. Le script est la commande (règle 5), il reçoit le nombre de portions en variable.",
       "appareils": [],
-      "config": {"appareil": null, "haid": null, "script": "script.nourrir_le_chat", "haids": {"reservoir": "input_number.croquettes_reservoir", "portionWeight": null, "distribuees": null}},
+      "config": {"appareil": null, "haid": null, "script": "script.remplir_la_gamelle", "haids": {"reservoir": "input_number.croquettes_reservoir", "portionWeight": null, "distribuees": null}},
       "entites": [
-        {"entity_id": "script.nourrir_le_chat", "plateforme": "script", "etat": "off", "attributs": {"friendly_name": "Nourrir le chat"}},
+        {"entity_id": "script.remplir_la_gamelle", "plateforme": "script", "etat": "off", "attributs": {"friendly_name": "Remplir la gamelle"}},
         {"entity_id": "script.donner_des_croquettes", "plateforme": "script", "etat": "off", "attributs": {"friendly_name": "Donner des croquettes"}},
         {"entity_id": "input_number.croquettes_reservoir", "plateforme": "input_number", "etat": "62", "attributs": {"min": 0, "max": 100, "step": 1, "unit_of_measurement": "%"}}
       ],
       "attendu": {
         "appareil": null,
         "notes": [],
-        "commande": {"domaine": "script", "service": "turn_on", "entity_id": "script.nourrir_le_chat", "donnees": {}, "quantite": false, "min": null, "max": null, "pas": null},
+        "commande": {"domaine": "script", "service": "turn_on", "entity_id": "script.remplir_la_gamelle", "donnees": {}, "quantite": false, "min": null, "max": null, "pas": null},
         "une_portion": null,
-        "envoi_2_portions": {"domaine": "script", "service": "turn_on", "data": {"entity_id": "script.nourrir_le_chat", "variables": {"portions": 2}}},
+        "envoi_2_portions": {"domaine": "script", "service": "turn_on", "data": {"entity_id": "script.remplir_la_gamelle", "variables": {"portions": 2}}},
         "portion": null,
         "poids_portion": null,
-        "cibles_de_commande": ["script.nourrir_le_chat"],
+        "cibles_de_commande": ["script.remplir_la_gamelle"],
         "programme": {"source": null, "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
         "anomalies": [],
         "consommables": [],
@@ -950,10 +1052,10 @@
       "id": "appareil_et_script_designes",
       "description": "L'appareil a sa commande ET un script est désigné dans Paramètres : la commande de l'appareil passe d'abord (règle R1, comme le « Distribuer » d'avant le 05/10, qui ne prenait le script qu'en repli). Le script reste une cible : ses automatisations sont reconnues.",
       "appareils": [{"device_id": "dev_aqara_z2m", "nom": "Distributeur de croquettes", "fabricant": "Aqara", "modele": "ZNCWWSQ01LM"}],
-      "config": {"appareil": "dev_aqara_z2m", "script": "script.nourrir_le_chat", "haids": {}},
+      "config": {"appareil": "dev_aqara_z2m", "script": "script.remplir_la_gamelle", "haids": {}},
       "entites": [
         {"entity_id": "select.distributeur_cuisine_feed", "device_id": "dev_aqara_z2m", "plateforme": "mqtt", "etat": "unknown", "attributs": {"options": ["START"]}},
-        {"entity_id": "script.nourrir_le_chat", "plateforme": "script", "etat": "off", "attributs": {"friendly_name": "Nourrir le chat"}}
+        {"entity_id": "script.remplir_la_gamelle", "plateforme": "script", "etat": "off", "attributs": {"friendly_name": "Remplir la gamelle"}}
       ],
       "attendu": {
         "appareil": "dev_aqara_z2m",
@@ -963,7 +1065,7 @@
         "envoi_2_portions": {"domaine": "select", "service": "select_option", "data": {"entity_id": "select.distributeur_cuisine_feed", "option": "START"}},
         "portion": null,
         "poids_portion": null,
-        "cibles_de_commande": ["script.nourrir_le_chat", "select.distributeur_cuisine_feed"],
+        "cibles_de_commande": ["script.remplir_la_gamelle", "select.distributeur_cuisine_feed"],
         "programme": {"source": null, "connu": false, "presente": false, "active": false, "lisible": false, "mode": null, "note": null, "repas": []},
         "anomalies": [],
         "consommables": [],
@@ -1092,12 +1194,12 @@
   ],
 
   "automatisations": {
-    "_lisezmoi": "Le distributeur de référence est celui du cas aqara_z2m_manuel, plus le script désigné script.nourrir_le_chat. declencheurs_bruts = la sortie de la fonction PURE declencheurs(raw_config) ; attendu = l'élément résumé après résolution par hass.states (entite_heure devient heure, ou autre si l'entité ne donne pas d'heure). « commande » dit si l'automatisation est gardée par le filtre des ACTIONS : une action COMMANDE quand elle vise une cible de REPAS (contexte.cibles_repas = la commande et le script désigné) ou un script qui commande ; viser seulement la portion ou le mode (les autres cibles) est un RÉGLAGE, pas un repas — l'automatisation est écartée, sinon une « portion d'hiver » à 06:00 passerait pour un repas, compterait dans le prochain repas et les jours de réserve, et retiendrait le planning Loggia (repas sauté). Les cibles servent à TROUVER les candidates (automations_with_entity), les cibles de repas à les GARDER. Une device action se résout par le registre (son entity_id est un identifiant de registre, contexte.registre_ids) et commande si l'entité résolue est une cible de repas ; non résolue, elle commande si l'appareil est le distributeur, le domaine dans DOMAINES_ACTION_APPAREIL et, pour un select, l'option START ; une automatisation écartée sans indice n'apparaît pas dans la réponse ; indice n'est posé QUE sur une automatisation NON reconnue par ses actions (null sinon, même si l'ancienne liste la nomme) : l'écran dit « Reconnue par votre ancienne liste » à cause de lui. Un appel DIRECT « action: script.x » n'est pas dans references (HA ne relève que target et data) : on le trouve en parcourant toutes les automatisations par scripts_appeles(raw_config). Un script COMMANDE s'il vise une cible de repas, directement ou par un script qu'il appelle (3 niveaux au plus, garde anti-cycle) ; il devient alors une cible à son tour. Portions : lues seulement sur l'action qui vise la COMMANDE ou un script qui commande (value, portions, amount, quantity, grams numériques), ou le count numérique d'un repeat autour d'un appui (button.press ou select_option START) ; un gabarit, ou deux valeurs différentes → null. Jours : weekday du déclencheur, ou condition time à weekday (seule ou dans un and) ; null = tous les jours. conditionnel : toute autre condition de niveau haut (or, not, template, state, numeric_state…) ; une branche choose / if n'est pas suivie en v1. Un déclencheur ou une condition enabled:false est ignoré. time_pattern : hours '/N' (minutes absentes = 0) → periodique avec ses heures, qui n'entrent PAS dans heures (pas de « prochain repas » ni de jours de réserve dessus).",
+    "_lisezmoi": "Le distributeur de référence est celui du cas aqara_z2m_manuel, plus le script désigné script.remplir_la_gamelle. declencheurs_bruts = la sortie de la fonction PURE declencheurs(raw_config) ; attendu = l'élément résumé après résolution par hass.states (entite_heure devient heure, ou autre si l'entité ne donne pas d'heure). « commande » dit si l'automatisation est gardée par le filtre des ACTIONS : une action COMMANDE quand elle vise une cible de REPAS (contexte.cibles_repas = la commande et le script désigné) ou un script qui commande ; viser seulement la portion ou le mode (les autres cibles) est un RÉGLAGE, pas un repas — l'automatisation est écartée, sinon une « portion d'hiver » à 06:00 passerait pour un repas, compterait dans le prochain repas et les jours de réserve, et retiendrait le planning Loggia (repas sauté). Les cibles servent à TROUVER les candidates (automations_with_entity), les cibles de repas à les GARDER. Une device action se résout par le registre (son entity_id est un identifiant de registre, contexte.registre_ids) et commande si l'entité résolue est une cible de repas ; non résolue, elle commande si l'appareil est le distributeur, le domaine dans DOMAINES_ACTION_APPAREIL et, pour un select, l'option START ; une automatisation écartée sans indice n'apparaît pas dans la réponse ; indice n'est posé QUE sur une automatisation NON reconnue par ses actions (null sinon, même si l'ancienne liste la nomme) : l'écran dit « Reconnue par votre ancienne liste » à cause de lui. Un appel DIRECT « action: script.x » n'est pas dans references (HA ne relève que target et data) : on le trouve en parcourant toutes les automatisations par scripts_appeles(raw_config). Un script COMMANDE s'il vise une cible de repas, directement ou par un script qu'il appelle (3 niveaux au plus, garde anti-cycle) ; il devient alors une cible à son tour. Portions : lues seulement sur l'action qui vise la COMMANDE ou un script qui commande (value, portions, amount, quantity, grams numériques), ou le count numérique d'un repeat autour d'un appui (button.press ou select_option START) ; un gabarit, ou deux valeurs différentes → null. Jours : weekday du déclencheur, ou condition time à weekday (seule ou dans un and) ; null = tous les jours. conditionnel : toute autre condition de niveau haut (or, not, template, state, numeric_state…) ; une branche choose / if n'est pas suivie en v1. Un déclencheur ou une condition enabled:false est ignoré. time_pattern : hours '/N' (minutes absentes = 0) → periodique avec ses heures, qui n'entrent PAS dans heures (pas de « prochain repas » ni de jours de réserve dessus).",
     "contexte": {
       "fuseau": "Europe/Paris",
-      "cibles": ["number.distributeur_cuisine_serving_size", "script.nourrir_le_chat", "select.distributeur_cuisine_feed", "select.distributeur_cuisine_mode"],
+      "cibles": ["number.distributeur_cuisine_serving_size", "script.remplir_la_gamelle", "select.distributeur_cuisine_feed", "select.distributeur_cuisine_mode"],
       "commande": "select.distributeur_cuisine_feed",
-      "cibles_repas": ["script.nourrir_le_chat", "select.distributeur_cuisine_feed"],
+      "cibles_repas": ["script.remplir_la_gamelle", "select.distributeur_cuisine_feed"],
       "registre_ids": {"1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d": "select.distributeur_cuisine_feed", "3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f": "number.distributeur_cuisine_serving_size"},
       "appareils": ["dev_aqara_z2m"],
       "reservoir": "input_number.croquettes_reservoir",
@@ -1108,12 +1210,12 @@
         "input_datetime.heure_vide": {"etat": "unknown", "attributs": {"has_date": false, "has_time": true}}
       },
       "scripts": {
-        "script.nourrir_le_chat": {
-          "raw_config": {"alias": "Nourrir le chat", "sequence": [{"action": "select.select_option", "target": {"entity_id": "select.distributeur_cuisine_feed"}, "data": {"option": "START"}}]},
+        "script.remplir_la_gamelle": {
+          "raw_config": {"alias": "Remplir la gamelle", "sequence": [{"action": "select.select_option", "target": {"entity_id": "select.distributeur_cuisine_feed"}, "data": {"option": "START"}}]},
           "action_script": {"referenced_entities": ["select.distributeur_cuisine_feed"], "referenced_devices": []}
         },
         "script.routine_du_matin": {
-          "raw_config": {"alias": "Routine du matin", "sequence": [{"action": "light.turn_on", "target": {"entity_id": "light.cuisine"}}, {"action": "script.nourrir_le_chat"}]},
+          "raw_config": {"alias": "Réveil en douceur", "sequence": [{"action": "light.turn_on", "target": {"entity_id": "light.cuisine"}}, {"action": "script.remplir_la_gamelle"}]},
           "action_script": {"referenced_entities": ["light.cuisine"], "referenced_devices": []}
         },
         "script.boucle_a": {
@@ -1219,10 +1321,10 @@
         "attributs": {"friendly_name": "Croquettes par script", "id": "1728000000007", "last_triggered": null},
         "raw_config": {"id": "1728000000007", "alias": "Croquettes par script",
           "triggers": [{"trigger": "time", "at": {"entity_id": "input_datetime.heure_repas_soir", "offset": "-00:15:00"}}],
-          "actions": [{"action": "script.nourrir_le_chat", "data": {"portions": 2}}]},
+          "actions": [{"action": "script.remplir_la_gamelle", "data": {"portions": 2}}]},
         "references": {"entities": ["input_datetime.heure_repas_soir"], "devices": []},
         "action_script": {"referenced_entities": [], "referenced_devices": []},
-        "scripts_appeles": ["script.nourrir_le_chat"],
+        "scripts_appeles": ["script.remplir_la_gamelle"],
         "declencheurs_bruts": [{"type": "entite_heure", "entite": "input_datetime.heure_repas_soir", "decalage": -15}],
         "attendu": {"commande": true, "indice": null, "nom": "Croquettes par script", "etat": "on", "dernier": null,
           "declencheurs": [{"type": "heure", "heure": "18:30"}],
@@ -1232,14 +1334,14 @@
         "id": "script_dans_un_script",
         "entity_id": "automation.routine_du_matin",
         "etat": "on",
-        "attributs": {"friendly_name": "Routine du matin", "id": "1728000000008", "last_triggered": null},
-        "raw_config": {"id": "1728000000008", "alias": "Routine du matin",
+        "attributs": {"friendly_name": "Réveil en douceur", "id": "1728000000008", "last_triggered": null},
+        "raw_config": {"id": "1728000000008", "alias": "Réveil en douceur",
           "triggers": [{"trigger": "time", "at": {"entity_id": "sensor.reveil_suivant", "offset": {"minutes": 10}}}],
           "actions": [{"action": "script.turn_on", "target": {"entity_id": "script.routine_du_matin"}}]},
         "references": {"entities": ["script.routine_du_matin", "sensor.reveil_suivant"], "devices": []},
         "action_script": {"referenced_entities": ["script.routine_du_matin"], "referenced_devices": []},
         "declencheurs_bruts": [{"type": "entite_heure", "entite": "sensor.reveil_suivant", "decalage": 10}],
-        "attendu": {"commande": true, "indice": null, "nom": "Routine du matin", "etat": "on", "dernier": null,
+        "attendu": {"commande": true, "indice": null, "nom": "Réveil en douceur", "etat": "on", "dernier": null,
           "declencheurs": [{"type": "heure", "heure": "06:20"}],
           "heures": ["06:20"], "jours": null, "conditionnel": false, "portions": null, "modifiable_si_admin": true}
       },
@@ -1312,10 +1414,10 @@
         "raw_config": {"id": "1728000000013", "alias": "Croquettes au lever",
           "triggers": [{"trigger": "sun", "event": "sunrise", "offset": "-00:30:00"}],
           "conditions": [{"condition": "or", "conditions": [{"condition": "state", "entity_id": "person.quelqu_un", "state": "home"}, {"condition": "template", "value_template": "{{ is_state('input_boolean.chat_dehors', 'off') }}"}]}],
-          "actions": [{"action": "script.nourrir_le_chat"}]},
+          "actions": [{"action": "script.remplir_la_gamelle"}]},
         "references": {"entities": ["person.quelqu_un"], "devices": []},
         "action_script": {"referenced_entities": [], "referenced_devices": []},
-        "scripts_appeles": ["script.nourrir_le_chat"],
+        "scripts_appeles": ["script.remplir_la_gamelle"],
         "declencheurs_bruts": [{"type": "soleil", "evenement": "sunrise", "decalage": -30}],
         "attendu": {"commande": true, "indice": null, "nom": "Croquettes au lever", "etat": "on", "dernier": null,
           "declencheurs": [{"type": "soleil", "evenement": "sunrise", "decalage": -30}],

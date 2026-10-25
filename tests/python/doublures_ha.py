@@ -101,7 +101,18 @@ def poser_demarrage() -> None:
         def __init__(self, url_path, path, cache_headers=True):
             self.url_path, self.path, self.cache_headers = url_path, path, cache_headers
 
-    _composants().http = module("homeassistant.components.http", StaticPathConfig=StaticPathConfig)
+    # Les vues HTTP (chantier Plan 3D) : une classe de base vide suffit, la
+    # vue n'est qu'enregistree ici — `test_plan.py` l'exerce, elle.
+    class HomeAssistantView:
+        url = None
+        name = None
+        requires_auth = True
+
+    _composants().http = module("homeassistant.components.http", StaticPathConfig=StaticPathConfig,
+                                HomeAssistantView=HomeAssistantView)
+    if "aiohttp" not in sys.modules:
+        web = module("aiohttp.web", Response=object, json_response=lambda *a, **k: None)
+        module("aiohttp", web=web)
 
 
 # ── Automatisations et scripts (05/10, ADR 0155) ────────────────────────────

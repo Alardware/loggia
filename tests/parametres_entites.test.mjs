@@ -87,9 +87,11 @@ test('le chemin donné est le nom du bouton, tel qu’il s’affiche dans chaque
 test('le plan du robot ne se monte qu’avec une image : pas d’état « sans carte »', () => {
   const fiche = lire('src', 'ficherobot.jsx');
   assert.ok(fiche.includes('<VacPlan hass={hass} haid={idCarte} '), 'le plan reçoit autre chose que l’image trouvée par la fiche');
-  assert.ok(fiche.includes('carte={idCarte ? planDe() : null}'),
+  /* ASSERTION MODIFIÉE (chantier IoT, tâche 8, 18/10 ; I2 A) : l'onglet Carte part ; le plan s'ouvre par « Voir la carte » dans une
+   * seconde feuille, que rien ne monte sans image — ni la rangée qui l'ouvre (`aUneCarte`). */
+  assert.ok(fiche.includes('{carteOuverte && idCarte && (') && fiche.includes('aUneCarte={!!idCarte}'),
     'la fiche monte le plan sans image : il lui faut de nouveau un état « sans carte »');
-  assert.equal((fiche.match(/planDe\(\)/g) || []).length, 1, 'planDe() est appelé ailleurs : vérifier qu’une image y existe');
+  assert.equal((fiche.match(/<VacPlan /g) || []).length, 1, 'le plan est monté ailleurs : vérifier qu’une image y existe');
   const importeurs = fichiers.filter(f => /vacplan\.jsx['"]/.test(readFileSync(f, 'utf8'))).map(nom);
   assert.deepEqual(importeurs, ['ficherobot.jsx'], 'un autre écran monte le plan');
   assert.ok(!/if \(!haid\) \{/.test(lire('src', 'vacplan.jsx')), 'la branche « sans carte » est revenue');

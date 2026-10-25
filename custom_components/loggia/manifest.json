@@ -3,7 +3,9 @@
   "name": "Loggia Dashboard",
   "after_dependencies": [
     "automation",
+    "energy",
     "mqtt",
+    "recorder",
     "script"
   ],
   "codeowners": [
@@ -19,5 +21,5 @@
   "integration_type": "service",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/Alardware/loggia/issues",
-  "version": "3.93.0"
+  "version": "3.94.0"
 }

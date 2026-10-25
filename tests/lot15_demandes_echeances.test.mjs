@@ -19,13 +19,17 @@ import assert from 'node:assert/strict';
 import { register } from 'node:module';
 
 /* La doublure, pour `optimiste.js` SEUL : ses crochets passent par
- * `globalThis.__crochetsDemandes`, que `monter` remplit. */
+ * `globalThis.__crochetsDemandes`, que `monter` remplit.
+ * ASSERTION MODIFIÉE (chantier IoT, passe bis 2 du 18/10, point N) : optimiste.js porte aussi la variante PARTAGÉE de l'état
+ * optimiste (le geste d'un robot), qui s'abonne par `useSyncExternalStore` ; la doublure doit l'exporter pour que le module se
+ * charge — `useDemandes`, que ce test fait tourner, ne s'en sert pas. */
 const DOUBLURE = 'data:text/javascript,' + encodeURIComponent([
   'const c = () => globalThis.__crochetsDemandes;',
   'export const useState = (i) => c().useState(i);',
   'export const useEffect = (f, d) => c().useEffect(f, d);',
   'export const useRef = (v) => c().useRef(v);',
   'export const useCallback = (f, d) => c().useCallback(f, d);',
+  'export const useSyncExternalStore = (s, lire) => lire();',
 ].join('\n'));
 register('data:text/javascript,' + encodeURIComponent([
   'export async function resolve(spec, ctx, next) {',

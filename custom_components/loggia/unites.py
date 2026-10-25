@@ -36,3 +36,13 @@ def depuis_celsius(valeur: float, unite: str) -> float:
     if unite == "F":
         return valeur * 9 / 5 + 32
     return valeur
+
+
+def vers_celsius(valeur: float, unite: str) -> float:
+    """L'inverse de `depuis_celsius` : une valeur dans l'unite de
+    l'installation, ramenee en Celsius. Le chauffage garde ses consignes en °C
+    (ADR 0128) ; ce qu'un geste a pose sur un thermostat Fahrenheit se range
+    donc en Celsius."""
+    if unite == "F":
+        return (valeur - 32) * 5 / 9
+    return valeur

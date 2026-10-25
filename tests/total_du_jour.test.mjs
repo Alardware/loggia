@@ -21,9 +21,10 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { minuitLocal, compteurDuJour, requeteJour, totauxRelus } from '../src/jourstat.js';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const APP = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const APP = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
 
 const LE_7_A_14H = new Date(2026, 9, 7, 14, 30, 0).getTime();
 const MINUIT_DU_7 = new Date(2026, 9, 7, 0, 0, 0).getTime();
@@ -112,7 +113,9 @@ test('un compteur qui n’a rien compté rend bien zéro', () => {
 test('l’aperçu ne lit plus l’état brut pour ce qui se compte par jour', () => {
   /* Les six valeurs du jour passent par `kwhJour` / `euroJour`. Les reprendre
    * en `numKwh(EN.…)` ramènerait l'index entier. */
-  assert.ok(APP.includes("import { compteurDuJour, useTotauxJour } from './jourstat.js';"),
+  // Et `minuitLocal`, le début de la courbe du jour d'une prise (chantier Prises, tâche 7).
+  // ASSERTION MODIFIÉE (ADR 0274) : la vue Énergie, sortie du boot, importe elle-même ce qu'elle seule utilise.
+  assert.ok(APP.includes("import { minuitLocal } from './jourstat.js';") && APP.includes("import { compteurDuJour, useTotauxJour } from '../jourstat.js';"),
     'App.jsx n’importe plus le lecteur du jour');
   assert.ok(APP.includes('const prodJour = kwhJour(EN.prodJour);'), 'la production du jour');
   assert.ok(APP.includes('const injJour = kwhJour(EN.injectionJour);'), 'l’injection du jour');

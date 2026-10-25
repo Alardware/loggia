@@ -52,11 +52,24 @@ const lecteurs = (cle) => FICHIERS
   .filter(([, t]) => t.includes(cle))
   .map(([c]) => c);
 
+/* Une clé morte se cherche sous son nom EXACT, entre guillemets. Depuis le
+ * ciel du 17/10, `loggia-ciel` est aussi le nom d'un élément (<loggia-ciel>,
+ * enregistré par `customElements`), et le préfixe de trois clés qui n'ont rien
+ * à voir avec l'ancien ciel étoilé (`loggia-ciel-qualite`, `-actuel`,
+ * `-niveau-v2`). Ni l'un ni les autres ne lisent la clé morte. */
+const lecteursExacts = (cle) => {
+  const q = new RegExp('[\'"`]' + cle.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&') + '[\'"`]');
+  return FICHIERS
+    .filter(([c]) => PORTEUSES.indexOf(c) < 0)
+    .filter(([, t]) => q.test(t.replace(/customElements\.(get|define)\(\s*(['"])[^'"]+\2/g, '')))
+    .map(([c]) => c);
+};
+
 test('les quatre clés sans lecteur ont bien quitté la synchronisation', async () => {
   const { LOGGIA_SYNC_KEYS } = await import('../src/state.js');
   for (const morte of ['loggia_lightlayout', 'loggia_climlayout', 'loggia_medlayout', 'loggia-ciel']) {
     assert.ok(LOGGIA_SYNC_KEYS.indexOf(morte) < 0, morte + ' est revenue dans la synchronisation');
-    assert.deepEqual(lecteurs(morte), [], morte + ' a retrouvé un lecteur : alors elle doit RETOURNER dans la liste');
+    assert.deepEqual(lecteursExacts(morte), [], morte + ' a retrouvé un lecteur : alors elle doit RETOURNER dans la liste');
   }
 });
 

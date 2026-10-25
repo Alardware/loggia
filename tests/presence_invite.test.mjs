@@ -14,7 +14,7 @@ test('l’onglet Presence designe un input_boolean, et le bascule sans se l’ap
   assert.ok(v.includes("const invite = cfg.invite || {};") && v.includes("id.indexOf('input_boolean.') === 0"), 'la liste des interrupteurs de Home Assistant');
   assert.ok(v.includes("onChange={v => enregistrer({ invite: { entite: v } })}"), 'la designation');
   assert.ok(v.includes("hass.callService('input_boolean', inviteOn ? 'turn_off' : 'turn_on', { entity_id: invite.entite })"), 'la bascule passe par Home Assistant : l’interrupteur lui appartient');
-  assert.ok(v.includes("{tr('Aucun interrupteur désigné : crée une entrée « Interrupteur » (input_boolean) nommée Invité dans Home Assistant, puis désigne-la ici.')}"), 'sans designation, la carte dit quoi creer');
+  assert.ok(v.includes("{tr('Aucun interrupteur désigné : créez une entrée « Interrupteur » (input_boolean) nommée Invité dans Home Assistant, puis désignez-la ici.')}"), 'sans designation, la carte dit quoi creer');
   assert.ok(v.includes("etat.invite.coupure_prevue"), 'la coupure programmee se dit');
 });
 

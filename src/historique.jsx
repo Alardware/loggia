@@ -8,10 +8,12 @@
  * Rien ici ne connait le reste du dashboard : ce module n'importe que la
  * traduction, trois crochets React et les instants du journal
  * (`evenement.js`, sans React — la fenêtre de 24 h et l'heure d'une ligne s'y
- * testent à sec, audit du 03/10). */
+ * testent à sec, audit du 03/10) — et, pour dire un volet, le seuil de
+ * « fermé » de l'écran (`voletecran.js`, sans React lui non plus). */
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { tr } from './i18n.js';
 import { dansLaFenetre, heureJournal } from './evenement.js';
+import { coverFerme, positionDe } from './voletecran.js';
 import { seriesRelues, GARDE_SERIE } from './releve.js';
 
 /* L'heure qui avance, à la minute ronde (audit du 03/10). Un rafraîchissement
@@ -90,12 +92,37 @@ export function useDerniersEvenements(hass, ids, reduire) {
   return derniers;
 }
 
-/** L'etat d'un evenement du journal, dit en un mot. */
-export function etatJournal(id, st, S) {
+/* Un volet publié `open` qui, à sa position d'AUJOURD'HUI, est fermé : la
+ * dernière ligne de son journal seulement (`dernier`). */
+/* …et seulement si rien n'a été publié DEPUIS ce changement d'état
+ * (`last_updated` = `last_changed`) : la position d'aujourd'hui est alors bien
+ * celle de l'événement. Ouvert à 100 à 08:00 puis placé à 1 % plus tard, la
+ * ligne de 08:00 reste « Ouvert » (relecture du 19/10). */
+const voletBute = (id, st, S, dernier) => {
+  const ici = S && S[id];
+  const intact = !!ici && (!ici.last_updated || !ici.last_changed || ici.last_updated === ici.last_changed);
+  return !!(dernier && st === 'open' && id.indexOf('cover.') === 0 && ici && ici.state === 'open' && intact && coverFerme(ici, positionDe(ici)));
+};
+
+/** L'etat d'un evenement du journal, dit en un mot.
+ *
+ * `dernier` : cet evenement est le plus recent de l'entite — l'etat publie
+ * maintenant est le sien, et sa position aussi. Un volet qui bute a 1 % se
+ * publie `open` une fois ferme (sa chambre, ADR 0105) : la carte dit
+ * « Fermé » (`coverFerme`, seuil de 2 %), le journal le dit donc aussi. Le
+ * journal de Home Assistant ne porte pas la position d'un evenement plus
+ * ancien : celui-la garde le mot de son etat. */
+export function etatJournal(id, st, S, dernier = false) {
   const dom = id.slice(0, id.indexOf('.'));
   const a = (S && S[id] && S[id].attributes) || {};
+  // Un état muet, dans la langue de l'écran — jamais `unavailable` en anglais (19/10).
+  if (st === 'unavailable') return tr('Indisponible');
+  if (st === 'unknown') return tr('Inconnu');
   if (['light', 'switch', 'fan', 'input_boolean', 'humidifier'].indexOf(dom) >= 0) return st === 'on' ? tr('Allumé') : tr('Éteint');
-  if (dom === 'cover') return st === 'open' ? tr('Ouvert') : st === 'closed' ? tr('Fermé') : st === 'opening' ? tr('Ouverture…') : st === 'closing' ? tr('Fermeture…') : st;
+  if (dom === 'cover') {
+    if (st === 'open') return voletBute(id, st, S, dernier) ? tr('Fermé') : tr('Ouvert');
+    return st === 'closed' ? tr('Fermé') : st === 'opening' ? tr('Ouverture…') : st === 'closing' ? tr('Fermeture…') : st;
+  }
   if (dom === 'lock') return st === 'locked' ? tr('Verrouillée') : st === 'unlocked' ? tr('Déverrouillée') : st;
   if (dom === 'media_player') return st === 'playing' ? tr('Lecture') : st === 'paused' ? tr('En pause') : st === 'off' ? tr('Éteint') : st === 'on' ? tr('Allumé') : tr('Inactif');
   if (dom === 'binary_sensor') {
@@ -130,7 +157,13 @@ export function RoomActivityCard({ hass, ids, titre = null, sous = null, max = 8
   /* L'heure dit le jour quand ce n'est plus aujourd'hui (audit du 03/10) :
    * « 16:00 » seul datait du jour un événement de lundi. Le rendu suit la
    * minute du crochet — la ligne passe à « hier » au premier coup de minuit. */
-  const actif = (e) => ['on', 'open', 'unlocked', 'playing', 'heat', 'cleaning', 'home'].indexOf(e.state) >= 0;
+  /* La ligne la plus récente de chaque entité : la seule dont l'état publié
+   * maintenant — et la position d'un volet — est encore le sien. */
+  const vus = new Set();
+  const dernieres = new Set(events.filter(e => (vus.has(e.entity_id) ? false : (vus.add(e.entity_id), true))));
+  // Un volet « open » à 1 % est fermé (`coverFerme`) : son point ne s'allume pas.
+  const actif = (e) => ['on', 'open', 'unlocked', 'playing', 'heat', 'cleaning', 'home'].indexOf(e.state) >= 0
+    && !voletBute(e.entity_id, e.state, S, dernieres.has(e));
   return (
     <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
       <div style={{ fontSize: 15, fontWeight: 700 }}>{titre || tr('Activité')}</div>
@@ -140,7 +173,7 @@ export function RoomActivityCard({ hass, ids, titre = null, sous = null, max = 8
           <div key={(e.when || 0) + '|' + e.entity_id + '|' + i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none' }}>
             <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: actif(e) ? 'var(--o-warn)' : 'var(--o-text3)', boxShadow: actif(e) ? '0 0 7px var(--o-warn)' : 'none' }} />
             <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.name || (S[e.entity_id] && S[e.entity_id].attributes && S[e.entity_id].attributes.friendly_name) || e.entity_id}</span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: actif(e) ? 'var(--o-warn)' : 'var(--o-text2)', whiteSpace: 'nowrap' }}>{e.state != null ? etatJournal(e.entity_id, e.state, S) : (e.message || '')}{e.n > 1 ? ' ·×' + e.n : ''}</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: actif(e) ? 'var(--o-warn)' : 'var(--o-text2)', whiteSpace: 'nowrap' }}>{e.state != null ? etatJournal(e.entity_id, e.state, S, dernieres.has(e)) : (e.message || '')}{e.n > 1 ? ' ·×' + e.n : ''}</span>
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', flexShrink: 0, minWidth: 38, textAlign: 'right', whiteSpace: 'nowrap' }}>{heureJournal(e.when)}</span>
           </div>
         ))}

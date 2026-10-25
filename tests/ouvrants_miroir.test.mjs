@@ -19,7 +19,9 @@ const classes = (texte) => (texte.match(/["']([a-z_]+)["']/g) || []).map((s) => 
 
 test('l’écran et le composant disent la même chose d’un volet', () => {
   const py = lire('custom_components', 'loggia', 'ouvrants.py').match(/CLASSES_VOLETS: tuple\[str, \.\.\.\] = \(([^)]*)\)/);
-  const js = lire('src', 'views', 'volets.jsx').match(/const CLASSES_VOLETS = \[([^\]]*)\]/);
+  // ASSERTION MODIFIÉE (chantier Volets, tâche 1) : la liste quitte views/volets.jsx
+  // pour voletecran.js, dans le paquet de démarrage — la carte du volet en a besoin.
+  const js = lire('src', 'voletecran.js').match(/export const CLASSES_VOLETS = \[([^\]]*)\]/);
   assert.ok(py && js, 'une des deux listes a disparu ou changé de forme');
   assert.deepEqual(classes(js[1]), classes(py[1]));
   // Le choix du 03/10 : une classe absente n'est pas un volet, et une

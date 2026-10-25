@@ -9,7 +9,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   CLASSES_PORTE, CLASSES_FENETRE, CLASSES_MOUVEMENT, CLASSES_SURETE, SEUIL_CO2, NIVEAUX, ICONES_ATTENTION,
-  familleOuvrant, comptesSecurite, tuilesSecurite, pointsAttention, niveauMax, resumeAttention, couleurNiveau, iconePoint,
+  familleOuvrant, comptesSecurite, tuilesSecurite, pointsAttention, niveauMax, resumeAttention, couleurNiveau, iconePoint, motsSurete,
 } from '../src/attention.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -41,17 +41,21 @@ const MAISON = {
 const CAMS = [{ nom: 'Entrée', online: true }, { nom: 'Jardin', online: false, haid: 'camera.jardin' }];
 
 test('les constantes : classes, seuil et niveaux', () => {
-  assert.deepEqual(CLASSES_PORTE, ['door', 'garage_door', 'gate']);
+  // ASSERTION MODIFIÉE (audit du 19/10, point 14) : `gate` n'est pas une classe de `binary_sensor` (c'est celle d'un `cover`).
+  assert.deepEqual(CLASSES_PORTE, ['door', 'garage_door']);
   assert.deepEqual(CLASSES_FENETRE, ['window', 'opening']);
   assert.deepEqual(CLASSES_MOUVEMENT, ['motion', 'occupancy', 'presence']);
   assert.deepEqual(CLASSES_SURETE, ['smoke', 'carbon_monoxide', 'gas', 'moisture', 'safety', 'tamper']);
   assert.equal(SEUIL_CO2, 1400, 'le palier « Élevé » des captures du 19/09');
   assert.deepEqual(NIVEAUX, ['danger', 'alerte', 'info']);
-  assert.ok(app.includes('co2 < ' + SEUIL_CO2 + ' ? 1 : 2'), 'le seuil est le palier haut d’airPalier');
+  // ASSERTION MODIFIÉE (audit du 19/10, M16) : `airPalier` est parti ; la bannière et le badge lisent la table (`zoneMesure('co2')`).
+  assert.ok(!app.includes('function airPalier') && app.includes("zoneMesure('co2', co2)"), 'la bannière lit la table de confort.js');
 });
 
 test('familleOuvrant : portes, fenêtres, rien', () => {
-  for (const dc of ['door', 'garage_door', 'gate']) assert.equal(familleOuvrant(dc), 'portes', dc);
+  // ASSERTION MODIFIÉE (audit du 19/10, point 14) : `gate` n'est plus une porte — ce n'est pas une classe de binaire.
+  for (const dc of ['door', 'garage_door']) assert.equal(familleOuvrant(dc), 'portes', dc);
+  assert.equal(familleOuvrant('gate'), null);
   for (const dc of ['window', 'opening']) assert.equal(familleOuvrant(dc), 'fenetres', dc);
   for (const dc of ['motion', 'smoke', '', null, undefined]) assert.equal(familleOuvrant(dc), null, String(dc));
 });
@@ -140,18 +144,16 @@ test('1. l’alarme déclenchée : un danger, par panneau', () => {
   assert.deepEqual(pointsAttention({ S: { 'alarm_control_panel.maison': et('disarmed') } }), []);
 });
 
+/* ASSERTIONS MODIFIÉES (audit des capteurs du 19/10, lot 4) : deriveNotifs n'a plus de copie de la table — il lit `motsSurete`, comme les points de
+ * l'Accueil, la fiche et la carte d'un binaire. « Mot pour mot » ne se vérifie plus entre deux copies : il n'y en a qu'une. */
 test('2. la sûreté : les mots et la table de deriveNotifs, mot pour mot', () => {
-  const d = app.indexOf('const SURETE = {');
-  assert.ok(d >= 0, 'la table SURETE de deriveNotifs a disparu');
-  const blocApp = app.slice(d, app.indexOf('};', d));
-  assert.deepEqual([...blocApp.matchAll(/^\s*([a-z_]+): \[/gm)].map(m => m[1]), CLASSES_SURETE, 'mêmes classes, même ordre');
+  assert.ok(!app.includes('const SURETE = {') && app.includes('const duo = motsSurete(a.device_class);'), 'deriveNotifs lit LA table');
   for (const dc of CLASSES_SURETE) {
-    const ligne = blocApp.match(new RegExp('^\\s*' + dc + ": \\[(\"|')(.+?)\\1, '(.+?)'\\],?$", 'm'));
-    assert.ok(ligne, dc + ' : ligne introuvable dans deriveNotifs');
-    assert.ok(source.includes(ligne[0].trim()), dc + ' : la ligne du module diffère de deriveNotifs');
+    const duo = motsSurete(dc);
+    assert.ok(Array.isArray(duo) && duo.length === 2, dc + ' : sa ligne dans la table');
     const pts = pointsAttention({ S: { ['binary_sensor.' + dc]: bin(dc, 'on', 'Capteur ' + dc) } });
     assert.equal(pts.length, 1, dc);
-    assert.equal(pts[0].titre, ligne[3], dc + ' : le titre est « ce qui s’est passé »');
+    assert.equal(pts[0].titre, duo[1], dc + ' : le titre est « ce qui s’est passé »');
     assert.equal(pts[0].sous, 'Capteur ' + dc);
     assert.equal(pts[0].vue, 'securite');
     assert.equal(pts[0].haid, 'binary_sensor.' + dc);
@@ -166,11 +168,12 @@ test('2. la sûreté : ce qui brûle est un danger, l’eau et le sabotage une a
     'binary_sensor.fumee_off': bin('smoke', 'off'), 'binary_sensor.fumee_muette': bin('smoke', 'unavailable'), 'binary_sensor.vibr': bin('vibration', 'on'),
   };
   const pts = pointsAttention({ S });
+  // ASSERTIONS MODIFIÉES (audit des capteurs du 19/10, lot 4) : UN mot par danger à l'écran — « Monoxyde détecté », « Boîtier ouvert » ; l'ordre suit les titres.
   assert.deepEqual(pts.map(p => [p.titre, p.niveau]), [
-    ['CO détecté', 'danger'], ['Fumée détectée', 'danger'], ['Gaz détecté', 'danger'],
-    ['Alerte de sécurité', 'alerte'], ['Boîtier ouvert ou déplacé', 'alerte'], ['Fuite détectée', 'alerte'],
+    ['Fumée détectée', 'danger'], ['Gaz détecté', 'danger'], ['Monoxyde détecté', 'danger'],
+    ['Alerte de sécurité', 'alerte'], ['Boîtier ouvert', 'alerte'], ['Fuite détectée', 'alerte'],
   ]);
-  assert.deepEqual(pts.map(p => p.icone), ['flame', 'fire-smoke', 'flame', 'shield-exclamation', 'shield-exclamation', 'water']);
+  assert.deepEqual(pts.map(p => p.icone), ['fire-smoke', 'flame', 'flame', 'shield-exclamation', 'shield-exclamation', 'water']);
   assert.equal(pts.find(p => p.titre === 'Fuite détectée').sous, 'Sous évier');
   assert.equal(pts.find(p => p.titre === 'Gaz détecté').sous, 'binary_sensor.gaz', 'sans friendly_name, l’id');
 });
@@ -226,10 +229,12 @@ test('4. le CO₂ d’une pièce au palier « chargé », seuil compris', () => 
   const pieces = [{ nom: 'Chambre', co2: 1510.4 }, { nom: 'Salon', co2: 1100 }, { nom: 'Bureau', co2: 1400, haid: 'sensor.co2_bureau' },
     { nom: 'Cave', co2: 1399.6 }, { nom: 'Vide', co2: null }, { nom: 'Texte', co2: 'abc' }, { co2: 2000 }, null, 'x', { name: 'Grenier', co2: 1700 }];
   const pts = pointsAttention({ pieces });
+  // ASSERTION MODIFIÉE (audit du 19/10, point 13) : les chiffres à la manière de la langue, l'unité après une espace insécable.
+  const ppm = (n) => n.toLocaleString('fr-FR') + '\u00a0ppm';
   assert.deepEqual(pts.map(p => [p.cle, p.niveau, p.icone, p.titre, p.sous, p.vue, p.haid]), [
-    ['co2:Bureau', 'alerte', 'wind', 'CO₂ élevé', 'Bureau · 1400 ppm', 'room:Bureau', 'sensor.co2_bureau'],
-    ['co2:Chambre', 'alerte', 'wind', 'CO₂ élevé', 'Chambre · 1510 ppm', 'room:Chambre', null],
-    ['co2:Grenier', 'alerte', 'wind', 'CO₂ élevé', 'Grenier · 1700 ppm', 'room:Grenier', null],
+    ['co2:Bureau', 'alerte', 'wind', 'CO₂ élevé', 'Bureau · ' + ppm(1400), 'room:Bureau', 'sensor.co2_bureau'],
+    ['co2:Chambre', 'alerte', 'wind', 'CO₂ élevé', 'Chambre · ' + ppm(1510), 'room:Chambre', null],
+    ['co2:Grenier', 'alerte', 'wind', 'CO₂ élevé', 'Grenier · ' + ppm(1700), 'room:Grenier', null],
   ]);
 });
 
@@ -258,17 +263,19 @@ test('7. les veilles : la pile faible est une info, le CO₂ signalé une alerte
   };
   const veilles = { signales: ['bat:sensor.capteur_porte_batterie', 'bat:sensor.telecommande_batterie', 'bat:sensor.inconnue', 'co2:sensor.co2_bureau', 'co2:sensor.co2_chambre', 'creuses', 'xyz:1', 'bat:', null, 42] };
   const pts = pointsAttention({ S, veilles, pieces: [{ nom: 'Bureau', co2: 1500, haid: 'sensor.co2_bureau' }] });
+  // ASSERTION MODIFIÉE (audit du 19/10, point 13) : « 1 500 ppm », « 14 % » — `nombre` de la langue, espace insécable.
+  const ppm = (n) => n.toLocaleString('fr-FR') + '\u00a0ppm';
   assert.deepEqual(pts.map(p => [p.cle, p.niveau, p.icone, p.titre, p.sous, p.vue, p.haid]), [
-    ['co2:Bureau', 'alerte', 'wind', 'CO₂ élevé', 'Bureau · 1500 ppm', 'room:Bureau', 'sensor.co2_bureau'],
-    ['co2:sensor.co2_chambre', 'alerte', 'wind', 'CO₂ élevé', 'CO2 chambre · 1451 ppm', null, 'sensor.co2_chambre'],
+    ['co2:Bureau', 'alerte', 'wind', 'CO₂ élevé', 'Bureau · ' + ppm(1500), 'room:Bureau', 'sensor.co2_bureau'],
+    ['co2:sensor.co2_chambre', 'alerte', 'wind', 'CO₂ élevé', 'CO2 chambre · ' + ppm(1451), null, 'sensor.co2_chambre'],
     // 14 % : sous le seuil « attention » (20 %) — visible, en ambre (v3.49.0).
-    ['pile:sensor.capteur_porte_batterie', 'alerte', 'battery-quarter', 'Pile faible', 'Capteur porte · 14 %', 'objets', 'sensor.capteur_porte_batterie'],
+    ['pile:sensor.capteur_porte_batterie', 'alerte', 'battery-quarter', 'Pile faible', 'Capteur porte · 14\u00a0%', 'objets', 'sensor.capteur_porte_batterie'],
     ['pile:sensor.inconnue', 'info', 'battery-quarter', 'Pile faible', 'sensor.inconnue', 'objets', 'sensor.inconnue'],
     ['pile:sensor.telecommande_batterie', 'info', 'battery-quarter', 'Pile faible', 'Télécommande', 'objets', 'sensor.telecommande_batterie'],
   ]);
   // Sans la pièce, la veille parle seule.
   const seule = pointsAttention({ S, veilles: { signales: ['co2:sensor.co2_bureau'] } });
-  assert.deepEqual(seule.map(p => [p.cle, p.sous]), [['co2:sensor.co2_bureau', 'CO2 bureau · 1500 ppm']]);
+  assert.deepEqual(seule.map(p => [p.cle, p.sous]), [['co2:sensor.co2_bureau', 'CO2 bureau · ' + ppm(1500)]]);
   // Même clé (une pièce nommée comme le capteur) : une seule fois.
   assert.equal(pointsAttention({ S, veilles: { signales: ['co2:sensor.co2_bureau'] }, pieces: [{ nom: 'sensor.co2_bureau', co2: 1500 }] }).length, 1);
   assert.deepEqual(pointsAttention({ veilles: { signales: 'non' } }), []);

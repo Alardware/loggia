@@ -33,6 +33,9 @@ export const entity = (entity_id, opt = {}) => ({
   disabled_by: opt.disabled ? 'user' : null,
   name: opt.name || null,
   original_name: opt.original || null,
+  // La plateforme et la clé de traduction (chantier Médias, tâche 2) : ce qui dit l'intégration d'une entité sans appareil, et la sœur « Annoncer » d'une Echo.
+  platform: opt.platform || null,
+  translation_key: opt.key || null,
 });
 
 export const state = (entity_id, st, attributes = {}) => [entity_id, { entity_id, state: String(st), attributes }];
@@ -237,6 +240,58 @@ export const mediaHome = () => home({
     state('media_player.echo_salon', 'idle', { friendly_name: 'Echo Salon', volume_level: 0.4 }),
     state('media_player.sejour_echo_salon', 'playing', { friendly_name: 'Echo Salon (pilote)', media_title: 'Une chanson' }),
     state('media_player.ampli', 'off', { friendly_name: 'Ampli bureau' }),
+  ),
+});
+
+/**
+ * La maison des médias de sa maquette (chantier Médias, tâche 2 ; M1 B, M9, M10, M14) : ce que son registre montrait le 17/10,
+ * aux noms de la démo. Une Echo exposée DEUX fois, par l'intégration officielle (« Alexa Devices », l'appareil `d_dot`,
+ * la `notify` « Annoncer », les bits 5644 : ni lecture ni pause) et par `alexa_media_player` (HACS, un AUTRE appareil au
+ * registre, `d_dot_hacs`, les bits 318399) — les deux identifiants finissent pareil, comme chez lui ; le groupe « Partout »,
+ * officiel, avec sa `notify` ; une Apple TV (`apple_tv`, sa `remote.`) ; Spotify, un appareil de SERVICE ; le haut-parleur
+ * d'une sonnette, sur l'appareil d'une caméra ; une Echo officielle seule, sans HACS.
+ */
+export const alexaHome = () => home({
+  areas: [area('chambre_lino', 'Chambre de Lino'), area('salon', 'Séjour'), area('bureau', 'Bureau'), area('entree', 'Entrée')],
+  devices: [
+    device('d_dot', 'Echo Dot - Chambre Lino', 'chambre_lino', { manufacturer: 'Amazon', model: 'Echo Dot (3rd Gen)', integration: 'alexa_devices' }),
+    device('d_dot_hacs', 'Echo Dot Chambre Lino', 'chambre_lino', { manufacturer: 'Amazon', model: 'Echo Dot', integration: 'alexa_media' }),
+    // Le modèle qu'écrivent les deux intégrations pour un groupe d'enceintes, lu dans son registre : c'est à lui que le groupe se reconnaît.
+    device('d_partout', 'Partout', null, { manufacturer: 'Amazon', model: 'Speaker Group', integration: 'alexa_devices' }),
+    device('d_atv', 'Apple TV Salon', 'salon', { manufacturer: 'Apple', model: 'Apple TV 4K', integration: 'apple_tv' }),
+    device('d_spotify', 'Spotify Démo', null, { manufacturer: 'Spotify AB', model: 'Spotify', integration: 'spotify', entry_type: 'service' }),
+    device('d_sonnette', 'Sonnette entrée', 'entree', { manufacturer: 'Démo', model: 'G6 Entrée', integration: 'demo' }),
+    device('d_bureau', 'Echo Dot - Bureau', 'bureau', { manufacturer: 'Amazon', model: 'Echo Dot (3rd Gen)', integration: 'alexa_devices' }),
+  ],
+  entities: [
+    entity('media_player.chambre_lino_echo_dot', { device: 'd_dot', platform: 'alexa_devices' }),
+    entity('notify.chambre_lino_echo_dot_annoncer', { device: 'd_dot', platform: 'alexa_devices', key: 'announce' }),
+    entity('notify.chambre_lino_echo_dot_parler', { device: 'd_dot', platform: 'alexa_devices', key: 'speak' }),
+    entity('sensor.chambre_lino_echo_dot_prochaine_alarme', { device: 'd_dot', platform: 'alexa_devices' }),
+    entity('media_player.echo_dot_chambre_lino', { device: 'd_dot_hacs', platform: 'alexa_media' }),
+    entity('media_player.partout', { device: 'd_partout', platform: 'alexa_devices' }),
+    entity('notify.partout_annoncer', { device: 'd_partout', platform: 'alexa_devices', key: 'announce' }),
+    entity('media_player.apple_tv_salon', { device: 'd_atv', platform: 'apple_tv' }),
+    entity('remote.apple_tv_salon', { device: 'd_atv', platform: 'apple_tv' }),
+    entity('media_player.spotify_demo', { device: 'd_spotify', platform: 'spotify' }),
+    entity('camera.sonnette_entree', { device: 'd_sonnette', platform: 'demo' }),
+    entity('media_player.sonnette_entree_haut_parleur', { device: 'd_sonnette', platform: 'demo' }),
+    entity('media_player.bureau_echo_dot', { device: 'd_bureau', platform: 'alexa_devices' }),
+  ],
+  states: states(
+    state('media_player.chambre_lino_echo_dot', 'playing', { friendly_name: 'Echo Dot - Chambre Lino', supported_features: 5644, volume_level: 0.3, device_class: 'speaker' }),
+    state('notify.chambre_lino_echo_dot_annoncer', 'unknown', { friendly_name: 'Echo Dot - Chambre Lino Annoncer' }),
+    state('notify.chambre_lino_echo_dot_parler', 'unknown', { friendly_name: 'Echo Dot - Chambre Lino Parler' }),
+    state('sensor.chambre_lino_echo_dot_prochaine_alarme', 'unknown', { friendly_name: 'Echo Dot - Chambre Lino Prochaine alarme', device_class: 'timestamp' }),
+    state('media_player.echo_dot_chambre_lino', 'playing', { friendly_name: 'Echo Dot Chambre Lino', supported_features: 318399, volume_level: 0.3, media_title: 'Clair de Lune', media_artist: 'Debussy', media_duration: 300, media_position: 91 }),
+    state('media_player.partout', 'idle', { friendly_name: 'Partout', supported_features: 5644, volume_level: 0.4 }),
+    state('notify.partout_annoncer', 'unknown', { friendly_name: 'Partout Annoncer' }),
+    state('media_player.apple_tv_salon', 'off', { friendly_name: 'Apple TV Salon', supported_features: 450487, device_class: 'tv', source_list: ['Netflix', 'Arte'] }),
+    state('remote.apple_tv_salon', 'off', { friendly_name: 'Apple TV Salon', supported_features: 0 }),
+    state('media_player.spotify_demo', 'playing', { friendly_name: 'Spotify Démo', supported_features: 1572925, media_title: 'Clair de Lune', source_list: ['Echo Dot - Chambre Lino', 'Partout'] }),
+    state('camera.sonnette_entree', 'idle', { friendly_name: 'Sonnette entrée' }),
+    state('media_player.sonnette_entree_haut_parleur', 'idle', { friendly_name: 'Sonnette entrée Haut-parleur', supported_features: 136708, volume_level: 0.5 }),
+    state('media_player.bureau_echo_dot', 'unavailable', { friendly_name: 'Echo Dot - Bureau', supported_features: 5644 }),
   ),
 });
 

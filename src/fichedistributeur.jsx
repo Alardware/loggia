@@ -1,8 +1,24 @@
-/* ── La fiche du distributeur de croquettes (ADR 0155, 05/10) ────────────────
+/* ── La fiche du distributeur de croquettes (ADR 0155, 05/10 ; étape 2 du chantier IoT, 19/10 — ADR 0216) ──
  *
- * Une feuille à onglets sur le modèle du robot (ADR 0042) : Accueil, Planning,
- * Historique, Entretien, et la roue Réglages dans l'en-tête — une page, pas un
- * onglet. Un appareil = sa carte + sa fiche (ADR 0153).
+ * Une feuille à onglets sur le socle commun des fiches (`fichecommune.jsx`) :
+ * Accueil, Repas, Historique — et Entretien seulement s'il y a de quoi (I26 :
+ * des consommables) —, la roue Réglages dans l'en-tête (I4 A), une page, pas un
+ * onglet. Un appareil = sa carte + sa fiche (ADR 0153). L'en-tête prend la
+ * plaque de la carte et « {pièce} · distributeur » (I21).
+ *
+ * L'Accueil est celui de sa maquette « Cartes IoT », 1e (I22, I23) : le
+ * réservoir en grand, et « Je l'ai rempli » près de lui, qui DEMANDE — il a
+ * quitté la carte, où un appui par erreur remettait le bac à 100 % ; « Servir
+ * maintenant », selon la commande de l'appareil, et « Distribuer », le geste
+ * PARTAGÉ de la carte (distributeuretat.js : deux appuis, une ration, d'où
+ * qu'ils viennent) ; le prochain repas et la journée ; « État du distributeur »
+ * seulement quand l'appareil se plaint — jamais « Aucun problème ».
+ *
+ * Repas et Historique prennent aussi son dessin (I24, I25) : la rangée
+ * « Programme de l'appareil » qui dit qui sert, « VOS AUTOMATISATIONS », puis
+ * les sept jours GLISSANTS et chaque repas sous son vrai nom — celui de
+ * l'automatisation qui l'a servi, jamais « Repas du matin » deviné à l'heure.
+ * Les barres de la semaine partent, et l'orange de l'ancienne fiche (I8).
  *
  * Ce qui se CALCULE vit dans `distributeur.js` (pur, testé à sec), les briques
  * communes dans `fichecommune.jsx`. Ce fichier ne fait que dessiner :
@@ -33,43 +49,40 @@
  */
 import { useState, useEffect, useRef, useId } from 'react';
 import { tr, trN, trSens, locale, comparerTextes } from './i18n.js';
-import { Fi, Bascule, Gauge, ListeChoix, cvName } from './ui.jsx';
+import { Fi, Bascule, ListeChoix, cvName } from './ui.jsx';
 import { LOGGIA_INDEX, loggiaEnt, cfgVal, cfgSet, compteOrdinaire } from './state.js';
 import { commanderService } from './actions.js';
 import { premierJourSemaine } from './horloge.js';
+import { LISERE } from './styles.js';
 import { useOptimiste, useDemandes, enVol } from './optimiste.js';
 import { estRefus, raisonEchec } from './refus.js';
-import { etiquetteJour, etiquetteProchain, ordreJours, heureValide } from './robots.js';
+import { ordreJours, heureValide } from './robots.js';
+import { etiquetteJour, etiquetteProchain, phraseEntretien } from './robotsfiche.js';
+import { lireDistributeur, envoiDistribuer, niveauDuBac, prochainRepas, grammesRation, estMasse, enGrammes } from './distributeur.js';
+import { lancerDistribution, useDistribution } from './distributeuretat.js';
 import {
-  lireDistributeur, envoiDistribuer, niveauDuBac, mesurePortion, prochainRepas, dernierRepas, compteDuJour,
-  joursDeReserveDistributeur, planningAffiche, libelleHeures, libelleJours, repasDepuisHistorique, resumeSemaineRepas,
-} from './distributeur.js';
+  mesurePortion, compteDuJour, joursDeReserveDistributeur, planningAffiche, libelleHeures, libelleJours, repasDepuisHistorique, septJoursRepas,
+  consommablesDistributeur, reglagesDistributeur, selectMode, niveauConsommable,
+} from './distributeurfiche.js';
 import {
-  PANNEAU, TITRE_SECTION, PETITES_CAPITALES, BOUTON_DOUX, LIGNE, SOUS, filet, BoutonConfirme, PasAPas, PuceJour, ChampHeure,
-  BarresSemaine, useHistoriquePeriode, EnteteFiche, FicheOnglets, PanneauOnglet, PageReglagesAppareil, focaliser,
+  PANNEAU, PETITES_CAPITALES, LIGNE, SOUS, filet, BoutonConfirme, PasAPas, PuceJour, ChampHeure,
+  useHistoriquePeriode, EnteteFiche, FicheOnglets, PanneauOnglet, PageReglagesAppareil, OngletEntretien, focaliser,
 } from './fichecommune.jsx';
 
 const JOURS_HISTORIQUE = 10;      // la purge par défaut de Home Assistant
-const VERROU_MS = 2500;           // « Distribuer » : un appui, puis 2,5 s de pause
 const PORTIONS_MAX = 20;          // comme `distributeurs.py`
 // Douze repas au plus, comme `distributeurs.py` (MAX_REPAS) : au-delà, « Ajouter » ne se
 // propose plus — le serveur refuserait (`trop_de_repas`, que refus.js sait dire) (05/10).
 const MAX_REPAS = 12;
 const MAX_RESERVOIR = 1500;       // le maximum d'un bac en grammes sans maximum déclaré (croqMax)
-// Le symbole du gramme, le même dans les sept langues (les grammes de la semaine, toujours rapportés en g).
-const GRAMME = 'g';
 
-/* Le mot d'une source de repas (historique, tuiles). `trSens` : « Programmé »
- * et « Manuel » ont aussi un sens de MODE, une autre clé. */
+/* Le mot de la source du prochain repas (la tuile), quand l'automatisation n'a pas de nom. Ceux d'un repas PASSÉ — « Repas à la
+ * main », « À distance » — sont les titres de l'Historique (`septJoursRepas`, distributeurfiche.js). */
 const MOT_SOURCE = {
   loggia: () => tr('Planning de Loggia'),
-  automatisation: () => tr('Depuis une automatisation'),
   automatisations: () => tr('Depuis une automatisation'),
-  programme: () => trSens('Programmé · source d’un repas'),
   appareil: () => tr('Programme de l’appareil'),
   capteur: () => tr('Programme de l’appareil'),
-  manuel: () => trSens('Manuel · source d’un repas'),
-  distance: () => tr('À distance'),
 };
 const motSource = (s) => (MOT_SOURCE[s] ? MOT_SOURCE[s]() : null);
 // Le mode d'un Aqara, dans les mots du Planning : « Manual » n'est pas un mot.
@@ -101,154 +114,263 @@ export function heureLibre(repas) {
   return '08:00';
 }
 
-/* ════════════ L'accueil ════════════ */
+/* ════════════ L'accueil (sa maquette « Cartes IoT », 1e ; I22, I23 ; § 7.8) ════════════ */
 
-function OngletAccueil({ hass, lecture, niveau, reservoirMort, jours, prochain, dernier, aujourdhui, alerte, mort, allerA }) {
+/* Les panneaux de sa maquette (§ 7.5) : `--o-s3`, le liseré, le rayon 18 — le panneau du socle, sans son dégradé ni son ombre. */
+const CADRE = { ...PANNEAU, background: 'var(--o-s3)', boxShadow: 'none', borderRadius: 18, padding: '16px 18px' };
+// Le cadre d'une tuile : celui d'un panneau ; sa marge (14 × 16, 14 × 12 sous 290 px de tuiles) est celle des tuiles du robot (`rb-a-tuile`).
+const CADRE_TUILE = { background: 'var(--o-s3)', border: LISERE, borderRadius: 18, boxSizing: 'border-box', minWidth: 0 };
+// Deux lignes au plus, coupées entre deux mots, puis « … » : « Mahlzeiten: 1 · 12 g », « Harmonogram Loggii » au téléphone (05/10).
+const DEUX_LIGNES = { overflow: 'hidden', overflowWrap: 'anywhere', hyphens: 'auto', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' };
+/* Les puces de sa maquette (`ChipButton`) : 40 px, le rayon 10, le gris doux ; d'accent — « Oui, 100 % », « Distribuer » —, le bleu
+ * plein et le blanc. Le pas à pas de « Servir maintenant » : deux puces carrées de 44 px. */
+const PUCE = { height: 40, padding: '0 14px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+  background: 'var(--o-s1)', color: 'var(--o-text1)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexShrink: 0 };
+const ACCENT = { background: 'var(--o-accent-fond)', color: '#fff' };
+const PAS = { ...PUCE, width: 44, height: 44, padding: 0 };
+/* Le mot d'une anomalie de l'appareil, en entier : la carte en dit le court (« Problème signalé »). */
+const MOT_ANOMALIE = { bas: () => tr('Bac presque vide'), bloque: () => tr('Distribution bloquée'), autre: () => tr('Problème signalé par l’appareil') };
+const grammesLisibles = (g) => (Math.round(g * 10) / 10).toLocaleString(locale(), { maximumFractionDigits: 1 });
+
+/* Une tuile de l'Accueil (14 × 16) : son nom 12 / 700 au gris secondaire, la valeur 20 / 800, la ligne 12 / 600 ; elle ouvre un
+ * onglet. La valeur et la ligne passent sur deux lignes plutôt que de disparaître : la mise en page cède, pas les mots (05/10). La
+ * valeur se resserre aussi, comme celle du robot, sous 340 et 290 px de tuiles (`rb-d-tuile-titre`, index.css) : à 320 px,
+ * « Mahlzeiten: 1 · 45 g » se coupait en « Mahlzeite / n: » (vérification dans `?demo`, étape 2 du chantier IoT, tâche 8). */
+function Tuile({ nom, titre, sous, onClick }) {
+  return (
+    <button type="button" className="rb-a-tuile" onClick={onClick} style={{ ...CADRE_TUILE, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', color: 'inherit' }}>
+      <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--o-text2)' }}>{nom}</span>
+      <span className="rb-d-tuile-titre" style={{ fontWeight: 800, letterSpacing: '-.01em', marginTop: 6, ...DEUX_LIGNES }}>{titre}</span>
+      {sous && <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2, ...DEUX_LIGNES }}>{sous}</span>}
+    </button>
+  );
+}
+
+/* L'Accueil : le réservoir — « RÉSERVOIR », « 30 % » en 48 / 800, sa réserve, la barre ambre de 8 px — et « Je l'ai rempli », qui
+ * DEMANDE (« Remettre le niveau à 100 % ? » · « Annuler » · « Oui, 100 % ») : seulement sur une aide `input_number` vivante (`onRempli`)
+ * — un vrai capteur se remplit tout seul. « Servir maintenant » (I23), selon la commande de l'appareil (ADR 0155, R1) : une commande qui
+ * ÉCRIT une quantité compte les portions de CE geste ; sinon la taille de ration de l'appareil, s'il en a une, s'écrit aussitôt et vaut
+ * pour les rations suivantes ; un bouton sans taille, « Distribuer » seul. « Distribuer » est le geste PARTAGÉ de la carte : deux
+ * appuis, d'ici ou d'elle, une ration ; puis « Demande envoyée à 18:20 », et « Servi à 18:21 · 12 g » quand un compteur de l'appareil
+ * bouge — dans la minute, sinon la demande seule : rien ne s'invente. Les tuiles, et « État du distributeur » seulement quand
+ * l'appareil se plaint (I22). Muet, rien ne se commande ici : pas de « Servir maintenant » du tout, rien d'inerte. */
+function OngletAccueil({ hass, lecture, niveau, reservoirMort, phraseReserve, bas, onRempli, prochain, aujourdhui, alertes, mesure, allerA, idRepli = null }) {
   const S = (hass && hass.states) || {};
   const c = lecture.commande;
-  // « Distribuer » : absent quand l'appareil ne répond pas (la commande muette
-  // ou sa connectivité coupée) ; un réservoir muet, lui, n'empêche pas la vis.
-  const peutDistribuer = !!c && !(mort && (mort.raison === 'commande' || mort.raison === 'connectivite'));
-  const nMax = c && c.quantite ? Math.max(1, Math.min(PORTIONS_MAX, c.max != null ? Math.floor(c.max / (c.pas > 0 ? c.pas : 1)) : PORTIONS_MAX)) : 1;
-  const [n, setN] = useState(1);
-  const [verrou, setVerrou] = useState(false);
-  useEffect(() => { if (!verrou) return undefined; const t = setTimeout(() => setVerrou(false), VERROU_MS); return () => clearTimeout(t); }, [verrou]);
-  const distribuer = () => {
-    if (verrou) return;
-    const e = envoiDistribuer(c, c.quantite ? n : 1);
-    if (!e) return;
-    setVerrou(true);
-    commanderService(hass, e.data.entity_id, e.domaine, e.service, e.data);
-  };
-  // La portion : la valeur de l'entité, montrée tout de suite (useOptimiste),
-  // et SON unité — un `serving_size` d'Aqara compte des portions, pas des grammes.
+  // « Distribuer » : absent quand l'appareil ne répond pas (la commande muette ou sa connectivité coupée) ; un réservoir muet, lui, n'empêche pas la vis.
+  const peutDistribuer = !!c && !(lecture.enLigne.mort && lecture.enLigne.raison !== 'reservoir');
+  /* La question de « Je l'ai rempli ». Au clavier, la puce démontée laissait le focus tomber sur <body> : il va à « Annuler », puis
+   * revient à la puce — ou, le bac rempli (elle n'est plus là), à « Distribuer » (vérification dans `?demo`, tâche 8), ou, l'appareil
+   * muet (« Distribuer » parti aussi), à l'onglet (`idRepli` ; passe bis, point G). Un bac qui se remplit d'ailleurs pendant la
+   * question la referme : elle ne reviendrait pas toute seule plus tard. */
+  const [question, setQuestion] = useState(false);
+  const idBac = useId();
+  const aRemplir = !!onRempli;
+  useEffect(() => { if (!aRemplir) setQuestion(false); }, [aRemplir]);
+  const demander = () => { setQuestion(true); focaliser(idBac + '-annuler'); };
+  const refermer = () => { setQuestion(false); focaliser(idBac + '-rempli', idBac + '-distribuer', idRepli); };
+  /* Les portions de CE geste, pour une commande qui écrit une quantité : jamais moins que ce qui part VRAIMENT — `valeurPortions` relève
+   * la valeur au minimum de l'entité (min 2 → « 2 portions · 12 g » ; passe bis, point G). */
+  const pasC = c && c.pas > 0 ? c.pas : 1;
+  const nMin = c && c.quantite ? Math.max(1, Math.ceil((c.min != null ? c.min : 1) / pasC)) : 1;
+  const nMax = c && c.quantite ? Math.max(nMin, Math.min(PORTIONS_MAX, c.max != null ? Math.floor(c.max / pasC) : PORTIONS_MAX)) : 1;
+  const [n, setN] = useState(nMin);
+  // La taille de ration de l'appareil : sa valeur, montrée tout de suite (useOptimiste), et SON unité.
   const p = lecture.portion;
   const vReel = p && S[p.entity_id] ? Number(S[p.entity_id].state) : null;
   const reel = vReel != null && Number.isFinite(vReel) ? vReel : null;
   const [ov, poserOv] = useOptimiste(reel);
   const pv = ov != null ? ov : reel;
-  const pas = p && p.pas > 0 ? p.pas : 1;
+  const pasP = p && p.pas > 0 ? p.pas : 1;
   const poserPortion = (v) => {
     const borne = Math.max(p.min != null ? p.min : -Infinity, Math.min(p.max != null ? p.max : Infinity, Math.round(v * 1000) / 1000));
     poserOv(borne);
     commanderService(hass, p.entity_id, 'number', 'set_value', { entity_id: p.entity_id, value: borne });
   };
-  const tuiles = [
-    prochain && { nom: tr('Prochain repas'), vers: 'planning', ...prochain },
-    dernier && { nom: tr('Dernier repas'), vers: 'historique', ...dernier },
-  ].filter(Boolean);
-  const descNiveau = niveau.pct == null ? null : jours == null ? tr('Ce qu’il reste dans le bac') : jours > 1 ? tr('Environ {n} jours de réserve', { n: jours }) : tr('Moins de deux jours de réserve');
+  const gpp = mesure && mesure.grammesParPortion > 0 ? mesure.grammesParPortion : null;
+  const portions = (k) => trN(k, '{n} portion', '{n} portions') + (gpp ? ' · ' + grammesLisibles(k * gpp) + ' g' : '');
+  /* Le pas à pas de l'appareil règle une TAILLE de ration — une unité qui n'est pas une masse compte des portions —, jamais une entité
+   * de poids (passe bis de l'étape 2, 19/10 ; D1) : sur le number désigné en grammes, il aurait réglé l'étalonnage de l'appareil. */
+  const pas = !peutDistribuer ? null
+    : c.quantite ? { valeur: portions(n), moins: n > nMin ? () => setN(x => Math.max(nMin, x - 1)) : null, plus: n < nMax ? () => setN(x => Math.min(nMax, x + 1)) : null, appareil: false }
+      : p && pv != null && !estMasse(p.unite) ? { valeur: portions(pv),
+        moins: p.min == null || pv - pasP >= p.min ? () => poserPortion(pv - pasP) : null, plus: p.max == null || pv + pasP <= p.max ? () => poserPortion(pv + pasP) : null, appareil: true }
+        : null;
+  /* Le geste : le verrou partagé, puis la commande de l'appareil (`lancerDistribution`, qui tient le verrou jusqu'à la réponse de Home
+   * Assistant). La demande retient ce que disaient les compteurs de l'appareil à l'appui ; un compteur qui MONTE dans la minute — une
+   * vraie hausse, pas un battement par « unavailable » (passe bis, point G) —, ou un « dernier repas » qui change, dit qu'une ration
+   * est tombée — et combien, s'il compte des grammes. Une fois servie, elle le reste. */
+  const vol = useDistribution();
+  const temoins = [...lecture.historique.compteurs, lecture.historique.dernier].filter(Boolean);
+  const valeur = (e) => { const v = e ? Number(e.state) : NaN; return e && e.state !== '' && Number.isFinite(v) ? v : null; };
+  const releve = () => Object.fromEntries(temoins.map(id => [id, S[id] ? { v: valeur(S[id]), s: S[id].state } : null]));
+  const grammesCompteur = () => {
+    for (const id of lecture.historique.compteurs) {
+      const e = S[id];
+      const u = e && e.attributes ? e.attributes.unit_of_measurement : null;
+      const v = valeur(e);
+      // Un compteur dans une masse (g, kg, oz… : `estMasse`), en grammes ; sans unité, il compte des portions, pas des grammes.
+      if (estMasse(u) && v != null) return enGrammes(v, u);
+    }
+    return null;
+  };
+  const [demande, setDemande] = useState(null);
+  const distribuer = () => {
+    const e = peutDistribuer ? envoiDistribuer(c, c.quantite ? n : 1) : null;
+    if (!e || !lancerDistribution(hass, e)) return;
+    setDemande({ t: Date.now(), avant: releve(), g: grammesCompteur(), ration: grammesRation(mesure, c, c.quantite ? n : 1), servi: null });
+  };
+  const aServi = (x) => {
+    const av = demande.avant[x], e = S[x];
+    if (!e || !av) return false;
+    /* Le capteur « dernier repas » : une heure NOUVELLE, postérieure à l'appui. Muet (« unavailable ») à l'appui puis revenu à son
+     * ancienne heure, il passait pour un repas — « différent d'avant » ne vaut rien quand avant ne se lisait pas (passe bis 2, 19/10). */
+    if (x === lecture.historique.dernier) { const t = Date.parse(e.state); return !isNaN(t) && t > demande.t; }
+    const v = valeur(e);
+    return v != null && av.v != null && v > av.v;
+  };
+  const bouge = demande && !demande.servi && Date.now() - demande.t <= 60000 ? temoins.find(aServi) : null;
+  const tBouge = bouge ? Date.parse(S[bouge].last_changed) : null;
+  const gBouge = bouge ? grammesCompteur() : null;
+  useEffect(() => {
+    if (tBouge == null) return;
+    setDemande(d => (d && !d.servi ? { ...d, servi: { t: tBouge, g: gBouge != null && d.g != null && gBouge > d.g ? gBouge - d.g : d.ration } } : d));
+  }, [tBouge, gBouge]);
+  const geste = !demande ? null
+    : demande.servi ? { texte: demande.servi.g != null ? tr('Servi à {h} · {g} g', { h: heureDe(demande.servi.t), g: grammesLisibles(demande.servi.g) }) : tr('Servi à {h}', { h: heureDe(demande.servi.t) }), encre: 'var(--o-ok)' }
+      : { texte: tr('Demande envoyée à {h}', { h: heureDe(demande.t) }), encre: 'var(--o-text2)' };
   return (
-    <div className="rb-accueil">
-      <div className="rb-a-hero" style={PANNEAU}>
-        {(niveau.pct != null || reservoirMort) && (
-          <div>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-              <span style={{ fontSize: 14.5, fontWeight: 700 }}>{tr('Réservoir')}</span>
+    <div className="rb-accueil" style={{ gap: 12 }}>
+      {(niveau.pct != null || reservoirMort) && (
+        /* L'aide du bac muette : le liseré est ici, sur son panneau — la vis répond, l'en-tête ne crie pas à la panne (passe bis, point G). */
+        <div className={reservoirMort ? 'o-panne' : undefined} style={CADRE}>
+          {/* Le chiffre et la puce sur une ligne ; trop étroit (« Ich habe nachgefüllt » à 320 px), la puce passe dessous plutôt que
+            * d'écraser « 38 % » (tâche 8). */}
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '12px 16px', flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 0, flex: '1 1 150px' }}>
+              <div style={PETITES_CAPITALES}>{tr('Réservoir')}</div>
               {reservoirMort
-                ? <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--o-text3)' }}>{tr('Indisponible')}</span>
-                : <span style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums', color: niveau.pct < 25 ? 'var(--o-bad)' : 'var(--rb-doux)' }}>{niveau.pct}<span style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text2)' }}> %</span></span>}
+                ? <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--o-text3)', marginTop: 8 }}>{tr('Indisponible')}</div>
+                : <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, fontWeight: 800, lineHeight: 1, marginTop: 8, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}><span style={{ fontSize: 48, letterSpacing: '-.03em' }}>{niveau.pct}</span><span style={{ fontSize: 22 }}>%</span></div>}
+              {!reservoirMort && <div style={{ fontSize: 12.5, fontWeight: 600, color: bas ? 'var(--o-warn)' : 'var(--o-text2)', marginTop: 8 }}>{phraseReserve}</div>}
             </div>
-            {!reservoirMort && <Gauge pct={niveau.pct} color={niveau.pct < 25 ? 'var(--o-bad)' : 'var(--rb-doux)'} h={6} style={{ marginTop: 10 }} />}
-            {!reservoirMort && descNiveau && <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)', marginTop: 8 }}>{descNiveau}</div>}
+            {onRempli && !question && <button type="button" id={idBac + '-rempli'} onClick={demander} style={PUCE}><Fi i="check" size={12} />{tr('Je l’ai rempli')}</button>}
           </div>
-        )}
-        {aujourdhui && <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: niveau.pct != null || reservoirMort ? 12 : 0 }}>{aujourdhui}</div>}
-        {peutDistribuer && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: niveau.pct != null || reservoirMort || aujourdhui ? 18 : 0, flexWrap: 'wrap' }}>
-            {/* Une commande qui ÉCRIT une quantité : des portions, pas à pas — jamais un curseur. */}
-            {c.quantite && <PasAPas valeur={trN(n, '{n} portion', '{n} portions')} peutMoins={n > 1} peutPlus={n < nMax}
-              moins={() => setN(x => Math.max(1, x - 1))} plus={() => setN(x => Math.min(nMax, x + 1))} />}
-            {/* Le verrou de 2,5 s : `aria-disabled`, pas `disabled` — un bouton désactivé perd le
-              * focus, qui tombait sur <body> après Entrée ; `distribuer` ignore déjà l'appui (05/10). */}
-            <button type="button" onClick={distribuer} aria-disabled={verrou}
-              style={{ flex: 1, minWidth: 150, padding: '15px 12px', borderRadius: 14, border: 'none', cursor: verrou ? 'default' : 'pointer', fontSize: 14.5, fontWeight: 800, fontFamily: 'inherit', background: 'var(--rb-fond)', color: '#fff', opacity: verrou ? .55 : 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <Fi i="paw" size={14} color="#fff" />{c.quantite ? trN(n, 'Distribuer {n} portion', 'Distribuer {n} portions') : tr('Distribuer')}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {tuiles.length > 0 && (
-        <div className="rb-a-tuiles" style={{ display: 'grid', gridTemplateColumns: 'repeat(' + tuiles.length + ', minmax(0, 1fr))', gap: 12 }}>
-          {tuiles.map(t => (
-            <button key={t.vers} type="button" onClick={() => allerA(t.vers)} style={{ ...PANNEAU, padding: '14px 16px', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', color: 'inherit' }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)' }}>{t.nom}</div>
-              {/* L'heure revient à la ligne plutôt que de disparaître (« Heute 19… » à 320 px), et
-                * l'origine tient sur deux lignes (« Harmonogram Loggii ») : la mise en page cède (05/10). */}
-              <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-.01em', marginTop: 5, overflowWrap: 'anywhere', hyphens: 'auto' }}>{t.titre}</div>
-              {t.sous && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 3, overflow: 'hidden', overflowWrap: 'anywhere', hyphens: 'auto', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{t.sous}</div>}
-            </button>
-          ))}
+          {!reservoirMort && (
+            <div aria-hidden="true" style={{ position: 'relative', height: 8, marginTop: 14, borderRadius: 4, background: 'var(--o-s1)', overflow: 'hidden' }}>
+              <span data-barre="" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: niveau.pct + '%', borderRadius: 4, background: 'var(--o-piece-ambre)' }} />
+            </div>
+          )}
+          {/* La question de sa maquette, sous la barre ; son « Annuler » ferme la question, pas la feuille. */}
+          {onRempli && question && (
+            <div role="group" aria-label={tr('Remettre le niveau à 100 % ?')} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+              {/* Trop étroit, les deux puces passent sous la question plutôt que de la réduire à un mot par ligne (tâche 8). */}
+              <span style={{ flex: '1 1 140px', minWidth: 0, fontSize: 13, fontWeight: 700 }}>{tr('Remettre le niveau à 100 % ?')}</span>
+              <button type="button" id={idBac + '-annuler'} onClick={refermer} style={PUCE}>{tr('Annuler')}</button>
+              <button type="button" onClick={() => { onRempli(); refermer(); }} style={{ ...PUCE, ...ACCENT }}>{tr('Oui, 100 %')}</button>
+            </div>
+          )}
         </div>
       )}
 
-      {p && pv != null && (
-        <div style={{ ...PANNEAU, padding: '4px 0' }}>
-          <div style={LIGNE}>
-            <span style={{ minWidth: 0 }}>
-              {/* Se coupe plutôt que de passer sous le « − » (« Portionsgröße » à 320 px, 05/10). */}
-              <span style={{ display: 'block', fontSize: 14.5, fontWeight: 700, overflowWrap: 'anywhere', hyphens: 'auto' }}>{tr('Taille de la portion')}</span>
-            </span>
-            <PasAPas nom={tr('Taille de la portion')} valeur={pv.toLocaleString(locale()) + (p.unite ? ' ' + p.unite : '')}
-              peutMoins={p.min == null || pv - pas >= p.min} peutPlus={p.max == null || pv + pas <= p.max}
-              moins={() => poserPortion(pv - pas)} plus={() => poserPortion(pv + pas)} />
+      {peutDistribuer && (
+        <div style={CADRE}>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>{tr('Servir maintenant')}</div>
+          {/* − 2 portions · 12 g + et « Distribuer » sur une ligne ; au téléphone, « Distribuer » passe dessous, pleine largeur. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+            {/* Jamais un curseur pour ce qui distribue : un glissé de trop et la vis tourne. */}
+            {/* La valeur revient à la ligne (« 2 Portionen · » / « 12 g ») plutôt que de pousser « + » hors de l'écran à 320 px. */}
+            {pas && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flex: '0 1 auto', minWidth: 0 }}>
+                <button type="button" aria-label={tr('Portion plus petite')} title={tr('Portion plus petite')} onClick={pas.moins || undefined} disabled={!pas.moins} style={{ ...PAS, opacity: pas.moins ? 1 : .4 }}><Fi i="minus-small" size={16} /></button>
+                <span style={{ minWidth: 64, textAlign: 'center', fontSize: 17, fontWeight: 800, lineHeight: 1.2, overflowWrap: 'anywhere', fontVariantNumeric: 'tabular-nums' }}>{pas.valeur}</span>
+                <button type="button" aria-label={tr('Portion plus grande')} title={tr('Portion plus grande')} onClick={pas.plus || undefined} disabled={!pas.plus} style={{ ...PAS, opacity: pas.plus ? 1 : .4 }}><Fi i="plus-small" size={16} /></button>
+              </span>
+            )}
+            {/* Le verrou partagé : `aria-disabled`, pas `disabled` — un bouton désactivé perd le focus (05/10). */}
+            <button type="button" onClick={distribuer} id={idBac + '-distribuer'} aria-disabled={vol ? 'true' : undefined} style={{ ...PUCE, ...ACCENT, height: 44, flex: '1 1 120px', minWidth: 0, fontSize: 13 }}>
+              <Fi i="paw" size={13} />{tr('Distribuer')}
+            </button>
           </div>
+          {pas && pas.appareil && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 8 }}>{tr('Elle vaut pour les rations suivantes.')}</div>}
+          {geste && <div role="status" style={{ fontSize: 12, fontWeight: 700, color: geste.encre, marginTop: 10 }}>{geste.texte}</div>}
         </div>
       )}
 
-      {alerte && (
-        <button type="button" className="rb-a-alerte" onClick={() => allerA('entretien')}
-          style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderRadius: 'var(--o-radius,18px)', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', color: 'inherit', background: 'rgba(var(--o-warn-rgb),.13)' }}>
-          <span style={{ width: 38, height: 38, borderRadius: 12, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-warn-rgb),.2)' }}><Fi i="triangle-warning" size={16} color="var(--o-warn)" /></span>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 800 }}>{alerte}</span>
-          <Fi i="angle-right" size={12} color="var(--o-text2)" />
-        </button>
+      {(prochain || aujourdhui) && (
+        <div className="rb-a-tuiles" style={{ display: 'grid', gridTemplateColumns: 'repeat(' + (prochain && aujourdhui ? 2 : 1) + ', minmax(0, 1fr))', gap: 12 }}>
+          {prochain && <Tuile nom={tr('Prochain repas')} titre={prochain.titre} sous={prochain.sous} onClick={() => allerA('planning')} />}
+          {aujourdhui && <Tuile nom={tr('Aujourd’hui')} titre={aujourdhui.titre} sous={aujourdhui.sous} onClick={() => allerA('historique')} />}
+        </div>
+      )}
+
+      {/* Seulement quand l'appareil se plaint (I22) : l'ambre à 0,08, son filet à 0,3 — la rangée d'alerte d'un robot. Jamais « Aucun problème ». */}
+      {alertes.length > 0 && (
+        <div role="status" className="rb-a-alerte" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 18, background: 'rgba(var(--o-warn-rgb),.08)', border: '1px solid rgba(var(--o-warn-rgb),.3)' }}>
+          <Fi i="triangle-warning" size={15} color="var(--o-warn)" />
+          <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 700 }}>{tr('État du distributeur')}</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--o-warn)', textAlign: 'right' }}>{alertes.join(' · ')}</span>
+        </div>
       )}
     </div>
   );
 }
 
-/* ════════════ Le planning ════════════ */
+/* ════════════ Repas (I24 ; sa maquette 1e) ════════════
+ *
+ * Les règles du serveur ne changent pas (ADR 0155) ; le dessin suit sa maquette : la rangée « Programme de l'appareil », qui dit qui
+ * sert et son mode ; « VOS AUTOMATISATIONS » ; « Associer une automatisation », à l'accent. Le planning de Loggia, « Deux sources », la
+ * mise en garde et l'ancienne liste restent, sur les mêmes panneaux. */
 
-/* Un panneau de bloc : son titre, une phrase qui dit d'où il vient, ses lignes. */
+/* Un bloc : son titre en petites capitales (« VOS AUTOMATISATIONS »), une phrase qui dit d'où il vient, ses lignes. */
 const Bloc = ({ titre, sous = null, action = null, children }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
-    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-      <div style={TITRE_SECTION}>{titre}</div>{action}
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: 24 }}>
+      <div style={PETITES_CAPITALES}>{titre}</div>{action}
     </div>
     {sous && <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)', marginTop: -4 }}>{sous}</div>}
     {children}
   </div>
 );
-const LIEN = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 2px', border: 'none', background: 'none', cursor: 'pointer', font: 'inherit', fontSize: 12.5, fontWeight: 700, color: 'var(--rb-doux)' };
+// Un panneau de rangées : celui de sa maquette, ses rangées jusqu'au bord.
+const LISTE = { ...CADRE, padding: 0, overflow: 'hidden' };
+// Les liens de sa maquette (« Associer une automatisation ») : l'accent doux, 12,5 / 800 — plus l'orange de l'ancienne fiche (I8).
+const LIEN = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 2px', border: 'none', background: 'none', cursor: 'pointer', font: 'inherit', fontSize: 12.5, fontWeight: 800, color: 'var(--o-accent-soft)' };
 const MOT = { fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)', lineHeight: 1.5 };
 const AVIS = { padding: '12px 16px', borderRadius: 'var(--o-radius,18px)', fontSize: 13, fontWeight: 700, lineHeight: 1.45, background: 'rgba(var(--o-warn-rgb),.13)', color: 'var(--o-text1)' };
 
-/* Le programme de l'appareil, en lecture : ses créneaux s'il se lit, sinon ce
- * qu'on en sait — et son mode (Aqara), qui se règle dans Réglages. */
-function BlocProgramme({ p, premier, versReglages, idMode }) {
+/* Le programme de l'appareil : UNE rangée — son nom, la phrase qui dit qui sert, et son mode (Aqara : « Manuel › », qui ouvre
+ * Réglages) —, puis ses créneaux s'il se lit. Qui sert : « Ce sont vos automatisations qui servent » quand l'appareil est en mode
+ * manuel et qu'une automatisation est allumée (`servent`) ; sinon ce qu'on sait de son programme, ou rien. */
+function BlocProgramme({ p, premier, versReglages, idMode, servent }) {
   const mode = p.mode === 'programme' ? trSens('Programmé · mode') : p.mode === 'manuel' ? trSens('Manuel · mode') : null;
-  const phrase = p.lisible ? null
-    : p.note === 'capteur_diagnostic' ? tr('Programme non lisible : activez le capteur de diagnostic de l’appareil.')
-      : p.note === 'tenu_par_appareil' && p.mode === 'programme' ? tr('L’appareil peut aussi distribuer selon ses propres créneaux. Passez-le en mode manuel dans Réglages si vous ne vous en servez pas.')
-        : p.presente ? tr('Tenu par l’appareil : modifiez-le dans l’application du fabricant.') : null;
+  const phrase = p.mode === 'manuel' ? (servent ? tr('Ce sont vos automatisations qui servent') : null)
+    : p.lisible ? null
+      : p.note === 'capteur_diagnostic' ? tr('Programme non lisible : activez le capteur de diagnostic de l’appareil.')
+        : p.note === 'tenu_par_appareil' && p.mode === 'programme' ? tr('L’appareil peut aussi distribuer selon ses propres créneaux. Passez-le en mode manuel dans Réglages si vous ne vous en servez pas.')
+          : p.presente ? tr('Tenu par l’appareil : modifiez-le dans l’application du fabricant.') : null;
+  const corps = (
+    <>
+      <span style={{ minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 14, fontWeight: 700 }}>{tr('Programme de l’appareil')}</span>
+        {phrase && <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2, lineHeight: 1.4 }}>{phrase}</span>}
+      </span>
+      {mode && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 800, color: 'var(--o-text2)', flexShrink: 0 }}>{mode}<Fi i="angle-small-right" size={16} color="var(--o-text3)" /></span>}
+    </>
+  );
+  const rangee = { ...CADRE, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 14px 12px 16px' };
   return (
-    <Bloc titre={tr('Programme de l’appareil')}>
-      {(mode || (p.lisible && (p.repas || []).length > 0)) && (
-        <div style={{ ...PANNEAU, padding: '4px 0' }}>
-          {mode && (
-            <button type="button" id={idMode} onClick={versReglages} style={{ ...LIGNE, width: '100%', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', color: 'inherit', textAlign: 'left' }}>
-              <span style={{ fontSize: 14.5, fontWeight: 700 }}>{tr('Mode de distribution')}</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 800 }}>{mode}<Fi i="angle-right" size={11} color="var(--o-text2)" /></span>
-            </button>
-          )}
-          {p.lisible && (p.repas || []).map((r, i) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+      {mode ? <button type="button" id={idMode} onClick={versReglages} style={{ ...rangee, width: '100%', cursor: 'pointer', fontFamily: 'inherit', color: 'inherit', textAlign: 'left' }}>{corps}</button>
+        : <div style={rangee}>{corps}</div>}
+      {p.lisible && (p.repas || []).length > 0 && (
+        <div style={LISTE}>
+          {p.repas.map((r, i) => (
             // Un créneau éteint : son heure en gris de texte, jamais une opacité sur la ligne — elle
             // estompait « Éteint » lui-même, le mot qui DIT l'état, jusqu'à 2,3:1 (05/10).
-            <div key={i + r.heure} style={{ ...LIGNE, borderTop: filet(i || mode) }}>
+            <div key={i + r.heure} style={{ ...LIGNE, padding: '14px 16px', borderTop: filet(i) }}>
               <span style={{ minWidth: 0 }}>
-                <span style={{ display: 'block', fontSize: 19, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: r.actif ? undefined : 'var(--o-text2)' }}>{r.heure}</span>
+                <span style={{ display: 'block', fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: r.actif ? undefined : 'var(--o-text2)' }}>{r.heure}</span>
                 <span style={SOUS}>{[libelleJours(r.jours, premier, locale()), r.portions > 0 ? trN(r.portions, '{n} portion', '{n} portions') : null].filter(Boolean).join(' · ')}</span>
               </span>
               {/* « Éteint », pas « Inactif » : celui-ci est le `idle` de Home Assistant, « Idle » en anglais (05/10). */}
@@ -257,26 +379,25 @@ function BlocProgramme({ p, premier, versReglages, idMode }) {
           ))}
         </div>
       )}
-      {phrase && <div style={{ ...PANNEAU, ...MOT, fontSize: 13 }}>{phrase}</div>}
-    </Bloc>
+    </div>
   );
 }
 
-/* « Vos automatisations » : UNE ligne par automatisation, ses heures lues
- * dans son déclencheur, son interrupteur (si le compte la commande), et le
- * lien vers son éditeur (si Home Assistant le laisse modifier). */
+/* « Vos automatisations » : UNE rangée par automatisation — son nom (14 / 700), ses heures lues dans son déclencheur (17 / 800), ses
+ * jours (12) —, son interrupteur (si le compte la commande), et le lien vers son éditeur (si Home Assistant le laisse modifier).
+ * « Couper cette automatisation coupe ses 2 repas. » seulement quand elle sert : coupée, « couper » ne veut plus rien dire. */
 function LigneAutomatisation({ a, i, on, mort, premier, basculer, origine, ordinaire, dissocier }) {
   const heures = Array.isArray(a.heures) ? a.heures.filter(heureValide) : [];
   const details = [libelleJours(a.jours, premier, locale()), a.conditionnel ? tr('Selon une condition') : null,
     a.portions > 0 ? trN(a.portions, '{n} portion', '{n} portions') : null].filter(Boolean).join(' · ');
   const indice = a.indice === 'ancienne_liste' ? tr('Reconnue par votre ancienne liste') : a.indice === 'associee' ? tr('Associée à la main') : null;
   return (
-    <div className={mort ? 'o-panne' : undefined} style={{ padding: '13px 18px', borderTop: mort ? 'none' : filet(i), ...(mort ? { borderRadius: 14 } : null) }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+    <div className={mort ? 'o-panne' : undefined} style={{ padding: '14px 16px', borderTop: mort ? 'none' : filet(i), ...(mort ? { borderRadius: 14 } : null) }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         {/* Coupée : en gris de texte, que la garde tient à 4,5:1 — l'opacité .6 la laissait à 3,5:1 (05/10). */}
         <span style={{ flex: 1, minWidth: 0, color: on || mort ? undefined : 'var(--o-text2)' }}>
-          <span style={{ display: 'block', fontSize: 14.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nom}</span>
-          <span style={{ display: 'block', fontSize: 15, fontWeight: 800, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>{libelleHeures(a)}</span>
+          <span style={{ display: 'block', fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nom}</span>
+          <span style={{ display: 'block', fontSize: 17, fontWeight: 800, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{libelleHeures(a)}</span>
           {details && <span style={SOUS}>{details}</span>}
         </span>
         {mort ? <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text3)', flexShrink: 0 }}>{tr('Indisponible')}</span>
@@ -284,12 +405,12 @@ function LigneAutomatisation({ a, i, on, mort, premier, basculer, origine, ordin
             // Sans interrupteur, l'état se DIT : une opacité seule ne se lit pas (05/10).
             : !on ? <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text3)', flexShrink: 0 }}>{tr('Éteinte')}</span> : null}
       </div>
-      {heures.length > 1 && <div style={{ ...MOT, marginTop: 6 }}>{trN(heures.length, 'Couper cette automatisation coupe ses {n} repas.', 'Couper cette automatisation coupe ses {n} repas.')}</div>}
+      {on && !mort && heures.length > 1 && <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}>{trN(heures.length, 'Couper cette automatisation coupe ses {n} repas.', 'Couper cette automatisation coupe ses {n} repas.')}</div>}
       {(indice || (a.modifiable && a.id_config && origine) || (a.indice === 'associee' && !ordinaire)) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 6 }}>
           {indice && <span style={{ ...PETITES_CAPITALES, fontSize: 9.5 }}>{indice}</span>}
           {a.modifiable && a.id_config && origine && (
-            <a href={origine + '/config/automation/edit/' + encodeURIComponent(a.id_config)} target="_top" rel="noopener" style={{ ...LIEN, textDecoration: 'none' }}>{tr('Modifier dans Home Assistant')}<Fi i="arrow-right" size={10} color="var(--rb-doux)" /></a>
+            <a href={origine + '/config/automation/edit/' + encodeURIComponent(a.id_config)} target="_top" rel="noopener" style={{ ...LIEN, textDecoration: 'none' }}>{tr('Modifier dans Home Assistant')}<Fi i="arrow-right" size={10} color="var(--o-accent-soft)" /></a>
           )}
           {a.indice === 'associee' && !ordinaire && <button type="button" onClick={dissocier} style={LIEN}>{tr('Dissocier')}</button>}
         </div>
@@ -332,7 +453,7 @@ function RepasLoggia({ r, i, jours, quantite, ordinaire, poser, supprimer }) {
 function OngletPlanning({ hass, etat, erreur, ordinaire, allumee, demander, premier, versReglages, ecrire, err, associer, dissocier, enLigneAuto, idBase }) {
   const S = (hass && hass.states) || {};
   if (!etat) {
-    return <div role={erreur ? 'status' : undefined} style={{ ...PANNEAU, ...MOT, fontSize: 13 }}>{erreur ? tr('Planning indisponible pour l’instant.') : tr('Chargement…')}</div>;
+    return <div role={erreur ? 'status' : undefined} style={{ ...CADRE, ...MOT, fontSize: 13 }}>{erreur ? tr('Planning indisponible pour l’instant.') : tr('Chargement…')}</div>;
   }
   const vue = planningAffiche(etat, { ordinaire, allumee });
   const autos = (Array.isArray(etat.automatisations) ? etat.automatisations : []).filter(Boolean);
@@ -359,10 +480,10 @@ function OngletPlanning({ hass, etat, erreur, ordinaire, allumee, demander, prem
     .map(id => ({ id, label: cvName(S[id], id), sub: id })).sort((a, b) => comparerTextes(a.label, b.label));
   const lienAssocier = !ordinaire && candidates.length > 0 ? (
     <ListeChoix value={null} options={candidates} onChange={associer} label={tr('Associer une automatisation')} nom={tr('Associer une automatisation')} style={LIEN}>
-      {() => <><Fi i="plus" size={10} color="var(--rb-doux)" />{tr('Associer une automatisation')}</>}
+      {() => <><Fi i="add" size={12} color="var(--o-accent-soft)" />{tr('Associer une automatisation')}</>}
     </ListeChoix>
   ) : null;
-  const ajout = vue.peutAjouter && repas.length < MAX_REPAS ? <button type="button" id={idBase + '-ajouter'} onClick={ajouter} style={LIEN}><Fi i="plus" size={10} color="var(--rb-doux)" />{tr('Ajouter un repas')}</button> : null;
+  const ajout = vue.peutAjouter && repas.length < MAX_REPAS ? <button type="button" id={idBase + '-ajouter'} onClick={ajouter} style={LIEN}><Fi i="add" size={12} color="var(--o-accent-soft)" />{tr('Ajouter un repas')}</button> : null;
   /* Le planning de Loggia se PROPOSE dès que le serveur le permet (`peutPlanifier`) et
    * qu'il n'existe pas encore — même sous le bloc « Programme de l'appareil » : un Aqara
    * en mode manuel montre son mode, et n'obtenait jamais « Ajouter un repas » (05/10). */
@@ -372,11 +493,11 @@ function OngletPlanning({ hass, etat, erreur, ordinaire, allumee, demander, prem
       {err && <div role="alert" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)' }}>{err}</div>}
       {vue.deuxSources && <div role="note" style={AVIS}>{tr('Deux sources distribuent : vérifiez qu’un repas ne part pas deux fois.')}</div>}
 
-      {vue.blocs.programme && <BlocProgramme p={etat.programme} premier={premier} versReglages={versReglages} idMode={idBase + '-mode'} />}
+      {vue.blocs.programme && <BlocProgramme p={etat.programme} premier={premier} versReglages={versReglages} idMode={idBase + '-mode'} servent={autos.some(a => enLigneAuto(a) && allumee(a))} />}
 
       {vue.blocs.automatisations && (
-        <Bloc titre={tr('Vos automatisations')} sous={tr('Les automatisations de Home Assistant qui commandent ce distributeur.')}>
-          <div style={{ ...PANNEAU, padding: '4px 0' }}>
+        <Bloc titre={tr('Vos automatisations')}>
+          <div style={LISTE}>
             {autos.map((a, i) => (
               <LigneAutomatisation key={a.entity_id} a={a} i={i} on={allumee(a)} mort={!enLigneAuto(a)} premier={premier} origine={origine} ordinaire={ordinaire}
                 basculer={() => basculer(a)} dissocier={() => dissocier(a.entity_id)} />
@@ -392,7 +513,7 @@ function OngletPlanning({ hass, etat, erreur, ordinaire, allumee, demander, prem
           {vue.pause && (
             <div role="note" style={AVIS}>{tr('En pause : une autre source distribue déjà.')} {tr('Reprendra seul quand l’autre source s’arrêtera.')}</div>
           )}
-          <div style={{ ...PANNEAU, padding: '4px 0', opacity: vue.pause ? .6 : 1 }}>
+          <div style={{ ...LISTE, opacity: vue.pause ? .6 : 1 }}>
             {repas.map((r, i) => (
               <RepasLoggia key={r.id} r={r} i={i} jours={jours} quantite={quantite} ordinaire={ordinaire}
                 poser={poserRepas} supprimer={() => supprimer(r.id)} />
@@ -403,17 +524,17 @@ function OngletPlanning({ hass, etat, erreur, ordinaire, allumee, demander, prem
 
       {/* Les trois états vides : une commande et rien de programmé ; aucune commande. */}
       {vue.vide === 'aucun' && (
-        <div style={{ ...PANNEAU, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ ...CADRE, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <span style={{ ...MOT, fontSize: 13 }}>{tr('Aucun repas programmé.')}</span>{ajout}
         </div>
       )}
       {/* Sous le programme de l'appareil, l'état vide dit QUEL planning est vide. */}
       {vue.blocs.programme && proposition && (
         <Bloc titre={tr('Planning de Loggia')} sous={tr('Loggia distribue à ces heures, même écran fermé.')} action={ajout}>
-          <div style={{ ...PANNEAU, ...MOT, fontSize: 13 }}>{tr('Aucun repas programmé.')}</div>
+          <div style={{ ...CADRE, ...MOT, fontSize: 13 }}>{tr('Aucun repas programmé.')}</div>
         </Bloc>
       )}
-      {vue.vide === 'sans_commande' && <div style={{ ...PANNEAU, ...MOT, fontSize: 13 }}>{tr('Loggia ne sait pas commander ce distributeur : désignez son appareil ou son script de distribution dans Paramètres.')}</div>}
+      {vue.vide === 'sans_commande' && <div style={{ ...CADRE, ...MOT, fontSize: 13 }}>{tr('Loggia ne sait pas commander ce distributeur : désignez son appareil ou son script de distribution dans Paramètres.')}</div>}
       {vue.miseEnGarde && <div role="note" style={AVIS}>{tr('Si l’application du fabricant programme aussi des repas, coupez-les : sinon l’animal mange deux fois.')}</div>}
       {/* Avec la proposition seulement : sous un planning de Loggia rempli, elle flottait seule (05/10). */}
       {vue.ancienneListe && proposition && <div style={MOT}>{tr('Votre ancienne liste ne distribuait rien par elle-même.')}</div>}
@@ -424,119 +545,101 @@ function OngletPlanning({ hass, etat, erreur, ordinaire, allumee, demander, prem
 
 /* ════════════ L'historique ════════════ */
 
+/* L'Historique de sa maquette (I25) : « 7 DERNIERS JOURS » et « 21 repas · 252 g » (20 / 800) ; puis une rangée par repas, dans la
+ * feuille qui défile — le jour dans son badge, le titre VRAI (13,5 / 700), le moment (12), la pastille d'origine et les grammes
+ * (14 / 800). Les barres de la semaine partent. Au téléphone, la pastille et les grammes passent sous le titre plutôt que de le
+ * couper : la mise en page cède, pas les mots. */
+const PASTILLE_ORIGINE = { automatisme: () => [tr('Automatisme'), 'magic-wand'], main: () => [tr('À la main'), 'hand'], appareil: () => [tr('Appareil'), 'calendar-clock'] };
+const pastilleDe = (o) => (o && PASTILLE_ORIGINE[o] ? PASTILLE_ORIGINE[o]() : null);
+
 // Exporté pour les tests : un rendu côté serveur ne lance pas l’effet qui lit l’historique.
-export function OngletHistorique({ lignes, resume, chargee, erreur, aveugle, maintenant }) {
-  if (erreur) return <div role="alert" style={{ ...PANNEAU, ...MOT, fontSize: 13 }}>{tr('Historique indisponible.')}</div>;
-  if (!chargee) return <div style={{ ...PANNEAU, ...MOT, fontSize: 13 }}>{tr('Lecture de l’historique…')}</div>;
+export function OngletHistorique({ semaine, chargee, erreur, aveugle, maintenant }) {
+  if (erreur) return <div role="alert" style={{ ...CADRE, ...MOT, fontSize: 13 }}>{tr('Historique indisponible.')}</div>;
+  if (!chargee) return <div style={{ ...CADRE, ...MOT, fontSize: 13 }}>{tr('Lecture de l’historique…')}</div>;
   const jourLong = (t) => { const e = etiquetteJour(t, maintenant, locale()); return e === tr('Auj.') ? tr('Aujourd’hui') : e === tr('Hier') ? tr('Hier') : new Date(t).toLocaleDateString(locale(), { weekday: 'long' }).replace(/^./, c => c.toUpperCase()); };
   const quantite = (l) => l.quantites.filter(q => q.unite).map(q => q.valeur.toLocaleString(locale(), { maximumFractionDigits: 1 }) + ' ' + q.unite).join(' · ');
+  // Rien à lire et rien de vu : ni « 0 repas » qui passerait pour une semaine à jeun, ni « Aucun repas » — l'application du fabricant
+  // a pu en servir (05/10, contradicteur). La phrase suffit.
+  const muet = aveugle && semaine.rangees.length === 0;
   return (
-    <div className="rb-histo">
-      {/* Rien à lire et rien de vu : pas de « 0 repas » qui passerait pour une semaine à jeun. */}
-      {!(aveugle && lignes.length === 0) && <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
-        <div style={{ borderRadius: 'var(--o-radius,18px)', padding: '16px 20px', background: 'rgba(var(--rb-rgb),.14)', display: 'grid', gridTemplateColumns: 'repeat(' + (resume.grammes != null ? 2 : 1) + ', minmax(0, 1fr))', gap: 10 }}>
-          <div><div style={PETITES_CAPITALES}>{tr('Cette semaine')}</div><div style={{ fontSize: 21, fontWeight: 800, marginTop: 4 }}>{trN(resume.n, '{n} repas', '{n} repas')}</div></div>
-          {resume.grammes != null && <div><div style={PETITES_CAPITALES}>{tr('Croquettes')}</div><div style={{ fontSize: 21, fontWeight: 800, marginTop: 4 }}>{Math.round(resume.grammes).toLocaleString(locale()) + ' ' + GRAMME}</div></div>}
+    <div className="rb-histo" style={{ gap: 12 }}>
+      {!muet && (
+        <div style={CADRE}>
+          <div style={PETITES_CAPITALES}>{tr('7 derniers jours')}</div>
+          <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8, fontVariantNumeric: 'tabular-nums' }}>
+            {semaine.grammes != null ? trN(semaine.n, '{n} repas · {g} g', '{n} repas · {g} g', { g: semaine.grammes.toLocaleString(locale()) }) : trN(semaine.n, '{n} repas', '{n} repas')}
+          </div>
         </div>
-        <BarresSemaine jours={resume.jours} nom={tr('Cette semaine')} valeur={(j) => (j.grammes != null ? j.grammes : j.n)} />
-      </div>}
+      )}
       {aveugle && <div style={MOT}>{tr('L’historique ne voit que les repas partis de Home Assistant.')}</div>}
-      {/* Aveugle et rien vu : « Aucun repas » affirmerait ce qu'on ne sait pas — l'application
-        * du fabricant a pu en servir (05/10, contradicteur). La phrase du dessus suffit. */}
-      {!(aveugle && lignes.length === 0) && <div style={{ ...PANNEAU, padding: '4px 0' }}>
-        {lignes.length === 0 && <div style={{ padding: '16px 20px', ...MOT, fontSize: 13 }}>{tr('Aucun repas ces derniers jours.')}</div>}
-        {lignes.slice(0, 30).map((l, i) => (
-          <div key={l.t + '-' + i} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '13px 18px', borderTop: filet(i) }}>
-            <span style={{ minWidth: 42, height: 42, padding: '0 4px', boxSizing: 'border-box', borderRadius: 12, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 800, background: 'rgba(var(--rb-rgb),.14)', color: 'var(--rb-doux)' }}>{etiquetteJour(l.t, maintenant, locale())}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {/* La source quand on la sait ; sinon le moment seul, sans inventer d'où il vient. */}
-              <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{motSource(l.source) || jourLong(l.t) + ' ' + heureDe(l.t)}</div>
-              {motSource(l.source) && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{jourLong(l.t)} {heureDe(l.t)}</div>}
-            </div>
-            {quantite(l) && <div style={{ fontSize: 14, fontWeight: 800, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{quantite(l)}</div>}
-          </div>
-        ))}
-      </div>}
-    </div>
-  );
-}
-
-/* ════════════ L'entretien ════════════ */
-
-function OngletEntretien({ hass, lecture, onRempli }) {
-  const S = (hass && hass.states) || {};
-  const soeurs = new Map(lecture.soeurs.map(s => [s.id, s]));
-  const presser = (id) => commanderService(hass, id, 'button', 'press', { entity_id: id });
-  const motAnomalie = (a) => (a.type === 'bas' ? tr('Bac presque vide') : a.type === 'bloque' ? tr('Distribution bloquée') : ((soeurs.get(a.entity_id) || {}).nom || a.entity_id));
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {lecture.consommables.length > 0 && (
-        <div className="rb-pieces">
-          {lecture.consommables.map(c => {
-            const bas = (c.jours != null && c.jours <= 3) || (c.pct != null && c.pct <= 15);
-            const couleur = bas ? 'var(--o-bad)' : 'var(--rb-doux)';
+      {!muet && (
+        <div style={LISTE}>
+          {semaine.rangees.length === 0 && <div style={{ padding: '14px 16px', ...MOT, fontSize: 13 }}>{tr('Aucun repas ces 7 derniers jours.')}</div>}
+          {semaine.rangees.map((r, i) => {
+            const o = pastilleDe(r.origine);
+            const q = quantite(r);
             return (
-              <div key={c.entity_id} style={PANNEAU}>
-                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-                  <div style={{ fontSize: 15, fontWeight: 800, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{MOT_CONSOMMABLE[c.role] ? MOT_CONSOMMABLE[c.role]() : c.role}</div>
-                  {c.pct != null && <div style={{ fontSize: 19, fontWeight: 800, color: couleur, fontVariantNumeric: 'tabular-nums' }}>{Math.round(c.pct)} %</div>}
+              <div key={r.cle} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px 12px', padding: '12px 16px', borderTop: filet(i) }}>
+                <span style={{ minWidth: 44, height: 36, padding: '0 4px', boxSizing: 'border-box', borderRadius: 10, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', fontSize: 11.5, fontWeight: 800, color: 'var(--o-text1)' }}>{etiquetteJour(r.t, maintenant, locale())}</span>
+                <div style={{ flex: '1 1 140px', minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, overflowWrap: 'anywhere' }}>{r.titre}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 }}>{jourLong(r.t) + ' ' + heureDe(r.t)}</div>
                 </div>
-                {c.jours != null && <div style={{ fontSize: 12.5, fontWeight: 600, color: bas ? 'var(--o-bad)' : 'var(--o-text2)', marginTop: 3 }}>{trN(Math.round(c.jours), '{n} jour restant', '{n} jours restants')}</div>}
-                {c.pct != null && <Gauge pct={Math.max(0, Math.min(100, c.pct))} color={couleur} h={5} style={{ marginTop: 12 }} />}
-                {/* « Remplacé » est un `button.press` de l'appareil : ouvert à tous (ADR 0144, 05/10). */}
-                {c.reset && <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}><BoutonConfirme libelle={tr('Remplacé')} onConfirme={() => presser(c.reset)} /></div>}
+                {(o || q) && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12, marginLeft: 'auto', flexShrink: 0 }}>
+                    {o && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 999, background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}><Fi i={o[1]} size={11} />{o[0]}</span>}
+                    {q && <span style={{ minWidth: 44, textAlign: 'right', fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{q}</span>}
+                  </span>
+                )}
               </div>
             );
           })}
-        </div>
-      )}
-      {lecture.anomalies.length > 0 && (
-        <div style={{ ...PANNEAU, padding: '4px 0', maxWidth: 640 }}>
-          {lecture.anomalies.map((a, i) => {
-            const m = muette(S[a.entity_id]);
-            return (
-              <div key={a.entity_id} style={{ ...LIGNE, borderTop: filet(i) }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, minWidth: 0, fontSize: 14, fontWeight: 700 }}>
-                  {a.actif && <Fi i="triangle-warning" size={14} color="var(--o-warn)" />}{motAnomalie(a)}
-                </span>
-                <span style={{ fontSize: 13, fontWeight: 800, flexShrink: 0, color: m ? 'var(--o-text3)' : a.actif ? 'var(--o-warn)' : 'var(--o-text2)' }}>{m ? tr('Indisponible') : a.actif ? tr('Problème') : tr('Normal')}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-      {onRempli && (
-        <div style={{ ...PANNEAU, padding: '4px 0', maxWidth: 640 }}>
-          <div style={LIGNE}>
-            <span style={{ minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: 14.5, fontWeight: 700 }}>{tr('Réservoir rempli')}</span>
-              <span style={SOUS}>{tr('Remet le niveau du bac à 100 %.')}</span>
-            </span>
-            <button type="button" onClick={onRempli} style={BOUTON_DOUX}>{tr('Rempli')}</button>
-          </div>
         </div>
       )}
     </div>
   );
 }
+
+/* ════════════ L'entretien (I26 : seulement s'il y a de quoi) ════════════
+ *
+ * Les consommables de l'appareil — le déshydratant, le filtre d'un Petlibro ou d'un PetKit — sur le modèle du ROBOT (sa règle ; passe bis
+ * de l'étape 2, 19/10, point G) : la brique commune (`OngletEntretien`, fichecommune.jsx) — « Remplacé » DEMANDE (« Remettre Déshydratant
+ * à 100 % ? », I20), l'ambre sous 35 %, le rouge sous 15 % (en jours : 7 et 3), aucune phrase quand tout va bien. « Remplacé » est un
+ * `button.press` de l'appareil : ouvert à tous (ADR 0144, 05/10). « Je l'ai rempli » et les anomalies sont passés à l'Accueil :
+ * l'onglet n'existe plus pour le seul réservoir. */
+
+/* Les consommables sur le gabarit des pièces d'usure du robot : le nom, « 12 jours restants » dessous, le pourcentage s'il se sait,
+ * le niveau (`niveauConsommable`), et le bouton qui remet à neuf — s'il répond : un bouton `unavailable` (ou absent de `states`) est
+ * écarté ici, comme le robot écarte le sien (`piecesUsure`), et « Remplacé » n'est jamais inerte. La brique du serveur
+ * (`consommablesDistributeur`) le garde tel quel : la fixture partagée la fige (passe bis 2 de l'étape 2, 19/10). */
+const piecesDe = (consommables, S) => consommables.map(c => ({
+  id: c.entity_id, role: c.role, nom: MOT_CONSOMMABLE[c.role] ? MOT_CONSOMMABLE[c.role]() : c.role,
+  pct: c.pct != null ? Math.round(Math.max(0, Math.min(100, c.pct))) : null,
+  texte: c.jours != null ? trN(Math.round(c.jours), '{n} jour restant', '{n} jours restants') : null,
+  niveau: niveauConsommable(c), reset: c.reset && !muette(S[c.reset]) ? c.reset : null,
+}));
 
 /**
- * « Aujourd'hui : {n} repas · {g} g » : le compteur du jour de l'appareil, sinon
- * ce que l'historique en a vu (`lignes`, `null` tant qu'il n'est pas lu) — et
- * seulement s'il VOIT l'appareil (un compteur, un « dernier repas »). Aveugle,
- * il ne compte que les repas partis de Home Assistant : « 1 repas » cacherait
- * ceux de l'application du fabricant (05/10, contradicteur). `null` sinon.
- * Exporté pour les tests : un rendu côté serveur ne lit pas l'historique.
+ * La tuile « Aujourd'hui » (I22) : `{ titre, sous }` — « 3 repas · 36 g » et leurs heures (« 07:30 · 12:00 »), « Rien depuis minuit » —,
+ * d'après le compteur du jour de l'appareil, sinon ce que l'historique en a vu (`lignes`, `null` tant qu'il n'est pas lu) — et
+ * l'historique seulement s'il VOIT l'appareil (un compteur, un « dernier repas ») : aveugle, il ne compterait que les repas partis de Home
+ * Assistant — « 1 repas » cacherait ceux de l'application du fabricant (05/10, contradicteur). Sans compteur ni historique qui voie, rien
+ * ne se sait : `null`, et la tuile n'est pas là. Exportée pour les tests : un rendu côté serveur ne lit pas l'historique.
  */
-export function texteAujourdhui(compte, lignes, { aveugle = false, maintenant = Date.now() } = {}) {
+export function tuileAujourdhui(compte, lignes, { aveugle = false, maintenant = Date.now() } = {}) {
   const minuit = new Date(maintenant); minuit.setHours(0, 0, 0, 0);
-  const duJour = Array.isArray(lignes) && !aveugle ? lignes.filter(l => l.t >= minuit.getTime()) : null;
-  const nJour = compte.repas != null ? compte.repas : duJour && (duJour.length || compte.grammes != null) ? duJour.length : null;
-  const gJour = compte.grammes != null ? Math.round(compte.grammes) : null;
-  return nJour != null && gJour != null ? trN(nJour, 'Aujourd’hui : {n} repas · {g} g', 'Aujourd’hui : {n} repas · {g} g', { g: gJour.toLocaleString(locale()) })
-    : nJour != null ? trN(nJour, 'Aujourd’hui : {n} repas', 'Aujourd’hui : {n} repas')
-      : gJour != null ? tr('Aujourd’hui : {g} g', { g: gJour.toLocaleString(locale()) }) : null;
+  const duJour = Array.isArray(lignes) && !aveugle ? lignes.filter(l => l.t >= minuit.getTime()).sort((a, b) => a.t - b.t) : null;
+  const nJour = compte.repas != null ? compte.repas : duJour ? duJour.length : null;
+  const gLignes = duJour && duJour.some(l => l.grammes != null) ? duJour.reduce((s, l) => s + (l.grammes || 0), 0) : null;
+  const gJour = compte.grammes != null ? Math.round(compte.grammes) : gLignes != null ? Math.round(gLignes) : null;
+  const titre = nJour != null && gJour != null ? trN(nJour, '{n} repas · {g} g', '{n} repas · {g} g', { g: gJour.toLocaleString(locale()) })
+    : nJour != null ? trN(nJour, '{n} repas', '{n} repas') : gJour != null ? gJour.toLocaleString(locale()) + ' g' : null;
+  if (!titre) return null;
+  return { titre, sous: duJour ? (duJour.length ? duJour.map(l => heureDe(l.t)).join(' · ') : tr('Rien depuis minuit')) : null };
 }
+
+/* Le prochain repas, dans sa tuile : « 19:00 » aujourd'hui, « Demain 07:30 », « Mer. 07:30 » au-delà. */
+const quandRepas = (t, maintenant, loc) => (new Date(t).toDateString() === new Date(maintenant).toDateString() ? heureDe(t) : etiquetteProchain(t, maintenant, loc));
 
 /* ════════════ La fiche ════════════ */
 
@@ -548,7 +651,7 @@ export function texteAujourdhui(compte, lignes, { aveugle = false, maintenant = 
  * principale, posée par la coquille. `index`, `ongletDepart` et `maintenant`
  * servent aux tests.
  */
-export default function FicheDistributeurContent({ hass, etat = null, erreur = false, cfg, onFiche = null, epingle = null, onEtat = null, index, ongletDepart = 'accueil', maintenant = null }) {
+export default function FicheDistributeurContent({ hass, etat = null, erreur = false, cfg, onFiche = null, epingle = null, onEtat = null, index, ongletDepart = 'accueil', maintenant = null, plaque = null, sousNom = null }) {
   const S = (hass && hass.states) || {};
   const idx = index === undefined ? LOGGIA_INDEX : index;
   const conf = cfg === undefined ? loggiaEnt('feeder', null) : cfg;
@@ -622,36 +725,56 @@ export default function FicheDistributeurContent({ hass, etat = null, erreur = f
     compteurs: hs.compteurs, dernier: hs.dernier, evenements: hs.evenements, automatisations: autosReconnues,
     journal: vu && Array.isArray(vu.journal) ? vu.journal : [], states: S, depuis: t - JOURS_HISTORIQUE * 86400000, maintenant: t,
   }) : [];
-  const resume = resumeSemaineRepas(lignes, t, premier);
+  // Les sept jours de l'Historique (I25), chaque repas sous son vrai nom : celui de l'automatisation qui l'a servi.
+  const nomsAutos = Object.fromEntries((vu && Array.isArray(vu.automatisations) ? vu.automatisations : []).filter(a => a && a.entity_id).map(a => [a.entity_id, a.nom || cvName(S[a.entity_id], a.entity_id)]));
+  const semaine = septJoursRepas(lignes, { noms: nomsAutos, maintenant: t });
 
   // Le bac : son niveau, sa réserve en jours sur les seuls repas à heure fixe des sources actives.
   const reservoir = conf && conf.haids ? conf.haids.reservoir : null;
   const stRes = typeof reservoir === 'string' && reservoir ? S[reservoir] : undefined;
   const reservoirMort = typeof reservoir === 'string' && reservoir.indexOf('.') > 0 && muette(stRes);
   const maxRes = stRes && stRes.attributes && Number(stRes.attributes.max) > 0 ? Number(stRes.attributes.max) : MAX_RESERVOIR;
-  const niveau = niveauDuBac(S, reservoir, maxRes);
+  /* « Je l'ai rempli » (I22) : le maximum de l'aide, montré tout de suite — le geste d'abord (useOptimiste, 6 s au plus : I33) —, puis
+   * ce que l'aide répond. Seulement sur une aide `input_number` vivante : un vrai capteur se remplit tout seul. */
+  const [plein, poserPlein] = useOptimiste(stRes ? stRes.state : null);
+  const lu = niveauDuBac(S, reservoir, maxRes);
+  // Le maximum de l'aide, en grammes pour l'affichage (une aide en kg disait « 2 g » ; passe bis, point G — toute masse se convertit,
+  // `enGrammes`, passe bis 2) ; en SON unité pour l'écrire.
+  const uRes = stRes && stRes.attributes ? stRes.attributes.unit_of_measurement : null;
+  const niveau = plein != null ? { pct: 100, grammes: lu.grammes == null ? null : enGrammes(maxRes, uRes) } : lu;
   const mesure = mesurePortion(S, lecture.portion, lecture.poidsPortion);
   const jours = vu ? joursDeReserveDistributeur(niveau.grammes, vu, mesure, { allumee }) : null;
-  const onRempli = typeof reservoir === 'string' && reservoir.indexOf('input_number.') === 0 && !reservoirMort
-    ? () => commanderService(hass, reservoir, 'input_number', 'set_value', { entity_id: reservoir, value: maxRes }) : null;
+  // Ni sur un bac déjà plein — à son maximum, ou remis à 100 % à l'instant : la question ne ferait rien (rien d'inerte ; tâche 8).
+  const dejaPlein = plein != null || (stRes != null && Number(stRes.state) >= maxRes);
+  const onRempli = typeof reservoir === 'string' && reservoir.indexOf('input_number.') === 0 && !reservoirMort && !dejaPlein
+    ? () => { poserPlein(true); commanderService(hass, reservoir, 'input_number', 'set_value', { entity_id: reservoir, value: maxRes }); } : null;
+  // La réserve sous le chiffre : « ≈ 18 jours de réserve · 450 g » ; sans rythme connu, « Ce qu'il reste dans le bac ».
+  // Sous deux jours, « Moins de deux jours de réserve » : le singulier n'existe pas (passe bis, point G).
+  const reserve = jours == null ? tr('Ce qu’il reste dans le bac') : jours < 2 ? tr('Moins de deux jours de réserve') : trN(jours, '≈ {n} jours de réserve', '≈ {n} jours de réserve');
+  const phraseReserve = niveau.grammes != null ? reserve + ' · ' + Math.round(niveau.grammes).toLocaleString(locale()) + ' g' : reserve;
 
-  // Les deux tuiles : ce qui vient, ce qui est parti.
+  /* Les deux tuiles (I22) : « Prochain repas » — l'heure, et le nom de l'automatisation, ou « Planning de Loggia », « Programme de
+   * l'appareil » ; rien d'allumé, « Aucun » — et « Aujourd'hui ». « Dernier repas » part : l'Historique le dit. */
   const capteur = lecture.prochainCapteur && S[lecture.prochainCapteur] ? S[lecture.prochainCapteur].state : null;
   const pr = prochainRepas(vu, t, { allumee, capteur });
   // Un repas de Loggia ne porte de portions que si la commande ÉCRIT une quantité : sinon une
   // pression = une ration, et le Planning ne les montre pas — la tuile non plus (05/10).
   const portionsDites = pr && pr.portions > 0 && !(pr.source === 'loggia' && !(vu && vu.commande && vu.commande.quantite));
-  const prochain = pr ? { titre: etiquetteProchain(pr.date, t, locale()),
-    sous: [pr.nom || motSource(pr.source), portionsDites ? trN(pr.portions, '{n} portion', '{n} portions') : null, pr.conditionnel ? tr('Selon une condition') : null].filter(Boolean).join(' · ') } : null;
-  const dr = dernierRepas(lecture, S, vu, t);
-  const derniereLigne = lignes.find(l => Math.abs(l.t - (dr ? dr.t : 0)) <= 120000) || null;
-  const dernier = dr ? { titre: etiquetteJour(dr.t, t, locale()) + ' ' + heureDe(dr.t),
-    sous: derniereLigne ? motSource(derniereLigne.source) : dr.source === 'automatisation' ? motSource('automatisation') : null } : null;
+  const autos = vu && Array.isArray(vu.automatisations) ? vu.automatisations.filter(Boolean) : [];
+  // Un programme que l'appareil tient sans le montrer (présent, illisible) : la tuile le nomme, comme la carte — rien ne s'invente, ni
+  // « Aucun » ni « Rien de planifié » (passe bis, point E ; ajustement 2).
+  const programmeTenu = !!(vu && vu.programme && vu.programme.presente && !vu.programme.lisible);
+  const prochain = pr ? { titre: quandRepas(pr.date, t, locale()),
+    sous: [pr.nom || motSource(pr.source), portionsDites ? trN(pr.portions, '{n} portion', '{n} portions') : null, pr.conditionnel ? tr('Selon une condition') : null].filter(Boolean).join(' · ') }
+    : !vu ? null : programmeTenu ? { titre: tr('Programme de l’appareil'), sous: null }
+      : { titre: tr('Aucun'), sous: autos.length ? tr('Aucune automatisation active') : tr('Rien de planifié') };
   const aveugle = !hs.compteurs.length && !hs.dernier;
-  const aujourdhui = texteAujourdhui(compteDuJour(lecture, S), brut ? lignes : null, { aveugle, maintenant: t });
-  // L'alerte de l'Accueil : une anomalie ACTIVE, qui renvoie à Entretien.
-  const active = lecture.anomalies.find(a => a.actif) || null;
-  const alerte = active ? (active.type === 'bas' ? tr('Bac presque vide') : active.type === 'bloque' ? tr('Distribution bloquée') : ((lecture.soeurs.find(s => s.id === active.entity_id) || {}).nom || active.entity_id)) : null;
+  const aujourdhui = tuileAujourdhui(compteDuJour(lecture, S, t), brut ? lignes : null, { aveugle, maintenant: t });
+  /* « État du distributeur » : les anomalies ACTIVES, en entier — un autre problème sous le nom propre de son entité (« Erreur moteur »,
+   * la règle du 05/10), à défaut « Problème signalé par l'appareil » ; jamais deux fois le même mot (passe bis, point G). Aucune, pas
+   * de rangée. */
+  const nomPropre = (id) => { const s = lecture.soeurs.find(x => x.id === id); return s && s.attributs && s.attributs.friendly_name && s.nom ? s.nom : null; };
+  const alertes = [...new Set(lecture.anomalies.filter(a => a.actif).map(a => (a.type === 'autre' ? nomPropre(a.entity_id) || MOT_ANOMALIE.autre() : MOT_ANOMALIE[a.type]())))];
 
   // Le nom : celui de l'appareil, à défaut « Distributeur de croquettes ».
   const appareil = lecture.appareil && idx && idx.deviceMeta && typeof idx.deviceMeta.get === 'function' ? idx.deviceMeta.get(lecture.appareil) : null;
@@ -662,26 +785,33 @@ export default function FicheDistributeurContent({ hass, etat = null, erreur = f
     return modele ? [{ cle: 'modele', nom: tr('Modèle'), valeur: modele }] : [];
   })();
   // Le mode de distribution (Aqara) se dit avec les mots du Planning, pas « Manual ».
-  const motMode = (r, v) => (lecture.mode && r.id === lecture.mode.id ? motModeDe(v) : null);
-  const aReglages = !!lecture.appareil || lecture.reglages.principaux.length > 0 || lecture.reglages.autres.length > 0;
+  const mode = selectMode(lecture.soeurs);
+  const motMode = (r, v) => (mode && r.id === mode.id ? motModeDe(v) : null);
+  // Les consommables (Entretien) et les réglages (la roue) : ce que seule la popup lit, calculé ici sur les sœurs (passe bis, 19/10).
+  const consommables = consommablesDistributeur(lecture.soeurs);
+  const reglages = reglagesDistributeur(lecture.soeurs, lecture.commande);
+  const aReglages = !!lecture.appareil || reglages.principaux.length > 0 || reglages.autres.length > 0;
   const ficheId = (conf && typeof conf.haid === 'string' && conf.haid) || (lecture.commande && lecture.commande.entity_id) || (lecture.portion && lecture.portion.entity_id) || null;
 
+  /* Les onglets de sa maquette (I21) : Accueil · Repas · Historique — « Planning » devient « Repas », sous le même identifiant —, et
+   * Entretien seulement s'il y a de quoi (I26) : des consommables. « Je l'ai rempli » et les anomalies vivent à l'Accueil. */
   const onglets = [
     ['accueil', tr('Accueil'), 'home'],
-    ['planning', tr('Planning'), 'calendar-clock'],
+    ['planning', tr('Repas'), 'calendar-clock'],
     ['historique', tr('Historique'), 'time-past'],
-    ...(lecture.consommables.length || lecture.anomalies.length || onRempli ? [['entretien', tr('Entretien'), 'wrench-simple']] : []),
+    ...(consommables.length ? [['entretien', tr('Entretien'), 'wrench-simple']] : []),
   ];
   const [onglet, setOnglet] = useState(ongletDepart);
   /* Ce qui relie chaque onglet à son panneau (motif ARIA du robot). */
   const idOnglets = useId();
   const actuel = (onglet === 'reglages' && aReglages) || onglets.some(o => o[0] === onglet) ? onglet : 'accueil';
   const avecOnglets = actuel !== 'reglages' && onglets.length > 1;
-  const mort = lecture.enLigne.mort ? lecture.enLigne : null;
+  // L'aide du bac seule muette n'est pas une panne de l'appareil : la vis répond, l'en-tête ne le dit pas (comme la plaque ; passe bis, point G).
+  const mort = lecture.enLigne.mort && lecture.enLigne.raison !== 'reservoir' ? lecture.enLigne : null;
   /* Le focus suit chaque changement de vue interne (05/10) : une tuile ou l'alerte ouvre
    * son onglet ET y pose le focus ; Réglages le donne à Retour ; Retour ramène à la vue
-   * d'où l'on venait (le Planning, par « Mode de distribution ») et le rend à ce qui avait
-   * ouvert la page — la roue, ou la ligne du mode. */
+   * d'où l'on venait (Repas, par la rangée « Programme de l'appareil » et son mode) et le
+   * rend à ce qui avait ouvert la page — la roue, ou cette rangée. */
   const retourVers = useRef('accueil');
   const ouvreur = useRef(null);
   const allerA = (id) => { setOnglet(id); focaliser(idOnglets + '-t-' + id); };
@@ -689,24 +819,24 @@ export default function FicheDistributeurContent({ hass, etat = null, erreur = f
   const retour = () => { const vers = retourVers.current || 'accueil'; setOnglet(vers); focaliser(ouvreur.current, idOnglets + '-t-' + vers); };
 
   return (
-    <div className="rb-fiche rb-distributeur" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div className="rb-fiche" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* L'en-tête commun (I21) : la plaque de la carte, le nom, « {pièce} · distributeur », l'épingle, la roue (I4 A), UNE croix. */}
       <EnteteFiche nom={nom} enReglages={actuel === 'reglages'} reglages={aReglages} onReglages={() => versReglages(idOnglets + '-roue')} idRoue={idOnglets + '-roue'} epingle={epingle}
-        panne={mort ? tr('Ce distributeur ne répond plus.') : null} />
+        panne={mort ? tr('Ce distributeur ne répond plus.') : null} plaque={plaque} sousNom={sousNom} />
       {avecOnglets && <FicheOnglets idBase={idOnglets} nom={nom} onglets={onglets} actuel={actuel} onChoisir={setOnglet} />}
       {actuel !== 'reglages' && (
         <PanneauOnglet idBase={idOnglets} actuel={actuel} avecOnglets={avecOnglets}>
-          {actuel === 'accueil' && <OngletAccueil hass={hass} lecture={lecture} niveau={niveau} reservoirMort={reservoirMort} jours={jours} prochain={prochain} dernier={dernier}
-            aujourdhui={aujourdhui} alerte={alerte} mort={mort} allerA={allerA} />}
+          {actuel === 'accueil' && <OngletAccueil hass={hass} lecture={lecture} niveau={niveau} reservoirMort={reservoirMort} phraseReserve={phraseReserve} bas={niveau.pct != null && niveau.pct < 15}
+            onRempli={onRempli} prochain={prochain} aujourdhui={aujourdhui} alertes={alertes} mesure={mesure} allerA={allerA} idRepli={idOnglets + '-t-accueil'} />}
           {actuel === 'planning' && <OngletPlanning hass={hass} etat={vu} erreur={erreur} ordinaire={ordinaire} allumee={allumee} demander={demander} premier={premier}
             versReglages={() => versReglages(idOnglets + '-mode')} ecrire={ecrire} err={err} associer={associer} dissocier={dissocier} enLigneAuto={enLigneAuto} idBase={idOnglets} />}
-          {actuel === 'historique' && <OngletHistorique lignes={lignes} resume={resume} chargee={!!brut} erreur={histoErreur} maintenant={t}
-            aveugle={aveugle} />}
-          {actuel === 'entretien' && <OngletEntretien hass={hass} lecture={lecture} onRempli={onRempli} />}
+          {actuel === 'historique' && <OngletHistorique semaine={semaine} chargee={!!brut} erreur={histoErreur} maintenant={t} aveugle={aveugle} />}
+          {actuel === 'entretien' && (() => { const pieces = piecesDe(consommables, S); return <OngletEntretien hass={hass} pieces={pieces} phrase={phraseEntretien(pieces)} />; })()}
         </PanneauOnglet>
       )}
       {/* Les réglages de la roue commandent l'APPAREIL (switch, select, number) : pas de
         * `ordinaire` ici, comme la portion de l'Accueil et comme le robot (ADR 0144, 05/10). */}
-      {actuel === 'reglages' && <PageReglagesAppareil hass={hass} nom={nom} libelleNom={tr('Nom')} reglages={lecture.reglages} fiche={fiche} motOption={motMode}
+      {actuel === 'reglages' && <PageReglagesAppareil hass={hass} nom={nom} libelleNom={tr('Nom')} reglages={reglages} fiche={fiche} motOption={motMode}
         retour={retour} idRetour={idOnglets + '-retour'} onFiche={onFiche && ficheId ? () => onFiche(ficheId) : null} />}
     </div>
   );

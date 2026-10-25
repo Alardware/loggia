@@ -9,9 +9,10 @@ import { fileURLToPath } from 'node:url';
 import { tuileAlarme } from '../src/attention.js';
 import { domaineEdition, identifiantEdition } from '../src/objets.js';
 import { LOGGIA_SYNC_KEYS } from '../src/state.js';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
 const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
 const en = readFileSync(join(RACINE, 'src', 'langues', 'en.js'), 'utf8');
 const NL = String.fromCharCode(10);

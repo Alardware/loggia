@@ -95,11 +95,13 @@ test('les favoris se rangent PAR lecteur, et l’écran ne décide de rien', () 
   const src = readFileSync(join(RACINE, 'src', 'favlecture.js'), 'utf8');
   assert.match(src, /PAR LECTEUR/, 'la raison du rangement par lecteur a disparu du fichier');
 
-  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
-  assert.ok(app.includes("const CLE_FAVLECTURE = 'loggia_favlecture';"), 'la cle de rangement a bouge');
-  assert.ok(app.includes('favorisLecture(id)'), 'la fiche ne lit plus les favoris du lecteur');
+  // ASSERTION MODIFIÉE (chantier Médias, tâche 1 ; § 10) : les favoris du navigateur vivent dans navigateurmedias.jsx, et la fiche qui les lit dans fichemedia.jsx — le morceau chargé à la demande, plus App.jsx.
+  const nav = readFileSync(join(RACINE, 'src', 'navigateurmedias.jsx'), 'utf8');
+  assert.ok(nav.includes("const CLE_FAVLECTURE = 'loggia_favlecture';"), 'la cle de rangement a bouge');
+  const fiche = readFileSync(join(RACINE, 'src', 'fichemedia.jsx'), 'utf8');
+  assert.ok(fiche.includes('favorisLecture(id)'), 'la fiche ne lit plus les favoris du lecteur');
   // Tout ce qui DECIDE vit dans le module pur : l'ecran ne fabrique pas d'appel.
-  assert.ok(app.includes('appelPourJouer('), 'la fiche fabrique son appel au lieu de passer par le module');
+  assert.ok(fiche.includes('appelPourJouer('), 'la fiche fabrique son appel au lieu de passer par le module');
 });
 
 test('la phrase pour un Echo : le seul chemin, et c’est la sienne', async () => {
@@ -190,4 +192,39 @@ test('une enceinte qui apparaît DEUX fois : on vise celle qui sait parler', asy
     ['media_player.un', meta('alexa_devices')], ['media_player.deux', meta('cast')]]), deviceMeta: new Map() };
   assert.equal(cibleAlexa('media_player.un', autresIds, sansHacs), null);
   assert.equal(cibleAlexa('media_player.absente', etats, index), null);
+});
+
+test('passe bis (17/10) : la fin de l’identifiant se lit sur une FRONTIÈRE DE MOT, et une officielle que deux jumelles revendiquent n’en a aucune', async () => {
+  const { cibleAlexa } = await import('../src/favlecture.js');
+  const e = (nom) => ({ state: 'idle', attributes: { friendly_name: nom } });
+  const meta = (p) => ({ deviceId: null, platform: p });
+  const idx = (...paires) => ({ entityMeta: new Map(paires.map(([id, p]) => [id, meta(p)])), deviceMeta: new Map() });
+  /* `salon_techo` finit par `echo` en lettres, pas en mots : ce n'est pas l'Echo. `salon_echo`, lui, l'est. */
+  const etats = { 'media_player.salon_techo': e('Technics du salon'), 'media_player.salon_echo': e('Echo - Salon'), 'media_player.echo': e('Echo') };
+  const index = idx(['media_player.salon_techo', 'alexa_devices'], ['media_player.salon_echo', 'alexa_devices'], ['media_player.echo', 'alexa_media']);
+  assert.equal(cibleAlexa('media_player.salon_techo', etats, index), null, 'pas de frontière de mot : pas de cible');
+  assert.equal(cibleAlexa('media_player.salon_echo', etats, index), 'media_player.echo');
+  /* Le défaut de la relecture : deux jumelles HACS au nom par défaut, « Echo Dot » et « Echo Dot » (`echo_dot`, `echo_dot_2`), et une
+   * officielle « Echo Dot - Chambre » dont l'identifiant finit par `echo_dot`. Deux candidates : aucune — dire la phrase dans la
+   * mauvaise pièce est pire que ne pas la proposer. */
+  const doubles = { 'media_player.chambre_echo_dot': e('Echo Dot'), 'media_player.echo_dot': e('Echo Dot'), 'media_player.echo_dot_2': e('Echo Dot') };
+  const index2 = idx(['media_player.chambre_echo_dot', 'alexa_devices'], ['media_player.echo_dot', 'alexa_media'], ['media_player.echo_dot_2', 'alexa_media']);
+  assert.equal(cibleAlexa('media_player.chambre_echo_dot', doubles, index2), null, 'deux jumelles la revendiquent : aucune');
+  // Une seule candidate, et c'est elle.
+  assert.equal(cibleAlexa('media_player.chambre_echo_dot', { 'media_player.chambre_echo_dot': e('Echo Dot - Chambre'), 'media_player.echo_dot': e('Echo Dot') }, index2), 'media_player.echo_dot');
+});
+
+test('passe bis 2 (17/10) : seule une Echo OFFICIELLE revendique une jumelle — un Sonos `salon` ne prend pas `echo_salon`, même si l’identifiant finit par le sien', async () => {
+  const { cibleAlexa } = await import('../src/favlecture.js');
+  const e = (nom) => ({ state: 'idle', attributes: { friendly_name: nom } });
+  const meta = (p) => ({ deviceId: null, platform: p });
+  /* Le défaut rejoué par la relecture : `echo_salon` finit par `_salon`, et le Sonos « Salon » adoptait la jumelle HACS — l'Echo
+   * disparaissait, et la carte « Salon » le commandait. Le revendicateur doit être une Echo officielle. */
+  const etats = { 'media_player.salon': e('Salon'), 'media_player.echo_salon': e('Echo Salon'), 'media_player.sejour_echo_salon': e('Echo - Salon') };
+  const idx = (p) => ({ entityMeta: new Map([['media_player.salon', meta(p)], ['media_player.echo_salon', meta('alexa_media')], ['media_player.sejour_echo_salon', meta('alexa_devices')]]), deviceMeta: new Map() });
+  assert.equal(cibleAlexa('media_player.salon', etats, idx('sonos')), null, 'un Sonos : jamais de jumelle par le nom');
+  assert.equal(cibleAlexa('media_player.salon', etats, idx('cast')), null, 'ni un Chromecast');
+  assert.equal(cibleAlexa('media_player.salon', etats, { entityMeta: new Map(), deviceMeta: new Map() }), null, 'ni un lecteur dont on ne sait pas l’intégration');
+  assert.equal(cibleAlexa('media_player.sejour_echo_salon', etats, idx('sonos')), 'media_player.echo_salon', 'l’officielle, elle, la revendique — et elle seule');
+  assert.equal(cibleAlexa('media_player.echo_salon', etats, idx('sonos')), 'media_player.echo_salon', 'la jumelle HACS : elle-même, sans détour');
 });

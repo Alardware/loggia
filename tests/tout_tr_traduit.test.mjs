@@ -92,15 +92,34 @@ const CORPUS = [
   ...parcourir(join(RACINE, 'scripts'), /\.(mjs|js|py)$/).filter(p => !/__pycache__/.test(p)),
 ].map(p => readFileSync(p, 'utf8')).join('\n');
 
+/* TEST MODIFIÉ (19/10) : une clé COURTE se cherche ENTRE GUILLEMETS. « N »,
+ * « NE », « SO » — les points cardinaux abrégés — se trouvaient dans n'importe
+ * quel mot du corpus (« Notifications », « NE » de « CONNEXION »…) : la
+ * sous-chaîne les disait vivantes, et rien ne les appelait. Pour une clé de
+ * quatre caractères ou moins, seul le littéral compte : `'N'`, `"N"` ou
+ * `` `N` ``, sous sa forme échappée s'il le faut. Une clé plus longue garde la
+ * sous-chaîne : elle traverse des tables, des gabarits du serveur, des
+ * concaténations — et la chercher entre guillemets tuerait du vivant. */
+const COURTE = 4;
+const echapper = (c, q) => c.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').split(q).join('\\' + q);
+const citee = (c) => ["'", '"', '`'].some(q => CORPUS.includes(q + c + q) || CORPUS.includes(q + echapper(c, q) + q));
+
 test('aucune clé de catalogue que plus rien n’appelle', () => {
   /* La clé EST le texte français. On la cherche telle quelle, PARTOUT — pas
    * seulement dans un `tr('…')` : beaucoup de textes transitent par une table
    * (`MESURES_NOMS`, `WX_NOMS`) avant d'y arriver, et les gabarits du serveur
    * vivent dans les `.py`. Chercher le littéral est la seule méthode qui ne
    * tue pas de vivant. */
-  const orphelines = [...CLES].filter(c => !CORPUS.includes(c));
+  const orphelines = [...CLES].filter(c => !CORPUS.includes(c) || (c.length <= COURTE && !citee(c)));
   assert.deepEqual(orphelines, [],
     'ces clés sont traduites six fois et ne s’afficheront jamais : retire-les des catalogues');
+});
+
+test('une clé courte n’est vivante qu’entre guillemets', () => {
+  // Le garde-fou de la recherche : une clé courte qu'on appelle se trouve, une sous-chaîne seule ne suffit pas.
+  assert.ok(citee('OK') || citee('Auto'), 'la recherche entre guillemets ne trouve plus rien : elle est cassée');
+  const piege = 'NOTIFICATIONS';
+  assert.ok(piege.includes('NO') && !["'", '"', '`'].some(q => piege.includes(q + 'NO' + q)), 'une sous-chaîne passerait pour un appel');
 });
 
 test('un gabarit que le serveur écrit au journal s’écrit en entier, et a sa clé', () => {

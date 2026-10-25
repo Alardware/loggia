@@ -58,7 +58,7 @@ export function raisonLisible(raison, tr = (x) => x) {
   if (raison === 'socket') return tr('Liaison à Home Assistant interrompue.');
   if (raison === 'pipeline') return tr('Aucun moteur de transcription dans Home Assistant.');
   if (raison === 'refus') return tr('Accès au micro refusé.');
-  if (raison === 'suspendu') return tr('Le son n’a pas démarré. Touche l’écran, puis réessaie.');
+  if (raison === 'suspendu') return tr('Le son n’a pas démarré. Touchez l’écran, puis réessayez.');
   return tr('Écoute impossible.');
 }
 

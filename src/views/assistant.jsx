@@ -609,8 +609,8 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
   const occupe = etat !== 'idle';
   const ouvert = fil === 'ouvert';
   const pret = !!texte.trim() && !occupe && lie;
-  const invite = ecoute ? tr('Parle, je t’écoute.')
-    : micro.ok ? tr('Appuie et parle, j’écoute jusqu’au silence.')
+  const invite = ecoute ? tr('Parlez, je vous écoute.')
+    : micro.ok ? tr('Appuyez et parlez, j’écoute jusqu’au silence.')
       : raisonLisible(micro.raison, tr);
   const motLu = etat === 'speaking' ? mot : -1;
   const replie = hZone > 0 ? Math.min(1, BANDE / hZone) : 1;
@@ -807,7 +807,7 @@ export default function AssistantSheet({ hass, ns, onClose, question = '' }) {
                   style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 11, padding: '14px 2px 10px' }}>
                   {messages.length === 0 && !occupe && (
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', textAlign: 'center', padding: '10px 0' }}>
-                      {tr('Pose-lui une question.')}
+                      {tr('Posez-lui une question.')}
                     </div>
                   )}
                   {messages.map((m, i) => <Bulle key={i} m={m} />)}

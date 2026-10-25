@@ -45,14 +45,15 @@ const tousChaines = (v) => Object.values(v).every(x => typeof x === 'string' && 
 
 test('tous les lecteurs sont couverts ici', () => {
   // Un lecteur ajouté à lectures.js sans cas dans ce fichier fait échouer ce test.
+  // ASSERTION MODIFIÉE (audit des capteurs du 19/10, lot 4) : `roomHidden` est parti — plus rien n'écrivait `loggia_roomhidden`.
   assert.deepEqual(Object.keys(L).sort(),
-    ['croqAncienneListe', 'croqHaids', 'hueScripts', 'notifIds', 'plantsCfg', 'roomHidden', 'voletDays', 'voletMode']);
+    ['croqAncienneListe', 'croqHaids', 'hueScripts', 'notifIds', 'plantsCfg', 'voletDays', 'voletMode']);
 });
 
 test('configuration absente : chaque lecteur rend son défaut', () => {
   etat();
   assert.equal(L.voletMode(), null);
-  for (const f of ['voletDays', 'croqAncienneListe', 'roomHidden', 'plantsCfg']) assert.deepEqual(L[f](), [], f);
+  for (const f of ['voletDays', 'croqAncienneListe', 'plantsCfg']) assert.deepEqual(L[f](), [], f);
   for (const f of ['croqHaids', 'hueScripts', 'notifIds']) assert.deepEqual(L[f](), {}, f);
   // Sans serveur ni navigateur non plus.
   setLoggiaState({ cfg: {}, ent: {}, server: false });
@@ -230,28 +231,11 @@ for (const [nom, domaine, valide] of [
   });
 }
 
-/* ── Pièces masquées (stockage de l'appareil) ─────────────────────────────── */
+/* ── Pièces masquées ─────────────────────────────────────────────────────── */
 
-test('pièces masquées : le stockage local, abîmé ou absent, rend []', () => {
-  const avant = Object.getOwnPropertyDescriptor(globalThis, 'window');
-  const warn = console.warn;
-  const m = new Map();
-  globalThis.window = { localStorage: { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) } };
-  console.warn = () => {};   // readLS signale un JSON illisible : attendu ici
-  try {
-    etat();
-    assert.deepEqual(L.roomHidden(), []);
-    m.set('loggia_roomhidden', JSON.stringify(['Cuisine', 'Garage']));
-    assert.deepEqual(L.roomHidden(), ['Cuisine', 'Garage']);
-    for (const brut of ['null', '"Cuisine"', '42', 'true', '{"Cuisine":1}', '{', '']) {
-      m.set('loggia_roomhidden', brut);
-      assert.deepEqual(L.roomHidden(), [], brut);
-    }
-  } finally {
-    console.warn = warn;
-    if (avant) Object.defineProperty(globalThis, 'window', avant); else delete globalThis.window;
-  }
-});
+/* TEST RETIRÉ (audit des capteurs du 19/10, lot 4) : « pièces masquées : le stockage local, abîmé ou absent, rend [] ».
+ * `roomHidden` est parti : plus rien n'écrivait `loggia_roomhidden`, et « Tout réafficher » remet l'agencement de la pièce
+ * (tests/audit_capteurs_lot4.test.mjs). */
 
 /* ── Plantes ──────────────────────────────────────────────────────────────── */
 
@@ -282,7 +266,8 @@ test('Paramètres lit l’ancienne liste par le lecteur, pas la clé brute', () 
   // abîmé pour qu'on le répare. Puis l'éditeur est parti (ADR 0155) : l'encart
   // « Ancienne liste de repas » lit par `croqAncienneListe`, qui garde le repas
   // abîmé en champs sûrs (tests/distributeur_migration.test.mjs).
-  assert.match(src, /import \{ croqAncienneListe \} from '\.\.\/lectures\.js';/);
+  // ASSERTION MODIFIÉE (audit du 19/10, M1) : Paramètres lit aussi les plantes par leur lecteur (`plantsCfg`), dans le même import.
+  assert.match(src, /import \{ croqAncienneListe(, plantsCfg)? \} from '\.\.\/lectures\.js';/);
   assert.match(src, /const liste = croqAncienneListe\(\)\.filter\(/);
   assert.doesNotMatch(src, /croqRepasEdition|croqMeals|repas: avecCle\(/, 'l’éditeur de l’ancienne liste est revenu');
   assert.doesNotMatch(src, /\.meals\) \|\| \[\]\)\.map/, 'une relecture brute des repas est revenue');
@@ -308,7 +293,6 @@ const FORMES = {
     && (m.auto === null || (typeof m.auto === 'string' && m.auto !== '')) && typeof m.relie === 'boolean'),
   hueScripts: (r) => objet(r) && tousChaines(r),
   notifIds: (r) => objet(r) && tousChaines(r),
-  roomHidden: (r) => Array.isArray(r),
   plantsCfg: (r) => objets(r) && r.every(p => !!p.base),
 };
 

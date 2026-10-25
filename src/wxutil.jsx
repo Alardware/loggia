@@ -11,7 +11,7 @@
  * crepuscule, pluie d'orage, pluie battante). Embarquees dans le bundle
  * plutot que servies depuis  : la demo et une installation neuve les
  * ont aussi. */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import wxClearDay from './assets/wx/clear-day.svg';
 import wxClearNight from './assets/wx/clear-night.svg';
 import wxPartly from './assets/wx/partly-cloudy-day.svg';
@@ -29,6 +29,26 @@ import wxFog from './assets/wx/fog.svg';
 import wxTornado from './assets/wx/tornado.svg';
 import wxAube from './assets/wx/sunrise.svg';
 import wxCrepuscule from './assets/wx/sunset.svg';
+/* Le jeu CLAIR (25/10, sa maquette « Cartes météo » en thème clair) : les mêmes
+ * dessins, le contour des nuages en gris-bleu (#93a5bd, 1,5 px quelle que soit
+ * la taille) et les traits du vent plus foncés. Un nuage blanc sur une carte
+ * claire ne se lisait pas, et le filtre d'avant (brightness .58) le rendait
+ * gris sombre — « moi je veux comme sur le modèle ». Dérivés des sombres par
+ * la règle de tests/icones_claires (l'animation reste) ; servis en FICHIERS
+ * (`?no-inline`) et non dans le boot : onze images de plus au démarrage ne
+ * tiendraient pas dans sa marge. Soleil, lune, aube, crépuscule, pluie
+ * battante et tornade sont les mêmes dans les deux thèmes. */
+import clPartly from './assets/wx/clair/partly-cloudy-day.svg?no-inline';
+import clPartlyNight from './assets/wx/clair/partly-cloudy-night.svg?no-inline';
+import clCloudy from './assets/wx/clair/cloudy.svg?no-inline';
+import clRain from './assets/wx/clair/rain.svg?no-inline';
+import clSnow from './assets/wx/clair/snow.svg?no-inline';
+import clSleet from './assets/wx/clair/sleet.svg?no-inline';
+import clHail from './assets/wx/clair/hail.svg?no-inline';
+import clStorm from './assets/wx/clair/thunderstorms.svg?no-inline';
+import clStormRain from './assets/wx/clair/thunderstorms-rain.svg?no-inline';
+import clWind from './assets/wx/clair/wind.svg?no-inline';
+import clFog from './assets/wx/clair/fog.svg?no-inline';
 import { loggiaEnt, LOGGIA_RESOLVED } from './state.js';
 import { REDUCE_MOTION } from './ui.jsx';
 import { tr, trHA } from './i18n.js';
@@ -60,6 +80,24 @@ const WX_METEO = {
   storm: wxStorm, storrain: wxStormRain, night: wxClearNight, brouillard: wxFog, tornade: wxTornado,
   aube: wxAube, crepuscule: wxCrepuscule,
 };
+const WX_CLAIR = {
+  partly: clPartly, partlynight: clPartlyNight, clouds: clCloudy, wind: clWind,
+  rain: clRain, snow: clSnow, gresil: clSleet, grele: clHail,
+  storm: clStorm, storrain: clStormRain, brouillard: clFog,
+};
+
+/* Le thème clair se lit sur `<html class="loggia-light">` (theme.js), qui ne
+ * prévient personne quand il change : on observe la classe. Au rendu serveur
+ * et sans document, sombre. */
+const estClair = () => { try { return document.documentElement.classList.contains('loggia-light'); } catch { return false; } };
+const ecouterClair = (cb) => {
+  try {
+    const mo = new MutationObserver(cb);
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => mo.disconnect();
+  } catch { return () => {}; }
+};
+const useClair = () => useSyncExternalStore(ecouterClair, estClair, () => false);
 
 /* Ce que l'icône MONTRE, pour qui ne la voit pas (20/09). « météo » ne disait
  * rien : dans la rangée des heures, l'icône est seule à porter la condition —
@@ -113,7 +151,8 @@ function IcoFigee({ src, size, nom }) {
  * y tournent pareil, mais sans ouvrir UN DOCUMENT par icône — il y en avait
  * sept à l'écran. */
 export function WeatherIco({ wx, size = 42, anime = true }) {
-  const src = WX_METEO[wx] || wxCloudy;
+  const clair = useClair();
+  const src = (clair && WX_CLAIR[wx]) || WX_METEO[wx] || wxCloudy;
   const nom = nomMeteo(WX_METEO[wx] ? wx : 'clouds');
   if (!anime || REDUCE_MOTION) return <IcoFigee src={src} size={size} nom={nom} />;
   return <img src={src} alt={nom} className="o-wx-ico" width={size} height={size} style={{ pointerEvents: 'none', display: 'block' }} />;

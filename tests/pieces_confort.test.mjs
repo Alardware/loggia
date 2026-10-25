@@ -16,6 +16,9 @@ const { MESURES_CONFORT, verdictMesure, scoreMesure, valeurConfort, verdictIndic
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const app = lire('src', 'App.jsx');
+// La fiche de confort d'une pièce est chargée à la demande (chantier Capteurs, tâche 1 : la borne) : elle se lit dans son fichier.
+const ficheConfort = lire('src', 'ficheconfort.jsx');
+const blocFiche = (debut, fin) => { const d = ficheConfort.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = ficheConfort.indexOf(fin, d + 1); return ficheConfort.slice(d, f < 0 ? undefined : f); };
 const barre = lire('src', 'barreconfort.jsx');
 const pur = lire('src', 'confort.js');
 const css = lire('src', 'index.css');
@@ -58,25 +61,30 @@ test('les paliers sont CEUX des captures du 19/09, borne par borne', () => {
 });
 
 test('la fiche de confort lit la meme table : ses verdicts sont delegues', () => {
-  const table = bloc('const FICHE_CONFORT = () => ({', NL + '});');
+  // ASSERTIONS MODIFIÉES (chantier Capteurs, tâche 1) : la fiche, sa table et ses échelles vivent dans ficheconfort.jsx, qui importe la table.
+  const table = blocFiche('const FICHE_CONFORT = () => ({', NL + '});');
   for (const cle of ['temp', 'hum', 'co2', 'bruit']) assert.ok(table.includes("verdict: v => verdictMesure('" + cle + "', v) }"), cle + ' : verdict delegue');
   assert.ok(!/verdict: v => v </.test(table), 'plus aucun seuil ecrit dans la fiche : une seule table, confort.js');
   assert.ok(table.includes("bruit: { key: 'bruit', label: tr('Bruit'), ico: 'volume', ...echelleFiche('bruit'),"), 'le bruit a sa barre dans la fiche');
   // La barre de la fiche : l'echelle des jauges des cartes (19/09).
-  assert.ok(app.includes('const e = echelleMesure(cle);') && app.includes("return { min: e.de, max: e.a, grad: 'linear-gradient(90deg,' + e.bandes.map(b => b.c + ' ' + b.de + '% ' + b.a + '%').join(',') + ')',"), 'bornes, couleurs et reperes des cartes');
-  assert.ok(app.includes("import { indiceConfort, verdictMesure, capteurBruit, echelleMesure, jaugeMesure, cleMesure, barresPile, mesuresFiche } from './confort.js';"));
+  assert.ok(ficheConfort.includes('const e = echelleMesure(cle);') && ficheConfort.includes("return { min: e.de, max: e.a, grad: 'linear-gradient(90deg,' + e.bandes.map(b => b.c + ' ' + b.de + '% ' + b.a + '%').join(',') + ')',"), 'bornes, couleurs et reperes des cartes');
+  // ASSERTION MODIFIÉE (audit du 19/10, H2) : la note et la zone de la table choisissent aussi le conseil.
+  // ASSERTION MODIFIÉE (audit des capteurs du 19/10, lot 4) : et le nom et la glyphe du CO₂, ceux de sa carte (`nomMesure`, `iconeMesure`).
+  assert.ok(ficheConfort.includes("import { verdictMesure, zoneMesure, scoreMesure, echelleMesure, indiceConfort, mesuresFiche, nomMesure, iconeMesure } from './confort.js';"));
 });
 
 test('la fiche de confort se dit dans la langue du moment (relecture du 03/10)', () => {
   /* Objet du module, la table se bâtissait une fois, à l'import : passer à
    * l'allemand sans recharger laissait « Qualité de l'air », « Température »…
    * en français. Une fonction, appelée à chaque rendu de la fiche. */
-  assert.ok(!/^const COMFORT = \{/m.test(app), 'la table de la fiche est redevenue un objet du module : ses titres se figent à l’import');
-  assert.ok(app.includes('const FICHE_CONFORT = () => ({'), 'la table de la fiche est une fonction');
-  const fiche = bloc('function RoomComfortModal(', NL + '}');
+  // ASSERTIONS MODIFIÉES (chantier Capteurs, tâche 1) : la fiche et sa table vivent dans ficheconfort.jsx, chargée à la demande.
+  assert.ok(!/^const COMFORT = \{/m.test(app) && !/^const COMFORT = \{/m.test(ficheConfort), 'la table de la fiche est redevenue un objet du module : ses titres se figent à l’import');
+  assert.ok(ficheConfort.includes('const FICHE_CONFORT = () => ({'), 'la table de la fiche est une fonction');
+  const fiche = blocFiche('export default function RoomComfortModal(', NL + '}');
   assert.ok(fiche.includes('const table = FICHE_CONFORT();'), 'appelée au rendu de la fiche, pas une fois pour toutes');
-  const table = bloc('const FICHE_CONFORT = () => ({', NL + '});');
-  for (const titre of ["tr('Température')", "tr('Humidité')", `tr("Qualité de l'air")`, "tr('Bruit')"]) assert.ok(table.includes('label: ' + titre), titre + ' : le titre se traduit dans la fonction');
+  const table = blocFiche('const FICHE_CONFORT = () => ({', NL + '});');
+  // ASSERTION MODIFIÉE (audit des capteurs du 19/10, lot 4) : le CO₂ s'appelle « CO₂ », le nom de sa carte (`nomMesure`, lu au rendu) — « Qualité de l'air » est l'indice.
+  for (const titre of ["tr('Température')", "tr('Humidité')", "nomMesure('co2')", "tr('Bruit')"]) assert.ok(table.includes('label: ' + titre), titre + ' : le titre se traduit dans la fonction');
 });
 
 test('la note d’une mesure : 100 sur le plateau de l’idéal, puis une pente entre les ancrages', () => {
@@ -163,12 +171,14 @@ test('la vue d’une piece : la barre de confort a la place des reglages rapides
   assert.ok(vue.includes('const confortPiece = indiceConfort({ temp: versCelsius(live && live.temp, uniteTPiece), hum: live && live.hum, co2: live && live.co2, bruit: bruitId ? parseFloat(S[bruitId].state) : null }, uniteTPiece);'), 'les mesures de la piece, et son sonometre, convertis vers Celsius');
   assert.ok(vue.includes('const bruitId = capteurBruitPiece(S, room);') && vue.includes('<RoomComfortModal piece={piece} hass={hass} bruitId={bruitId}'), 'le bruit va aussi dans la fiche');
   for (const ancien of ['setGroupBri', 'setGroupColor', 'toggleCovers', 'coverPct', 'LIGHT_PALETTE', 'className="o-bar"', "tr('Luminosité')", 'o-barlabel']) assert.ok(!vue.includes(ancien), ancien + ' : les reglages rapides ont quitte la vue');
-  assert.ok(vue.includes("? tr('{n} lampes allumées', { n: lightsOn.length })"), 'l’en-tete garde son compte de lampes');
+  // ASSERTION MODIFIÉE (ADR 0261, A4, A9) : le compte passe par `trN`, et par les lumières de la maison (`lumieresDe`, switch déclarés compris).
+  assert.ok(vue.includes("trN(lightsOn.length, '{n} lampe allumée', '{n} lampes allumées')") && vue.includes('const lightIds = lumieresDe(S, { ...ctxLumieres(), ids: ents });'), 'l’en-tete garde son compte de lampes');
   assert.ok(!css.includes('.o-barlabel'), 'la regle de l’ancienne barre est partie avec elle');
   const zone = bloc('function capteurBruitPiece(S, roomName) {', NL + '}');
   assert.ok(zone.includes('find(z => rmNorm(z.name) === cible)') && zone.includes('return zone ? capteurBruit(zone.entities, S) : null;'), 'le sonometre se cherche dans la ZONE Home Assistant de la piece');
   assert.ok(app.includes('capteurBruitPiece((getHass() || {}).states, activeRoom)].filter(Boolean) : [];'), 'et il est relu en direct quand la piece est ouverte');
-  const fiche = bloc('function RoomComfortModal(', NL + '}');
+  // ASSERTION MODIFIÉE (chantier Capteurs, tâche 1) : la fiche de confort est chargée à la demande, de son propre fichier.
+  const fiche = blocFiche('export default function RoomComfortModal(', NL + '}');
   assert.ok(fiche.includes('const confort = indiceConfort(vals, uniteT);') && fiche.includes("const overall = confort ? confort.verdict : { t: '—', c: 'var(--o-text2)' };") && fiche.includes("{tr('Indice de confort')} · {confort.indice} / 100"), 'la fiche dit le meme mot que la barre');
   assert.ok(fiche.includes('const metrics = [table.temp, table.hum, table.co2, table.bruit].filter(m => vals[m.key] != null);'));
 });
@@ -199,7 +209,8 @@ test('au telephone la rangee de mesures reste sur UNE ligne', () => {
 test('les icones existent, la demo a un sonometre, et l’anglais suit', () => {
   for (const m of pur.matchAll(/icone: '([a-z0-9-]+)'/g)) assert.ok(police.includes('.fi-rr-' + m[1] + ':before'), m[1] + ' n’existe pas dans la police');
   assert.ok(police.includes('.fi-rr-leaf:before'));
-  assert.ok(demo.includes("'sensor.salon_bruit': s(34, { friendly_name: 'Salon Bruit', unit_of_measurement: 'dB', device_class: 'sound_pressure' }),") && demo.includes("'sensor.salon_humidite', 'sensor.salon_co2', 'sensor.salon_bruit', 'cover.salon',"), 'dans la zone du salon');
+  assert.ok(demo.includes("'sensor.salon_bruit': s(34, { friendly_name: 'Salon Bruit', unit_of_measurement: 'dB', device_class: 'sound_pressure' }),") && demo.includes("'sensor.salon_humidite', 'sensor.salon_co2', 'sensor.salon_bruit', 'cover.volet_salon',"), 'dans la zone du salon');
+  // ASSERTION MODIFIÉE (19/10) : `cover.salon`, un nom fantôme sans état, quitte la zone du salon ; le sonomètre y reste.
 });
 
 test('la barre a la hauteur de celle des scenarios (retour du 18/09)', () => {

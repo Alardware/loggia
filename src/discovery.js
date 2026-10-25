@@ -100,8 +100,11 @@ async function safeWSObj(hass, type, errors) {
  * Il nomme ses champs `id` là où Home Assistant dit `area_id`, `device_id` ou
  * `entity_id` : la conversion se fait ici, pour que le reste du fichier ne
  * connaisse qu'une seule forme.
+ *
+ * Exportée pour `tests/discovery.test.mjs` : la recopie de chaque champ du
+ * composant se vérifie sur sa réponse, pas sur le texte de la source.
  */
-async function registresDuComposant(hass) {
+export async function registresDuComposant(hass) {
   if (!hass || typeof hass.callWS !== 'function') return null;
   let r;
   try {
@@ -125,10 +128,17 @@ async function registresDuComposant(hass) {
       // Le domaine de l'intégration, que les registres n'exposent qu'au travers
       // de `identifiers` : le composant l'a déjà extrait.
       integration: d.integration,
+      // Les empreintes des identifiants d'un appareil qui porte un lecteur
+      // (chantier Médias, M1 B ; ADR 0208) : un hachage court de chaque valeur,
+      // posé par le composant — jamais la valeur. Absentes ailleurs.
+      empreintes: Array.isArray(d.empreintes) ? d.empreintes.filter(e => typeof e === 'string') : null,
     })),
     entities: (index.entities || []).map(e => ({
       entity_id: e.id, name: e.name, device_id: e.device, area_id: e.area,
       platform: e.platform, entity_category: e.category, translation_key: e.key || null,
+      // La famille d'un chauffage, que le serveur a reconnue (fil_pilote,
+      // thermostat, vtherm) : l'écran n'a pas l'identifiant stable pour le faire.
+      famille: e.famille || null,
       device_class: e.device_class, original_device_class: e.device_class,
       unit_of_measurement: e.unit, hidden_by: e.hidden ? 'user' : null,
     })),
@@ -186,6 +196,11 @@ export function buildIndex({ areas = [], devices = [], entities = [], floors = [
       area: d.area_id || null,
       via: d.via_device_id || null,
       entryType: d.entry_type || null,
+      // Les empreintes de ses identifiants (le composant les pose pour un
+      // lecteur) : deux appareils qui en partagent une sont le MÊME appareil
+      // physique, exposé par deux intégrations (resolveMedia). Vides sans le
+      // composant, ou pour tout ce qui n'est pas un lecteur.
+      empreintes: Array.isArray(d.empreintes) ? d.empreintes.filter(e => typeof e === 'string') : [],
     });
   });
 
@@ -214,6 +229,9 @@ export function buildIndex({ areas = [], devices = [], entities = [], floors = [
       // La cle de traduction : le nom que l'integration donne a l'entite, le
       // meme dans toutes les langues (voir robots.js).
       translationKey: e.translation_key || null,
+      // La famille d'un chauffage ('fil_pilote', 'thermostat', 'vtherm'), posee
+      // par le composant. Sans lui (registres de Home Assistant), null.
+      famille: e.famille || null,
     });
   });
 

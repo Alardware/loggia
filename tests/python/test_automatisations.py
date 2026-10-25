@@ -462,6 +462,9 @@ def test_manifest_declare_automation_et_script():
     # hassfest refuse l'import d'une integration non declaree (validate.yml).
     manifest = json.loads((RACINE / "custom_components" / "loggia" / "manifest.json").read_text(encoding="utf-8"))
     assert {"mqtt", "automation", "script"} <= set(manifest.get("after_dependencies") or [])
+    # Le cout heure par heure des prises et le chauffage lisent l'historique et
+    # l'Energie a la demande (25/10, hassfest de la PR #36).
+    assert {"energy", "recorder"} <= set(manifest.get("after_dependencies") or [])
     assert not {"automation", "script"} & set(manifest.get("dependencies") or [])
 
 
@@ -479,8 +482,8 @@ def test_nommer_la_commande_n_est_pas_la_commander(module):
     assert not module.vise(appel("logbook.log", CTX["commande"]), cibles, apps)
     assert not module.vise(appel("notify.persistent_notification", CTX["commande"]), cibles, apps)
     assert module.vise(appel("select.select_option", CTX["commande"]), cibles, apps)
-    assert module.vise(appel("script.turn_on", "script.nourrir_le_chat"), cibles, apps)
-    assert module.vise(appel("homeassistant.turn_on", "script.nourrir_le_chat"), cibles, apps)
+    assert module.vise(appel("script.turn_on", "script.remplir_la_gamelle"), cibles, apps)
+    assert module.vise(appel("homeassistant.turn_on", "script.remplir_la_gamelle"), cibles, apps)
     # Liste FERMEE, a dessein : un service d'integration qui vise la commande
     # distribue peut-etre — un repas en double est le risque le plus grave.
     assert module.vise(appel("petkit.manual_feed", CTX["commande"]), cibles, apps)
@@ -618,3 +621,24 @@ def test_ce_que_le_parcours_voit_muet_ne_retient_rien(module):
     attente = {"wait_for_trigger": [{"trigger": "state", "entity_id": CTX["commande"]}]}
     assert _ids_gardes(module, [_referencee("automation.v", [tant_que]), _referencee("automation.u", [attente])],
                        CTX["commande"]) == set()
+
+
+# ── Le chauffage : les automatisations qui le COMMANDENT (D5 ; audit du 19/10) ─
+
+def test_les_automatisations_qui_commandent_un_chauffage(module):
+    from doublures_ha import FausseAutomatisation, poser_automatisations
+    import types as _t
+    poele = "climate.poele"
+    commande = FausseAutomatisation("automation.matin", {"actions": [{"action": "climate.set_temperature",
+                                    "target": {"entity_id": poele}, "data": {"temperature": 21}}]},
+                                    {"entities": [poele]}, {"referenced_entities": [poele]})
+    nomme = FausseAutomatisation("automation.alerte", {"actions": [{"action": "notify.notify",
+                                 "data": {"message": "{{ states('climate.poele') }}"}, "target": {"entity_id": poele}}]},
+                                 {"entities": [poele]}, {"referenced_entities": [poele]})
+    eteinte = FausseAutomatisation("automation.soir", {"actions": [{"action": "climate.turn_off", "target": {"entity_id": poele}}]},
+                                   {"entities": [poele]}, {"referenced_entities": [poele]})
+    etats = {"automation.matin": "on", "automation.alerte": "on", "automation.soir": "off"}
+    hass = _t.SimpleNamespace(states=_t.SimpleNamespace(get=lambda e: _t.SimpleNamespace(state=etats[e]) if e in etats else None))
+    poser_automatisations(hass, [commande, nomme, eteinte])
+    assert module.automatisations_qui_commandent(hass, poele, registre=lambda x: x) == ["automation.matin"], \
+        "une notification qui le nomme ne le commande pas ; eteinte, elle ne commande rien"
