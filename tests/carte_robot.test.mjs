@@ -226,7 +226,8 @@ test('point 3 : « Localiser » de la carte — son script par le serveur, le bi
     m2.appuyer(puce(m2, 'Localiser'));
     await attendre();
     w2.ws.find(x => x.type === 'loggia/robots/lancer').ko({ code: 'invalid_format', message: 'extra keys not allowed' });
-    await attendre(); await attendre();
+    // Le repli passe par un module charge a la demande : borne, pas deux tours fixes (CI, 25/10).
+    await jusqua(() => w2.appels.length > 0);
     assert.deepEqual(w2.appels, ['vacuum.locate ' + ASP]);
     // Le script désigné mais indisponible ou disparu : le serveur ne le lance pas et ne note rien (`_etat_script`, `script_inconnu`) — `locate`, sans toast.
     const w3 = avecScripts('unavailable');
@@ -234,7 +235,8 @@ test('point 3 : « Localiser » de la carte — son script par le serveur, le bi
     m3.appuyer(puce(m3, 'Localiser'));
     await attendre();
     w3.ws.find(x => x.type === 'loggia/robots/lancer').ko({ code: 'script_inconnu', message: 'script inconnu de ce robot : ' + ASP });
-    await attendre(); await attendre();
+    // Le repli passe par un module charge a la demande : borne, pas deux tours fixes (CI, 25/10).
+    await jusqua(() => w3.appels.length > 0);
     assert.deepEqual(w3.appels, ['vacuum.locate ' + ASP]);
   } finally { setLoggiaState({ cfg: {}, resolved: {} }); }
 }));
