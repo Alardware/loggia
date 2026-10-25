@@ -26,7 +26,7 @@
  * deux fichiers de plus pour rien.
  */
 import { garde, JETONS_GARDE } from './contraste.js';
-import { cfgVal } from './state.js';
+import { cfgVal, apparence } from './state.js';
 import { LOOK_DEF } from './ui.jsx';
 
 // "couleur CSS (hex/rgb) → 'r,g,b'" pour alimenter les tokens rgba(var(--o-accent-rgb),...)
@@ -376,7 +376,9 @@ export const SAFE_NOLOOK = (() => {
 export function readLook() {
   if (SAFE_NOLOOK) return { ...LOOK_DEF };
   try {
-    const L = { ...LOOK_DEF, ...(cfgVal('loggia_look', null) || {}) };
+    // L'apparence du profil ou de l'écran d'abord (ADR 0223), la maison ensuite.
+    const ap = apparence().look;
+    const L = { ...LOOK_DEF, ...((ap && typeof ap === 'object') ? ap : (cfgVal('loggia_look', null) || {})) };
     if (L.fond !== 'photo') L.fond = 'aucun'; // les degrades retires retombent sur « aucun »
     // « Bleu », retire des couleurs d'accent le 19/09 : c'etait l'accent du theme
     // d'origine, deja offert par « Couleur du theme ».
@@ -480,7 +482,26 @@ function applyLook(root, L, frostedPreset, light) {
   Object.keys(corrige).forEach(k => root.style.setProperty(k, corrige[k]));
 }
 
+/* Saphir, Acier, Givre vivent dans `themes-bleus.js`, chargé à la demande :
+ * le boot n'avait plus la place (25/10). Le premier `applyTheme` qui en
+ * réclame un pose le défaut, lance le chargement, et se rejoue à l'arrivée —
+ * avec les DERNIERS réglages demandés, pas ceux du départ : on a pu changer de
+ * thème ou de mode entre-temps. */
+const BLEUS = ['saphir', 'acier', 'givre'];
+let bleus = null, enRoute = null, dernierTheme = null;
+function chargerBleus() {
+  if (enRoute) return;
+  enRoute = import('./themes-bleus.js').then(m => {
+    // Un import retenu par `vite:preloadError` rend `undefined` (recharge.js) :
+    // la page va repartir, on ne rejoue rien.
+    if (!m) return;
+    bleus = m.THEMES_BLEUS;
+    if (dernierTheme && BLEUS.includes(dernierTheme[0].loggiaTheme)) applyTheme(...dernierTheme);
+  }).catch(() => { enRoute = null; });
+}
+
 export function applyTheme(opts, hass) {
+  dernierTheme = [opts, hass];
   const root = document.documentElement;
   THEME_KEYS.forEach(k => root.style.removeProperty(k)); root.style.removeProperty('--o-radius'); root.style.removeProperty('--o-bggrad'); root.style.removeProperty('--o-shadow-hover');
   // Ce que la garde de contraste a posé la fois d'avant : sinon la correction
@@ -497,7 +518,8 @@ export function applyTheme(opts, hass) {
   const light = opts.mode === 'light';
   root.classList.toggle('loggia-light', light);
   // Preset Loggia ('' = défaut → tokens CSS de base, aucune surcharge). Sinon applique la variante claire/sombre.
-  const preset = LOGGIA_PRESETS[opts.loggiaTheme];
+  const preset = LOGGIA_PRESETS[opts.loggiaTheme] || (bleus && bleus[opts.loggiaTheme]);
+  if (!preset && !bleus && BLEUS.includes(opts.loggiaTheme)) chargerBleus();
   if (preset) { const v = preset[light ? 'light' : 'dark']; if (v) applyVars(root, v); }
   applyLook(root, L, opts.loggiaTheme === 'frosted', light); // 'frosted' active aussi le flou backdrop des cartes
   return !light;

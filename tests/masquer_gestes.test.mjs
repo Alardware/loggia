@@ -85,7 +85,8 @@ test('l’Accueil en edition : la taille d’une piece a tous, la piece elle-mem
 
 test('les autres gestes de configuration : masques au meme critere', () => {
   const app = lire('src', 'App.jsx');
-  const cal = bloc(app, 'function FeuilleCalendrier(', NL + '}');
+  // ASSERTION MODIFIÉE (boot, 19/10) : la feuille du mois vit dans feuillecalendrier.jsx, chargé à la demande ; son code n'a pas changé.
+  const cal = bloc(lire('src', 'feuillecalendrier.jsx'), 'function FeuilleCalendrierContent(', NL + '}');
   assert.ok(cal.includes('const ordinaire = compteOrdinaire(hass);') && cal.includes('{!ordinaire && tousCals.length > 1 && ('),
     'loggia_agendas reste reservee : le choix des agendas est masque');
   assert.ok(bloc(app, 'function BandeauEdition(', NL + '}').includes('const ouvrirEnt = onEnt && !compteOrdinaire(ctx.hass) ? onEnt : null;'),

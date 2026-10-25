@@ -137,6 +137,41 @@
         "une_portion": 1,
         "envoi_2_portions": { "domaine": "number", "service": "set_value", "data": { "entity_id": "number.a_feed", "value": 2 } }
       }
+    },
+    {
+      "id": "poids_designe_en_grammes",
+      "description": "Passe bis de l'étape 2 (19/10, D1) : « Poids d'une portion » désigné sur un number en GRAMMES est le poids, pas la taille — la taille reste la sœur serving_size (en « portion »), et le poids n'est pas une cible de commande.",
+      "config": { "appareil": "dA", "haids": { "portionWeight": "number.a_portion_weight" } },
+      "entites": [
+        { "entity_id": "select.a_feed", "device_id": "dA", "plateforme": "mqtt", "etat": "unknown", "attributs": { "options": ["", "START"] } },
+        { "entity_id": "number.a_serving_size", "device_id": "dA", "plateforme": "mqtt", "etat": "2", "attributs": { "min": 1, "max": 10, "step": 1, "unit_of_measurement": "portion" } },
+        { "entity_id": "number.a_portion_weight", "device_id": "dA", "plateforme": "mqtt", "etat": "6", "attributs": { "min": 1, "max": 20, "step": 1, "unit_of_measurement": "g" } }
+      ],
+      "attendu": { "portion_id": "number.a_serving_size", "poids_portion_id": "number.a_portion_weight", "cibles_de_commande": ["number.a_serving_size", "select.a_feed"] }
+    },
+    {
+      "id": "poids_designe_hors_des_soeurs",
+      "description": "Passe bis de l'étape 2 (19/10, D1) : un poids désigné en grammes qui n'est pas une sœur — une aide, sans appareil — reste le POIDS, et la taille reste la sœur serving_size. Passe bis 2 (19/10) : le cas fige le poids (`poids_portion_id`) et porte l'aide qu'il décrit — il ne portait que l'entité d'un autre appareil (cas suivant), et restait vert sur le code d'avant la règle D1 ; sur ce code, l'aide désignée devient la taille et le poids reste celui des sœurs.",
+      "config": { "appareil": "dA", "haids": { "portionWeight": "number.aide_poids" } },
+      "entites": [
+        { "entity_id": "select.a_feed", "device_id": "dA", "plateforme": "mqtt", "etat": "unknown", "attributs": { "options": ["", "START"] } },
+        { "entity_id": "number.a_serving_size", "device_id": "dA", "plateforme": "mqtt", "etat": "2", "attributs": { "min": 1, "max": 10, "step": 1, "unit_of_measurement": "portion" } },
+        { "entity_id": "number.a_portion_weight", "device_id": "dA", "plateforme": "mqtt", "etat": "6", "attributs": { "unit_of_measurement": "g" } },
+        { "entity_id": "number.aide_poids", "plateforme": "template", "etat": "9", "attributs": { "min": 1, "max": 20, "step": 1, "unit_of_measurement": "g" } }
+      ],
+      "attendu": { "portion_id": "number.a_serving_size", "poids_portion_id": "number.aide_poids", "cibles_de_commande": ["number.a_serving_size", "select.a_feed"], "notes": [] }
+    },
+    {
+      "id": "poids_designe_sur_un_autre_appareil",
+      "description": "Passe bis de l'étape 2 (19/10, D1) : un poids désigné en grammes posé sur un AUTRE appareil est ignoré et signalé, et le poids de l'appareil le remplace (passe bis 2 : le poids se fige, `poids_portion_id`).",
+      "config": { "appareil": "dA", "haids": { "portionWeight": "number.b_poids" } },
+      "entites": [
+        { "entity_id": "select.a_feed", "device_id": "dA", "plateforme": "mqtt", "etat": "unknown", "attributs": { "options": ["", "START"] } },
+        { "entity_id": "number.a_serving_size", "device_id": "dA", "plateforme": "mqtt", "etat": "2", "attributs": { "min": 1, "max": 10, "step": 1, "unit_of_measurement": "portion" } },
+        { "entity_id": "number.a_portion_weight", "device_id": "dA", "plateforme": "mqtt", "etat": "6", "attributs": { "unit_of_measurement": "g" } },
+        { "entity_id": "number.b_poids", "device_id": "dB", "plateforme": "mqtt", "etat": "9", "attributs": { "unit_of_measurement": "g" } }
+      ],
+      "attendu": { "portion_id": "number.a_serving_size", "poids_portion_id": "number.a_portion_weight", "cibles_de_commande": ["number.a_serving_size", "select.a_feed"], "notes": [{ "code": "appareil_divergent", "entity_id": "number.b_poids" }] }
     }
   ]
 }

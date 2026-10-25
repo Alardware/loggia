@@ -186,7 +186,7 @@ def test_la_commande_de_l_appareil_passe_avant_le_script_designe(da):
     lu = da.decrire_appareil(cas["config"], registre, etats)
     assert lu["commande"]["domaine"] == "select"
     # Le script reste une cible de REPAS : ses automatisations sont reconnues.
-    assert lu["cibles_de_repas"] == ["script.nourrir_le_chat", "select.distributeur_cuisine_feed"]
+    assert lu["cibles_de_repas"] == ["script.remplir_la_gamelle", "select.distributeur_cuisine_feed"]
 
 
 def test_le_script_designe_recoit_ses_portions(da):
@@ -194,7 +194,7 @@ def test_le_script_designe_recoit_ses_portions(da):
     registre, etats, _ = monter(cas)
     lu = da.decrire_appareil(cas["config"], registre, etats)
     assert da.envoi(lu["commande"], 3) == {"domaine": "script", "service": "turn_on",
-                                          "data": {"entity_id": "script.nourrir_le_chat",
+                                          "data": {"entity_id": "script.remplir_la_gamelle",
                                                    "variables": {"portions": 3}}}
 
 
@@ -344,6 +344,90 @@ def test_les_regles_qui_ne_tenaient_a_aucun_cas(da):
     # Sans appareil, une entite designee DESACTIVEE n'est pas une soeur.
     reg = FauxRegistre([Entree("number.portion", None, "template", desactivee=True)])
     assert da.soeurs(reg, {}, None, {"haids": {"portionWeight": "number.portion"}}) == []
+
+
+def test_le_poids_designe_en_grammes_est_un_poids_pas_une_taille(da):
+    """Passe bis de l'etape 2 (19/10, D1) : « Poids d'une portion » designe sur
+    un number en GRAMMES — ce que le champ demande — est le poids d'une
+    portion, et la taille se cherche parmi les soeurs (CLES_PORTION,
+    MOTIF_SUFFIXE_PORTION) ; sans unite de masse, il reste la taille, comme
+    avant. L'ecran (`portionDistributeur`, `poidsPortion`) lit la meme regle :
+    sinon la carte prenait le poids pour la portion (6 g au lieu de 12), et le
+    pas a pas de « Servir maintenant » aurait regle l'etalonnage de l'appareil."""
+    reg = _registre(("select.m_feed", "dev_m"), ("number.m_serving_size", "dev_m"), ("number.m_portion_weight", "dev_m"),
+                    ("number.aide_poids", None), ("number.b_poids", "dev_b"))
+    etats = {"select.m_feed": FauxEtat("unknown", {"options": ["", "START"]}),
+             "number.m_serving_size": FauxEtat("2", {"min": 1, "max": 10, "step": 1, "unit_of_measurement": "portion"}),
+             "number.m_portion_weight": FauxEtat("6", {"min": 1, "max": 20, "step": 1, "unit_of_measurement": "g"}),
+             "number.aide_poids": FauxEtat("9", {"unit_of_measurement": "g"}),
+             "number.b_poids": FauxEtat("7", {"unit_of_measurement": "kg"})}
+    liste = da.soeurs(reg, etats, "dev_m")
+    cfg = {"appareil": "dev_m", "haids": {"portionWeight": "number.m_portion_weight"}}
+    assert da.portion(liste, etats, cfg, reg, "dev_m") == {"entity_id": "number.m_serving_size", "unite": "portion", "min": 1, "max": 10, "pas": 1}
+    assert da.poids_portion(liste, etats, cfg, reg, "dev_m") == {"entity_id": "number.m_portion_weight", "unite": "g"}
+    lu = da.decrire_appareil(cfg, reg, etats)
+    assert lu["portion"]["entity_id"] == "number.m_serving_size" and lu["poids_portion"]["entity_id"] == "number.m_portion_weight"
+    assert "number.m_portion_weight" not in lu["cibles_de_commande"]
+    # Sans unite de masse : la taille, comme avant (l'installation qui designait son serving_size).
+    cfg["haids"]["portionWeight"] = "number.m_serving_size"
+    assert da.portion(liste, etats, cfg, reg, "dev_m")["entity_id"] == "number.m_serving_size"
+    assert da.poids_portion(liste, etats, cfg, reg, "dev_m")["entity_id"] == "number.m_portion_weight"
+    # Une aide en grammes, hors des soeurs : le poids quand meme ; posee sur un AUTRE appareil : ignoree.
+    cfg["haids"]["portionWeight"] = "number.aide_poids"
+    assert da.poids_portion(liste, etats, cfg, reg, "dev_m") == {"entity_id": "number.aide_poids", "unite": "g"}
+    assert da.portion(liste, etats, cfg, reg, "dev_m")["entity_id"] == "number.m_serving_size"
+    cfg["haids"]["portionWeight"] = "number.b_poids"
+    assert da.poids_portion(liste, etats, cfg, reg, "dev_m")["entity_id"] == "number.m_portion_weight"
+    # Sans designation : le poids de l'appareil, par sa cle ou son suffixe.
+    assert da.poids_portion(liste) == {"entity_id": "number.m_portion_weight", "unite": "g"}
+
+
+def test_une_erreur_sans_classe_est_une_anomalie(da):
+    """Passe bis de l'etape 2 (19/10, B) : le `_error` qu'un Aqara publie sous
+    Zigbee2MQTT n'a pas de device_class — il n'etait jamais une anomalie, et
+    l'erreur de l'appareil ne s'affichait nulle part. Reconnu par son SUFFIXE,
+    parmi les seules soeurs, il vaut « autre » ; un `_error` qui n'est pas un
+    binary_sensor, non."""
+    assert da.anomalies([_s("binary_sensor.m_error", etat="on")]) == [{"entity_id": "binary_sensor.m_error", "type": "autre", "actif": True}]
+    assert da.anomalies([_s("binary_sensor.m_error", etat="off")]) == [{"entity_id": "binary_sensor.m_error", "type": "autre", "actif": False}]
+    assert da.anomalies([_s("sensor.m_error", etat="on"), _s("binary_sensor.m_errors", etat="on"), _s("binary_sensor.m_door", etat="on")]) == []
+    assert da.anomalies([_s("binary_sensor.m_error", etat="on", classe="problem")]) == [{"entity_id": "binary_sensor.m_error", "type": "autre", "actif": True}]
+    # ASSERTION AJOUTEE (passe bis 2 de l'etape 2, 19/10 ; relecture de controle) : le suffixe ne vaut que SANS classe — un
+    # `_link_error` de classe connectivity a « on » dit « connecte », pas « probleme » ; une classe qui n'est pas problem n'est
+    # jamais une anomalie. (Le cas `erreur_de_classe_connectivite` de la fixture le fige des deux cotes.)
+    assert da.anomalies([_s("binary_sensor.m_link_error", etat="on", classe="connectivity"),
+                         _s("binary_sensor.m_motor_error", etat="on", classe="running")]) == []
+
+
+def test_toute_unite_de_masse_est_un_poids(da):
+    """Passe bis 2 de l'etape 2 (19/10 ; relecture de controle) : seules g et
+    kg comptaient comme des masses — un « Poids d'une portion » designe en
+    oz, en lb ou en mg devenait la TAILLE de la ration, et le pas a pas de
+    l'ecran aurait ecrit sur un poids (l'etalonnage). Toute unite de masse de
+    Home Assistant (UNITES_MASSE, avec « ug » pour µg) est un poids ; l'ecran
+    lit la meme table par la fixture, et convertit en grammes (`enGrammes`)."""
+    assert da.UNITES_MASSE == ("g", "kg", "mg", "µg", "ug", "oz", "lb", "st")
+    for unite in da.UNITES_MASSE:
+        reg = _registre(("select.m_feed", "dev_m"), ("number.m_serving_size", "dev_m"), ("number.m_poids", "dev_m"))
+        etats = {"select.m_feed": FauxEtat("unknown", {"options": ["", "START"]}),
+                 "number.m_serving_size": FauxEtat("2", {"min": 1, "max": 10, "step": 1, "unit_of_measurement": "portion"}),
+                 "number.m_poids": FauxEtat("0.2", {"min": 0.1, "max": 2, "step": 0.1, "unit_of_measurement": unite})}
+        liste = da.soeurs(reg, etats, "dev_m")
+        cfg = {"appareil": "dev_m", "haids": {"portionWeight": "number.m_poids"}}
+        assert da.portion(liste, etats, cfg, reg, "dev_m")["entity_id"] == "number.m_serving_size", unite
+        assert da.poids_portion(liste, etats, cfg, reg, "dev_m") == {"entity_id": "number.m_poids", "unite": unite}
+        assert "number.m_poids" not in da.decrire_appareil(cfg, reg, etats)["cibles_de_commande"], unite
+    # Ce qui n'est pas une masse reste la taille, comme avant : « portion », « G » (la casse compte, comme dans HA), aucune unite.
+    for unite in ("portion", "G", None):
+        reg = _registre(("select.m_feed", "dev_m"), ("number.m_taille", "dev_m"))
+        attrs = {"min": 1, "max": 10, "step": 1}
+        if unite:
+            attrs["unit_of_measurement"] = unite
+        etats = {"select.m_feed": FauxEtat("unknown", {"options": ["", "START"]}), "number.m_taille": FauxEtat("2", attrs)}
+        liste = da.soeurs(reg, etats, "dev_m")
+        cfg = {"appareil": "dev_m", "haids": {"portionWeight": "number.m_taille"}}
+        assert da.portion(liste, etats, cfg, reg, "dev_m")["entity_id"] == "number.m_taille", unite
+        assert da.poids_portion(liste, etats, cfg, reg, "dev_m") is None, unite
 
 
 def test_departage_par_entity_id(da):

@@ -1,7 +1,7 @@
 /* Lot 14 de l'audit du 03/10 : le fond météo et l'orbe, côté WebGL.
  *
  * Mesuré dans la démo (Chrome, écran à 130 Hz) avant la correction :
- *   - la boucle de wx3d demandait une image à CHAQUE rafraîchissement
+ *   - la boucle du ciel demandait une image à CHAQUE rafraîchissement
  *     (130 rAF/s) pour en dessiner 27 ;
  *   - elle dessinait encore 22 images/s pour un canevas à top −1169, sous
  *     les cartes qu'on était descendu lire, et réclamait 138 rAF/s sous la
@@ -13,83 +13,111 @@
  *     5 encore vivants sur la vue suivante), et l'orbe de même (4 après 10
  *     ouvertures).
  *
- * Ces tests montent le VRAI hôte de wx3d.jsx — sa boucle, ses arrêts, son
- * nettoyage — sur un faux moteur de rendu : three est le vrai, sauf
- * WebGLRenderer ; React se réduit à ses deux crochets ; le temps est
- * virtuel (setTimeout simulé, rAF à 130 Hz, performance.now à la main). */
+ * Le 17/10, le ciel a été remplacé par celui du handoff « Loggia themes
+ * redesign » : un élément <loggia-ciel> en WebGL brut (src/ciel.js), sans
+ * three. Son shader et ses particules viennent tels quels du handoff ; son
+ * HÔTE garde tout ce qui précède, et ces tests le vérifient sur le vrai
+ * élément, monté dans un navigateur réduit à ce qu'il touche : un faux
+ * contexte WebGL qui compte ses images, un faux canevas 2D, le temps virtuel
+ * (minuteurs simulés, rAF à 130 Hz, performance.now à la main). */
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { register } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as VRAI_THREE from 'three';
-import * as VRAI_REACT from 'react';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const NL = String.fromCharCode(10);
 
-/* Un module qui reprend tous les noms d'un vrai, et prend chez `faux` ceux
- * qu'on remplace — lus au chargement, dans `globalThis.__lot14`. */
-const doublure = (cle, vrai) => 'const { vrai, faux } = globalThis.__lot14.' + cle + ';' + NL
-  + Object.keys(vrai).filter((n) => n !== 'default' && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(n))
-    .map((n) => 'export const ' + n + " = ('" + n + "' in faux) ? faux." + n + ' : vrai.' + n + ';').join(NL);
-const CROCHETS = `
-let D;
-export async function initialize(d) { D = d; }
-export async function resolve(spec, ctx, suite) {
-  if (ctx.parentURL && ctx.parentURL.endsWith('/src/wx3d.jsx') && D[spec]) return { url: 'data:text/javascript,' + encodeURIComponent(D[spec]), shortCircuit: true };
-  return suite(spec, ctx);
-}`;
-register('./jsx-hooks.mjs', import.meta.url);
-register('data:text/javascript,' + encodeURIComponent(CROCHETS), { data: { three: doublure('three', VRAI_THREE), react: doublure('react', VRAI_REACT) } });
-
-/* ── Le banc : un navigateur réduit à ce que touche l'hôte ─────────────── */
+/* ── Le banc : un navigateur réduit à ce que touche le ciel ────────────── */
 const E = {};
 let maintenant = 0, prochainVsync = 0;
 const VSYNC = 1000 / 130;
 
-class FauxRendu {
-  constructor() {
-    E.rendus.push(this);
-    this.journal = [];
-    this.domElement = { style: {} };
-    this.compilation = new Promise((ok) => { this.compilee = ok; });
-    // Le pilote compile-t-il en parallèle ? (`has` ne journalise rien, `get` si.)
-    this.extensions = { has: (n) => FauxRendu.parallele && n === 'KHR_parallel_shader_compile' };
-  }
-  setPixelRatio() {}
-  getPixelRatio() { return 1; }
-  setSize() {}
-  compileAsync() { this.journal.push('compileAsync'); return this.compilation; }
-  render() { this.journal.push('render'); E.images++; }
-  dispose() { this.journal.push('dispose'); }
-  forceContextLoss() { this.journal.push('forceContextLoss'); }
+/** Un objet dont toute méthode inconnue ne fait rien ; les constantes GL valent leur nom. */
+const souple = (connu) => new Proxy(connu, {
+  get(t, k) {
+    if (k in t) return t[k];
+    if (typeof k === 'string' && /^[A-Z][A-Z0-9_]*$/.test(k)) return k;
+    return () => undefined;
+  },
+  set(t, k, v) { t[k] = v; return true; },
+});
+const toile2d = () => souple({ createLinearGradient: () => ({ addColorStop() {} }), createRadialGradient: () => ({ addColorStop() {} }) });
+
+function contexteGL() {
+  const gl = souple({
+    journal: [],
+    getShaderPrecisionFormat: () => ({ precision: 23 }),
+    getExtension: (n) => {
+      if (n === 'WEBGL_lose_context') return { loseContext: () => gl.journal.push('loseContext') };
+      if (n === 'KHR_parallel_shader_compile' && E.parallele) return { COMPLETION_STATUS_KHR: 'COMPLETION_STATUS_KHR' };
+      return null;
+    },
+    getProgramParameter: (pr, p) => {
+      gl.journal.push('programme:' + p);
+      return p === 'COMPLETION_STATUS_KHR' ? E.compilee : true;
+    },
+    getShaderParameter: (s, p) => { gl.journal.push('shader:' + p); return true; },
+    getUniformLocation: (pr, n) => n,
+    getAttribLocation: () => 0,
+    uniform1f: (u, v) => { E.uniformes[u] = v; },
+    uniform3f: (u, x, y, z) => { E.uniformes[u] = [x, y, z]; },
+    drawArrays: () => { E.images++; },
+    deleteProgram: () => gl.journal.push('deleteProgram'),
+    deleteBuffer: () => gl.journal.push('deleteBuffer'),
+  });
+  E.contextes.push(gl);
+  return gl;
 }
 
+function canevas() {
+  const c = { style: {}, width: 0, height: 0, retire: false };
+  c.getContext = (t) => (t === 'webgl' ? contexteGL() : toile2d());
+  c.remove = () => { c.retire = true; };
+  return c;
+}
+
+class FauxElement {
+  constructor() { this.attrs = new Map(); this.style = {}; this.dataset = {}; this.enfants = []; this.isConnected = false; this.clientWidth = 800; this.clientHeight = 400; }
+  getAttribute(n) { return this.attrs.has(n) ? this.attrs.get(n) : null; }
+  setAttribute(n, v) { const vieux = this.getAttribute(n); this.attrs.set(n, String(v)); if (this.attributeChangedCallback && this.constructor.observedAttributes.includes(n)) this.attributeChangedCallback(n, vieux, String(v)); }
+  appendChild(c) { this.enfants.push(c); return c; }
+  getBoundingClientRect() { return { top: 0, left: 0, right: 800, bottom: 400, width: 800, height: 400 }; }
+}
+
+const registre = new Map();
+globalThis.HTMLElement = FauxElement;
+globalThis.customElements = { get: (n) => registre.get(n), define: (n, c) => registre.set(n, c) };
+globalThis.window = { devicePixelRatio: 1, matchMedia: () => ({ matches: false }) };
+globalThis.document = {
+  hidden: false,
+  documentElement: { classList: { contains: (c) => E.classes.has(c) } },
+  createElement: () => canevas(),
+  addEventListener: (t, f) => E.ecoutes.set(t, f),
+  removeEventListener: (t, f) => { if (E.ecoutes.get(t) === f) E.ecoutes.delete(t); },
+  querySelectorAll: () => [],
+};
+globalThis.getComputedStyle = () => ({ getPropertyValue: (p) => (p === '--o-bg' ? E.fond : '') });
+const stock = new Map();
+globalThis.localStorage = { getItem: (k) => (stock.has(k) ? stock.get(k) : null), setItem: (k, v) => stock.set(k, String(v)), removeItem: (k) => stock.delete(k) };
+Object.defineProperty(globalThis, 'performance', { value: { now: () => maintenant }, configurable: true, writable: true });
+let n = 0;
+globalThis.requestAnimationFrame = (f) => { E.demandes++; E.rafs.set(++n, f); return n; };
+globalThis.cancelAnimationFrame = (id) => { E.rafs.delete(id); };
+globalThis.ResizeObserver = class { constructor(cb) { this.cb = cb; E.ro.push(this); } observe() {} disconnect() { this.coupe = true; } };
+globalThis.IntersectionObserver = class { constructor(cb) { this.cb = cb; this.cibles = []; E.io.push(this); } observe(c) { this.cibles.push(c); } disconnect() { this.coupe = true; } };
+globalThis.MutationObserver = class { constructor(cb) { this.cb = cb; this.cibles = []; E.mo.push(this); } observe(c, o) { this.cibles.push([c, o]); } disconnect() { this.coupe = true; } };
+
+await import(new URL('../src/ciel.js', import.meta.url));
+const Ciel = registre.get('loggia-ciel');
+
 function installe() {
-  FauxRendu.parallele = true;
-  Object.assign(E, { rendus: [], images: 0, demandes: 0, rafs: new Map(), io: [], mo: [], ecoutes: new Map(), classes: new Set(), refs: [], effets: [] });
+  Object.assign(E, { parallele: true, compilee: false, contextes: [], images: 0, demandes: 0, rafs: new Map(), io: [], mo: [], ro: [], ecoutes: new Map(), classes: new Set(), uniformes: {}, fond: '#0b101b' });
+  stock.clear();
+  document.hidden = false;
   maintenant = 1000; prochainVsync = 1000 + VSYNC;
-  globalThis.__lot14 = {
-    three: { vrai: VRAI_THREE, faux: { WebGLRenderer: FauxRendu } },
-    react: { vrai: VRAI_REACT, faux: { useRef: (v) => { const r = { current: v }; E.refs.push(r); return r; }, useEffect: (f) => { E.effets.push(f); } } },
-  };
-  Object.defineProperty(globalThis, 'performance', { value: { now: () => maintenant }, configurable: true, writable: true });
-  globalThis.window = { devicePixelRatio: 1 };
-  globalThis.document = {
-    hidden: false,
-    documentElement: { classList: { contains: (c) => E.classes.has(c) } },
-    addEventListener: (t, f) => E.ecoutes.set(t, f),
-    removeEventListener: (t, f) => { if (E.ecoutes.get(t) === f) E.ecoutes.delete(t); },
-  };
-  let n = 0;
-  globalThis.requestAnimationFrame = (f) => { E.demandes++; E.rafs.set(++n, f); return n; };
-  globalThis.cancelAnimationFrame = (id) => { E.rafs.delete(id); };
-  globalThis.ResizeObserver = class { observe() {} disconnect() {} };
-  globalThis.IntersectionObserver = class { constructor(cb) { this.cb = cb; this.cibles = []; E.io.push(this); } observe(c) { this.cibles.push(c); } disconnect() { this.coupe = true; } };
-  globalThis.MutationObserver = class { constructor(cb) { this.cb = cb; this.cibles = []; E.mo.push(this); } observe(c, o) { this.cibles.push([c, o]); } disconnect() { this.coupe = true; } };
-  mock.timers.enable({ apis: ['setTimeout'] });
+  mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
 }
 function desinstalle() { mock.timers.reset(); }
 
@@ -105,24 +133,19 @@ function avance(ms) {
     }
   }
 }
-const microtaches = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
 
-let WeatherGL;
-/** Monte l'hôte comme React le ferait : rendu, ref posée, effet lancé. */
-async function monte() {
-  WeatherGL ??= (await import(new URL('../src/wx3d.jsx', import.meta.url))).default;
-  WeatherGL({ condition: 'rainy', hourEq: 12, intensity: 1 });
-  const hote = { clientWidth: 800, clientHeight: 400, appendChild() {}, removeChild() {} };
-  E.refs[0].current = hote;
-  const nettoie = E.effets[0]();
-  return { hote, nettoie, rendu: E.rendus[0] };
+/** Monte le ciel comme le navigateur le ferait : attributs posés, puis branché. */
+function monte(attrs = {}) {
+  const el = new Ciel();
+  const tous = { meteo: 'rainy', qualite: 'plein', ...attrs };
+  for (const k in tous) el.attrs.set(k, tous[k]);
+  el.isConnected = true;
+  el.connectedCallback();
+  return { el, gl: E.contextes[E.contextes.length - 1] };
 }
 /** Monte, et laisse la compilation finir. */
-async function monteCompile() {
-  const m = await monte();
-  if (m.rendu.journal.includes('compileAsync')) { m.rendu.compilee(); await microtaches(); }
-  return m;
-}
+function monteCompile(attrs) { const m = monte(attrs); E.compilee = true; avance(40); return m; }
+const demonte = (el) => { el.isConnected = false; el.disconnectedCallback(); };
 const voit = (oui) => { E.io.forEach((o) => o.cb([{ isIntersecting: oui, target: o.cibles[0] }])); };
 /** La veille pose ou retire sa classe sur <html> : seuls ceux qui y regardent l'apprennent. */
 const classeChange = () => {
@@ -130,54 +153,66 @@ const classeChange = () => {
     .forEach((o) => o.cb([{ type: 'attributes', attributeName: 'class', target: document.documentElement }]));
 };
 
-/* ── wx3d ──────────────────────────────────────────────────────────────── */
+/* ── Le ciel ───────────────────────────────────────────────────────────── */
 
-test('sans compilation parallèle, pas de compileAsync : three le journaliserait à chaque affichage', async () => {
-  /* Relecture du lot 14 : sans KHR_parallel_shader_compile (rendu logiciel,
-   * GPU écarté), compileAsync n'apporte rien — le gel se reporte au premier
-   * rendu — et three écrit « extension not supported » à CHAQUE montage. */
+test('sans compilation parallèle, le ciel paraît aussitôt', () => {
   installe();
   try {
-    FauxRendu.parallele = false;
-    const { rendu } = await monte();
-    await microtaches();
-    assert.ok(!rendu.journal.includes('compileAsync'), 'compileAsync sans l’extension : un avertissement de three par affichage de l’Accueil');
+    E.parallele = false;
+    monte();
     avance(200);
-    assert.ok(E.images >= 4, 'sans compilation à attendre, le ciel paraît aussitôt (' + E.images + ' image(s) en 200 ms)');
+    assert.ok(E.images >= 8, 'sans compilation à attendre, le ciel paraît aussitôt (' + E.images + ' image(s) en 200 ms)');
   } finally { desinstalle(); }
 });
 
-test('le shader se compile hors du fil principal AVANT la première image', async () => {
+test('le shader se compile hors du fil principal AVANT la première image', () => {
   installe();
   try {
-    const { rendu } = await monte();
-    assert.ok(rendu.journal.includes('compileAsync'), 'aucun compileAsync : le premier rendu compile, et fige l’interface à froid (2,2 à 4,7 s mesurés)');
+    const { gl } = monte();
     avance(300);
     assert.equal(E.images, 0, 'une image avant la fin de la compilation : c’est elle qui attend le pilote, sur le fil principal');
-    rendu.compilee(); await microtaches();
+    const bloquants = gl.journal.filter((j) => j === 'programme:LINK_STATUS' || j.startsWith('shader:'));
+    assert.deepEqual(bloquants, [], 'une question au programme pendant sa compilation le fait attendre : ' + bloquants.join(', '));
+    assert.ok(gl.journal.includes('programme:COMPLETION_STATUS_KHR'), 'personne ne demande si la compilation est finie');
+    E.compilee = true;
     avance(200);
-    assert.ok(E.images >= 4, 'la compilation finie, le ciel doit paraître (' + E.images + ' image(s) en 200 ms)');
+    assert.ok(E.images >= 8, 'la compilation finie, le ciel doit paraître (' + E.images + ' image(s) en 200 ms)');
   } finally { desinstalle(); }
 });
 
-test('la boucle demande une image par image dessinée, plus une au plus, et garde son plafond de 30/s', async () => {
+test('la boucle demande UNE image à l’écran par image dessinée, et garde son plafond', () => {
   installe();
   try {
-    await monteCompile();
+    monteCompile();
     avance(200);
     const i0 = E.images, d0 = E.demandes;
     avance(3000);
     const images = E.images - i0, demandes = E.demandes - d0;
-    assert.ok(images >= 75 && images <= 90, images + ' images en 3 s : le rythme d’origine (une par 33 ms au moins) a changé');
-    assert.ok(demandes <= images * 2, demandes + ' rAF pour ' + images + ' images : la boucle réveille encore le navigateur à chaque rafraîchissement');
+    // « plein » : 60 images/s au plus (le handoff) ; l'écran en offre 130.
+    assert.ok(images >= 120 && images <= 200, images + ' images en 3 s : le plafond de 60/s du niveau « plein » a changé');
+    // À 60 images sur 130 Hz, « deux rAF par image » laisserait passer une boucle qui
+    // demande CHAQUE rafraîchissement : le seuil est donc une demande par image.
+    assert.ok(demandes <= images * 1.1, demandes + ' rAF pour ' + images + ' images : la boucle réveille encore le navigateur à chaque rafraîchissement');
   } finally { desinstalle(); }
 });
 
-test('hors du cadre, plus rien ne se dessine ni ne se demande ; au retour, le ciel repart', async () => {
+test('« Léger » dessine moitié moins', () => {
   installe();
   try {
-    const { hote } = await monteCompile();
-    assert.ok(E.io.some((o) => o.cibles.includes(hote)), 'personne n’observe l’hôte : le canevas défile hors de l’écran et continue de dessiner (22 images/s à top −1169)');
+    monteCompile({ qualite: 'leger' });
+    avance(200);
+    const i0 = E.images;
+    avance(3000);
+    const images = E.images - i0;
+    assert.ok(images >= 60 && images <= 100, images + ' images en 3 s : le niveau « léger » plafonne à 30/s');
+  } finally { desinstalle(); }
+});
+
+test('hors du cadre, plus rien ne se dessine ni ne se demande ; au retour, le ciel repart', () => {
+  installe();
+  try {
+    const { el } = monteCompile();
+    assert.ok(E.io.some((o) => o.cibles.includes(el)), 'personne n’observe le ciel : il défile hors de l’écran et continue de dessiner (22 images/s à top −1169)');
     avance(100);
     voit(false);
     avance(50); // une image déjà demandée peut tomber
@@ -191,16 +226,17 @@ test('hors du cadre, plus rien ne se dessine ni ne se demande ; au retour, le ci
   } finally { desinstalle(); }
 });
 
-test('sous la veille et onglet caché, la boucle dort ; la fin de l’arrêt la relance', async () => {
+test('sous la veille et onglet caché, la boucle dort ; la fin de l’arrêt la relance', () => {
   installe();
   try {
-    await monteCompile();
+    monteCompile();
     avance(100);
     E.classes.add('loggia-ambient-on'); classeChange();
     avance(50);
     let d0 = E.demandes, i0 = E.images;
     avance(2000);
     assert.equal(E.demandes - d0, 0, (E.demandes - d0) + ' rAF sous la veille : la boucle tourne à vide (138/s mesurés)');
+    assert.equal(E.images - i0, 0, 'des images sous la veille');
     E.classes.delete('loggia-ambient-on'); classeChange();
     avance(300);
     assert.ok(E.images - i0 >= 7, 'la veille partie, le ciel ne repart pas : rien ne regarde la classe de <html>');
@@ -218,37 +254,93 @@ test('sous la veille et onglet caché, la boucle dort ; la fin de l’arrêt la 
   } finally { desinstalle(); }
 });
 
-test('le démontage rend le contexte, après avoir tout libéré, et coupe ses écoutes', async () => {
+test('le démontage rend le contexte, après avoir tout libéré, et coupe ses écoutes', () => {
   installe();
   try {
-    const { nettoie, rendu } = await monteCompile();
+    const { el, gl } = monteCompile();
     avance(200);
-    nettoie();
-    const j = rendu.journal;
-    assert.ok(j.includes('forceContextLoss'), 'le contexte reste au ramasse-miettes : jusqu’à 5 encore vivants sur la vue suivante');
-    assert.ok(j.lastIndexOf('dispose') < j.indexOf('forceContextLoss'), 'perdu avant dispose(), le contexte ferait écrire « Context Lost » à three');
-    assert.ok(E.io.every((o) => o.coupe) && E.mo.every((o) => o.coupe), 'un observateur survit au démontage');
+    demonte(el);
+    const j = gl.journal;
+    assert.ok(j.includes('loseContext'), 'le contexte reste au ramasse-miettes : jusqu’à 5 encore vivants sur la vue suivante');
+    assert.ok(j.lastIndexOf('deleteProgram') < j.indexOf('loseContext') && j.lastIndexOf('deleteBuffer') < j.indexOf('loseContext'), 'programme et tampon doivent partir avant le contexte');
+    assert.ok([...E.io, ...E.mo, ...E.ro].every((o) => o.coupe), 'un observateur survit au démontage');
     assert.equal(E.ecoutes.has('visibilitychange'), false, 'l’écoute de visibilité survit au démontage');
+    assert.ok(el.enfants.every((c) => c.retire), 'les canevas restent dans l’élément démonté');
     const i0 = E.images, d0 = E.demandes;
     avance(1000);
     assert.equal(E.images - i0 + E.demandes - d0, 0, 'la boucle tourne encore après le démontage');
   } finally { desinstalle(); }
 });
 
-test('démonté pendant la compilation : rien ne se libère sous elle, tout part à sa fin', async () => {
+test('démonté pendant la compilation : rien ne se dessine, l’attente s’arrête, le contexte est rendu', () => {
   installe();
   try {
-    const { nettoie, rendu } = await monte();
-    assert.ok(rendu.journal.includes('compileAsync'), 'pas de compilation asynchrone');
+    const { el, gl } = monte();
     avance(100);
-    nettoie();
-    // three relit ses programmes toutes les 10 ms jusqu'à la fin : les libérer
-    // ou perdre le contexte sous lui lèverait une erreur dans son minuteur.
-    assert.deepEqual(rendu.journal, ['compileAsync'], 'libéré sous la compilation : ' + rendu.journal.join(', '));
-    rendu.compilee(); await microtaches();
+    demonte(el);
+    const questions = gl.journal.filter((j) => j === 'programme:COMPLETION_STATUS_KHR').length;
+    E.compilee = true;
     avance(500);
-    assert.ok(rendu.journal.includes('dispose') && rendu.journal.includes('forceContextLoss'), 'la compilation finie, le contexte n’est jamais rendu');
-    assert.equal(E.images, 0, 'un hôte démonté a dessiné');
+    assert.equal(gl.journal.filter((j) => j === 'programme:COMPLETION_STATUS_KHR').length, questions, 'l’attente de la compilation continue après le démontage');
+    assert.ok(gl.journal.includes('loseContext'), 'le contexte n’est jamais rendu');
+    assert.equal(E.images, 0, 'un ciel démonté a dessiné');
+  } finally { desinstalle(); }
+});
+
+/* ── Ce que Loggia lui passe ───────────────────────────────────────────── */
+
+test('le soleil suit le VRAI lever : à 7 h 48, levé si le jour commence à 7 h 30', () => {
+  installe();
+  try {
+    // Le handoff a figé le 9 octobre (lever 8 h 06) : à 7 h 48, le soleil y serait encore couché.
+    const a = monteCompile({ heure: '7.8' });
+    assert.ok(E.uniformes.uSun[2] < 0, 'sans lever donné, le repli du handoff (8 h 06) : soleil couché');
+    demonte(a.el);
+    const { el } = monteCompile({ heure: '7.8', lever: '7.5', coucher: '19.2' });
+    avance(100);
+    assert.ok(E.uniformes.uSun[2] > 0, 'lever donné à 7 h 30 : à 7 h 48 le soleil doit être levé');
+    el.setAttribute('lever', 'n’importe quoi');
+    assert.deepEqual(el.soleil(), [], 'un lever illisible doit retomber sur le repli, pas sur NaN');
+  } finally { desinstalle(); }
+});
+
+test('la couleur du fond se lit aussi en rgb() : le thème « Suivre HA » ne donne pas toujours #rrggbb', () => {
+  installe();
+  try {
+    E.fond = 'rgb(240, 242, 245)';
+    monteCompile();
+    avance(100);
+    const [r, g, b] = E.uniformes.uFond;
+    assert.ok(r > 0.9 && g > 0.9 && b > 0.9, 'un fond clair en rgb() lu comme le bleu nuit de repli : le ciel se fondrait dans la mauvaise couleur');
+  } finally { desinstalle(); }
+});
+
+test('quand personne ne regarde, le vent repart de presque rien (ticket #25)', () => {
+  installe();
+  try {
+    const { el } = monteCompile();
+    avance(100);
+    el.drift = 5000; // une tablette murale après des jours de vent
+    voit(false);
+    assert.ok(el.drift < 10, 'la coordonnée du vent grandit sans fin : le float finit par manquer (voir wx3d_hash)');
+    voit(true);
+    const i0 = E.images;
+    avance(200);
+    assert.ok(E.images > i0, 'le ciel ne repart pas après la remise à zéro');
+  } finally { desinstalle(); }
+});
+
+test('au téléphone, le fondu garde les proportions du bandeau de 440 px', () => {
+  installe();
+  try {
+    /* Le handoff garde 250 px de ciel pur : à 304 px de haut (36vh d'un
+     * téléphone), il ne restait que ~97 px pour fondre, contre ~213 avec
+     * l'ancien ciel. « En bas c'est moins fondu qu'avant » (17/10). */
+    const a = monte(); a.el.clientHeight = 304; E.compilee = true; avance(60);
+    assert.ok(Math.abs(E.uniformes.uZone - (1 - 250 / 440)) < 1e-6, 'au téléphone, la zone du fondu se tasse sous 250 px de ciel pur (uZone = ' + E.uniformes.uZone + ')');
+    demonte(a.el);
+    const b = monte(); b.el.clientHeight = 528; avance(60);
+    assert.ok(Math.abs(E.uniformes.uZone - (1 - 250 / 528)) < 1e-6, 'au-delà de 440 px, le ciel du handoff tel quel');
   } finally { desinstalle(); }
 });
 

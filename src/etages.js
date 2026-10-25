@@ -29,6 +29,10 @@ export function etagesDe(index) {
   return l
     .filter(f => f && f.id)
     .map(f => ({ id: f.id, nom: (f.name || f.id), niveau: Number.isFinite(f.level) ? f.level : null }))
+    /* Le nom COURT (25/10), pour la ligne du telephone : le niveau, comme un
+     * bouton d'ascenseur (−1, 0, 1) ; sans niveau, les initiales du nom. */
+    .map(e => ({ ...e, court: e.niveau != null ? String(e.niveau).replace('-', '−')
+      : String(e.nom).split(/[\s'’-]+/).filter(Boolean).map(m => m[0]).join('').slice(0, 3).toUpperCase() }))
     /* Par NIVEAU, pas par nom : le sous-sol (−1) vient avant le
      * rez-de-chaussée (0), qui vient avant l'étage (1). Un étage sans niveau
      * déclaré passe en dernier plutôt que de se glisser au hasard. */

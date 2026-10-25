@@ -49,7 +49,8 @@ const EXPOSE = 'data:text/javascript,' + encodeURIComponent([
   'export async function load(url, ctx, next) {',
   "  if (!url.endsWith('/src/App.jsx?l16dp')) return next(url, ctx);",
   "  const r = await next(url.slice(0, -6), ctx);",
-  "  return { ...r, source: String(r.source) + ';export { RoomGenericCard as __RoomGenericCard, CvBigSensor as __CvBigSensor, LigneEntite as __LigneEntite, CvHistory as __CvHistory, useDomainCards as __useDomainCards, SensorSheet as __SensorSheet, FicheAppareil as __FicheAppareil };' };",
+  // ASSERTION MODIFIÉE (chantier Capteurs, tâche 1) : la fiche 24 h est chargée à la demande ; `ouvrir` monte sa coquille, `FicheCapteur`.
+  "  return { ...r, source: String(r.source) + ';export { RoomGenericCard as __RoomGenericCard, CvBigSensor as __CvBigSensor, LigneEntite as __LigneEntite, CvHistory as __CvHistory, useDomainCards as __useDomainCards, FicheCapteur as __SensorSheet, FicheAppareil as __FicheAppareil };' };",
   '}',
 ].join('\n'));
 register('./jsx-hooks.mjs', import.meta.url);

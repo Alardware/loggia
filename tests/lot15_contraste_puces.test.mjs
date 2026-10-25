@@ -45,8 +45,9 @@ test('aucun texte quasi noir sur le fond d’accent — sauf deux icônes', () =
   assert.ok(lire('src', 'ui.jsx').includes("background: accent ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: accent ? '#fff' : 'var(--o-text1)',"), 'editBtn (Restaurer)');
   assert.ok(lire('src', 'Onboarding.jsx').includes("fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#fff',"), 'Commencer, Continuer, Ouvrir mon dashboard');
   assert.ok(bloc(APP, 'function BandeauEdition(', NL + 'function ').includes("background: accent ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: accent ? '#fff' : 'var(--o-text1)'"), 'Ajouter une carte');
-  for (const f of ['function CardEditSheet(', 'function FichePiece(', 'function FicheScenario(']) {
-    assert.ok(/background: 'var\(--o-accent-fond\)', color: '#fff'(, opacity: [^}]+)? \}\}><Fi i="plus" size=\{12\} \/>\{tr\('Enregistrer'\)\}/.test(bloc(APP, f, NL + 'function ')), f + ' : Enregistrer');
+  // ASSERTION MODIFIÉE (audit du 19/10) : la fiche d'une pièce est chargée à la demande (fichepiece.jsx).
+  for (const [code, f] of [[APP, 'function CardEditSheet('], [lire('src', 'fichepiece.jsx'), 'export default function FichePiece('], [lire('src', 'fichescenario.jsx'), 'export default function FicheScenario(']]) { // ASSERTION MODIFIÉE (contre-relecture du lot 3 des capteurs) : la fiche d'un scénario est chargée à la demande — fichescenario.jsx.
+    assert.ok(/background: 'var\(--o-accent-fond\)', color: '#fff'(, opacity: [^}]+)? \}\}><Fi i="plus" size=\{12\} \/>\{tr\('Enregistrer'\)\}/.test(bloc(code, f, NL + 'function ')), f + ' : Enregistrer');
   }
 });
 

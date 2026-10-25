@@ -7,9 +7,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + readFileSync(join(RACINE, 'src', 'views', 'voletsplan.jsx'), 'utf8') + VUES_SORTIES); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
 const en = readFileSync(join(RACINE, 'src', 'langues', 'en.js'), 'utf8');
 const NL = String.fromCharCode(10);
 const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = src.indexOf(fin, d + 1); return src.slice(d, f < 0 ? undefined : f); };
@@ -18,8 +19,9 @@ test('la fabrique rend toute cle : entite, zone, distributeur, plante — et por
   const dc = bloc('function useDomainCards(', NL + '}');
   assert.ok(dc.includes("if (zone || k.indexOf('zone:') === 0) {") && dc.includes("if (k === 'obj:feeder') return <CarteDistributeur ") && dc.includes("if (k.indexOf('plant:') === 0) {"), 'les trois cles composees');
   // Le distributeur passe par sa carte abonnée (ADR 0155, 05/10), qui rend RoomFeederCard telle quelle.
-  assert.ok(dc.includes("<CarteDistributeur chip={chip} lire={distributeur} nom={label || tr('Distributeur')}") && dc.includes('<RoomPlantCard chip={chip} mort={pl.mort} nom={label || pl.name}'), 'les cartes du distributeur et de la plante, compactes ou non');
-  assert.ok(bloc('function CarteDistributeur(', NL + '}').includes('<RoomFeederCard chip={chip} mort={d.mort} nom={nom} pct={d.pct} sub={d.sous} onFeed={d.feed} onRempli={d.onRempli} onOpen={onOpen} />'), 'la carte du distributeur, compacte ou non');
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I5, I12) : la carte lit sa vue (`useVueDistributeur`) sur le `hass` de la fabrique — la carte large et la compacte.
+  assert.ok(dc.includes("<CarteDistributeur chip={chip} hass={hass} nom={label || tr('Distributeur')}") && dc.includes('<RoomPlantCard chip={chip} pl={pl} nom={label || pl.name}'), 'les cartes du distributeur et de la plante, compactes ou non');
+  assert.ok(bloc('function CarteDistributeur(', NL + '}').includes('<RoomFeederCard v={useVueDistributeur(hass, nom)} chip={chip} onOpen={onOpen} />'), 'la carte du distributeur, compacte ou non');
   assert.ok(dc.includes('{feederPop && <FicheDistributeur hass={hass} onClose={() => setFeederPop(false)} />}') && dc.includes('{plantPop && <FichePlante pl={plantPop}'), 'leurs fiches voyagent avec la fabrique');
   assert.ok(dc.includes('setFeederPop(false); setPlantPop(null); };'), 'fermer les ferme aussi');
   assert.ok(dc.includes('const nom = (k) => nomDeCle(S, k);'), 'et elle sait nommer une cle');
@@ -30,7 +32,9 @@ test('la fabrique rend toute cle : entite, zone, distributeur, plante — et por
 test('Objets ne compose plus rien : il demande ses cartes a la fabrique', () => {
   const v = bloc('function ObjetsView(', NL + '}');
   assert.ok(!v.includes('croqHaids()') && !v.includes('plantsCfg()') && !v.includes('setSheet(') && !v.includes('<FicheDistributeur') && !v.includes('<FichePlante'), 'plus de distributeur ni de plante calcules ici');
-  assert.ok(v.includes("const cle = (o.type === 'feeder' || o.type === 'plant') ? o.cle : o.id;") && v.includes('return compacte ? dc.compact(cle, ed.labelOf(o.cle) || null) : dc.card(cle, ed.labelOf(o.cle) || null);'), 'la fabrique, pour tout');
+  // ASSERTION MODIFIÉE (chantier Capteurs, tâche 7) : la carte standard d'une mesure porte le nom de sa pièce, que l'objet lui donne (C13).
+  // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 9 ; C20) : une carte de groupe se nomme par sa clé, comme le distributeur et la plante.
+  assert.ok(v.includes("const cle = (o.type === 'feeder' || o.type === 'plant' || o.type === 'groupe') ? o.cle : o.id;") && v.includes('return compacte ? dc.compact(cle, ed.labelOf(o.cle) || null) : dc.card(cle, ed.labelOf(o.cle) || o.nomCarte || null);'), 'la fabrique, pour tout');
 });
 
 test('le composeur : cartes de Loggia d’abord, appareils par piece, puces, recherche qui cherche tout', () => {
@@ -38,7 +42,17 @@ test('le composeur : cartes de Loggia d’abord, appareils par piece, puces, rec
   const c = bloc('function ComposeurCartes(', NL + '}');
   assert.ok(c.includes("if (distributeurConfigure()) out.push({ cle: 'obj:feeder',") && c.includes("out.push({ cle: 'plant:' + p.base,") && c.includes("out.push({ cle: 'zone:' + z.id,") && c.includes('if (!composites) return [];'), 'distributeur, plantes, zones fil pilote — quand la vue les accepte');
   assert.ok(c.includes('climateZones(S).filter(z => !estClimate(z))'), 'un thermostat reste un appareil');
-  assert.ok(c.includes('filtres: filtresObjet({ domaine: dom, estLumiere: cvEstLumiere(id), classe })') && c.includes('const puces = OBJ_FILTRES().filter('), 'les puces d’Objets, avec les memes regles');
+  // Les prises rangées comme Objets les range (A5) : `filtresEntite` donne `estPrise` à `filtresObjet` — tests/prises_gestes.test.mjs le joue.
+  assert.ok(c.includes('filtres: filtresEntite(S, id)') && c.includes('const puces = OBJ_FILTRES().filter('), 'les puces d’Objets, avec les memes regles');
+  assert.ok(bloc('function filtresEntite(', NL + '}').includes("estPrise: dom === 'switch' && !cvEstLumiere(id) && priseDe(S, id).prise"), 'la regle des prises, comme dans Objets');
+  // Aucun appel a `filtresObjet` ne range un switch sans connaitre la regle des prises : le composeur l'avait oubliee.
+  let depuis = 0;
+  for (let i = src.indexOf('filtresObjet({', depuis); i >= 0; i = src.indexOf('filtresObjet({', depuis)) {
+    let niveau = 0, fin = i + 'filtresObjet'.length;
+    do { if (src[fin] === '(') niveau++; if (src[fin] === ')') niveau--; fin++; } while (niveau > 0);
+    assert.ok(src.slice(i, fin).includes('estPrise'), 'un appel a filtresObjet sans estPrise : ' + src.slice(i, fin).slice(0, 90));
+    depuis = fin;
+  }
   assert.ok(c.includes('const cherche = (...champs) =>') && c.includes('cherche(c.nom, c.sous, c.cle, c.piece)') && c.includes('cherche(a.id, a.nom, a.piece)'), 'nom, sous-titre, cle, piece, identifiant');
   assert.ok(c.includes("const cle = (g) => (piece && rmNorm(g) === rmNorm(piece)) ? '0' : g ? '1' + g.toLowerCase() : '2';"), 'la piece courante en tete, les sans-piece en dernier');
   assert.ok(c.includes('useState(() => (piece ? { [rmNorm(piece)]: true } : {}))') && c.includes('aria-expanded={ouvert}'), 'la piece courante ouverte, les autres repliees');

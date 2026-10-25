@@ -29,9 +29,36 @@ export const CLES_TELEPHONE = [
   'Alarme déclenchée : {nom}',
   'Ouverture pendant que l’alarme est armée : {nom}',
   '{nom} : {v} ppm, il faut aerer',
+  /* Le monoxyde chiffré au palier Danger (ADR 0251, « Téléphone, sans réaction »). */
+  '{nom} : monoxyde de carbone à {v} ppm, aérez et sortez',
   '{nom} : pile a {v} %',
+  /* La pile binaire (`on` = faible) et le détecteur de sûreté muet (audit du 19/10, M3 et M5). */
+  '{nom} : pile faible',
+  'Détecteur muet, à vérifier : {nom}',
+  /* Plusieurs détecteurs muets ensemble, une seule notification (relecture du lot 2, point 8). */
+  'Détecteurs muets, à vérifier : {nom}',
   '{nom} : {reste} restant, a remplacer',
   'Heures creuses : c’est le moment de lancer les machines',
+  /* La fin d'un cycle d'electromenager (chantier Prises, P6). */
+  '{nom} : cycle terminé à {h} ({kwh} kWh)',
+  /* Le mode enfant (chantier Mode enfant, E13, E22) : le titre, la demande de
+   * l'enfant, l'insistance au volume et au rallumage. */
+  'Loggia — mode enfant',
+  '{nom} demande 15 min de plus ({appareil})',
+  'Volume ramené trois fois en dix minutes sur {appareil}',
+  '{appareil} se rallume après l’heure',
+];
+
+/* Ce que le serveur dit ou montre SANS passer par le telephone (chantier Mode
+ * enfant) : la voix de l'Echo cinq minutes avant la coupure (E4 B), et les deux
+ * boutons de la notification de la demande (E13). Traduits comme les textes
+ * du telephone, dans la langue de la maison ; a part, parce que la garde de
+ * tests/python/test_lot16_alertes_traduites.py ne compte dans CLES_TELEPHONE
+ * que ce qu'un envoi au telephone cite. */
+export const CLES_VOIX = [
+  '{nom}, l’écran s’éteint dans cinq minutes',
+  'Accorder 15 min',
+  'Refuser',
 ];
 
 /* Les cles du telephone d'un catalogue, en chaines. Une valeur qui n'en est
@@ -41,7 +68,7 @@ export const CLES_TELEPHONE = [
  * reste ecartee — textes_serveur et langues_catalogues l'attrapent deja. */
 export function clesTelephone(cat, code) {
   const out = [];
-  for (const cle of CLES_TELEPHONE) {
+  for (const cle of [...CLES_TELEPHONE, ...CLES_VOIX]) {
     const v = cat[cle];
     if (v == null) continue;
     if (typeof v !== 'string') throw new Error(`src/langues/${code}.js : « ${cle} » part au telephone, il doit etre une chaine`);

@@ -58,6 +58,7 @@ export const CLES_APPAREIL = new Set([
   'loggia-fond-photo',        // la photo de fond (ui.jsx, FOND_PHOTO_CLE)
   'loggia_journal',           // les notifications lues PAR CELUI QUI REGARDE (v3.80.0)
   'loggia-assistant-device',  // l'identifiant de ce navigateur aupres de l'assistant
+  'loggia-appareil',          // l'identifiant de CET ecran, cle de sa fiche (ADR 0220)
   'loggia-langue-active',     // la derniere langue servie ici (i18n.js)
   'loggia-maj-verifie',       // la derniere verification de mise a jour
   'loggia-scnrangee',         // la rangee des scenarios vue pleine ici (App.jsx, lot 14)
@@ -83,7 +84,10 @@ export const estCleAppareil = (k) => typeof k === 'string'
  * plus tard, un minuteur depuis longtemps echu eteignait une lampe au
  * redemarrage suivant ; efface par l'import, un minuteur en cours se perdait.
  * Ces cles ne quittent donc pas le serveur, et l'import ne les purge pas. */
+/* Les fiches des appareils (ADR 0220) aussi : reimportees, elles rendraient a
+ * chaque ecran le profil qu'il avait le jour de la sauvegarde. */
 const CLES_SERVEUR = new Set([
+  'loggia_appareils',
   'loggia_admin_pin_defini', 'loggia_admin_pin', 'loggia_admin_pin_hache',
   'loggia_minuteurs', 'loggia_sirene_test',
 ]);
@@ -113,7 +117,7 @@ const MIGRATABLE_KEYS = [
   'loggia-wxfx',
   'loggia_active_user', 'loggia_alarm', 'loggia_cameras', 'loggia_customviews',
   'loggia_energyHaids', 'loggia_haCfg', 'loggia_lights', 'loggia_look', 'loggia_medias',
-  'loggia_people', 'loggia_plants', 'loggia_quickscenes', 'loggia_roomhidden', 'loggia_rooms',
+  'loggia_people', 'loggia_plants', 'loggia_quickscenes', 'loggia_rooms',
   'loggia_switchlights', 'loggia_users',
 ];
 const MIGRATABLE = new Set(MIGRATABLE_KEYS);

@@ -37,6 +37,8 @@ register('./jsx-hooks.mjs', import.meta.url);
 const M = await import(new URL('../src/fichedistributeur.jsx', import.meta.url).href);
 const Fiche = M.default;
 const { OngletHistorique } = M;
+// TEST AJOUTÉ (étape 2 IoT, 19/10 ; I25) : l'Historique reçoit ses sept jours tout calculés (`septJoursRepas`).
+const { septJoursRepas } = await import('../src/distributeurfiche.js');
 const SOURCE = readFileSync(new URL('../src/fichedistributeur.jsx', import.meta.url), 'utf8');
 const FIXTURE = JSON.parse(readFileSync(new URL('./fixtures/distributeurs.json', import.meta.url), 'utf8'));
 const copie = (o) => JSON.parse(JSON.stringify(o));
@@ -82,10 +84,12 @@ const attr = (attrs, nom) => { const m = new RegExp('\\b' + nom + '="([^"]*)"').
 
 test('Accueil, Planning et Historique toujours là ; Entretien selon les données', () => {
   // Serveur muet, ni réservoir ni consommable : les trois onglets restent.
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I21) : l'onglet « Planning » s'appelle « Repas », comme dans sa maquette (même identifiant).
   const nu = rendre({ etat: null, erreur: true, cfg: { haid: 'select.distributeur_feed' } });
-  assert.deepEqual(onglets(nu).map(o => o.nom), ['Accueil', 'Planning', 'Historique'], 'les trois onglets, même serveur muet');
-  // Un réservoir `input_number` : « Réservoir rempli » vit dans Entretien.
-  assert.deepEqual(onglets(rendre()).map(o => o.nom), ['Accueil', 'Planning', 'Historique', 'Entretien']);
+  assert.deepEqual(onglets(nu).map(o => o.nom), ['Accueil', 'Repas', 'Historique'], 'les trois onglets, même serveur muet');
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I22, I26) : « Je l'ai rempli » est passé à l'Accueil, près du réservoir ; Entretien
+  // n'existe plus pour le seul réservoir.
+  assert.deepEqual(onglets(rendre()).map(o => o.nom), ['Accueil', 'Repas', 'Historique']);
   // Un consommable de l'appareil (Petlibro) suffit aussi, sans réservoir.
   const petlibro = maison({ ents: [['button.granary_manual_feed', 'petlibro', 'manual_feed'], ['sensor.granary_remaining_desiccant', 'petlibro', 'remaining_desiccant'], ['button.granary_desiccant_reset', 'petlibro', 'desiccant_reset']],
     states: [st('button.granary_manual_feed', 'unknown', {}), st('sensor.granary_remaining_desiccant', '12', { unit_of_measurement: 'd' }), st('button.granary_desiccant_reset', 'unknown', {})] });
@@ -167,9 +171,11 @@ test('« deux sources » : seulement pour un programme LISIBLE actif', () => {
   const html = rendre({ etat: illisible, ongletDepart: 'planning' });
   assert.ok(!html.includes('Deux sources'), 'un programme illisible ne crie pas au loup');
   assert.ok(html.includes('L’appareil peut aussi distribuer selon ses propres créneaux.'), 'il le dit autrement');
-  assert.ok(html.includes('Mode de distribution'), 'le mode, avec renvoi aux réglages');
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I24) : la rangée « Programme de l'appareil » de sa maquette porte le mode et ouvre Réglages ;
+  // la ligne « Mode de distribution » est partie.
+  assert.match(html, /<button type="button" id="[^"]+-mode"[^>]*>(?:(?!<\/button>).)*>Programmé</, 'le mode, avec renvoi aux réglages');
   // Mode manuel : pas de source, mais le mode se montre.
-  assert.ok(rendre({ ongletDepart: 'planning' }).includes('Mode de distribution'));
+  assert.match(rendre({ ongletDepart: 'planning' }), /<button type="button" id="[^"]+-mode"[^>]*>(?:(?!<\/button>).)*>Manuel</);
 });
 
 test('une ligne par automatisation, ses heures lues, « coupe ses 2 repas »', () => {
@@ -267,16 +273,27 @@ test('Distribuer : des portions pas à pas pour une commande qui écrit, jamais 
   // Un number `feed` de PetKit : la quantité s'écrit, en portions.
   const petkit = maison({ ents: [['number.petkit_feed', 'petkit', 'feed']], states: [st('number.petkit_feed', '0', { min: 0, max: 100, step: 10 })] });
   const html = rendre({ cfg: { appareil: 'dev1' } }, petkit);
-  assert.ok(html.includes('Distribuer 1 portion') && html.includes('>1 portion<'), 'PasAPas de portions puis le bouton');
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I23) : le pas à pas de « Servir maintenant » compte les portions, le bouton dit
+  // « Distribuer » seul, comme dans sa maquette ; le verrou de 2,5 s est celui du geste PARTAGÉ avec la carte (distributeuretat.js).
+  assert.ok(html.includes('>1 portion<') && /<button[^>]*>.*?Distribuer<\/button>/.test(html) && !html.includes('Distribuer 1 portion'), 'PasAPas de portions puis le bouton');
   assert.ok(!html.includes('role="slider"') && !html.includes('type="range"'), 'jamais un curseur');
-  assert.ok(SOURCE.includes('const VERROU_MS = 2500;'), 'le verrou de 2,5 s');
+  assert.ok(readFileSync(new URL('../src/distributeuretat.js', import.meta.url), 'utf8').includes('export const VERROU_DISTRIBUER_MS = 2500;'), 'le verrou de 2,5 s');
 });
 
 test('la portion : l’unité de l’entité, jamais un « g » en dur', () => {
-  assert.ok(rendre().includes('Taille de la portion') && rendre().includes('>45 g<'), 'en grammes quand l’entité le dit');
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I23) : la taille de ration vit dans « Servir maintenant », et un serving_size se dit
+  // en portions (« 2 portions »), plus en chiffre nu.
+  // ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; D1) : le number en grammes désigné comme « Poids d'une portion » est un POIDS —
+  // le pas à pas ne le règle jamais (il aurait réglé l'étalonnage) ; sans taille de ration, « Servir maintenant » n'a que « Distribuer ».
+  const seul = rendre();
+  assert.ok(seul.includes('Servir maintenant') && !seul.includes('>45 g<') && !seul.includes('aria-label="Portion plus grande"'), 'un poids n’a pas de pas à pas');
   const aqara = maison({ states: [st('number.distributeur_portion', '2', { min: 1, max: 10, step: 1 })] });
   const html = rendre({}, aqara);
-  assert.ok(html.includes('>2<') && !html.includes('>2 g<'), 'un serving_size compte des portions');
+  assert.ok(html.includes('>2 portions<') && !html.includes('>2 g<'), 'un serving_size compte des portions');
+  // La forme de Zigbee2MQTT : la taille en « portion » à côté du poids en g — « 2 portions · 90 g », l'unité de l'entité lue comme des portions.
+  const z2m = maison({ ents: [['select.distributeur_feed', 'mqtt', null], ['number.distributeur_portion', 'mqtt', null], ['number.distributeur_serving_size', 'mqtt', null], ['select.distributeur_mode', 'mqtt', null]],
+    states: [st('number.distributeur_serving_size', '2', { min: 1, max: 10, step: 1, unit_of_measurement: 'portion' })] });
+  assert.ok(rendre({}, z2m).includes('>2 portions · 90 g<'), 'la taille en « portion », le poids désigné en g');
 });
 
 test('hors ligne : le liseré sur l’en-tête, et plus de « Distribuer »', () => {
@@ -287,10 +304,13 @@ test('hors ligne : le liseré sur l’en-tête, et plus de « Distribuer »', ()
   assert.equal(panne(html), 1, 'un seul liseré');
   assert.match(html, /<div class="o-panne"[^>]*>[^]*?Ce distributeur ne répond plus\./, 'sur la ligne d’en-tête, qui le dit');
   assert.ok(!/>Distribuer</.test(html), 'Distribuer disparaît');
-  // Le réservoir muet : en-tête en panne, « Indisponible » sur sa ligne, ni 0 % ni Rempli.
+  // Le réservoir muet : « Indisponible » sur sa ligne, ni 0 % ni Rempli.
+  // ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; point G) : le liseré est sur le panneau du réservoir, pas sur l'en-tête — la vis
+  // répond, et l'en-tête ne dit plus « ne répond plus » (comme la plaque de la carte).
   const bac = maison({ states: [st('input_number.croquettes_reservoir', 'unavailable', { max: 1500 })] });
   const r = rendre({}, bac);
   assert.equal(panne(r), 1);
+  assert.ok(!r.includes('Ce distributeur ne répond plus.') && /<div class="o-panne"[^>]*>[^]*?Indisponible/.test(r), 'le liseré, sur le réservoir');
   assert.ok(r.includes('Indisponible') && !r.includes('>0<') && !/>Entretien</.test(r), 'ni « 0 % » ni Rempli (et Entretien n’a plus rien)');
   // Une automatisation tombée : SA ligne porte le liseré.
   const auto = maison({ states: [st('automation.croquettes_du_midi', 'unavailable', {})] });
@@ -300,16 +320,17 @@ test('hors ligne : le liseré sur l’en-tête, et plus de « Distribuer »', ()
 });
 
 test('Historique : indisponible ≠ vide, et ce qu’il ne voit pas se dit', () => {
-  const resume = { jours: Array.from({ length: 7 }, (_, i) => ({ date: new Date(2026, 9, 5 + i), n: 0, grammes: null, aujourdhui: i === 0 })), n: 0, grammes: null };
-  const r = (p) => renderToStaticMarkup(createElement(OngletHistorique, { lignes: [], resume, chargee: true, erreur: false, aveugle: false, maintenant: MAINTENANT, ...p }));
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I25) : l'onglet reçoit les sept jours glissants (`semaine`) ; « Aucun repas ces 7 derniers
+  // jours. », comme le robot ; le repas au bouton de l'appareil s'intitule « Repas à la main », les mots de sa maquette.
+  const r = ({ lignes = [], ...p } = {}) => renderToStaticMarkup(createElement(OngletHistorique, { semaine: septJoursRepas(lignes, { maintenant: MAINTENANT }), chargee: true, erreur: false, aveugle: false, maintenant: MAINTENANT, ...p }));
   assert.ok(r({ erreur: true }).includes('Historique indisponible.'));
   assert.ok(!r({ erreur: true }).includes('Aucun repas'));
-  assert.ok(r({}).includes('Aucun repas ces derniers jours.'));
+  assert.ok(r({}).includes('Aucun repas ces 7 derniers jours.'));
   assert.ok(r({ aveugle: true }).includes('L’historique ne voit que les repas partis de Home Assistant.'));
   const lignes = [{ t: MAINTENANT - 3600000, source: 'automatisation', quantites: [{ valeur: 45, unite: 'g' }], grammes: 45, origines: [] },
     { t: MAINTENANT - 7200000, source: 'manuel', quantites: [], grammes: null, origines: [] }];
   const h = r({ lignes });
-  assert.ok(h.includes('Depuis une automatisation') && h.includes('45 g') && h.includes('Manuel'), 'une ligne par repas, avec sa source');
+  assert.ok(h.includes('Depuis une automatisation') && h.includes('45 g') && h.includes('Repas à la main'), 'une ligne par repas, avec sa source');
   // Une source qu'on ne sait pas : le moment seul, sans libellé inventé.
   const inconnue = r({ lignes: [{ t: MAINTENANT - 3600000, source: null, quantites: [{ valeur: 24, unite: 'g' }], grammes: 24, origines: [] }] });
   assert.ok(inconnue.includes('24 g') && !inconnue.includes('Dernier repas') && !inconnue.includes('Depuis'), 'pas de source devinée');
@@ -324,30 +345,34 @@ test('l’accueil : jours de réserve sur les repas ACTIFS, prochain repas, aujo
     ents: [['select.distributeur_feed', 'mqtt', null], ['number.distributeur_portion', 'mqtt', null], ['sensor.distributeur_weight_per_day', 'mqtt', null]] });
   const html = rendre({}, m);
   // 760 g, deux repas de 45 g à 07:30 et 19:00 (le midi est coupé) : 8 jours.
-  assert.ok(html.includes('Environ 8 jours de réserve'), 'la réserve compte les seuls repas allumés');
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I22) : les mots de sa maquette — « ≈ 8 jours de réserve · 760 g » sous le chiffre, et la
+  // tuile « Aujourd'hui » qui porte son nom à part, la valeur dessous.
+  assert.ok(html.includes('≈ 8 jours de réserve · 760 g'), 'la réserve compte les seuls repas allumés');
   assert.ok(html.includes('Prochain repas') && html.includes('Croquettes matin et soir'), 'le prochain repas, et d’où il vient');
-  assert.ok(html.includes('Aujourd’hui : 45 g'), 'le compteur du jour');
+  assert.ok(/>Aujourd’hui<\/span><span[^>]*>45 g<\/span>/.test(html), 'le compteur du jour');
 });
 
 /* ── Relecture du contradicteur (05/10) ───────────────────────────────────── */
 
 test('« Aujourd’hui » : l’historique ne compte que s’il VOIT l’appareil', () => {
-  const { texteAujourdhui } = M;
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I22) : la phrase est devenue une tuile, `{ titre, sous }`, qui porte « Aujourd'hui »
+  // dans son nom ; la règle porte sur son titre, sans le préfixe.
+  const texteAujourdhui = (...a) => { const r = M.tuileAujourdhui(...a); return r ? r.titre : null; };
   const vu = [{ t: MAINTENANT - 3600000, source: 'automatisation', quantites: [], grammes: null, origines: [] }];
   const rien = { repas: null, portions: null, grammes: null };
   // Un compteur ou un « dernier repas » : l'historique voit tout ce qui sort.
-  assert.equal(texteAujourdhui(rien, vu, { aveugle: false, maintenant: MAINTENANT }), 'Aujourd’hui : 1 repas');
+  assert.equal(texteAujourdhui(rien, vu, { aveugle: false, maintenant: MAINTENANT }), '1 repas');
   // Aveugle : il ne voit que ce que Home Assistant a lancé — « 1 repas » tairait l'application du fabricant.
   assert.equal(texteAujourdhui(rien, vu, { aveugle: true, maintenant: MAINTENANT }), null, 'aveugle : rien d’affirmé');
   // Pas encore lu : rien non plus ; le compteur de l'appareil, lui, parle toujours.
   assert.equal(texteAujourdhui(rien, null, { maintenant: MAINTENANT }), null);
-  assert.equal(texteAujourdhui({ repas: 2, portions: null, grammes: 90 }, null, { aveugle: true, maintenant: MAINTENANT }), 'Aujourd’hui : 2 repas · 90 g');
+  assert.equal(texteAujourdhui({ repas: 2, portions: null, grammes: 90 }, null, { aveugle: true, maintenant: MAINTENANT }), '2 repas · 90 g');
 });
 
 test('Historique aveugle et vide : pas de « Aucun repas » qu’on ne sait pas', () => {
-  const resume = { jours: Array.from({ length: 7 }, (_, i) => ({ date: new Date(2026, 9, 5 + i), n: 0, grammes: null, aujourdhui: i === 0 })), n: 0, grammes: null };
-  const r = (p) => renderToStaticMarkup(createElement(OngletHistorique, { lignes: [], resume, chargee: true, erreur: false, aveugle: false, maintenant: MAINTENANT, ...p }));
-  assert.ok(r({}).includes('Aucun repas ces derniers jours.'), 'témoin : un appareil qui se voit, vide, le dit');
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I25) : les sept jours glissants (`semaine`), et la phrase de sa maquette.
+  const r = (p) => renderToStaticMarkup(createElement(OngletHistorique, { semaine: septJoursRepas([], { maintenant: MAINTENANT }), chargee: true, erreur: false, aveugle: false, maintenant: MAINTENANT, ...p }));
+  assert.ok(r({}).includes('Aucun repas ces 7 derniers jours.'), 'témoin : un appareil qui se voit, vide, le dit');
   const aveugle = r({ aveugle: true });
   assert.ok(aveugle.includes('L’historique ne voit que les repas partis de Home Assistant.') && !aveugle.includes('Aucun repas'), 'aveugle : la limite, pas un vide inventé');
 });
@@ -424,7 +449,8 @@ const AQARA_SEUL = () => {
 
 test('Planning : le planning de Loggia reste PROPOSÉ sous le bloc « Programme de l’appareil »', () => {
   const html = rendre({ etat: AQARA_SEUL(), ongletDepart: 'planning' });
-  assert.ok(html.includes('Mode de distribution'), 'témoin : le bloc du programme (mode manuel) est là');
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I24) : la rangée « Programme de l'appareil » de sa maquette remplace « Mode de distribution ».
+  assert.ok(html.includes('Programme de l’appareil') && html.includes('>Manuel<'), 'témoin : le bloc du programme (mode manuel) est là');
   // Le serveur dit `peutPlanifier` : rien d'autre ne distribue. La troisième source se propose.
   assert.ok(html.includes('Ajouter un repas'), 'un Aqara en mode manuel sans automatisation n’obtient jamais « Ajouter un repas »');
   assert.ok(html.includes('Aucun repas programmé.') && html.includes('Planning de Loggia'), 'l’état vide, nommé : c’est le planning de LOGGIA qui est vide');
@@ -494,8 +520,12 @@ test('noms accessibles : chaque repas de Loggia est un groupe nommé, le pas à 
   etat.planning = { appareil: 'dev1', repas: [{ id: 'r1', heure: '08:00', jours: [0, 1, 2, 3, 4, 5, 6], portions: 1, actif: true }, { id: 'r2', heure: '18:30', jours: [0], portions: 1, actif: true }] };
   const html = rendre({ etat, ongletDepart: 'planning' });
   assert.ok(html.includes('role="group" aria-label="Repas de 08:00"') && html.includes('role="group" aria-label="Repas de 18:30"'), '« Heure », « Lundi », « Supprimer » ×2 sans dire de quel repas');
-  const acc = rendre();
-  assert.ok(acc.includes('aria-label="Taille de la portion : Moins"') && acc.includes('aria-label="Taille de la portion : Plus"'), 'le pas à pas de la portion nommé par ce qu’il règle');
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I23) : le pas à pas de « Servir maintenant » prend les mots de sa maquette, qui disent
+  // toujours ce qu'ils règlent.
+  // ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; D1) : sur une TAILLE de ration (le number désigné sans unité de masse) — le
+  // poids en grammes de la maison type n'a pas de pas à pas.
+  const acc = rendre({}, maison({ states: [st('number.distributeur_portion', '2', { min: 1, max: 10, step: 1 })] }));
+  assert.ok(acc.includes('aria-label="Portion plus petite"') && acc.includes('aria-label="Portion plus grande"'), 'le pas à pas de la portion nommé par ce qu’il règle');
   const reg = rendre({ ongletDepart: 'reglages' });
   assert.ok(/aria-label="[^"]+ : Moins"/.test(reg), 'Réglages : « Moins » répété pour chaque ligne');
 });
@@ -512,9 +542,11 @@ test('le focus suit les vues internes : roue, Retour, tuiles, Ajouter ont un poi
   assert.ok(/const allerA = \(id\) => \{ setOnglet\(id\); focaliser\(idOnglets \+ '-t-' \+ id\); \};/.test(SOURCE), 'les tuiles et l’alerte changent d’onglet sans poser le focus');
   assert.ok(SOURCE.includes("focaliser(idOnglets + '-retour')") && SOURCE.includes('focaliser(ouvreur.current'), 'Réglages : le focus va à Retour, puis revient à ce qui l’a ouvert');
   // « Distribuer » pendant son verrou : désactivé pour les yeux, pas pour le clavier.
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; lot 10) : le verrou est le geste PARTAGÉ avec la carte (`useDistribution`), lu dans `enVol`.
+  // ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; point G) : lu dans `vol` — `enVol` masquait l'import d'optimiste.js du même nom.
   const acc = SOURCE.slice(SOURCE.indexOf('function OngletAccueil('), SOURCE.indexOf('\n}\n', SOURCE.indexOf('function OngletAccueil(')));
-  assert.ok(acc.includes('aria-disabled={verrou}'), 'Distribuer ne dit pas son verrou');
-  assert.ok(!/[^-]disabled=\{verrou\}/.test(acc), 'Distribuer `disabled` : le focus tombe sur <body>');
+  assert.ok(acc.includes("aria-disabled={vol ? 'true' : undefined}"), 'Distribuer ne dit pas son verrou');
+  assert.ok(!/[^-]disabled=\{vol/.test(acc), 'Distribuer `disabled` : le focus tombe sur <body>');
 });
 
 test('Retour ramène à la vue d’où l’on venait (Planning par « Mode de distribution »)', () => {
@@ -524,7 +556,8 @@ test('Retour ramène à la vue d’où l’on venait (Planning par « Mode de di
 });
 
 test('la pastille du jour s’élargit au mot (« Gestern », « Wczoraj ») au lieu de déborder', () => {
-  const resume = { jours: Array.from({ length: 7 }, (_, i) => ({ date: new Date(2026, 9, 5 + i), n: 0, grammes: null, aujourdhui: i === 0 })), n: 0, grammes: null };
-  const h = renderToStaticMarkup(createElement(OngletHistorique, { lignes: [{ t: MAINTENANT - 86400000, source: 'manuel', quantites: [], grammes: null, origines: [] }], resume, chargee: true, erreur: false, aveugle: false, maintenant: MAINTENANT }));
-  assert.ok(/min-width:42px;height:42px/.test(h) && !/[;"]width:42px/.test(h), 'une largeur fixe de 42 px coupe « Gestern » (44 px)');
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I25) : le badge de sa maquette, 44 × 36 — en largeur MINIMALE, toujours.
+  const semaine = septJoursRepas([{ t: MAINTENANT - 86400000, source: 'manuel', quantites: [], grammes: null, origines: [] }], { maintenant: MAINTENANT });
+  const h = renderToStaticMarkup(createElement(OngletHistorique, { semaine, chargee: true, erreur: false, aveugle: false, maintenant: MAINTENANT }));
+  assert.ok(/min-width:44px;height:36px/.test(h) && !/[;"]width:44px/.test(h), 'une largeur fixe de 44 px coupe « Wczoraj »');
 });

@@ -13,10 +13,11 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pilesMaison } from '../src/piles.js';
 import { enHaids, setLoggiaState } from '../src/state.js';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8').replace(/\r\n/g, '\n');
-const APP = lire('src', 'App.jsx');
+const APP = (lire('src', 'App.jsx') + VUES_SORTIES);
 const e = (state, attributes = {}) => ({ state: String(state), attributes });
 const pile = (state, nom) => e(state, { device_class: 'battery', unit_of_measurement: '%', friendly_name: nom });
 
@@ -54,8 +55,10 @@ test('piles.js est pur : ni React, ni Home Assistant', () => {
   /* Audit du 03/10 : les noms de même charge se rangent dans la langue de
    * l'écran, par `comparerTextes`. C'est la SEULE dépendance permise, comme
    * pour attention.js — épinglée à l'identique, rien d'autre ne passe. */
+  /* ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 11 ; C32) : la carte Piles vit ici aussi — ses mots (i18n.js), ses chiffres
+   * (format.js) et le seuil de la maison (attention.js, pur lui aussi). Toujours ni React, ni Home Assistant. */
   const imports = lire('src', 'piles.js').match(/^import .*$/gm) || [];
-  assert.deepEqual(imports, ["import { comparerTextes } from './i18n.js';"]);
+  assert.deepEqual(imports, ["import { tr, trN, comparerTextes } from './i18n.js';", "import { nombre } from './format.js';", "import { seuilsPile } from './attention.js';"]);
 });
 
 test('la vue Énergie : les piles ont leur onglet, avec la carte standard et la grille des Objets', () => {
@@ -65,7 +68,9 @@ test('la vue Énergie : les piles ont leur onglet, avec la carte standard et la 
    * plat : elles passent dans leur propre onglet, avec le compte de celles à
    * surveiller sur le bouton. Le reste ne change pas : même carte à cinq
    * barres (ADR 0057), même grille que les Objets, pas de cadre autour. */
-  assert.ok(APP.includes("import { pilesMaison } from './piles.js';"));
+  // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 11 ; C32) : la carte Piles lit le même module ; la liste d'Énergie, elle, ne change pas.
+  // ASSERTION MODIFIÉE (ADR 0274) : la vue Énergie, sortie du boot, importe elle-même ce qu'elle seule utilise.
+  assert.ok(APP.includes("import { pilesDeLaMaison as pilesCarte, vuePiles, glyphePile } from './piles.js';") && APP.includes("import { pilesMaison } from '../piles.js';"));
   const i = APP.indexOf('\nfunction EnergieContent(');
   const vue = APP.slice(i, APP.indexOf('\nfunction ', i + 1));
   assert.ok(vue.includes('const piles = pilesMaison(S, (id) => (LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && LOGGIA_INDEX.entityMeta.get(id)) || {});'), 'les piles, filtrées par le registre');
@@ -176,7 +181,7 @@ test('la trajectoire du soleil est partie, et ne revient pas (08/10)', () => {
    * arc — la pastille d'irradiance qui se superposait aux badges fixes, et le
    * rond qui se posait la nuit sur le repere de lever. Les deux defauts sont
    * devenus impossibles : il n'y a plus ni rond, ni repere, ni arc. */
-  const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
   for (const trace of ['function SunArc(', '<SunArc', 'SunMark', 'sunGrad', 'o-sunmark']) {
     assert.ok(!src.includes(trace), `l\u2019arc du soleil est revenu : ${trace}`);
   }
@@ -198,7 +203,7 @@ test('sans position declaree, les pastilles de la maison restent (08/10)', () =>
    * arc, ce renvoi emportait aussi la consommation de la maison et le sens du
    * reseau, qui n'ont rien a voir avec le soleil : chez quelqu'un qui n'a pas
    * declare sa position, le schema perdait ses chiffres. */
-  const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
   const f = src.slice(src.indexOf('function PastillesEnergie('), src.indexOf('\nconst EN_LAYOUT_KEY'));
   assert.ok(!/if \(!s\) return null;/.test(f), 'le composant redevient muet sans position declaree');
   assert.ok(f.includes('const day = !!(s && s.day);'), 'le jour ne se lit plus prudemment');
@@ -223,7 +228,7 @@ test('la scene TIENT SON RAPPORT, et le cadre colle au dessin (08/10)', () => {
    *
    * Mesure apres : bords du dessin et du repere confondus (34 et 310 sur un
    * telephone, 0 px d'ecart ; idem sur un ordinateur). */
-  const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
   const m = src.match(/const SCENE = \{ x0: ([^,]+), w: ([^,]+), h: (\d+), mx: ([\d.]+), mw: ([\d.]+) \};/);
   assert.ok(m, 'la table SCENE a disparu : les nombres sont repartis se semer dans le code');
   // A gauche, le cadre commence au bord du dessin : rien n'y depasse.
@@ -299,7 +304,7 @@ test('sans capteur de production, les panneaux solaires ne s’affichent plus su
    * maintenant `solarPresente`, alimenté par `solarAvail` (capteur configuré,
    * pas seulement production non nulle) — le même signal qui pilote déjà
    * « Solaire actif / inactif » dans l'en-tête. */
-  const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
   const maison = src.slice(src.indexOf('function EnergyHouseSchema('), src.indexOf('\n}', src.indexOf('function EnergyHouseSchema(')));
   assert.ok(maison.includes('solarPresente = true'), 'solarPresente a disparu de la signature (ou son défaut, qui garde la démo intacte)');
   assert.ok(maison.includes('{solarPresente && <img src={energySolarImg}'), 'les panneaux redessinent sans vérifier solarPresente');
@@ -327,7 +332,7 @@ test('une épingle s’écrit sur ce que la maison a, pas sur ce qu’un écran 
    * d'avant par-dessus. Et la fiche appareil LISAIT avec `indexOf` alors
    * qu'elle ECRIVAIT en comparant l'entite — une epingle au format `{t, id}`
    * s'y affichait absente, et le clic pour l'epingler la retirait. */
-  const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
   const f = src.slice(src.indexOf('function basculerEpingle('), src.indexOf('\n}', src.indexOf('function basculerEpingle(')));
   assert.ok(f.includes('const eps = lireEpingles();'), 'la bascule n’relit plus la maison avant d’ecrire');
   assert.ok(f.includes('eps.some(x => cvId(x) === id)'), 'la comparaison ne passe plus par l’entite');

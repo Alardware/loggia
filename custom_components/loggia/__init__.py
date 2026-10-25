@@ -60,8 +60,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 # autres, il doit se taire avant qu'ils ne s'arretent.
 MODULES_VIVANTS = (
     "rechargement",
-    "alertes", "distributeurs", "fenetres", "interrupteurs", "minuteurs", "nuit",
-    "presence", "robots", "scenarios", "sirene", "veilles", "volets", "regles",
+    "alertes", "chauffage", "distributeurs", "enfant", "fenetres", "interrupteurs", "lumieres", "minuteurs",
+    "nuit", "presence", "prises", "robots", "scenarios", "sirene", "veilles", "volets", "regles",
 )
 
 
@@ -139,10 +139,26 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
                               acces_robots=lambda: hass.data.get(DOMAIN, {}).get("robots"),
                               acces_minuteurs=lambda: hass.data.get(DOMAIN, {}).get("minuteurs"),
                               acces_sirene=lambda: hass.data.get(DOMAIN, {}).get("sirene"),
-                              acces_distributeurs=lambda: hass.data.get(DOMAIN, {}).get("distributeurs"))
+                              acces_distributeurs=lambda: hass.data.get(DOMAIN, {}).get("distributeurs"),
+                              acces_chauffage=lambda: hass.data.get(DOMAIN, {}).get("chauffage"),
+                              acces_prises=lambda: hass.data.get(DOMAIN, {}).get("prises"),
+                              acces_lumieres=lambda: hass.data.get(DOMAIN, {}).get("lumieres"),
+                              acces_enfant=lambda: hass.data.get(DOMAIN, {}).get("enfant"))
             data["ws"] = True
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : configuration utilisateur indisponible")
+
+    # Le plan 3D (chantier Plan 3D) : une vue HTTP authentifiee, hors de
+    # /config/www/ qui est ouvert a tous. Meme regime que le WebSocket : une
+    # seule fois pour la vie du process, et son echec ne gene rien d'autre.
+    if not data.get("plan") and data.get("store"):
+        try:
+            from .plan import async_register_plan
+
+            async_register_plan(hass, data["store"])
+            data["plan"] = True
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia : plan 3D indisponible")
 
     # Le socle commun des regles : journal unifie et respect du geste manuel.
     # Il vient AVANT les modules de regles — chacun le recoit et lui confie
@@ -188,6 +204,18 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
             data["volets"] = LoggiaVolets(hass, data["store"], data.get("regles"))
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : regles de volets indisponibles")
+
+    # Le chauffage (chantier Chauffage) : un seul chef par chauffage au
+    # planning allume. AVANT les fenetres et la presence, qui lui donnent leurs
+    # faits — elles le cherchent au moment de servir, mais autant qu'il soit
+    # la. Meme regime que les regles ci-dessus.
+    if not data.get("chauffage") and data.get("store") and data.get("regles"):
+        try:
+            from .chauffage import LoggiaChauffage
+
+            data["chauffage"] = LoggiaChauffage(hass, data["store"], data.get("regles"))
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia : moteur du chauffage indisponible")
 
     # Fenetre ouverte, chauffage coupe. Meme regime que les regles ci-dessus.
     if not data.get("fenetres") and data.get("store") and data.get("regles"):
@@ -267,6 +295,39 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
             data["sirene"] = LoggiaSirene(hass, data["store"], data.get("regles"))
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : test de sirene indisponible")
+
+    # Les prises (chantier Prises) : leur configuration, et le cycle de
+    # l'electromenager suivi meme ecran ferme. Meme regime que les regles.
+    if not data.get("prises") and data.get("store") and data.get("regles"):
+        try:
+            from .prises import LoggiaPrises
+
+            data["prises"] = LoggiaPrises(hass, data["store"], data.get("regles"))
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia : prises indisponibles")
+
+    # Le carnet des lumieres (chantier Lumieres, L1) : chaque allumage,
+    # extinction et reglage, avec son niveau et son contexte, note ecran
+    # ferme. Il ne commande rien : le magasin lui suffit.
+    if not data.get("lumieres") and data.get("store"):
+        try:
+            from .lumieres import LoggiaLumieres
+
+            data["lumieres"] = LoggiaLumieres(hass, data["store"])
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia : carnet des lumieres indisponible")
+
+    # Le mode enfant (chantier Mode enfant) : les profils par piece, le plafond
+    # de volume, le temps d'ecran et le coucher tenus ecran ferme, la demande
+    # de l'enfant au telephone. Meme regime que les regles : il previent par
+    # elles, il n'agit jamais par `agir` (E11).
+    if not data.get("enfant") and data.get("store") and data.get("regles"):
+        try:
+            from .enfant import LoggiaEnfant
+
+            data["enfant"] = LoggiaEnfant(hass, data["store"], data.get("regles"))
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia : mode enfant indisponible")
 
     # Un import ou une remise a zero ecrit la configuration des modules par la
     # configuration generale : ils la reprennent tout de suite, au lieu

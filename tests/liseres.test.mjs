@@ -64,6 +64,8 @@ test('les cartes de la maison et des vues portent le liseré, aucune ne l’effa
     CV_CADRE: constante(APP, 'CV_CADRE'),
     // Cartes d'appareil : seule leur racine pose une bordure dans ces corps.
     RoomGenericCard: corps('RoomGenericCard'),
+    // La carte d'une prise (chantier Prises, tâche 7) : la générique ne la porte plus.
+    RoomPriseCard: corps('RoomPriseCard'),
     RoomLightCard: corps('RoomLightCard'),
     RoomFeederCard: corps('RoomFeederCard'),
     RoomPlantCard: corps('RoomPlantCard'),

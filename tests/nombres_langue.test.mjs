@@ -53,7 +53,9 @@ test('l’écran passe par nombre() : dec et decMax d’App.jsx, la pluie de la 
   assert.ok(app.includes("out.temp = r.temp != null ? dec(r.temp, 1) + '°' : '—';"), 'les pièces de l’Accueil');
   assert.ok(app.includes("{isNaN(v) ? '—' : decMax(v, 2)}"), 'la valeur d’une entité number dans la fiche générique');
   assert.ok(app.includes('(isNaN(n) ? String(brut) : decMax(n, 2))'), 'la valeur d’un capteur dans la fiche générique');
-  assert.ok(lire('src', 'cartemeteo.jsx').includes("tr('{n} {u}', { n: nombre(pluie.cumul, 1, 0), u: pluie.uniteCumul })"), 'le cumul de pluie de la carte météo');
+  // ASSERTION MODIFIÉE (sa maquette « Cartes météo », 20/10) : le cumul de pluie a quitté la carte du rail (vent et coucher du soleil
+  // à sa place) ; il s'écrit dans la fiche, entier, par tuilesMeteo (meteofiche.js) — aucune décimale à formater.
+  assert.ok(!lire('src', 'cartemeteo.jsx').includes('pluie.cumul'), 'le cumul de pluie est revenu sur la carte du rail');
 });
 
 test('aucun nombre décimal formaté à la main dans src/', () => {

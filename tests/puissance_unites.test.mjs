@@ -15,10 +15,11 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { wattsDe, kwhDe, facteurWatts, facteurKwh } from '../src/unites.js';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8').replace(/\r\n/g, '\n');
-const APP = lire('src', 'App.jsx');
+const APP = (lire('src', 'App.jsx') + VUES_SORTIES);
 const capteur = (state, unite, dc = 'power') => ({
   state: String(state),
   attributes: unite == null ? { device_class: dc } : { device_class: dc, unit_of_measurement: unite },
@@ -117,7 +118,8 @@ test('la vue Énergie lit ses puissances en watts et ses énergies en kWh', () =
 
 test('l’Accueil, la carte Énergie, les points d’attention et l’aperçu lisent en watts', () => {
   const acc = sansCommentaires(corps('deriveAccueil'));
-  assert.ok(acc.includes('const solarW = numW(E.solarOutput), netW = numW(E.consoNow), surplusRaw = numW(E.surplusNow);'),
+  // ASSERTION MODIFIÉE (25/10) : l'Accueil lit aussi les noms de la fiche (gridNow, injectionNow, solarNow), toujours en watts.
+  assert.ok(acc.includes('const numW = (id) => (id && S[id] ? wattsDe(S[id]) : null);') && acc.includes('const solarW = ou(E.solarNow, E.solarOutput), netW = numW(E.consoNow), surplusRaw = ou(E.surplusNow, E.injectionNow);'),
     'le bandeau de l’Accueil relit ses puissances brutes : « ↓ 1 W »');
   assert.ok(acc.includes('const power = numW(notifIds().dishwasher) || 0;'), 'le lave-vaisselle compare encore des kW à des seuils en watts');
   const cv = sansCommentaires(corps('CvEnergie'));
@@ -132,9 +134,16 @@ test('l’Accueil, la carte Énergie, les points d’attention et l’aperçu li
   assert.ok(lire('src', 'views', 'parametres.jsx').includes('wattsDe(S[en.consoNow])'), 'l’aperçu des Paramètres relit la consommation brute');
 });
 
-test('la carte d’une prise lit sa puissance en watts : le seuil de veille compte en watts', () => {
-  const i = APP.indexOf("deviceClass: 'power' });");
-  assert.notEqual(i, -1, 'la puissance de la prise ne se cherche plus dans un capteur frère');
-  assert.ok(APP.slice(i, i + 600).includes('return sid && S[sid] ? wattsDe(S[sid]) : null;'),
-    '1,25 kW se lirait « 1 W » — « En veille » sur un radiateur qui chauffe');
+/* TEST RÉÉCRIT (chantier Prises, tâche 3, P1) : la puissance d'une prise est
+ * celle du capteur que la règle des prises retient (`priseDe`), plus le premier
+ * capteur `power` de son appareil — celui du poêle les porte tous. Toujours en
+ * watts. */
+test('la carte d’une prise lit sa puissance en watts, dans le capteur que la règle lui donne', () => {
+  // Chantier Prises, tâche 7 : la carte d'une prise a sa vue (`useVuePrise`), partagée avec la compacte.
+  const i = APP.indexOf('function useVuePrise(');
+  assert.notEqual(i, -1, 'la vue d’une prise a disparu');
+  const f = APP.slice(i, APP.indexOf('\n}\n', i));
+  assert.ok(f.includes('const prise = actif ? priseDe(S, id) : PAS_DE_PRISE;'), 'la puissance de la prise ne se cherche plus par la règle des prises');
+  assert.ok(f.includes('const watts = prise.puissance && S[prise.puissance] ? wattsDe(S[prise.puissance]) : null;'),
+    'la puissance d’une prise se lit encore brute : 1,25 kW redeviendrait « 1 W »');
 });

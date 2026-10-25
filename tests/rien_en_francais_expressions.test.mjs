@@ -169,11 +169,12 @@ test('les mots en clair rangés dans une variable, puis montrés', () => {
   assert.ok(!PAR.includes("{u.role || tr('Famille')}"), 'le rôle d’un profil s’affiche en clair');
   // Une caméra enregistrée sans nom.
   assert.ok(!PAR.includes("'Caméra ' +"), 'une caméra sans nom s’appelle « Caméra 1 » dans toutes les langues');
-  // Les points cardinaux : « O » est l'Ouest en français, l'Est en allemand.
-  const volets = lire('views', 'volets.jsx');
-  const debut = volets.indexOf('const CARDINAUX = () => [');
-  const cardinaux = volets.slice(debut, volets.indexOf('];', debut));
-  assert.equal((cardinaux.match(/court: tr\('/g) || []).length, 8, 'un point cardinal s’affiche sans tr()');
+  // Les points cardinaux : « O » est l'Ouest en français, l'Est en allemand. Ils
+  // vivent dans la fiche d'un volet depuis le chantier Volets (V2), en toutes lettres.
+  const fiche = lire('voletsfiche.js');
+  const debut = fiche.indexOf('export const FACADES = () => [');
+  const facades = fiche.slice(debut, fiche.indexOf('];', debut));
+  assert.equal((facades.match(/nom: tr\('/g) || []).length, 8, 'un point cardinal s’affiche sans tr()');
   // La machine en attente de découverte.
   assert.ok(!/'Machine \d'/.test(lire('sysconf.js')), '« Machine 1 » s’affiche en clair');
   // La source de l'énergie, au premier lancement : un mot français DANS une phrase traduite.

@@ -13,8 +13,20 @@
  * exactement comme le reste de l'interface. Une ligne ancienne, ecrite avant
  * cette version, garde son francais compose — rien ne casse. */
 import { tr } from './i18n.js';
+import { nombre } from './format.js';
 
 const SEPARATEUR = ' · ';
+
+/* Un nombre à virgule parmi les arguments d'une partie — les kWh d'un cycle
+ * (`{kwh} kWh`, chantier Prises) — s'écrit à la façon de la langue : « 1,08 »
+ * en français, « 1.08 » en anglais. Les autres modules envoient leurs nombres
+ * déjà écrits ; un entier (`{n} min`) reste tel quel. */
+function lisibles(args) {
+  if (!args || typeof args !== 'object') return args || undefined;
+  const o = {};
+  for (const [k, v] of Object.entries(args)) o[k] = typeof v === 'number' && !Number.isInteger(v) ? nombre(v, 2, 0) : v;
+  return o;
+}
 
 /** Le texte traduit d'un champ (`quoi`, `motif`, `detail`, `regle`) d'une
  * ligne de journal, ou '' s'il est vide. */
@@ -22,7 +34,7 @@ export function mot(entree, champ) {
   if (!entree) return '';
   const g = entree.g && entree.g[champ];
   if (Array.isArray(g) && g.length) {
-    return g.map(p => (Array.isArray(p) ? tr(p[0], p[1] || undefined) : tr(String(p))))
+    return g.map(p => (Array.isArray(p) ? tr(p[0], lisibles(p[1])) : tr(String(p))))
       .filter(Boolean).join(SEPARATEUR);
   }
   const brut = entree[champ];

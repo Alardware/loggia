@@ -4,7 +4,7 @@
 qui s'y casse — un nom mal ecrit, un module qui ne sait pas se taire, un
 enregistrement fait deux fois au rechargement — ne se voyait qu'au demarrage
 de Home Assistant, chez quelqu'un. Ici on le fait tourner pour de vrai : les
-quatorze modules naissent, le service et le panneau s'enregistrent, le
+quinze modules naissent, le service et le panneau s'enregistrent, le
 dechargement les arrete tous, et un rechargement les rebatit sans rien
 reenregistrer de ce qui vit jusqu'a l'arret du process.
 """
@@ -73,7 +73,14 @@ class FauxHass:
         async def lire_compte(uid):
             return comptes.get(uid)
 
-        self.http = types.SimpleNamespace(async_register_static_paths=enregistrer_chemins)
+        # Les vues HTTP (le plan 3D) : la vraie leverait sur une route deja prise.
+        self.vues = []
+
+        def enregistrer_vue(vue):
+            assert vue.url not in [v.url for v in self.vues], "route enregistree deux fois : " + vue.url
+            self.vues.append(vue)
+
+        self.http = types.SimpleNamespace(async_register_static_paths=enregistrer_chemins, register_view=enregistrer_vue)
         self.auth = types.SimpleNamespace(async_get_user=lire_compte)
 
     def async_create_task(self, coro, *args, **kwargs):
@@ -106,7 +113,7 @@ def composant(monkeypatch, store_module):
     return charger("__init__")
 
 
-def test_le_demarrage_cree_les_quatorze_modules_le_service_et_le_panneau(composant, caplog):
+def test_le_demarrage_cree_les_quinze_modules_le_service_et_le_panneau(composant, caplog):
     hass = FauxHass()
     caplog.set_level(logging.WARNING)
     assert lancer(composant.async_setup_entry(hass, object())) is True
@@ -119,8 +126,16 @@ def test_le_demarrage_cree_les_quatorze_modules_le_service_et_le_panneau(composa
     manquants = [nom for nom in composant.MODULES_VIVANTS if data.get(nom) is None]
     assert manquants == [], "modules absents apres le demarrage : %s" % manquants
     # 34 depuis le 05/10 (ADR 0155) : `loggia/distributeurs/etat` et
-    # `loggia/distributeurs/config` s'ajoutent aux 32.
-    assert data.get("ws") is True and len(hass.commandes) == 34
+    # `loggia/distributeurs/config` s'ajoutent aux 32. 38 avec les quatre du
+    # chauffage (chantier Chauffage, § 8.2), 39 avec les manoeuvres d'un volet
+    # (chantier Volets, spec 6.5), 41 avec les deux des prises (chantier
+    # Prises, spec 6.1), 43 avec les deux du carnet des lumieres (chantier
+    # Lumieres, spec 6.2), 49 avec les six du mode enfant (chantier Mode
+    # enfant, spec 7.4), 50 avec le depart d'un robot (chantier IoT, I3 A).
+    # ASSERTION MODIFIEE (chantier Mode enfant, tache 3) : 43 -> 49.
+    # ASSERTION MODIFIEE (chantier IoT, tache 4, 18/10) : 49 -> 50, `loggia/robots/lancer`.
+    # ASSERTION MODIFIEE (passe bis 2 de la tranche robots 2, 20/10) : 50 -> 51, `loggia/robots/scripts` — la roue de la popup.
+    assert data.get("ws") is True and len(hass.commandes) == 52
     assert hass.services.has_service(composant.DOMAIN, "scenario")
     assert "loggia" in hass.data.get("frontend_panels", {}), "le panneau n'est pas dans le menu"
     hass.executer()
@@ -165,8 +180,13 @@ def test_un_rechargement_rebatit_les_modules_sans_rien_reenregistrer(composant, 
     for nom in composant.MODULES_VIVANTS:
         assert data.get(nom) is not None, nom + " n'a pas ete rebati"
         assert data[nom] is not avant[nom], nom + " est l'ancienne instance"
-    assert len(hass.commandes) == 34
+    # ASSERTION MODIFIEE (chantier Mode enfant, tache 3) : 43 -> 49.
+    # ASSERTION MODIFIEE (chantier IoT, tache 4, 18/10) : 49 -> 50, `loggia/robots/lancer`.
+    # ASSERTION MODIFIEE (passe bis 2 de la tranche robots 2, 20/10) : 50 -> 51, `loggia/robots/scripts`.
+    assert len(hass.commandes) == 52
     assert "loggia" in hass.data.get("frontend_panels", {})
+    # La vue du plan 3D vit jusqu'a l'arret du process : une seule fois.
+    assert [v.url for v in hass.vues] == ["/api/loggia/plan/{etage}"]
     hass.executer()
     erreurs = [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]
     assert erreurs == [], erreurs

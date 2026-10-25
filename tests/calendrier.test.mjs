@@ -20,14 +20,19 @@ import { fileURLToPath } from 'node:url';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+/* ASSERTION MODIFIÉE (boot, 19/10) : la feuille du mois a quitté App.jsx pour
+ * feuillecalendrier.jsx, chargé à la demande (la borne du démarrage,
+ * tests/lot14_chargement.test.mjs) ; son code n'a pas changé. Ce qu'elle
+ * épingle se lit désormais dans ce module. */
+const feuille = readFileSync(join(RACINE, 'src', 'feuillecalendrier.jsx'), 'utf8');
 
-/** Le corps d'une fonction nommée, jusqu'à la suivante. */
-function corps(entete) {
-  const i = src.indexOf(entete);
+/** Le corps d'une fonction nommée, jusqu'à la suivante — ou la fin du fichier, quand elle le ferme. */
+function corps(entete, texte = src) {
+  const i = texte.indexOf(entete);
   assert.notEqual(i, -1, `${entete} introuvable`);
-  const fin = src.indexOf('\nfunction ', i + entete.length);
-  assert.notEqual(fin, -1, `fin de ${entete} introuvable`);
-  return src.slice(i, fin);
+  const fin = texte.indexOf('\nfunction ', i + entete.length);
+  // ASSERTION MODIFIÉE (boot, 19/10) : la feuille du mois est la dernière fonction de son module.
+  return texte.slice(i, fin === -1 ? undefined : fin);
 }
 
 test('sans plage, l’agenda garde la fenêtre du rail', () => {
@@ -64,7 +69,8 @@ test('changer de mois relit les événements', () => {
 });
 
 test('aucun agenda coché veut dire tous', () => {
-  const c = corps('function FeuilleCalendrier(');
+  // ASSERTION MODIFIÉE (boot, 19/10) : lu dans feuillecalendrier.jsx.
+  const c = corps('function FeuilleCalendrierContent(', feuille);
   // `choisis` vaut null tant que rien n'a été choisi ; `actifs` doit alors
   // retomber sur la liste complète, sinon le mois s'afficherait vide.
   assert.match(c, /\(choisis \|\| tousCals\)/, 'le repli sur tous les agendas a disparu');
@@ -76,7 +82,8 @@ test('aucun agenda coché veut dire tous', () => {
 });
 
 test('la grille tient six semaines, quel que soit le mois', () => {
-  const c = corps('function FeuilleCalendrier(');
+  // ASSERTION MODIFIÉE (boot, 19/10) : lu dans feuillecalendrier.jsx.
+  const c = corps('function FeuilleCalendrierContent(', feuille);
   // 42 cases : un mois qui commence un dimanche en occupe six. Une grille
   // qui change de hauteur ferait sauter la liste qui est dessous.
   assert.match(c, /length: 42/, 'la grille n’a plus six semaines fixes');
@@ -99,7 +106,8 @@ test('la carte du rail ouvre le mois', () => {
 });
 
 test('le choix des agendas se masque à un compte ordinaire (03/10)', () => {
-  const c = corps('function FeuilleCalendrier(');
+  // ASSERTION MODIFIÉE (boot, 19/10) : lu dans feuillecalendrier.jsx.
+  const c = corps('function FeuilleCalendrierContent(', feuille);
   // `loggia_agendas` reste réservée aux administrateurs (store.py, épinglé par
   // tests/python/test_store.py) : un compte Home Assistant ordinaire se
   // verrait refuser chaque case, et son choix reviendrait au rechargement. Le

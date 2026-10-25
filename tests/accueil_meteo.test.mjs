@@ -172,8 +172,9 @@ test('la carte : les previsions par abonnement, par une reference vivante, et ri
   assert.ok(carte.includes("const parHeure = usePrevisions(hass, id, types.heure ? 'hourly' : null);") && carte.includes("const parJour = usePrevisions(hass, id, types.jour ? 'daily' : null);"), 'seulement les types que l’entite sait donner');
   assert.ok(carte.includes('if (!connecte || !entite || !type) { setListe(null); return undefined; }') && carte.includes('return () => { fini = true; if (stop) fermer(stop); };'), 'pas de type, pas d’abonnement ; et l’abonnement se ferme');
   assert.ok(carte.includes("if (!st || st.state === 'unavailable' || st.state === 'unknown') return null;"));
-  assert.ok(carte.includes('{extremes && <div') && carte.includes('{heures.length > 0 && (') && carte.includes('{mode && <WeatherIco wx={mode} size={44} />}') && !carte.includes("'—'"), 'un bloc sans donnee ne se dessine pas, et pas de tiret de decor');
-  assert.ok(carte.includes("const nom = a.friendly_name || tr('Météo');") && carte.includes('{nom}</div>'), 'le lieu est le nom de l’entite, jamais une ville en dur');
+  assert.ok(carte.includes('{extremes && <div') && carte.includes('{heures.length > 0 && (') && carte.includes('{mode && <span style={{ width: 64, height: 64') && carte.includes('<WeatherIco wx={mode} size={64} /></span>}') && carte.includes('{phrase && <div') && carte.includes('{(pluie.vent != null || astre) && (') && !carte.includes("'—'"), 'un bloc sans donnee ne se dessine pas, et pas de tiret de decor');
+  // Sa maquette du 20/10 : « Météo-France forecast for city Sainte-Solange » devient « Sainte-Solange » (nomVille, meteo.js).
+  assert.ok(carte.includes("const nom = nomVille(a.friendly_name) || tr('Météo');") && carte.includes('{nom}</div>'), 'le lieu est le nom de l’entite, jamais une ville en dur');
 });
 
 test('la carte : la disposition fournie — le lieu et le chiffre a gauche, le ciel a droite, les heures dessous — aux teintes des autres cartes du rail', () => {
@@ -181,7 +182,10 @@ test('la carte : la disposition fournie — le lieu et le chiffre a gauche, le c
   /* La rangee des heures est FIGEE depuis le 20/09 (« il y a un truc qui
    * clignote ») : a 28 px, le soleil a huit rayons saute d'un cran au lieu
    * de tourner. La grande icone, elle, tourne toujours. */
-  const ordre = ['{nom}</div>', 'className="o-meteo-temp"', '<WeatherIco wx={mode} size={44} />', '{ciel}</div>', "tr('Max {n}'", "gridTemplateColumns: 'repeat(' + heures.length", '{h.libelle}</span>', '<WeatherIco wx={h.mode} size={28} anime={false} />', '{h.temp}</span>'];
+  /* Sa maquette « Cartes météo » du 20/10 (cadre 1a) : le nom de la ville et la
+   * phrase, l'icône de 64 à droite ; puis le chiffre en grand, le ciel et les
+   * extrêmes à droite ; le vent et le soleil ; les heures. */
+  const ordre = ['{nom}</div>', '{phrase.texte}</div>', '<WeatherIco wx={mode} size={64} />', 'className="o-meteo-temp"', '{ciel}</div>', "tr('Max {n}'", '{astre.libelle}', "gridTemplateColumns: 'repeat(' + heures.length", '{h.libelle}</span>', '<WeatherIco wx={h.mode} size={28} anime={false} />', '{h.temp}</span>'];
   let curseur = -1;
   for (const morceau of ordre) { const i = rendu.indexOf(morceau); assert.ok(i > curseur, morceau + ' n’est pas a sa place'); curseur = i; }
   // Retour du 17/09 sur le fond bleu de la capture : « applique les memes teintes
@@ -196,10 +200,15 @@ test('la carte : la disposition fournie — le lieu et le chiffre a gauche, le c
     assert.ok(styles.includes(morceau), morceau + ' : la meme surface que « En ce moment »');
   }
   assert.ok(carte.includes("import { CARTE_RAIL } from './styles.js';") && carte.includes('style={{ ...CARTE_RAIL,'), 'les textes prennent les couleurs du theme');
-  assert.ok(!/#[0-9a-fA-F]{3,8}/.test(carte) && !carte.includes('linear-gradient') && !carte.includes('FOND_JOUR') && !carte.includes('rgba(255,255,255'), 'plus aucune couleur en dur : ni fond bleu, ni texte blanc');
+  // La teinte d'état (vigilance, pluie) est un LAVIS des jetons du thème, comme sur les cartes de la maison : jamais une couleur en dur.
+  assert.ok(!/#[0-9a-fA-F]{3,8}/.test(carte) && !carte.includes('FOND_JOUR') && !carte.includes('rgba(255,255,255'), 'plus aucune couleur en dur : ni fond bleu, ni texte blanc');
+  assert.ok(carte.includes("export const fondTeinte = (rgb) => (rgb ? `linear-gradient(180deg, rgba(${rgb},.12), rgba(${rgb},.03) 72%), var(--o-surfA)` : undefined);"), 'le lavis d’état, sur la surface du rail');
+  assert.ok(carte.includes("cold: 'var(--o-cold-rgb)', warn: 'var(--o-warn-rgb)', warn2: 'var(--o-warn2-rgb)', bad: 'var(--o-bad-rgb)'"), 'les tons passent par les jetons');
   assert.ok(rendu.includes("borderTop: 'var(--o-bw,1px) solid var(--o-bd3)'") && carte.includes("const DOUX = 'var(--o-text2)';") && rendu.includes("color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>{h.libelle}</span>"), 'le filet et les gris des lignes du rail');
   assert.ok(rendu.includes('role="button" tabIndex={0}') && rendu.includes("if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ouvrir(); }"), 'la carte s’ouvre au clavier comme au doigt');
   assert.ok(rendu.includes("flex: '0 0 auto'") && rendu.includes("flex: '1 1 0', minWidth: 0, textAlign: 'right'"), 'le chiffre ne cede pas sa place : c’est le libelle qui passe a la ligne');
+  // La phrase tient sur deux lignes ; la vigilance orange ou rouge la prend, le jaune non (vigilanceWidget).
+  assert.ok(rendu.includes('WebkitLineClamp: 2') && carte.includes('vigilance && vigilance.widget ? { texte: vigilance.texte, ton: vigilance.ton } : phraseMeteo('), 'la phrase, et la vigilance qui la prend');
   assert.ok(css.includes('.o-carte-meteo { container-type: inline-size;') && css.includes('.o-carte-meteo .o-meteo-temp { font-size: 52px; font-size: clamp(40px, 17.7cqw, 52px); }'), 'le chiffre suit la largeur de la CARTE : 330 px ou 276 px de rail');
 });
 

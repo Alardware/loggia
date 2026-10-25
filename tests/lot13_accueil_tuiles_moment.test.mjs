@@ -25,9 +25,10 @@ import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { transformSync } from 'esbuild';
 import { composant } from './rendu.mjs';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
 const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
 const Surface = await composant('ui.jsx', 'Surface');
 const nomCarte = await composant('ui.jsx', 'nomCarte');
@@ -89,10 +90,21 @@ test('une ligne qui mène à une vue ne promet pas de fiche ; une ligne inerte n
 test('les lignes qui ouvrent une fiche le disent, celles qui changent de vue non', () => {
   const d = morceau('function Dashboard(', '\n}');
   const lignes = [...d.matchAll(/momentRows\.push\(<LigneMoment [\s\S]*?\/>\)/g)].map(m => m[0]);
-  assert.equal(lignes.length, 5, 'lecteur, robot, lave-vaisselle, chauffage, volet : le lecteur du test ne suit plus le code');
+  /* ASSERTION MODIFIÉE (tâche 12 du chantier Chauffage) : six poussées au
+   * lieu de cinq — les lignes du planning de chauffe (`lignesMoment`), entre
+   * le lave-vaisselle et les zones qui chauffent. */
+  /* ASSERTION MODIFIÉE (audit de l'écran des prises, 19/10, point 2) : sept poussées — le cycle d'électroménager que le
+   * serveur suit (une ligne par prise, qui ouvre sa fiche) passe avant l'ancienne ligne du lave-vaisselle, gardée en repli. */
+  assert.equal(lignes.length, 7, 'lecteur, robot, cycles des prises, lave-vaisselle, planning de chauffe, zones qui chauffent, volet : le lecteur du test ne suit plus le code');
   for (const l of lignes) {
     assert.equal(/ fiche /.test(l), l.includes('onOpen={() => dc.ouvrir('), 'une ligne qui ouvre une fiche sans `fiche`, ou l’inverse : ' + l.slice(0, 90));
   }
+  /* ASSERTION AJOUTÉE (tâche 12) : une ligne du planning de chauffe ouvre la
+   * fiche de SON chauffage (par sa clé) et le dit ; celle de la maison mène
+   * à Objets › Chauffage, sans promettre de fiche — la même condition des
+   * deux côtés. */
+  const chauffage = lignes.find(l => l.includes('key={l.cle}'));
+  assert.ok(chauffage && chauffage.includes("onOpen={l.chauffage ? () => setFicheCh(l.chauffage) : onNav ? () => onNav('climat') : null} fiche={!!l.chauffage} />"), chauffage);
   const attention = morceau('function CarteAttention(', '\n}');
   assert.ok(attention.includes('<LigneMoment ') && !/ fiche[ =]/.test(attention), '« À surveiller » mène à des vues, pas à des fiches');
 });
@@ -119,20 +131,23 @@ test('« n autres » du rail : son nom est ce qu’elle affiche', () => {
 });
 
 const FIN_NOMS = 'Object.keys(libelles).forEach(k => { libelles[k] = nomCarte(...vus[k].map(enPhrase), libelles[k]); });';
+// ASSERTION MODIFIÉE (ADR 0261, A9) : les comptes de la bannière se tranchent par `trN` (n === 1), plus par `n > 1`.
 const nomsBanniere = (portee) => evaluer(morceau("const libelles = { al: tr('Voir la sécurité'),", FIN_NOMS),
-  { tr: (k) => k, nomCarte, fmtWatts, airLabel: (v) => (v < 1150 ? 'BON' : 'ÉLEVÉ'), ...portee }, 'libelles');
+  // ASSERTION MODIFIÉE (audit du 19/10, M16) : le mot de l'air vient de la table (`motCo2`, la zone de confort.js), plus d'`airLabel`.
+  { tr: (k) => k, trN: (n, un, plusieurs) => (n === 1 ? un : plusieurs), nomCarte, fmtWatts, motCo2: (v) => (v < 900 ? 'EXCELLENT' : v < 1150 ? 'BON' : 'MOYEN'), ...portee }, 'libelles');
 
 test('une tuile de la bannière dit ce qu’elle affiche, puis où elle mène', () => {
   assert.deepEqual(nomsBanniere({
     alarmeTuile: { texte: 'Désarmée' },
-    a: { metricExport: { sign: '↑ ', raw: 460, label: 'EXPORT RÉSEAU' }, maxCo2: 812.4, lightsOn: 3, lightsTotal: 12 },
+    // ASSERTION MODIFIÉE (25/10) : la tuile d'énergie dit ce que la maison consomme.
+    a: { metricConso: { raw: 460 }, maxCo2: 812.4, lightsOn: 3, lightsTotal: 12 },
     ouvStat: { ouverts: 2, total: 7 }, actifsStat: { medias: 1, mediasTotal: 3 }, nEnCours: 4,
   }), {
     // Les libellés en capitales du dessin se lisent en casse de phrase : une
     // synthèse vocale épelle un mot court en capitales (« B-O-N »).
     al: 'Désarmée, Alarme, Voir la sécurité',
-    ex: '↑ 460 W, Export réseau, Voir l’énergie',
-    air: '812 ppm, Qualité air · bon, Voir la pièce la plus chargée',
+    ex: '460 W, Conso maison, Voir l’énergie',
+    air: '812 ppm, Qualité air · excellent, Voir la pièce la plus chargée',
     ouv: '2 / 7, Ouvrants ouverts, Voir la sécurité',
     lum: '3 / 12 prés., Lumières allumées, Voir les lumières',
     med: '1 / 3, Média en lecture, Voir les médias',
@@ -140,8 +155,9 @@ test('une tuile de la bannière dit ce qu’elle affiche, puis où elle mène', 
   });
   // Au chargement, la valeur est un squelette sans texte : le nom n'invente rien.
   const vide = nomsBanniere({ alarmeTuile: null, a: null, ouvStat: { ouverts: 0, total: 0 }, actifsStat: { medias: 0, mediasTotal: 0 }, nEnCours: 0 });
-  assert.equal(vide.ex, 'Export réseau, Voir l’énergie');
-  assert.equal(vide.air, 'Qualité air · bon, Voir la pièce la plus chargée');
+  assert.equal(vide.ex, 'Conso maison, Voir l’énergie');
+  // ASSERTION MODIFIÉE (audit du 19/10, M16) : pendant le chargement, pas de « BON » sans mesure.
+  assert.equal(vide.air, 'Qualité air, Voir la pièce la plus chargée');
 });
 
 test('le nom d’une tuile de la bannière reprend les mots de son dessin', () => {
@@ -149,13 +165,17 @@ test('le nom d’une tuile de la bannière reprend les mots de son dessin', () =
   // être celui que la tuile montre.
   const vus = morceau('const vus = {', '\n            };');
   const cases = morceau('const cases = [];', 'if (!cases.length) return null;');
-  const mots = [...vus.matchAll(/tr\('([^']+)'\)/g)].map(m => m[1]);
-  assert.ok(mots.length >= 12, 'les libellés du nom ne se lisent plus');
-  for (const m of mots) assert.ok(cases.includes("tr('" + m + "')"), '« ' + m + ' » est dans le nom, pas sur la tuile');
-  assert.ok(vus.includes('fmtWatts(a.metricExport.raw)') && cases.includes('<Num v={a.metricExport.raw} prefix={a.metricExport.sign} fmt={fmtWatts} />'), 'la puissance s’écrit comme sur la tuile');
-  // `airLabel` rend un mot déjà traduit, des deux côtés (05/10, lot 16).
-  assert.ok(vus.includes("? airLabel(a.maxCo2) : tr('BON')") && cases.includes("? airLabel(a.maxCo2) : tr('BON')"), 'le palier d’air aussi');
-  assert.ok(!vus.includes('tr(airLabel(') && !cases.includes('tr(airLabel('), 'le palier d’air retraduit');
+  // ASSERTION MODIFIÉE (ADR 0261, A9) : un compte se dit par `trN(n, singulier, pluriel)` — ses deux clés sont des mots du dessin.
+  const mots = [...vus.matchAll(/tr\('([^']+)'\)/g)].map(m => m[1])
+    .concat([...vus.matchAll(/trN\([^,]+, '([^']+)', '([^']+)'\)/g)].flatMap(m => [m[1], m[2]]));
+  // ASSERTION MODIFIÉE (audit du 19/10, M16) : un libellé de moins — le « BON » du chargement, qu'aucune mesure ne disait.
+  assert.ok(mots.length >= 11, 'les libellés du nom ne se lisent plus');
+  for (const m of mots) assert.ok(cases.includes("'" + m + "'"), '« ' + m + ' » est dans le nom, pas sur la tuile');
+  // ASSERTION MODIFIÉE (25/10) : la consommation de la maison, sans flèche de sens.
+  assert.ok(vus.includes('fmtWatts(a.metricConso.raw)') && cases.includes('<Num v={a.metricConso.raw} fmt={fmtWatts} />'), 'la puissance s’écrit comme sur la tuile');
+  // ASSERTION MODIFIÉE (audit du 19/10, M16) : `motCo2` rend le mot de la table, déjà traduit, des deux côtés — et rien sans mesure.
+  assert.ok(vus.includes("a && a.maxCo2 != null ? ' · ' + motCo2(a.maxCo2) : ''") && cases.includes("a && a.maxCo2 != null ? ' · ' + motCo2(a.maxCo2) : ''"), 'le palier d’air aussi');
+  assert.ok(!vus.includes('tr(motCo2(') && !cases.includes('tr(motCo2('), 'le palier d’air retraduit');
   for (const k of ['al', 'ex', 'air', 'ouv', 'lum', 'med', 'app']) {
     assert.ok(cases.includes('onClick={clics.' + k + '} aria-label={libelles.' + k + '}'), 'la tuile ' + k + ' ne porte plus son nom');
   }

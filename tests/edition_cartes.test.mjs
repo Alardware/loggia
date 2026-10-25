@@ -1,20 +1,22 @@
 // Le mode edition (maquette du 14/09), le meme partout : le bandeau, la carte
 // d'edition, la fiche « Modifier l'entite », et le glisser libre.
 
+// ASSERTIONS MODIFIÉES (19/10, vouvoiement de l'interface générale) : les textes cités ici passent au « vous » ; seule la clé française change (tests/vouvoiement_interface_1910.test.mjs).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + readFileSync(join(RACINE, 'src', 'views', 'voletsplan.jsx'), 'utf8') + VUES_SORTIES); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
 const NL = String.fromCharCode(10);
 const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = src.indexOf(fin, d + 1); return src.slice(d, f < 0 ? undefined : f); };
 
 test('le bandeau : le mot d’ordre de la maquette et ses trois boutons', () => {
   const b = bloc('function BandeauEdition(', NL + '}');
-  assert.ok(b.includes("tr('Mode édition : attrape une carte pour la déplacer où tu veux, ou ajoute, renomme et retire une carte.')"));
+  assert.ok(b.includes("tr('Mode édition : attrapez une carte pour la déplacer où vous voulez, ou ajoutez, renommez et retirez une carte.')"));
   assert.ok(b.includes("tr('Ajouter une carte')") && b.includes("tr('Toutes les cartes')") && b.includes("tr('Terminer')"));
   assert.ok(b.includes('useContext(HeaderCtx)') && b.includes('ctx.onToggleEdit'), 'Terminer quitte l’edition par le contexte de l’en-tete');
   assert.ok(b.includes('ed.reset()'), 'Toutes les entites ramene la liste automatique');
@@ -128,7 +130,10 @@ test('la taille : compacte (une rangee de 88 px) ou standard (deux), rangee dans
   assert.ok(c.includes("compact ? 'o-cvrow1' : ''") && c.includes('if (compact) {') && c.includes("minHeight: 0, height: '100%'"), 'la carte d’edition compacte tient sur une rangee');
   assert.ok(c.includes("brut.indexOf('zone:') !== 0") && c.includes('taille && !!ed.basculerCompact'), 'pas de compacte pour une zone fil pilote, ni la ou la vue n’en offre pas');
   const obj = bloc('function ObjetsView(', NL + '}');
-  assert.equal((bloc('function useDomainCards(', NL + '}').match(/chip=\{chip\}/g) || []).length, 2, 'distributeur et plantes prennent leur compacte, dans la fabrique commune');
+  // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 5 ; C20) : une carte de groupe prend sa compacte aussi, dans la fabrique commune.
+  // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 8 ; C28) : la vigilance météo aussi.
+  // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 11 ; C32) : et la carte Piles.
+  assert.equal((bloc('function useDomainCards(', NL + '}').match(/chip=\{chip\}/g) || []).length, 5, 'distributeur, plantes, piles, groupes et vigilance prennent leur compacte, dans la fabrique commune');
   assert.ok(obj.includes('className="grid-objets grid-dense"') && obj.includes("(ed.estCompact(o.cle) ? 'o-cvrow1' : '')"), 'la grille d’Objets est dense, la compacte y prend une rangee');
   const en = bloc('function EnergieContent(', NL + 'function ');
   assert.ok(en.includes('taille={false}'), 'les postes d’Energie n’ont pas de compacte');

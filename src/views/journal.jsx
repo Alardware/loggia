@@ -25,6 +25,11 @@ const NOM_MODULE = () => ({
   volets: tr('Volets'), fenetres: tr('Chauffage'), presence: tr('Départ et retour'),
   nuit: tr('La nuit'), veilles: tr('Veilles'), alertes: tr('Alertes'),
   interrupteurs: tr('Interrupteurs'), regles: tr('Journal'),
+  // Le moteur du chauffage (plan 2, choix 16) : « Chauffage » nomme déjà la
+  // règle des fenêtres, celle qui coupe les radiateurs.
+  chauffage: tr('Planning de chauffe'),
+  // Les cycles de l'électroménager et la pose d'un minuteur (chantier Prises, le contrat du plan 1).
+  prises: tr('Prises'), minuteurs: tr('Minuteurs'),
 });
 
 export function JournalReglages({ hass, cardSt }) {
@@ -109,7 +114,8 @@ export function JournalReglages({ hass, cardSt }) {
               <div key={'tenue-' + id} style={ligne}>
                 <span style={{ minWidth: 0 }}>
                   <span style={etiquette}>{nom(id)}</span>
-                  <span style={{ color: 'var(--o-text3)' }}>{tr('tenu par')} {noms[tenues[id].module] || tenues[id].module} · {tenues[id].regle}</span>
+                  {/* La règle, un mot du serveur : traduite comme les autres mots du journal (`mot`), jamais brute. */}
+                  <span style={{ color: 'var(--o-text3)' }}>{tr('tenu par')} {noms[tenues[id].module] || tenues[id].module}{mot(tenues[id], 'regle') ? ' · ' + mot(tenues[id], 'regle') : ''}</span>
                 </span>
               </div>
             ))}

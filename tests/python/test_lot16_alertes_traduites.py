@@ -26,6 +26,8 @@ facons de parler au telephone depuis nuit.py.
 """
 from __future__ import annotations
 
+import sys
+
 import ast
 import asyncio
 import re
@@ -92,7 +94,10 @@ def gabarits_de(nom: str) -> list[str]:
 
 
 # Les modules qui parlent au telephone, regles mis a part (le socle).
-MODULES = ("alertes", "veilles")
+# ASSERTION MODIFIEE (chantier Mode enfant, tache 2 ; E13, E22) : le mode enfant parle au telephone — la demande
+# de l'enfant, l'insistance — et a l'Echo (« Parler », un `notify` qui n'est pas le telephone) ; ses gabarits
+# sont des constantes `MSG_*`, dans CLES_TELEPHONE.
+MODULES = ("alertes", "veilles", "prises", "enfant")
 
 
 def gabarits_produits() -> list[str]:
@@ -673,6 +678,9 @@ def alertes_en_allemand(store_module, etats):
     a._hass = FauxHass(etats)
     a._store = magasin(store_module, {"loggia_alertes": cfg})
     a._dernier, a._dangers, a._avant, a._vanne_coupee = {}, {}, {}, None
+    # Audit du 19/10 : le dernier etat connu (H5) et les detecteurs muets (M5).
+    a._connu, a._muets, a._muets_dits, a._au_demarrage = {}, {}, set(), None
+    a._rendus_au_silence = set()
     a._regles = regles.Regles(a._hass, a._store)
     a._regles._depot = FauxStore(None)
     return a
@@ -715,6 +723,7 @@ def veilles_en_allemand(store_module, etats, cfg):
     v.store = magasin(store_module, {"loggia_veilles": cfg, "loggia_alertes": {"service": "mobile"}})
     v.cfg = lancer(v.async_config())
     v.signales, v.creuses_en_cours, v._defait = set(), False, []
+    v._depot = FauxStore(None)  # ce qui a ete signale (audit du 19/10, M2), en memoire
     v.regles = regles.Regles(v.hass, v.store)
     v.regles._depot = FauxStore(None)
     return v
@@ -726,7 +735,14 @@ def titres_admis(textes) -> set[str]:
     return {"Loggia"} | set(textes.TEXTES["de"].values())
 
 
-def test_les_veilles_partent_en_allemand(store_module):
+def test_les_veilles_partent_en_allemand(store_module, monkeypatch):
+    # Un registre illisible (audit du 19/10, lot 3) : la pile de ce test n'a pas
+    # d'entree au registre, et un registre lisible l'ecarterait, comme l'ecran.
+    # `test_discovery.py` laisse les siens poses : sans ceci, l'ordre comptait.
+    def illisible(_hass):
+        raise RuntimeError("registre illisible")
+    for nom in ("entity_registry", "device_registry"):
+        monkeypatch.setattr(sys.modules["homeassistant.helpers." + nom], "async_get", illisible)
     textes = charger("textes")
     etats = {"sensor.pile": FauxEtat("sensor.pile", "9", {"device_class": "battery", "friendly_name": "Tuer"}),
              "sensor.tarif": FauxEtat("sensor.tarif", "HC")}

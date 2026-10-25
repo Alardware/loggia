@@ -10,12 +10,16 @@ Il les expose a tous les comptes authentifies, ce qui donne la meme interface a
 toute la maison.
 
 Ce qui sort d'ici est volontairement pauvre : identifiants, noms, rattachements,
-et de quoi reconnaitre un appareil (fabricant, modele, integration). Aucun jeton,
-aucune option de configuration, rien qui touche aux identifiants de connexion
-d'une integration.
+et de quoi reconnaitre un appareil (fabricant, modele, integration) ou un
+chauffage (sa famille — l'identifiant stable qui la designe reste ici). Pour un
+lecteur, les EMPREINTES de ses identifiants d'appareil (un hachage court, jamais
+la valeur) : c'est par elles que l'ecran reconnait une meme enceinte exposee par
+deux integrations (chantier Medias, M1 B ; ADR 0208). Aucun jeton, aucune option
+de configuration, rien qui touche aux identifiants de connexion d'une integration.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 from typing import Any
 
@@ -25,6 +29,8 @@ from homeassistant.helpers import (
     device_registry as dr,
     entity_registry as er,
 )
+
+from .chauffage_familles import PLATEFORME_BT, commandes_par, famille
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -94,19 +100,62 @@ def _etages(hass: HomeAssistant) -> list[dict[str, Any]]:
     ]
 
 
+# Douze caracteres hexadecimaux : assez pour que deux appareils d'une maison ne se
+# confondent pas, trop peu pour reconstruire quoi que ce soit.
+EMPREINTE_LONGUEUR = 12
+
+
+def _empreinte(valeur: Any) -> str:
+    """L'empreinte d'un identifiant d'appareil : SHA-256 de sa VALEUR seule,
+    sans le domaine de l'integration, tronque a douze caracteres.
+
+    Les deux integrations d'une Echo (« Alexa Devices », l'officielle, et
+    `alexa_media_player`, celle de HACS) ecrivent toutes deux le numero de serie
+    de l'enceinte dans leurs identifiants, chacune sous son domaine : la valeur
+    seule les fait se rejoindre. Le numero de serie, lui, ne quitte jamais le
+    serveur en clair — l'index est lu par tout compte authentifie.
+    """
+    return hashlib.sha256(str(valeur).encode("utf-8")).hexdigest()[:EMPREINTE_LONGUEUR]
+
+
 @callback
-def _appareils(hass: HomeAssistant) -> list[dict[str, Any]]:
+def _porteurs_de_lecteur(hass: HomeAssistant) -> set[str]:
+    """Les appareils qui portent au moins un `media_player` actif."""
+    reg = er.async_get(hass)
+    return {
+        e.device_id
+        for e in reg.entities.values()
+        if e.device_id and e.disabled_by is None and e.entity_id.startswith("media_player.")
+    }
+
+
+@callback
+def _appareils(hass: HomeAssistant, autorise: Any = None) -> list[dict[str, Any]]:
+    """Les appareils de la maison.
+
+    `autorise` est le meme test que pour les entites (`_lecture_autorisee`) :
+    un compte restreint ne recoit que les appareils dont il peut lire au moins
+    une entite active (audit du 19/10, M25). Il recevait le nom, le fabricant
+    et la piece de chaque appareil de la maison, alors que les entites, elles,
+    lui etaient filtrees. Sans restriction, rien ne change."""
     reg = dr.async_get(hass)
+    lecteurs = _porteurs_de_lecteur(hass)
+    permis = None
+    if autorise is not None:
+        permis = {e.device_id for e in er.async_get(hass).entities.values()
+                  if e.device_id and e.disabled_by is None and autorise(e.entity_id)}
     sortie = []
     for d in reg.devices.values():
         if d.disabled_by is not None:
+            continue
+        if permis is not None and d.id not in permis:
             continue
         # `identifiers` porte le domaine de l'integration qui a cree l'appareil.
         integration = None
         for domaine, _ in d.identifiers:
             integration = domaine
             break
-        sortie.append({
+        entree = {
             "id": d.id,
             "name": d.name_by_user or d.name,
             # Fabricant et modele restent : ils servent a reconnaitre l'appareil
@@ -120,7 +169,16 @@ def _appareils(hass: HomeAssistant) -> list[dict[str, Any]]:
             "area": d.area_id,
             "via": d.via_device_id,
             "entry_type": _valeur(d.entry_type),
-        })
+        }
+        # Les empreintes des identifiants (chantier Medias, M1 B ; ADR 0208) :
+        # seulement pour un appareil qui porte un lecteur — l'index voyage vers
+        # chaque ecran, pas de champ en plus ailleurs —, et seulement s'il a un
+        # identifiant : un appareil sans identifiant n'a pas d'empreinte.
+        if d.id in lecteurs:
+            empreintes = sorted({_empreinte(v) for _, v in d.identifiers if v not in (None, "")})
+            if empreintes:
+                entree["empreintes"] = empreintes
+        sortie.append(entree)
     return sortie
 
 
@@ -145,16 +203,32 @@ def _lecture_autorisee(user: Any) -> Any:
     return lambda entity_id: bool(verif(entity_id, "read"))
 
 
+def commandes_du_registre(hass: Any, entrees: Any) -> dict[str, str]:
+    """{entite commandee : le VTherm ou le Better Thermostat qui la commande} —
+    pour ne pas en faire un chauffage de plus (audit du 19/10). Sans
+    `config_entries` lisible, seuls les VTherm comptent."""
+    def attributs_de(haid: str) -> dict:
+        return dict(getattr(hass.states.get(haid), "attributes", None) or {})
+
+    try:
+        bt = [(getattr(x, "entry_id", None), dict(getattr(x, "data", None) or {}))
+              for x in hass.config_entries.async_entries(PLATEFORME_BT)]
+    except Exception:  # noqa: BLE001
+        bt = []
+    return commandes_par(entrees, attributs_de, bt)
+
+
 @callback
 def _entites(hass: HomeAssistant, autorise: Any = None) -> list[dict[str, Any]]:
     reg = er.async_get(hass)
+    commandes = commandes_du_registre(hass, list(reg.entities.values()))
     sortie = []
     for e in reg.entities.values():
         if e.disabled_by is not None:
             continue
         if autorise is not None and not autorise(e.entity_id):
             continue
-        sortie.append({
+        entree = {
             "id": e.entity_id,
             "name": e.name or e.original_name,
             "device": e.device_id,
@@ -171,7 +245,22 @@ def _entites(hass: HomeAssistant, autorise: Any = None) -> list[dict[str, Any]]:
             "device_class": e.device_class or e.original_device_class,
             "unit": e.unit_of_measurement,
             "hidden": e.hidden_by is not None,
-        })
+        }
+        # La famille d'un chauffage (chauffage_familles.py) : fil pilote,
+        # thermostat ou VTherm. L'ecran n'a ni l'`unique_id` qui dit « pilot
+        # wire » ni les options : la reconnaissance se fait ICI, une seule fois,
+        # et il lit le resultat. Seule la famille sort — l'identifiant stable
+        # reste au serveur. La cle n'est posee que pour un chauffage : l'index
+        # voyage vers chaque ecran, pas de champ vide en plus.
+        domaine = e.entity_id.split(".", 1)[0]
+        if domaine in ("climate", "select"):
+            etat = hass.states.get(e.entity_id)
+            fam = famille(domaine, e.platform, getattr(e, "unique_id", None), e.original_name,
+                          dict(getattr(etat, "attributes", None) or {}), getattr(e, "translation_key", None))
+            # Commande par un VTherm ou un Better Thermostat : pas un chauffage de plus.
+            if fam and e.entity_id not in commandes:
+                entree["famille"] = fam
+        sortie.append(entree)
     return sortie
 
 
@@ -217,7 +306,7 @@ def async_index(hass: HomeAssistant, user: Any = None) -> dict[str, Any]:
             "component_version": _version_du_composant(),
             "areas": _zones(hass),
             "floors": _etages(hass),
-            "devices": _appareils(hass),
+            "devices": _appareils(hass, autorise),
             "entities": _entites(hass, autorise),
             "services": _services(hass),
         }

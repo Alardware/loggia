@@ -15,10 +15,10 @@ html, body { overflow-x: clip; max-width: 100%; }
  * scénario de l'Accueil gardent leur classe en plus, et la tuile d'alarme de la
  * bannière la sienne (celle de son état). Et toute pastille dont le FOND est
  * une teinte du thème (`background: rgba(var(--o-…-rgb), α)`) : « 4 MISES À JOUR »
- * en ambre sur sa pastille ambre. Et le lavis des fiches à onglets (robot,
- * distributeur : `rgba(var(--rb-rgb), α)`), que le sélecteur des teintes du
- * thème ne voyait pas — « CETTE SEMAINE » de l'Historique à 3,41:1 en clair
- * (05/10). */
+ * en ambre sur sa pastille ambre. Et le lavis de la fiche à onglets du robot
+ * (`rgba(var(--rb-rgb), α)` ; celle du distributeur n'en a plus depuis l'étape
+ * 2 du chantier IoT), que le sélecteur des teintes du thème ne voyait pas —
+ * « CETTE SEMAINE » de l'Historique à 3,41:1 en clair (05/10). */
 [style*="background: rgba(var(--rb-"], [style*="72%), linear-gradient(180deg,var(--o-surfA)"], [style*="background: rgba(var(--o-"], .o-piecestd, .o-tuile-alarme, .grid-qscenes > * {
   --o-text: var(--o-text-lavis); --o-text1: var(--o-text1-lavis);
   --o-text2: var(--o-text2-lavis); --o-text3: var(--o-text3-lavis); --o-text3-rgb: var(--o-text3-lavis-rgb);
@@ -152,17 +152,14 @@ html.loggia-light {
 
 body { background: var(--o-bggrad, var(--o-bg)); font-family: var(--o-font); color: var(--o-text); transition: background .3s; }
 
-/* Les icônes météo en mode CLAIR (10/10) — « on distingue mal en clair ».
-   Leurs nuages sont peints en dur dans les fichiers SVG (#deeafb, #e6effc,
-   #f3f7fe) : des bleus quasi blancs, posés sur une carte presque blanche.
-   Mesuré sur les pixels, le nuage tombait à 1,12:1 — invisible. Le soleil,
-   lui, restait visible, ce qui rendait le défaut déroutant.
-
-   Ces SVG sont des IMAGES : on ne peut pas y changer une couleur, seulement
-   filtrer. Réglage retenu après mesure de cinq candidats : 3,12:1 en moyenne
-   et 85 % des pixels au-dessus de 3:1 (un contour par drop-shadow ne donnait
-   que 1,22). Le sombre n’y touche pas : il n’en a pas besoin. */
-html.loggia-light .o-wx-ico { filter: brightness(.58) saturate(1.8); }
+/* Les icônes météo en mode CLAIR. Première réponse (10/10, « on distingue
+   mal en clair ») : un filtre — brightness(.58) saturate(1.8), 3,12:1 mesuré —
+   parce que ces SVG sont des images dont on ne change pas une couleur. Il
+   rendait les nuages gris sombre, ce que sa maquette ne montre pas (25/10,
+   « moi je veux comme sur le modèle ») : le clair a maintenant SON jeu
+   d'icônes (src/assets/wx/clair, choisi dans wxutil.jsx), les mêmes dessins
+   avec un contour gris-bleu. Plus aucun filtre ici : l'icône est servie telle
+   quelle dans les deux thèmes (ADR 0273). */
 
 /* Îlot sombre (caméra, veille, schéma) : les valeurs du sombre v2, quel que soit le thème. */
 .o-sombre {
@@ -382,6 +379,22 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 .o-cvdense .o-cvpastille, .o-cvico { width: 26px; height: 26px; border-radius: 9px; }
 .o-cvcarte > .o-cvrow { gap: 11px; }
 .o-cvcarte.o-cvdense > .o-cvrow { gap: 9px; row-gap: 4px; }
+/* Les ▲ ▼ d'un volet compact (relecture du 13/10) : la pastille, ▲ et ▼
+ * demandent 26 + 9 + 38 + 9 + 38 = 120 px. À 320 px de fenêtre, la compacte
+ * n'en a que 113 de contenu (141 de large, liseré et rembourrage déduits) : ▼
+ * passait à la ligne, la rangée montait à 90 px et la phrase sortait de la
+ * carte. Sous 120 px, ils passent à 32 de large (108 px) — L'ICÔNE RESTE, comme
+ * au thermostat (« il manque l'icône ») : c'est le groupe qui cède. Leur largeur
+ * est une variable, que le style en ligne de CvCard lit (`mini`, App.jsx). */
+@container (width < 120px) { .o-cvdense > .o-cvrow { --o-mini-volet: 32px; } }
+/* La puissance d'une prise compacte (chantier Prises, § 3.3), entre la
+ * pastille et la bascule : 26 + 9 + 52 (« 1,95 kW ») + 9 + 44 = 140 px. En
+ * dessous — le téléphone de 360 px et moins —, elle cède sa place, la phrase
+ * et la bascule restent ; la carte standard et la fiche la disent. */
+@container (width < 140px) { .o-cvpuissance { display: none; } }
+/* Le pourcentage d'une lumière compacte (chantier Lumières, § 3.3), au même seuil : 26 + 9 + 36 (« 100 % ») + 9 + 44 = 124 px
+ * le loge, mais la phrase garde sa place : sous 140 px, il cède, la carte standard et la fiche le disent. */
+@container (width < 140px) { .o-cvpourcent { display: none; } }
 /* Le `display` vient d'ici lui aussi : en ligne, il empêchait le climat étroit
  * d'escamoter sa pastille (`display: none` ne gagne jamais contre un style en
  * ligne). Comme la taille, il appartient à la feuille. */
@@ -608,6 +621,18 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
   .o-bar-scenes .o-qb-direct button { padding: 5px 7px !important; }
   .o-bar-scenes .o-qb-ico { display: flex; }
   .o-bar-scenes .o-qb-txt { display: none; }
+  /* La barre « Maison » d'Objets › Chauffage (tâche 11 du chantier Chauffage)
+   * ne glisse pas non plus : ses quatre modes tiennent l'écran. Le libellé
+   * s'efface — le titre « Chauffage » est juste au-dessus, et le groupe garde
+   * son nom pour le lecteur d'écran —, les puces se partagent la largeur et
+   * vont par paires : sur une rangée si les quatre tiennent, sinon deux et
+   * deux, jamais trois et une. */
+  .o-bar.o-bar-maison { flex-wrap: wrap !important; overflow: visible; padding: 10px !important; }
+  .o-bar-maison > .o-qb { flex: 1 1 100%; padding: 4px 5px !important; }
+  .o-bar-maison .o-qb-lbl { display: none; }
+  .o-bar-maison .o-maison-puces { flex: 1 1 auto; flex-wrap: wrap; }
+  .o-bar-maison .o-maison-paire { flex: 1 1 auto; }
+  .o-bar-maison .o-maison-paire > button { flex: 1 1 auto; }
   /* les onglets d'une page (Règles) : une rangée qui glisse, comme un bandeau —
    * sans le bouton collé à droite, qui n'a rien à ranger ici */
   .o-onglets { flex-wrap: nowrap !important; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; -ms-overflow-style: none; }
@@ -665,7 +690,12 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
   /* Vue Pièce : 2 cartes par ligne, compactées pour tenir sans déborder. */
   .grid-roomdev { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
   .grid-roomdev .o-rmcard { min-height: 150px !important; padding: 13px !important; }
-  .grid-roomdev .o-rmbtn { padding: 8px 3px !important; font-size: 11px !important; }
+  /* Les puces d'un lecteur (`o-puce-lecteur` : lecture/pause, « Allumer », sa maquette) gardent leur rembourrage et leur corps :
+   * serrées, « Allumer » perdait son air et sa taille (passe bis Médias, 17/10). */
+  .grid-roomdev .o-rmbtn:not(.o-puce-lecteur) { padding: 8px 3px !important; font-size: 11px !important; }
+  /* Les applications d'une TV dans la popup d'un lecteur (fichemedia.jsx) : quatre colonnes, trois sous 400 px — « Crunchyroll »
+   * finissait en « … » dans une puce de 71 px (passe bis Médias, 17/10). */
+  @media (max-width: 399px) { .o-puces-applis { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; } }
   .grid-qscenes::-webkit-scrollbar { height: 4px; }
   .grid-qscenes::-webkit-scrollbar-thumb { background: var(--o-bd1); border-radius: 4px; }
   .grid-qscenes::-webkit-scrollbar-track { background: transparent; }
@@ -956,22 +986,34 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
  * les scénarios (retour du 19/09). Le voile ne fait plus qu'assombrir le ciel
  * pour les textes posés dessus, dans la teinte du thème. Le masque suit une
  * courbe douce : une rampe droite laisse deviner ses deux bouts. */
-.o-wx3d { position: absolute; top: 0; left: 0; right: 0; height: var(--o-wx-h, 44vh); overflow: hidden; z-index: 0; pointer-events: none;
+/* Le ciel du handoff du 17/10 se fond LUI-MÊME dans `--o-bg` : son shader
+ * mélange le bas avec la couleur du thème et finit exactement sur elle. Sur un
+ * fond uni, aucun masque — la maquette n'en met pas, et un masque en plus
+ * hâtait le fondu (en clair, sous un orage, le ciel tombait sur 30 px). */
+.o-wx3d { position: absolute; top: 0; left: 0; right: 0; height: var(--o-wx-h, 44vh); overflow: hidden; z-index: 0; pointer-events: none; }
+/* Fond DÉGRADÉ (un thème qui pose `--o-bggrad`) ou PHOTO : le shader finirait
+ * sur la couleur unie du thème, pas sur ce que la page montre. Le masque long
+ * d'avant (ADR 0059) rend alors le vrai fond, sans marche. */
+html[style*="--o-bggrad"] .o-wx3d, body:has(.o-fond-photo) .o-wx3d {
   -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 30%, rgba(0,0,0,.94) 40%, rgba(0,0,0,.8) 50%, rgba(0,0,0,.6) 60%, rgba(0,0,0,.38) 70%, rgba(0,0,0,.19) 80%, rgba(0,0,0,.06) 90%, transparent 100%);
   mask-image: linear-gradient(180deg, #000 0%, #000 30%, rgba(0,0,0,.94) 40%, rgba(0,0,0,.8) 50%, rgba(0,0,0,.6) 60%, rgba(0,0,0,.38) 70%, rgba(0,0,0,.19) 80%, rgba(0,0,0,.06) 90%, transparent 100%); }
-.o-wx3d-veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(11,16,27,.10) 0%, rgba(11,16,27,.32) 46%, rgba(11,16,27,.6) 100%); }
-html.loggia-light .o-wx3d-veil { background: linear-gradient(180deg, rgba(238,242,248,.06) 0%, rgba(238,242,248,.38) 46%, rgba(238,242,248,.7) 100%); }
+/* Le voile de la maquette : en sombre, une ombre légère sous l'en-tête et rien
+ * plus bas ; en clair, aucun. Il ne finit jamais sur une couleur opaque. */
+.o-wx3d-veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.18) 0%, transparent 26%); }
+html.loggia-light .o-wx3d-veil { background: none; }
 @media (max-width: 820px) { .o-wx3d { height: var(--o-wx-h-m, 36vh); } }
-/* Accueil avec fond météo GLSL : le ciel se voit à travers la barre du haut (comme la carte météo) */
-main:has(.o-wx3d) .loggia-hdr { background: rgba(11, 16, 27, .38) !important; }
-html.loggia-light main:has(.o-wx3d) .loggia-hdr { background: rgba(238, 242, 248, .38) !important; }
-/* Le voile et la barre du haut prennent la teinte du THÈME : le bleu nuit de
- * Loggia, posé sur le ciel d'un autre thème, s'y voyait. */
+/* Accueil avec fond météo : le ciel se voit à travers la barre du haut. Aux
+ * dosages de la maquette : 30 % du fond en sombre, 40 % en clair, 80 % en clair
+ * sous un ciel sombre (nuit, orage) — sinon son texte foncé s'y perd. */
+main:has(.o-wx3d) .loggia-hdr { background: rgba(11, 16, 27, .30) !important; }
+html.loggia-light main:has(.o-wx3d) .loggia-hdr { background: rgba(238, 242, 248, .40) !important; }
+html.loggia-light main:has(.o-wx3d-sombre) .loggia-hdr { background: rgba(238, 242, 248, .80) !important; }
+/* La barre du haut prend la teinte du THÈME : le bleu nuit de Loggia, posé
+ * sur le ciel d'un autre thème, s'y voyait. */
 @supports (background: color-mix(in srgb, red 50%, transparent)) {
-  .o-wx3d-veil { background: linear-gradient(180deg, color-mix(in srgb, var(--o-bg) 10%, transparent) 0%, color-mix(in srgb, var(--o-bg) 32%, transparent) 46%, color-mix(in srgb, var(--o-bg) 60%, transparent) 100%); }
-  html.loggia-light .o-wx3d-veil { background: linear-gradient(180deg, color-mix(in srgb, var(--o-bg) 6%, transparent) 0%, color-mix(in srgb, var(--o-bg) 38%, transparent) 46%, color-mix(in srgb, var(--o-bg) 70%, transparent) 100%); }
-  main:has(.o-wx3d) .loggia-hdr,
-  html.loggia-light main:has(.o-wx3d) .loggia-hdr { background: color-mix(in srgb, var(--o-bg) 38%, transparent) !important; }
+  main:has(.o-wx3d) .loggia-hdr { background: color-mix(in srgb, var(--o-bg) 30%, transparent) !important; }
+  html.loggia-light main:has(.o-wx3d) .loggia-hdr { background: color-mix(in srgb, var(--o-bg) 40%, transparent) !important; }
+  html.loggia-light main:has(.o-wx3d-sombre) .loggia-hdr { background: color-mix(in srgb, var(--o-bg) 80%, transparent) !important; }
 }
 
 /* ── Chiffres a chasse fixe ─────────────────────────────────────────────
@@ -1030,6 +1072,28 @@ html.loggia-light main:has(.o-wx3d) .o-greet-facts { color: var(--o-text1) !impo
 html.loggia-light main:has(.o-wx3d) .o-greet-hi,
 html.loggia-light main:has(.o-wx3d) .o-greet-facts,
 html.loggia-light main:has(.o-wx3d) .o-greet-name { text-shadow: 0 1px 3px rgba(255, 255, 255, .8), 0 0 16px rgba(255, 255, 255, .55); }
+/* Thème clair sous un ciel SOMBRE (nuit, orage, averse, grêle) : le ciel du
+ * handoff du 17/10 ne s'éclaircit plus d'un voile, et un texte foncé s'y
+ * perdrait. Il passe au blanc, comme en sombre — la maquette « Loggia Vues
+ * v2 » fait de même, titres de section compris, mais seulement ceux posés SUR
+ * le ciel (`.o-sur-ciel`, mesuré par wx3d.jsx). */
+html.loggia-light main:has(.o-wx3d-sombre) .o-greet-hi,
+html.loggia-light main:has(.o-wx3d-sombre) .o-greet-facts,
+html.loggia-light main:has(.o-wx3d-sombre) .o-greet-name,
+html.loggia-light main:has(.o-wx3d-sombre) .o-banner-metrics div,
+html.loggia-light main:has(.o-wx3d-sombre) .o-banner-metrics span { color: #fff !important; }
+html.loggia-light main:has(.o-wx3d-sombre) .o-greet-hi,
+html.loggia-light main:has(.o-wx3d-sombre) .o-greet-facts,
+html.loggia-light main:has(.o-wx3d-sombre) .o-greet-name,
+html.loggia-light main:has(.o-wx3d-sombre) .o-banner-metrics { text-shadow: 0 1px 3px rgba(8, 12, 20, .62), 0 0 18px rgba(8, 12, 20, .38); }
+html.loggia-light .o-sur-ciel > h2 { color: rgba(255, 255, 255, .92) !important; text-shadow: 0 1px 3px rgba(8, 12, 20, .55), 0 0 14px rgba(8, 12, 20, .35); }
+html.loggia-light .o-sur-ciel > span,
+html.loggia-light .o-sur-ciel > div:not(:has(button)) { color: rgba(255, 255, 255, .8) !important; text-shadow: 0 1px 3px rgba(8, 12, 20, .55), 0 0 14px rgba(8, 12, 20, .35); }
+/* Le bandeau d'édition se pose en haut de l'Accueil, donc SUR le ciel. Sa
+ * teinte translucide y laissait passer un ciel d'orage en thème clair (texte
+ * gris sur gris foncé), un ciel de midi en sombre : il y reprend le fond qu'il
+ * a partout ailleurs — la même teinte, posée sur le fond du thème. */
+main:has(.o-wx3d) .o-bandeau-edition { background: linear-gradient(rgba(var(--o-accent-rgb), .12), rgba(var(--o-accent-rgb), .12)), var(--o-bg) !important; }
 
 /* L'en-tête pose son flou en style en ligne. Au-dessus du ciel météo de
    l'Accueil, un canvas qui s'anime sans cesse, ce flou se recalculerait à
@@ -1205,6 +1269,16 @@ h1[tabindex="-1"]:focus, h1[tabindex="-1"]:focus-visible { outline: none; }
 /* Et le même enfoncement au press : la carte qu'on tient n'est plus un
    `[role="button"]`, que visait le retour tactile du haut de la feuille. */
 .o-pointille:active, [data-sec]:has(> .o-surface):active { transform: scale(.955); }
+/* MAIS SEULEMENT CE QU'ON TIENT (19/10). `:active` gagne aussi les ANCÊTRES :
+   presser le ⤢ d'une carte enfonçait la carte ET le panneau Pièces entier,
+   chacun autour de son centre — le bouton glissait de 20 à 30 px sous la
+   souris, et le relâchement tombait sur la carte : « le bouton pour agrandir /
+   rétrécir ne marche pas dans une fenêtre », et le panneau « qui se décale ».
+   Saisir une carte enfonçait de même tout le panneau. Même parade que
+   l'interrupteur des pièces (`.o-piece:has([role="switch"]:active)`). */
+.o-pointille:has(button:not(.o-surface):active),
+[data-sec]:has(> .o-surface):has(button:not(.o-surface):active),
+[data-sec]:has(> .o-surface):has(.o-pointille:active) { transform: none; }
 /* Et son rebond (relecture du lot 13, 04/10) : `[role="button"]` donnait
    aussi la transition des boutons. Sans elle, l'intertitre qu'on saisit en
    édition s'enfonçait d'un coup et revenait sec. Les autres cartes
@@ -1355,6 +1429,271 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
  * comme le « · À la maison » : l'avatar et sa pastille disent l'essentiel,
  * le nom reste au survol et au lecteur d'écran. */
 @container (max-width: 230px) { .o-presence-nom { display: none; } }
+
+/* ── La carte étroite : une grille commune (passe téléphone, ADR 0202 ; sa décision du 15/10, « ok pour 1c ») ──
+ * Au téléphone, deux colonnes de cartes de 141 à 176 px : sous 188 px de CONTENU (la
+ * carte de 176 px du téléphone de 390 px en a 142 dans Objets), toute carte au gabarit
+ * qui porte la classe `o-gabarit` prend la même disposition, de haut en bas :
+ *  - la plaque à gauche, le CHIFFRE à droite (`ChiffreHaut`) — celui de la carte d'un
+ *    capteur : 22 px / 800, l'unité en 12 px au gris doux, 4 px sous le haut de la
+ *    plaque. Une valeur longue (« 1,95 kW ») rétrécit, jusqu'à 16 px, sans jamais se
+ *    couper : sa largeur en em (`--o-em`, posée par la carte, `emChiffre`) dit la taille
+ *    qui tient entre la plaque (38), 8 px d'air et l'écart de l'unité (3) ;
+ *  - le nom EN ENTIER, sur toute la largeur, 14 px / 600, deux lignes au plus, passé à la
+ *    ligne ENTRE deux mots — jamais dans un mot ; une troisième ligne finit en « … » ;
+ *  - la phrase, sur UNE ligne, de 12 à 10,5 px d'après sa longueur (`--o-n`, posée par
+ *    la carte ; 0,58 em par lettre majore Manrope en 600), « … » en dernier recours ; une
+ *    lampe allumée l'écrit à son encre (`data-encre`, `--o-encre`, T8), lisible comme du
+ *    texte sur son lavis ;
+ *  - UNE ligne de commandes de 44 px, collée au pied par sa marge auto.
+ * Ce qui change de place s'écrit DEUX fois — `o-seul-large`, `o-seul-etroit` — et la
+ * feuille n'en montre qu'une ; en `!important`, pour qu'un `display` en ligne ne la batte
+ * pas. Sans requêtes de conteneur (Safari 15 et avant), la carte large seule.
+ * Budget en hauteur d'une carte de 184 px (150 px de contenu, rembourrage et liseré
+ * ôtés) : 38 + 10 + 2 × 16 + 2 + 15 + 9 + 44 = 150 ; un nom d'une ligne rend 16 px, que
+ * la marge auto du pied absorbe (ADR 0179 : aucune marge fixe ne pousse le corps dehors).
+ * Les cartes LARGES ne changent pas : leurs règles vivent en ligne.
+ *
+ * La paire « valeur / étiquette » (`ValeurEtiquette`) — la consigne ou le mode entre − et
+ * + d'un chauffage : sur une carte large, la taille de la maquette (`--o-taille`, posée par
+ * la carte : 15 px, 12 ou 10 pour un mot long ; l'étiquette en 10 px, en capitales). Sur
+ * une carte étroite (T9, T18) :
+ *  - − et + font 44 px à partir de 142 px de contenu, et en dessous ils cèdent — jamais
+ *    sous 28 px de large, jamais sous 44 de haut : `--o-pas`, la place qui reste, moins les
+ *    deux écarts de 4 px, moins celle de la valeur, partagée en deux. La valeur a 46 px au
+ *    moins ; un mot de mode trop long en demande plus (`--o-mot`, sa longueur posée par la
+ *    carte ; 6,2 px par lettre, ce que la valeur demande à 10 px), et les carrés lui cèdent ;
+ *  - la valeur rétrécit, de 15 à 10 px, d'après la place qui reste (`--o-reserve`, ce que
+ *    prennent les boutons et leurs écarts) et sa longueur (`--o-n` ; 0,62 em par lettre
+ *    majore Manrope en 800) ; un mot seul qui ne tient pas même à 10 px finit en « … » ;
+ *  - l'étiquette passe en minuscules, comme sur 1c, en 700, de 10 à 8 px (0,63 em par lettre
+ *    couvre « Harmonogram » et « Programma ») ; en capitales, « CONSIGNE » à 8 px faisait
+ *    47,2 px, pour 46. Elle passe sur deux lignes entre deux mots s'il le faut, et s'efface
+ *    sous un mot de mode de plus de 13 lettres (`data-long`), que la rangée de 44 px ne loge
+ *    pas en plus ;
+ *  - le point du mode ne s'écrit que pour la carte large : la plaque porte sa couleur.
+ * La ligne d'une prise (T10, T11) : sa bascule à gauche — 46 px, et 8 d'écart : la place
+ * des kWh est le reste (`--o-reserve`, 54 px, posé par la carte) —, et les kWh du jour à
+ * droite (`data-kwh`), de 13 à 10,5 px (0,6 em par caractère), « Aujourd'hui » dessous.
+ * 10,5 et non 11 : une vue personnelle de 320 px laisse 50 px aux kWh, et « 1,47 kWh » en
+ * fait 50,1 en 11 px — il finissait en « … ». Protégée, une pastille sans interrupteur
+ * (`data-pastille`) : le cadenas et « Protégée », de 11 à 9,5 px selon la place (89 px :
+ * ses 7 px de rembourrage de chaque côté, le cadenas, 4 px, l'écart de la rangée et 51 px
+ * pour les kWh, qui les ont alors). Sous 140 px de contenu, la pastille ne garde que le
+ * cadenas (26 px), et les kWh reprennent la place (36 : la pastille, l'écart, 2 px d'air). */
+.o-gabarit { container-type: inline-size; }
+@supports not (container-type: inline-size) { .o-seul-etroit { display: none !important; } }
+@container (width >= 188px) { .o-seul-etroit { display: none !important; } }
+/* La plaque-interrupteur d'une lumière (T12) : une zone de toucher de 44 × 44, 3 px autour de ses 38 ; plus forte que
+ * l'allongement de ± 12 px des interrupteurs au téléphone, qui mordrait sur le nom, 10 px plus bas. */
+.o-gab-plaque[role="switch"]::after { content: ''; position: absolute; inset: -3px; }
+.o-gab-valeur { font-size: var(--o-taille, 15px); }
+.o-gab-etiquette { font-size: var(--o-taille, 10px); }
+@container (width < 188px) {
+  .o-seul-large { display: none !important; }
+  .o-gabarit > * { --o-milieu-haut: 10px; --o-pied-haut: 9px; --o-pas: clamp(28px, calc((100cqi - 8px - max(46px, 6.2px * var(--o-mot, 0))) / 2), 44px); --o-pas-ecart: 4px; --o-reserve: calc(2 * var(--o-pas) + 8px); }
+  .o-gab-chiffre { font-size: clamp(16px, calc((100cqi - 49px) / var(--o-em, 2.4)), 22px); }
+  .o-gab-nom { font-size: 14px !important; font-weight: 600 !important; line-height: 16px; white-space: normal !important; overflow-wrap: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .o-gab-phrase { line-height: 15px; font-size: clamp(10.5px, calc(100cqi / (0.58 * var(--o-n, 20))), 12px) !important; }
+  .o-gab-phrase[data-encre] { color: var(--o-encre) !important; }
+  .o-gab-valeur { font-size: clamp(10px, calc((100cqi - var(--o-reserve)) / (0.62 * var(--o-n, 5))), 15px); }
+  .o-gab-etiquette { font-size: clamp(8px, calc((100cqi - var(--o-reserve)) / (0.63 * var(--o-n, 8))), 10px); line-height: 1.1; text-transform: none !important; letter-spacing: 0 !important; font-weight: 700 !important; }
+  .o-gab-etiquette[data-long] { display: none; }
+  .o-gab-valeur[data-kwh] { font-size: clamp(10.5px, calc((100cqi - var(--o-reserve)) / (0.6 * var(--o-n, 8))), 13px); }
+  .o-gabarit > [data-pastille] { --o-reserve: calc(100cqi - 51px); }
+  .o-gab-pastille-mot { font-size: clamp(9.5px, calc((100cqi - 89px) / (0.63 * var(--o-n, 8))), 11px); }
+}
+@container (width < 140px) {
+  .o-gab-pastille-mot { display: none; }
+  .o-gabarit > [data-pastille] { --o-reserve: 36px; }
+}
+/* La puce inerte « Revient à 08:30 » d'un écran bloqué (chantier Mode enfant, E16 ; carteenfant.jsx) : la phrase entière mesurait 143 px
+ * (rembourrage de 14) pour 142 px de contenu à 390 px, 127 à 360, 107 à 320 — coupée en français, hors de la carte en allemand (« Wieder
+ * ab 08:30 », 23 px dehors). Mesurée dans la démo le 17/10 avec un rembourrage de 10 : 134 px en français, 139 en allemand, 127 en
+ * polonais, 148 en espagnol (« Vuelve a las 08:30 »), 76 pour l'heure seule. Sous 148 px de contenu — où une des sept langues ne tient
+ * plus —, l'heure seule avec la lune ou le sablier : le chiffre du haut dit déjà l'état, et la phrase de la carte l'écrit en mots (passe bis
+ * du 17/10, point 3). Les deux écritures sont dans la carte ; la feuille n'en montre qu'une. */
+.o-revient-court { display: none !important; }
+@container (width < 148px) {
+  .o-revient-long { display: none !important; }
+  .o-revient-court { display: inline !important; }
+}
+/* La zone hachurée du plafond sur la barre de volume (`RmJauge`, chantier Mode enfant, E15 ; § 6.1) : le motif de sa maquette dans les
+ * jetons du thème — ici plutôt qu'en ligne, pour la place du boot (passe bis du 17/10, point 14). */
+.o-jauge-plafond { background: repeating-linear-gradient(135deg, color-mix(in oklab, var(--o-text3) 32%, transparent) 0 3px, transparent 3px 8px); }
+/* La carte étroite d'une MESURE (chantier Capteurs, tâche 4 bis) : sur la grille commune, la barre des zones prend la
+ * place de la ligne de commandes. Le nom y garde ses lignes de 16 px (sur une carte large, 18 : `--o-nom-ligne`). Les
+ * chiffres sous la barre passent de 10,5 à 9,5 px — à 360 px, « 1 400 » et « 1 600 » se touchaient — et, sous 120 px
+ * de contenu (le téléphone de 320 px), ceux qui toucheraient leur voisin se taisent (`data-serre`, que la carte pose
+ * d'après leur place sur la barre : le « 1 600 » du CO₂, le « 17 » d'une température, le « 80 » d'une humidité). */
+@container (width < 188px) {
+  .o-mesure-nom { --o-nom-ligne: 16px; }
+  .o-mesure-reperes { font-size: 9.5px !important; }
+}
+@container (width < 120px) { .o-mesure-reperes > [data-serre] { display: none; } }
+/* La carte LARGE d'une mesure : aucun mot coupé au milieu (correction bis du chantier Capteurs, point 6 ; mesuré à 1280 px :
+ * « Schlafzim… » en allemand, « przewietrz » en polonais, « Idéal · 47 % d'humid… »).
+ *  - La colonne du nom ne descend pas sous son mot le plus long (`min-width: auto`, le `min-content` d'un élément flexible : le
+ *    nom passe à la ligne entre deux mots, sa phrase n'y compte pas, son cadre étant un conteneur). C'est d'abord le CHIFFRE qui
+ *    cède : sa colonne rétrécit (`flex-shrink`), et sa ligne (`o-mesure-ligne`), large de sa taille estimée (`--o-em`, en em de
+ *    25 px) sans jamais dépasser la colonne, écrit le chiffre à la taille qui y tient, de 25 à 14 px. Sa colonne a un plancher
+ *    (correction bis 2, point 4) : le chiffre en 14 px. Au-delà, en dernier recours, le nom cède : sa colonne ne prend jamais
+ *    plus que ce que le plancher et l'écart lui laissent (`--o-plancher`, posé par la carte), et un mot plus large finit en
+ *    « … ». Un plafond borne le `min-width: auto` d'un élément flexible : le plancher l'emporte toujours.
+ *  - La phrase vit dans un cadre (`o-mesure-phrases`), large comme la colonne : elle rétrécit de 12 à 10,5 px d'après sa largeur
+ *    estimée (`--o-larg`, en em, Manrope 600), comme la phrase de la carte étroite ; si elle ne tient pas même à 10,5 px, sa forme
+ *    de repli (`data-repli` : « Idéal · 47 % », « Confiné ») prend sa place, sur la même ligne — une largeur maximale qui vaut
+ *    zéro ou l'infini efface l'autre. « … » en dernier recours. Sans requêtes de conteneur, la phrase entière, comme avant. */
+.o-mesure-ligne > span { font-size: 25px; }
+.o-mesure-phrases { display: flex; }
+.o-mesure-phrases > [data-repli] { display: none; }
+@supports (container-type: inline-size) {
+  @container (width >= 188px) { .o-mesure-gauche { min-width: auto !important; max-width: calc(100% - var(--o-plancher, 0px)); } }
+  .o-mesure-ligne { container-type: inline-size; }
+  .o-mesure-ligne > span { font-size: clamp(14px, calc(100cqi / var(--o-em, 4)), 25px); }
+  .o-mesure-phrases { container-type: inline-size; }
+  .o-mesure-phrases > .o-mesure-phrase { flex: 0 1 auto; min-width: 0; font-size: clamp(10.5px, calc(100cqi / var(--o-larg, 12)), 12px) !important; }
+  .o-mesure-phrases > [data-longue] { max-width: max(0px, calc((100cqi - 10.5px * var(--o-larg)) * 100000)); }
+  .o-mesure-phrases > [data-repli] { display: block; max-width: max(0px, calc((10.5px * var(--o-larg) - 100cqi) * 100000)); font-size: clamp(10.5px, calc(100cqi / var(--o-larg-repli, 8)), 12px) !important; }
+}
+/* L'en-tête d'Objets › Volets au téléphone : l'icône seule, comme les filtres. */
+@media (max-width: 560px) { .o-volets-tout-mot { display: none; } }
+/* …et sans « · n en mouvement » : chaque carte dit déjà « En fermeture ». Avec
+ * lui et « Tout arrêter », l'en-tête passait sur deux lignes le temps d'une
+ * course, et les cartes descendaient de 27 px (relecture du 13/10). Le compte
+ * cède sa place aux puces : il passe à la ligne DANS sa colonne (« 4 Rollläden
+ * · 3 offen »), et la rangée garde la hauteur des puces, 40 px. */
+@media (max-width: 760px) {
+  .o-volets-mouvement { display: none; }
+  .o-volets-compte { flex: 1 1 0; min-width: 0; line-height: 13px; }
+}
+
+/* ── La fiche d'un volet : la semaine et l'historique (relecture du 13/10) ─────
+ * L'échelle de la semaine : chaque heure centrée sur son repère ; quand la
+ * piste est trop étroite pour cinq sans qu'elles se touchent, les quarts (6 h,
+ * 18 h) s'effacent — plus tôt pour les mots longs (« 24 godz. », `data-long`),
+ * qui perdent aussi midi sur une piste très étroite. Seuils mesurés : 22 px
+ * pour « 24 h », 44 px pour « 24 godz. », 6 px d'écart au moins. */
+.o-volet-echelle { container-type: inline-size; }
+@container (width < 120px) { .o-volet-echelle > [data-repere="quart"] { display: none; } }
+@container (width < 210px) { .o-volet-echelle[data-long] > [data-repere="quart"] { display: none; } }
+@container (width < 110px) { .o-volet-echelle[data-long] > [data-repere="milieu"] { display: none; } }
+/* Une manœuvre de l'Historique : l'heure, le texte, qui. Au téléphone, la
+ * pastille passe SOUS le texte : à côté, elle écrasait le motif jusqu'à un mot
+ * par ligne ; sous lui, elle peut aller à la ligne plutôt que de déborder. */
+.o-volet-manoeuvre { display: grid; grid-template-columns: 84px minmax(0, 1fr) auto; align-items: center; column-gap: 12px; }
+.o-volet-manoeuvre > [data-qui] { white-space: nowrap; }
+@media (max-width: 760px) {
+  .o-volet-manoeuvre { grid-template-columns: 84px minmax(0, 1fr); row-gap: 6px; }
+  .o-volet-manoeuvre > [data-qui] { grid-column: 2; justify-self: start; max-width: 100%; white-space: normal; }
+}
+
+/* ── La carte d'une lumière (chantier Lumières, § 3.2) ──────────────────────────
+ * Le pourcentage d'une carte LARGE s'écrit à la première rangée, deuxième colonne de
+ * la grille du milieu — celle du radiateur : en grand à droite du nom et de la phrase,
+ * aligné sur leur bas. Sous 188 px de CONTENU, la carte est celle de la grille commune
+ * (`o-gabarit`, plus haut ; passe téléphone, ADR 0202) : la plaque y devient
+ * l'interrupteur, le pourcentage monte en haut à droite, la phrase d'une lampe allumée
+ * s'écrit à son encre.
+ * Une carte MOYENNE — de 188 à 200 px de contenu, la carte de 226 px d'un écran de 1280 px en a 192 — garde le pourcentage en bas, mais plus petit :
+ * 21 px, « % » à 60 % (12,6 px), au lieu de 25 / 15. « 100 % » y fait 52,1 px au lieu de 61,5 ; avec ses 10 px d'air il laisse à « Allumée depuis 18:05 »
+ * (123,6 px à 12 px) 129,9 px au lieu de 120,5 : la phrase tient sur sa ligne, au lieu de finir en « Allumée depuis 18:… » (revue du 14/10, R6). Dès 200 px de
+ * contenu — 1366 px d'écran et plus — la grande taille tient : 128,5 px libres pour 123,6, 5 px de marge ; la phrase française est la plus longue des trois
+ * langues demandées (l'allemand : 108 px, le polonais : 114). La grille d'Objets ne descend pas sous 225 px de carte, 191 de contenu. L'espagnol (« Encendido
+ * desde 18:05 », 134 px) demanderait 197 px à côté de « 100 % » en 21 px : à 1280 px il finit encore en « … ». La plage est bornée des deux côtés : sous 188 px,
+ * la carte étroite tait ce pourcentage, et l'ordre des règles n'y décide de rien. */
+@container (188px <= width < 200px) {
+  .o-lumiere-chiffre { --o-chiffre-taille: 21px; }
+}
+
+/* ── Les puces d'un robot (chantier IoT, I9) ───────────────────────────────────
+ * Une puce seule garde son mot. Deux n'ont que leur glyphe sous 200 px de CONTENU
+ * — la carte étroite du téléphone, la carte de 184 px — : le mot reste dans leur
+ * nom (« Pause Tondeuse »). Dès 200 px, le mot revient à côté du glyphe. */
+@container (width < 200px) { .o-puces-robot[data-n="2"] .o-puce-robot-mot { display: none; } }
+
+/* ── L'en-tête d'Objets › Prises (chantier Prises, § 3.4 ; relecture finale, A8) ──
+ * Le compte tient sur UNE ligne, à toute largeur. À la ligne, il faisait 35 px
+ * de haut contre 19 pour son repli de chargement, et la grille bougeait de 16 px
+ * quand la puissance changeait de largeur (« 167 W » contre « 4 W »). Au
+ * téléphone (760 px et moins, comme l'en-tête des volets), « en ce moment »
+ * s'efface : la puissance seule suffit. Ses chiffres sont tabulaires : le compte
+ * ne tremble pas d'un relevé à l'autre. Quand une ligne ne suffit pas encore
+ * (320 px, en allemand ou en polonais), le compte se coupe en « … » plutôt que
+ * de faire sauter la grille. Le repli de chargement (App.jsx) porte les mêmes
+ * classes : même hauteur, rien ne saute à l'arrivée du compte. */
+/* 40 px et le titre centré, comme les autres en-têtes (19/10) : aligné sur la
+ * ligne de base sans hauteur, le titre des Prises montait de 11 px au-dessus de
+ * celui des Lumières — « pas tous à la même hauteur ». */
+.o-prises-entete { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; }
+.o-prises-entete > h2 { flex: none; }
+.o-prises-compte { flex: 1 1 0; min-width: 0; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) {
+  .o-prises-moment { display: none; }
+}
+
+/* ── L'en-tête d'Objets › Lumières (chantier Lumières, § 3.4) ─────────────────
+ * Le titre, le compte à côté, « Tout éteindre » à droite. La rangée a la hauteur
+ * de la puce, 40 px, qu'elle soit là ou non : rien ne saute quand la dernière
+ * lampe s'éteint, ni quand l'en-tête arrive (son repli, App.jsx, porte les mêmes
+ * classes). Le compte tient sur UNE ligne, chiffres tabulaires, « … » au besoin ;
+ * au téléphone (560 px et moins, le seuil des puces des volets), la puce n'a que
+ * son icône — son nom le dit toujours. */
+.o-lumieres-entete { display: flex; align-items: center; gap: 12px; min-height: 40px; }
+.o-lumieres-entete > h2 { flex: none; }
+.o-lumieres-compte { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) { .o-lumieres-tout-mot { display: none; } }
+/* L'en-tête d'Objets › Multimédia (chantier Médias, M15) : la hauteur des autres en-têtes (40 px), le compte sur UNE ligne, sans puce. */
+.o-medias-entete { display: flex; align-items: center; gap: 12px; min-height: 40px; }
+.o-medias-entete > h2 { flex: none; }
+.o-medias-compte { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+/* L'en-tête d'Objets › IoT (chantier IoT, I14) : la même rangée, le compte sur UNE ligne, rien à droite. */
+.o-iot-entete { display: flex; align-items: center; gap: 12px; min-height: 40px; }
+.o-iot-entete > h2 { flex: none; }
+.o-iot-compte { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+/* La rangée COMMUNE des autres filtres — Tous, Chauffage, Capteurs (19/10) : la
+ * même hauteur, le titre au même niveau. Ils vivaient dans une rangée alignée
+ * sur la ligne de base, sans hauteur : leur titre était 11 px plus haut que
+ * celui des Lumières, des Volets, du Multimédia et de l'IoT. */
+.o-objets-entete { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; }
+
+/* ── Les trois tuiles du haut d'Objets (chantier Lumières, revue du 14/10, R9) ──
+ * « 50 appareils reliés », « 4 scènes », « 1 entités absentes » : trois colonnes,
+ * 14 px d'écart, 20 px de rembourrage. À 320 px — une grille de 292 px, des tuiles
+ * de 88 px —, il ne reste que 46 px au texte : « verbundene » (71,6 px à 12,5 px)
+ * débordait de sa tuile de 4,6 px, « ontbrekende » (76,7), « dispositivos » (72) et
+ * « urządzenia » de même. Sous 330 px de grille — un téléphone de moins de 358 px —,
+ * le rembourrage passe à 12 px et le libellé à 11,5 px : le mot le plus long des sept
+ * langues finit à 4 px de sa tuile. Au-delà, rien ne change : la tuile d'un téléphone de
+ * 360 px (101 px) tient « ontbrekende » à 3 px près. La grille est le conteneur de
+ * ses tuiles ; leurs styles en ligne cèdent par `!important`, comme le nom d'une carte. */
+.grid-objstats { container-type: inline-size; }
+@container (width < 330px) {
+  .grid-objstats > div { padding-left: 12px !important; padding-right: 12px !important; }
+  .grid-objstats > div > :last-child { font-size: 11.5px !important; }
+}
+
+/* ── Les quatre blancs nommés de la fiche d'une lumière (chantier Lumières, § 3.7) ──
+ * Une rangée, à toute largeur. Sous 300 px de rangée — le téléphone de 360 px et
+ * moins —, l'écart se resserre et le mot passe à 11 px / 700 : « Neutralna »
+ * (53 px) tient dans sa puce au lieu de se couper en « … » (mesuré à 320 px). */
+.o-lumiere-blancs { container-type: inline-size; }
+@container (width < 300px) {
+  .o-lumiere-blancs-grille { gap: 4px !important; }
+  .o-lumiere-blanc { font-size: 11px !important; font-weight: 700 !important; padding: 0 !important; }
+}
+
+/* ── Le Journal du jour d'une prise (chantier Prises, § 3.9) ──────────────────
+ * L'heure (52 px), quoi, qui. Sur une feuille étroite — le téléphone : moins de
+ * 360 px dans le panneau —, la pastille de qui passe SOUS le texte : à côté,
+ * « Bouton de la prise » laissait quelques pixels à « Cycle terminé ». */
+.o-prise-journal { container-type: inline-size; }
+.o-prise-journal-ligne { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; align-items: center; column-gap: 10px; }
+.o-prise-journal-ligne > [data-qui] { white-space: nowrap; }
+@container (width < 360px) {
+  .o-prise-journal-ligne { grid-template-columns: 52px minmax(0, 1fr); row-gap: 6px; }
+  .o-prise-journal-ligne > [data-qui] { grid-column: 2; justify-self: start; max-width: 100%; white-space: normal; }
+}
 
 /* ── La carte météo du rail de l'Accueil (ADR 0038) ───────────────────────────
  * Le rail fait 330 px sur grand écran, 276 px en dessous : le chiffre de la
@@ -1566,23 +1905,26 @@ html.loggia-light .grid-qscenes > button { box-shadow: var(--o-shadow-rangee, 0 
   .rb-tondeuse { --rb-fond: color-mix(in srgb, var(--o-ok) 62%, #000); }
 }
 .rb-tondeuse [role="switch"][aria-checked="true"] { background: var(--rb-fond) !important; }
-/* Le distributeur (ADR 0155, 05/10) : l'orange que sa fiche portait déjà.
- * `--o-orange` passe par la garde de contraste (contraste.js) comme texte ;
- * `--rb-fond` porte du texte blanc, assombri comme la tondeuse — et, sans
- * `color-mix`, le fond de l'accent, qui tient déjà le blanc. */
-.rb-distributeur { --rb-rgb: var(--o-orange-rgb); --rb-doux: var(--o-orange); --rb-fond: var(--o-accent-fond); }
-@supports (color: color-mix(in srgb, red 50%, black)) {
-  .rb-distributeur { --rb-fond: color-mix(in srgb, var(--o-orange) 62%, #000); }
-}
-/* En clair, `--o-orange` est DÉJÀ assombri par la garde pour s'écrire sur une
- * surface claire (#9e350a sous iOS) : il porte le blanc (7:1). Le mélanger
- * encore au noir donnait un brun presque noir, loin du bouton de la carte
- * (05/10). Le mélange ne sert qu'en sombre, où l'orange est vif. */
-html.loggia-light .rb-distributeur { --rb-fond: var(--o-orange); }
+/* Le distributeur (ADR 0155, 05/10 ; étape 2 du chantier IoT, 19/10 — ADR 0216) : sa fiche ne porte plus
+ * l'orange d'un lavis `--rb-` — les panneaux de sa maquette, l'accent pour ses liens, et l'ambre de sa plaque,
+ * celle de la carte (I8). */
+/* Le chauffage (plan 2 du chantier Chauffage) : les couleurs de sa maquette
+ * (« Celles de la maquette », 11/10 ; tâche 10 bis B) — le bouton plein d'une
+ * fiche est au bleu de l'accent, qui porte déjà le texte blanc ; la chauffe
+ * est orange, le froid bleu, et le rouge reste aux alertes. « Reprendre le
+ * planning » n'est plus un bouton plein : doux, à l'accent. */
+.rb-chauffage { --rb-rgb: var(--o-accent-rgb); --rb-doux: var(--o-accent-soft); --rb-fond: var(--o-accent-fond); }
 /* Le champ d'heure natif dessine son horloge selon le schéma de couleurs :
  * sans lui, noire sur la fiche sombre (05/10). */
 .rb-fiche { color-scheme: dark; }
 html.loggia-light .rb-fiche { color-scheme: light; }
+/* Le champ date de la feuille des Vacances (barre « Maison », tâche 11 du
+ * chantier Chauffage) : son calendrier au schéma du thème, comme l'horloge. */
+.o-vacances { color-scheme: dark; }
+html.loggia-light .o-vacances { color-scheme: light; }
+/* L'heure d'un changement du planning de chauffe, centrée dans son champ :
+ * Safari (iOS) aligne la valeur d'un champ d'heure à part du champ. */
+.rb-chauffage input[type="time"]::-webkit-date-and-time-value { text-align: center; }
 /* Les onglets : UNE ligne, l'icone au-dessus du mot, les onglets se partagent
  * la largeur — l'agencement du telephone, partout : la fiche est une feuille
  * de 480 px au plus (ajustement du 18/09). */
@@ -1604,27 +1946,32 @@ html.loggia-light .rb-fiche { color-scheme: light; }
   .rb-onglets:has(> .rb-onglet:nth-child(5)) { gap: 2px; padding: 4px; }
   .rb-onglets:has(> .rb-onglet:nth-child(5)) > .rb-onglet { font-size: 9.5px; }
 }
-.rb-accueil, .rb-zones, .rb-histo, .rb-planning { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
-.rb-pieces { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 14px; }
-
-/* ── La prise dit ce qu'elle alimente (26/09) ────────────────────────────────
- *
- * L'animation ne parle QUE de l'appareil au travail : tambour qui tourne,
- * sirene qui tremble, lueur qui respire, temoins du NAS qui clignotent. Elle
- * est posee par la carte seulement quand la puissance mesuree depasse le seuil
- * de veille — rien ne bouge pour une prise allumee qui ne fait rien.
- *
- * `currentColor` : la plaque porte deja la couleur de son appareil.
- */
-/* Plus de « turn » (lot 15 de l'audit du 03/10) : aucun type de prise ne le
- * posait — le tambour tourne dans son dessin (`o-ic-spin`, plus bas). */
-@keyframes o-prise-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
-@keyframes o-prise-shake { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-14deg); } 40% { transform: rotate(12deg); } 60% { transform: rotate(-8deg); } 80% { transform: rotate(5deg); } }
-.o-prise-bob { animation: o-prise-bob 1.8s ease-in-out infinite; }
-.o-prise-shake { transform-origin: 50% 10%; animation: o-prise-shake .9s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) {
-  .o-prise-bob, .o-prise-shake { animation: none; }
+.rb-accueil, .rb-histo, .rb-planning { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+/* L'Accueil d'un robot (chantier IoT, tâches 8 et 13) : le corps et la marge de ses puces et de ses tuiles vivent ici, pour que le
+ * téléphone les change sans priorité forcée. Sa maquette dessine la popup à 520 px ; sous 360 px de panneau, la seconde puce ne garde
+ * que son glyphe (son mot reste son nom) et la principale passe en 13 px — sur deux lignes sous 270 plutôt que coupée ; sous 340 px
+ * de tuiles, leur valeur passe en 17 px, puis en 15 sous 290, leur marge en 12. Mesuré à 375, 360 et 320 px de large, et dans la
+ * popup de bureau (396 px de panneau : rien ne change). Les puces en 13 px partout, celles de sa maquette (passe bis du 18/10,
+ * point 13) : la principale à 0 12px, la seconde à 0 14px. */
+.rb-a-hero, .rb-a-tuiles { container-type: inline-size; }
+.rb-a-puce { font-size: 13px; padding: 0 14px; }
+.rb-a-principale { padding: 0 12px; }
+.rb-a-libelle { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rb-a-tuile { padding: 14px 16px; }
+.rb-a-tuile-titre { display: block; font-size: 20px; font-weight: 800; letter-spacing: -.01em; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@container (max-width: 360px) {
+  .rb-a-seconde .rb-a-mot { display: none; }
+  .rb-a-seconde { width: 48px; padding: 0; }
+  .rb-a-principale { font-size: 13px; padding: 0 12px; }
 }
+@container (max-width: 270px) { .rb-a-libelle { white-space: normal; line-height: 1.15; } }
+@container (max-width: 340px) { .rb-a-tuile-titre { font-size: 17px; } }
+@container (max-width: 290px) { .rb-a-tuile-titre { font-size: 15px; } .rb-a-tuile { padding: 14px 12px; } }
+/* La valeur des tuiles du distributeur (étape 2 du chantier IoT, tâche 8) : deux lignes au plus, et non une (05/10) — mais resserrée
+ * comme celle du robot. À 320 px en allemand, « Mahlzeiten: 1 · 45 g » en 20 px se coupait au milieu d'un mot. */
+.rb-d-tuile-titre { font-size: 20px; }
+@container (max-width: 340px) { .rb-d-tuile-titre { font-size: 17px; } }
+@container (max-width: 290px) { .rb-d-tuile-titre { font-size: 15px; } }
 
 /* ── Les appareils dessines : leur mouvement est DANS le dessin (26/09) ───────
  *

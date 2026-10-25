@@ -51,5 +51,8 @@ pas moins absurde pour un minuteur de maison.
 - **Redémarrer Home Assistant** après la mise à jour : les commandes WebSocket
   s'enregistrent au démarrage. Avant, la rangée « Minuteur » n'apparaît pas.
 - La démo simule le composant : même décompte, même cumul.
+- **La pose se note au journal** depuis le chantier Prises (ADR 0194) : le
+  module `minuteurs`, `poser`, les minutes de CET appui ; le Journal du jour
+  d'une prise la dit « Minuteur · 30 min ».
 
 Tests : tests/python/test_minuteurs.py (13), tests/minuteur.test.mjs (4).

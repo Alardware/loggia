@@ -48,10 +48,11 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.core import Context, HomeAssistant, callback
 
 from .discovery import async_index
+from .lumieres_maison import a_epargner, async_interrupteurs_declares, lumieres_de_la_maison, par_service
 from .refus import RefusNomme
 from .regles import demarrer
 from .nuit import CLE as CLE_NUIT, fait_nuit
-from .ouvrants import est_fenetre_de_toit, est_volet
+from .ouvrants import est_fenetre_de_toit, est_volet, ouvre_et_ferme
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
@@ -418,6 +419,30 @@ def piece_de(scenario: dict[str, Any], maison: dict[str, Any]) -> str | None:
     return None
 
 
+# Le seuil de l'ecran (V12, voletecran.js `SEUIL_FERME`) : deux pour cent aux
+# deux bouts. Sa chambre bute a 1 % et elle est fermee.
+SEUIL_FERME = 2
+
+
+def volet_deja_au_bout(geste: str, etat: str, attrs: dict[str, Any] | None) -> bool:
+    """Le volet est-il deja la ou le geste l'enverrait ? (audit du 19/10)
+
+    L'etat seul ne suffit pas : `open` vaut pour tout volet qui n'est pas en
+    bas — 30 % apres la protection solaire, 1 % pour sa chambre —, et le
+    Reveil ne les ouvrait pas. La position tranche quand elle est publiee ;
+    `closed` fait foi, comme a l'ecran (`coverFerme`) : chez Netatmo l'etat
+    bascule d'abord, la position suit une a trois minutes apres."""
+    p = (attrs or {}).get("current_position")
+    pos = p if isinstance(p, (int, float)) and not isinstance(p, bool) else None
+    if geste == "fermer":
+        return etat == "closed" or (pos is not None and pos <= SEUIL_FERME)
+    if geste == "ouvrir":
+        if etat == "closed":
+            return False
+        return pos >= 100 - SEUIL_FERME if pos is not None else etat == "open"
+    return False
+
+
 def cibles(action: dict[str, Any], maison: dict[str, Any], piece: str | None,
            veilleuses=(), alarme: str | None = None, nuit: bool = False) -> list[str]:
     """Les entites qu'une action toucherait MAINTENANT — celles qui ont
@@ -432,12 +457,28 @@ def cibles(action: dict[str, Any], maison: dict[str, Any], piece: str | None,
     portee = action.get("portee") or "maison"
     ou = action.get("piece") or piece
     domaine = DOMAINES[famille] + "."
-    epargnees = set(veilleuses or ()) if action.get("sauf_veilleuses") else set()
+    entites = maison.get("entites") or {}
+    # Les lumieres : la definition commune a toutes les regles (lumieres_maison,
+    # audit du 19/10), quand le contexte l'a calculee (`maison["lumieres"]` :
+    # l'interrupteur declare compris, un groupe efface devant ses membres) ;
+    # sinon les `light.*` de l'inventaire. Les veilleuses sont epargnees
+    # PARTOUT (sa decision, retouches du 19/10, R6) : une EXTINCTION epargne
+    # toujours la veilleuse de la regle Nuit - et le groupe qui en contient
+    # une, son `turn_off` l'eteindrait -, que l'option « sauf les veilleuses »
+    # soit cochee ou non ; un allumage n'est pas concerne.
+    candidats = maison.get("lumieres") if famille == "lumieres" else None
+    if candidats is None:
+        candidats = [h for h in sorted(entites) if h.startswith(domaine)]
+    epargnees: set = set()
+    if famille == "lumieres" and geste == "eteindre":
+        attributs = {h: (e.get("attrs") or {}) for h, e in entites.items()
+                     if h.startswith("light.") and isinstance(e, dict)}
+        epargnees = a_epargner(attributs, veilleuses or ())
     out = []
-    for haid in sorted(maison.get("entites") or {}):
-        if not haid.startswith(domaine) or haid in epargnees:
+    for haid in sorted(candidats):
+        if haid in epargnees or haid not in entites:
             continue
-        e = maison["entites"][haid]
+        e = entites[haid]
         if not dans_la_portee(e, portee, ou):
             continue
         etat = str(e.get("etat") or "").lower()
@@ -451,7 +492,10 @@ def cibles(action: dict[str, Any], maison: dict[str, Any], piece: str | None,
             velux = geste == "fermer" and bool(maison.get("velux")) and est_fenetre_de_toit(classe)
             if not (est_volet(classe) or velux):
                 continue
-            if (geste == "fermer" and etat == "closed") or (geste == "ouvrir" and etat == "open"):
+            # « Tilt seul » : il ferait refuser l'appel groupe entier (19/10).
+            if not ouvre_et_ferme((e.get("attrs") or {}).get("supported_features")):
+                continue
+            if volet_deja_au_bout(geste, etat, e.get("attrs")):
                 continue
         elif famille == "medias":
             tv = e.get("classe") == "tv"
@@ -478,9 +522,12 @@ def ordres(action: dict[str, Any], haids: list[str],
     famille, geste = action["famille"], action["geste"]
     domaine = DOMAINES[famille]
     if famille == "lumieres":
-        if geste == "eteindre":
-            return [(domaine, "turn_off", haids, {})]
-        return [(domaine, "turn_on", haids, {"brightness_pct": int(action.get("valeur") or 100)})]
+        # Chacun par son service (lumieres_maison) : une lampe par `light`,
+        # avec son niveau ; un interrupteur declare lumiere par `homeassistant`,
+        # tel quel - il n'a pas de niveau.
+        allumer = geste != "eteindre"
+        niveau = {"brightness_pct": int(action.get("valeur") or 100)} if allumer else {}
+        return [(d, s, lot, dict(niveau) if d == "light" else {}) for d, s, lot in par_service(haids, allumer)]
     if famille == "volets":
         return [(domaine, "open_cover" if geste == "ouvrir" else "close_cover", haids, {})]
     if famille == "medias":
@@ -726,8 +773,31 @@ class LoggiaScenarios:
     async def _contexte(self) -> dict[str, Any]:
         maison = self.inventaire()
         maison["velux"] = await self._velux()
+        maison["lumieres"] = self._lumieres(maison, await async_interrupteurs_declares(self.store))
         return {"maison": maison, "veilleuses": await self._veilleuses(),
                 "alarme": await self._alarme(maison), "nuit": self._nuit()}
+
+    def _lumieres(self, maison: dict[str, Any], declares: set[str]) -> list[str]:
+        """Les lumieres de la maison, par la definition commune a toutes les
+        regles (lumieres_maison, audit du 19/10) : les `light.*` de
+        l'inventaire - deja sans configuration ni cache -, plus les
+        interrupteurs declares lumieres, qui ENTRENT dans l'inventaire pour
+        que `cibles` lise leur etat et leur piece ; un groupe s'efface devant
+        ses membres."""
+        registre, _ = self._lire_registres()
+        entites = maison["entites"]
+        for haid in sorted(declares):
+            r = registre.get(haid) or {}
+            st = self.hass.states.get(haid)
+            if haid in entites or st is None or r.get("categorie") or r.get("cache"):
+                continue
+            attrs = dict(getattr(st, "attributes", None) or {})
+            entites[haid] = {"piece": r.get("piece"), "classe": r.get("classe") or attrs.get("device_class"),
+                             "etat": str(getattr(st, "state", "") or ""), "attrs": attrs,
+                             "nom": str(attrs.get("friendly_name") or haid)}
+        attributs = {h: (e.get("attrs") or {}) for h, e in entites.items()
+                     if h.startswith("light.") or h in declares}
+        return lumieres_de_la_maison(attributs, registre, declares)
 
     def _resume(self, s: dict[str, Any], ctx: dict[str, Any]) -> tuple[str | None, list[dict[str, Any]]]:
         piece = piece_de(s, ctx["maison"])

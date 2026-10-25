@@ -7,13 +7,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 import {
   ACTIFS_DETECTION, GENRES_DETECTION, ICONES_DETECTION, FENETRE_EVENEMENT,
   libelleDetection, detecteursDe, instantDe, reduireDerniers, evenementCamera, depuis,
 } from '../src/evenement.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
 const histo = readFileSync(join(RACINE, 'src', 'historique.jsx'), 'utf8');
 const demo = readFileSync(join(RACINE, 'src', 'demo.js'), 'utf8');
 const en = readFileSync(join(RACINE, 'src', 'langues', 'en.js'), 'utf8');

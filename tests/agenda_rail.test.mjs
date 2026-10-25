@@ -12,6 +12,9 @@ import {
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+/* La carte du rail (agendarail.jsx) et sa feuille, chargée à la demande depuis le chantier Prises
+ * (feuilleagenda.jsx) : ce que ce fichier épingle se lit dans les deux. */
+const railEtFeuille = () => readFileSync(join(RACINE, 'src', 'agendarail.jsx'), 'utf8') + readFileSync(join(RACINE, 'src', 'feuilleagenda.jsx'), 'utf8');
 const en = readFileSync(join(RACINE, 'src', 'langues', 'en.js'), 'utf8');
 const NL = String.fromCharCode(10);
 const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = src.indexOf(fin, d + 1); return src.slice(d, f < 0 ? undefined : f); };
@@ -91,7 +94,9 @@ test('le rail : UNE carte Agenda a la place de deux (02/10)', () => {
    *
    * Le widget calendrier n'est pas supprime pour autant : il quitte les
    * presents par defaut, reste ajoutable, et garde son mois et ses villes. */
-  assert.ok(src.includes("import { CarteAgenda, FeuilleAgenda } from './agendarail.jsx';"),
+  // ASSERTION MODIFIÉE (chantier Prises, tâche 2) : la feuille se charge à la demande, de son propre fichier.
+  assert.ok(src.includes("import { CarteAgenda } from './agendarail.jsx';")
+    && src.includes("const FeuilleAgenda = lazyRecharge(() => import('./feuilleagenda.jsx').then(m => ({ default: m.FeuilleAgenda })));"),
     'la carte et la feuille viennent de leur propre fichier');
   assert.ok(src.includes("const ACC_RAIL = ['attention', 'heure', 'meteo', 'co2', 'moment', 'rappels', 'agenda'];"),
     'le calendrier reste une section connue du rail, donc ajoutable');
@@ -126,7 +131,7 @@ test('le rail : UNE carte Agenda a la place de deux (02/10)', () => {
 });
 
 test('la carte Agenda : la bande porte ses points, la feuille a ses deux vues (02/10)', () => {
-  const c = readFileSync(join(RACINE, 'src', 'agendarail.jsx'), 'utf8');
+  const c = railEtFeuille();
 
   // La bande : le jour CHOISI se remplit d'accent, AUJOURD'HUI se liseré.
   assert.ok(c.includes("background: sel ? 'var(--o-accent-fond)' : 'var(--o-s2)'"),
@@ -163,14 +168,18 @@ test('la carte Agenda : la bande porte ses points, la feuille a ses deux vues (0
   /* Le mois ne se limite PLUS aux sept jours du rail : il demande sa propre
    * plage, sinon ses cases sortaient vides — « ici il n'y a pas le texte ». */
   assert.ok(c.includes('const plageMois = useMemo(() => {'), 'la vue mois calcule sa plage');
-  assert.ok(c.includes("if (vue !== 'mois') { onPlage(null); return undefined; }"),
+  /* ASSERTION MODIFIÉE (18/10) : elle épinglait « Mois seul », et c'était le
+   * défaut — Semaine et Jour lisaient alors les sept jours du rail et
+   * sortaient vides (tests/agenda_semaine_vue.test.mjs). Ce qui reste vrai :
+   * la feuille rend sa plage en se refermant. */
+  assert.ok(c.includes('return () => onPlage(null);'),
     'et la rend en repartant : la carte du rail n’a pas besoin du mois');
 });
 
 /* Quatre defauts trouves en relisant la feuille a l'ecran le 02/10 — aucun
  * n'etait visible dans les sources, tous l'etaient dans le navigateur. */
 test('ce que la relecture a l’ecran a corrige', () => {
-  const c = readFileSync(join(RACINE, 'src', 'agendarail.jsx'), 'utf8');
+  const c = railEtFeuille();
 
   /* 1. Un evenement sur la journee entiere empruntait tr('Journee'), la cle du
    * reglage de veille jour/nuit : elle se traduit « Daytime », « Tagsuber »,
@@ -235,7 +244,7 @@ test('les flèches : un jour, une semaine, un MOIS — et la clé se relit', () 
   assert.deepEqual(moisPlus(new Date(2026, 11, 15), 1), new Date(2027, 0, 15), 'décembre mène à janvier de l’année suivante');
   assert.deepEqual(moisPlus(new Date(2026, 0, 15), -1), new Date(2025, 11, 15));
 
-  const c = readFileSync(join(RACINE, 'src', 'agendarail.jsx'), 'utf8');
+  const c = railEtFeuille();
   assert.ok(c.includes('const jourSel = useMemo(() => jourDeCle(choisi) || base, [base, choisi]);'),
     'la feuille relit la clé au lieu de la chercher dans sept jours');
   assert.ok(c.includes("vue === 'mois' ? moisPlus(jourSel, sens) : ajoute(jourSel, sens * (vue === 'jour' ? 1 : 7))"),
@@ -260,7 +269,7 @@ test('« Mes agendas » liste les agendas de la MAISON, pas ceux qui ont un rend
    * Un agenda vide sur la periode n'existait donc pas, et un agenda toujours
    * vide n'existait jamais : impossible de savoir qu'il est la, impossible de
    * le cocher ou de le decocher. La liste part desormais des entites. */
-  const rail = readFileSync(join(RACINE, 'src', 'agendarail.jsx'), 'utf8');
+  const rail = railEtFeuille();
   assert.ok(rail.includes('function calendriersDeLaMaison(hass)'), 'la liste ne part plus des entites de la maison');
   assert.ok(rail.includes("return Object.keys(S).filter(id => id.indexOf('calendar.') === 0);"),
     'les agendas ne se cherchent plus parmi les `calendar.*`');
@@ -295,7 +304,7 @@ test('la feuille d’agenda : jours fixes, rien de rogné, le fond ne suit plus 
    *   « L'affichage ne me plait pas trop » (captures de Google Agenda) —
    *     grosses tuiles de jour, colonnes espacees en sept cartes, evenements
    *     en fond translucide. */
-  const rail = readFileSync(join(RACINE, 'src', 'agendarail.jsx'), 'utf8');
+  const rail = railEtFeuille();
 
   /* Les jours restent en haut, sur un fond OPAQUE — sinon les heures passent
    * au travers quand la grille défile dessous.
@@ -370,7 +379,7 @@ test('un poste de nuit s’étend sur les deux jours, et son titre ne se coupe p
   assert.equal(matin.debut, 0, 'le matin ne part plus de minuit');
   assert.ok(Math.abs(matin.fin - 5.65) < 0.01, 'le matin ne s’arrete plus a l’heure de fin');
 
-  const rail = readFileSync(join(RACINE, 'src', 'agendarail.jsx'), 'utf8');
+  const rail = railEtFeuille();
   // La grille couvre les 24 heures, et s'ouvre sur une heure utile.
   assert.ok(/const H0 = 0;/.test(rail) && /const H1 = 24;/.test(rail), 'la grille se rogne de nouveau sur la journee de bureau');
   assert.ok(rail.includes('const HEURE_OUVERTURE = 7;'), 'la grille s’ouvrira sur minuit');

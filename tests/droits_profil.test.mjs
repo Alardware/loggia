@@ -91,9 +91,19 @@ test('les sections des trois droits passent par le même motif', () => {
   assert.ok(debut > 0, '« Observer sans agir » a disparu');
   const corps = par.slice(debut, par.indexOf('\n  };', debut));
   assert.ok(!corps.includes('.catch(() => null)'), '« Observer sans agir » avale de nouveau ses refus');
-  assert.ok(corps.includes('setObsRefus(await bilanEcritures(['), 'le bilan des quatre écritures n’est plus gardé');
+  assert.ok(corps.includes('setObsRefus(await bilanEcritures(ecrituresObservation(h, lus, cible)));'), 'le bilan des écritures n’est plus gardé');
+  /* Les écritures vivent dans `ecrituresObservation` depuis que le planning de
+   * chauffe a rejoint l'interrupteur (plan 2 du chantier Chauffage) : elles
+   * n'y avalent rien non plus. */
+  const e = par.indexOf('export function ecrituresObservation(');
+  assert.ok(e > 0, 'les écritures d’« Observer sans agir » ont disparu');
+  assert.ok(!par.slice(e, par.indexOf('\n}', e)).includes('.catch('), 'les écritures d’« Observer sans agir » avalent de nouveau leurs refus');
   assert.ok(par.includes('{obsRefus && (') && par.includes('<span>{obsRefus}</span>'), 'le refus ne s’affiche plus sous la barre des règles');
-  for (const [v, cle] of [['volets', 'loggia_volets'], ['fenetres', 'loggia_fenetres'], ['presence', 'loggia_presence'],
+  /* ASSERTION MODIFIÉE (19/10, V10) : Règles › Volets dit son refus SOUS la rangée touchée,
+   * et il y reste jusqu'au geste suivant — `err` s'effaçait au relevé suivant (5 s). */
+  assert.ok(lire('src', 'views', 'volets.jsx').includes("setRefus({ ou, texte: raisonEchec(e, 'loggia_volets') });"),
+    'volets.jsx : un refus s’affiche de nouveau en « Unauthorized », ou passe pour une panne');
+  for (const [v, cle] of [['fenetres', 'loggia_fenetres'], ['presence', 'loggia_presence'],
     ['nuit', 'loggia_nuit'], ['veilles', 'loggia_veilles'], ['interrupteurs', 'loggia_interrupteurs']]) {
     assert.ok(lire('src', 'views', v + '.jsx').includes(`setErr(raisonEchec(e, '${cle}'));`),
       `${v}.jsx : un refus s’affiche de nouveau en « Unauthorized », ou passe pour une panne`);

@@ -127,7 +127,8 @@ test('les suggestions sous un champ : le panneau des menus, à leur taille', () 
   assert.ok(c.includes('onMouseDown={(e) => e.preventDefault()}'), 'un appui dans la liste ferait perdre le champ');
   assert.ok(c.includes('const montre = visibles.length > 0 && !(visibles.length === 1 && visibles[0].id === texte);'), 'un panneau vide s’ouvrirait');
   // Les trois endroits qui portaient une <datalist>.
-  assert.ok(APP.includes('<ChampSuggere id={id} label={lbl} value={v} onChange={set}'), 'la fiche d’une pièce');
+  // ASSERTION MODIFIÉE (audit du 19/10) : la fiche d'une pièce est chargée à la demande — elle vit dans fichepiece.jsx.
+  assert.ok(readFileSync(new URL('../src/fichepiece.jsx', import.meta.url), 'utf8').includes('<ChampSuggere id={id} label={lbl} value={v} onChange={set}'), 'la fiche d’une pièce');
   for (const s of ["suggestions={c.domain && sugg ? sugg(c.domain) : []}", "suggestions={sugg('sensor')}", "suggestions={sugg('alarm_control_panel')}", "suggestions={sugg('weather')}"]) {
     assert.ok(PAR.includes(s), 'les entités d’une vue : ' + s);
   }
@@ -153,19 +154,25 @@ test('seules les feuilles à onglets gardent une hauteur fixe', () => {
     CarteAjoutSheet: '<BottomSheet onClose={onClose} onglets>',
     // La fiche du distributeur, à onglets comme le robot (ADR 0155, 05/10).
     FicheDistributeur: '<BottomSheet onClose={onClose} onglets>',
+    // La fiche du chauffage : Accueil, Planning, Historique (plan 2 du
+    // chantier Chauffage, 11/10 ; Réglages est parti à la tâche 10 bis C).
+    FicheChauffage: '<BottomSheet onClose={onClose} onglets>',
+    // La fiche d'un volet : Accueil, Planning, Historique (plan 2 du chantier Volets, tâche 10).
+    FicheVolet: '<BottomSheet onClose={onClose} onglets>',
   };
   for (const [nom, feuille] of Object.entries(avecOnglets)) {
     const i = APP.indexOf('\nfunction ' + nom + '(');
     const j = APP.indexOf('\nfunction ', i + 1);
     assert.ok(i >= 0 && APP.slice(i, j < 0 ? undefined : j).includes(feuille), nom + ' : changer d’onglet changerait la hauteur de la feuille');
   }
-  assert.equal((APP.match(/<BottomSheet[^>]* onglets/g) || []).length, 3, 'une feuille sans onglets a pris une hauteur fixe');
+  assert.equal((APP.match(/<BottomSheet[^>]* onglets/g) || []).length, 5, 'une feuille sans onglets a pris une hauteur fixe');
   // La lampe blancs + couleurs : ses deux palettes partagent la même case — la
   // fiche prend la hauteur de la plus grande, sans les 760 px (19/09 : « pourquoi
   // cette différence entre ces deux lumières »).
-  const i = APP.indexOf('\nfunction RoomLightSheet(');
-  const lampe = APP.slice(i, APP.indexOf('\nfunction ', i + 1));
-  assert.ok(lampe.includes('<BottomSheet onClose={onClose}>'), 'la lampe a retrouvé une hauteur fixe');
+  // ASSERTION MODIFIÉE (chantier Lumières, tâche 8) : la feuille d'une lumière est la coquille d'App.jsx ; sa fiche, chargée à la demande, garde ses deux palettes dans la même case.
+  const lampe = lire('src', 'fichelumiere.jsx');
+  const coquille = APP.slice(APP.indexOf('\nfunction FicheLumiere('), APP.indexOf('\n}\n', APP.indexOf('\nfunction FicheLumiere(')));
+  assert.ok(coquille.includes('<BottomSheet onClose={onClose}>'), 'la lampe a retrouvé une hauteur fixe');
   assert.equal((lampe.match(/gridArea: '1 \/ 1'/g) || []).length, 2, 'les deux palettes ne partagent plus leur case');
   assert.ok(lampe.includes("visibility: blancs ? 'visible' : 'hidden'") && lampe.includes("visibility: blancs ? 'hidden' : 'visible'"));
   const CSS = lire('src', 'index.css');

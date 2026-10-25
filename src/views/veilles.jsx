@@ -183,7 +183,7 @@ export function VeillesReglages({ hass, cardSt }) {
             </div>
             {commandables.length > 0 && (
               <div style={{ marginTop: 14 }}>
-                <div style={{ ...label, marginBottom: 8 }}>{tr('Et lancer, si tu veux')}</div>
+                <div style={{ ...label, marginBottom: 8 }}>{tr('Et lancer, si vous le souhaitez')}</div>
                 <Choix enregistrer={enregistrer} liste={commandables} retenues={co2.ventilation} champNom="ventilation" section="co2" />
               </div>
             )}
@@ -222,7 +222,7 @@ export function VeillesReglages({ hass, cardSt }) {
         * qu'eux. Vérifiés une fois par heure, comme les piles. */}
       <div style={cardSt}>
         <RegleEntete nom={tr('Consommables')}
-          desc={tr('Le filtre d’un aspirateur, la brosse d’un robot, le réservoir d’un distributeur : rien ne les nomme dans Home Assistant. Désigne leurs capteurs, la veille prévient quand il faut remplacer.')}
+          desc={tr('Le filtre d’un aspirateur, la brosse d’un robot, le réservoir d’un distributeur : rien ne les nomme dans Home Assistant. Désignez leurs capteurs, la veille prévient quand il faut remplacer.')}
           on={conso.actif} cb={() => enregistrer({ consommables: { actif: !conso.actif } })} plie={pliConso} onPlier={plierConso} zone="veilles-conso" />
         {conso.actif && !pliConso && (
           <div id="veilles-conso" style={ZONE_REGLAGES}>
@@ -280,7 +280,7 @@ export function VeillesReglages({ hass, cardSt }) {
             </div>
             {commandables.length > 0 && (
               <div style={{ marginTop: 14 }}>
-                <div style={{ ...label, marginBottom: 4 }}>{tr('Et allumer, si tu veux')}</div>
+                <div style={{ ...label, marginBottom: 4 }}>{tr('Et allumer, si vous le souhaitez')}</div>
                 <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 8 }}>
                   {tr('Une prise n’est pas une machine chargée : la notification reste le plus sûr.')}
                 </div>

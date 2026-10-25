@@ -969,3 +969,34 @@ def pour_compte(maison: list[tuple[dict, str | None]], user: Any) -> list[dict]:
         e["indice"] = element["indice"]
         sortie.append(e)
     return sortie
+
+
+def automatisations_qui_commandent(hass: Any, entite: str, registre: Any = None) -> list[str]:
+    """Les automatisations ALLUMEES dont une ACTION commande `entite` (chantier
+    Chauffage, D5 ; audit du 19/10) : un programme concurrent du planning. Les
+    candidates viennent de Home Assistant (`automations_with_entity` : elle la
+    nomme quelque part) ; une action doit la VISER (`vise`) — une notification
+    qui la nomme ne compte pas. Sans `raw_config` lisible, ce que HA a releve
+    dans ses seules actions tranche."""
+    try:
+        from homeassistant.components.automation import automations_with_entity
+    except ImportError:
+        return []
+    comp = _composant(hass, "automation")
+    if registre is None:
+        registre = _registre_ha(hass)
+    sortie: list[str] = []
+    for aid in sorted(set(_appelle(automations_with_entity, hass, entite))):
+        if str(getattr(_etat(hass, aid), "state", "")).lower() != "on":
+            continue
+        ent = _entite(comp, aid)
+        raw = getattr(ent, "raw_config", None) if ent is not None else None
+        acts = actions(raw) if isinstance(raw, dict) else []
+        if acts:
+            if any(vise(a, [entite], [], registre) for a in acts):
+                sortie.append(aid)
+            continue
+        refs = _refs_actions(ent) if ent is not None else None
+        if refs is not None and entite in refs[0]:
+            sortie.append(aid)
+    return sortie

@@ -16,6 +16,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 // La langue avant l'import : `tr` lit celle du navigateur au premier appel.
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
@@ -26,7 +27,9 @@ const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const PAR = lire('src', 'views', 'parametres.jsx');
 const INTER = lire('src', 'views', 'interrupteurs.jsx');
 const COMMUN = lire('src', 'views', 'parcommun.jsx');
-const APP = lire('src', 'App.jsx');
+const APP = (lire('src', 'App.jsx') + VUES_SORTIES);
+// Les ambiances Hue, chargées à la demande depuis le 11/10 (tâche 6 bis du chantier Chauffage).
+const SCENES = lire('src', 'scenes.jsx');
 const DEMO = lire('src', 'demo.js');
 const ALERTES_PY = lire('custom_components', 'loggia', 'alertes.py');
 
@@ -119,11 +122,18 @@ test('les familles de capteurs se comptent avec les classes du composant', () =>
 
 test('couper le téléphone ne coupe pas la maison, et le bandeau le dit', () => {
   // `_reagir` ne lit que les actions : l'interrupteur des alertes téléphone
-  // n'y est pour rien. La maquette disait « rien ne partira » — vrai pour le
-  // téléphone, faux pour la maison.
+  // n'y est pour rien. La maquette disait « rien ne partira » — faux pour la
+  // maison, et faux aussi pour le téléphone (plus bas, 15/10).
   const reagir = entre(ALERTES_PY, 'async def _reagir(', 'async def _danger_passe(');
   assert.ok(reagir.includes('if not actions.get("actif"):') && !reagir.includes('cfg.get("actif")'), 'la maison dépend maintenant du téléphone : le bandeau deviendrait faux');
   assert.ok(ALERTES.includes("{cfg.actions.actif ? ' ' + tr('La maison réagit quand même aux dangers.') : ''}"));
+  /* ASSERTION AJOUTÉE (15/10) : le bandeau dit aussi que le téléphone choisi reçoit encore les autres alertes de Loggia — la fin du cycle d'un lave-vaisselle, par
+   * exemple. Elles passent par `regles.prevenir`, qui ne lit que le téléphone et les heures calmes, jamais `actif` ; seul `alertes.py` s'arrête sûreté coupée.
+   * Que `prevenir` lise `actif`, et le bandeau mentirait de nouveau. */
+  const prevenir = entre(lire('custom_components', 'loggia', 'regles.py'), 'async def prevenir(', 'async def agir(');
+  assert.ok(prevenir.includes('cfg.get("service")') && !prevenir.includes('cfg.get("actif")'), '`prevenir` dépend maintenant de `actif` : le bandeau deviendrait faux');
+  assert.ok(ALERTES_PY.includes('not cfg.get("actif")'), 'les alertes de sûreté, elles, s’arrêtent bien sûreté coupée');
+  assert.ok(ALERTES.includes('Le téléphone choisi reçoit quand même les autres alertes de Loggia') && !ALERTES.includes('aucune notification ne partira'), 'le bandeau ne promet plus un silence total');
   // Les réglages coupés restent lisibles et modifiables.
   assert.ok(ALERTES.includes('opacity: cfg.actif ? 1 : .5'));
 });
@@ -245,14 +255,16 @@ test('les puces de navigation choisies sont en bleu plein, texte blanc', () => {
   const sites = [
     [APP, "border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>", 'filtres d’Objets'],
     [APP, "background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)' }}>", 'pièces'],
-    [APP, "const miniBtn = (on) => ({ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: on ? 'var(--o-accent-fond)'", 'pièces Hue'],
+    [SCENES, "const miniBtn = (on) => ({ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: on ? 'var(--o-accent-fond)'", 'pièces Hue'],
     [APP, "background: actif ? 'var(--o-accent-fond)' : 'transparent', color: actif ? '#fff' : 'var(--o-text2)' });", 'modes des volets'],
     // Les onglets Puissance / Consommation ont disparu avec la refonte du
     // 06/10 ; l'Energie garde ses puces, soumises a la meme regle.
     [APP, "background: faceApercu === id ? 'var(--o-accent-fond)' : 'transparent', color: faceApercu === id ? '#fff' : 'var(--o-text2)' }}>", 'Synthèse / Maison'],
     [lire('src', 'views', 'energiehisto.jsx'), "background: actif ? 'var(--o-accent-fond)' : 'transparent', color: actif ? '#fff' : 'var(--o-text2)',", 'périodes de l’historique'],
     [APP, "background: onglet === id ? 'var(--o-accent-fond)' : 'transparent', color: onglet === id ? '#fff' : 'var(--o-text2)' }}>{lbl}</button>", 'onglets de la bibliothèque'],
-    [lire('src', 'ficherobot.jsx'), "style={{ background: actuel === id ? 'var(--o-accent-fond)' : 'transparent', color: actuel === id ? '#fff' : 'var(--o-text2)' }}>", 'onglets d’un robot'],
+    /* ASSERTION MODIFIÉE (chantier IoT, tâche 8, 18/10 ; I15) : les onglets d'un robot sont ceux du socle commun (`FicheOnglets`,
+     * fichecommune.jsx) — les autres en --o-text1 depuis le 05/10 (4,24:1 en --o-text2, en clair). */
+    [lire('src', 'fichecommune.jsx'), "style={{ background: actuel === id ? 'var(--o-accent-fond)' : 'transparent', color: actuel === id ? '#fff' : 'var(--o-text1)' }}>", 'onglets d’un robot'],
     [lire('src', 'views', 'systeme.jsx'), "background: x.cle === s.cle ? 'var(--o-accent-fond)' : 'transparent', color: x.cle === s.cle ? '#fff' : 'var(--o-text2)' }}>{x.nom}</button>", 'séries du Système'],
   ];
   // Puis « mets aussi les zones et modes en bleu » : plus d'exception.
@@ -263,8 +275,12 @@ test('les puces de navigation choisies sont en bleu plein, texte blanc', () => {
     // Le sélecteur des fiches passe par la liste commune depuis la 3.55.0.
     [lire('src', 'ui.jsx'), "background: on ? 'var(--o-accent-fond)' : survol ? 'var(--o-s2)' : 'transparent', color: on ? '#fff' : 'var(--o-text1)',", 'options d’un menu déroulant'],
     [ROBOT, "border: '1px solid ' + (on ? 'transparent' : 'var(--o-bd2)'),", 'zones d’un robot'],
-    [ROBOT, "background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text3)' }}>{nomJour(j, locale(), 'narrow')}</button>", 'jours du planning'],
+    /* ASSERTION MODIFIÉE (chantier IoT, tâche 8, 18/10 ; I16, I15) : « Où » a ses puces (`PuceOu`, le gris doux de sa maquette au
+     * repos), et les jours du planning sont les pastilles du socle commun (`PuceJour`, fichecommune.jsx). */
+    [ROBOT, "background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : inerte ? 'var(--o-text2)' : 'var(--o-text1)' }}>", '« Où » d’un robot'],
+    [lire('src', 'fichecommune.jsx'), "background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text3)' }}>{nomJour(j, locale(), 'narrow')}</button>", 'jours du planning'],
   );
+  assert.ok(ROBOT.includes('<PuceJour key={j} j={j}'), 'le planning d’un robot a quitté les pastilles communes');
   for (const [src, bout, nom] of sites) assert.ok(src.includes(bout), nom + ' : la puce choisie n’est plus en bleu plein');
   assert.ok(!APP.includes('function FichePuces({ options, valeur, onChoix, couleur'), 'les modes d’une fiche ont retrouvé leur couleur');
   // La zone garde son carré de couleur : il la relie à la carte.
@@ -277,10 +293,14 @@ test('la consigne se lit entre les deux boutons des cartes climat', () => {
   // Le mot « Consigne » est un texte masqué devant le chiffre, plus un
   // `aria-label` sur un <span> sans rôle — interdit, et qui cachait « 19 °C »
   // sous « Consigne » (lot 13 de l'audit du 03/10).
-  assert.equal(APP.split("<span className=\"o-vh\">{tr('Consigne') + ' '}</span>{consigne}</span>").length - 1, 2);
+  /* ASSERTION MODIFIÉE (passe téléphone, tâche 4) : la consigne et son étiquette vivent dans la paire de la grille commune (`ValeurEtiquette`) ; chaque carte
+   * lui passe ce que la valeur est (`dit`), qu'elle écrit en texte masqué devant le chiffre. */
+  assert.equal((APP.match(/dit=\{(parMode|estModule) \? tr\('Mode'\) : tr\('Consigne'\)\}/g) || []).length, 2);
+  assert.ok(APP.includes("{dit != null && <span className=\"o-vh\">{dit + ' '}</span>}{valeur}</span>"));
   assert.ok(!APP.includes("<span aria-label={tr('Consigne')}"), 'la consigne cache de nouveau son chiffre sous un aria-label');
   // Sans consigne lisible : « — », jamais un 20 ou un 19 inventé (audit du 03/10).
-  assert.equal((APP.match(/const consigne = target != null \? decMax\(Number\(target\), 1\) \+ ' °' \+ uT : '—';/g) || []).length, 2);
+  // Écrite à une décimale, suivie de « ° » : « 20,0° » (cartes 1a, tâche 10 bis A du chantier Chauffage).
+  assert.equal((APP.match(/const consigne = target != null \? nombre\(Number\(target\), 1\) \+ '°' : '—';/g) || []).length, 2);
   // Le sous-titre dit l'état ; il ne répète plus la valeur.
   assert.ok(!APP.includes("tr('Chauffe') + ' · ' + consigne"), 'la consigne est dite deux fois');
 });
@@ -298,5 +318,5 @@ test('le menu déroulant s’ouvre sous son bouton, et son bouton est en bleu pl
   assert.ok(dd.includes('if (menuRef.current && menuRef.current.contains(e.target)) return;'), 'un appui dans le menu le fermerait avant le choix');
   assert.ok(dd.includes("zIndex: 9000"), 'le menu passerait sous une feuille (z-index 200)');
   assert.ok(dd.includes("border: 'none', background: 'var(--o-accent-fond)', color: '#fff' };"), 'le bouton du menu n’est plus en bleu plein');
-  assert.ok(APP.includes("<ListeChoix value={cat} options={HUE_CATS()} onChange={setCat} label={tr('Collection de scènes')} />"), '« Collection » a quitté la liste commune');
+  assert.ok(SCENES.includes("<ListeChoix value={cat} options={HUE_CATS()} onChange={setCat} label={tr('Collection de scènes')} />"), '« Collection » a quitté la liste commune');
 });

@@ -1,62 +1,22 @@
-/* ── Les robots de la maison : aspirateur et tondeuse (ADR 0042) ─────────────
+/* ── Les robots de la maison : ce que le DÉMARRAGE emploie (ADR 0042 ; chantier IoT, tâche 1) ──
  *
- * Une fiche par robot, en onglets (maquettes du 17/09) : l'accueil du robot,
- * ses zones, son planning, son historique, son entretien, ses réglages. Ce fichier porte tout ce
- * qui se CALCULE ; pas de React, pas de Home Assistant : la vue lui passe des
- * entités déjà lues, les tests aussi.
+ * Les cartes d'un aspirateur et d'une tondeuse, la compacte, « En ce moment » et l'en-tête d'Objets › IoT
+ * lisent ici la phase d'un robot, le service qui le renvoie à sa base, et son prochain passage ; les fiches
+ * des autres appareils (chauffage, volets, distributeur) y prennent les jours, les heures et les durées.
+ * Tout ce que la seule popup d'un robot calcule — ses sœurs, ses pièces, son entretien, ses sessions, ses
+ * réglages, sa fiche technique — vit dans `robotsfiche.js`, chargé avec elle : le démarrage n'avait plus
+ * que 420 octets de marge (§ 12 de la conception, la place d'abord). Pas de React, pas de Home Assistant :
+ * la vue passe des entités déjà lues, les tests aussi.
  *
- * Deux robots ne se ressemblent pas. Un aspirateur annonce des pièces et cinq
- * consommables en pourcentage ; une tondeuse, des zones qui sont des
- * interrupteurs, des lames comptées en heures, une hauteur de coupe. Rien n'est
- * donc écrit en dur : tout se lit dans les entités SŒURS du robot — celles du
- * même appareil —, reconnues à leur clé de traduction (la même dans toutes les
- * langues), à défaut à leur identifiant. Et rien ne s'invente : une mesure que
- * l'appareil ne publie pas ne se dessine pas.
+ * La carte y prend aussi (chantier IoT, tâche 2) ce qu'elle dit et ce qu'elle offre : la PHRASE d'état
+ * (`phraseRobot`, I7, § 6 de la conception) — la première ligne qui s'applique, son encre —, les PUCES de
+ * son pied (`commandesRobot`, I9), que la phase et les bits de l'appareil décident, et le prochain passage
+ * qui partira vraiment (`prochainPassage`, qui saute « Ne pas déranger », I18).
  */
-import { tr, locale, comparerTextes } from './i18n.js';
-import { sansAccents } from './outils.js';
+import { tr, locale } from './i18n.js';
+import { quandLumiere } from './lumieres.js';
 
 export const DOMAINES_ROBOT = ['vacuum', 'lawn_mower'];
-
-const nombre = (v) => { const n = typeof v === 'number' ? v : parseFloat(v); return isNaN(n) ? null : n; };
-const borne = (n, a, b) => Math.min(b, Math.max(a, n));
-
-/* ════════════ Les entités sœurs ════════════ */
-
-/**
- * Les sœurs d'un robot, décrites une fois : domaine, clé de traduction,
- * identifiant court, catégorie, classe, unité, état, nom SANS celui de
- * l'appareil (« Aspirateur Filtre » se lit « Filtre »). `texte` est ce que les
- * motifs regardent : la clé et l'identifiant, sans accents.
- */
-export function decrireSoeurs(index, states, idRobot) {
-  if (!index || !index.entityMeta || !idRobot) return [];
-  const moi = index.entityMeta.get(idRobot);
-  if (!moi || !moi.deviceId) return [];
-  const appareil = sansAccents(moi.device || '');
-  const out = [];
-  index.entityMeta.forEach((m, id) => {
-    if (m.deviceId !== moi.deviceId || id === idRobot || m.hidden || m.disabled) return;
-    const st = (states || {})[id];
-    if (!st) return;
-    const a = st.attributes || {};
-    const objet = id.slice(id.indexOf('.') + 1);
-    let nom = String(a.friendly_name || m.name || objet);
-    if (appareil && sansAccents(nom).indexOf(appareil) === 0 && nom.length > appareil.length + 1) nom = nom.slice(appareil.length).replace(/^[\s·:–-]+/, '');
-    out.push({
-      id, domaine: id.slice(0, id.indexOf('.')), objet, cle: m.translationKey || null, categorie: m.category || null,
-      classe: a.device_class || m.deviceClass || null, unite: a.unit_of_measurement || null,
-      etat: st.state, attributs: a, plateforme: m.platform || null,
-      nom: nom.charAt(0).toUpperCase() + nom.slice(1),
-      texte: sansAccents((m.translationKey || '') + ' ' + objet),
-    });
-  });
-  return out.sort((x, y) => comparerTextes(x.id, y.id));
-}
-
-const vivant = (s) => s && s.etat != null && s.etat !== 'unavailable' && s.etat !== 'unknown' && s.etat !== '';
-
-/* ════════════ L'état et le geste ════════════ */
 
 /** La phase d'un robot, d'après l'état normalisé par Home Assistant. */
 export function phaseRobot(domaine, etat) {
@@ -70,251 +30,114 @@ export function phaseRobot(domaine, etat) {
   return 'repos';
 }
 
-/** Le mot de l'état. « En charge » ne se dit que si un capteur le dit. */
-export function motEtatRobot(domaine, etat, { enCharge: charge = false } = {}) {
-  const p = phaseRobot(domaine, etat);
-  if (p === 'base') return charge ? tr('À la base · en charge') : tr('À la base');
-  if (p === 'travail') return domaine === 'lawn_mower' ? tr('Tonte en cours') : tr('Nettoyage en cours');
-  if (p === 'pause') return tr('En pause');
-  if (p === 'retour') return tr('Retour à la base');
-  if (p === 'erreur') return tr('Erreur');
-  if (p === 'absent') return tr('Injoignable');
-  return tr('Au repos');
-}
-
-/** Un capteur binaire « en charge » parmi les sœurs, et allumé. */
-export function enCharge(soeurs) {
-  return (soeurs || []).some(s => s.domaine === 'binary_sensor' && s.classe === 'battery_charging' && s.etat === 'on');
-}
-
-/** La batterie : l'attribut du robot d'abord, le capteur de l'appareil ensuite. */
-export function batterieRobot(etatRobot, soeurs) {
-  const a = (etatRobot && etatRobot.attributes) || {};
-  const direct = nombre(a.battery_level);
-  if (direct != null) return Math.round(borne(direct, 0, 100));
-  const c = (soeurs || []).find(s => s.domaine === 'sensor' && s.classe === 'battery' && vivant(s) && nombre(s.etat) != null);
-  return c ? Math.round(borne(nombre(c.etat), 0, 100)) : null;
-}
-
-/**
- * Le bouton principal : pause quand le robot travaille, reprise quand il est
- * en pause, départ sinon — avec le compte des zones choisies, s'il y en a.
- */
-export function actionPrincipale(domaine, etat, nZones = 0) {
-  const p = phaseRobot(domaine, etat);
-  const depart = domaine === 'lawn_mower' ? 'start_mowing' : 'start';
-  if (p === 'travail') return { cle: 'pause', service: 'pause', libelle: tr('Mettre en pause') };
-  if (p === 'pause') return { cle: 'reprendre', service: depart, libelle: tr('Reprendre') };
-  if (p === 'absent') return { cle: 'absent', service: null, libelle: tr('Injoignable') };
-  const libelle = nZones > 1 ? tr('Démarrer · {n} zones', { n: nZones }) : nZones === 1 ? tr('Démarrer · 1 zone') : tr('Démarrer');
-  return { cle: 'demarrer', service: depart, libelle };
+/** La batterie d'un robot (passe bis du 18/10, point 8) : l'attribut `battery_level`, sinon l'état de sa sœur `battery` — bornée de 0 à
+ *  100 et arrondie ; une valeur vide ou qui n'est pas un nombre est INCONNUE (null) : jamais un faux « 0 % ». */
+export function batterieRobot(attributs, etatSoeur = null) {
+  const lire = (v) => {
+    if (v == null || (typeof v === 'string' && !v.trim())) return null;
+    const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  };
+  const n = lire(attributs && attributs.battery_level) ?? lire(etatSoeur);
+  return n == null ? null : Math.round(Math.min(100, Math.max(0, n)));
 }
 
 /** Le service du retour à la base. */
 export const serviceRetour = (domaine) => (domaine === 'lawn_mower' ? 'dock' : 'return_to_base');
 
-/**
- * La commande qui nettoie des PIÈCES, telle que l'intégration du robot
- * l'attend. Il n'existe pas de service commun : chaque intégration a le sien.
- * Inconnue, ou service absent de l'installation : `null` — la vue ne propose
- * alors pas de départ par pièces plutôt que d'envoyer une commande au hasard.
- */
-export function commandeZones({ plateforme = null, services = null, idRobot = null, segments = [] } = {}) {
-  const segs = (segments || []).map(Number).filter(n => !isNaN(n));
-  if (!idRobot || !segs.length) return null;
-  // Sans liste de services (composant absent), on ne peut pas vérifier : on fait confiance à la plateforme.
-  const existe = (domaine, service) => !services || !services[domaine] || !!services[domaine][service];
-  if (plateforme === 'ecovacs') return { domaine: 'vacuum', service: 'send_command', data: { entity_id: idRobot, command: 'spot_area', params: { rooms: segs.join(','), cleanings: 1 } } };
-  if (plateforme === 'roborock') return { domaine: 'vacuum', service: 'send_command', data: { entity_id: idRobot, command: 'app_segment_clean', params: segs } };
-  if (plateforme === 'dreame_vacuum' && existe('dreame_vacuum', 'vacuum_clean_segment')) return { domaine: 'dreame_vacuum', service: 'vacuum_clean_segment', data: { entity_id: idRobot, segments: segs } };
-  if (plateforme === 'xiaomi_miio' && existe('xiaomi_miio', 'vacuum_clean_segment')) return { domaine: 'xiaomi_miio', service: 'vacuum_clean_segment', data: { entity_id: idRobot, segments: segs } };
-  return null;
-}
+/* Les bits de Home Assistant (`VacuumEntityFeature`, `LawnMowerEntityFeature`) : une puce n'existe que si
+ * l'appareil a le sien (I9). Une tondeuse n'a pas de « Localiser » : Home Assistant n'en a pas pour elle. */
+export const BITS_ROBOT = Object.freeze({
+  vacuum: Object.freeze({ pause: 4, base: 16, localiser: 512, demarrer: 8192 }),
+  lawn_mower: Object.freeze({ demarrer: 1, pause: 2, base: 4, localiser: 0 }),
+});
 
 /**
- * Les zones d'une tondeuse : les interrupteurs de son appareil qui désignent
- * une aire de tonte. Les allumer, c'est les choisir ; « Démarrer » tond alors
- * celles qui sont allumées. Sans interrupteur de zone, pas de zones.
+ * Les interrupteurs d'aire d'une tondeuse (passe bis 2 du 18/10, point D) : ceux de SON appareil, ni masqués ni désactivés, reconnus
+ * à leur clé de traduction (`area`), à défaut à leur identifiant — la règle du serveur (`aires_de`, robots.py). `index` : celui de la
+ * découverte (`entityMeta`). Triés ; vide sans appareil.
  */
-export function zonesTondeuse(soeurs) {
-  return (soeurs || [])
-    .filter(s => s.domaine === 'switch' && vivant(s) && (s.cle === 'area' || /(^|_)(zone|area)_/.test(s.objet)))
-    .map(s => ({ id: s.id, nom: s.nom.replace(/^(zone|area)\s+/i, ''), actif: s.etat === 'on' }));
-}
-
-/* ════════════ L'entretien ════════════ */
-
-/* L'ordre est celui de la lecture ; il sert aussi à l'attribution : « brosse
- * latérale » passe avant « brosse », qui sinon la prendrait. */
-const ROLES_USURE = [
-  ['filtre', () => tr('Filtre'), /filter|filtre/],
-  ['brosse_laterale', () => tr('Brosse latérale'), /side_?brush|brosse_laterale/],
-  ['brosse_principale', () => tr('Brosse principale'), /main_?brush|lifespan_brush|brosse_principale|(^|[_ ])brush([_ ]|$)/],
-  ['serpilliere', () => tr('Serpillière'), /mop|serpilliere/],
-  ['capteurs', () => tr('Capteurs'), /sensor_dirty|sensor_time|sensors?_left|capteurs?_(sales?|restant)/],
-  ['sac', () => tr('Sac à poussière'), /dust_?bag|sac_a_poussiere/],
-  ['entretien', () => tr('Entretien du robot'), /unit_care|entretien/],
-  ['lames', () => tr('Lames'), /blade|(^|[_ ])lames?([_ ]|$)/],
-  ['detergent', () => tr('Détergent'), /detergent/],
-  ['ions', () => tr('Ions d’argent'), /silver_ion/],
-];
-/* L'ordre de LECTURE, lui, est celui des maquettes : la brosse principale avant la latérale. */
-const ORDRE_LECTURE = ['filtre', 'brosse_principale', 'brosse_laterale', 'serpilliere', 'capteurs', 'sac', 'entretien', 'lames', 'detergent', 'ions'];
-/* Ce qui parle d'une lame ou d'une brosse sans dire son usure. */
-const PAS_UNE_USURE = /height|hauteur|angle|speed|vitesse|mode|inch|pouce|spacing|espacement/;
-const EN_HEURES = { h: 1, min: 1 / 60, s: 1 / 3600, d: 24, j: 24 };
-/* Les durées de vie que ces intégrations ne publient pas, mais que leur
- * fabricant documente : sans elles, « 45 h restantes » n'a pas de jauge. */
-const VIE_NOMINALE_H = {
-  roborock: { brosse_principale: 300, brosse_laterale: 200, filtre: 150, capteurs: 30 },
-  xiaomi_miio: { brosse_principale: 300, brosse_laterale: 200, filtre: 150, capteurs: 30 },
-};
-
-const roleDe = (s) => { if (PAS_UNE_USURE.test(s.texte)) return null; const r = ROLES_USURE.find(x => x[2].test(s.texte)); return r ? r[0] : null; };
-
-/** Le niveau d'une pièce d'usure : bas sous 35 %, moyen sous 65 %, bon au-delà. */
-export function niveauUsure(pct) {
-  if (pct == null) return null;
-  return pct < 35 ? 'bas' : pct < 65 ? 'moyen' : 'bon';
-}
-
-const heures = (n) => { const r = n >= 10 ? Math.round(n) : Math.round(n * 10) / 10; return r.toLocaleString(locale(), { maximumFractionDigits: 1 }); };
-
-/**
- * Les pièces d'usure : ce qu'il reste, en pourcentage quand on le sait.
- *   - un capteur en % : c'est la jauge ;
- *   - un temps d'usage ET son seuil d'alerte (les lames d'une tondeuse) : la
- *     jauge est ce qu'il reste avant le seuil ;
- *   - un temps restant dont le fabricant documente la durée de vie : idem ;
- *   - sinon le temps seul, sans jauge — on ne devine pas un total.
- * `reset` est le bouton de l'appareil qui remet le compteur à neuf, s'il existe.
- */
-export function piecesUsure(soeurs) {
-  // Un état qui n'est pas un nombre (« unavailable », « unknown ») s'écarte de lui-même.
-  const capteurs = (soeurs || []).filter(s => s.domaine === 'sensor' && nombre(s.etat) != null && (s.unite === '%' || EN_HEURES[s.unite] != null));
-  // Un bouton vaut « unknown » tant qu'il n'a jamais servi : seul « unavailable » l'écarte.
-  const boutons = (soeurs || []).filter(s => s.domaine === 'button' && s.etat !== 'unavailable' && /reset|reinitialis/.test(s.texte));
+export function airesTondeuse(index, idRobot) {
+  const t = index && index.entityMeta;
+  const moi = t && idRobot ? t.get(idRobot) : null;
+  if (!moi || !moi.deviceId) return [];
   const out = [];
-  ROLES_USURE.forEach(([role, nom]) => {
-    const duRole = capteurs.filter(s => roleDe(s) === role);
-    if (!duRole.length) return;
-    const bouton = boutons.find(b => roleDe(b) === role);
-    const reset = bouton ? bouton.id : null;
-    const enPct = duRole.filter(s => s.unite === '%');
-    if (enPct.length) {
-      enPct.forEach(s => {
-        const pct = Math.round(borne(nombre(s.etat), 0, 100));
-        out.push({ id: s.id, role, nom: enPct.length > 1 ? s.nom : nom(), pct, texte: null, niveau: niveauUsure(pct), reset });
-      });
-      return;
-    }
-    const h = (s) => nombre(s.etat) * EN_HEURES[s.unite];
-    const seuil = duRole.find(s => /warn|avertissement|limit|seuil/.test(s.texte));
-    const use = duRole.find(s => s !== seuil && /used|usage|utilis/.test(s.texte));
-    const restant = duRole.find(s => s !== seuil && /left|remaining|restant/.test(s.texte));
-    if (use && seuil && h(seuil) > 0) {
-      const pct = Math.round(borne(100 * (1 - h(use) / h(seuil)), 0, 100));
-      out.push({ id: use.id, role, nom: nom(), pct, texte: tr('{n} h sur {m} h', { n: heures(h(use)), m: heures(h(seuil)) }), niveau: niveauUsure(pct), reset });
-    } else if (restant) {
-      const vie = (VIE_NOMINALE_H[restant.plateforme] || {})[role] || null;
-      const pct = vie ? Math.round(borne(100 * h(restant) / vie, 0, 100)) : null;
-      out.push({ id: restant.id, role, nom: nom(), pct, texte: tr('{n} h restantes', { n: heures(h(restant)) }), niveau: niveauUsure(pct), reset });
-    } else if (use) {
-      out.push({ id: use.id, role, nom: nom(), pct: null, texte: tr('{n} h d’utilisation', { n: heures(h(use)) }), niveau: null, reset });
-    }
+  t.forEach((m, id) => {
+    if (id.indexOf('switch.') === 0 && m && m.deviceId === moi.deviceId && !m.hidden && !m.disabled
+      && (m.translationKey === 'area' || /(^|_)(zone|area)_/.test(id.slice(7)))) out.push(id);
   });
-  return out.sort((a, b) => ORDRE_LECTURE.indexOf(a.role) - ORDRE_LECTURE.indexOf(b.role));
+  return out.sort();
 }
-
-/** Ce qui presse : la pièce la plus usée, si elle est sous le seuil bas. */
-export function alerteEntretien(pieces) {
-  const bas = (pieces || []).filter(p => p.niveau === 'bas').sort((a, b) => a.pct - b.pct);
-  return bas.length ? bas[0] : null;
-}
-
-/** Les compteurs de l'appareil : totaux, cycles, kilomètres — tels qu'il les nomme. */
-export function compteursRobot(soeurs) {
-  return (soeurs || [])
-    .filter(s => s.domaine === 'sensor' && vivant(s) && nombre(s.etat) != null && /(^|[_ ])total|maintenance|cycles|kilometrage|mileage|odometer|cleaning_count/.test(s.texte) && roleDe(s) == null)
-    .map(s => ({ id: s.id, nom: s.nom, valeur: nombre(s.etat), unite: s.unite || null }));
-}
-
-/* ════════════ L'historique ════════════ */
 
 /**
- * Les sessions d'un robot, tirées de l'historique de SON état : une session
- * commence quand il se met au travail et dure tant qu'il travaille, fait une
- * pause ou rentre. Elle est « terminée » si le robot a regagné sa base,
- * « interrompue » s'il s'est arrêté ailleurs, en « erreur » s'il l'a dit.
- * La durée est celle du TRAVAIL ; une session de moins d'une minute est un
- * faux départ, elle ne compte pas.
- *
- * `surfaces` est l'historique du capteur de surface, s'il existe : la surface
- * d'une session est le maximum atteint pendant qu'elle durait.
+ * Les puces du pied de la carte (I9) : `[{ cle, service, glyphe, mot, choisie }]`, dans l'ordre de la maquette.
+ *  - sur la base : « Démarrer » (le logement entier ; une tondeuse, ses zones allumées) et « Localiser » ;
+ *  - au travail : « Pause » et « Base » ;
+ *  - en pause ou au retour : « Reprendre » et « Base » — choisie pendant le retour ;
+ *  - en erreur : « Base » seule ; arrêté hors de sa base : « Démarrer » et « Base » ;
+ *  - muet : rien.
+ * Des services explicites — `start`, `start_mowing`, `pause`, `return_to_base`, `dock`, `locate` —, jamais `toggle`. `depart` faux :
+ * pas de « Démarrer » — une tondeuse à aires dont aucune n'est allumée ne partirait pas (passe bis 2 du 18/10, point D) ; rien
+ * d'inerte, la ligne garde ce qui reste possible.
  */
-export function sessionsRobot(etats, { domaine = 'vacuum', maintenant = Date.now(), surfaces = [] } = {}) {
-  const pts = (etats || [])
-    .map(e => ({ t: Date.parse(e.last_changed || e.last_updated || ''), p: phaseRobot(domaine, e.state) }))
-    .filter(e => !isNaN(e.t))
-    .sort((a, b) => a.t - b.t);
-  const mesures = (surfaces || []).map(e => ({ t: Date.parse(e.last_changed || e.last_updated || ''), v: nombre(e.state) })).filter(e => !isNaN(e.t) && e.v != null);
-  const fin = maintenant instanceof Date ? maintenant.getTime() : Number(maintenant);
-  const sessions = [];
-  let cours = null;
-  const clore = (t, issue) => {
-    if (!cours) return;
-    if (cours.travail >= 60000) {
-      const debut = cours.debut;
-      const dans = mesures.filter(m => m.t >= debut && m.t <= t + 120000);
-      sessions.push({
-        debut, fin: t, dureeMin: Math.round(cours.travail / 60000), issue,
-        surface: dans.length ? Math.round(Math.max(...dans.map(m => m.v))) : null,
-      });
-    }
-    cours = null;
-  };
-  pts.forEach((e, i) => {
-    const suivant = i + 1 < pts.length ? pts[i + 1].t : fin;
-    const actif = e.p === 'travail' || e.p === 'pause' || e.p === 'retour';
-    if (actif) {
-      if (!cours) { if (e.p !== 'travail') return; cours = { debut: e.t, travail: 0 }; }
-      if (e.p === 'travail') cours.travail += Math.max(0, suivant - e.t);
-    } else if (cours) {
-      clore(e.t, e.p === 'base' ? 'termine' : e.p === 'erreur' ? 'erreur' : 'interrompu');
-    }
-  });
-  if (cours) clore(fin, 'en_cours');
-  return sessions.sort((a, b) => b.debut - a.debut);
+export function commandesRobot(domaine, phase, bits, { depart: peutPartir = true } = {}) {
+  const b = BITS_ROBOT[domaine] || BITS_ROBOT.vacuum;
+  const f = Number(bits) || 0;
+  const a = (k) => !!(b[k] && (f & b[k]) && (k !== 'demarrer' || peutPartir || phase === 'pause' || phase === 'retour'));
+  const depart = domaine === 'lawn_mower' ? 'start_mowing' : 'start';
+  const puce = (cle, service, glyphe, mot, choisie = false) => ({ cle, service, glyphe, mot, choisie });
+  const demarrer = () => puce('demarrer', depart, 'play', tr('Démarrer'));
+  const base = (choisie = false) => puce('base', serviceRetour(domaine), 'home', tr('Base'), choisie);
+  const out = [];
+  if (phase === 'base') {
+    if (a('demarrer')) out.push(demarrer());
+    if (a('localiser')) out.push(puce('localiser', 'locate', 'marker', tr('Localiser')));
+  } else if (phase === 'travail') {
+    if (a('pause')) out.push(puce('pause', 'pause', 'pause', tr('Pause')));
+    if (a('base')) out.push(base());
+  } else if (phase === 'pause' || phase === 'retour') {
+    if (a('demarrer')) out.push(puce('reprendre', depart, 'play', tr('Reprendre')));
+    if (a('base')) out.push(base(phase === 'retour'));
+  } else if (phase === 'erreur') {
+    if (a('base')) out.push(base());
+  } else if (phase === 'repos') {
+    if (a('demarrer')) out.push(demarrer());
+    if (a('base')) out.push(base());
+  }
+  return out;
 }
 
-/** Le mot d'une issue. */
-export function motIssue(issue) {
-  return issue === 'termine' ? tr('Terminé') : issue === 'erreur' ? tr('Erreur') : issue === 'en_cours' ? tr('En cours') : tr('Interrompu');
-}
+/* ── Le geste en vol (passe bis du 18/10, point 1) ──
+ * Deux appuis rapprochés sur « Pause » relançaient le robot : la puce basculait sur l'avance du geste (« Reprendre ») et le second
+ * appui envoyait `start`. Le geste en vol vit dans le magasin de robotsetat.js, partagé par la carte, la compacte et la popup ;
+ * ici, ce qu'il change aux puces. La phase qu'annonce chaque geste : */
+export const PHASE_GESTE = Object.freeze({ demarrer: 'travail', reprendre: 'travail', pause: 'pause', base: 'retour' });
 
-const minuit = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d; };
+/** Un geste de plus, pendant celui qui vole (`enVol`, ou null) ? Seulement rentrer à la base — qui ne relance rien — et localiser :
+ *  jamais l'inverse ni le même, pas de reprise par un second appui. Localiser en vol ne retient que lui (passe bis 2 du 20/10) : le
+ *  robot bipe, « Nettoyer tout le logement » reste offert — et un second appui ne le fait pas rebiper. */
+export function gestePermis(cle, enVol) {
+  return !enVol || (enVol.cle === 'localiser' ? cle !== 'localiser' : cle === 'localiser' || (cle === 'base' && enVol.cle !== 'base'));
+}
 
 /**
- * La semaine en cours (du premier jour de la langue au dernier) : le total et
- * un jour par barre. La surface ne s'additionne que si le robot la publie.
+ * Les puces pendant un geste en vol : celle qui l'a lancé garde sa place et son mot, choisie et marquée `enVol` — elle ne fait plus
+ * rien ; les autres sont celles de la phase qu'il annonce, sans ce qui l'annulerait (`gestePermis`). `geste` : `{ cle, depuis }` —
+ * la puce, et la phase RÉELLE d'avant lui —, ou null : la phase seule décide (`commandesRobot`). La puce qui l'a lancé se cherche
+ * parmi celles d'avant lui, sinon parmi celles qu'il annonce : « Base » posée pendant le vol d'un départ, le robot encore sur sa
+ * base, n'est pas une puce de la base — la carte et la compacte restaient sans puce (passe bis 2 du 18/10, point H). `opts` : ceux
+ * de `commandesRobot` (`depart`).
  */
-export function resumeSemaine(sessions, maintenant = Date.now(), premier = 1) {
-  const auj = minuit(maintenant);
-  const recul = (auj.getDay() - (premier % 7) + 7) % 7;
-  const debut = new Date(auj); debut.setDate(debut.getDate() - recul);
-  const jours = Array.from({ length: 7 }, (_, i) => { const d = new Date(debut); d.setDate(d.getDate() + i); return { date: d, dureeMin: 0, surface: 0, n: 0, aujourdhui: d.getTime() === auj.getTime() }; });
-  const limite = new Date(debut); limite.setDate(limite.getDate() + 7);
-  const dans = (sessions || []).filter(s => s.debut >= debut.getTime() && s.debut < limite.getTime());
-  const aSurface = dans.some(s => s.surface != null);
-  dans.forEach(s => {
-    const j = jours.find(x => minuit(s.debut).getTime() === x.date.getTime());
-    if (!j) return;
-    j.dureeMin += s.dureeMin; j.surface += s.surface || 0; j.n += 1;
-  });
-  return {
-    jours, n: dans.length, dureeMin: dans.reduce((a, s) => a + s.dureeMin, 0),
-    surface: aSurface ? dans.reduce((a, s) => a + (s.surface || 0), 0) : null,
-  };
+export function commandesEnVol(domaine, phase, bits, geste, opts) {
+  const apres = commandesRobot(domaine, phase, bits, opts);
+  if (!geste) return apres;
+  const avant = commandesRobot(domaine, geste.depuis, bits, opts);
+  let i = avant.findIndex(p => p.cle === geste.cle);
+  let lanceur = avant[i];
+  if (!lanceur) { i = apres.findIndex(p => p.cle === geste.cle); lanceur = apres[i]; }
+  const out = apres.filter(p => p.cle !== geste.cle && gestePermis(p.cle, geste));
+  if (lanceur) out.splice(Math.min(i, out.length), 0, { ...lanceur, choisie: true, enVol: true });
+  return out;
 }
 
 /** « 2 h 15 », « 48 min ». */
@@ -323,61 +146,6 @@ export function dureeLisible(min) {
   if (m < 60) return tr('{n} min', { n: m });
   const h = Math.floor(m / 60), r = m % 60;
   return r ? tr('{h} h {m}', { h, m: String(r).padStart(2, '0') }) : tr('{h} h', { h });
-}
-
-/** L'étiquette d'un jour de session : « Auj. », « Hier », sinon le jour court. */
-export function etiquetteJour(t, maintenant = Date.now(), loc = 'fr-FR') {
-  const ecart = Math.round((minuit(maintenant).getTime() - minuit(t).getTime()) / 86400000);
-  if (ecart === 0) return tr('Auj.');
-  if (ecart === 1) return tr('Hier');
-  const mot = new Date(t).toLocaleDateString(loc, { weekday: 'short' }).replace(/\./g, '');
-  return mot.charAt(0).toUpperCase() + mot.slice(1);
-}
-
-/* ════════════ Les réglages et la fiche technique ════════════ */
-
-/* Ce qu'on règle d'abord sur un robot ; le reste existe, replié. */
-const REGLAGE_PRINCIPAL = /work_mode|mode_de_travail|water|(^|[_ ])eau([_ ]|$)|debit|suction|aspiration|carpet|tapis|obstacle|resume|reprise|blade_height|hauteur_des_lames|cutting_height|rain|pluie|wildlife|faune|night|nuit|dnd|do_not_disturb|child_lock|edge|border|bordure|clean_preference|preference/;
-/* Ce qui n'est pas un réglage du travail du robot. */
-const REGLAGE_SECONDAIRE = /voice|voix|volume|bluetooth|cloud|led|light|eclairage|map_offset|decalage|update|mise_a_jour|inch|pouce|webrtc|camera/;
-
-/**
- * Les réglages du robot : les interrupteurs, listes et nombres de son appareil.
- * Les zones d'une tondeuse n'en sont pas (ce sont des choix de départ). Les
- * `principaux` sont ceux qui changent le travail ; les `autres` se déplient.
- */
-export function reglagesRobot(soeurs) {
-  const zones = new Set(zonesTondeuse(soeurs).map(z => z.id));
-  const tous = (soeurs || []).filter(s => vivant(s) && !zones.has(s.id) && ['switch', 'select', 'number'].indexOf(s.domaine) >= 0).map(s => {
-    const a = s.attributs || {};
-    if (s.domaine === 'switch') return { id: s.id, type: 'bascule', nom: s.nom, texte: s.texte, actif: s.etat === 'on' };
-    if (s.domaine === 'select') return { id: s.id, type: 'choix', nom: s.nom, texte: s.texte, valeur: s.etat, options: Array.isArray(a.options) ? a.options : [] };
-    return { id: s.id, type: 'nombre', nom: s.nom, texte: s.texte, valeur: nombre(s.etat), min: nombre(a.min), max: nombre(a.max), pas: nombre(a.step) || 1, unite: s.unite || null };
-  }).filter(r => r.type !== 'choix' || r.options.length > 1).filter(r => r.type !== 'nombre' || r.valeur != null);
-  const principaux = tous.filter(r => REGLAGE_PRINCIPAL.test(r.texte) && !REGLAGE_SECONDAIRE.test(r.texte)).slice(0, 8);
-  const pris = new Set(principaux.map(r => r.id));
-  return { principaux, autres: tous.filter(r => !pris.has(r.id)) };
-}
-
-/** La qualité d'un signal Wi-Fi, en mots. */
-export function qualiteSignal(dbm) {
-  const n = nombre(dbm);
-  if (n == null) return null;
-  return n >= -60 ? tr('excellent') : n >= -70 ? tr('bon') : n >= -80 ? tr('moyen') : tr('faible');
-}
-
-/** La fiche technique : modèle, micrologiciel, Wi-Fi — ce que l'appareil en dit. */
-export function ficheTechnique(appareil, soeurs) {
-  const lignes = [];
-  const a = appareil || {};
-  const modele = [a.manufacturer, a.model].filter(Boolean).join(' ');
-  if (modele) lignes.push({ cle: 'modele', nom: tr('Modèle'), valeur: modele });
-  const maj = (soeurs || []).find(s => s.domaine === 'update' && s.attributs && s.attributs.installed_version);
-  const micro = a.firmware || (maj && maj.attributs.installed_version) || null;
-  if (micro) lignes.push({ cle: 'micrologiciel', nom: tr('Micrologiciel'), valeur: String(micro) });
-  const wifi = (soeurs || []).find(s => s.domaine === 'sensor' && s.classe === 'signal_strength' && vivant(s) && /wi_?fi|wlan|rssi/.test(s.texte) && !/ble|bluetooth|mnet|mobile/.test(s.texte));
-  if (wifi && nombre(wifi.etat) != null) lignes.push({ cle: 'wifi', nom: tr('Wi-Fi'), valeur: Math.round(nombre(wifi.etat)) + ' ' + (wifi.unite || 'dBm') + ' · ' + qualiteSignal(wifi.etat) });
-  return lignes;
 }
 
 /* ════════════ Le planning (ADR 0043) ════════════
@@ -418,31 +186,15 @@ export function resumeJours(jours, premier = 1, loc = 'fr-FR') {
   return ordreJours(premier).filter(j => retenus.has(j)).map(j => nomJour(j, loc, 'short')).join(' · ');
 }
 
-/**
- * Ce qu'un planning vise : ses zones par leur nom ; sans zone, tout — sauf une
- * tondeuse à interrupteurs d'aire, qui tond alors celles qui sont allumées.
- */
-export function resumeZones(planning, { domaine = 'vacuum', aDesAires = false } = {}) {
-  const zones = (planning && planning.zones) || [];
-  if (zones.length) return zones.map(z => z.nom).join(' · ');
-  if (domaine === 'lawn_mower') return aDesAires ? tr('Les zones allumées') : tr('Tout le jardin');
-  return tr('Tout le logement');
-}
-
-/** Une zone de la vue, telle que le planning la garde. */
-export const zonePlanning = (z) => ({ id: z.id, nom: z.nom, segments: ((z.piece && z.piece.segments) || []).map(Number).filter(n => Number.isInteger(n)) });
-
-/** Un planning neuf : les jours ouvrés, neuf heures, tout le logement. */
-export function nouveauPlanning(idRobot, maintenant = Date.now()) {
-  return { id: 'p' + Math.floor(Number(maintenant)).toString(36), robot: idRobot, heure: '09:00', jours: [0, 1, 2, 3, 4], zones: [], actif: true };
-}
-
-/** Le prochain départ d'un robot : la première échéance STRICTEMENT après maintenant. */
-export function prochainPassage(plannings, idRobot, maintenant = Date.now()) {
+/** Le prochain départ d'un robot : la première échéance STRICTEMENT après maintenant — d'un passage qui
+ *  PARTIRA (I18). `calme`, la plage « Ne pas déranger » du robot : le serveur retient tout passage dont
+ *  l'heure y tombe (ADR 0043), et un passage a toujours la même heure — il ne se propose donc jamais. */
+export function prochainPassage(plannings, idRobot, maintenant = Date.now(), calme = null) {
   const m = new Date(maintenant);
   let mieux = null;
   (plannings || []).forEach(p => {
     if (!p || !p.actif || p.robot !== idRobot) return;
+    if (calme && dansLaPlage(calme, p.heure)) return;
     const min = minutesDe(p.heure);
     if (min == null) return;
     const jours = new Set(p.jours || []);
@@ -455,13 +207,6 @@ export function prochainPassage(plannings, idRobot, maintenant = Date.now()) {
   return mieux;
 }
 
-/** « Auj. 18:30 », « Demain 09:30 », « Lun 09:30 ». */
-export function etiquetteProchain(t, maintenant = Date.now(), loc = 'fr-FR') {
-  const ecart = Math.round((minuit(t).getTime() - minuit(maintenant).getTime()) / 86400000);
-  const heure = new Date(t).toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' });
-  return (ecart === 0 ? tr('Auj.') : ecart === 1 ? tr('Demain') : nomJour(jourPlanning(t), loc, 'short')) + ' ' + heure;
-}
-
 /** Une heure tombe-t-elle dans une plage {actif, debut, fin} ? La plage peut enjamber minuit. */
 export function dansLaPlage(plage, hhmm) {
   if (!plage || !plage.actif) return false;
@@ -470,8 +215,66 @@ export function dansLaPlage(plage, hhmm) {
   return d < f ? (t >= d && t < f) : (t >= d || t < f);
 }
 
-/** L'interrupteur de pluie de l'appareil, s'il en a un : le robot rentre alors de lui-même. */
-export function capteurPluie(soeurs) {
-  const s = (soeurs || []).find(x => x.domaine === 'switch' && vivant(x) && /rain|pluie/.test(x.texte));
-  return s ? { id: s.id, nom: s.nom, actif: s.etat === 'on' } : null;
+/* ════════════ La phrase de la carte (I7 ; § 6 de la conception) ════════════ */
+
+const heureDe = (t) => new Date(t).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+const jourDe = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+
+/** « Passage à 09:30 » aujourd'hui, « Passage demain 09:30 », « Passage mardi 09:30 » au-delà. */
+export function libellePassage(date, maintenant = Date.now()) {
+  const t = new Date(date).getTime();
+  const ecart = Math.round((jourDe(t) - jourDe(maintenant)) / 86400000);
+  const h = heureDe(t);
+  if (ecart <= 0) return tr('Passage à {h}', { h });
+  if (ecart === 1) return tr('Passage demain {h}', { h });
+  return tr('Passage {jour} {h}', { jour: new Date(t).toLocaleDateString(locale(), { weekday: 'long' }), h });
+}
+
+/** Les pièces d'un passage, telles que la carte les dit : « Salon, Cuisine », « tout le logement », ou null quand on ne les sait pas. */
+export function piecesDites(domaine, pieces, tout = false) {
+  if (Array.isArray(pieces) && pieces.length) return pieces.join(', ');
+  if (tout) return domaine === 'lawn_mower' ? tr('tout le jardin') : tr('tout le logement');
+  return null;
+}
+
+/**
+ * La phrase d'état d'un robot (I7, § 6), la première ligne qui s'applique, et son encre — la carte, la compacte, la popup
+ * et « En ce moment » la partagent :
+ *  1. muet : « Indisponible depuis 14:20 », en rouge, le liseré qui respire (`panne`) ;
+ *  2. « Il bipe : suivez le son », trois secondes après un `locate` accepté, dans l'onglet qui l'a envoyé ;
+ *  3. en erreur : « En erreur · {message de l'appareil} », ou « En erreur », en rouge ;
+ *  4. au travail : « Nettoie · Salon, Cuisine », « Tond · Pelouse arrière », « Nettoie · tout le logement » — ce que le
+ *     carnet du serveur sait du passage ; sans lui, « Nettoyage en cours », « Tonte en cours » —, dans la teinte du robot ;
+ *  5. en pause : « En pause · {pièces} », ou « En pause » ; 6. au retour : « Retour à la base » ;
+ *  7. sur la base : « Passage à 09:30 », « Passage demain 09:30 », « Passage mardi 09:30 » — le prochain qui partira —,
+ *     sinon « Sur la base », ou « Sur la base · en charge » quand un capteur le dit ;
+ *  8. arrêté ailleurs : « À l’arrêt ».
+ * `phase` : celle de `phaseRobot`, l'avance d'un geste comprise ; `depuis` : le `last_changed` d'un robot muet ; `pieces`,
+ * `tout` : le passage en cours selon le carnet, `libelle` le nom du script maison qui l'a lancé ; `prochain` : ce que rend
+ * `prochainPassage`, ou null ; `sansZone` : une tondeuse à aires dont aucune n'est allumée — sur la base ou arrêtée, la phrase le dit,
+ * « Aucune zone allumée », puisqu'elle n'offre pas « Démarrer » (passe bis 2 du 18/10, point D). Rend `{ texte, encre, panne }`.
+ */
+export function phraseRobot({ domaine = 'vacuum', phase = 'absent', depuis = null, bipe = false, erreur = null, pieces = null, tout = false, libelle = null, prochain = null, charge = false, sansZone = false, maintenant = Date.now() } = {}) {
+  const tondeuse = domaine === 'lawn_mower';
+  const gris = 'var(--o-text2)';
+  if (phase === 'absent') {
+    const q = depuis ? quandLumiere(depuis, maintenant) : null;
+    return { texte: q ? tr('Indisponible depuis {h}', { h: q }) : tr('Indisponible'), encre: 'var(--o-bad)', panne: true };
+  }
+  if (bipe) return { texte: tr('Il bipe : suivez le son'), encre: 'var(--o-accent-soft)', panne: false };
+  if (phase === 'erreur') return { texte: erreur ? tr('En erreur · {m}', { m: erreur }) : tr('En erreur'), encre: 'var(--o-bad)', panne: false };
+  // Le nom d'un script maison (`libelle`, passe bis du 18/10, point A) dit le passage quand ses pièces ne se savent pas.
+  const p = piecesDites(domaine, pieces, tout) || libelle || null;
+  if (phase === 'travail') {
+    const texte = p ? (tondeuse ? tr('Tond · {p}', { p }) : tr('Nettoie · {p}', { p })) : (tondeuse ? tr('Tonte en cours') : tr('Nettoyage en cours'));
+    return { texte, encre: tondeuse ? 'var(--o-ok)' : 'var(--o-accent-soft)', panne: false };
+  }
+  if (phase === 'pause') return { texte: p ? tr('En pause · {p}', { p }) : tr('En pause'), encre: gris, panne: false };
+  if (phase === 'retour') return { texte: tr('Retour à la base'), encre: gris, panne: false };
+  if (sansZone) return { texte: tr('Aucune zone allumée'), encre: gris, panne: false };
+  if (phase === 'base') {
+    if (prochain && prochain.date) return { texte: libellePassage(prochain.date, maintenant), encre: gris, panne: false };
+    return { texte: charge ? tr('Sur la base · en charge') : tr('Sur la base'), encre: gris, panne: false };
+  }
+  return { texte: tr('À l’arrêt'), encre: gris, panne: false };
 }

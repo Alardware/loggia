@@ -528,6 +528,25 @@ def test_en_simulation_le_telephone_ne_sonne_pas(socle):
     assert r.hass.services.appels == []
     assert lancer(r.journal())[0]["simule"] is True
 
+
+def test_les_boutons_d_une_notification_passent_dans_data(socle):
+    """Chantier Mode enfant (E13) : la demande de l'enfant porte deux boutons, que l'application compagnon
+    renvoie en `mobile_app_notification_action`. `data` s'ajoute au regime du son sans l'ecraser."""
+    boutons = {"actions": [{"action": "LOGGIA_ENFANT_j_OUI", "title": "Accorder 15 min"}, {"action": "LOGGIA_ENFANT_j_NON", "title": "Refuser"}]}
+    r = socle(alertes=alertes(), quand=jour())
+    assert lancer(r.prevenir("enfant", "demande", "Lino demande", data=boutons)) is True
+    assert r.hass.services.appels[0][2] == {"title": "Loggia", "message": "Lino demande", "data": boutons}
+    # Pendant les heures calmes : les boutons ET le silence.
+    r2 = socle(alertes=alertes(calme=True), quand=nuit())
+    lancer(r2.prevenir("enfant", "demande", "Lino demande", data=boutons))
+    charge = r2.hass.services.appels[0][2]["data"]
+    assert charge["actions"] == boutons["actions"] and charge["push"] == {"sound": "none"} and charge["importance"] == "low"
+    assert boutons == {"actions": [{"action": "LOGGIA_ENFANT_j_OUI", "title": "Accorder 15 min"}, {"action": "LOGGIA_ENFANT_j_NON", "title": "Refuser"}]}, "le dict de l'appelant n'a pas bouge"
+    # Sans boutons, rien ne change pour les autres modules.
+    r3 = socle(alertes=alertes(), quand=jour())
+    lancer(r3.prevenir("veilles", "co2", "CO2", data=None))
+    assert "data" not in r3.hass.services.appels[0][2]
+
 # ── L'echelle de la maison ──────────────────────────────────────────────────
 
 def test_le_journal_garde_cinq_cents_lignes(module):
@@ -736,3 +755,108 @@ def test_deux_lignes_notees_pendant_le_premier_chargement_restent(socle):
     lancer(deux())
     modules = {e.get("module") for e in lancer(r.journal())}
     assert {"minuteurs", "sirene", "ancien"} <= modules, modules
+
+
+# ── Le journal des volets, plus precis (chantier Volets, spec 6.4) ─────────
+
+def test_un_ordre_de_volet_porte_sa_cible_quel_que_soit_le_module(socle):
+    r = socle()
+    lancer(r.agir("volets", "planning", "cover", "open_cover", ["cover.a"]))
+    lancer(r.agir("alertes", "danger", "cover", "close_cover", ["cover.a"]))
+    lancer(r.agir("volets", "soleil", "cover", "set_cover_position", ["cover.a"], {"position": 30}))
+    lancer(r.agir("volets", "main", "cover", "stop_cover", ["cover.a"]))
+    lancer(r.agir("presence", "depart", "light", "turn_off", ["light.a"]))
+    lumiere, stop, soleil, alerte, ouvre = lancer(r.journal())
+    assert (ouvre["cible"], alerte["cible"], soleil["cible"]) == (100, 0, 30)
+    assert "cible" not in stop, "stop ne vise aucune position"
+    assert "cible" not in lumiere, "une lampe n'a pas de cible"
+
+
+def test_la_facade_et_la_temperature_ne_vont_que_sur_les_lignes_qui_les_donnent(socle):
+    r = socle()
+    lancer(r.agir("volets", "soleil", "cover", "set_cover_position", ["cover.a"], {"position": 30},
+                  orientation=225, dehors=26.4))
+    lancer(r.agir("volets", "planning", "cover", "close_cover", ["cover.a"]))
+    planning, soleil = lancer(r.journal())
+    assert (soleil["orientation"], soleil["dehors"]) == (225, 26.4)
+    assert "orientation" not in planning and "dehors" not in planning
+    note = lancer(r.noter("volets", "non abouti", "fermer", n=0, detail="cover.a"))
+    assert not {"cible", "orientation", "dehors"} & set(note), "une ligne sans ordre ne porte rien de plus"
+
+
+# ── Le rechargement attend l'ecriture du journal de l'instance retiree (audit du 19/10) ──
+
+def test_l_ecriture_du_journal_a_l_arret_est_laissee_a_l_instance_suivante(socle, module):
+    """`arreter()` lancait l'ecriture de ce qui attendait, et plus personne ne
+    l'attendait : l'instance suivante relisait le fichier PENDANT cette
+    ecriture, puis l'ecrasait de ce qu'elle avait lu - sur le patron du carnet
+    des lumieres et des robots (CLE_ECRITURE_FINALE), la tache se depose dans
+    `hass.data`, et la suivante l'attend avant de relire."""
+    r = socle()
+    r.hass.data = {}
+    lancer(r.noter("nuit", "veilleuse", "eteindre"))
+    r.arreter()
+    tache = r.hass.data[module.DOMAIN][module.CLE_ECRITURE_FINALE]
+    assert tache is r.hass.taches[0]
+    lancer(tache)
+    assert r._depot.ecritures == 1
+    # Rien en attente : rien a deposer.
+    r2 = socle()
+    r2.hass.data = {}
+    r2.arreter()
+    assert r2.hass.data == {}
+
+
+def test_l_instance_suivante_attend_l_ecriture_du_journal_avant_de_relire(socle, module, caplog):
+    import asyncio as _asyncio
+
+    async def scenario(r, duree, attente):
+        fini = []
+
+        async def ecriture_finale():
+            await _asyncio.sleep(duree)
+            fini.append("ecrite")
+        tache = _asyncio.ensure_future(ecriture_finale())
+        r.hass.data = {module.DOMAIN: {module.CLE_ECRITURE_FINALE: tache}}
+        module.ATTENTE_ECRITURE_S, avant = attente, module.ATTENTE_ECRITURE_S
+        try:
+            await r.journal()
+        finally:
+            module.ATTENTE_ECRITURE_S = avant
+        laissee = module.CLE_ECRITURE_FINALE in r.hass.data[module.DOMAIN]
+        tache.cancel()
+        return fini, laissee
+
+    assert lancer(scenario(socle(), 0, 10.0)) == (["ecrite"], False), "attendue, puis oubliee"
+    with caplog.at_level("WARNING"):
+        assert lancer(scenario(socle(), 5, 0.01)) == ([], False), "trop longue : on relit quand meme"
+    assert "n'a pas fini" in caplog.text
+    # Sans `hass.data` (les tests, un Home Assistant qui n'en a pas) : rien ne bloque.
+    r = socle()
+    lancer(r.journal())
+
+
+def test_une_ecriture_du_journal_deja_partie_a_l_arret_se_depose_aussi(socle, module):
+    """L'echeance vient de sonner - la tache d'ecriture est partie, rien n'est
+    plus « en attente » - quand `arreter()` arrive : la tache en vol se depose."""
+    import sys as _sys
+    poses = []
+    ev = _sys.modules["homeassistant.helpers.event"]
+    vrai = ev.async_call_later
+
+    def faux(hass, delai, rappel):
+        poses.append(rappel)
+        return lambda: None
+    ev.async_call_later = faux
+    try:
+        r = socle()
+        r.hass.data = {}
+        lancer(r.noter("nuit", "veilleuse", "eteindre"))
+        poses[0](None)
+        assert r._ecriture is None and len(r.hass.taches) == 1
+        r.arreter()
+        assert r.hass.data[module.DOMAIN][module.CLE_ECRITURE_FINALE] is r.hass.taches[0]
+        lancer(r.hass.taches[0])
+        assert r._depot.ecritures == 1
+    finally:
+        ev.async_call_later = vrai

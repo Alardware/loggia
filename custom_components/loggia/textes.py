@@ -109,3 +109,15 @@ def traduire(texte: Any, langue: str) -> str:
     filet = TEXTES.get("en") or {}
     parts = parties(texte) or [(str(texte), {})]
     return SEPARATEUR.join(remplir(cat.get(g) or filet.get(g) or g, a) for g, a in parts)
+
+
+def langue_rendue(gabarit: str, langue: str) -> str:
+    """La langue dans laquelle `traduire` rend VRAIMENT ``gabarit`` : la demandee
+    si son catalogue a la cle, sinon l'anglais, sinon le francais. Un nombre
+    ecrit dans le message (« 1,95 kWh ») la suit (relecture des prises, 13/10)."""
+    if langue == LANGUE_SOURCE:
+        return langue
+    for code in (langue, "en"):
+        if (TEXTES.get(code) or {}).get(gabarit):
+            return code
+    return LANGUE_SOURCE

@@ -12,7 +12,9 @@ import { fileURLToPath } from 'node:url';
 
 // La langue de la machine ne doit pas changer le résultat (garde-fou de la CI).
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
-const R = await import('../src/robots.js');
+/* ASSERTION MODIFIÉE (chantier IoT, tâche 1, 18/10 ; § 12) : ce que vise un passage, le planning neuf, l'étiquette du prochain et
+ * le capteur de pluie ont quitté `robots.js` pour `robotsfiche.js`, chargé avec la popup ; les deux modules se lisent ensemble. */
+const R = { ...(await import('../src/robots.js')), ...(await import('../src/robotsfiche.js')) };
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
@@ -61,6 +63,8 @@ test('ce qu’un planning vise', () => {
   assert.equal(R.resumeZones(null), 'Tout le logement');
   assert.deepEqual(R.zonePlanning({ id: 'salon', nom: 'Salon', couleur: '#fff', piece: { segments: ['1', 2, 'x'] } }), { id: 'salon', nom: 'Salon', segments: [1, 2] });
   assert.deepEqual(R.zonePlanning({ id: 'switch.t_zone_avant', nom: 'Avant' }), { id: 'switch.t_zone_avant', nom: 'Avant', segments: [] }, 'une aire de tonte n’a pas de segment');
+  // TEST AJOUTÉ (tranche robots 2, 19/10 ; R5) : une zone de Home Assistant garde son identifiant de zone, jamais un segment.
+  assert.deepEqual(R.zonePlanning({ id: 'zone:cuisine', nom: 'Cuisine', piece: { zone: 'cuisine', segments: ['m1_2'] } }), { id: 'zone:cuisine', nom: 'Cuisine', segments: [], zone: 'cuisine' });
 });
 
 test('un planning neuf : les jours ouvrés, neuf heures, un identifiant que le serveur accepte', () => {
@@ -90,7 +94,8 @@ test('le prochain passage est la première échéance STRICTEMENT à venir', () 
 test('le prochain passage se dit court', () => {
   assert.equal(R.etiquetteProchain(new Date(2026, 8, 17, 18, 30).getTime(), JEUDI_18H, 'fr-FR'), 'Auj. 18:30');
   assert.equal(R.etiquetteProchain(new Date(2026, 8, 18, 9, 30).getTime(), JEUDI_18H, 'fr-FR'), 'Demain 09:30');
-  assert.equal(R.etiquetteProchain(new Date(2026, 8, 19, 9, 5).getTime(), JEUDI_18H, 'fr-FR'), 'Sam 09:05');
+  // ASSERTION MODIFIÉE (passe bis du 18/10, point 13) : le jour court de la langue, son point compris — « Mar. 09:30 » dans sa maquette.
+  assert.equal(R.etiquetteProchain(new Date(2026, 8, 19, 9, 5).getTime(), JEUDI_18H, 'fr-FR'), 'Sam. 09:05');
 });
 
 test('« Ne pas déranger » : la plage peut enjamber minuit', () => {
@@ -106,8 +111,12 @@ test('« Ne pas déranger » : la plage peut enjamber minuit', () => {
 });
 
 test('le capteur de pluie de l’appareil, s’il en a un', () => {
-  const s = (id, etat, cle) => ({ id, domaine: id.split('.')[0], etat, nom: 'Détection de pluie', texte: ((cle || '') + ' ' + id.split('.')[1]).toLowerCase() });
+  // ASSERTION MODIFIÉE (chantier IoT, tâche 9, 18/10 ; I18) : une sœur porte aussi sa clé de traduction (`cle`), comme decrireSoeurs la décrit.
+  const s = (id, etat, cle) => ({ id, domaine: id.split('.')[0], etat, cle: cle || null, nom: 'Détection de pluie', texte: ((cle || '') + ' ' + id.split('.')[1]).toLowerCase() });
   assert.deepEqual(R.capteurPluie([s('switch.t_voix', 'on', 'voice'), s('switch.t_detection', 'on', 'rain_detection')]), { id: 'switch.t_detection', nom: 'Détection de pluie', actif: true });
+  // ASSERTION AJOUTÉE (chantier IoT, tâche 9, 18/10 ; I18) : la clé `rain_detection` passe avant tout autre interrupteur de pluie — le
+  // premier venu, éteint, n'est pas celui de la détection.
+  assert.deepEqual(R.capteurPluie([s('switch.t_a', 'off', 'rain_delay_during_mowing'), s('switch.t_b', 'on', 'rain_detection')]), { id: 'switch.t_b', nom: 'Détection de pluie', actif: true });
   assert.deepEqual(R.capteurPluie([s('switch.t_detection_de_pluie', 'off', null)]), { id: 'switch.t_detection_de_pluie', nom: 'Détection de pluie', actif: false }, 'reconnu aussi à son identifiant');
   assert.equal(R.capteurPluie([s('switch.t_detection', 'unavailable', 'rain_detection')]), null);
   assert.equal(R.capteurPluie([s('sensor.t_pluie', '3', 'rain')]), null, 'un capteur n’est pas un interrupteur');
@@ -116,25 +125,36 @@ test('le capteur de pluie de l’appareil, s’il en a un', () => {
 
 test('l’onglet Planning : il n’existe que si le composant répond, et rien ne s’y invente', () => {
   const vue = lire('src', 'ficherobot.jsx');
-  assert.ok(vue.includes("const planning = useEtatServeur(hass, 'loggia/robots/etat', 15000, '');"), 'l’état vient du serveur');
-  assert.ok(vue.includes("...(planning.etat ? [['planning', tr('Planning'), 'calendar-clock']] : []),"), 'sans réponse du composant, pas d’onglet');
-  const o = vue.indexOf("['zones', idCarte"), p = vue.indexOf("['planning', tr('Planning')"), h = vue.indexOf("['historique', tr('Historique')");
-  assert.ok(o < p && p < h, 'l’ordre des maquettes : Carte, Planning, Historique');
+  /* ASSERTION MODIFIÉE (chantier IoT, tâche 8, 18/10 ; I15, I16) : l'état vient toujours du serveur, mais par la vue de la carte —
+   * l'état des robots (robotsetat.js, 15 s fiche ouverte), que la carte lit aussi ; une écriture du planning y pose la configuration
+   * rendue. L'onglet Carte part (I2 A) : Accueil, Planning, Historique. La tuile « Prochain passage » dit le premier passage qui
+   * PARTIRA, sinon « Aucun » · « Rien de planifié » (tests/fiche_robot.test.mjs) — elle ne retombe plus sur le dernier. */
+  /* ASSERTION MODIFIÉE (passe bis du 18/10, point 7) : la réponse d'une écriture se pose sur l'état FRAIS du magasin
+   * (`lireEtatRobots`), plus sur celui du dernier rendu ; le geste se JOUE dans tests/fiche_robot_onglets.test.mjs (point 7). */
+  assert.ok(vue.includes('etat: vue.etat, err: errPlanning, setErr: setErrPlanning, vivant,')
+    && vue.includes("setEtat: (f) => { const suite = typeof f === 'function' ? f(lireEtatRobots().etat || vue.etat) : f; if (suite) poserEtatRobots(suite); },"), 'l’état vient du serveur');
+  assert.ok(vue.includes("...(vue.etat ? [['planning', tr('Planning'), 'calendar-clock']] : []),"), 'sans réponse du composant, pas d’onglet');
+  const o = vue.indexOf("['accueil', tr('Accueil')"), p = vue.indexOf("['planning', tr('Planning')"), h = vue.indexOf("['historique', tr('Historique')");
+  assert.ok(o >= 0 && o < p && p < h, 'l’ordre de sa maquette : Accueil, Planning, Historique');
   assert.ok(vue.includes("const r = await h.callWS({ type: 'loggia/robots/config', patch });"));
   assert.ok(vue.includes("e.code === 'unauthorized' ? tr('Réservé aux administrateurs.')"), 'un refus du serveur se dit');
-  assert.ok(vue.includes('const passage = prochain ? { ...prochain, nom: tr(\'Prochain passage\'), vers: \'planning\' } : derniere ?'), 'la tuile des maquettes, quand un passage est planifié ; sinon le dernier');
-  assert.ok(vue.includes("const zonesPlanifiables = domaine === 'lawn_mower' ? zones : (commande([1]) ?"), 'un planning ne vise que ce que le SERVEUR sait commander');
+  assert.ok(vue.includes("onglet: vue.etat ? 'planning' : null };"), 'la tuile mène au Planning, quand il existe');
+  // ASSERTION MODIFIÉE (tranche robots 2, 19/10 ; R5) : les zones de Home Assistant se planifient telles quelles — le serveur les vise par `vacuum.clean_area`.
+  // ASSERTION MODIFIÉE (passe bis du 20/10) : un script de départ désigné, et le planning ne propose aucune pièce — le serveur retiendrait.
+  assert.ok(vue.includes("const zonesPlanifiables = domaine === 'lawn_mower' || parZones ? zones : scriptDepart ? [] : (commande([1]) ?"), 'un planning ne vise que ce que le SERVEUR sait commander');
   assert.ok(vue.includes("{domaine === 'lawn_mower' && !pluieNative && etat && etat.meteo && ("), 'la règle de pluie de Loggia : seulement sans capteur natif, et seulement avec une météo');
   assert.ok(vue.includes("{!neuf && <BoutonConfirme libelle={tr('Supprimer')}"), 'supprimer demande deux appuis');
   assert.ok(vue.includes("const retenu = p.actif && dansLaPlage(reglages.calme, p.heure);"), 'un passage pris dans « Ne pas déranger » le dit');
   assert.ok(!/planning[^\n]*#[0-9a-fA-F]{6}\b/.test(vue), 'aucune couleur en dur');
   const css = lire('src', 'index.css');
-  assert.ok(css.includes('.rb-accueil, .rb-zones, .rb-histo, .rb-planning { display: grid; grid-template-columns: minmax(0, 1fr);'), 'une colonne, partout');
+  // ASSERTION MODIFIÉE (chantier IoT, tâche 8, 18/10 ; I2 A) : l'onglet Carte parti, sa grille (`.rb-zones`) part avec lui.
+  assert.ok(css.includes('.rb-accueil, .rb-histo, .rb-planning { display: grid; grid-template-columns: minmax(0, 1fr);') && !css.includes('.rb-zones'), 'une colonne, partout');
 });
 
 test('la démo répond comme le serveur', () => {
   const demo = lire('src', 'demo.js');
-  assert.ok(demo.includes("if (msg && msg.type === 'loggia/robots/etat') return Promise.resolve(robotsDemo(states));"));
+  // ASSERTION MODIFIÉE (passe bis du 20/10) : le faux serveur lit la description de la maison du magasin de la démo, comme le vrai.
+  assert.ok(demo.includes("if (msg && msg.type === 'loggia/robots/etat') return Promise.resolve(robotsDemo(states, lireCfgDemo('loggia_entities')));"));
   assert.ok(demo.includes("if (msg && msg.type === 'loggia/robots/config') return Promise.resolve({ config: robotsPatch(msg.patch) });"));
   assert.ok(demo.includes('if (Array.isArray(p.plannings)) ROB_CFG().plannings = p.plannings;'), 'la liste est REMPLACÉE, comme côté serveur');
 });

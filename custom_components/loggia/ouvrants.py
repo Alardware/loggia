@@ -43,6 +43,27 @@ def est_fenetre_de_toit(classe: Any) -> bool:
     return classe == FENETRE_DE_TOIT
 
 
+# Les bits OPEN et CLOSE de CoverEntityFeature.
+COVER_OPEN, COVER_CLOSE = 1, 2
+
+
+def ouvre_et_ferme(features: Any) -> bool:
+    """Cet ouvrant recoit-il `open_cover` / `close_cover` ? (audit du 19/10)
+
+    Un volet « tilt seul » - des lames qui s'inclinent, sans montee ni
+    descente - n'a ni OPEN ni CLOSE : glisse dans un appel GROUPE, il le fait
+    refuser en entier par Home Assistant, et les autres volets ne bougent pas.
+    Sans `supported_features` lisible (absent, 0), on ne sait pas : il reste,
+    comme avant."""
+    if isinstance(features, bool):
+        return True
+    try:
+        f = int(features or 0)
+    except (TypeError, ValueError):
+        return True
+    return f <= 0 or bool(f & (COVER_OPEN | COVER_CLOSE))
+
+
 def geste_au_vent(classe: Any, velux: bool = False) -> str | None:
     """Ce que le vent fort fait de cet ouvrant, ou None s'il n'y touche pas.
 

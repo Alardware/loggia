@@ -111,6 +111,7 @@ export function clesRefusees(e) {
  * qu'on lit du message.
  */
 const nombre = (x) => (/^\d+$/.test(x) ? Number(x) : x);
+
 const REFUS = {
   /* Ce qui nomme une CLÉ : celle du composant, sinon celle que l'écran écrivait. */
   not_admin: (k) => (k
@@ -120,6 +121,18 @@ const REFUS = {
     ? tr('« {k} » non enregistré — trop volumineux', { k })
     : tr('Réglage non enregistré — trop volumineux')),
   code_admin_requis: () => tr('Profil non changé — le code administrateur est requis'),
+  /* Les bornes des volets (audit du 19/10, volets.py `_valider_patch`). */
+  volets_decalage_hors_bornes: (k) => (k
+    ? tr('« {k} » non enregistré — un décalage va de −120 à +240 minutes', { k })
+    : tr('Décalage non enregistré — il va de −120 à +240 minutes')),
+  volets_seuil_vent: () => tr('Seuil de vent non enregistré — il doit être plus grand que zéro'),
+  /* Un patch de la règle Nuit mal formé (`verifier_patch`, nuit.py ; audit du 19/10, seconde tranche, B14) : une liste
+   * de lampes qui n'en est pas une, des jours hors de 0 à 6. Le composant nomme la clé (« veilleuse.lampes »,
+   * « coucher.jours ») après les deux-points ; rien ne s'est écrit. Un code NOMMÉ, à lui : `invalid_format` reste le
+   * refus générique, que l'écran ne sait pas dire (tests/refus_codes.test.mjs). */
+  nuit_format: (k) => (k
+    ? tr('« {k} » non enregistré — le réglage de la nuit n’a pas la forme attendue', { k })
+    : tr('Réglage de la nuit non enregistré — il n’a pas la forme attendue')),
   /* Ce qui nomme une LIMITE : celle du composant, le seul à la connaître.
    * Sans elle, la phrase aurait un trou à la place du nombre : `null`, et
    * l'appelant retombe sur son dernier recours. */
@@ -139,7 +152,30 @@ const REFUS = {
   ajout_refuse: (k) => (k === 'commande'
     ? tr('Repas non ajouté — Loggia ne sait pas commander ce distributeur')
     : tr('Repas non ajouté — l’appareil ou vos automatisations programment déjà les repas')),
+  /* Le planning de chauffe (plan 2) : les quatre refus qu'une CARTE peut
+   * recevoir d'une reprise en main (`loggia/chauffage/main`), qui ne nomme
+   * jamais une place de la semaine — dits sans lieu. Les autres, ceux de la
+   * configuration et de la maison, n'arrivent qu'à la fiche d'un chauffage et
+   * à la barre « Maison », chargées à la demande : chacune les enregistre en
+   * se chargeant (`enregistrerRefus`, refuschauffage.js), et la fiche y
+   * reprend le lieu de ces deux-là. Le démarrage en est plus léger (relecture
+   * des tâches 11 et 12). L'identifiant d'un chauffage ne s'affiche jamais ;
+   * les bornes de 5 à 30 °C sont celles du serveur (TEMPERATURE_MIN / MAX). */
+  chauffage_mode_inconnu: () => tr('Ce chauffage ne connaît pas ce mode.'),
+  chauffage_temperature_hors_bornes: () => tr('Température hors bornes : de 5 à 30 °C.'),
+  chauffage_inconnu: () => tr('Ce chauffage est introuvable.'),
+  chauffage_sans_planning: () => tr('Le planning de ce chauffage est éteint.'),
+  /* Un minuteur posé sur un appareil déjà éteint (`off`, `standby`) : le serveur le refuse (minuteurs.py, audit du 19/10) —
+   * il le couperait de nouveau une fois rallumé. La fiche le sait souvent un sondage trop tard. */
+  minuteur_deja_eteint: () => tr('L’appareil est déjà éteint.'),
 };
+
+/** Des refus de plus, que seul un module chargé à la demande peut recevoir —
+ * ceux du planning de chauffe (refuschauffage.js). Un code déjà connu prend
+ * la phrase plus précise. */
+export function enregistrerRefus(table) {
+  Object.assign(REFUS, table);
+}
 
 /**
  * Ce qu'un refus du composant veut dire, dans la langue de l'écran — ou

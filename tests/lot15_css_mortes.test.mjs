@@ -22,7 +22,6 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TYPES_PRISE } from '../src/prises.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
@@ -84,9 +83,10 @@ function classesDe(feuille) {
 /** Ce qui ne se lit pas d'un bloc. `construit` doit figurer tel quel dans le
  *  code ; `suffixes` dit ce que le code peut réellement coller derrière. */
 const DYNAMIQUES = {
-  // App.jsx, carte de prise : `'o-prise-' + anim`, où anim = animationPrise()
-  // = le `fx` de son type (prises.js) — `bob` pour le VE, `shake` pour la sirène.
-  'o-prise-': { construit: "'o-prise-' + anim", suffixes: Object.values(TYPES_PRISE).map((t) => t.fx).filter(Boolean) },
+  // Plus aucun depuis le chantier Prises (tâche 7, P11) : la carte d'une prise
+  // ne pose plus `'o-prise-' + anim` — la maquette est immobile. Ses classes
+  // (`o-prise-journal`, `o-prise-journal-ligne`) s'écrivent d'un bloc ; celles
+  // de sa carte étroite sont parties avec la passe téléphone (tâche 5).
 };
 
 /** Les classes de `feuille` que rien ne lit dans `code`. */
@@ -118,8 +118,6 @@ test('les préfixes tolérés sont vraiment construits, et seulement avec leurs 
     assert.ok(net.includes(d.construit), prefixe + ' : « ' + d.construit + ' » n’est plus dans le code — la tolérance n’a plus lieu d’être');
     assert.ok(d.suffixes.length > 0, prefixe + ' : aucun suffixe posé');
   }
-  // Et dans l'autre sens : un `fx` posé sans sa règle ne bougerait pas.
-  for (const fx of DYNAMIQUES['o-prise-'].suffixes) assert.ok(css.includes('.o-prise-' + fx + ' { '), '.o-prise-' + fx + ' : posée par un type de prise, sans règle');
 });
 
 test('aucune classe de index.css sans lecteur', () => {
@@ -128,10 +126,8 @@ test('aucune classe de index.css sans lecteur', () => {
 });
 
 test('les keyframes qui ne servaient qu’à une classe morte sont parties avec elle', () => {
-  for (const k of ['o-doneIn', 'o-indIn', 'o-radarK', 'o-prise-turn']) {
+  // Celles de la plaque d'une prise qui travaillait sont parties avec son animation (chantier Prises, P11).
+  for (const k of ['o-doneIn', 'o-indIn', 'o-radarK', 'o-prise-turn', 'o-prise-bob', 'o-prise-shake']) {
     assert.ok(!css.includes('@keyframes ' + k + ' '), '@keyframes ' + k + ' : plus personne ne l’anime');
   }
-  // Celles de la plaque qui travaille, elles, restent : le VE et la sirène les posent.
-  assert.ok(css.includes('.o-prise-bob { animation: o-prise-bob 1.8s ease-in-out infinite; }'));
-  assert.ok(css.includes('.o-prise-shake { transform-origin: 50% 10%; animation: o-prise-shake .9s ease-in-out infinite; }'));
 });

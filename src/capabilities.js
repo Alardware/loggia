@@ -193,7 +193,8 @@ const MODES_COULEUR = {
   rgb: ['set_brightness', 'set_color'],
   rgbw: ['set_brightness', 'set_color'],
   rgbww: ['set_brightness', 'set_color', 'set_color_temp'],
-  white: ['set_brightness'],
+  // `white` : revenir au blanc d'un ruban `hs + white` (`light.turn_on` avec `white`, actions.js ; audit du 19/10, B6).
+  white: ['set_brightness', 'set_white'],
 };
 
 /** Les domaines dont allumer et éteindre ne passent pas par le masque. */

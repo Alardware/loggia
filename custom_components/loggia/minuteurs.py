@@ -18,7 +18,10 @@ Ce qui se passe quand...
   * Home Assistant redemarre : les minuteurs sont relus. Un minuteur echu
     pendant l'arret s'execute au demarrage — « eteindre dans 30 min » voulait
     dire « eteinte a telle heure », et cette heure est passee ;
-  * l'appareil est deja eteint a l'heure dite : rien a faire, rien au journal.
+  * l'appareil est deja eteint a l'heure dite : rien a faire, rien au journal ;
+  * on le pose sur un appareil deja eteint : il est refuse (`minuteur_deja_eteint`) —
+    garde, il couperait l'appareil une fois rallume, a l'heure d'un geste
+    oublie (audit du 19/10).
 
 L'extinction est la MAIN de celui qui a pose le minuteur, differee : elle part
 avec son contexte (`Context(user_id=...)`), comme un scenario, et laisse une
@@ -35,6 +38,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import Context, HomeAssistant, callback
 
+from .refus import RefusNomme
 from .regles import demarrer
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
@@ -56,6 +60,10 @@ TOTAL_MAX = 24 * 3600        # et un minuteur ne va jamais au-dela de 24 h
 
 # Ce qui compte pour « deja eteint » : l'extinction n'a alors plus d'objet.
 ETEINT = {"off", "unavailable", "unknown", "standby"}
+# Ce qui refuse la POSE : un appareil coupe. Un appareil qui ne repond plus
+# (« unavailable », « unknown ») garde le droit au minuteur : il revient
+# souvent allume, et doit s'eteindre a l'heure.
+COUPE = {"off", "standby"}
 
 
 # ── Ce qui se calcule, sans Home Assistant ──────────────────────────────────
@@ -264,12 +272,21 @@ class LoggiaMinuteurs:
             raise ValueError("entite non minutable : %r" % (haid,))
         if controle is not None and not controle(haid):
             raise PermissionError("pas le droit de piloter %s" % haid)
-        if self.hass.states.get(haid) is None:
+        st = self.hass.states.get(haid)
+        if st is None:
             raise ValueError("entite inconnue : %s" % haid)
+        if str(st.state).lower() in COUPE:
+            raise RefusNomme("minuteur_deja_eteint", "appareil deja eteint", haid)
         self.table = prolonger(self.table, haid, minutes, time.time(), par)
         await self._sauver()
         self._armer(haid)
         self._reecouter()
+        # La pose se note au journal (chantier Prises, spec 6.3) : le journal du
+        # jour d'une prise la dit (« minuteur · 30 min »). `n`, dans les parties :
+        # les minutes de CET appui, ajoutees a ce qui restait. Jamais `par`.
+        if self.regles is not None:
+            await self.regles.noter(MODULE, "minuteur", "poser", cibles=[haid], n=1,
+                                    motif=("{n} min", {"n": minutes}))
         return self.async_etat(controle)
 
     async def async_annuler(self, haid: str, controle: Any = None) -> dict[str, Any]:

@@ -24,7 +24,10 @@ import { readFileSync } from 'node:fs';
 
 // La langue AVANT l'import : les libellés et les jours se lisent en français.
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
-const D = await import('../src/distributeur.js');
+/* ASSERTION MODIFIÉE (chantier IoT, tâche 1, 18/10 ; § 12) : l'historique reconstruit, son résumé, le planning affiché, les libellés,
+ * la mesure d'une portion et les scripts candidats ont quitté `distributeur.js` (au démarrage) pour `distributeurfiche.js`, que la
+ * fiche et Paramètres importent à la demande. Les deux modules se lisent ensemble : chaque fonction est la même. */
+const D = { ...(await import('../src/distributeur.js')), ...(await import('../src/distributeurfiche.js')) };
 const { setLoggiaState } = await import('../src/state.js');
 const L = await import('../src/lectures.js');
 
@@ -50,8 +53,15 @@ function maison(cas) {
 
 test('les tables sont celles de la fixture, clé par clé', () => {
   // Une vingtaine d'entrées ne décident d'aucun attendu : les cas seuls ne les figeraient pas.
-  assert.deepEqual(Object.keys(D.TABLES).sort(), Object.keys(F.tables).sort());
-  for (const k of Object.keys(F.tables)) assert.deepEqual(D.TABLES[k], F.tables[k], k);
+  /* ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; point F) : les tables que le démarrage ne lit pas — le programme de l'appareil,
+   * les consommables, le mode, les cibles — vivent dans `TABLES_FICHE` (distributeurfiche.js) ; la fixture fige l'UNION, et une clé ne
+   * vit que d'un côté. */
+  const communes = Object.keys(D.TABLES).filter(k => k in D.TABLES_FICHE);
+  assert.deepEqual(communes, [], 'une table des deux côtés');
+  const tables = { ...D.TABLES, ...D.TABLES_FICHE };
+  assert.deepEqual(Object.keys(tables).sort(), Object.keys(F.tables).sort());
+  for (const k of Object.keys(F.tables)) assert.deepEqual(tables[k], F.tables[k], k);
+  assert.ok(Object.keys(D.TABLES_FICHE).length >= 10 && Object.keys(D.TABLES).length >= 20, 'les deux moitiés ont leur part');
 });
 
 test('la fixture entière : appareil, commande, portion, cibles, anomalies, consommables, en ligne, capteurs', () => {
@@ -62,15 +72,19 @@ test('la fixture entière : appareil, commande, portion, cibles, anomalies, cons
     const l = D.lireDistributeur(index, states, cas.config);
     const dit = (champ) => `[${cas.id}] ${champ}`;
     assert.equal(l.appareil, A.appareil, dit('appareil'));
-    assert.deepEqual(l.notes, A.notes, dit('notes'));
+    /* ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; point F) : ce que seule la popup lit (les consommables, le select du mode) ou que
+     * seul le serveur emploie (les notes, les cibles de commande) se calcule dans distributeurfiche.js sur les sœurs que `lireDistributeur`
+     * rend — le démarrage n'en porte rien ; la fixture fige toujours chaque brique. */
+    assert.deepEqual(D.notesAppareil(index, cas.config, l.appareil), A.notes, dit('notes'));
     assert.deepEqual(l.commande, A.commande, dit('commande'));
     assert.equal(l.commande && l.commande.quantite ? D.valeurPortions(l.commande, 1) : null, A.une_portion, dit('une_portion'));
     assert.deepEqual(D.envoiDistribuer(l.commande, 2), A.envoi_2_portions, dit('envoi_2_portions'));
     assert.deepEqual(l.portion, A.portion, dit('portion'));
     assert.deepEqual(l.poidsPortion, A.poids_portion, dit('poids_portion'));
-    assert.deepEqual(l.cibles, A.cibles_de_commande, dit('cibles_de_commande'));
+    assert.deepEqual(D.ciblesDeCommande({ commande: l.commande, portion: l.portion, mode: D.selectMode(l.soeurs), cfg: cas.config }), A.cibles_de_commande, dit('cibles_de_commande'));
     assert.deepEqual(l.anomalies, A.anomalies, dit('anomalies'));
-    assert.deepEqual(l.consommables, A.consommables, dit('consommables'));
+    assert.deepEqual(D.consommablesDistributeur(l.soeurs), A.consommables, dit('consommables'));
+    for (const k of ['consommables', 'reglages', 'notes', 'cibles', 'mode']) assert.ok(!(k in l), dit('lireDistributeur porte encore « ' + k + ' », que la carte ne lit pas'));
     assert.deepEqual(l.enLigne, A.en_ligne, dit('en_ligne'));
     assert.equal(l.enCours, A.en_cours, dit('en_cours'));
     assert.equal(l.prochainCapteur, A.prochain_capteur, dit('prochain_capteur'));
@@ -85,20 +99,25 @@ test('chaque brique, appelée seule, rend ce que lireDistributeur assemble', () 
     const l = D.lireDistributeur(index, states, cas.config);
     const dev = D.appareilDistributeur(index, cas.config);
     assert.equal(dev, l.appareil, cas.id);
-    assert.deepEqual(D.notesAppareil(index, cas.config, dev), l.notes, cas.id);
+    assert.deepEqual(D.notesAppareil(index, cas.config, dev), cas.attendu.notes, cas.id);
     const s = D.soeursDistributeur(index, states, dev, cas.config);
     assert.deepEqual(s, l.soeurs, cas.id);
     const c = D.commandeDistribuer(s, states, cas.config);
     const p = D.portionDistributeur(s, states, cas.config, dev);
     assert.deepEqual(p, l.portion, cas.id);
-    assert.deepEqual(D.selectMode(s), l.mode, cas.id);
-    assert.deepEqual(D.ciblesDeCommande({ commande: c, portion: p, mode: D.selectMode(s), cfg: cas.config }), l.cibles, cas.id);
+    assert.deepEqual(D.poidsPortion(s, states, cas.config, dev), l.poidsPortion, cas.id);
+    const mode = D.selectMode(s);
+    assert.ok(mode === null || mode.domaine === 'select', cas.id);
+    assert.deepEqual(D.ciblesDeCommande({ commande: c, portion: p, mode, cfg: cas.config }), cas.attendu.cibles_de_commande, cas.id);
     assert.deepEqual(D.anomaliesDistributeur(s), l.anomalies, cas.id);
-    assert.deepEqual(D.consommablesDistributeur(s), l.consommables, cas.id);
+    // ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; point F) : les consommables et les réglages sont des briques de la popup
+    // (distributeurfiche.js), appelées sur les sœurs que `lireDistributeur` rend.
+    assert.deepEqual(D.consommablesDistributeur(s), cas.attendu.consommables, cas.id);
     assert.equal(D.capteurEnCours(s), l.enCours, cas.id);
     assert.equal(D.capteurProchain(s), l.prochainCapteur, cas.id);
     assert.deepEqual(D.sourcesHistorique(s), l.historique, cas.id);
-    assert.deepEqual(D.reglagesDistributeur(s, c), l.reglages, cas.id);
+    const r = D.reglagesDistributeur(s, c);
+    assert.ok(Array.isArray(r.principaux) && Array.isArray(r.autres) && !r.principaux.concat(r.autres).some(x => c && x.id === c.entity_id), cas.id);
     assert.deepEqual(D.enLigne(s, states, cas.config), l.enLigne, cas.id);
   }
   assert.equal(D.libelleDecalage(0), '');
@@ -130,7 +149,7 @@ test('un script deviné à son nom n’est jamais une commande ; le script dési
   const designe = F.cas.find(c => c.id === 'script_seul');
   const md = maison(designe);
   assert.deepEqual(D.envoiDistribuer(D.lireDistributeur(md.index, md.states, designe.config).commande, 3),
-    { domaine: 'script', service: 'turn_on', data: { entity_id: 'script.nourrir_le_chat', variables: { portions: 3 } } });
+    { domaine: 'script', service: 'turn_on', data: { entity_id: 'script.remplir_la_gamelle', variables: { portions: 3 } } });
   // Un « script » qui n'en est pas un ne part pas non plus.
   assert.equal(D.commandeDistribuer([], {}, { script: 'automation.croquettes' }), null);
 });
@@ -354,15 +373,16 @@ test('historique : le capteur « dernier repas » et les entités event, à LEUR
   assert.deepEqual(D.repasDepuisHistorique('erreur', { dernier: d }), []);
 });
 
-test('la semaine des repas : une barre par jour, les grammes seulement s’ils sont comptés', () => {
+/* ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I25) : la semaine du calendrier et ses barres partent — l'Historique compte les 7 × 24 h
+ * qui finissent maintenant (`septJoursRepas`, comme le robot) ; les grammes, toujours, seulement s'ils sont comptés. */
+test('les sept jours des repas : 7 × 24 h glissantes, les grammes seulement s’ils sont comptés', () => {
   const lignes = [{ t: LUNDI(7), grammes: 16 }, { t: LUNDI(19), grammes: 16 }, { t: new Date(2026, 9, 7, 7).getTime(), grammes: null }];
-  const r = D.resumeSemaineRepas(lignes, new Date(2026, 9, 7, 12).getTime(), 1);
-  assert.equal(r.jours.length, 7);
+  const r = D.septJoursRepas(lignes, { maintenant: new Date(2026, 9, 7, 12).getTime() });
   assert.equal(r.n, 3);
   assert.equal(r.grammes, 32);
-  assert.deepEqual(r.jours.slice(0, 3).map(j => j.n), [2, 0, 1]);
-  assert.equal(r.jours[2].aujourdhui, true);
-  assert.equal(D.resumeSemaineRepas([{ t: LUNDI(7), grammes: null }], LUNDI(12)).grammes, null);
+  // Le lundi suivant, à midi : le repas du lundi 07:00 est sorti de la fenêtre, celui de 19:00 y est encore.
+  assert.equal(D.septJoursRepas(lignes, { maintenant: LUNDI(12) + 7 * 86400000 }).n, 2);
+  assert.equal(D.septJoursRepas([{ t: LUNDI(7), grammes: null }], { maintenant: LUNDI(12) }).grammes, null);
 });
 
 test('le dernier repas et le compte du jour', () => {
@@ -373,7 +393,10 @@ test('le dernier repas et le compte du jour', () => {
     'sensor.times_dispensed': { state: '2', last_changed: ISO(LUNDI(12)), attributes: {} },
   };
   assert.deepEqual(D.dernierRepas(lecture, S, null, LUNDI(13)), { t: LUNDI(7), source: 'capteur' });
-  assert.deepEqual(D.compteDuJour(lecture, S), { repas: 2, portions: null, grammes: 32 });
+  // ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; point G) : le compte du jour se lit à un instant — un compteur qui n'a pas bougé
+  // AUJOURD'HUI ne compte rien : à 00:20 le lendemain, les 32 g de lundi ne sont pas ceux de mardi (« 0 repas · 24 g » sur la tuile).
+  assert.deepEqual(D.compteDuJour(lecture, S, LUNDI(13)), { repas: 2, portions: null, grammes: 32 }, 'le même jour, il compte');
+  assert.deepEqual(D.compteDuJour(lecture, S, LUNDI(24) + 20 * 60000), { repas: null, portions: null, grammes: null }, 'le lendemain à 00:20, rien');
   // PetKit (05/10, contradicteur) : `total_dispensed` est le total du JOUR, `manual_dispensed` et
   // `planned_dispensed` ses deux parts. La première par ordre alphabétique (manual) disait 20 g.
   const pk = {
@@ -458,17 +481,21 @@ test('l’alerte de la carte : la première anomalie ACTIVE, sous le mot de la f
   // Un Petlibro n'a pas de réservoir en % : sans ce mot, le bac presque vide ne se voyait que dans la fiche.
   const lecture = (id) => { const c = F.cas.find(x => x.id === id); const m = maison(c); return D.lireDistributeur(m.index, m.states, c.config); };
   assert.equal(D.alerteDistributeur(lecture('petlibro')), null, 'des anomalies au repos ne disent rien');
-  assert.deepEqual(D.alerteDistributeur(lecture('petkit_diagnostic')), { type: 'bas', entity_id: 'binary_sensor.d4_food_level', mot: 'Bac presque vide' });
-  assert.deepEqual(D.alerteDistributeur(lecture('tuya_local_vide')), { type: 'bloque', entity_id: 'binary_sensor.catit_food_blockage', mot: 'Distribution bloquée' });
+  /* ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; point G) : l'alerte dit le TYPE et l'entité ; son mot est celui de la phrase de la
+   * carte (`phraseDistributeur` : « Bac presque vide », « Distribution bloquée », « Problème signalé »), et la popup dit les siens — le
+   * nom propre de l'entité pour « autre » (tests/fiche_distributeur_accueil.test.mjs). Le `mot` que personne ne lisait est parti. */
+  assert.deepEqual(D.alerteDistributeur(lecture('petkit_diagnostic')), { type: 'bas', entity_id: 'binary_sensor.d4_food_level' });
+  assert.deepEqual(D.alerteDistributeur(lecture('tuya_local_vide')), { type: 'bloque', entity_id: 'binary_sensor.catit_food_blockage' });
+  assert.equal(D.phraseDistributeur({ alerte: 'bas' }).texte, 'Bac presque vide');
   // Le Petlibro de la démo, bac presque vide : le même mot que la fiche.
   const pl = F.cas.find(x => x.id === 'petlibro');
   const m = maison(pl);
   m.states['binary_sensor.granary_food_low'].state = 'on';
-  assert.equal(D.alerteDistributeur(D.lireDistributeur(m.index, m.states, pl.config)).mot, 'Bac presque vide');
-  // Un autre problème se dit sous le nom de son entité.
-  const autre = { anomalies: [{ entity_id: 'binary_sensor.x_error', type: 'autre', actif: true }], soeurs: [{ id: 'binary_sensor.x_error', nom: 'Erreur moteur' }] };
-  assert.equal(D.alerteDistributeur(autre).mot, 'Erreur moteur');
-  assert.equal(D.alerteDistributeur({ anomalies: [{ entity_id: 'binary_sensor.y', type: 'autre', actif: true }], soeurs: [] }).mot, 'binary_sensor.y');
+  assert.equal(D.alerteDistributeur(D.lireDistributeur(m.index, m.states, pl.config)).type, 'bas');
+  // Un autre problème : le type « autre », la carte dit « Problème signalé ».
+  const autre = { anomalies: [{ entity_id: 'binary_sensor.x_error', type: 'autre', actif: true }] };
+  assert.deepEqual(D.alerteDistributeur(autre), { type: 'autre', entity_id: 'binary_sensor.x_error' });
+  assert.equal(D.phraseDistributeur({ alerte: 'autre' }).texte, 'Problème signalé');
   for (const v of [null, undefined, {}, { anomalies: 'x' }]) assert.equal(D.alerteDistributeur(v), null, JSON.stringify(v));
 });
 
@@ -480,7 +507,7 @@ test('les scripts candidats : PROPOSÉS par leur nom dans Paramètres, jamais un
   // mot. Le nom ne sert plus qu'à PROPOSER, dans la liste du champ « Script de distribution ».
   const S = {
     'script.distribuer': { state: 'off', attributes: { friendly_name: 'Distribuer' } },
-    'script.x1': { state: 'off', attributes: { friendly_name: 'Nourrir le chat' } },
+    'script.x1': { state: 'off', attributes: { friendly_name: 'Remplir la gamelle' } },
     'script.gamelle_du_soir': { state: 'off', attributes: {} },
     'script.feed_cat': { state: 'off', attributes: {} },
     'script.lumieres': { state: 'off', attributes: { friendly_name: 'Lumières du salon' } },
@@ -522,11 +549,13 @@ test('les réglages : ceux de l’appareil, jamais la commande (l’écrire DIST
   const cas = F.cas.find(c => c.id === 'aqara_z2m_manuel');
   const { index, states } = maison(cas);
   const l = D.lireDistributeur(index, states, cas.config);
-  const tous = [...l.reglages.principaux, ...l.reglages.autres];
+  // ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; point F) : les réglages, que seule la roue de la popup lit, se calculent sur les sœurs.
+  const reglages = D.reglagesDistributeur(l.soeurs, l.commande);
+  const tous = [...reglages.principaux, ...reglages.autres];
   const ids = tous.map(r => r.id);
   assert.ok(!ids.includes('select.distributeur_cuisine_feed'), 'la commande n’est pas un réglage');
   for (const id of ['select.distributeur_cuisine_mode', 'number.distributeur_cuisine_serving_size', 'number.distributeur_cuisine_portion_weight', 'switch.distributeur_cuisine_child_lock', 'light.distributeur_cuisine_led']) {
-    assert.ok(l.reglages.principaux.some(r => r.id === id), id);
+    assert.ok(reglages.principaux.some(r => r.id === id), id);
   }
   // Le voyant est une lumière : le service à appeler est le sien.
   assert.equal(tous.find(r => r.id === 'light.distributeur_cuisine_led').domaine, 'light');
@@ -534,8 +563,9 @@ test('les réglages : ceux de l’appareil, jamais la commande (l’écrire DIST
   const tuya = F.cas.find(c => c.id === 'tuya_cwwsq');
   const mt = maison(tuya);
   const lt = D.lireDistributeur(mt.index, mt.states, tuya.config);
-  assert.ok(![...lt.reglages.principaux, ...lt.reglages.autres].some(r => r.id === 'number.distributeur_tuya_feed'));
-  assert.ok(lt.reglages.principaux.some(r => r.id === 'switch.distributeur_tuya_slow_feed'));
+  const rt = D.reglagesDistributeur(lt.soeurs, lt.commande);
+  assert.ok(![...rt.principaux, ...rt.autres].some(r => r.id === 'number.distributeur_tuya_feed'));
+  assert.ok(rt.principaux.some(r => r.id === 'switch.distributeur_tuya_slow_feed'));
 });
 
 test('les sœurs : une entité masquée en reste une, une désactivée non ; sans appareil, les désignées seules', () => {
@@ -548,7 +578,7 @@ test('les sœurs : une entité masquée en reste une, une désactivée non ; san
   const sc = F.cas.find(c => c.id === 'script_seul');
   const ms = maison(sc);
   // Le script désigné en est une aussi, comme `designees` du Python (05/10, contradicteur).
-  assert.deepEqual(D.soeursDistributeur(ms.index, ms.states, null, sc.config).map(s => s.id), ['input_number.croquettes_reservoir', 'script.nourrir_le_chat']);
+  assert.deepEqual(D.soeursDistributeur(ms.index, ms.states, null, sc.config).map(s => s.id), ['input_number.croquettes_reservoir', 'script.remplir_la_gamelle']);
 });
 
 /* ════════════ La parité AU-DELÀ de la fixture (05/10, contradicteur) ════════════ */
@@ -568,9 +598,13 @@ function luParite(cas) {
   const { index, states } = maison(cas);
   const l = D.lireDistributeur(index, states, cas.config);
   const c = l.commande;
+  // ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; point F) : les notes, les cibles et les consommables sont des briques de distributeurfiche.js.
+  // ASSERTION MODIFIÉE (passe bis 2 de l'étape 2, 19/10) : le POIDS d'une portion se lit aussi (`poids_portion_id`, comme `_lu` du
+  // Python) — le cas `poids_designe_hors_des_soeurs` ne figeait pas le poids qu'il décrit, et restait vert sur le code d'avant la règle D1.
   return {
-    appareil: l.appareil, notes: l.notes, commande_id: c ? c.entity_id : null, donnees: c ? c.donnees : null,
-    portion_id: l.portion ? l.portion.entity_id : null, cibles_de_commande: l.cibles, consommables: l.consommables,
+    appareil: l.appareil, notes: D.notesAppareil(index, cas.config, l.appareil), commande_id: c ? c.entity_id : null, donnees: c ? c.donnees : null,
+    portion_id: l.portion ? l.portion.entity_id : null, poids_portion_id: l.poidsPortion ? l.poidsPortion.entity_id : null,
+    cibles_de_commande: D.ciblesDeCommande({ commande: c, portion: l.portion, mode: D.selectMode(l.soeurs), cfg: cas.config }), consommables: D.consommablesDistributeur(l.soeurs),
     une_portion: c && c.quantite ? D.valeurPortions(c, 1) : null, envoi_2_portions: D.envoiDistribuer(c, 2),
   };
 }
@@ -587,6 +621,52 @@ test('parité avec le Python au-delà de la fixture : START sans casse, portion 
   // L'option envoyée est celle que l'ENTITÉ écrit : select_option refuse une option qu'elle ne propose pas.
   const bas = PARITE.cas.find(c => c.id === 'start_en_minuscules');
   assert.deepEqual(luParite(bas).envoi_2_portions.data, { entity_id: 'select.a_feed', option: 'start' });
+});
+
+/* ════════════ Les masses et l'erreur sans classe (passe bis 2 de l'étape 2, 19/10 ; relecture de contrôle) ════════════ */
+
+/* TEST AJOUTÉ : seules g et kg comptaient comme des masses — un « Poids d'une portion » désigné en oz, en lb ou en mg devenait la TAILLE
+ * de la ration, et le pas à pas de « Servir maintenant » aurait écrit sur un poids (l'étalonnage de l'appareil). Toute unité de masse
+ * de Home Assistant (`UNITES_MASSE` : g, kg, mg, µg et son « ug », oz, lb, st) est un poids, des deux côtés (la fixture fige la table, le
+ * cas `poids_designe_en_onces`), et se convertit en grammes partout où le code convertit (`enGrammes`) : la mesure de la carte
+ * (« Distribuer 12 g », « ≈ 8 j ») et le niveau du bac. */
+test('passe bis 2 : toute unité de masse est un poids, jamais une taille — et se convertit en grammes', () => {
+  assert.deepEqual(D.TABLES.UNITES_MASSE, ['g', 'kg', 'mg', 'µg', 'ug', 'oz', 'lb', 'st']);
+  for (const u of D.TABLES.UNITES_MASSE) assert.ok(D.estMasse(u), u + ' n’est pas une masse');
+  for (const u of [null, undefined, '', 'portion', 'portions', 'G', 'KG', 'ml', 'l', 'd', '%']) assert.ok(!D.estMasse(u), String(u) + ' passe pour une masse');
+  const arrondi = (x) => Math.round(x * 1e6) / 1e6;
+  // Le poids d'une portion, dans chaque unité : la mesure de la carte, convertie — 2 portions par appui, de la taille de ration.
+  const S = { 'number.p': { state: '1' }, 'number.s': { state: '2', attributes: {} } };
+  const mesure = (u) => D.mesurePortion(S, { entity_id: 'number.s', unite: 'portion' }, { entity_id: 'number.p', unite: u });
+  assert.deepEqual(D.TABLES.UNITES_MASSE.map(u => [u, arrondi(mesure(u).grammesParPortion), mesure(u).portionsParAppui]),
+    [['g', 1, 2], ['kg', 1000, 2], ['mg', 0.001, 2], ['µg', 0.000001, 2], ['ug', 0.000001, 2], ['oz', 28.349523, 2], ['lb', 453.59237, 2], ['st', 6350.29318, 2]]);
+  assert.equal(D.enGrammes(1, 'oz'), 28.349523125, '1 oz = 1/16 lb, 28,349523125 g exactement');
+  assert.deepEqual([D.enGrammes(3, null), D.enGrammes(3, ''), D.enGrammes(3, 'portion'), D.enGrammes(null, 'g')], [3, 3, null, null], 'sans unité : des grammes ; une unité qui n’est pas une masse : rien');
+  // Une taille de ration réglée dans une masse : un appui = cette quantité, convertie.
+  const taille = D.mesurePortion({ 'number.t': { state: '0.5' } }, { entity_id: 'number.t', unite: 'oz' }, null);
+  assert.deepEqual([arrondi(taille.grammesParPortion), taille.portionsParAppui], [14.174762, 1], '0,5 oz');
+  // Le bac en onces : rapporté à son maximum, et ses grammes convertis.
+  assert.deepEqual(D.niveauDuBac({ 'input_number.bac': { state: '16', attributes: { unit_of_measurement: 'oz', max: 64 } } }, 'input_number.bac'), { pct: 25, grammes: 453.59237 });
+  // Désigné en onces, le number est le POIDS : la taille reste la sœur, et le pas à pas n'écrit jamais sur lui.
+  const cas = F.cas.find(c => c.id === 'poids_designe_en_onces');
+  assert.ok(cas, 'la fixture a perdu le cas des onces');
+  const { index, states } = maison(cas);
+  const l = D.lireDistributeur(index, states, cas.config);
+  assert.deepEqual([l.portion.entity_id, l.portion.unite, l.poidsPortion], ['number.cabanon_portions', null, { entity_id: 'number.cabanon_poids_portion', unite: 'oz' }]);
+  const m = D.mesurePortion(states, l.portion, l.poidsPortion);
+  assert.deepEqual([arrondi(m.grammesParPortion), m.portionsParAppui], [5.669905, 3], '3 portions de 0,2 oz');
+});
+
+/* TEST AJOUTÉ : le suffixe `_error` ne vaut anomalie que SANS classe — c'est ce que la fixture et le commentaire disaient, pas le code :
+ * un `binary_sensor.*_link_error` de classe connectivity à « on » (= connecté) disait « Problème signalé ». Une classe qui n'est pas
+ * « problem » n'est jamais une anomalie (le cas `erreur_de_classe_connectivite` de la fixture, des deux côtés). */
+test('passe bis 2 : le suffixe `_error` ne vaut anomalie que SANS classe — un `_link_error` de classe connectivity à « on » dit « connecté »', () => {
+  const soeur = (id, classe, etat = 'on') => ({ id, domaine: 'binary_sensor', objet: id.slice(id.indexOf('.') + 1), cle: null, classe, etat, attributs: {} });
+  assert.deepEqual(D.anomaliesDistributeur([soeur('binary_sensor.a_error', null)]), [{ entity_id: 'binary_sensor.a_error', type: 'autre', actif: true }], 'témoin : sans classe, l’erreur de Zigbee2MQTT');
+  assert.deepEqual(D.anomaliesDistributeur([soeur('binary_sensor.a_link_error', 'connectivity'), soeur('binary_sensor.a_motor_error', 'running')]), [], 'une classe qui n’est pas « problem » : pas une anomalie');
+  assert.deepEqual(D.anomaliesDistributeur([soeur('binary_sensor.a_error', 'problem', 'off')]), [{ entity_id: 'binary_sensor.a_error', type: 'autre', actif: false }], 'témoin : la classe problem');
+  // La clé passe avant toute classe, comme avant.
+  assert.deepEqual(D.anomaliesDistributeur([{ ...soeur('binary_sensor.a_x', 'connectivity', 'off'), cle: 'food_low' }]), [{ entity_id: 'binary_sensor.a_x', type: 'bas', actif: false }]);
 });
 
 /* ════════════ L'ancienne liste (migration) ════════════ */
@@ -616,7 +696,10 @@ test('l’ancienne liste se lit TOUTE, reliée ou non, abîmée comprise — ell
 /* ════════════ Sans React, sans entité en dur ════════════ */
 
 test('distributeur.js reste pur : ni React, ni hass, ni identifiant d’entité en dur', () => {
-  const src = readFileSync(new URL('../src/distributeur.js', import.meta.url), 'utf8');
-  assert.ok(!/from 'react'|callService|callWS|hass\./.test(src));
-  assert.ok(!/['"](sensor|select|number|button|binary_sensor|input_number|automation|switch)\.[a-z0-9_]+['"]/.test(src), 'un entity_id en dur');
+  // ASSERTION MODIFIÉE (chantier IoT, tâche 1, 18/10 ; § 12) : la même règle pour `distributeurfiche.js`, sa moitié chargée à la demande.
+  for (const f of ['distributeur.js', 'distributeurfiche.js']) {
+    const src = readFileSync(new URL('../src/' + f, import.meta.url), 'utf8');
+    assert.ok(!/from 'react'|callService|callWS|hass\./.test(src), f);
+    assert.ok(!/['"](sensor|select|number|button|binary_sensor|input_number|automation|switch)\.[a-z0-9_]+['"]/.test(src), f + ' : un entity_id en dur');
+  }
 });

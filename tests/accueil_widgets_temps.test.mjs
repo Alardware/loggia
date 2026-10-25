@@ -86,7 +86,8 @@ test('l’Accueil : des sections en option, présentes par défaut, que la croix
   const d = bloc(app, 'function Dashboard(', NL + 'function ');
   assert.ok(d.includes("ajoutees: Array.isArray(v.ajoutees) ? v.ajoutees : [...ACC_AJOUTEES_DEFAUT], styles: (v.styles && typeof v.styles === 'object') ? v.styles : {},"), 'l’agencement relu garde les ajouts et les styles — sinon ils se perdaient au rechargement');
   assert.ok(d.includes('const estOption = (id) => WIDGETS_OPTION.indexOf(id) >= 0;'));
-  assert.ok(d.includes("const cache = estOption(id) ? (grille.ajoutees || []).indexOf(id) < 0 : (grille.caches || []).map(s => ACC_RENOMME[s] || s).indexOf(id) >= 0;"), 'un widget en option n’est là que s’il est ajouté (par défaut, il l’est) ; un vieux masquage « calendrier » ne concerne plus personne');
+  // Une seule règle, `sectionMasquee` (ticket #34) : la carte ET la ligne sous le prénom la lisent.
+  assert.ok(d.includes("const sectionMasquee = (id) => (estOption(id) ? (grille.ajoutees || []).indexOf(id) < 0 : (grille.caches || []).map(s => ACC_RENOMME[s] || s).indexOf(id) >= 0);") && d.includes('const cache = sectionMasquee(id);'), 'un widget en option n’est là que s’il est ajouté (par défaut, il l’est) ; un vieux masquage « calendrier » ne concerne plus personne');
   assert.ok(d.includes("? saveGrille({ ajoutees: [...(grille.ajoutees || []).filter(x => x !== id), id] })") && d.includes("? saveGrille({ ajoutees: (grille.ajoutees || []).filter(x => x !== id) })"), 'ajouter et retirer passent par la grille du FORMAT en cours');
   assert.ok(d.includes("{estOption(id) ? tr('en option') : tr('masquée')}") && d.includes("{estOption(id) ? tr('Ajouter') : tr('Réafficher')}"), 'la ligne grisée dit « en option », son bouton « Ajouter »');
   assert.ok(d.includes('if (cache && !editMode) return null;'), 'hors édition, rien — pas même une place');

@@ -41,9 +41,11 @@ test('le reste se compte sur l’heure du SERVEUR, pas sur celle de l’appareil
 });
 
 test('la rangée lit le serveur, et ne tient plus rien dans l’onglet', () => {
-  const d = src.indexOf('function RangeeMinuteur(');
+  // ASSERTION MODIFIÉE (audit des prises, 19/10) : la rangée vit dans ficheswitch.jsx, chargée à la demande.
+  const sw = readFileSync(join(RACINE, 'src', 'ficheswitch.jsx'), 'utf8');
+  const d = sw.indexOf('function RangeeMinuteur(');
   assert.ok(d >= 0, 'la rangée existe');
-  const bloc = src.slice(d, src.indexOf('\n}\n', d));
+  const bloc = sw.slice(d, sw.indexOf('\n}\n', d));
   assert.ok(bloc.includes("useEtatServeur(hass, 'loggia/minuteurs/etat', 15000, '')"), 'elle lit les minuteurs du composant');
   assert.ok(bloc.includes("type: 'loggia/minuteurs/poser', entity_id: id, minutes: 30"), '+30 min part au serveur');
   assert.ok(bloc.includes("type: 'loggia/minuteurs/annuler', entity_id: id"), 'annuler aussi');

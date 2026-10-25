@@ -133,8 +133,11 @@ test('le distributeur : le README dit d’où vient son planning, dans l’ordre
     && lancer.indexOf('superieure_active(') < lancer.indexOf('da.envoi('),
     'async_lancer n’écarte plus le repas avant l’envoi quand une autre source distribue : le README dit faux');
   // Les onglets que le README promet sont ceux de la fiche.
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I21, I26) : « Planning » s'appelle « Repas », comme dans sa maquette ; Entretien n'est
+  // là que pour des consommables, et le README le dit.
   const fiche = lire('src', 'fichedistributeur.jsx');
-  for (const o of ['Accueil', 'Planning', 'Historique', 'Entretien']) {
+  assert.match(ligne, /Entretien quand l'appareil a des consommables/, 'le README promet Entretien à tous les distributeurs');
+  for (const o of ['Accueil', 'Repas', 'Historique', 'Entretien']) {
     assert.ok(ligne.includes(o), `le README ne nomme plus l’onglet ${o}`);
     assert.ok(fiche.includes(`tr('${o}')`), `la fiche du distributeur n’a plus d’onglet ${o}`);
   }

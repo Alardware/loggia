@@ -162,8 +162,36 @@ test('la page LIVRÉE précharge son boot et ses polices, aux bonnes adresses', 
  * 1 050 154 octets ; la marge est la croissance d'une journée d'audit
  * (999 220 → 1 050 154, +50 934). De quoi corriger, pas de quoi ajouter une
  * vue ni un catalogue de dessins (dessins.js : +58 866 octets d'un seul
- * commit, ADR 0113). */
+ * commit, ADR 0113).
+ *
+ * Le 11/10 (tâche 6 bis du chantier Chauffage), les Scènes Hue — la
+ * bibliothèque entière et sa section — quittent le boot pour `scenes.jsx`,
+ * chargé à la demande : 1 098 401 → 1 082 114 octets. La borne ne descend
+ * pas d'autant : cette place est celle des cartes du chauffage, qui vivent à
+ * l'Accueil (plan 2 du chantier, choix 4).
+ *
+ * Le 19/10 (audit des lumières), la feuille du Calendrier — le mois entier et
+ * le choix des agendas, que seule la carte du rail ouvre — quitte le boot pour
+ * `feuillecalendrier.jsx`, chargé à la demande : 1 102 358 → 1 093 023 octets.
+ * La borne ne descend pas d'autant : cette place est celle des corrections
+ * des lumières (ADR 0260 à 0262). */
 const BUDGET_BOOT = 1_100_000;
+
+/* TEST AJOUTÉ (chantier IoT, tâche 10, 18/10) : le budget mesure TOUT ce que le démarrage charge. Un module du démarrage importé
+ * aussi par un morceau à la demande — la démo important `phaseRobot` de robots.js — sortait du boot dans un morceau PARTAGÉ, que
+ * la page charge avec lui : `boot-*.js` maigrissait de 51 216 octets, le démarrage grossissait de 1 360, et la borne ne le voyait
+ * plus. Le boot n'importe que l'entrée et le vendor. */
+test('le boot n’importe que l’entrée et le vendor : aucun morceau partagé ne sort du budget', () => {
+  const pages = pagesConstruites();
+  assert.ok(pages.length, 'aucune page construite : ni le paquet ni dist');
+  for (const p of pages) {
+    const code = readFileSync(join(p.dossier, 'assets', p.boot), 'utf8');
+    const entree = (p.html.match(/<script type="module"[^>]*\ssrc="\.\/assets\/([A-Za-z0-9._-]+\.js)"/) || [])[1];
+    const statiques = [...new Set([...code.matchAll(/(?:from|import)\s*["']\.\/([A-Za-z0-9._-]+\.js)["']/g)].map((m) => m[1]))];
+    const autres = statiques.filter((f) => f !== entree && !/^vendor-[A-Za-z0-9_-]+\.js$/.test(f));
+    assert.deepEqual(autres, [], p.dossier + ' : le boot importe ' + autres.join(', ') + ' — un morceau partagé, chargé avec lui, hors du budget');
+  }
+});
 
 test('le boot tient son budget', () => {
   const pages = pagesConstruites();
@@ -173,7 +201,7 @@ test('le boot tient son budget', () => {
       `${p.dossier} : ${p.boot} pèse ${p.octets} octets, au-delà du budget de ${BUDGET_BOOT}. `
       + 'Ne pas relever la borne pour passer : sortir du boot ce que l’Accueil n’affiche pas — les vues '
       + 'chargées à la demande (ADR 0104) derrière `lazyRecharge` (ADR 0145) : l’édition, l’Énergie, le '
-      + 'Calendrier, les Scènes ; HUE_SCENES chargé à la demande, jamais retiré —, vérifier chaque étape dans le navigateur, puis abaisser la '
+      + 'Calendrier (les Scènes le sont depuis le 11/10 — scenes.jsx, HUE_SCENES entière, jamais retirée) —, vérifier chaque étape dans le navigateur, puis abaisser la '
       + 'borne d’autant. La relever est une décision : elle se dit dans un ADR.');
   }
 });

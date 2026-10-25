@@ -20,11 +20,13 @@ import asyncio
 import copy
 import json
 import logging
+import time
 from typing import Any, Callable
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
+from . import appareils
 from .code_admin import CLE_CLAIR, CLE_HACHE, code_valide, enregistrement_valide, hacher
 from .refus import RefusNomme
 
@@ -181,10 +183,18 @@ APPARENCE: frozenset[str] = frozenset(
         "loggia-langue",
         "loggia_icones",
         "loggia_vacrot",
+        # L'apparence par profil, et par ecran qui la veut (ADR 0223).
+        "loggia_apparence",
     }
 )
 
-OUVERTES_A_TOUS: frozenset[str] = frozenset({"loggia_active_user"}) | AGENCEMENT | APPARENCE
+# `loggia_appareils` (ADR 0220) : la fiche de l'ecran ou l'on se trouve, et le
+# profil qu'il regarde. Ouverte pour la meme raison que `loggia_active_user`,
+# mais elle ne s'ecrit jamais d'un bloc : `appareils.fusionner` n'y touche que
+# les fiches envoyees.
+OUVERTES_A_TOUS: frozenset[str] = (
+    frozenset({"loggia_active_user", appareils.CLE_APPAREILS}) | AGENCEMENT | APPARENCE
+)
 
 # Le signal aux ecrans abonnes (ADR 0067) : le compte et les cles qui ont
 # change, jamais les valeurs. Par le repartiteur interne, pas par le bus —
@@ -576,13 +586,22 @@ class LoggiaStore:
         Ce filtre rend le commun visible partout sans rien effacer.
         `_purger_ombres` fait ensuite le menage dans le fichier.
         """
-        data = await self._load()
+        return self._vue(await self._load(), user_id)
+
+    @staticmethod
+    def _vue(data: dict[str, Any], user_id: str | None) -> dict[str, Any]:
+        """Ce qu'un compte voit : la lecture ET la reponse d'une ecriture.
+        Une seule fonction, sinon l'une oublie le filtre de l'autre — la
+        reponse de `config/set` rendait le hache du code a tout compte
+        (audit du 19/10)."""
         value = data["users"].get(user_id)
         perso = dict(value) if isinstance(value, dict) else {}
         couvre = {k: v for k, v in perso.items() if est_personnelle(k)}
         # Les secrets restent ici ; le client sait seulement s'il y a un code.
         commun = {k: v for k, v in data["shared"].items() if k not in SECRETES}
         commun["loggia_admin_pin_defini"] = enregistrement_valide(data["shared"].get(CLE_HACHE))
+        if appareils.CLE_APPAREILS in commun:
+            commun[appareils.CLE_APPAREILS] = appareils.pour_l_ecran(commun[appareils.CLE_APPAREILS])
         return {**commun, **couvre}
 
     async def async_get_code_admin(self) -> dict[str, Any] | None:
@@ -667,6 +686,22 @@ class LoggiaStore:
             perso = dict(value) if isinstance(value, dict) else {}
         commun: dict[str, Any] = dict(data["shared"])
 
+        # Les appareils ne s'ecrivent jamais d'un bloc (ADR 0220) : l'ecran
+        # n'envoie que SA fiche, et la liste rangee la recoit. Les retirer tous
+        # d'un `None` reste l'affaire d'un administrateur.
+        if appareils.CLE_APPAREILS in patch:
+            demande = patch[appareils.CLE_APPAREILS]
+            if demande is None and not is_admin:
+                raise MaisonReserveeError(
+                    "reglages reserves aux administrateurs Home Assistant : "
+                    + appareils.CLE_APPAREILS
+                )
+            if demande is not None:
+                patch = {**patch, appareils.CLE_APPAREILS: appareils.fusionner(
+                    commun.get(appareils.CLE_APPAREILS), demande,
+                    compte=user_id, is_admin=is_admin,
+                    maintenant=int(time.time() * 1000))}
+
         for key, value in patch.items():
             if key in FORBIDDEN_KEYS:
                 _LOGGER.warning("Loggia : cle refusee a l'enregistrement (%s)", key)
@@ -726,7 +761,8 @@ class LoggiaStore:
         self._signaler(user_id,
                        perso=_cles_changees(avant_perso if isinstance(avant_perso, dict) else {}, perso),
                        communes=_cles_changees(data["shared"], commun))
-        return {**commun, **perso}
+        # La meme vue que la lecture : jamais les secrets (audit du 19/10).
+        return self._vue(nouveau, user_id)
 
     def _signaler(self, user_id: str | None, perso=(), communes=()) -> None:
         """Dit aux ecrans abonnes ce qui vient de changer — les CLES et le
@@ -745,6 +781,13 @@ class LoggiaStore:
                                   {"user_id": user_id, "perso": perso, "communes": communes})
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : le signal de configuration n'est pas parti")
+
+    def signaler_communes(self, cles) -> None:
+        """Un MODULE vient de changer des cles communes que les ecrans lisent EUX-MEMES par `config/get` — la description
+        de la maison (`loggia_entities`), que la roue d'un robot modifie par `loggia/robots/scripts` (passe bis 2 de la tranche
+        robots 2, 20/10). Les ecritures de module ne signalent rien d'ordinaire : leurs cles ne se lisent que par leurs
+        commandes. Celle-la est une cle du client : les autres ecrans la relisent (ADR 0067)."""
+        self._signaler(None, communes=[str(c) for c in cles if c])
 
     async def async_delete_user(self, user_id: str) -> None:
         """Efface les reglages propres a un compte.

@@ -39,6 +39,9 @@ def _lu(da, cas):
         "commande_id": c["entity_id"] if c else None,
         "donnees": json_de(c["donnees"]) if c else None,
         "portion_id": lu["portion"]["entity_id"] if lu["portion"] else None,
+        # ASSERTION MODIFIEE (passe bis 2 de l'etape 2, 19/10) : le POIDS d'une portion se lit aussi, comme `luParite` du JS — le cas
+        # `poids_designe_hors_des_soeurs` ne figeait pas le poids qu'il decrit.
+        "poids_portion_id": lu["poids_portion"]["entity_id"] if lu["poids_portion"] else None,
         "cibles_de_commande": json_de(lu["cibles_de_commande"]),
         "consommables": json_de(lu["consommables"]),
         "une_portion": lu["une_portion"],

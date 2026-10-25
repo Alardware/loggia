@@ -92,7 +92,7 @@ test('le seuil est celui de la veille du serveur, sinon celui de la maison', () 
 });
 
 test('le geste pour aérer : la ventilation de la veille, sinon les volets de la zone, sinon rien', () => {
-  const S = { 'fan.vmc': { state: 'on' }, 'switch.extracteur': { state: 'unavailable' }, 'cover.chambre': { state: 'closed', attributes: { supported_features: 15 } }, 'cover.fixe': { state: 'closed', attributes: { supported_features: 8 } }, 'cover.mort': { state: 'unavailable', attributes: { supported_features: 15 } }, 'light.chambre': { state: 'on', attributes: { supported_features: 1 } }, 'sensor.chambre_co2': { state: '1240' } };
+  const S = { 'fan.vmc': { state: 'on' }, 'switch.extracteur': { state: 'unavailable' }, 'cover.chambre': { state: 'closed', attributes: { supported_features: 15, device_class: 'shutter' } }, 'cover.fixe': { state: 'closed', attributes: { supported_features: 8, device_class: 'shutter' } }, 'cover.mort': { state: 'unavailable', attributes: { supported_features: 15, device_class: 'shutter' } }, 'light.chambre': { state: 'on', attributes: { supported_features: 1 } }, 'sensor.chambre_co2': { state: '1240' } };
   assert.deepEqual(A.ventilationVeille({ config: { co2: { ventilation: ['fan.vmc', 'switch.extracteur', 'fan.absent', 42] } } }, S), ['fan.vmc'], 'ce qui existe et répond');
   assert.deepEqual(A.ventilationVeille(null, S), []);
   const index = { areaOf: (id) => (id === 'sensor.chambre_co2' ? 'chambre' : null), areaList: [{ id: 'chambre', entities: ['cover.chambre', 'cover.fixe', 'cover.mort', 'light.chambre', 'cover.absent'] }] };

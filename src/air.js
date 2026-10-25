@@ -13,7 +13,8 @@
  * la ventilation de la veille, sinon les volets de la zone du capteur.
  */
 import { tr } from './i18n.js';
-import { SEUIL_CO2 } from './attention.js';
+import { SEUIL_CO2, seuilCo2 } from './attention.js';
+import { estVolet } from './voletecran.js';
 
 const nombre = (v) => { const n = typeof v === 'number' ? v : parseFloat(v); return isNaN(n) ? null : n; };
 
@@ -81,11 +82,8 @@ export function pireCapteur(capteurs, seuilMaison = null) {
   return pire;
 }
 
-/** Le seuil d'aération : celui de la veille CO₂ du serveur, sinon celui de la maison. */
-export function seuilCo2(veilles) {
-  const s = veilles && veilles.config && veilles.config.co2 ? nombre(veilles.config.co2.seuil) : null;
-  return s != null && s > 0 ? Math.round(s) : SEUIL_CO2;
-}
+// Le seuil d'aération vit avec le point de l'Accueil (attention.js, audit du 19/10, M16) : les deux lisent le même.
+export { seuilCo2 };
 
 /** La ventilation de la veille CO₂ : ses entités, celles qui existent. */
 export function ventilationVeille(veilles, states) {
@@ -93,7 +91,9 @@ export function ventilationVeille(veilles, states) {
   return liste.filter(id => typeof id === 'string' && states && states[id] && states[id].state !== 'unavailable');
 }
 
-/** Les volets de la zone d'un capteur, ceux qui savent s'ouvrir (bit OPEN). */
+/** Les volets de la zone d'un capteur, ceux qui savent s'ouvrir (bit OPEN).
+ * Des VOLETS, par leur classe (V3, audit du 19/10) : aérer n'ouvre ni le
+ * garage ni le portail rangés dans la même pièce que le capteur. */
 export function voletsDeLaZone(index, states, idCapteur) {
   if (!index || typeof index.areaOf !== 'function' || !idCapteur) return [];
   const zone = index.areaOf(idCapteur);
@@ -101,7 +101,7 @@ export function voletsDeLaZone(index, states, idCapteur) {
   return ((a && a.entities) || []).filter(id => {
     if (id.indexOf('cover.') !== 0) return false;
     const st = states && states[id];
-    return !!st && st.state !== 'unavailable' && ((st.attributes && st.attributes.supported_features) & 1) === 1;
+    return !!st && estVolet(st) && st.state !== 'unavailable' && ((st.attributes && st.attributes.supported_features) & 1) === 1;
   });
 }
 

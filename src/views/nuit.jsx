@@ -7,12 +7,13 @@
 import {
   useMemo
 } from 'react';
-import { LOGGIA_INDEX } from '../state.js';
+import { LOGGIA_INDEX, ctxLumieres } from '../state.js';
 import { cvName, RegleEntete, usePli , useEtatServeur } from '../ui.jsx';
 import { ZONE_REGLAGES } from './parcommun.jsx';
 import { tr, comparerTextes } from '../i18n.js';
 import { raisonEchec } from '../refus.js';
 import { puce } from '../styles.js';
+import { lumieresDe } from '../lumieres.js';
 
 // Le bit TRANSITION de Home Assistant : une lampe qui ne l'a pas ne sait pas
 // s'éteindre en fondu.
@@ -39,6 +40,9 @@ export function NuitReglages({ hass, cardSt }) {
 
   const enregistrer = async (patch) => {
     if (!h || !cfg) return;
+    /* L'écran avance, et REVIENT si l'écriture ne prend pas — refus ou coupure —, le patron d'`ecrireRegle(…, { annuler })`
+     * (refus.js ; ADR 0261) : la puce restait sur le réglage refusé jusqu'au sondage suivant, cinq secondes de mensonge. */
+    const avant = cfg;
     setEtat(e => {
       if (!e) return e;
       const n = { ...e.config };
@@ -61,20 +65,23 @@ export function NuitReglages({ hass, cardSt }) {
       const r = await h.callWS({ type: 'loggia/nuit/config', patch });
       if (vivant.current && r && r.config) setEtat(e => (e ? { ...e, config: r.config } : e));
     } catch (e) {
+      if (!vivant.current) return;
+      setEtat(x => (x ? { ...x, config: avant } : x));
       // Un refus se dit comme tel et nomme sa clé ; une panne reste une panne
       // (audit du 03/10, refus.js). Il s'affichait en « Unauthorized ».
       setErr(raisonEchec(e, 'loggia_nuit'));
     }
   };
 
+  /* Les lampes proposées : les lumières de la maison (L11, `lumieresDe` — ADR 0261), switch déclarés lumière compris, sans
+   * la LED d'une borne Wi-Fi ni un groupe en double. Un switch ne sait pas le fondu. */
   const lampes = useMemo(() => {
     if (!hass || !hass.states) return [];
-    return Object.keys(hass.states)
-      .filter(id => id.indexOf('light.') === 0)
+    return lumieresDe(hass.states, ctxLumieres())
       .map(id => {
         const st = hass.states[id];
         const f = ((st && st.attributes) || {}).supported_features || 0;
-        return { id, nom: cvName(st, id), fondu: !!(Number(f) & LIGHT_TRANSITION) };
+        return { id, nom: cvName(st, id), fondu: id.indexOf('light.') === 0 && !!(Number(f) & LIGHT_TRANSITION) };
       })
       .sort((a, b) => comparerTextes(a.nom, b.nom));
   }, [hass]);
@@ -87,7 +94,7 @@ export function NuitReglages({ hass, cardSt }) {
       nom: z.name,
       capteurs: (z.entities || []).filter(id => id.indexOf('binary_sensor.') === 0
         && CLASSES_MOUVEMENT.indexOf(((S[id] && S[id].attributes) || {}).device_class) >= 0),
-      lampes: (z.entities || []).filter(id => id.indexOf('light.') === 0 && S[id]),
+      lampes: lumieresDe(S, { ...ctxLumieres(), ids: z.entities || [] }),
     })).filter(z => z.capteurs.length > 0 && z.lampes.length > 0);
   }, [hass]);
 
@@ -272,7 +279,7 @@ export function NuitReglages({ hass, cardSt }) {
               <div style={{ ...label, marginBottom: 7 }}>{tr('Quelles pièces')}</div>
               {piecesMouvement.length === 0 && (
                 <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>
-                  {tr('Aucune pièce avec un capteur de mouvement et une lampe. Range-les dans une zone Home Assistant : la règle s’appuie dessus.')}
+                  {tr('Aucune pièce avec un capteur de mouvement et une lampe. Rangez-les dans une zone Home Assistant : la règle s’appuie dessus.')}
                 </div>
               )}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>

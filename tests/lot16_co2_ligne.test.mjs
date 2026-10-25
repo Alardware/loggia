@@ -36,7 +36,8 @@ const CATS = Object.fromEntries(await Promise.all(LANGUES.map(async l =>
  * chargement d'i18n.js, l'amorce y dépose le catalogue). */
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'it-IT' }, configurable: true });
 globalThis.window = { __loggiaCatalogue: { code: 'it', cat: CATS.it } };
-const { verdictMesure, jaugeMesure } = await import('../src/confort.js');
+// ASSERTION MODIFIÉE (audit du 19/10, point 14) : `jaugeMesure` est parti — la barre des cartes (`barreMesure`) lit le même mot.
+const { verdictMesure, barreMesure } = await import('../src/confort.js');
 const { langue } = await import('../src/i18n.js');
 
 function fonction(nom) {
@@ -45,34 +46,27 @@ function fonction(nom) {
   return APP.slice(d, APP.indexOf(NL + '}' + NL, d) + 2);
 }
 
-test('la ligne du CO₂ : le libellé se réduit, le verdict ne se coupe jamais', () => {
-  const f = fonction('RoomGenericCard');
-  // Les deux morceaux, posés là où la carte calcule sa ligne.
-  assert.ok(f.includes("ligneVerdict = [libMesure, jauge.verdict.t.toLocaleUpperCase(locale())];"), 'le CO₂ ne garde pas son libellé et son verdict à part');
-  const i = f.indexOf('{ligneVerdict ? ');
-  assert.ok(i > 0, 'la ligne du CO₂ ne se dessine pas à part');
-  const ligne = f.slice(i, f.indexOf(NL, i));
-  // Une rangée : le libellé peut rétrécir jusqu'à zéro, avec son ellipse…
-  assert.ok(ligne.includes("<div style={{ ...RM_SUB, color: couleur, display: 'flex' }}>"), 'la ligne n’est pas une rangée');
-  assert.ok(ligne.includes("<span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{ligneVerdict[0]}</span>"), 'le libellé ne cède pas');
-  // … le verdict jamais : il garde sa largeur, séparateur compris.
-  assert.ok(ligne.includes("<span style={{ flexShrink: 0, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'pre' }}>{' · ' + ligneVerdict[1]}</span>"), 'le verdict peut encore se couper');
-  // Le libellé AVANT le verdict : c'est lui qui cède, l'ordre de lecture ne change pas.
-  assert.ok(ligne.indexOf('{ligneVerdict[0]}') < ligne.indexOf('ligneVerdict[1]'));
-  // Les autres cartes gardent la ligne d'avant, et le nom accessible ne bouge pas.
-  assert.ok(ligne.includes(': <div style={{ ...RM_SUB, color: couleur }}>{sub}</div>}'), 'les autres cartes ont perdu leur ligne');
-  assert.ok(f.includes("sub = libMesure + ' · ' + jauge.verdict.t.toLocaleUpperCase(locale());") && f.includes("subLu = libMesure + ' · ' + jauge.verdict.t;"));
-  assert.ok(f.includes('label={nomCarte(nom, valeur, subLu || sub)}'));
-  // La rangée ne vaut plus pour le seul CO₂ (05/10, suite) : la température,
-  // l'humidité et le bruit coupaient leur verdict aussi — voir
-  // tests/lot16_verdicts_lignes.test.mjs. Une seule affectation, pour toutes.
-  assert.equal(f.split('ligneVerdict = [').length - 1, 1, 'une seule affectation, pour toute mesure à verdict');
+/* ASSERTIONS MODIFIÉES (chantier Capteurs, tâche 4 ; C8, C11) : la ligne « Qualité d'air · VERDICT » est partie avec la
+ * carte d'avant. La carte d'une mesure écrit la PHRASE de sa zone, le mot EN TÊTE — « Confiné · aérez » : si la place
+ * manque, c'est la fin qui cède, jamais le mot. */
+test('la ligne du CO₂ : le mot de la zone en tête de la phrase, jamais coupé', () => {
+  const f = fonction('RoomMesureCard');
+  assert.ok(!APP.includes('ligneVerdict'), 'la ligne « Libellé · VERDICT » est restée');
+  /* ASSERTION MODIFIÉE (chantier Capteurs, tâche 4 bis) : la phrase porte la classe de la grille commune et sa longueur (`--o-n`) ; son encre
+   * se calcule une fois, pour elle et pour sa forme courte. Ce qu'elle dit ne change pas. */
+  /* ASSERTION MODIFIÉE (correction bis, point 6) : sur la carte large, la phrase vit dans son cadre, avec sa largeur estimée (`--o-larg`) ; sa forme
+   * de repli — « Confiné », sans « aérez » — garde le mot en tête (`phraseMesure(…, true)`). Ce qu'elle dit ne change pas. */
+  assert.ok(f.includes("<div className=\"o-mesure-phrase\" data-longue={v.phraseRepli ? '' : undefined} style={{ ...RM_SUB, color: encre, '--o-larg': emPhrase(v.phrase) }}>{v.phrase}</div>")
+    && f.includes("const encre = v.muette ? 'var(--o-bad)' : teinte ? teinte.c : 'var(--o-text2)';"), 'la phrase de la zone');
+  assert.ok(f.includes("label={nomCarte(v.nom, valeur && famille ? famille + ' ' + valeur : valeur, v.phrase)}"), 'le nom accessible dit ce que la carte affiche, sa famille comprise');
+  assert.ok(PUR.includes('const morceaux = z ? [z.t] : [];'), 'le mot de la zone vient en tête');
 });
 
 test('en italien, l’air confiné est « Viziata », accordé à « Qualità dell’aria »', () => {
   assert.equal(langue(), 'it', 'le test ne tourne pas en italien');
   assert.equal(verdictMesure('co2', 1700).t, 'Viziata');
-  assert.equal(jaugeMesure('co2', 2000).verdict.t, 'Viziata', 'la jauge des cartes lit le même mot');
+  const b = barreMesure('co2', 2000);
+  assert.equal(b.zones[b.i].t, 'Viziata', 'la jauge des cartes lit le même mot');
   assert.equal(verdictMesure('co2', 1500).t, 'Scarsa', 'le palier d’avant ne bouge pas');
 });
 

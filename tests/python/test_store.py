@@ -197,6 +197,18 @@ def test_le_pin_suit_la_maison_mais_hache(creer_store, store_module):
     with pytest.raises(ValueError):
         lancer(magasin.async_set_code_admin({"sel": "zz", "hache": "00", "iterations": 1000}))
 
+def test_la_reponse_d_une_ecriture_ne_rend_pas_le_hache(creer_store):
+    """Audit du 19/10 : la lecture filtrait les secrets, la REPONSE d'une
+    ecriture non. Un compte ordinaire qui changeait de profil recevait le sel
+    et le hache du code — 10 000 essais hors ligne pour un code a 4 chiffres."""
+    magasin = creer_store({"users": {}, "shared": {}, "migrated": True})
+    code = charger("code_admin")
+    lancer(magasin.async_set_code_admin(code.hacher("4271")))
+    rendu = lancer(magasin.async_set_user("enfant", {"loggia_active_user": "2"}, is_admin=False))
+    assert "loggia_admin_pin_hache" not in rendu and "loggia_admin_pin" not in rendu
+    assert rendu["loggia_admin_pin_defini"] is True, "le client apprend le fait, comme a la lecture"
+    assert rendu == lancer(magasin.async_get_user("enfant")), "l'ecriture rend ce que la lecture rend"
+
 
 def test_le_code_en_clair_d_avant_est_hache_puis_efface(creer_store):
     """Un fichier d'avant le 18/09 : le clair devient un hache, les ombres des

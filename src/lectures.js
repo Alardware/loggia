@@ -15,7 +15,7 @@
  * Home Assistant a découvert (`voletCovers`, `switchLights`) restent avec le
  * reste : elles lisent deux sources, pas une.
  */
-import { cfgVal, loggiaEnt, readLS } from './state.js';
+import { cfgVal, loggiaEnt } from './state.js';
 
 /* Un identifiant d'entité est une chaîne non vide, et un recueil d'entités
  * un objet qui n'en garde que de telles (05/10, point 10b de l'audit de
@@ -86,12 +86,6 @@ export function hueScripts() {
 /** Les entités de notification désignées : `{ <clé>: '…' }`. */
 export function notifIds() {
   return ids(loggiaEnt('notifications', null));
-}
-
-/** Les pièces que l'utilisateur a masquées sur l'Accueil. */
-export function roomHidden() {
-  const v = readLS('loggia_roomhidden', []);
-  return Array.isArray(v) ? v : [];
 }
 
 /** Les plantes suivies : `[{ base, name, room }]`, sans les lignes sans base. */

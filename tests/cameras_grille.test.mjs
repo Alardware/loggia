@@ -13,10 +13,11 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { colonnesCam, camDispoDe, poserCamDispo, camDisposDe, CAM_AUTO } from '../src/camdispo.js';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
 const NL = String.fromCharCode(10);
 
 test('sans reglage, le telephone garde UNE camera par ligne', () => {

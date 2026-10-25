@@ -18,10 +18,11 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveEnergy } from '../src/resolve.js';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
-const APP = lire('src', 'App.jsx');
+const APP = (lire('src', 'App.jsx') + VUES_SORTIES);
 const HISTO = lire('src', 'views', 'energiehisto.jsx');
 const STATE = lire('src', 'state.js');
 

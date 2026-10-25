@@ -20,38 +20,36 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const src = readFileSync(join(RACINE, 'src', 'views', 'volets.jsx'), 'utf8');
 
+/* TESTS MODIFIÉS (chantier Volets, tâche 13, V2) : « Comme les autres · Heures
+ * à lui · Jamais » quitte Règles › Volets pour la fiche de chaque volet. Ce que
+ * ces trois tests gardaient s'y garde, dans voletsfiche.js ; les cas chiffrés
+ * sont dans tests/voletsfiche.test.mjs (« écrire : des tables ENTIÈRES »). */
+const fiche = readFileSync(join(RACINE, 'src', 'voletsfiche.js'), 'utf8');
+
 test('« Heures à lui » survit à des champs vides', () => {
-  const m = src.match(/const propre = !!\(r && !r\.exclu && \(([^)]*)\)\);/);
-  assert.ok(m, 'la règle du mode « Heures à lui » a disparu ou changé de forme');
-  const cond = m[1];
-  assert.match(cond, /r\.perso/,
-    'le mode redevient déduit des valeurs : vider les deux champs le fera disparaître');
-  // Le bouton doit poser le drapeau, sinon la lecture ne trouvera jamais rien.
-  assert.match(src, /poser\(\{ perso: true, ouverture: 60, fermeture: null \}\)/,
-    'le bouton « Heures à lui » ne pose plus le mode');
+  assert.ok(fiche.includes('const perso = r && !r.exclu && (r.perso || r.ouverture != null || r.fermeture != null);'),
+    'la règle du mode « Heures à lui » a disparu ou changé de forme');
+  // Le choix doit poser le drapeau, sinon la lecture ne trouvera jamais rien.
+  assert.ok(fiche.includes("regle === 'perso' ? (perso ? { ...r, perso: true } : { perso: true, ouverture: null, fermeture: null })"),
+    'le choix « Heures à lui » ne pose plus le mode');
 });
 
 test('les réglages écrits avant le drapeau restent reconnus', () => {
-  const m = src.match(/const propre = !!\(r && !r\.exclu && \(([^)]*)\)\);/);
-  const cond = m[1];
-  // Une installation configurée avant ce correctif n'a que ses décalages :
-  // ne lire que le drapeau ferait retomber tous ses volets sur « Comme les
-  // autres » à la première ouverture de la page.
-  assert.match(cond, /r\.ouverture != null \|\| r\.fermeture != null/,
-    'les anciennes configurations perdraient leur mode');
+  // Une installation configurée avant le drapeau n'a que ses décalages : ne
+  // lire que le drapeau ferait retomber ses volets sur « Comme les autres ».
+  assert.ok(fiche.includes('r.ouverture != null || r.fermeture != null'), 'les anciennes configurations perdraient leur mode');
 });
 
-test('vider un champ écrit null, pas zéro', () => {
-  // `Number('')` vaut 0 : sans le test explicite du vide, effacer le contenu
-  // enregistrerait un décalage de zéro minute — un réglage actif — au lieu de
-  // rendre le volet à l'heure générale.
-  const champs = src.match(/e\.target\.value === '' \? null :/g) || [];
-  assert.equal(champs.length, 2,
-    'les deux champs de minutes doivent distinguer « vide » de « zéro »');
+test('un décalage vide part de celui de la maison, jamais de zéro', () => {
+  // Vide (null), le volet suit l'heure de la maison : le premier − ou + part
+  // de ce décalage-là, il n'écrit pas zéro minute — un réglage actif.
+  assert.ok(fiche.includes('const depart = r[sens] != null && Number.isFinite(Number(r[sens])) ? Number(r[sens]) : decalageMaison(plan, sens);'),
+    'un décalage vide repartirait de zéro');
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -358,14 +356,16 @@ test('la démo répond au journal, avec les champs communs partout', () => {
 // Volet bloqué (§1, ADR 0010) : on ne ferme pas sur une baie ouverte (13/09/2026).
 // ─────────────────────────────────────────────────────────────────────────────
 
-test('la porte ou la fenêtre devant chaque volet se désigne dans Règles › Volets', () => {
+// TEST MODIFIÉ (chantier Volets, tâche 13, V2) : la porte se choisit dans la fiche du volet ; l'interrupteur reste ici.
+test('la porte ou la fenêtre devant chaque volet se désigne dans sa fiche ; l’interrupteur reste dans Règles › Volets', () => {
   assert.ok(src.includes('enregistrer({ baies: { actif: !baies.actif } })'), 'plus d’interrupteur « Volet bloqué »');
   assert.ok(src.includes("usePli('volets:baies')"), 'la règle ne se replie pas comme les autres');
   // Un capteur par volet, choisi parmi les capteurs d'ouverture — jamais
   // deviné d'un nom — et écrit dans la section « baies » du serveur.
-  assert.ok(src.includes("setPicker({ domaines: ['binary_sensor'], poser: (id) => enregistrer({ baies: { volets: { ...(baies.volets || {}), [c.id]: id } } }) })"),
+  assert.ok(fiche.includes("const CLASSES_PORTE = ['door', 'window', 'opening', 'garage_door'];"), 'la porte ne se choisit plus parmi les capteurs d’ouverture');
+  // ASSERTION MODIFIÉE (25/10, fusion volet par volet) : le patch ne porte que CE volet, `null` le retire.
+  assert.ok(fiche.includes('return { baies: { volets: { [id]: capteur || null }, ...(capteur && !baies.actif ? { actif: true } : null) } };'),
     'le choix du capteur n’écrit plus dans la section « baies »');
-  assert.ok(src.includes('if (picker.poser) picker.poser(id); else enregistrer('), 'le sélecteur ne sait plus poser ailleurs que dans un champ de section');
 });
 
 test('le journal dit pourquoi un ordre attend', () => {
@@ -376,7 +376,8 @@ test('le journal dit pourquoi un ordre attend', () => {
 
 test('la démo a une baie désignée et un ordre qui l’attend', () => {
   const demo = readFileSync(join(RACINE, 'src', 'demo.js'), 'utf8');
-  assert.ok(demo.includes("baies: { actif: true, volets: { 'cover.volet_salon': 'binary_sensor.fenetre_salon' } }"), 'la démo ne montre pas la règle');
+  // ASSERTION MODIFIÉE (chantier Volets, tâche 2) : la porte devant le volet du salon est sa baie vitrée (§ 9).
+  assert.ok(demo.includes("baies: { actif: true, volets: { 'cover.volet_salon': BAIE_DEMO } }") && demo.includes("const BAIE_DEMO = 'binary_sensor.baie_vitree';"), 'la démo ne montre pas la règle');
   assert.ok(demo.includes("motif: 'baie ouverte'"), 'la démo ne montre pas d’ordre retenu par une baie');
 });
 
@@ -391,7 +392,8 @@ test('la présence écoute les indices, et l’écran le dit', () => {
   // La carte se replie avec la règle, comme les trois autres.
   assert.ok(vue.includes('zone="presence-pres-1 presence-pres-2 presence-pres-3 presence-pres-4"'), 'la carte ne se replie pas avec la règle');
   // Les capteurs se trouvent par device_class — le miroir du serveur — jamais par nom.
-  assert.ok(vue.includes("['motion', 'occupancy', 'presence', 'door', 'window', 'opening', 'garage_door']"), 'la liste des device_class a changé de forme');
+  // ASSERTION MODIFIÉE (audit du 19/10, point 14) : la liste vient de LA table des classes (attention.js) — la présence, puis les ouvrants.
+  assert.ok(vue.includes('const classes = [...CLASSES_MOUVEMENT, ...CLASSES_OUVRANT];'), 'la liste des device_class a changé de forme');
   const demo = readFileSync(join(RACINE, 'src', 'demo.js'), 'utf8');
   assert.ok(demo.includes('indices: { actif: true, mains: true }'), 'la démo ne montre pas la règle');
   assert.ok(demo.includes("quoi: 'reporter'"), 'la démo ne montre pas de décompte reporté');
@@ -436,12 +438,15 @@ test('sur un danger, la maison réagit — et cela se règle à côté du télé
 });
 
 test('la fiche volet n’a plus la grille de modes : la bascule suffit', () => {
-  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const app = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
   const debut = app.indexOf('function RoomCoverSheet(');
   const fin = app.indexOf('function RoomClimateSheet(', debut);
   assert.ok(debut > 0 && fin > debut, 'la fiche volet précède la fiche thermostat');
   const fiche = app.slice(debut, fin);
-  assert.ok(fiche.includes("tr('Auto lever / coucher')"), 'la bascule du planning reste');
+  // Audit du 19/10 : la fiche n'est plus que celle des ouvrants qui ne sont pas
+  // des volets — le planning ne les pilote pas, la bascule mentait.
+  assert.ok(!fiche.includes("tr('Auto lever / coucher')"), 'plus de bascule du planning sur un garage');
+  assert.ok(fiche.includes("tr('Pas piloté par Loggia')"), 'un ouvrant sans classe dit pourquoi');
   assert.ok(!fiche.includes('voletModes('), 'plus de lecture des modes de l’input_select');
   assert.ok(!fiche.includes('select_option'), 'plus de commande de mode');
   assert.ok(!app.includes("tr('MODE AUTOMATIQUE')"), 'le libellé a disparu');
@@ -450,7 +455,7 @@ test('la fiche volet n’a plus la grille de modes : la bascule suffit', () => {
 });
 
 test('la pièce n’a plus de journal d’activité, la Sécurité garde le sien', () => {
-  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const app = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
   const rv = app.indexOf('function RoomView(');
   const room = app.slice(rv, app.indexOf(String.fromCharCode(10) + 'function ', rv + 1));
   assert.ok(!room.includes('<RoomActivityCard'), 'plus de journal sous les appareils de la pièce');
@@ -458,19 +463,45 @@ test('la pièce n’a plus de journal d’activité, la Sécurité garde le sien
 });
 
 test('la glissière des cartes a retrouvé sa hauteur d’avant, sans changer de dessin', () => {
-  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const app = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
   const j = app.indexOf('function RmJauge(');
   const jauge = app.slice(j, app.indexOf(String.fromCharCode(10) + '}', j));
-  assert.ok(jauge.includes('height: 24, borderRadius: 12, marginTop: marge'), '24 px de haut, comme avant la refonte');
+  // ASSERTION MODIFIÉE (chantier Lumières, tâche 4) : l'épaisseur devient un réglage (`piste`, 24 px par défaut) ; la fiche d'une lumière la veut à 32.
+  // ASSERTION MODIFIÉE (chantier Mode enfant, tâche 4 ; E7, E15) : la borne haute (`plafond`, null : aucune) et le pas du geste (`pas`, 1) s'ajoutent — sans eux, 24 px et le même dessin.
+  assert.ok(jauge.includes('piste = 24, plafond = null, pas = 1 }) {') && jauge.includes("height: piste, borderRadius: piste / 2, background: 'var(--o-s1)'") && jauge.includes('marginTop: marge'), '24 px de haut, comme avant la refonte');
   assert.ok(jauge.includes('data-fill') && jauge.includes('data-knob'), 'le dessin reste : remplissage + curseur');
   assert.ok(!jauge.includes('border:'), 'et toujours sans bordure');
 });
 
 test('les boutons de la carte enceinte sont des icônes, pas des « » en texte', () => {
-  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
-  const d = app.indexOf('function RoomMediaCard(');
-  const carte = app.slice(d, app.indexOf(String.fromCharCode(10) + 'function ', d + 1));
-  assert.ok(carte.includes('<Fi i="angle-double-left" size={15} />') && carte.includes('<Fi i="angle-double-right" size={15} />'), 'chevrons doubles de 15 px — 18 était trop gros');
-  assert.ok(carte.includes("<Fi i={np.playing ? 'pause' : 'play'} size={14} />"), 'lecture / pause à 14 px');
-  assert.ok(!carte.includes('>«<') && !carte.includes('>»<'), 'plus de guillemets en guise de flèches');
+  const app = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
+  /* ASSERTION MODIFIÉE (chantier Médias, tâche 4 ; M2 A, M13) : précédent et suivant ont quitté la carte pour la popup — leurs
+   * chevrons avec eux. La carte garde UNE puce, lecture ou pause, à icône (14 px), dans son propre composant (`PuceLecture`). */
+  const d = app.indexOf('function PuceLecture(');
+  assert.ok(d >= 0, 'la puce lecture / pause de la carte a disparu');
+  const puce = app.slice(d, app.indexOf(String.fromCharCode(10) + '}', d));
+  assert.ok(puce.includes("<Fi i={v.playing ? 'pause' : 'play'} size={14} />"), 'lecture / pause à 14 px');
+  const c = app.indexOf('function RoomMediaCard(');
+  const carte = app.slice(c, app.indexOf(String.fromCharCode(10) + '}', c));
+  assert.ok(!carte.includes('angle-double-left') && !carte.includes('angle-double-right'), 'précédent et suivant sont dans la popup (M2 A)');
+  assert.ok(!carte.includes('>«<') && !carte.includes('>»<') && !puce.includes('>«<'), 'plus de guillemets en guise de flèches');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// V2 (chantier Volets, tâche 13) : un volet se règle dans sa fiche.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('V2 : Règles › Volets ne règle plus un volet à la fois, une ligne dit où c’est', () => {
+  for (const parti of ["tr('Volet par volet')", "tr('Où donne chaque volet')", "setPicker({ domaines: ['binary_sensor']", 'const CARDINAUX = () => [']) {
+    assert.ok(!src.includes(parti), 'revenu dans Règles › Volets : ' + parti);
+  }
+  assert.ok(src.includes("{tr('Chaque volet se règle dans sa popup : ses heures, sa façade, la porte devant lui.')}"), 'la ligne qui dit où c’est');
+  // Ce qui reste : la maison (§ 8 de la conception).
+  // Le mode, lui, n'y a plus de commande (décision du 19/10) : il s'y dit, il
+  // se choisit dans la popup et dans la vue « modes et planning ».
+  assert.ok(!src.includes("enregistrer({ planning: { mode: id } })"), 'le mode se commande encore dans Paramètres');
+  for (const reste of ["enregistrer({ planning: { actif: !plan.actif } })", "enregistrer({ soleil: { temp_min: n } })",
+    "enregistrer({ baies: { actif: !baies.actif } })", "enregistrer({ verification: { tentatives: n } })", 'Ouvrants sans classe dans Home Assistant']) {
+    assert.ok(src.includes(reste), 'parti de Règles › Volets : ' + reste);
+  }
 });

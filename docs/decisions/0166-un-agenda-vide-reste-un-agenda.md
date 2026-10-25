@@ -6,8 +6,8 @@
 
 > « Pourquoi dans le calendrier j'en ai qu'un seul alors que sur HAOS j'en ai
 > 4 ? » — 8 octobre, deux captures à l'appui : Home Assistant listant
-> *Collectes*, *Maison*, *Planning Guillaume* et *Rappels* ; Loggia n'affichant
-> que *Planning Guillaume*.
+> *Collectes*, *Maison*, *Planning de la famille* et *Rappels* ; Loggia n'affichant
+> que *Planning de la famille*.
 
 Loggia lisait bien les quatre. Le registre d'entités le confirme : quatre
 `calendar.*`, aucun masqué, aucun désactivé, tous de la même intégration. Et

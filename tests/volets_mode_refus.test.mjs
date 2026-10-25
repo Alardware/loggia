@@ -88,7 +88,7 @@ test('un refus déjà nommé par le serveur garde SES clés ; un autre code pass
 });
 
 test('le câblage : la barre passe par le filet commun, et le refus par le canal du toast', () => {
-  const app = lire('src', 'App.jsx');
+  const app = lire('src', 'App.jsx') + lire('src', 'views', 'voletsplan.jsx');
   const i = app.indexOf('function VoletsContent(');
   assert.ok(i > 0, 'la vue Volets a changé de forme');
   const corps = app.slice(i, app.indexOf('\nfunction ', i + 1));
@@ -96,8 +96,10 @@ test('le câblage : la barre passe par le filet commun, et le refus par le canal
   assert.ok(!corps.includes('setModeLoggia(m);'), 'le choix s’écrit de nouveau dans l’état lu, sans filet');
   assert.ok(corps.includes('const [ovMode, poserMode] = useOptimiste(modeLoggia);'), 'le mode demandé ne passe plus par useOptimiste');
   assert.ok(corps.includes("cle: 'loggia_volets', annuler: () => poserMode(null)"), 'un refus ne remet plus l’ancien mode tout de suite');
-  assert.ok(corps.includes('style={barBtn(modeAffiche === m.id)}'), 'la barre ne montre plus le mode demandé');
-  assert.match(app, /import \{[^}]*\becrireRegle\b[^}]*\} from '\.\/refus\.js';/, 'App ne passe plus par le filet commun de refus.js');
+  // ASSERTION MODIFIÉE (19/10) : le bouton choisi garde son style ; un compte ordinaire l'a inerte par-dessus.
+  assert.ok(corps.includes('style={{ ...barBtn(modeAffiche === m.id),'), 'la barre ne montre plus le mode demandé');
+  // ASSERTION MODIFIÉE (19/10) : la vue vit dans views/voletsplan.jsx, qui importe '../refus.js'.
+  assert.match(app, /import \{[^}]*\becrireRegle\b[^}]*\} from '\.\.?\/refus\.js';/, 'la vue ne passe plus par le filet commun de refus.js');
   // Le canal par défaut : un rejet que personne ne reprend, que le toast écoute.
   assert.ok(lire('src', 'refus.js').includes('const relancer = (err) => { Promise.reject(err); };'),
     'le refus ne remonte plus à l’écoute globale');

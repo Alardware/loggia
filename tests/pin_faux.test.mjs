@@ -47,8 +47,12 @@ test('un code faux se VOIT aussi, sans couleur ni animation, et sans décaler le
   const html = await ouvrir();
   assert.ok(html.includes('margin-top:4px">Requis pour ce profil</div>'), 'le sous-titre ordinaire, à l’ouverture');
   assert.ok(!/aria-hidden="true"[^>]*>Requis pour ce profil/.test(html), 'hors erreur, le sous-titre se lit');
-  assert.ok(SRC.includes("{faux ? tr('Code incorrect') : tr('Requis pour ce profil')}"),
+  /* ASSERTION MODIFIÉE (chantier Mode enfant, tâche 5 ; E19) : le pavé dit POURQUOI il demande le code — « Requis pour ce profil » par
+   * défaut, « Requis pour les réglages du mode enfant » quand la fiche d'un lecteur l'ouvre (`sousTitre`). Le code faux garde sa ligne. */
+  assert.ok(SRC.includes("{faux ? tr('Code incorrect') : (sousTitre || tr('Requis pour ce profil'))}"),
     'l’erreur n’a toujours pas de texte visible : un œil qui distingue mal le rouge ne la voit pas');
+  const enfant = rendre(await composant('pinmodal.jsx', 'PinModal'), { hass: null, onClose: () => {}, onSuccess: () => {}, sousTitre: 'Requis pour les réglages du mode enfant' });
+  assert.ok(enfant.includes('margin-top:4px">Requis pour les réglages du mode enfant</div>'), 'le sous-titre de la fiche d’un lecteur');
   assert.ok(SRC.includes('aria-hidden={faux || undefined}'), 'lu deux fois : la région d’alerte le dit déjà');
 });
 

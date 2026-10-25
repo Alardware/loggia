@@ -12,7 +12,8 @@ const lire = (f) => readFileSync(new URL('../' + f, import.meta.url), 'utf8');
 test('l’onglet Volets regle les reprises par trois puces, et rien d’autre', () => {
   const v = lire('src/views/volets.jsx');
   assert.ok(v.includes("const verification = cfg.verification || {};") && v.includes("const tentatives = [1, 2, 3].indexOf(verification.tentatives) >= 0 ? verification.tentatives : 2;"), 'le reglage, avec son defaut');
-  assert.ok(v.includes("onClick={() => enregistrer({ verification: { tentatives: n } })} style={puce(tentatives === n)}"), 'trois puces, la choisie en bleu plein');
+  // ASSERTION MODIFIÉE (19/10, V10) : la puce porte aussi son allure inerte, pour un compte ordinaire.
+  assert.ok(v.includes("onClick={() => enregistrer({ verification: { tentatives: n } })} style={{ ...puce(tentatives === n), ...puceInerte(tentatives === n) }}"), 'trois puces, la choisie en bleu plein');
   assert.ok(v.includes("{tr('Manœuvre non confirmée')}") && v.includes("{tr('Tentatives')}"), 'les mots');
   assert.ok(!v.includes('verification: { actif'), 'pas d’interrupteur : la verification n’est pas une regle qu’on debraye');
 });

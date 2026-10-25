@@ -22,6 +22,22 @@
  * est remplacé par ce module.
  */
 
+/* Le calcul du planning de chauffe, celui de l'écran : le faux moteur de la
+ * démo décide avec lui, comme le serveur avec son jumeau (plus bas). */
+import { JOURS, MODES, FROID, changementEnCours, ecrireHeure, lireHeure, modeVoulu, prochainChangement } from './chauffage.js';
+/* Le planning des volets, celui du serveur (son jumeau) : la démo en tire les
+ * mouvements à venir de chaque volet (chantier Volets, § 9). */
+import { aVenir, regleDe } from './voletsplanning.js';
+/* Ce qu'est un volet pour l'écran (sa classe, miroir de `est_volet`) : les scénarios de la démo ne visent qu'eux.
+ * Recopié, pas importé, comme `phaseRobotDemo` plus bas : un import de voletecran.js depuis la démo — chargée à la
+ * demande — tirait du démarrage un morceau partagé de 43 849 octets, chargé avec lui (mesuré le 19/10 : `boot-*.js`
+ * 1 060 194 octets, plus ce morceau, au-delà de la borne). tests/demo_volets.test.mjs compare la copie à l'original. */
+export const CLASSES_VOLETS_DEMO = ['shutter', 'blind', 'shade', 'curtain', 'awning'];
+export const estVoletDemo = (st) => !!(st && st.attributes && CLASSES_VOLETS_DEMO.indexOf(st.attributes.device_class) >= 0);
+export const estMuetVoletDemo = (st) => !st || st.state === 'unavailable' || st.state === 'unknown';
+const estVolet = estVoletDemo;
+const estMuetVolet = estMuetVoletDemo;
+
 const maintenant = () => new Date().toISOString();
 /* Un seul endroit traduit les noms : ici. Chaque etat factice passe par `s`,
  * les cent-vingt `friendly_name` sont donc couverts sans les toucher un par
@@ -64,6 +80,8 @@ const LIEUX = {
   // `CAMERAS()` les nommait « Garage » et « Terrasse » dans toutes les langues.
   'Garage': { en: 'Garage', de: 'Garage', nl: 'Garage', it: 'Garage', es: 'Garaje', pl: 'Garaż' },
   'Terrasse': { en: 'Terrace', de: 'Terrasse', nl: 'Terras', it: 'Terrazza', es: 'Terraza', pl: 'Taras' },
+  // La zone des deux capteurs de plante (chantier Capteurs, étapes 2 et 3, § 12 ; C29) : une zone d'appareils, pas une pièce de Loggia. Polonais nouveau, à relire par Seba882.
+  'Technique': { en: 'Utility room', de: 'Technikraum', nl: 'Technische ruimte', it: 'Locale tecnico', es: 'Cuarto técnico', pl: 'Pomieszczenie techniczne' },
 };
 
 /* La langue de la maison factice, posée une fois par `installerDemo`. Elle se
@@ -138,6 +156,19 @@ const APPAREILS = {
   "Aspirateur Débit d'eau": { en: 'Vacuum Water flow', de: 'Staubsauger Wasserdurchfluss', nl: 'Stofzuiger Waterstroom', it: 'Aspirapolvere Flusso d’acqua', es: 'Aspiradora Caudal de agua', pl: 'Odkurzacz Przepływ wody' },
   'Aspirateur Détection tapis': { en: 'Vacuum Carpet detection', de: 'Staubsauger Teppicherkennung', nl: 'Stofzuiger Tapijtdetectie', it: 'Aspirapolvere Rilevamento tappeti', es: 'Aspiradora Detección de alfombras', pl: 'Odkurzacz Wykrywanie dywanów' },
   'Aspirateur Filtre': { en: 'Vacuum Filter', de: 'Staubsauger Filter', nl: 'Stofzuiger Filter', it: 'Aspirapolvere Filtro', es: 'Aspiradora Filtro', pl: 'Odkurzacz Filtr' },
+  // Tranche robots 2 : la carte active, le compteur de passages, et le script et les interrupteurs de la variante `scripts`.
+  'Aspirateur Carte active': { en: 'Vacuum Active map', de: 'Staubsauger Aktive Karte', nl: 'Stofzuiger Actieve kaart', it: 'Aspirapolvere Mappa attiva', es: 'Aspiradora Mapa activo', pl: 'Odkurzacz Aktywna mapa' },
+  'Aspirateur Compteur de nettoyage': { en: 'Vacuum Clean count', de: 'Staubsauger Reinigungsdurchgänge', nl: 'Stofzuiger Aantal beurten', it: 'Aspirapolvere Numero di passaggi', es: 'Aspiradora Número de pasadas', pl: 'Odkurzacz Liczba przejazdów' },
+  'Nettoyer les pièces choisies': { en: 'Clean the chosen rooms', de: 'Gewählte Räume reinigen', nl: 'Gekozen kamers schoonmaken', it: 'Pulire le stanze scelte', es: 'Limpiar las habitaciones elegidas', pl: 'Sprzątanie wybranych pokoi' },
+  'Nettoyer le salon': { en: 'Clean the living room', de: 'Wohnzimmer reinigen', nl: 'Woonkamer schoonmaken', it: 'Pulire il soggiorno', es: 'Limpiar el salón', pl: 'Sprzątanie salonu' },
+  'Nettoyer la cuisine': { en: 'Clean the kitchen', de: 'Küche reinigen', nl: 'Keuken schoonmaken', it: 'Pulire la cucina', es: 'Limpiar la cocina', pl: 'Sprzątanie kuchni' },
+  // Ses scripts par rôle (passe bis de la tranche robots 2, 20/10 : `scripts-sans-pieces`, `scripts-avec-pieces`).
+  'Nettoyer tout le logement': { en: 'Clean the whole home', de: 'Ganze Wohnung reinigen', nl: 'Hele woning schoonmaken', it: 'Pulire tutta la casa', es: 'Limpiar toda la casa', pl: 'Sprzątanie całego mieszkania' },
+  'Pause de l’aspirateur': { en: 'Pause the vacuum', de: 'Staubsauger pausieren', nl: 'Stofzuiger pauzeren', it: 'Pausa dell’aspirapolvere', es: 'Pausa de la aspiradora', pl: 'Pauza odkurzacza' },
+  'Reprendre l’aspirateur': { en: 'Resume the vacuum', de: 'Staubsauger fortsetzen', nl: 'Stofzuiger hervatten', it: 'Riprendere l’aspirapolvere', es: 'Reanudar la aspiradora', pl: 'Wznowienie odkurzacza' },
+  'Retour à la base': { en: 'Return to base', de: 'Zurück zur Station', nl: 'Terug naar het station', it: 'Ritorno alla base', es: 'Volver a la base', pl: 'Powrót do stacji' },
+  'Localiser l’aspirateur': { en: 'Locate the vacuum', de: 'Staubsauger finden', nl: 'Stofzuiger zoeken', it: 'Localizzare l’aspirapolvere', es: 'Localizar la aspiradora', pl: 'Lokalizacja odkurzacza' },
+  'Arroser le jardin': { en: 'Water the garden', de: 'Garten gießen', nl: 'Tuin sproeien', it: 'Irrigare il giardino', es: 'Regar el jardín', pl: 'Podlewanie ogrodu' },
   'Aspirateur Mode avancé': { en: 'Vacuum Advanced mode', de: 'Staubsauger Erweiterter Modus', nl: 'Stofzuiger Geavanceerde modus', it: 'Aspirapolvere Modalità avanzata', es: 'Aspiradora Modo avanzado', pl: 'Odkurzacz Tryb zaawansowany' },
   'Aspirateur Mode de travail': { en: 'Vacuum Work mode', de: 'Staubsauger Arbeitsmodus', nl: 'Stofzuiger Werkmodus', it: 'Aspirapolvere Modalità di lavoro', es: 'Aspiradora Modo de trabajo', pl: 'Odkurzacz Tryb pracy' },
   'Aspirateur Nombre total de nettoyages': { en: 'Vacuum Total cleanings', de: 'Staubsauger Reinigungen gesamt', nl: 'Stofzuiger Aantal schoonmaakbeurten', it: 'Aspirapolvere Numero totale di pulizie', es: 'Aspiradora Número total de limpiezas', pl: 'Odkurzacz Łączna liczba sprzątań' },
@@ -155,6 +186,8 @@ const APPAREILS = {
   'Basilic température': { en: 'Basil temperature', de: 'Basilikum Temperatur', nl: 'Basilicum temperatuur', it: 'Basilico temperatura', es: 'Albahaca temperatura', pl: 'Bazylia temperatura' },
   'Batterie maison': { en: 'Home battery', de: 'Hausbatterie', nl: 'Thuisbatterij', it: 'Batteria di casa', es: 'Batería de casa', pl: 'Bateria domowa' },
   'Batterie niveau': { en: 'Battery level', de: 'Batteriestand', nl: 'Batterijniveau', it: 'Livello batteria', es: 'Nivel de batería', pl: 'Poziom baterii' },
+  // Le motif d'un passage interrompu (chantier IoT, § 10).
+  'Bloqué sous le canapé': { en: 'Stuck under the sofa', de: 'Unter dem Sofa festgefahren', nl: 'Vast onder de bank', it: 'Bloccato sotto il divano', es: 'Atascado bajo el sofá', pl: 'Utknął pod kanapą' },
   'Borne de recharge': { en: 'Charging station', de: 'Ladestation', nl: 'Laadpaal', it: 'Stazione di ricarica', es: 'Punto de recarga', pl: 'Stacja ładowania' },
   'Bouton Cuisine': { en: 'Kitchen button', de: 'Taster Küche', nl: 'Knop keuken', it: 'Pulsante cucina', es: 'Botón cocina', pl: 'Przycisk kuchnia' },
   'Boîtier TV': { en: 'TV box', de: 'TV-Box', nl: 'Tv-box', it: 'Box TV', es: 'Reproductor de TV', pl: 'Przystawka TV' },
@@ -172,6 +205,7 @@ const APPAREILS = {
   'Carte météo animée': { en: 'Animated weather map', de: 'Animierte Wetterkarte', nl: 'Geanimeerde weerkaart', it: 'Mappa meteo animata', es: 'Mapa del tiempo animado', pl: 'Animowana mapa pogody' },
   'Chauffage : consigne de nuit': { en: 'Heating: night setpoint', de: 'Heizung: Nachttemperatur', nl: 'Verwarming: nachtinstelling', it: 'Riscaldamento: temperatura notturna', es: 'Calefacción: consigna nocturna', pl: 'Ogrzewanie: temperatura nocna' },
   'Cinéma': { en: 'Cinema', de: 'Kino', nl: 'Bioscoop', it: 'Cinema', es: 'Cine', pl: 'Kino' },
+  'Climatisation': { en: 'Air conditioner', de: 'Klimaanlage', nl: 'Airconditioner', it: 'Climatizzatore', es: 'Aire acondicionado', pl: 'Klimatyzator' },
   'Consommation du jour': { en: 'Today’s consumption', de: 'Verbrauch heute', nl: 'Verbruik vandaag', it: 'Consumo di oggi', es: 'Consumo de hoy', pl: 'Zużycie dzisiaj' },
   'Consommation heures creuses': { en: 'Off-peak consumption', de: 'Verbrauch Nebenzeit', nl: 'Verbruik daltarief', it: 'Consumo fuori punta', es: 'Consumo en horas valle', pl: 'Zużycie poza szczytem' },
   'Consommation heures pleines': { en: 'Peak consumption', de: 'Verbrauch Hauptzeit', nl: 'Verbruik piektarief', it: 'Consumo di punta', es: 'Consumo en horas punta', pl: 'Zużycie w szczycie' },
@@ -192,10 +226,32 @@ const APPAREILS = {
   'Détecteur de fumée entrée': { en: 'Entrance smoke detector', de: 'Rauchmelder Eingang', nl: 'Rookmelder entree', it: 'Rilevatore di fumo ingresso', es: 'Detector de humo entrada', pl: 'Czujnik dymu wejście' },
   'Détecteur de monoxyde salon': { en: 'Living room CO detector', de: 'CO-Melder Wohnzimmer', nl: 'CO-melder woonkamer', it: 'Rilevatore di CO soggiorno', es: 'Detector de CO salón', pl: 'Czujnik czadu salon' },
   'Echo de la cuisine': { en: 'Kitchen Echo', de: 'Echo Küche', nl: 'Echo keuken', it: 'Echo cucina', es: 'Echo cocina', pl: 'Echo kuchnia' },
+  // Les lecteurs de sa maquette « Cartes médias » (chantier Médias, § 8). L'officielle et sa jumelle HACS portent les mêmes mots, dans chaque langue :
+  // c'est ainsi que l'appariement les retrouve. Les noms de produit (« Echo Dot », « Apple TV 4K ») se lisent pareil partout. Polonais nouveau, à relire par Seba882.
+  'Apple TV Chambre': { en: 'Bedroom Apple TV', de: 'Apple TV Schlafzimmer', nl: 'Apple TV slaapkamer', it: 'Apple TV camera', es: 'Apple TV dormitorio', pl: 'Apple TV sypialnia' },
+  'Echo Dot - Chambre': { en: 'Echo Dot - Bedroom', de: 'Echo Dot - Schlafzimmer', nl: 'Echo Dot - Slaapkamer', it: 'Echo Dot - Camera', es: 'Echo Dot - Dormitorio', pl: 'Echo Dot - Sypialnia' },
+  'Echo Dot Chambre': { en: 'Echo Dot Bedroom', de: 'Echo Dot Schlafzimmer', nl: 'Echo Dot Slaapkamer', it: 'Echo Dot Camera', es: 'Echo Dot Dormitorio', pl: 'Echo Dot Sypialnia' },
+  'Echo Show Salon': { en: 'Living room Echo Show', de: 'Echo Show Wohnzimmer', nl: 'Echo Show woonkamer', it: 'Echo Show soggiorno', es: 'Echo Show salón', pl: 'Echo Show salon' },
+  'Echo Dot - Bureau': { en: 'Echo Dot - Office', de: 'Echo Dot - Büro', nl: 'Echo Dot - Kantoor', it: 'Echo Dot - Studio', es: 'Echo Dot - Despacho', pl: 'Echo Dot - Biuro' },
+  'Partout': { en: 'Everywhere', de: 'Überall', nl: 'Overal', it: 'Ovunque', es: 'En todas partes', pl: 'Wszędzie' },
+  'Apple TV 4K': { en: 'Apple TV 4K', de: 'Apple TV 4K', nl: 'Apple TV 4K', it: 'Apple TV 4K', es: 'Apple TV 4K', pl: 'Apple TV 4K' },
+  'Echo Dot (3e génération)': { en: 'Echo Dot (3rd Gen)', de: 'Echo Dot (3. Generation)', nl: 'Echo Dot (3e generatie)', it: 'Echo Dot (3ª generazione)', es: 'Echo Dot (3.ª generación)', pl: 'Echo Dot (3. generacji)' },
+  'Echo Dot': { en: 'Echo Dot', de: 'Echo Dot', nl: 'Echo Dot', it: 'Echo Dot', es: 'Echo Dot', pl: 'Echo Dot' },
+  'Echo': { en: 'Echo', de: 'Echo', nl: 'Echo', it: 'Echo', es: 'Echo', pl: 'Echo' },
+  'Echo Show': { en: 'Echo Show', de: 'Echo Show', nl: 'Echo Show', it: 'Echo Show', es: 'Echo Show', pl: 'Echo Show' },
+  'Annoncer': { en: 'Announce', de: 'Durchsage', nl: 'Aankondigen', it: 'Annuncia', es: 'Anunciar', pl: 'Ogłoś' },
+  'Parler': { en: 'Speak', de: 'Sprechen', nl: 'Spreken', it: 'Parla', es: 'Hablar', pl: 'Mów' },
+  'Annonces': { en: 'Announcements', de: 'Durchsagen', nl: 'Aankondigingen', it: 'Annunci', es: 'Anuncios', pl: 'Ogłoszenia' },
+  'Prochaine alarme': { en: 'Next alarm', de: 'Nächster Wecker', nl: 'Volgende wekker', it: 'Prossima sveglia', es: 'Próxima alarma', pl: 'Następny alarm' },
   'Enceinte': { en: 'Speaker', de: 'Lautsprecher', nl: 'Speaker', it: 'Diffusore', es: 'Altavoz', pl: 'Głośnik' },
   'Enceinte salon': { en: 'Living room speaker', de: 'Lautsprecher Wohnzimmer', nl: 'Speaker woonkamer', it: 'Diffusore soggiorno', es: 'Altavoz salón', pl: 'Głośnik salon' },
   'En ligne': { en: 'Online', de: 'Online', nl: 'Online', it: 'Online', es: 'En línea', pl: 'Online' },
   'Erreur du distributeur': { en: 'Feeder error', de: 'Fehler des Futterautomaten', nl: 'Fout voerautomaat', it: 'Errore del distributore', es: 'Error del comedero', pl: 'Błąd podajnika' },
+  // La mangeoire et la seconde erreur de l'Aqara (passe bis de l'étape 2 IoT, 19/10). Polonais nouveau, à relire par Seba882 : les quatre noms qui suivent.
+  'Erreur moteur': { en: 'Motor error', de: 'Motorfehler', nl: 'Motorfout', it: 'Errore motore', es: 'Error del motor', pl: 'Błąd silnika' },
+  'Taille de ration': { en: 'Serving size', de: 'Portionsgröße', nl: 'Portiegrootte', it: 'Dimensione della razione', es: 'Tamaño de la ración', pl: 'Wielkość porcji' },
+  'Poids d’une portion': { en: 'Portion weight', de: 'Gewicht einer Portion', nl: 'Gewicht van een portie', it: 'Peso di una porzione', es: 'Peso de una porción', pl: 'Waga porcji' },
+  'Portions distribuées aujourd’hui': { en: 'Portions served today', de: 'Heute ausgegebene Portionen', nl: 'Vandaag gegeven porties', it: 'Porzioni erogate oggi', es: 'Porciones servidas hoy', pl: 'Porcje wydane dzisiaj' },
   'État de la distribution': { en: 'Dispenser state', de: 'Ausgabestatus', nl: 'Status van de uitgifte', it: 'Stato dell’erogazione', es: 'Estado de la dispensación', pl: 'Stan wydawania' },
   'Fenêtre chambre': { en: 'Bedroom window', de: 'Fenster Schlafzimmer', nl: 'Raam slaapkamer', it: 'Finestra camera', es: 'Ventana dormitorio', pl: 'Okno sypialnia' },
   'Fenêtre salon': { en: 'Living room window', de: 'Fenster Wohnzimmer', nl: 'Raam woonkamer', it: 'Finestra soggiorno', es: 'Ventana salón', pl: 'Okno salon' },
@@ -215,14 +271,22 @@ const APPAREILS = {
   'Lumière couloir la nuit': { en: 'Hallway light at night', de: 'Flurlicht bei Nacht', nl: 'Ganglicht ’s nachts', it: 'Luce corridoio di notte', es: 'Luz del pasillo de noche', pl: 'Światło korytarza w nocy' },
   'Maison': { en: 'Home', de: 'Zu Hause', nl: 'Huis', it: 'Casa', es: 'Casa', pl: 'Dom' },
   'Mode de distribution': { en: 'Feeding mode', de: 'Fütterungsmodus', nl: 'Voermodus', it: 'Modalità di erogazione', es: 'Modo de dispensación', pl: 'Tryb karmienia' },
+  'Module fil pilote': { en: 'Pilot wire module', de: 'Fil-Pilote-Modul', nl: 'Fil-pilote-module', it: 'Modulo filo pilota', es: 'Módulo de hilo piloto', pl: 'Moduł fil pilote' },
   'Mouvement entrée': { en: 'Entrance motion', de: 'Bewegung Eingang', nl: 'Beweging entree', it: 'Movimento ingresso', es: 'Movimiento entrada', pl: 'Ruch wejście' },
   'Météo': { en: 'Weather', de: 'Wetter', nl: 'Weer', it: 'Meteo', es: 'Tiempo', pl: 'Pogoda' },
   'Nuit': { en: 'Night', de: 'Nacht', nl: 'Nacht', it: 'Notte', es: 'Noche', pl: 'Noc' },
   'Part fossile du réseau': { en: 'Fossil share of the grid', de: 'Fossiler Anteil im Netz', nl: 'Fossiel aandeel van het net', it: 'Quota fossile della rete', es: 'Parte fósil de la red', pl: 'Udział paliw kopalnych w sieci' },
+  // Les aires de la tondeuse au carnet des robots (chantier IoT, § 10) : le nom de leur interrupteur, sans « Tondeuse Zone ».
+  'Côté garage': { en: 'Garage side', de: 'Garagenseite', nl: 'Garagekant', it: 'Lato garage', es: 'Lado garaje', pl: 'Przy garażu' },
+  'Pelouse arrière': { en: 'Back lawn', de: 'Rasen hinten', nl: 'Achtergazon', it: 'Prato dietro', es: 'Césped trasero', pl: 'Trawnik z tyłu' },
   'Pelouse avant': { en: 'Front lawn', de: 'Rasen vorne', nl: 'Voorgazon', it: 'Prato davanti', es: 'Césped delantero', pl: 'Trawnik z przodu' },
   'Pile porte entrée': { en: 'Entrance door battery', de: 'Batterie Eingangstür', nl: 'Batterij voordeur', it: 'Batteria porta ingresso', es: 'Batería puerta entrada', pl: 'Bateria drzwi wejściowych' },
   'Plafonnier': { en: 'Ceiling light', de: 'Deckenleuchte', nl: 'Plafondlamp', it: 'Plafoniera', es: 'Plafón', pl: 'Lampa sufitowa' },
+  // Le motif d'un passage interrompu, tel qu'un appareil le publie dans la langue de la maison (chantier IoT, § 10).
+  'Pluie détectée': { en: 'Rain detected', de: 'Regen erkannt', nl: 'Regen gedetecteerd', it: 'Pioggia rilevata', es: 'Lluvia detectada', pl: 'Wykryto deszcz' },
   'Point d’équipe': { en: 'Team meeting', de: 'Teambesprechung', nl: 'Teamoverleg', it: 'Riunione di team', es: 'Reunión de equipo', pl: 'Spotkanie zespołu' },
+  'Poêle': { en: 'Stove', de: 'Ofen', nl: 'Kachel', it: 'Stufa', es: 'Estufa', pl: 'Piec' },
+  'Poêle à granulés': { en: 'Pellet stove', de: 'Pelletofen', nl: 'Pelletkachel', it: 'Stufa a pellet', es: 'Estufa de pellets', pl: 'Piec na pellet' },
   // L'apostrophe droite du capteur de la porte, la courbe de sa serrure : deux clés.
   "Porte d'entrée": { en: 'Front door', de: 'Eingangstür', nl: 'Voordeur', it: 'Porta d’ingresso', es: 'Puerta de entrada', pl: 'Drzwi wejściowe' },
   'Porte de garage': { en: 'Garage door', de: 'Garagentor', nl: 'Garagedeur', it: 'Porta del garage', es: 'Puerta del garaje', pl: 'Brama garażowa' },
@@ -237,6 +301,7 @@ const APPAREILS = {
   'Quantité de la distribution manuelle': { en: 'Manual feed quantity', de: 'Menge der manuellen Fütterung', nl: 'Hoeveelheid handmatig voeren', it: 'Quantità dell’erogazione manuale', es: 'Cantidad de la dispensación manual', pl: 'Ilość karmienia ręcznego' },
   'Quantité distribuée aujourd’hui': { en: 'Amount fed today', de: 'Heute ausgegebene Menge', nl: 'Vandaag gegeven hoeveelheid', it: 'Quantità erogata oggi', es: 'Cantidad servida hoy', pl: 'Ilość wydana dzisiaj' },
   "Qualité de l'air": { en: 'Air quality', de: 'Luftqualität', nl: 'Luchtkwaliteit', it: 'Qualità dell’aria', es: 'Calidad del aire', pl: 'Jakość powietrza' },
+  'Radiateur bureau': { en: 'Office radiator', de: 'Heizkörper Büro', nl: 'Radiator kantoor', it: 'Radiatore studio', es: 'Radiador despacho', pl: 'Grzejnik biuro' },
   'Radiateur bureau hors gel': { en: 'Office radiator frost protection', de: 'Heizkörper Büro Frostschutz', nl: 'Radiator kantoor vorstbeveiliging', it: 'Radiatore studio antigelo', es: 'Radiador despacho antihielo', pl: 'Grzejnik biuro ochrona przed mrozem' },
   'Radiateur chambre': { en: 'Bedroom radiator', de: 'Heizkörper Schlafzimmer', nl: 'Radiator slaapkamer', it: 'Radiatore camera', es: 'Radiador dormitorio', pl: 'Grzejnik sypialnia' },
   'Radiateur salon': { en: 'Living room radiator', de: 'Heizkörper Wohnzimmer', nl: 'Radiator woonkamer', it: 'Radiatore soggiorno', es: 'Radiador salón', pl: 'Grzejnik salon' },
@@ -254,6 +319,7 @@ const APPAREILS = {
   'Sortir le linge': { en: 'Take out the laundry', de: 'Wäsche herausnehmen', nl: 'Was uit de machine halen', it: 'Tirare fuori il bucato', es: 'Sacar la ropa', pl: 'Wyjąć pranie' },
   'Surplus': { en: 'Surplus', de: 'Überschuss', nl: 'Overschot', it: 'Surplus', es: 'Excedente', pl: 'Nadwyżka' },
   'TV du salon': { en: 'Living room TV', de: 'Fernseher Wohnzimmer', nl: 'Tv woonkamer', it: 'TV soggiorno', es: 'TV salón', pl: 'Telewizor salon' },
+  'Température extérieure': { en: 'Outdoor temperature', de: 'Außentemperatur', nl: 'Buitentemperatuur', it: 'Temperatura esterna', es: 'Temperatura exterior', pl: 'Temperatura zewnętrzna' },
   'Thermostat chambre': { en: 'Bedroom thermostat', de: 'Thermostat Schlafzimmer', nl: 'Thermostaat slaapkamer', it: 'Termostato camera', es: 'Termostato dormitorio', pl: 'Termostat sypialnia' },
   'Thermostat salon': { en: 'Living room thermostat', de: 'Thermostat Wohnzimmer', nl: 'Thermostaat woonkamer', it: 'Termostato soggiorno', es: 'Termostato salón', pl: 'Termostat salon' },
   'Tondeuse': { en: 'Mower', de: 'Mähroboter', nl: 'Grasmaaier', it: 'Tosaerba', es: 'Cortacésped', pl: 'Kosiarka' },
@@ -280,9 +346,17 @@ const APPAREILS = {
   'Verrouillage enfant': { en: 'Child lock', de: 'Kindersicherung', nl: 'Kinderslot', it: 'Blocco bambini', es: 'Bloqueo infantil', pl: 'Blokada rodzicielska' },
   'Vigilance météo': { en: 'Weather warning', de: 'Wetterwarnung', nl: 'Weerwaarschuwing', it: 'Allerta meteo', es: 'Aviso meteorológico', pl: 'Ostrzeżenie pogodowe' },
   'Visite du ramoneur': { en: 'Chimney sweep visit', de: 'Besuch des Schornsteinfegers', nl: 'Bezoek van de schoorsteenveger', it: 'Visita dello spazzacamino', es: 'Visita del deshollinador', pl: 'Wizyta kominiarza' },
+  'Volet bureau': { en: 'Office blind', de: 'Rollladen Büro', nl: 'Rolluik kantoor', it: 'Tapparella studio', es: 'Persiana despacho', pl: 'Roleta biuro' },
   'Volet chambre': { en: 'Bedroom blind', de: 'Rollladen Schlafzimmer', nl: 'Rolluik slaapkamer', it: 'Tapparella camera', es: 'Persiana dormitorio', pl: 'Roleta sypialnia' },
   'Volet cuisine': { en: 'Kitchen blind', de: 'Rollladen Küche', nl: 'Rolluik keuken', it: 'Tapparella cucina', es: 'Persiana cocina', pl: 'Roleta kuchnia' },
   'Volet salon': { en: 'Living room blind', de: 'Rollladen Wohnzimmer', nl: 'Rolluik woonkamer', it: 'Tapparella soggiorno', es: 'Persiana salón', pl: 'Roleta salon' },
+  // Les ouvrants que la carte sait dire et que la démo n'avait pas (audit du 19/10) : un store banne, un rideau sans position, un volet muet, un volet à la Netatmo, un garage, un portail.
+  'Store banne': { en: 'Awning', de: 'Markise', nl: 'Zonnescherm', it: 'Tenda da sole', es: 'Toldo', pl: 'Markiza' },
+  'Rideau chambre': { en: 'Bedroom curtain', de: 'Vorhang Schlafzimmer', nl: 'Gordijn slaapkamer', it: 'Tenda camera', es: 'Cortina dormitorio', pl: 'Zasłona sypialnia' },
+  'Volet entrée': { en: 'Entrance blind', de: 'Rollladen Eingang', nl: 'Rolluik entree', it: 'Tapparella ingresso', es: 'Persiana entrada', pl: 'Roleta wejście' },
+  'Volet salle de bain': { en: 'Bathroom blind', de: 'Rollladen Badezimmer', nl: 'Rolluik badkamer', it: 'Tapparella bagno', es: 'Persiana baño', pl: 'Roleta łazienka' },
+  'Porte de garage motorisée': { en: 'Motorised garage door', de: 'Elektrisches Garagentor', nl: 'Elektrische garagedeur', it: 'Porta del garage motorizzata', es: 'Puerta de garaje motorizada', pl: 'Brama garażowa z napędem' },
+  'Portail': { en: 'Gate', de: 'Hoftor', nl: 'Poort', it: 'Cancello', es: 'Portón', pl: 'Brama wjazdowa' },
   'Volets : fermeture au coucher du soleil': { en: 'Blinds: close at sunset', de: 'Rollläden: schließen bei Sonnenuntergang', nl: 'Rolluiken: sluiten bij zonsondergang', it: 'Tapparelle: chiusura al tramonto', es: 'Persianas: cerrar al atardecer', pl: 'Rolety: zamknięcie o zachodzie' },
   'Volets : ouverture du matin': { en: 'Blinds: open in the morning', de: 'Rollläden: Öffnen am Morgen', nl: 'Rolluiken: openen ’s ochtends', it: 'Tapparelle: apertura al mattino', es: 'Persianas: apertura por la mañana', pl: 'Rolety: otwarcie rano' },
   'Éclairage terrasse au crépuscule': { en: 'Terrace lighting at dusk', de: 'Terrassenbeleuchtung bei Dämmerung', nl: 'Terrasverlichting bij schemering', it: 'Illuminazione terrazza al crepuscolo', es: 'Iluminación de la terraza al anochecer', pl: 'Oświetlenie tarasu o zmierzchu' },
@@ -292,6 +366,17 @@ const APPAREILS = {
   'Serveur de fichiers du jour': { en: 'File server today', de: 'Dateiserver heute', nl: 'Bestandsserver vandaag', it: 'Server di file oggi', es: 'Servidor de archivos hoy', pl: 'Serwer plików dzisiaj' },
   'Lave-vaisselle': { en: 'Dishwasher', de: 'Geschirrspüler', nl: 'Vaatwasser', it: 'Lavastoviglie', es: 'Lavavajillas', pl: 'Zmywarka' },
   'Lave-vaisselle du jour': { en: 'Dishwasher today', de: 'Geschirrspüler heute', nl: 'Vaatwasser vandaag', it: 'Lavastoviglie oggi', es: 'Lavavajillas hoy', pl: 'Zmywarka dzisiaj' },
+  // Les prises de la démo (chantier Prises, § 10) : leurs noms, ceux de leurs capteurs et de leurs appareils.
+  'Prise NAS (Zephyr)': { en: 'NAS plug (Zephyr)', de: 'NAS-Steckdose (Zephyr)', nl: 'NAS-stopcontact (Zephyr)', it: 'Presa NAS (Zephyr)', es: 'Enchufe NAS (Zephyr)', pl: 'Gniazdko NAS (Zephyr)' },
+  'Prise PC Bureau (Atlas)': { en: 'Office PC plug (Atlas)', de: 'PC-Steckdose Büro (Atlas)', nl: 'Pc-stopcontact kantoor (Atlas)', it: 'Presa PC studio (Atlas)', es: 'Enchufe PC despacho (Atlas)', pl: 'Gniazdko PC biuro (Atlas)' },
+  'Prise lave-vaisselle': { en: 'Dishwasher plug', de: 'Steckdose Geschirrspüler', nl: 'Stopcontact vaatwasser', it: 'Presa lavastoviglie', es: 'Enchufe lavavajillas', pl: 'Gniazdko zmywarki' },
+  'Puissance': { en: 'Power', de: 'Leistung', nl: 'Vermogen', it: 'Potenza', es: 'Potencia', pl: 'Moc' },
+  'Énergie': { en: 'Energy', de: 'Energie', nl: 'Energie', it: 'Energia', es: 'Energía', pl: 'Energia' },
+  'Prise connectée': { en: 'Smart plug', de: 'Smarte Steckdose', nl: 'Slim stopcontact', it: 'Presa smart', es: 'Enchufe inteligente', pl: 'Inteligentne gniazdko' },
+  'Alarme sirène Siren on': { en: 'Alarm siren Siren on', de: 'Alarmsirene Siren on', nl: 'Alarmsirene Siren on', it: 'Sirena allarme Siren on', es: 'Sirena de alarma Siren on', pl: 'Syrena alarmu Siren on' },
+  'Alarme sirène': { en: 'Alarm siren', de: 'Alarmsirene', nl: 'Alarmsirene', it: 'Sirena allarme', es: 'Sirena de alarma', pl: 'Syrena alarmu' },
+  'Sirène': { en: 'Siren', de: 'Sirene', nl: 'Sirene', it: 'Sirena', es: 'Sirena', pl: 'Syrena' },
+  'Matin': { en: 'Morning', de: 'Morgen', nl: 'Ochtend', it: 'Mattina', es: 'Mañana', pl: 'Poranek' },
   'Radiateur chambre du jour': { en: 'Bedroom heater today', de: 'Heizung Schlafzimmer heute', nl: 'Radiator slaapkamer vandaag', it: 'Radiatore camera oggi', es: 'Radiador dormitorio hoy', pl: 'Grzejnik w sypialni dzisiaj' },
   'Box internet': { en: 'Internet router', de: 'Internet-Router', nl: 'Internetrouter', it: 'Router internet', es: 'Rúuter de internet', pl: 'Router internetowy' },
   'Box internet du jour': { en: 'Internet router today', de: 'Internet-Router heute', nl: 'Internetrouter vandaag', it: 'Router internet oggi', es: 'Rúuter de internet hoy', pl: 'Router internetowy dzisiaj' },
@@ -305,6 +390,78 @@ const APPAREILS = {
   'Production du mois': { en: 'Production this month', de: 'Erzeugung diesen Monat', nl: 'Opbrengst deze maand', it: 'Produzione del mese', es: 'Producción del mes', pl: 'Produkcja w tym miesiącu' },
   'Consommation de l’année': { en: 'Consumption this year', de: 'Verbrauch dieses Jahr', nl: 'Verbruik dit jaar', it: 'Consumo dell’anno', es: 'Consumo del año', pl: 'Zużycie w tym roku' },
   'Production de l’année': { en: 'Production this year', de: 'Erzeugung dieses Jahr', nl: 'Opbrengst dit jaar', it: 'Produzione dell’anno', es: 'Producción del año', pl: 'Produkcja w tym roku' },
+  // Les lampes de sa maquette « Cartes lumières » et les automatisations qui les allument (chantier Lumières, § 9).
+  'Ampoule': { en: 'Bulb', de: 'Glühbirne', nl: 'Lamp', it: 'Lampadina', es: 'Bombilla', pl: 'Żarówka' },
+  'Veilleuse': { en: 'Night light', de: 'Nachtlicht', nl: 'Nachtlampje', it: 'Luce notturna', es: 'Luz nocturna', pl: 'Lampka nocna' },
+  'Applique Extérieur': { en: 'Outdoor wall light', de: 'Außenwandleuchte', nl: 'Buitenwandlamp', it: 'Applique esterna', es: 'Aplique exterior', pl: 'Kinkiet zewnętrzny' },
+  'Coucher de Lino': { en: 'Lino’s bedtime', de: 'Linos Schlafenszeit', nl: 'Bedtijd van Lino', it: 'Nanna di Lino', es: 'Hora de dormir de Lino', pl: 'Usypianie Lina' },
+  'Coucher du soleil': { en: 'Sunset', de: 'Sonnenuntergang', nl: 'Zonsondergang', it: 'Tramonto', es: 'Puesta de sol', pl: 'Zachód słońca' },
+  // Les mesures de sa maquette « Cartes capteurs » et le thermomètre du salon (chantier Capteurs, § 9).
+  // Polonais nouveau, à relire par Seba882 — les huit noms de ce bloc et du suivant : jasność, pyły, LZO, les trois « Termometr »,
+  // wiatr, Stacja pogodowa (liste : docs/chantier-capteurs-plan-1-mesures.md, tâche 8).
+  'luminosité': { en: 'brightness', de: 'Helligkeit', nl: 'lichtsterkte', it: 'luminosità', es: 'luminosidad', pl: 'jasność' },
+  'particules': { en: 'particles', de: 'Feinstaub', nl: 'fijnstof', it: 'particolato', es: 'partículas', pl: 'pyły' },
+  'COV': { en: 'VOC', de: 'VOC', nl: 'VOS', it: 'COV', es: 'COV', pl: 'LZO' },
+  'Thermomètre salon': { en: 'Living room thermometer', de: 'Thermometer Wohnzimmer', nl: 'Thermometer woonkamer', it: 'Termometro soggiorno', es: 'Termómetro salón', pl: 'Termometr salon' },
+  'Thermomètre salon pile': { en: 'Living room thermometer battery', de: 'Thermometer Wohnzimmer Batterie', nl: 'Thermometer woonkamer batterij', it: 'Termometro soggiorno batteria', es: 'Termómetro salón pila', pl: 'Termometr salon bateria' },
+  'Thermomètre': { en: 'Thermometer', de: 'Thermometer', nl: 'Thermometer', it: 'Termometro', es: 'Termómetro', pl: 'Termometr' },
+  // La station du jardin (chantier Capteurs, C14, C15) : une mesure du dehors.
+  'vent': { en: 'wind', de: 'Wind', nl: 'wind', it: 'vento', es: 'viento', pl: 'wiatr' },
+  'Station météo': { en: 'Weather station', de: 'Wetterstation', nl: 'Weerstation', it: 'Stazione meteo', es: 'Estación meteorológica', pl: 'Stacja pogodowa' },
+  // Les capteurs des pièces (chantier Capteurs, passe 1 ter, 16/10 ; C16). Polonais nouveau, à relire par Seba882 : les onze noms de ce bloc.
+  'Capteur': { en: 'Sensor', de: 'Sensor', nl: 'Sensor', it: 'Sensore', es: 'Sensor', pl: 'Czujnik' },
+  'Capteur salon': { en: 'Living room sensor', de: 'Sensor Wohnzimmer', nl: 'Sensor woonkamer', it: 'Sensore soggiorno', es: 'Sensor salón', pl: 'Czujnik salon' },
+  'Luxmètre salon': { en: 'Living room light meter', de: 'Luxmeter Wohnzimmer', nl: 'Luxmeter woonkamer', it: 'Luxmetro soggiorno', es: 'Luxómetro salón', pl: 'Luksomierz salon' },
+  'Purificateur salon': { en: 'Living room air purifier', de: 'Luftreiniger Wohnzimmer', nl: 'Luchtreiniger woonkamer', it: 'Purificatore soggiorno', es: 'Purificador salón', pl: 'Oczyszczacz salon' },
+  'Capteur COV salon': { en: 'Living room VOC sensor', de: 'VOC-Sensor Wohnzimmer', nl: 'VOS-sensor woonkamer', it: 'Sensore COV soggiorno', es: 'Sensor COV salón', pl: 'Czujnik LZO salon' },
+  'Capteur cuisine': { en: 'Kitchen sensor', de: 'Sensor Küche', nl: 'Sensor keuken', it: 'Sensore cucina', es: 'Sensor cocina', pl: 'Czujnik kuchnia' },
+  'Capteur chambre': { en: 'Bedroom sensor', de: 'Sensor Schlafzimmer', nl: 'Sensor slaapkamer', it: 'Sensore camera', es: 'Sensor dormitorio', pl: 'Czujnik sypialnia' },
+  'Capteur chambre Lino': { en: 'Lino’s bedroom sensor', de: 'Sensor Linos Zimmer', nl: 'Sensor kamer Lino', it: 'Sensore camera di Lino', es: 'Sensor dormitorio de Lino', pl: 'Czujnik pokój Lina' },
+  'Capteur bureau': { en: 'Office sensor', de: 'Sensor Büro', nl: 'Sensor kantoor', it: 'Sensore studio', es: 'Sensor despacho', pl: 'Czujnik biuro' },
+  'Capteur entrée': { en: 'Entrance sensor', de: 'Sensor Eingang', nl: 'Sensor entree', it: 'Sensore ingresso', es: 'Sensor entrada', pl: 'Czujnik wejście' },
+  'Capteur salle de bain': { en: 'Bathroom sensor', de: 'Sensor Badezimmer', nl: 'Sensor badkamer', it: 'Sensore bagno', es: 'Sensor baño', pl: 'Czujnik łazienka' },
+  // Les cas de l'audit du 19/10 (point 15) : un monoxyde en ppm, une mesure muette, un binaire à part, une vigilance active.
+  'Capteur CO cuisine': { en: 'Kitchen CO sensor', de: 'CO-Sensor Küche', nl: 'CO-sensor keuken', it: 'Sensore CO cucina', es: 'Sensor CO cocina', pl: 'Czujnik CO kuchnia' },
+  'Capteur de monoxyde': { en: 'Carbon monoxide sensor', de: 'Kohlenmonoxidsensor', nl: 'Koolmonoxidesensor', it: 'Sensore di monossido', es: 'Sensor de monóxido', pl: 'Czujnik tlenku węgla' },
+  'monoxyde': { en: 'carbon monoxide', de: 'Kohlenmonoxid', nl: 'koolmonoxide', it: 'monossido', es: 'monóxido', pl: 'tlenek węgla' },
+  'Capteur d’air bureau': { en: 'Office air sensor', de: 'Luftsensor Büro', nl: 'Luchtsensor kantoor', it: 'Sensore aria studio', es: 'Sensor de aire despacho', pl: 'Czujnik powietrza biuro' },
+  'Capteur de vibration': { en: 'Vibration sensor', de: 'Vibrationssensor', nl: 'Trillingssensor', it: 'Sensore di vibrazione', es: 'Sensor de vibración', pl: 'Czujnik wibracji' },
+  'Lave-linge vibration': { en: 'Washing machine vibration', de: 'Waschmaschine Vibration', nl: 'Wasmachine trilling', it: 'Lavatrice vibrazione', es: 'Lavadora vibración', pl: 'Pralka wibracje' },
+  'Vigilance Météo-France': { en: 'Météo-France warning', de: 'Météo-France-Warnung', nl: 'Météo-France-waarschuwing', it: 'Allerta Météo-France', es: 'Aviso de Météo-France', pl: 'Ostrzeżenie Météo-France' },
+  // Le frigo (chantier Capteurs, passe 1 quater, 16/10 ; C17) : un capteur SANS zone, sa carte neutre. Polonais nouveau, à relire par Seba882.
+  'Capteur Frigo': { en: 'Fridge sensor', de: 'Kühlschranksensor', nl: 'Koelkastsensor', it: 'Sensore frigo', es: 'Sensor nevera', pl: 'Czujnik lodówki' },
+  /* Les capteurs binaires, les plantes et les piles de sa maquette « Cartes capteurs » (chantier Capteurs, étapes 2 et 3, § 12) : les appareils
+   * des ouvrants, des détecteurs et des détecteurs de présence, leurs piles, les deux plantes découvertes et un bouton. Les deux noms latins se
+   * lisent pareil partout. Polonais nouveau, à relire par Seba882. */
+  'Contact porte entrée': { en: 'Entrance door contact', de: 'Kontakt Eingangstür', nl: 'Contact voordeur', it: 'Contatto porta ingresso', es: 'Contacto puerta entrada', pl: 'Czujnik drzwi wejściowych' },
+  'Contact baie vitrée': { en: 'Patio door contact', de: 'Kontakt Terrassentür', nl: 'Contact schuifpui', it: 'Contatto portafinestra', es: 'Contacto puerta acristalada', pl: 'Czujnik drzwi tarasowych' },
+  'Contact fenêtre salon': { en: 'Living room window contact', de: 'Kontakt Fenster Wohnzimmer', nl: 'Contact raam woonkamer', it: 'Contatto finestra soggiorno', es: 'Contacto ventana salón', pl: 'Czujnik okna w salonie' },
+  'Contact fenêtre chambre': { en: 'Bedroom window contact', de: 'Kontakt Fenster Schlafzimmer', nl: 'Contact raam slaapkamer', it: 'Contatto finestra camera', es: 'Contacto ventana dormitorio', pl: 'Czujnik okna w sypialni' },
+  'Contact porte de garage': { en: 'Garage door contact', de: 'Kontakt Garagentor', nl: 'Contact garagedeur', it: 'Contatto porta garage', es: 'Contacto puerta garaje', pl: 'Czujnik bramy garażowej' },
+  'Contact porte de service': { en: 'Side door contact', de: 'Kontakt Nebeneingang', nl: 'Contact zijdeur', it: 'Contatto porta di servizio', es: 'Contacto puerta de servicio', pl: 'Czujnik drzwi bocznych' },
+  'Contact de porte': { en: 'Door contact', de: 'Türkontakt', nl: 'Deurcontact', it: 'Contatto porta', es: 'Contacto de puerta', pl: 'Czujnik drzwi' },
+  'Contact de fenêtre': { en: 'Window contact', de: 'Fensterkontakt', nl: 'Raamcontact', it: 'Contatto finestra', es: 'Contacto de ventana', pl: 'Czujnik okna' },
+  'Détecteur de fumée': { en: 'Smoke detector', de: 'Rauchmelder', nl: 'Rookmelder', it: 'Rilevatore di fumo', es: 'Detector de humo', pl: 'Czujnik dymu' },
+  'Détecteur de monoxyde': { en: 'Carbon monoxide detector', de: 'Kohlenmonoxidmelder', nl: 'Koolmonoxidemelder', it: 'Rilevatore di monossido', es: 'Detector de monóxido', pl: 'Czujnik czadu' },
+  'Détecteur de fuite': { en: 'Leak detector', de: 'Leckmelder', nl: 'Lekkagemelder', it: 'Rilevatore di perdite', es: 'Detector de fugas', pl: 'Czujnik zalania' },
+  'Détecteur de fuite évier': { en: 'Sink leak detector', de: 'Leckmelder Spüle', nl: 'Lekkagemelder gootsteen', it: 'Rilevatore di perdite lavello', es: 'Detector de fugas fregadero', pl: 'Czujnik zalania przy zlewie' },
+  'Radar bureau': { en: 'Office radar', de: 'Radar Büro', nl: 'Radar kantoor', it: 'Radar studio', es: 'Radar despacho', pl: 'Radar biuro' },
+  'Radar de présence': { en: 'Presence radar', de: 'Präsenzradar', nl: 'Aanwezigheidsradar', it: 'Radar di presenza', es: 'Radar de presencia', pl: 'Radar obecności' },
+  'Détecteur de mouvement salon': { en: 'Living room motion detector', de: 'Bewegungsmelder Wohnzimmer', nl: 'Bewegingsmelder woonkamer', it: 'Rilevatore di movimento soggiorno', es: 'Detector de movimiento salón', pl: 'Czujnik ruchu salon' },
+  'Détecteur de mouvement entrée': { en: 'Entrance motion detector', de: 'Bewegungsmelder Eingang', nl: 'Bewegingsmelder entree', it: 'Rilevatore di movimento ingresso', es: 'Detector de movimiento entrada', pl: 'Czujnik ruchu wejście' },
+  'Détecteur de mouvement': { en: 'Motion detector', de: 'Bewegungsmelder', nl: 'Bewegingsmelder', it: 'Rilevatore di movimento', es: 'Detector de movimiento', pl: 'Czujnik ruchu' },
+  'Bouton salon': { en: 'Living room button', de: 'Taster Wohnzimmer', nl: 'Knop woonkamer', it: 'Pulsante soggiorno', es: 'Botón salón', pl: 'Przycisk salon' },
+  'Bouton sans fil': { en: 'Wireless button', de: 'Funktaster', nl: 'Draadloze knop', it: 'Pulsante senza fili', es: 'Botón inalámbrico', pl: 'Przycisk bezprzewodowy' },
+  'Dracaena Marginata': { en: 'Dracaena Marginata', de: 'Dracaena Marginata', nl: 'Dracaena Marginata', it: 'Dracaena Marginata', es: 'Dracaena Marginata', pl: 'Dracaena Marginata' },
+  'Schefflera': { en: 'Schefflera', de: 'Schefflera', nl: 'Schefflera', it: 'Schefflera', es: 'Schefflera', pl: 'Schefflera' },
+  'Capteur de plante': { en: 'Plant sensor', de: 'Pflanzensensor', nl: 'Plantsensor', it: 'Sensore per piante', es: 'Sensor de planta', pl: 'Czujnik rośliny' },
+  'MeteoAlarm': { en: 'MeteoAlarm', de: 'MeteoAlarm', nl: 'MeteoAlarm', it: 'MeteoAlarm', es: 'MeteoAlarm', pl: 'MeteoAlarm' },
+  'Basilic besoin eau': { en: 'Basil needs water', de: 'Basilikum braucht Wasser', nl: 'Basilicum heeft water nodig', it: 'Basilico ha bisogno d’acqua', es: 'Albahaca necesita agua', pl: 'Bazylia potrzebuje wody' },
+  'pile': { en: 'battery', de: 'Batterie', nl: 'batterij', it: 'batteria', es: 'pila', pl: 'bateria' },
+  'sabotage': { en: 'tamper', de: 'Sabotage', nl: 'sabotage', it: 'manomissione', es: 'sabotaje', pl: 'sabotaż' },
+  'humidité du sol': { en: 'soil moisture', de: 'Bodenfeuchte', nl: 'bodemvochtigheid', it: 'umidità del terreno', es: 'humedad del suelo', pl: 'wilgotność gleby' },
+  'conductivité': { en: 'conductivity', de: 'Leitfähigkeit', nl: 'geleidbaarheid', it: 'conducibilità', es: 'conductividad', pl: 'przewodność' },
+  'lumière': { en: 'light', de: 'Licht', nl: 'licht', it: 'luce', es: 'luz', pl: 'światło' },
 };
 
 /** Le nom d'un appareil, sinon d'un lieu, dans la langue de la demonstration. */
@@ -317,21 +474,16 @@ const ETAGE_DE = { salon: 'rdc', cuisine: 'rdc', entree: 'rdc', chambre: 'etage'
 const PIECES = [
   ['salon', 'Salon', 21.4, 47, 612],
   ['cuisine', 'Cuisine', 22.8, 51, null],
-  ['chambre', 'Chambre', 19.6, 49, 1480],  // « Élevé » (orange) : la carte « A surveiller » a de quoi montrer
+  ['chambre', 'Chambre', 19.6, 49, 1659],  // « Confiné » (rouge), la chambre de sa maquette « Cartes capteurs » : la carte « A surveiller » a de quoi montrer
   ['bureau', 'Bureau', 20.9, 45, 538],
   ['entree', 'Entrée', 20.1, 46, null],
-  ['salle_de_bain', 'Salle de bain', 23.2, 58, null],
+  ['salle_de_bain', 'Salle de bain', 23.2, 68, null],  // « Humide » : la salle de bain de sa maquette, après la douche
 ];
 
 function etatsInitiaux() {
   const states = {
-    'sun.sun': (() => {
-      const lever = new Date(); lever.setHours(7, 12, 0, 0);
-      const coucher = new Date(); coucher.setHours(20, 28, 0, 0);
-      if (coucher < new Date()) coucher.setDate(coucher.getDate() + 1);
-      if (lever < new Date()) lever.setDate(lever.getDate() + 1);
-      return s('above_horizon', { friendly_name: 'Soleil', elevation: 34, next_rising: lever.toISOString(), next_setting: coucher.toISOString() });
-    })(),
+    // Le soleil des volets (§ 9) : levé à 07:47, couché à 20:24, sa position à l'heure de la démo.
+    'sun.sun': etatSoleilDemo(horlogeVolets()),
     'weather.maison': s('partlycloudy', { friendly_name: 'Météo', temperature: 24.3, humidity: 52, temperature_unit: '°C', supported_features: 3,
       apparent_temperature: 26, wind_speed: 9, wind_gust_speed: 20, wind_bearing: 281, wind_speed_unit: 'km/h',
       pressure: 1014, uv_index: 3, visibility: 12 }),
@@ -443,6 +595,8 @@ function etatsInitiaux() {
     'sensor.lave_vaisselle_jour': s(0.94, { friendly_name: etiquette('Lave-vaisselle du jour'), unit_of_measurement: 'kWh', device_class: 'energy' }),
     'sensor.radiateur_chambre_puissance': s(0, { friendly_name: etiquette('Radiateur chambre'), unit_of_measurement: 'W', device_class: 'power' }),
     'sensor.radiateur_chambre_jour': s(0.61, { friendly_name: etiquette('Radiateur chambre du jour'), unit_of_measurement: 'kWh', device_class: 'energy' }),
+    // La puissance du module du bureau (planning de chauffe) : le moteur de la démo la fait suivre le mode.
+    'sensor.radiateur_bureau_puissance': s(0, { friendly_name: etiquette('Radiateur bureau'), unit_of_measurement: 'W', device_class: 'power' }),
     'sensor.box_internet_puissance': s(11, { friendly_name: etiquette('Box internet'), unit_of_measurement: 'W', device_class: 'power' }),
     'sensor.box_internet_jour': s(0.26, { friendly_name: etiquette('Box internet du jour'), unit_of_measurement: 'kWh', device_class: 'energy' }),
     /* Le TARIF (06/10) : deux prix, et le capteur binaire qui dit lequel court.
@@ -472,20 +626,20 @@ function etatsInitiaux() {
     // Sa telecommande : une entite a part, sur le MEME appareil. C'est par
     // la que passent les touches, et c'est l'unique chemin d'un Android TV.
     'remote.tv_salon': s('on', { friendly_name: 'TV du salon', supported_features: 0 }),
-    /* Un Echo : il ne sait PAS parcourir sa bibliothèque (`alexa_media` n'expose
-     * aucun arbre), et c'est tout l'intérêt — la fiche montre alors la phrase,
-     * le seul chemin pour lui demander une playlist. */
-    'media_player.echo_cuisine': s('idle', { friendly_name: 'Echo de la cuisine', supported_features: 5644 }),
-    'media_player.tv_salon': s('playing', { friendly_name: 'TV du salon', supported_features: 450487,
+    // `device_class: tv` : le glyphe de l'écran sur sa carte (passe bis Médias, 17/10).
+    'media_player.tv_salon': s('playing', { friendly_name: 'TV du salon', supported_features: 450487, device_class: 'tv',
       source_list: ['Netflix', 'Disney+', 'YouTube', 'Prime Video', 'Free TV', 'Plex', 'Musique', 'Photos', 'Arcade', 'App Store', 'Crunchyroll'],
       app_name: 'Netflix', app_id: 'com.netflix.Netflix',
       media_title: 'Stranger Things', media_artist: 'S4 - E1', media_duration: 4672, media_position: 1591,
       media_position_updated_at: new Date().toISOString(), volume_level: .4 }),
-    'media_player.salon': s('playing', { friendly_name: 'Enceinte salon', media_title: 'Clair de Lune', media_artist: 'Debussy', volume_level: .35, supported_features: 20925, entity_picture: 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%234c1d95%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%230ea5e9%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2296%22%20height%3D%2296%22%20fill%3D%22url(%23g)%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%2226%22%20fill%3D%22%23111827%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%225%22%20fill%3D%22%23f4f4f5%22%2F%3E%3C%2Fsvg%3E' }),
+    // Une durée et une position : la progression de sa carte existe (passe bis Médias, 17/10).
+    'media_player.salon': s('playing', { friendly_name: 'Enceinte salon', media_title: 'Clair de Lune', media_artist: 'Debussy', volume_level: .35, supported_features: 20925,
+      media_duration: 318, media_position: 74, media_position_updated_at: new Date().toISOString(), entity_picture: 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%234c1d95%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%230ea5e9%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2296%22%20height%3D%2296%22%20fill%3D%22url(%23g)%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%2226%22%20fill%3D%22%23111827%22%2F%3E%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%225%22%20fill%3D%22%23f4f4f5%22%2F%3E%3C%2Fsvg%3E' }),
     // Un vrai robot annonce ce qu'il sait faire : sans supported_features ni
     // liste de vitesses, la fiche n'avait ni boutons ni selecteur a montrer.
+    // 8828 + 16384 : le bit CLEAN_AREA (tranche robots 2, R1) — il sait viser des pièces, et Home Assistant lui offre l'association.
     'vacuum.aspirateur': s('docked', { friendly_name: 'Aspirateur', battery_level: 92,
-      supported_features: 8828, fan_speed: 'max_plus',
+      supported_features: 25212, fan_speed: 'max_plus',
       fan_speed_list: ['quiet', 'normal', 'max', 'max_plus'],
       // Les pieces que le robot annonce, avec leurs segments (vue du robot, ADR 0042).
       // En minuscules comme un robot les annonce, dans la langue de la démo :
@@ -505,6 +659,8 @@ function etatsInitiaux() {
     'button.aspirateur_reinitialiser_filtre': s('unknown', { friendly_name: 'Aspirateur Réinitialiser le filtre' }),
     'select.aspirateur_mode_de_travail': s('vacuum', { friendly_name: 'Aspirateur Mode de travail', options: ['vacuum', 'mop', 'vacuum_and_mop'] }),
     'select.aspirateur_debit_d_eau': s('medium', { friendly_name: "Aspirateur Débit d'eau", options: ['low', 'medium', 'high'] }),
+    // Sa carte active (tranche robots 2, R11) : une seule carte ; `?demo&robots=etages` en donne deux.
+    'select.aspirateur_carte_active': s(etiquette('Maison'), { friendly_name: 'Aspirateur Carte active', options: [etiquette('Maison')] }),
     'switch.aspirateur_detection_tapis': s('on', { friendly_name: 'Aspirateur Détection tapis' }),
     'switch.aspirateur_mode_avance': s('off', { friendly_name: 'Aspirateur Mode avancé' }),
     // La tondeuse en pleine tonte : une fiche au repos ne montrerait ni la
@@ -516,7 +672,8 @@ function etatsInitiaux() {
     'switch.tondeuse_zone_pelouse_avant': s('off', { friendly_name: 'Tondeuse Zone Pelouse avant' }),
     'switch.tondeuse_zone_pelouse_arriere': s('on', { friendly_name: 'Tondeuse Zone Pelouse arrière' }),
     'switch.tondeuse_zone_cote_garage': s('off', { friendly_name: 'Tondeuse Zone Côté garage' }),
-    'sensor.tondeuse_usage_des_lames': s(43, { friendly_name: "Tondeuse Durée d'utilisation des lames", device_class: 'duration', unit_of_measurement: 'h' }),
+    // 52 h sur 60 : les lames à 13 %, sous 15 % — le rouge, que la maquette ne montre pas (chantier IoT, § 10).
+    'sensor.tondeuse_usage_des_lames': s(52, { friendly_name: "Tondeuse Durée d'utilisation des lames", device_class: 'duration', unit_of_measurement: 'h' }),
     'sensor.tondeuse_seuil_des_lames': s(60, { friendly_name: "Tondeuse Seuil d'usure des lames", device_class: 'duration', unit_of_measurement: 'h' }),
     'sensor.tondeuse_surface': s(210, { friendly_name: 'Tondeuse Surface', unit_of_measurement: 'm²' }),
     'sensor.tondeuse_cycles_de_batterie': s(86, { friendly_name: 'Tondeuse Cycles de batterie', unit_of_measurement: 'cycles' }),
@@ -539,7 +696,10 @@ function etatsInitiaux() {
     // « 1/1 fermee » et sa rangee d'ouvrants tenait sur un quart de ligne.
     'binary_sensor.porte_garage': s('off', { friendly_name: 'Porte de garage', device_class: 'door' }),
     'binary_sensor.porte_service': s('off', { friendly_name: 'Porte de service', device_class: 'door' }),
-    'binary_sensor.baie_vitree': s('off', { friendly_name: 'Baie vitrée', device_class: 'door' }),
+    // Ouverte devant le volet du salon (chantier Volets, § 9) : sa fermeture du soir l'attend.
+    'binary_sensor.baie_vitree': s('on', { friendly_name: 'Baie vitrée', device_class: 'door' }),
+    // Le thermomètre du dehors, celui de la protection solaire des volets.
+    'sensor.temperature_exterieure': s(26.4, { friendly_name: 'Température extérieure', unit_of_measurement: '°C', device_class: 'temperature' }),
     'binary_sensor.mouvement_entree': s('off', { friendly_name: 'Mouvement entrée', device_class: 'motion' }),
     'sensor.pile_porte_entree': s(9, { friendly_name: 'Pile porte entrée', device_class: 'battery', unit_of_measurement: '%' }),
     'person.demo': s('home', { friendly_name: 'Démo' }),
@@ -548,6 +708,17 @@ function etatsInitiaux() {
     'binary_sensor.fenetre_salon': s('off', { friendly_name: 'Fenêtre salon', device_class: 'window' }),
     'switch.radiateur_chambre': s('on', { friendly_name: 'Radiateur chambre' }),
     'switch.radiateur_salon': s('on', { friendly_name: 'Radiateur salon' }),
+    /* Le planning de chauffe (chantier Chauffage, plan 2) : deux modules fil
+     * pilote, chacun son `select` — les ordres tels que Zigbee2MQTT les publie
+     * pour un module NodOn —, son interrupteur et son capteur de puissance, sur
+     * le MÊME appareil (`indexDemo`). Celui de la chambre reprend l'interrupteur
+     * qui précède : la règle des fenêtres de la démo le coche encore, c'est le
+     * cas de la tâche 14. Le radiateur du salon reste sur une simple prise. Les
+     * options partent d'un mode quelconque : le moteur de la démo les règle
+     * avant le premier rendu (`demarrerChauffageDemo`). */
+    'select.radiateur_chambre_fil_pilote': s('eco', { friendly_name: 'Radiateur chambre', options: OPTIONS_FIL_PILOTE.slice() }),
+    'switch.radiateur_bureau': s('on', { friendly_name: 'Radiateur bureau' }),
+    'select.radiateur_bureau_fil_pilote': s('eco', { friendly_name: 'Radiateur bureau', options: OPTIONS_FIL_PILOTE.slice() }),
     'binary_sensor.detecteur_fumee': s('off', { friendly_name: 'Détecteur de fumée cuisine', device_class: 'smoke' }),
     // Les autres familles que la section Alertes compte, et la vanne qu'elle
     // coupe sur une fuite : une maison equipee, pas une liste vide.
@@ -559,9 +730,41 @@ function etatsInitiaux() {
     'device_tracker.telephone_de_camille': s('home', { friendly_name: 'Téléphone de Camille', source_type: 'gps' }),
     'climate.salon': s('heat', { friendly_name: 'Thermostat salon', current_temperature: 21.4, temperature: 22, hvac_action: 'heating', hvac_modes: ['off', 'heat'], min_temp: 7, max_temp: 30, target_temp_step: .5 }),
     'climate.chambre': s('off', { friendly_name: 'Thermostat chambre', current_temperature: 19.6, temperature: 19, hvac_action: 'off', hvac_modes: ['off', 'heat'], min_temp: 7, max_temp: 30, target_temp_step: .5 }),
+    /* Le poêle du salon (planning de chauffe) : un thermostat pour le serveur —
+     * il reçoit une consigne, le bit 1 de `supported_features` (1 + 16 + 128 +
+     * 256 : consigne, préréglages, arrêt, marche) —, dont le planning n'a
+     * jamais été allumé. Ses préréglages sont ceux d'un poêle à granulés. */
+    'climate.poele': s('heat', { friendly_name: 'Poêle', current_temperature: 21, temperature: 20, hvac_action: 'idle', hvac_modes: ['off', 'heat'], min_temp: 5, max_temp: 35, target_temp_step: .5,
+      supported_features: 401, preset_modes: ['turbo', 'manual', 'comfort', 'auto', 'overnight'], preset_mode: 'manual' }),
+    /* Une climatisation réversible dans le bureau (relecture de la tâche 10,
+     * prise à la tâche 10 bis B) : la démo n'avait aucun appareil qui
+     * refroidit, et l'Accueil de sa fiche — ses modes, ses préréglages,
+     * « Refroidit », sa plage — ne s'y voyait pas. Un thermostat pour le
+     * serveur (il reçoit une consigne : 1 + 2 + 16 + 128 + 256, consigne,
+     * plage, préréglages, arrêt, marche), jamais configuré ; elle refroidit. */
+    'climate.climatisation': s('cool', { friendly_name: 'Climatisation', current_temperature: 23.5, temperature: 22, hvac_action: 'cooling',
+      hvac_modes: ['off', 'heat', 'cool', 'heat_cool', 'dry', 'fan_only'], min_temp: 16, max_temp: 30, target_temp_step: .5,
+      supported_features: 403, preset_modes: ['eco', 'comfort', 'boost'], preset_mode: 'comfort' }),
     'cover.volet_salon': s('open', { friendly_name: 'Volet salon', current_position: 100, supported_features: 15, device_class: 'shutter' }),
     'cover.volet_cuisine': s('open', { friendly_name: 'Volet cuisine', current_position: 60, supported_features: 15, device_class: 'shutter' }),
     'cover.volet_chambre': s('closed', { friendly_name: 'Volet chambre', current_position: 0, supported_features: 15, device_class: 'shutter' }),
+    'cover.volet_bureau': s('open', { friendly_name: 'Volet bureau', current_position: 30, supported_features: 15, device_class: 'shutter' }),
+    /* Les cas que l'écran sait afficher et que la démo ne portait pas (audit du
+     * 19/10) — des entités FICTIVES, des noms génériques :
+     *  - un store banne, rentré (`awning`, avec position) ;
+     *  - un rideau sans position (`supported_features` 3 : ouvrir, fermer) ;
+     *  - un volet muet (`unavailable`) : la carte dit « Indisponible » ;
+     *  - un volet « façon Netatmo » (`VOLETS_NETATMO_DEMO`) : jamais `opening`
+     *    ni `closing`, l'état bascule d'abord, la position arrive après — et
+     *    une fermeture finit `open` à 1 %, comme sa chambre ;
+     *  - une porte de garage et un portail (`garage`, `gate`, features 3) : des
+     *    ouvrants, pas des volets — aucun ordre groupé ne les touche. */
+    'cover.store_banne': s('closed', { friendly_name: 'Store banne', current_position: 0, supported_features: 15, device_class: 'awning' }),
+    'cover.rideau_chambre': s('closed', { friendly_name: 'Rideau chambre', supported_features: 3, device_class: 'curtain' }),
+    'cover.volet_entree': s('unavailable', { friendly_name: 'Volet entrée', supported_features: 15, device_class: 'shutter', restored: true }),
+    'cover.volet_sdb': s('open', { friendly_name: 'Volet salle de bain', current_position: 100, supported_features: 15, device_class: 'shutter' }),
+    'cover.porte_garage': s('closed', { friendly_name: 'Porte de garage motorisée', supported_features: 3, device_class: 'garage' }),
+    'cover.portail': s('closed', { friendly_name: 'Portail', supported_features: 3, device_class: 'gate' }),
     'scene.reveil': s('unknown', { friendly_name: 'Réveil' }),
     'scene.je_rentre': s('unknown', { friendly_name: 'Je rentre' }),
     'scene.cinema': s('unknown', { friendly_name: 'Cinéma' }),
@@ -572,13 +775,21 @@ function etatsInitiaux() {
     states['sensor.' + cle + '_humidite'] = s(h, { friendly_name: lieu(nom) + ' ' + etiquette('humidité'), unit_of_measurement: '%', device_class: 'humidity' });
     if (co2 != null) states['sensor.' + cle + '_co2'] = s(co2, { friendly_name: lieu(nom) + ' CO2', unit_of_measurement: 'ppm', device_class: 'carbon_dioxide' });
     /* Le salon a une lampe de COULEUR, les autres non : c'est ce qui permet
-     * de voir que Loggia ne propose une teinte que la ou elle existe. */
+     * de voir que Loggia ne propose une teinte que la ou elle existe. Elle publie aussi des EFFETS (retouches du 19/10, R4 :
+     * la démo porte chaque cas) — la liste d'une Hue sous Zigbee2MQTT, `effect` à « None », et la fonction annoncée dans
+     * `supported_features` (44 = effet + flash + transition), sans quoi le moteur refuserait l'ordre. */
     states['light.' + cle] = s(cle === 'salon' || cle === 'cuisine' ? 'on' : 'off', cle === 'salon'
-      ? { friendly_name: etiquette('Plafonnier') + ' ' + lieu(nom), brightness: 180, rgb_color: [255, 176, 92], color_temp_kelvin: 2900,
-          min_color_temp_kelvin: 2000, max_color_temp_kelvin: 6535, supported_color_modes: ['color_temp', 'rgb'] }
+      ? { friendly_name: etiquette('Plafonnier') + ' ' + lieu(nom), brightness: 180, color_mode: 'rgb', rgb_color: [255, 176, 92], hs_color: [31, 64], color_temp_kelvin: 2900,
+          min_color_temp_kelvin: 2000, max_color_temp_kelvin: 6535, supported_color_modes: ['color_temp', 'rgb'],
+          supported_features: 44, effect_list: ['None', 'candle', 'fireplace', 'colorloop'], effect: 'None' }
       : { friendly_name: etiquette('Plafonnier') + ' ' + lieu(nom), brightness: 180, supported_color_modes: ['brightness'] });
   });
-  return Object.assign(states, etatsDistributeur());
+  // Les lampes de sa maquette « Cartes lumières » (chantier Lumières, § 9) : le bureau, la chambre et la cuisine prennent les leurs.
+  Object.assign(states, etatsDistributeur(), etatsPrisesDemo(), etatsLumieresDemo());
+  // Les mesures de sa maquette « Cartes capteurs » (chantier Capteurs, § 9).
+  // Les capteurs binaires, les plantes et les piles de sa maquette « Cartes capteurs » (chantier Capteurs, étapes 2 et 3, § 12).
+  // Les lecteurs de sa maquette « Cartes médias » (chantier Médias, § 8) : chaque état de la maquette, et la paire jumelle d'une Echo.
+  return Object.assign(states, etatsMesuresDemo(states), etatsCapteursDemo(states), etatsMediasDemo(states));
 }
 
 /* La configuration de la maison, servie par le magasin mémoire : le dashboard
@@ -589,6 +800,14 @@ function configDemo() {
      * la popup ait quelque chose a raconter. Le nom vaut ce qu'il dit : c'est
      * un reglage, chacun met le sien. */
     loggia_assistant: 'demo',
+    /* Le mode enfant de sa maquette (chantier Mode enfant, § 10) : le profil « Lino » sur la chambre, l'Apple TV ajoutée. Le faux
+     * serveur le relit à chaque réglage (`enfantPatch`) et le réécrit ici, comme `loggia/config/suivre` le ferait chez lui. */
+    loggia_enfant: ENFANT_CFG,
+    /* L'applique extérieure est une prise que la maison déclare lumière, comme chez lui (chantier Lumières, § 9). */
+    loggia_switchlights: ['switch.applique_exterieur'],
+    /* Les quatre phrases de sa maquette, gardées pour l'Echo de la cuisine (chantier Médias, § 8 ; M19) : des boutons de « Dire à
+     * Alexa », rangés comme le navigateur de l'utilisateur les range — par lecteur, la phrase entière pour identifiant (favlecture.js). */
+    loggia_favlecture: { 'media_player.echo_cuisine': PHRASES_MEDIAS_DEMO.map(([phrase]) => ({ t: phrase, i: phrase, c: 'custom', v: null })) },
     /* La démo a toujours sa rangée de scénarios sur l'Accueil : elle le sait
      * d'avance, comme un navigateur qui y est déjà passé (lot 14 de l'audit
      * du 03/10, `rangeeVue` dans App.jsx). Son magasin mémoire repart vide à
@@ -601,10 +820,13 @@ function configDemo() {
       categories: { fumee: true, gaz: true, co: true, fuite: true, alarme: true, portes: true },
       calme: { actif: false, debut: '22:00', fin: '07:00' },
       actions: { actif: true, lumieres: true, volets: true, vanne: { actif: true, entite: '' } } },
-    loggia_rooms: PIECES.map(([cle, nom, , , co2]) => ({
+    /* Le jardin est une pièce du DEHORS (chantier Capteurs, C17, 16/10), comme son « Extérieur » : une mesure n'est jugée que dans
+     * une pièce de Loggia, et sa station perdait sinon ses jauges du dehors. Une pièce de la configuration seulement, pas de
+     * `PIECES` : ni plafonnier, ni thermomètre de plus — la pièce lit ceux de la station. */
+    loggia_rooms: [...PIECES.map(([cle, nom, , , co2]) => ({
       room: lieu(nom),
       haid: { temp: 'sensor.' + cle + '_temperature', humidity: 'sensor.' + cle + '_humidite', co2: co2 != null ? 'sensor.' + cle + '_co2' : null },
-    })),
+    })), { room: lieu('Jardin'), haid: { temp: 'sensor.jardin_temperature', humidity: 'sensor.jardin_humidite', co2: null } }],
     // `loggia_energyHaids` est la cle que lisent `enHaids()` ET la disponibilite
     // des vues : sans elle, la vue Energie restait masquee en demonstration.
     // `loggia_cameras` est la cle que lit l'agregat — `loggia_entities.cameras`
@@ -638,6 +860,18 @@ function configDemo() {
       consoMois: 'sensor.conso_mois', prodMois: 'sensor.production_mois',
       consoAnnee: 'sensor.conso_annee', prodAnnee: 'sensor.production_annee',
         evNow: 'sensor.borne_recharge', batNow: 'sensor.batterie_maison', batSoc: 'sensor.batterie_niveau' },
+      /* `?demo&robots=scripts` (tranche robots 2, Q1 A) : ses interrupteurs de pièces et son script, qui gardent la main sur les
+       * pièces devant les zones de Home Assistant — la maison de la démo les gagne pour cette variante seulement.
+       * `scripts-sans-pieces` et `scripts-avec-pieces` (passe bis du 20/10, sa décision « Mon script garde la main ») : SON cas —
+       * ses interrupteurs, ses cinq scripts par rôle sans celui des pièces, puis avec lui, une fois désigné dans la roue. */
+      ...(VARIANTE_ROBOTS === 'scripts' || VARIANTE_ROBOTS === 'scripts-sans-pieces' || VARIANTE_ROBOTS === 'scripts-avec-pieces' ? {
+        vacuumRooms: [{ id: 'salon', name: lieu('Salon'), segments: [1], toggle: 'input_boolean.nettoyer_salon_demo' },
+          { id: 'cuisine', name: lieu('Cuisine'), segments: [2], toggle: 'input_boolean.nettoyer_cuisine_demo' }],
+        vacuumScripts: VARIANTE_ROBOTS === 'scripts' ? { pieces_selectionnees: 'script.nettoyer_pieces_demo' }
+          : { nettoyer_tout: 'script.aspirateur_nettoyer_tout', pause: 'script.aspirateur_pause', reprendre: 'script.aspirateur_reprendre',
+            retour_base: 'script.aspirateur_retour_base', localiser: 'script.aspirateur_localiser',
+            ...(VARIANTE_ROBOTS === 'scripts-avec-pieces' ? { pieces_selectionnees: 'script.nettoyer_pieces_demo' } : {}) },
+      } : {}),
     },
     // Deux profils : la demo doit exercer les DEUX branches, admin comprise.
     loggia_users: [{ name: 'Démo', role: 'Admin', c: 'var(--o-accent)' }, { name: etiquette('Invité'), role: 'Famille', c: 'var(--o-purple)' }],
@@ -692,17 +926,18 @@ const SCN_INTEGRES = [
   { id: 'reveil', icone: 'sunrise', teinte: 'ambre', actions: [SCN_A('volets', 'ouvrir'), SCN_A('lumieres', 'allumer', 'maison', { valeur: 30, si: 'nuit' }), SCN_A('chauffage', 'confort')] },
   { id: 'depart', icone: 'running', teinte: 'bain', actions: [SCN_A('lumieres', 'eteindre'), SCN_A('medias', 'eteindre'), SCN_A('chauffage', 'eco'), SCN_A('alarme', 'absent'), SCN_A('serrures', 'verrouiller')] },
   { id: 'retour', icone: 'home', teinte: 'accent', actions: [SCN_A('lumieres', 'allumer', 'vie', { valeur: 60, si: 'nuit' }), SCN_A('chauffage', 'confort')] },
-  { id: 'nuit', icone: 'moon', teinte: 'chambre', actions: [SCN_A('lumieres', 'eteindre', 'maison', { sauf_veilleuses: true }), SCN_A('volets', 'fermer'), SCN_A('medias', 'eteindre'), SCN_A('alarme', 'nuit'), SCN_A('serrures', 'verrouiller')] },
+  { id: 'nuit', icone: 'moon', teinte: 'chambre', actions: [SCN_A('lumieres', 'eteindre', 'maison'), SCN_A('volets', 'fermer'), SCN_A('medias', 'eteindre'), SCN_A('alarme', 'nuit'), SCN_A('serrures', 'verrouiller')] },
   { id: 'cinema', icone: 'film', teinte: 'vert', actions: [SCN_A('medias', 'pause'), SCN_A('lumieres', 'allumer', 'piece', { valeur: 10 }), SCN_A('volets', 'fermer', 'piece'), SCN_A('medias', 'allumer_tv', 'piece')] },
   { id: 'musique', icone: 'music', teinte: 'tendre', actions: [SCN_A('medias', 'lecture', 'piece'), SCN_A('lumieres', 'allumer', 'piece', { valeur: 50 })] },
   { id: 'invites', icone: 'users', teinte: 'ambre', actions: [SCN_A('lumieres', 'allumer', 'vie', { valeur: 100 }), SCN_A('chauffage', 'confort')] },
   { id: 'tout_eteindre', icone: 'power', teinte: 'gris', actions: [SCN_A('lumieres', 'eteindre'), SCN_A('medias', 'eteindre')] },
 ];
 const SCN_PIECE = {
-  'light.salon': 'Salon', 'cover.salon': 'Salon', 'cover.volet_salon': 'Salon', 'media_player.salon': 'Salon', 'media_player.tv_salon': 'Salon', 'media_player.enceinte_salon': 'Salon', 'media_player.echo_cuisine': 'Cuisine', 'climate.salon': 'Salon',
-  'light.cuisine': 'Cuisine', 'cover.cuisine': 'Cuisine', 'cover.volet_cuisine': 'Cuisine',
-  'light.chambre': 'Chambre', 'cover.chambre': 'Chambre', 'cover.volet_chambre': 'Chambre', 'climate.chambre': 'Chambre',
-  'light.bureau': 'Bureau', 'light.entree': 'Entrée', 'lock.porte_entree': 'Entrée', 'light.sdb': 'Salle de bain',
+  'light.salon': 'Salon', 'cover.volet_salon': 'Salon', 'cover.store_banne': 'Salon', 'media_player.salon': 'Salon', 'media_player.tv_salon': 'Salon', 'media_player.enceinte_salon': 'Salon', 'media_player.echo_cuisine': 'Cuisine', 'climate.salon': 'Salon', 'climate.poele': 'Salon',
+  'light.cuisine': 'Cuisine', 'cover.volet_cuisine': 'Cuisine',
+  'light.chambre': 'Chambre', 'cover.volet_chambre': 'Chambre', 'cover.rideau_chambre': 'Chambre', 'climate.chambre': 'Chambre',
+  'light.bureau': 'Bureau', 'cover.volet_bureau': 'Bureau', 'light.entree': 'Entrée', 'lock.porte_entree': 'Entrée', 'light.sdb': 'Salle de bain',
+  'cover.volet_entree': 'Entrée', 'cover.porte_garage': 'Entrée', 'cover.portail': 'Entrée', 'cover.volet_sdb': 'Salle de bain',
 };
 const SCN_INTIME = /chambre|bain/i;
 /* Bati au PREMIER ACCES, jamais a l'import : il porte un nom de piece, et la
@@ -727,6 +962,14 @@ function scnEffectifs() {
   if (SCN_CFG().ordre.length) { const rang = {}; SCN_CFG().ordre.forEach((id, i) => { rang[id] = i; }); out.sort((a, b) => (rang[a.id] == null ? 99 : rang[a.id]) - (rang[b.id] == null ? 99 : rang[b.id])); }
   return out;
 }
+/* Une veilleuse de la règle Nuit, ou un groupe (`attributes.entity_id`) qui en contient une, de proche en proche sans boucler. */
+function scnEpargnee(id, states, vus = new Set()) {
+  if (NUI_CFG().veilleuse.lampes.indexOf(id) >= 0) return true;
+  if (vus.has(id)) return false;
+  vus.add(id);
+  const membres = states[id] && states[id].attributes ? states[id].attributes.entity_id : null;
+  return Array.isArray(membres) && membres.some(m => typeof m === 'string' && scnEpargnee(m, states, vus));
+}
 function scnCibles(a, states, piece) {
   const dom = { lumieres: 'light.', volets: 'cover.', medias: 'media_player.', chauffage: 'climate.', alarme: 'alarm_control_panel.', serrures: 'lock.' }[a.famille];
   const nuit = !!(states['sun.sun'] && states['sun.sun'].state === 'below_horizon');
@@ -737,8 +980,14 @@ function scnCibles(a, states, piece) {
     const st = states[id].state, p = SCN_PIECE[id] ? lieu(SCN_PIECE[id]) : null;
     if (a.portee === 'piece' && (!ou || !p || p.toLowerCase() !== ou.toLowerCase())) return false;
     if (a.portee === 'vie' && (!p || SCN_INTIME.test(p))) return false;
+    /* Les veilleuses sont épargnées PARTOUT (sa décision, retouches du 19/10, R6) : une EXTINCTION de la famille lumières épargne
+     * la veilleuse de la règle Nuit — et un groupe qui en contient une —, que l'option « sauf les veilleuses » soit cochée ou
+     * non, comme au serveur (scenarios.py) ; un allumage n'est pas concerné. */
+    if (a.famille === 'lumieres' && a.geste === 'eteindre' && scnEpargnee(id, states)) return false;
     if (a.famille === 'lumieres') return a.geste === 'eteindre' ? st === 'on' : true;
-    if (a.famille === 'volets') return a.geste === 'fermer' ? st !== 'closed' : st !== 'open';
+    /* Des volets par leur CLASSE, comme le serveur (`est_volet`, scenarios.py) : le garage et le portail de la démo
+     * gardent leur carte, mais « fermer les volets » ne les touche pas ; un volet muet ne reçoit rien. */
+    if (a.famille === 'volets') return estVolet(states[id]) && !estMuetVolet(states[id]) && (a.geste === 'fermer' ? st !== 'closed' : st !== 'open');
     if (a.famille === 'medias') { const tv = (states[id].attributes || {}).device_class === 'tv'; return a.geste === 'eteindre' ? st !== 'off' : a.geste === 'pause' ? st === 'playing' : a.geste === 'lecture' ? (!tv && st !== 'playing') : tv; }
     if (a.famille === 'serrures') return st !== 'locked';
     return true;
@@ -793,7 +1042,7 @@ function scenariosLancer(id, states) {
         const etat = { lumieres: a.geste === 'eteindre' ? 'off' : 'on', volets: a.geste === 'fermer' ? 'closed' : 'open',
           medias: a.geste === 'eteindre' ? 'off' : a.geste === 'pause' ? 'paused' : a.geste === 'lecture' ? 'playing' : 'on',
           serrures: 'locked', alarme: { absent: 'armed_away', nuit: 'armed_night', maison: 'armed_home' }[a.geste] }[a.famille];
-        if (etat) states[hid] = { ...st, state: etat, last_changed: new Date().toISOString() };
+        if (etat) { states[hid] = { ...st, state: etat, last_changed: new Date().toISOString() }; minuteurSiEteint(hid, etat); }
       });
       fait.push({ famille: a.famille, geste: a.geste, n: ids.length }); n += ids.length;
     });
@@ -903,6 +1152,13 @@ function statistiquesDemo(msg) {
   const maintenant = Date.now();
   const out = {};
   for (const id of ids) {
+    // Le capteur d'une prise : sa journée, tranche par tranche (chantier Prises, § 10).
+    if (priseDuCapteurDemo(id)) { out[id] = statsPriseDemo(id, msg); continue; }
+    // La plante MUETTE de sa maquette (chantier Capteurs, § 7.3, § 12) : ses relevés à l'heure, jusqu'à ce qu'elle se taise.
+    if (STATS_PLANTES_DEMO[id]) { out[id] = statsPlanteDemo(id, msg); continue; }
+    /* Une mesure de sa maquette « Cartes capteurs » (chantier Capteurs, § 9) : ses 24 heures sur 5 minutes. Une autre
+     * n'en a pas, comme un capteur sans `state_class` chez Home Assistant : la fiche lit alors son histoire. */
+    if (msg.period === '5minute') { const l = statsMesureDemo(id, msg); if (l) out[id] = l; continue; }
     /* Ce que l'entite MESURE se lit sur son nom : la demo se donne ici le droit
      * de connaitre ses propres capteurs, comme partout ailleurs dans ce
      * fichier. */
@@ -950,7 +1206,48 @@ function statistiquesDemo(msg) {
   return out;
 }
 
-function historiqueDemo(chemin, states) {
+/* La température d'une pièce, sur la fenêtre demandée (tâche 10 bis D du
+ * chantier Chauffage) : une sinusoïde douce autour de sa valeur, ± 1,6 °C — la
+ * journée a son creux à 6 h et son haut à 18 h —, qui rejoint sur les quatre
+ * dernières heures la valeur du moment, celle de la carte ; un point par
+ * quart d'heure, le pas de la courbe de la fiche. Le générateur des
+ * puissances multipliait la valeur par une courbe de journée : −0,8° au
+ * milieu d'une journée à 21°. Le CO₂, les puissances et les autres capteurs
+ * gardent le leur. */
+const PAS_TEMPERATURE_DEMO = 15 * 60000;
+const AMPLITUDE_TEMPERATURE_DEMO = 1.6;           // °C, de part et d'autre de la valeur
+const RACCORD_TEMPERATURE_DEMO = 4 * 3600000;     // les dernières heures, qui rejoignent la valeur du moment
+// La journée, de −1 (6 h) à 1 (18 h), à l'heure de la maison — avec UN décalage, celui de
+// `fin` : un changement d'heure dans la fenêtre faisait sauter la courbe d'une heure, jusqu'à
+// 0,4 °C d'un quart d'heure au suivant (le 25/10/2026, test « doucement »).
+const JOUR_DEMO = 86400000;
+const journeeDemo = (t, fin) => {
+  const decalage = new Date(fin).getTimezoneOffset() * 60000;
+  const heure = (((t - decalage) % JOUR_DEMO) + JOUR_DEMO) % JOUR_DEMO / 3600000;
+  return Math.sin((heure - 12) / 24 * 2 * Math.PI);
+};
+/** La pièce à l'instant `t` quand elle vaut `cur` à `fin` : au plus 1,6 °C d'elle, au dixième de degré. */
+function temperatureDemo(cur, t, fin) {
+  const raccord = Math.max(0, 1 - (fin - t) / RACCORD_TEMPERATURE_DEMO);
+  const ecart = Math.round(AMPLITUDE_TEMPERATURE_DEMO * (journeeDemo(t, fin) - journeeDemo(fin, fin) * raccord) * 10) / 10;
+  return Math.round((cur + ecart) * 100) / 100;
+}
+/* Les instants de la fenêtre : un par quart d'heure depuis `t0`, puis `t1`, maintenant. */
+function instantsDemo(t0, t1) {
+  const sortie = [];
+  for (let t = t0; t < t1; t += PAS_TEMPERATURE_DEMO) sortie.push(t);
+  sortie.push(t1);
+  return sortie;
+}
+function historiqueTemperatureDemo(id, cur, t0, t1) {
+  const pts = instantsDemo(t0, t1).map(t => ({ state: String(t === t1 ? cur : temperatureDemo(cur, t, t1)), last_changed: new Date(t).toISOString() }));
+  pts[0].entity_id = id;
+  return [pts];
+}
+
+/* L'historique de la démo, au format de `history/period` : exportée pour
+ * tests/demo_chauffage.test.mjs, qui tient la température plausible. */
+export function historiqueDemo(chemin, states) {
   const m = String(chemin).match(/filter_entity_id=([^&]+)/);
   const plusieurs = m ? decodeURIComponent(m[1]).split(',') : [];
   if (plusieurs.some(x => /^(vacuum|lawn_mower)\./.test(x))) return historiqueRobotDemo(plusieurs, states);
@@ -960,6 +1257,12 @@ function historiqueDemo(chemin, states) {
   const t0 = d ? Date.parse(decodeURIComponent(d[1])) : Date.now() - 86400000;
   const finVoulue = String(chemin).match(/end_time=([^&]+)/);
   const t1 = Math.min(Date.now(), finVoulue ? Date.parse(decodeURIComponent(finVoulue[1])) : Date.now());
+  // Les capteurs binaires de sa maquette « Cartes capteurs » (chantier Capteurs, § 9, § 12) : l'histoire du jour, plusieurs d'un coup, à l'horloge des capteurs.
+  if (plusieurs.length && plusieurs.every(x => CAPTEURS_DEMO.has(x))) return historiqueCapteursDemo(plusieurs, t0, Math.min(horlogeCapteurs(), t1), states);
+  // Un chauffage : ses modes et sa consigne n'ont rien d'une courbe à multiplier (tâche 10 du plan 2).
+  if (id && (estModuleChauffageDemo(id) || id.indexOf('climate.') === 0)) return historiqueChauffageDemo(id, t0, t1, states);
+  // Un volet : son histoire de la semaine (chantier Volets, § 9), à l'horloge des volets.
+  if (id && VOLETS_DEMO.includes(id)) return historiqueVoletDemo(id, t0, Math.min(horlogeVolets(), finVoulue ? Date.parse(decodeURIComponent(finVoulue[1])) : Infinity), states);
   /* Un capteur BINAIRE n'a pas de valeur a multiplier : `parseFloat('off')`
    * rendait NaN et la fonction repartait les mains vides. C'est pourtant d'un
    * binaire que la vue Energie tire les creneaux d'heures creuses. */
@@ -967,6 +1270,7 @@ function historiqueDemo(chemin, states) {
   if (id && (brut === 'on' || brut === 'off')) return historiqueBinaireDemo(t0, t1);
   const cur = id && states[id] ? parseFloat(states[id].state) : NaN;
   if (!id || isNaN(cur)) return [];
+  if (((states[id] && states[id].attributes) || {}).device_class === 'temperature' && t1 > t0) return historiqueTemperatureDemo(id, cur, t0, t1);
   const solaire = /solaire|solar|production/i.test(id);
   /* Le RESEAU n'est pas une courbe comme les autres : il change de SIGNE.
    *
@@ -1006,6 +1310,8 @@ function historiqueDemo(chemin, states) {
       v = co2 ? 430 + (cur - 430) * (0.45 + 0.55 * Math.max(0, Math.sin((heure - 18) / 14 * Math.PI))) * (0.9 + 0.1 * Math.sin(i))
         : reseau ? (880 + 430 * Math.max(0, Math.sin((heure - 17.5) / 8 * Math.PI)) + 95 * Math.sin(i / 3.1)) - 2300 * jour
           : solaire ? cur * jour * (0.8 + 0.4 * Math.sin(i)) : cur * (0.7 + 0.6 * Math.sin(i / 3.7) + 0.15 * Math.sin(i));
+      // Une mesure positive ne passe pas sous zéro (audit du 19/10, point 15) : l'indice de qualité de l'air descendait à −2,5.
+      if (!reseau && cur >= 0 && attrs.device_class !== 'temperature') v = Math.max(0, v);
     }
     pts.push({ state: String(Math.round(v * 100) / 100), last_changed: new Date(t).toISOString() });
   }
@@ -1118,44 +1424,919 @@ function ligneJournal(champs) {
   return ligne;
 }
 
-/* Regles de volets : le planning arme, la protection solaire reglee sur deux
- * facades, le vent au repos. De quoi voir la page telle qu'elle sera une fois
- * remplie, plutot qu'un formulaire vide. */
-const VOL_CFG = {
-  planning: { actif: true, mode: 'auto', ouverture: { decalage: 15 }, fermeture: { decalage: -20 }, jours: [0, 1, 2, 3, 4, 5, 6], volets: { 'cover.chambre': { ouverture: 90, fermeture: null } } },
+/* ── Les volets de la démo (chantier Volets, § 9) ─────────────────────────────
+ *
+ * Les quatre volets de sa maquette, à toute heure :
+ *  - la cuisine à 60 %, déplacée à la main plusieurs fois cette semaine ;
+ *  - le salon ouvert, façade sud-ouest, sa baie vitrée OUVERTE devant lui ;
+ *    avant-hier, sa fermeture a attendu la baie (« Après fermeture : Baie
+ *    vitrée ») ; ce soir, passé l'heure, elle attend encore ;
+ *  - le bureau, nouveau, façade ouest, tenu à 30 % par la protection
+ *    solaire — jusque vers 18:30, puis « quand le soleil quitte la façade »
+ *    (`jusqu_a` à null : un cas du § 6.1) ; le soleil couché, plus rien ne
+ *    le tient, un geste à la main l'a laissé à 30 % ; ses manœuvres de
+ *    protection chaque après-midi ;
+ *  - la chambre fermée, à ses heures à elle : +30 min, du lundi au vendredi.
+ * Le soleil se lève à 07:47 et se couche à 20:24 AUJOURD'HUI ; les autres
+ * jours glissent comme dans la maquette (+1,4 min et −1,8 min par jour).
+ *
+ * Les mouvements à venir se calculent avec le jumeau du serveur
+ * (voletsplanning.js), sur ces heures du soleil ; l'histoire de la semaine —
+ * historique et journal, qui se répondent — se bâtit une fois, à l'heure où
+ * la démo s'installe, et finit sur la position de chaque volet. Un faux
+ * moteur fait le reste (`installerDemo`). `maisonVoletsDemo` l'expose à
+ * tests/demo_volets.test.mjs, son horloge réglée.
+ */
+const VOLETS_DEMO = ['cover.volet_cuisine', 'cover.volet_salon', 'cover.volet_bureau', 'cover.volet_chambre'];
+/* Les autres volets — par leur classe, comme `_tous_les_covers()` au serveur
+ * (audit du 19/10) : le store banne, le rideau sans position, le volet muet,
+ * celui « façon Netatmo ». Ils ont leur état du § 6.1, sans histoire de la
+ * semaine. Le garage et le portail n'en sont pas. */
+const VOLETS_AUTRES_DEMO = ['cover.store_banne', 'cover.rideau_chambre', 'cover.volet_entree', 'cover.volet_sdb'];
+/* Le volet « façon Netatmo » (§ 0 et § 5 de la conception) : son faux moteur ne
+ * publie jamais `opening` ni `closing` (`moteurVolet`). */
+const VOLETS_NETATMO_DEMO = new Set(['cover.volet_sdb']);
+// Où en est chaque volet quand la démo s'installe (§ 9) ; l'histoire de la semaine y aboutit.
+const POSITIONS_DEMO = { 'cover.volet_cuisine': 60, 'cover.volet_salon': 100, 'cover.volet_bureau': 30, 'cover.volet_chambre': 0 };
+const MINUTE_MS = 60000;
+const BAIE_DEMO = 'binary_sensor.baie_vitree';
+const FACADE_BUREAU = 270;
+
+/* L'horloge des volets : celle du navigateur ; `maisonVoletsDemo` la règle.
+ * `DEPART_VOLETS` est l'heure où l'histoire s'arrête — l'installation. */
+let horlogeVolets = () => Date.now();
+let DEPART_VOLETS = null;
+let HISTOIRE_VOLETS = null;
+const departVolets = () => (DEPART_VOLETS == null ? (DEPART_VOLETS = horlogeVolets()) : DEPART_VOLETS);
+
+/* Le jour `d` (0 : aujourd'hui) à l'horloge de la maison, à `h`:`m`. */
+const aJour = (ref, d, h, m) => { const x = new Date(ref); return new Date(x.getFullYear(), x.getMonth(), x.getDate() + d, h, m, 0, 0).getTime(); };
+
+/** Le lever et le coucher du jour `d` : 07:47 et 20:24 aujourd'hui, +84 s et −108 s par jour. */
+function soleilDuJour(ref, d) {
+  return { lever: aJour(ref, d, 7, 47) + d * 84000, coucher: aJour(ref, d, 20, 24) - d * 108000 };
+}
+
+/** Le soleil à l'instant `t` : azimut et hauteur, cohérents avec ses heures. */
+function soleilA(t) {
+  const { lever, coucher } = soleilDuJour(t, 0);
+  if (t >= lever && t <= coucher) {
+    const f = (t - lever) / (coucher - lever);
+    return { azimut: Math.round(105 + 150 * f), elevation: Math.round(32 * Math.sin(Math.PI * f) * 10) / 10, leve: true };
+  }
+  const veille = t < lever ? soleilDuJour(t, -1).coucher : coucher;
+  const matin = t < lever ? lever : soleilDuJour(t, 1).lever;
+  const f = (t - veille) / (matin - veille);
+  return { azimut: Math.round(255 + 210 * f) % 360, elevation: Math.round(-12 * Math.sin(Math.PI * f) * 10) / 10, leve: false };
+}
+
+/** L'état `sun.sun` de la démo à l'instant `t`. */
+function etatSoleilDemo(t) {
+  const { lever, coucher } = soleilDuJour(t, 0);
+  const p = soleilA(t);
+  return s(p.leve ? 'above_horizon' : 'below_horizon', { friendly_name: 'Soleil', elevation: p.elevation, azimuth: p.azimut, rising: t < aJour(t, 0, 14, 5),
+    next_rising: new Date(t < lever ? lever : soleilDuJour(t, 1).lever).toISOString(),
+    next_setting: new Date(t < coucher ? coucher : soleilDuJour(t, 1).coucher).toISOString() });
+}
+
+/** `soleil_jours` (§ 6.1) : du lundi de la semaine à aujourd'hui + 7, à l'heure de la maison. */
+function soleilJoursDemo(t) {
+  const lundi = -((new Date(t).getDay() + 6) % 7);
+  const jours = [];
+  for (let d = lundi; d <= 7; d++) {
+    const { lever, coucher } = soleilDuJour(t, d);
+    jours.push({ date: isoCha(new Date(aJour(t, d, 12, 0))).slice(0, 10), lever: isoCha(new Date(lever)), coucher: isoCha(new Date(coucher)) });
+  }
+  return jours;
+}
+
+/* La configuration des volets : des entités qui existent. Paresseuse, et
+ * remise à neuf par `maisonVoletsDemo` : une écriture d'un test ne déborde pas sur l'autre. */
+let VOL_CFG_ = null;
+const VOL_CFG = () => (VOL_CFG_ || (VOL_CFG_ = {
+  planning: { actif: true, mode: 'auto', ouverture: { decalage: 30 }, fermeture: { decalage: 30 }, jours: [0, 1, 2, 3, 4, 5, 6],
+    volets: { 'cover.volet_chambre': { perso: true, ouverture: 30, fermeture: null, jours_ouverture: [0, 1, 2, 3, 4] } } },
   velux: { actif: false },
   soleil: {
     actif: true, position: 30, elevation_min: 15, temp_min: 25,
-    temp_entite: 'sensor.exterieur_temperature',
-    volets: { 'cover.salon': { orientation: 225, ouverture: 90 } },
+    temp_entite: 'sensor.temperature_exterieure',
+    volets: { 'cover.volet_salon': { orientation: 225, ouverture: 90 }, 'cover.volet_bureau': { orientation: FACADE_BUREAU, ouverture: 90 } },
   },
   vent: { actif: false, entite: '', seuil: 50 },
-  baies: { actif: true, volets: { 'cover.volet_salon': 'binary_sensor.fenetre_salon' } },
-};
+  baies: { actif: true, volets: { 'cover.volet_salon': BAIE_DEMO } },
+}));
 
+/**
+ * L'histoire de la semaine, bâtie une fois : `{ mouvements, journal }`.
+ * `mouvements` : `[{ id, t, pos }]`, dans l'ordre ; `journal` : les lignes
+ * que le moteur aurait écrites, `cible` comprise, et `orientation` et
+ * `dehors` sur celles de la protection (§ 6.4). Ce que la main a fait n'a pas
+ * de ligne. Elle s'arrête à `depart` et finit, pour chaque volet, sur sa
+ * position de la démo : au besoin, un dernier geste à la main.
+ */
+function histoireVolets(depart) {
+  const mouvements = [];
+  const journal = [];
+  const bouger = (id, t, pos) => { if (t <= depart) mouvements.push({ id, t, pos }); };
+  const noter = (t, champs) => { if (t <= depart) journal.push(ligneJournal({ detail: '', simule: false, ts: t / 1000, ...champs })); };
+  const planifier = (t, quoi, ids, motif, cible) => {
+    ids.forEach(id => bouger(id, t, cible));
+    noter(t, { module: 'volets', regle: 'planning', quoi, cibles: ids, n: ids.length, motif: [[motif, { d: '+30' }]], cible });
+  };
+  const proteger = (t, dehors) => {
+    bouger('cover.volet_bureau', t, 30);
+    noter(t, { module: 'volets', regle: 'soleil', quoi: 'proteger', cibles: ['cover.volet_bureau'], n: 1, motif: [['soleil a {a}°', { a: soleilA(t).azimut }]],
+      cible: 30, orientation: FACADE_BUREAU, dehors });
+  };
+  VOLETS_DEMO.forEach(id => mouvements.push({ id, t: aJour(depart, -8, 21, 0), pos: 0 }));
+  for (let d = -7; d <= 0; d++) {
+    const { lever, coucher } = soleilDuJour(depart, d);
+    const ouvre = lever + 30 * MINUTE_MS, ferme = coucher + 30 * MINUTE_MS;
+    const ouvree = (new Date(aJour(depart, d, 12, 0)).getDay() + 6) % 7 <= 4;
+    /* Aujourd'hui, le soleil levé, la protection tient le bureau depuis 13:05 — ou depuis 40 min le matin, jamais
+     * avant le lever : rien ne la relâche avant l'installation. Le soleil couché, la journée se raconte comme les
+     * autres et finit par un geste à la main : la nuit, la protection ne monte aucun volet (relecture du 13/10, point 7). */
+    const tient = d === 0 && soleilA(depart).leve;
+    const tp = tient ? Math.max(lever, Math.min(aJour(depart, 0, 13, 5), depart - 40 * MINUTE_MS)) : aJour(depart, d, 13, 5);
+    const bureau = !tient || ouvre < tp ? ['cover.volet_bureau'] : [];
+    planifier(ouvre, 'ouvrir', ['cover.volet_cuisine', 'cover.volet_salon', ...bureau, ...(ouvree ? ['cover.volet_chambre'] : [])], 'lever du soleil {d} min', 100);
+    proteger(tp, 26.4 - (d % 3) * 0.7);
+    if (!tient) {
+      bouger('cover.volet_bureau', aJour(depart, d, 18, 30), 100);
+      noter(aJour(depart, d, 18, 30), { module: 'volets', regle: 'soleil', quoi: 'rouvrir', cibles: ['cover.volet_bureau'], n: 1, motif: 'soleil parti',
+        cible: 100, orientation: FACADE_BUREAU, dehors: 23.8 });
+    }
+    // La cuisine, à la main : deux gestes à deux minutes (une manœuvre), puis un aller-retour.
+    if (d === -4) { bouger('cover.volet_cuisine', aJour(depart, d, 14, 10), 40); bouger('cover.volet_cuisine', aJour(depart, d, 14, 12), 60); }
+    if (d === -1) { bouger('cover.volet_cuisine', aJour(depart, d, 16, 45), 50); bouger('cover.volet_cuisine', aJour(depart, d, 17, 20), 100); }
+    // Le salon : sa baie était ouverte à l'heure — avant-hier, et ce soir.
+    const salon = d === -2 || d === 0 ? [] : ['cover.volet_salon'];
+    planifier(ferme, 'fermer', ['cover.volet_cuisine', ...salon, ...(!tient ? ['cover.volet_bureau'] : []), 'cover.volet_chambre'], 'coucher du soleil {d} min', 0);
+    if (d === -2) {
+      const t = aJour(depart, d, 22, 40);
+      bouger('cover.volet_salon', t, 0);
+      noter(t, { module: 'volets', regle: 'rattrapage', quoi: 'fermer', cibles: ['cover.volet_salon'], n: 1, motif: 'baie refermee', cible: 0 });
+    }
+  }
+  mouvements.sort((a, b) => a.t - b.t);
+  // La fin de l'histoire : chaque volet sur sa position de la démo, au besoin d'un geste à la main.
+  const avance = { 'cover.volet_cuisine': 25, 'cover.volet_salon': 15, 'cover.volet_bureau': 10, 'cover.volet_chambre': 50 };
+  VOLETS_DEMO.forEach(id => {
+    const dernier = mouvements.filter(m => m.id === id).pop();
+    if (dernier.pos !== POSITIONS_DEMO[id]) mouvements.push({ id, t: Math.max(dernier.t + MINUTE_MS, depart - avance[id] * MINUTE_MS), pos: POSITIONS_DEMO[id] });
+  });
+  mouvements.sort((a, b) => a.t - b.t);
+  journal.sort((a, b) => b.ts - a.ts);
+  return { mouvements, journal };
+}
+const histoire = () => HISTOIRE_VOLETS || (HISTOIRE_VOLETS = histoireVolets(departVolets()));
+
+/** L'historique d'un volet, au format de `history/period` : son état au début, puis chaque mouvement. */
+function historiqueVoletDemo(id, t0, t1, states) {
+  const st = states[id];
+  if (!st) return [];
+  const siens = histoire().mouvements.filter(m => m.id === id);
+  const point = (t, pos) => ({ state: pos > 0 ? 'open' : 'closed', attributes: { ...st.attributes, current_position: pos },
+    last_changed: new Date(t).toISOString(), last_updated: new Date(t).toISOString() });
+  const avant = siens.filter(m => m.t <= t0).pop();
+  const liste = [...(avant ? [point(t0, avant.pos)] : []), ...siens.filter(m => m.t > t0 && m.t <= t1).map(m => point(m.t, m.pos))];
+  if (!liste.length) return [];
+  liste[0].entity_id = id;
+  return [liste];
+}
+
+/** `loggia/volets/manoeuvres` (§ 6.5) : les lignes du journal qui nomment ce volet, les plus récentes d'abord. */
+function manoeuvresVoletsDemo(msg, states) {
+  const id = msg && msg.entity_id;
+  const depuis = Number(msg && msg.depuis);
+  if (typeof id !== 'string' || !id || !Number.isFinite(depuis) || depuis < 0) return Promise.reject({ code: 'invalid_format', message: 'entity_id, depuis' });
+  const tout = reglesDemo(states).journal;
+  const lignes = tout.filter(l => l.ts >= depuis && ((Array.isArray(l.cibles) && l.cibles.includes(id)) || (typeof l.detail === 'string' && l.detail.split(/[^a-z0-9_.]/).includes(id))))
+    .sort((a, b) => b.ts - a.ts).slice(0, 200);
+  return Promise.resolve({ lignes, couvre_depuis: tout.length ? Math.min(...tout.map(l => l.ts)) : null });
+}
+
+/** `loggia/volets/etat`, les champs d'avant et ceux du § 6.1. */
 function voletsDemo(states) {
-  const sun = states['sun.sun'];
-  const at = (sun && sun.attributes) || {};
+  const t = horlogeVolets();
+  const cfg = VOL_CFG();
+  const plan = cfg.planning;
+  const maintenant = isoCha(new Date(t));
+  const jours = soleilJoursDemo(t);
+  const p = soleilA(t);
+  // Passé l'heure de la fermeture d'aujourd'hui, une baie ouverte la retient jusqu'au matin.
+  const fermeAujourdhui = soleilDuJour(t, 0).coucher + 30 * MINUTE_MS;
+  const finProtection = aJour(t, 0, 18, 30);
+  // Le soleil couché, la protection ne tient rien (relecture du 13/10, point 7).
+  const protege = p.leve && !!(cfg.soleil.actif && cfg.soleil.volets && cfg.soleil.volets['cover.volet_bureau']);
+  const etatDe = (capteur) => {
+    const b = states[capteur];
+    return !b || b.state === 'unavailable' || b.state === 'unknown' ? 'muette' : b.state === 'on' ? 'ouverte' : 'fermee';
+  };
+  const capteurs = (cfg.baies && cfg.baies.volets) || {};
+  const facades = (cfg.soleil && cfg.soleil.volets) || {};
+  const volets = {};
+  [...VOLETS_DEMO, ...VOLETS_AUTRES_DEMO].filter(id => states[id]).forEach(id => {
+    volets[id] = {
+      regle: regleDe(plan, id),
+      a_venir: aVenir(plan, id, jours, maintenant),
+      protection: id === 'cover.volet_bureau' && protege ? { jusqu_a: t < finProtection ? isoCha(new Date(finProtection)) : null, position: 100, orientation: FACADE_BUREAU } : null,
+      abri: false,
+      attente: capteurs[id] && cfg.baies.actif && etatDe(capteurs[id]) === 'ouverte' && t >= fermeAujourdhui && plan.actif
+        ? { sens: 'fermer', motif: 'baie ouverte', expire: isoCha(new Date(soleilDuJour(t, 1).lever + 30 * MINUTE_MS)) } : null,
+      porte: capteurs[id] ? { entite: capteurs[id], etat: etatDe(capteurs[id]) } : null,
+      orientation: facades[id] && Number.isFinite(Number(facades[id].orientation)) ? ((Number(facades[id].orientation) % 360) + 360) % 360 : null,
+      manoeuvre: null,
+    };
+  });
+  // Plus de `prochains` (audit du 19/10) : le serveur ne le publie plus, l'écran lit `a_venir`.
   return {
-    config: VOL_CFG,
-    soleil: { azimut: at.azimuth != null ? at.azimuth : 214, elevation: at.elevation != null ? at.elevation : 34 },
-    abaisses: VOL_CFG.soleil.actif ? ['cover.salon'] : [],
+    config: cfg,
+    soleil: { azimut: p.azimut, elevation: p.elevation },
+    abaisses: protege ? ['cover.volet_bureau'] : [],
     a_l_abri: false,
-    // Les prochains rendez-vous du planning : demain matin, ce soir.
-    prochains: { ouverture: { 15: new Date(new Date().setHours(31, 48, 0, 0)).toISOString() }, fermeture: { '-20': new Date(new Date().setHours(20, 24, 0, 0)).toISOString() } },
-    journal: [
-      // Les gabarits que volets.py écrit, parties comprises (relecture du 03/10).
-      ligneJournal({ module: 'volets', regle: 'soleil', quoi: 'proteger', cibles: ['cover.salon'], n: 1, motif: [['soleil a {a}°', { a: 225 }]], detail: '', simule: false, ts: Date.now() / 1000 - 900 }),
-      ligneJournal({ module: 'volets', regle: 'planning', quoi: 'ouvrir', cibles: ['cover.salon', 'cover.cuisine', 'cover.chambre'], n: 3, motif: [['lever du soleil {d} min', { d: '+15' }]], detail: '', simule: false, ts: Date.now() / 1000 - 27000 }),
-    ],
+    journal: histoire().journal,
+    maintenant,
+    soleil_jours: jours,
+    volets,
   };
 }
 
 function voletsPatch(patch) {
   Object.keys(patch || {}).forEach(section => {
-    if (VOL_CFG[section]) Object.assign(VOL_CFG[section], patch[section]);
+    if (VOL_CFG()[section]) Object.assign(VOL_CFG()[section], patch[section]);
   });
-  return VOL_CFG;
+  return VOL_CFG();
+}
+
+/**
+ * La maison de la démo, son horloge réglée, pour tests/demo_volets.test.mjs :
+ * l'état des volets, leur historique, leurs manœuvres, le journal des règles
+ * et l'écriture de la configuration — une histoire et une configuration
+ * neuves à chaque appel.
+ */
+export function maisonVoletsDemo({ quand = null } = {}) {
+  const t = quand == null ? Date.now() : Number(quand);
+  horlogeVolets = () => t;
+  DEPART_VOLETS = t;
+  HISTOIRE_VOLETS = null;
+  VOL_CFG_ = null;
+  const states = etatsInitiaux();
+  return {
+    states,
+    etat: () => voletsDemo(states),
+    historique: (id, jours) => historiqueDemo('history/period/' + new Date(t - jours * 86400000).toISOString() + '?filter_entity_id=' + encodeURIComponent(id)
+      + '&end_time=' + encodeURIComponent(new Date(t).toISOString()) + '&significant_changes_only=0', states),
+    manoeuvres: (msg) => manoeuvresVoletsDemo(msg, states),
+    regles: () => reglesDemo(states),
+    ecrire: (patch) => voletsPatch(patch),
+  };
+}
+
+/* ── Les prises de la démo (chantier Prises, § 10) ────────────────────────────
+ *
+ * Les quatre prises de sa maquette « Cartes prises », à toute heure :
+ *  - le NAS (Zephyr), PROTÉGÉ, vers 4 W ; sa sauvegarde de 02:00 à 02:45 vers
+ *    23 W ; allumé depuis 41 jours (« le 2 sept. » un 13 octobre) ;
+ *  - le PC du bureau (Atlas), de 95 à 165 W, allumé à 08:50 par le bouton de
+ *    la prise — trente minutes avant l'heure de la démo si elle est plus
+ *    matinale —, sa pause de midi vers 35 W ;
+ *  - le lave-vaisselle, son cycle de 13:40 à 16:14 et ses deux pics à 1 950 W
+ *    — fini vingt minutes avant la démo si elle est plus matinale, et alors il
+ *    passe minuit si la démo s'ouvre dans la nuit ; trois jours plus tôt, le
+ *    précédent ; « Prévenir à la fin du cycle » allumé ; 1,08 kWh, comme sa
+ *    maquette, à quelque heure qu'on l'ouvre ;
+ *  - le poêle, allumé à 06:30 par l'automatisation « Matin », muet depuis
+ *    14:20 — une heure avant la démo si elle est plus matinale. Son nom ne dit
+ *    pas ce qu'il est : son type est IMPOSÉ, « Radiateur » (P2).
+ * Chacune a son appareil Zigbee (derrière le pont), son capteur de puissance
+ * et son compteur d'énergie, leurs statistiques sur 5 min et à l'heure, et un
+ * logbook avec ses contextes ; le minuteur de la démo note sa pose et coupe à
+ * l'échéance. Le pont de Zigbee2MQTT et la sirène de l'alarme sont là : ni
+ * l'un ni l'autre n'est une prise. `maisonPrisesDemo` l'expose à
+ * tests/demo_prises.test.mjs, son horloge réglée. */
+const PRISES_DEMO = ['switch.prise_nas_zephyr', 'switch.prise_pc_bureau_atlas', 'switch.prise_lave_vaisselle', 'switch.poele'];
+const NOMS_PRISES_DEMO = { 'switch.prise_nas_zephyr': 'Prise NAS (Zephyr)', 'switch.prise_pc_bureau_atlas': 'Prise PC Bureau (Atlas)',
+  'switch.prise_lave_vaisselle': 'Prise lave-vaisselle', 'switch.poele': 'Poêle' };
+const PIECES_PRISES_DEMO = { 'switch.prise_nas_zephyr': 'bureau', 'switch.prise_pc_bureau_atlas': 'bureau', 'switch.prise_lave_vaisselle': 'cuisine', 'switch.poele': 'salon' };
+/* Le type que le serveur devine de leur nom (son jumeau de `typeDePrise`, § 6.2) : écrit ici, pas
+ * importé — prises.js est au démarrage, et un import de la démo le ferait sortir du boot dans un
+ * morceau partagé, que le démarrage chargerait quand même (tests/demo_prises.test.mjs les compare). */
+const DEVINES_DEMO = { 'switch.prise_nas_zephyr': 'nas', 'switch.prise_pc_bureau_atlas': 'pc', 'switch.prise_lave_vaisselle': 'lv', 'switch.poele': 'prise' };
+// Ce que chaque compteur affiche (sa maquette, `total`).
+const TOTAUX_PRISES_DEMO = { 'switch.prise_nas_zephyr': 212.6, 'switch.prise_pc_bureau_atlas': 846.1, 'switch.prise_lave_vaisselle': 507.3, 'switch.poele': 391.4 };
+const PONT_DEMO = 'switch.zigbee2mqtt_bridge_permit_join';
+const SIRENE_SWITCH_DEMO = 'switch.alarme_sirene_siren_on';
+/** Les capteurs d'une prise de la démo : `sensor.<nom>_power` et `_energy`, comme Zigbee2MQTT les nomme. */
+const capteursPriseDemo = (id) => ({ power: 'sensor.' + id.slice(7) + '_power', energy: 'sensor.' + id.slice(7) + '_energy' });
+/** La prise d'un de ses capteurs, ou null. */
+const priseDuCapteurDemo = (id) => PRISES_DEMO.find(p => id === capteursPriseDemo(p).power || id === capteursPriseDemo(p).energy) || null;
+/** L'appareil d'une prise de la démo (son interrupteur et ses deux capteurs), ou de la sirène de l'alarme ; null sinon. */
+const appareilPriseDemo = (id) => (id === SIRENE_SWITCH_DEMO ? 'alarme_sirene'
+  : (PRISES_DEMO.includes(id) ? 'prise_' + id.slice(7) : priseDuCapteurDemo(id) ? 'prise_' + priseDuCapteurDemo(id).slice(7) : null));
+/* Le modèle que Zigbee2MQTT donne à son pont : un nom d'intégration, qui ne se traduit pas — c'est à lui que Loggia le reconnaît. */
+const MODELE_PONT_DEMO = 'Bridge';
+const CINQ_MIN_MS = 5 * MINUTE_MS;
+
+/* L'horloge des prises : celle du navigateur ; `maisonPrisesDemo` la règle. */
+let horlogePrises = () => Date.now();
+/* L'histoire d'AUJOURD'HUI, fixée UNE fois (relecture des tâches 1 à 6, point 2 ; tâche 12 bis — B8) : à la
+ * première lecture du jour, et gardée telle quelle. Recalculée à chaque lecture, elle suivait l'horloge — les
+ * heures de la maquette ramenées avant « maintenant » —, et une démo ouverte avant 16:34 faisait avancer
+ * « Terminé à » d'une minute à chaque relecture. `jour` (minuit) → son histoire : une démo laissée ouverte passé
+ * minuit fixe celle du jour qui commence, et garde celle de la veille. */
+const HISTOIRES_PRISES = new Map();
+/* La configuration (§ 6.1) : le NAS protégé, le poêle IMPOSÉ en radiateur, le lave-vaisselle qui prévient. */
+let PRI_CFG_ = null;
+const PRI_CFG = () => (PRI_CFG_ || (PRI_CFG_ = { protegees: ['switch.prise_nas_zephyr'], types: { 'switch.poele': 'radia' }, prevenir: { 'switch.prise_lave_vaisselle': true } }));
+/* Ce que la session ajoute à l'histoire : les gestes sur une prise (le logbook, `context_user_id`
+ * du compte de la démo), et les lignes du minuteur (le journal de Loggia). */
+const PRISES_GESTES = [];
+const PRISES_JOURNAL = [];
+
+/* Le cycle du lave-vaisselle : 154 minutes, de son début à sa fin — le prélavage, le premier pic à 1 950 W, le
+ * lavage, le second pic, le séchage. Le lavage tient à 66 W : le cycle fait 1,079 kWh, « 1,08 » comme sa
+ * maquette (à 62 W il en faisait 1,074 — « 1,07 »). La puissance se lit à `m` minutes DU DÉBUT du cycle, jamais
+ * à l'heure du jour : un cycle qui passe minuit garde sa forme entière. */
+const DUREE_CYCLE_LV = 154;
+const puissanceCycleLv = (m) => (m < 0 || m >= DUREE_CYCLE_LV ? 0 : m < 15 ? 38 : m < 35 ? 1950 : m < 115 ? 66 : m < 125 ? 1950 : 14);
+
+/**
+ * L'histoire d'une journée : les heures de sa maquette, ramenées avant `t`
+ * quand la démo s'ouvre plus tôt. `t` est l'heure de la démo pour aujourd'hui,
+ * la fin de la journée pour un jour passé (`passe`) : un jour passé suit les
+ * heures de la maquette, et le lave-vaisselle n'y tourne qu'un jour sur trois.
+ */
+function histoirePrises(t, passe = false) {
+  const avant = (h, m, recul) => (passe ? aJour(t, 0, h, m) : Math.min(aJour(t, 0, h, m), t - recul * MINUTE_MS));
+  const finLv = avant(16, 14, 20);
+  const muet = passe ? Infinity : avant(14, 20, 60);
+  const jour = Math.round(aJour(t, 0, 12, 0) / 86400000);
+  return {
+    nas: aJour(t, -41, 9, 0), sauvegarde: [aJour(t, 0, 2, 0), aJour(t, 0, 2, 45)],
+    pc: avant(8, 50, 30),
+    lv: !passe || jour % 3 === 0 ? [finLv - DUREE_CYCLE_LV * MINUTE_MS, finLv] : null,
+    poele: [Math.min(aJour(t, 0, 6, 30), muet - 120 * MINUTE_MS), muet],
+  };
+}
+/** L'histoire d'aujourd'hui, fixée à la première lecture du jour (voir `HISTOIRES_PRISES`). */
+function histoireAujourdhui() {
+  const t = horlogePrises();
+  const jour = aJour(t, 0, 0, 0);
+  if (!HISTOIRES_PRISES.has(jour)) HISTOIRES_PRISES.set(jour, histoirePrises(t));
+  return HISTOIRES_PRISES.get(jour);
+}
+/** L'histoire du jour de l'instant `x`, à l'horloge des prises : celle qu'on a fixée, sinon celle des jours passés. */
+function histoireDuJour(x) {
+  const jour = aJour(x, 0, 0, 0);
+  if (jour === aJour(horlogePrises(), 0, 0, 0)) return histoireAujourdhui();
+  return HISTOIRES_PRISES.get(jour) || histoirePrises(aJour(x, 0, 23, 59), true);
+}
+/* Un aléa stable par tranche de 5 minutes : la courbe ne scintille pas d'une lecture à l'autre. */
+const aleaPrise = (x, graine) => hasardStable(Math.floor(x / CINQ_MIN_MS) * 31 + graine);
+
+/** Le cycle du lave-vaisselle qui couvre l'instant `x`, ou null : celui de son jour, ou — avant minuit — celui du
+ * jour qui vient, commencé la veille au soir (une démo ouverte à 00:30 : de 21:36 à 00:10). Chaque jour a l'histoire
+ * du sien, et un instant d'avant minuit ne se lit pas dans l'histoire d'hier : elle ne connaît pas ce cycle-là. */
+function cycleLvA(x) {
+  for (const d of [0, 1]) {
+    const lv = histoireDuJour(aJour(x, d, 12, 0)).lv;
+    if (lv && x >= lv[0] && x < lv[1]) return lv;
+  }
+  return null;
+}
+
+/** La puissance d'une prise à l'instant `x` (W), ou null quand elle est muette. */
+function wattsPriseDemo(id, x, H = histoireDuJour(x)) {
+  if (id === 'switch.prise_nas_zephyr') return x >= H.sauvegarde[0] && x < H.sauvegarde[1] ? 21 + 4 * aleaPrise(x, 1) : 3.4 + 1.4 * aleaPrise(x, 1);
+  if (id === 'switch.prise_pc_bureau_atlas') {
+    if (x < H.pc) return 0;
+    const h = new Date(x).getHours() + new Date(x).getMinutes() / 60;
+    return h >= 12.5 && h < 13.5 ? 32 + 6 * aleaPrise(x, 2) : 95 + 70 * aleaPrise(x, 2);
+  }
+  // Le cycle qui couvre `x`, même commencé la veille au soir : sa puissance se lit à ses minutes à lui, pas dans l'histoire du jour de `x`.
+  if (id === 'switch.prise_lave_vaisselle') {
+    const lv = cycleLvA(x);
+    return lv ? puissanceCycleLv((x - lv[0]) / MINUTE_MS) : 0;
+  }
+  if (id === 'switch.poele') {
+    if (x >= H.poele[1]) return null;
+    if (x < H.poele[0]) return 0;
+    return x < H.poele[0] + 45 * MINUTE_MS ? 310 : 38 + 10 * aleaPrise(x, 4);
+  }
+  return null;
+}
+
+/** L'énergie d'une prise entre deux instants (kWh), par tranches de 5 minutes — ce que son compteur compte. */
+function kwhPriseDemo(id, t0, t1) {
+  let wh = 0;
+  for (let x = t0; x < t1; x += CINQ_MIN_MS) {
+    const w = wattsPriseDemo(id, x + CINQ_MIN_MS / 2);
+    if (w != null) wh += w * Math.min(CINQ_MIN_MS, t1 - x) / 3600000;
+  }
+  return Math.round(wh) / 1000;
+}
+
+/** Les états des prises de la démo, de leurs capteurs, du pont et de la sirène, à l'horloge des prises. */
+function etatsPrisesDemo() {
+  const t = horlogePrises();
+  const H = histoireAujourdhui();
+  const depuis = (x) => new Date(x).toISOString();
+  const etat = (state, attributs, x) => ({ ...s(state, attributs), last_changed: depuis(x), last_updated: depuis(x) });
+  const allumee = { 'switch.prise_nas_zephyr': H.nas, 'switch.prise_pc_bureau_atlas': H.pc, 'switch.prise_lave_vaisselle': aJour(t, -15, 19, 5), 'switch.poele': H.poele[1] };
+  const out = {};
+  PRISES_DEMO.forEach(id => {
+    const muet = id === 'switch.poele';
+    const nom = NOMS_PRISES_DEMO[id];
+    const w = wattsPriseDemo(id, t, H);
+    out[id] = etat(muet ? 'unavailable' : 'on', { friendly_name: nom }, allumee[id]);
+    out[capteursPriseDemo(id).power] = etat(muet ? 'unavailable' : String(Math.round(w * 10) / 10), { friendly_name: etiquette(nom) + ' ' + etiquette('Puissance'),
+      device_class: 'power', state_class: 'measurement', unit_of_measurement: 'W' }, muet ? H.poele[1] : t);
+    out[capteursPriseDemo(id).energy] = etat(muet ? 'unavailable' : String(TOTAUX_PRISES_DEMO[id]), { friendly_name: etiquette(nom) + ' ' + etiquette('Énergie'),
+      device_class: 'energy', state_class: 'total_increasing', unit_of_measurement: 'kWh' }, muet ? H.poele[1] : t);
+  });
+  out[PONT_DEMO] = s('off', { friendly_name: 'Zigbee2MQTT Bridge Permit join', icon: 'mdi:human-greeting-proximity' });
+  out[SIRENE_SWITCH_DEMO] = s('off', { friendly_name: 'Alarme sirène Siren on' });
+  return out;
+}
+
+/** Les cycles du lave-vaisselle des sept derniers jours (§ 6.1), du plus ancien au plus récent (le contrat du plan 1).
+ * Les kWh sont ceux du cycle ENTIER, minuit franchi ou non : `kwhPriseDemo` lit sa puissance dans le cycle, pas dans le jour. */
+function cyclesLvDemo(t) {
+  const out = [];
+  for (let d = -7; d <= 0; d++) {
+    const H = histoireDuJour(aJour(t, d, 12, 0));
+    if (!H.lv || H.lv[1] > t) continue;
+    out.push({ debut: isoCha(new Date(H.lv[0])), fin: isoCha(new Date(H.lv[1])), kwh: kwhPriseDemo('switch.prise_lave_vaisselle', H.lv[0], H.lv[1]) });
+  }
+  return out;
+}
+
+/* Les lignes du journal des cycles du lave-vaisselle (le contrat du plan 1) :
+ * « cycle démarré » une minute après le début, « cycle terminé » dix minutes
+ * après la baisse — l'instant RÉEL dans leurs parties (`ts`, en secondes), et
+ * les kWh à part, trois décimales au plus. */
+function journalCyclesDemo() {
+  const t = horlogePrises();
+  const id = 'switch.prise_lave_vaisselle';
+  const hm = (ms) => new Date(ms).toTimeString().slice(0, 5);
+  return cyclesLvDemo(t).flatMap(c => {
+    const a = Date.parse(c.debut), b = Date.parse(c.fin);
+    const lignes = [ligneJournal({ module: 'prises', regle: 'cycle', quoi: 'cycle démarré', cibles: [id], n: 1, motif: [['à {h}', { h: hm(a), ts: Math.round(a / 1000) }]], detail: '', simule: false, ts: a / 1000 + 60 })];
+    if (b + 600000 <= t) {
+      lignes.push(ligneJournal({ module: 'prises', regle: 'cycle', quoi: 'cycle terminé', cibles: [id], n: 1, detail: '', simule: false, ts: b / 1000 + 600,
+        motif: [['à {h}', { h: hm(b), ts: Math.round(b / 1000) }], ['{kwh} kWh', { kwh: Math.round(c.kwh * 1000) / 1000 }]] }));
+    }
+    return lignes;
+  });
+}
+
+/** `loggia/prises/etat` (§ 6.1) : la configuration, et pour chaque prise son type, sa protection, son alerte, ses cycles. */
+function prisesDemo() {
+  const t = horlogePrises();
+  const cfg = PRI_CFG();
+  const prises = {};
+  PRISES_DEMO.forEach(id => {
+    const impose = (cfg.types && cfg.types[id]) || null;
+    const type = impose || DEVINES_DEMO[id];
+    // `suivi` (audit du 19/10) : le serveur suit le cycle de l'électroménager qui mesure — toutes les prises de la démo mesurent.
+    prises[id] = { type, impose: !!impose, protegee: (cfg.protegees || []).includes(id), prevenir: !!(cfg.prevenir && cfg.prevenir[id]),
+      suivi: ['lv', 'll', 'sl'].includes(type), cycle: null, cycles: id === 'switch.prise_lave_vaisselle' ? cyclesLvDemo(t) : [] };
+  });
+  return { maintenant: isoCha(new Date(t)), config: JSON.parse(JSON.stringify(cfg)), prises, notifier: true };
+}
+
+/** `loggia/prises/config` (le contrat du plan 1) : `protegees` arrive ENTIÈRE et remplace la liste ;
+ * `types` et `prevenir` se posent prise par prise — un type `null` rend la prise à son nom, `false` coupe. */
+function prisesPatch(patch) {
+  const cfg = PRI_CFG();
+  if (patch && Array.isArray(patch.protegees)) cfg.protegees = [...new Set(patch.protegees)].sort();
+  for (const [id, t] of Object.entries((patch && patch.types) || {})) { if (t) cfg.types[id] = t; else delete cfg.types[id]; }
+  for (const [id, v] of Object.entries((patch && patch.prevenir) || {})) { if (v) cfg.prevenir[id] = true; else delete cfg.prevenir[id]; }
+  return JSON.parse(JSON.stringify(cfg));
+}
+
+/**
+ * Les statistiques d'un capteur de prise, au format de
+ * `recorder/statistics_during_period` : des tranches de 5 min ou d'une heure,
+ * jamais celle en cours ; `mean` pour une puissance (W), `change` pour un
+ * compteur (kWh). Une tranche où la prise était muette n'existe pas.
+ */
+function statsPriseDemo(id, msg) {
+  const prise = priseDuCapteurDemo(id);
+  const pas = msg.period === '5minute' ? CINQ_MIN_MS : msg.period === 'hour' ? 3600000 : 0;
+  const t0 = Date.parse(msg.start_time);
+  if (!prise || !pas || isNaN(t0)) return [];
+  const t1 = Math.min(horlogePrises(), msg.end_time ? Date.parse(msg.end_time) : Infinity);
+  const energie = id === capteursPriseDemo(prise).energy;
+  const lignes = [];
+  for (let debut = Math.ceil(t0 / pas) * pas; debut + pas <= t1; debut += pas) {
+    let wh = 0, duree = 0;
+    for (let x = debut; x < debut + pas; x += CINQ_MIN_MS) {
+      const w = wattsPriseDemo(prise, x + CINQ_MIN_MS / 2);
+      if (w == null) continue;
+      wh += w * CINQ_MIN_MS / 3600000;
+      duree += CINQ_MIN_MS;
+    }
+    if (!duree) continue;
+    // Le compteur compte au dixième de Wh : arrondi au Wh, chaque tranche de 5 minutes à 66 W (5,5 Wh) montait à 6 et le jour
+    // dépassait de 8 Wh le cycle qui l'a consommé (« 1,09 » contre « 1,08 »).
+    lignes.push(energie ? { start: debut, end: debut + pas, change: Math.round(wh * 10) / 10000 } : { start: debut, end: debut + pas, mean: Math.round(wh * 3600000 / duree * 10) / 10 });
+  }
+  return lignes;
+}
+
+/** `logbook/get_events` : ce que le logbook dit des prises depuis `start_time`, contextes compris, dans l'ordre du temps. */
+function logbookPrisesDemo(msg, states) {
+  const t = horlogePrises();
+  const H = histoireAujourdhui();
+  const nom = (id) => (states[id] && states[id].attributes ? states[id].attributes.friendly_name : id);
+  const debut = Date.parse(msg && msg.start_time) || 0;
+  const ids = Array.isArray(msg && msg.entity_ids) ? msg.entity_ids : null;
+  const evts = [
+    // Le PC : allumé au bouton de la prise — aucun contexte.
+    { when: H.pc / 1000, entity_id: 'switch.prise_pc_bureau_atlas', state: 'on', name: nom('switch.prise_pc_bureau_atlas') },
+    // Le poêle : allumé par l'automatisation « Matin », puis muet.
+    { when: H.poele[0] / 1000, entity_id: 'switch.poele', state: 'on', name: nom('switch.poele'), context_id: 'demo-matin', context_event_type: 'automation_triggered',
+      context_domain: 'automation', context_name: etiquette('Matin'), context_entity_id: 'automation.matin' },
+    { when: H.poele[1] / 1000, entity_id: 'switch.poele', state: 'unavailable', name: nom('switch.poele') },
+    ...PRISES_GESTES,
+  ];
+  return evts.filter(e => e.when * 1000 >= debut && e.when * 1000 <= t && (!ids || ids.includes(e.entity_id))).sort((a, b) => a.when - b.when);
+}
+
+/**
+ * La maison de la démo, son horloge des prises réglée, pour
+ * tests/demo_prises.test.mjs : les états, l'index, l'état du § 6.1, les
+ * statistiques, le logbook, l'écriture de la configuration — une
+ * configuration et une histoire neuves à chaque appel. L'histoire d'aujourd'hui
+ * est fixée à la première lecture (ici, aussitôt) ; `avancer(ms)` fait passer le
+ * temps SANS la refaire, comme une démo restée ouverte : le test relit, et vérifie
+ * que « Terminé à » n'a pas bougé.
+ */
+export function maisonPrisesDemo({ quand = null } = {}) {
+  let t = quand == null ? Date.now() : Number(quand);
+  horlogePrises = () => t;
+  PRI_CFG_ = null;
+  HISTOIRES_PRISES.clear();
+  PRISES_GESTES.length = 0;
+  PRISES_JOURNAL.length = 0;
+  const states = etatsInitiaux();
+  return {
+    states,
+    avancer: (ms) => { t += Number(ms) || 0; },
+    index: () => indexDemo(states),
+    etat: () => prisesDemo(),
+    statistiques: (msg) => statistiquesDemo(msg),
+    logbook: (msg) => logbookPrisesDemo(msg, states),
+    ecrire: (patch) => ({ config: prisesPatch(patch), etat: prisesDemo() }),
+  };
+}
+
+/* ── Les lumières de la démo (chantier Lumières, § 9) ─────────────────────────
+ *
+ * Les six lampes de sa maquette « Cartes lumières », à toute heure :
+ *  - le Plafonnier Bureau, un variateur, allumé à 18:05 à l'interrupteur, à 100 % ;
+ *  - l'Ampoule Chambre, en blanc réglable : 45 %, 2 700 K, allumée à 20:10 depuis
+ *    Loggia, un minuteur jusqu'à 21:10 ;
+ *  - le Plafonnier Chambre, éteint à 07:50 — son dernier niveau, 80 % ;
+ *  - la Veilleuse Chambre Lino, en couleur : violet (275°), 15 %, allumée à 20:30
+ *    par l'automatisation « Coucher de Lino » — la veilleuse de la règle Nuit ;
+ *  - le Plafonnier Cuisine, éteint ;
+ *  - l'Applique Extérieur, tout ou rien — un switch déclaré lumière, comme chez
+ *    lui —, allumée à 20:24 par l'automatisation « Coucher du soleil ».
+ * Leurs journées sont celles de la maquette, vue à 20:40 ; à toute autre heure, la
+ * démo les décale TOUTES d'autant, ses 20:40 à l'heure de la démo : la même
+ * scène, le minuteur de l'ampoule compris — la nuit, une lampe allumée « depuis
+ * hier ». (Gardées à leurs heures après 20:40, le minuteur aurait éteint
+ * l'ampoule à 21:10, et la scène se serait défaite.) L'histoire d'aujourd'hui est fixée à
+ * la première lecture du jour (`HISTOIRES_LUMIERES`, la leçon de la démo des
+ * prises) : une démo restée ouverte ne la refait pas. Le salon, l'entrée et la
+ * salle de bain gardent leurs lampes : la pièce du salon, l'interrupteur sans fil
+ * et la règle Nuit s'en servent.
+ * Le faux serveur répond au carnet (`loggia/lumieres/etat`,
+ * `loggia/lumieres/journal`, § 6.2) d'après cette histoire et les gestes de la
+ * session ; il applique la luminosité, le blanc et la couleur
+ * (`gesteLumiereDemo`), et son minuteur éteint aussi les lumières.
+ * `maisonLumieresDemo` l'expose à tests/demo_lumieres.test.mjs, son horloge réglée. */
+const LUMIERES_DEMO = ['light.bureau', 'light.ampoule_chambre', 'light.chambre', 'light.veilleuse_chambre_lino', 'light.cuisine', 'switch.applique_exterieur'];
+/* Une lumière de la démo, celles du salon, de l'entrée et de la salle de bain comprises. */
+const lampeDemo = (id) => String(id).indexOf('light.') === 0 || LUMIERES_DEMO.includes(id);
+/* Leur pièce : les trois plafonniers sont déjà dans la leur ; l'applique, faute de jardin, à l'entrée. */
+const PIECES_LUMIERES_DEMO = { 'light.ampoule_chambre': 'chambre', 'light.veilleuse_chambre_lino': 'chambre', 'switch.applique_exterieur': 'entree' };
+/* Ce que chaque lampe sait faire : ses modes, les bornes de son blanc, et la couleur qu'elle a allumée. */
+const LAMPES_DEMO = {
+  'light.bureau': { modes: ['brightness'], allumee: { color_mode: 'brightness' } },
+  'light.ampoule_chambre': { modes: ['color_temp'], min: 2200, max: 6500, allumee: { color_mode: 'color_temp', color_temp_kelvin: 2700 } },
+  'light.chambre': { modes: ['brightness'], allumee: { color_mode: 'brightness' } },
+  'light.veilleuse_chambre_lino': { modes: ['color_temp', 'xy'], min: 2000, max: 6535, allumee: { color_mode: 'xy', hs_color: [275, 100], rgb_color: [149, 0, 255] } },
+  'light.cuisine': { modes: ['brightness'], allumee: { color_mode: 'brightness' } },
+  'switch.applique_exterieur': { modes: null, allumee: {} },
+};
+const nomLampeDemo = (id) => ({
+  'light.bureau': etiquette('Plafonnier') + ' ' + lieu('Bureau'), 'light.ampoule_chambre': etiquette('Ampoule') + ' ' + lieu('Chambre'),
+  'light.chambre': etiquette('Plafonnier') + ' ' + lieu('Chambre'), 'light.veilleuse_chambre_lino': etiquette('Veilleuse') + ' ' + lieu('Chambre') + ' Lino',
+  'light.cuisine': etiquette('Plafonnier') + ' ' + lieu('Cuisine'), 'switch.applique_exterieur': etiquette('Applique Extérieur'),
+})[id];
+/* La journée de chaque lampe, celle de sa maquette : [heure, état, luminosité, qui, automatisation]. `qui` :
+ * `inter`, l'interrupteur mural (aucun contexte) ; `loggia`, le compte de la démo ; `auto`, une automatisation. */
+const JOURNEES_LUMIERES = {
+  'light.bureau': [['08:55', 'on', 100, 'inter'], ['12:10', 'off', null, 'inter'], ['18:05', 'on', 100, 'inter']],
+  'light.ampoule_chambre': [['07:05', 'on', 30, 'auto', 'Réveil'], ['07:40', 'off', null, 'loggia'], ['20:10', 'on', 45, 'loggia']],
+  'light.chambre': [['07:20', 'on', 80, 'inter'], ['07:50', 'off', null, 'inter']],
+  /* La veilleuse : allumée à la main au réveil de Lino, éteinte par la règle Nuit une heure plus tard en un fondu de 5 min —
+   * ses paliers et son extinction arrivent sans contexte, après la ligne de Loggia (§ 8) —, rallumée au coucher. */
+  'light.veilleuse_chambre_lino': [['05:50', 'on', 15, 'inter'], ['06:51', 'on', 9, 'inter'], ['06:53', 'on', 4, 'inter'], ['06:55', 'off', null, 'inter'],
+    ['20:30', 'on', 15, 'auto', 'Coucher de Lino']],
+  'light.cuisine': [['07:15', 'on', 100, 'inter'], ['08:20', 'off', null, 'inter'], ['19:05', 'on', 100, 'inter'], ['20:20', 'off', null, 'inter']],
+  'switch.applique_exterieur': [['20:24', 'on', null, 'auto', 'Coucher du soleil']],
+};
+// Le minuteur de l'ampoule : posé depuis Loggia quelques secondes après l'avoir allumée, pour une heure.
+const MINUTEUR_LUMIERE_DEMO = { id: 'light.ampoule_chambre', heure: [20, 10], minutes: 60 };
+// La ligne de la règle Nuit qui éteint la veilleuse, une heure après son allumage à la main (§ 8).
+const VEILLEUSE_ETEINTE_DEMO = [6, 50];
+
+/* L'horloge des lumières : celle du navigateur ; `maisonLumieresDemo` la règle. */
+let horlogeLumieres = () => Date.now();
+const HISTOIRES_LUMIERES = new Map();
+/* Ce que la session ajoute : les gestes sur une lampe, au carnet (§ 6.2), avec leur réglage. */
+const LUMIERES_GESTES = [];
+/* `niveau_a` du serveur (lumieres_calcul.py) : l'instant où le niveau d'une lampe a été noté pour la dernière fois, en secondes —
+ * son allumage, ou son dernier réglage. Un réglage qui le suit à moins de 30 s se fond dans la note ; une extinction l'efface. */
+const NIVEAUX_LUMIERES = new Map();
+const FONDRE_S = 30;
+
+/** La journée d'aujourd'hui : celle de sa maquette, décalée tout entière pour que ses 20:40 soient `t`. */
+function histoireLumieres(t) {
+  const decalage = t - aJour(t, 0, 20, 40);
+  const quand = ([h, m]) => (aJour(t, 0, h, m) + decalage) / 1000;
+  const evenements = [];
+  for (const id of LUMIERES_DEMO) {
+    // La note d'avant la fenêtre (le contrat du plan 1) : éteinte l'avant-veille à 23:00 — l'état de la lampe quand la fenêtre s'ouvre.
+    evenements.push({ when: aJour(t, -2, 23, 0) / 1000, entity_id: id, state: 'off', bri: null, reglage: false, context_user_id: null });
+    let avant = 'off';
+    for (const [hm, state, bri, qui, auto] of JOURNEES_LUMIERES[id]) {
+      const contexte = qui === 'loggia' ? { context_user_id: 'demo' }
+        : qui === 'auto' ? { context_user_id: null, context_event_type: 'automation_triggered', context_name: etiquette(auto) } : { context_user_id: null };
+      // Allumée, puis allumée encore : un réglage de niveau seul (les paliers du fondu de la veilleuse).
+      evenements.push({ when: quand(hm.split(':').map(Number)), entity_id: id, state, bri, reglage: state === 'on' && avant === 'on', ...contexte });
+      avant = state;
+    }
+  }
+  const pose = quand(MINUTEUR_LUMIERE_DEMO.heure) + 5;
+  return { evenements: evenements.sort((a, b) => a.when - b.when), minuteur: { id: MINUTEUR_LUMIERE_DEMO.id, pose, fin: pose - 5 + MINUTEUR_LUMIERE_DEMO.minutes * 60 },
+    veilleuse: quand(VEILLEUSE_ETEINTE_DEMO) };
+}
+/** L'histoire d'aujourd'hui, fixée à la première lecture du jour. */
+function histoireLumieresAujourdhui() {
+  const t = horlogeLumieres();
+  const jour = aJour(t, 0, 0, 0);
+  if (!HISTOIRES_LUMIERES.has(jour)) HISTOIRES_LUMIERES.set(jour, histoireLumieres(t));
+  return HISTOIRES_LUMIERES.get(jour);
+}
+
+/* Les attributs d'une lampe allumée à `bri` %, dans le réglage `r` ; éteinte, Home Assistant les efface. */
+const ETEINTE_DEMO = { brightness: null, color_mode: null, color_temp_kelvin: null, hs_color: null, rgb_color: null };
+const allumeeDemo = (bri, r) => ({ brightness: bri == null ? null : Math.round(bri * 255 / 100), color_temp_kelvin: null, hs_color: null, rgb_color: null, ...r });
+const capacitesDemo = (id) => {
+  const l = LAMPES_DEMO[id];
+  return !l || !l.modes ? {} : { supported_color_modes: l.modes, ...(l.min ? { min_color_temp_kelvin: l.min, max_color_temp_kelvin: l.max } : {}) };
+};
+
+/** Les états des six lampes, à l'horloge des lumières : la dernière ligne de leur journée, `last_changed` compris. */
+function etatsLumieresDemo() {
+  const t = horlogeLumieres();
+  const H = histoireLumieresAujourdhui();
+  const out = {};
+  for (const id of LUMIERES_DEMO) {
+    const e = H.evenements.filter(x => x.entity_id === id && x.when * 1000 <= t).pop();
+    const on = !!e && e.state === 'on';
+    const iso = new Date(e ? e.when * 1000 : aJour(t, -1, 23, 0)).toISOString();
+    const attributs = id.indexOf('light.') === 0 ? { ...capacitesDemo(id), ...(on ? allumeeDemo(e.bri, LAMPES_DEMO[id].allumee) : ETEINTE_DEMO) } : {};
+    out[id] = { ...s(on ? 'on' : 'off', { friendly_name: nomLampeDemo(id), ...attributs }), last_changed: iso, last_updated: iso };
+  }
+  return out;
+}
+
+/* Une couleur `hs` vue par Home Assistant : la teinte et la saturation, à pleine valeur (`color_hs_to_RGB`). */
+function rgbDeHsDemo([h, sat]) {
+  const c = Math.max(0, Math.min(100, Number(sat) || 0)) / 100, x = c * (1 - Math.abs(((((Number(h) || 0) % 360) + 360) % 360 / 60) % 2 - 1));
+  const secteur = Math.floor(((((Number(h) || 0) % 360) + 360) % 360) / 60);
+  const [r, g, b] = [[c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x]][secteur];
+  return [r, g, b].map(v => Math.round((v + 1 - c) * 255));
+}
+
+/* La couleur qu'une lampe reprend en se rallumant : celle que le carnet garde (`memoire`), sinon celle de sa journée. */
+function couleurReprise(id, memoire) {
+  const m = memoire || {};
+  if (m.mode === 'color_temp' && m.kelvin) return { color_mode: 'color_temp', color_temp_kelvin: m.kelvin };
+  if (Array.isArray(m.hs) && m.mode) return { color_mode: m.mode, hs_color: m.hs, rgb_color: rgbDeHsDemo(m.hs) };
+  if (m.mode) return { color_mode: m.mode };
+  return { ...(LAMPES_DEMO[id] ? LAMPES_DEMO[id].allumee : {}) };
+}
+
+/**
+ * Ce que fait un service sur une lampe de la démo, comme Home Assistant :
+ * `turn_on` allume, et pose ce qu'on lui donne — `brightness_pct` (ou un pas,
+ * `brightness_step_pct`), `color_temp_kelvin` (borné à l'ampoule), `hs_color`
+ * (sa couleur en `rgb_color`) ; sans rien, une lampe éteinte reprend son
+ * dernier réglage (`memoire`, `{ bri, mode, kelvin, hs }` : « se rallumera à
+ * 80 % »). `turn_off` éteint et efface ces attributs ; `toggle` bascule. Une
+ * lampe muette ne répond pas. Rend le nouvel état `{ state, attributes }`, ou
+ * null quand le service n'y change rien.
+ */
+export function appliquerLumiereDemo(cur, id, service, data = {}, memoire = null) {
+  if (!cur || cur.state === 'unavailable') return null;
+  const a = cur.attributes || {};
+  const allumer = service === 'turn_on' || (service === 'toggle' && cur.state !== 'on');
+  if (!allumer) return service === 'turn_off' || service === 'toggle' ? { state: 'off', attributes: id.indexOf('light.') === 0 ? { ...a, ...ETEINTE_DEMO, ...effetDemo(a, cur, null, false) } : a } : null;
+  if (id.indexOf('light.') !== 0) return { state: 'on', attributes: a };
+  const modes = Array.isArray(a.supported_color_modes) ? a.supported_color_modes : [];
+  const avant = cur.state === 'on' && a.brightness != null ? a.brightness : memoire && memoire.bri ? Math.round(memoire.bri * 255 / 100) : 255;
+  let brightness = data.brightness_pct != null ? Math.round(Math.max(1, Math.min(100, Number(data.brightness_pct))) * 255 / 100)
+    : data.brightness_step_pct != null ? Math.round(Math.max(1, Math.min(100, avant / 2.55 + Number(data.brightness_step_pct))) * 2.55) : avant;
+  if (!modes.some(m => m !== 'onoff')) brightness = null;
+  let couleur = cur.state === 'on' ? { color_mode: a.color_mode, color_temp_kelvin: a.color_temp_kelvin, hs_color: a.hs_color, rgb_color: a.rgb_color }
+    : couleurReprise(id, memoire);
+  if (data.color_temp_kelvin != null && modes.includes('color_temp')) {
+    const k = Math.round(Math.max(Number(a.min_color_temp_kelvin) || 2000, Math.min(Number(a.max_color_temp_kelvin) || 6535, Number(data.color_temp_kelvin))));
+    couleur = { color_mode: 'color_temp', color_temp_kelvin: k, hs_color: null, rgb_color: null };
+  } else if (Array.isArray(data.hs_color) && modes.some(m => ['hs', 'xy', 'rgb', 'rgbw', 'rgbww'].includes(m))) {
+    const hs = [Number(data.hs_color[0]) || 0, Number(data.hs_color[1]) || 0];
+    couleur = { color_mode: modes.includes('hs') ? 'hs' : modes.includes('xy') ? 'xy' : 'rgb', color_temp_kelvin: null, hs_color: hs, rgb_color: rgbDeHsDemo(hs) };
+  }
+  if (!couleur.color_mode) couleur = { color_mode: modes.includes('brightness') ? 'brightness' : modes[0] || 'onoff' };
+  return { state: 'on', attributes: { ...a, ...allumeeDemo(brightness == null ? null : brightness * 100 / 255, couleur), ...effetDemo(a, cur, data, true) } };
+}
+
+/* L'effet d'une lampe qui en publie (`effect_list`), comme Home Assistant le tient (retouches du 19/10, R4) : rien pour une lampe
+ * sans liste ; éteinte (`data` vide, `turn_off`), effacé ; `turn_on` avec un `effect` de la liste le pose, un nom hors liste est
+ * ignoré ; allumée, un réglage garde l'effet en cours ; rallumée sans rien dire, « aucun » (le nom que la liste lui donne). */
+function effetDemo(a, cur, data, allume) {
+  const liste = Array.isArray(a.effect_list) ? a.effect_list : null;
+  if (!liste) return {};
+  if (!allume) return { effect: null };
+  const d = data || {};
+  if (typeof d.effect === 'string' && liste.includes(d.effect)) return { effect: d.effect };
+  if (cur.state === 'on' && a.effect) return { effect: a.effect };
+  return { effect: liste.find(e => ['off', 'none', 'stop_effect'].includes(String(e).toLowerCase())) || null };
+}
+
+/* Le réglage qu'une lampe allumée garde au carnet (§ 6.2) : sa luminosité, son mode, son blanc ou sa couleur. */
+const reglageCarnetDemo = (a) => ({ bri: a.brightness == null ? null : Math.max(1, Math.round(a.brightness / 2.55)), mode: a.color_mode || null,
+  kelvin: a.color_mode === 'color_temp' ? a.color_temp_kelvin : null, hs: Array.isArray(a.hs_color) && a.color_mode !== 'color_temp' ? a.hs_color : null });
+
+/**
+ * Un geste sur une lampe de la démo : le service appliqué (`appliquerLumiereDemo`),
+ * l'état écrit — `last_changed` ne bouge que si l'état change, comme dans Home
+ * Assistant —, et le carnet qui le note, comme `noter` du serveur : un allumage,
+ * une extinction, ou un réglage de niveau seul (`reglage`). Un réglage à moins de
+ * 30 s du dernier niveau noté — l'allumage ou le réglage d'avant — se fond dans SA
+ * note, à la dernière valeur : « Allumée à 60 % » (et non « Réglée à »), ou « Réglée
+ * à 40 % » ; la note garde l'heure du PREMIER changement, et chaque pas prolonge les
+ * 30 s. Seulement chez le même auteur, ou sans auteur (l'écho de l'ampoule) ; une
+ * couleur seule n'est pas une note. `utilisateur` : le compte de la démo, ou null
+ * (le minuteur du serveur). Rend vrai si quelque chose a changé.
+ */
+export function gesteLumiereDemo(states, id, service, data = {}, { utilisateur = 'demo', maintenant = Date.now() } = {}) {
+  const cur = states[id];
+  /* Une lampe sans histoire (le salon, l'entrée…), vue allumée et que le carnet n'a jamais notée : son réglage courant s'y
+   * inscrit AVANT le premier geste, à l'heure où elle s'est allumée — la ligne que son journal lui prêtait déjà. Sans lui,
+   * éteinte elle perdait son repère gris (`dernier: null`), et rallumée elle revenait à 100 % en `color_temp` sans kelvin, en or. */
+  if (cur && cur.state === 'on' && !dernierCarnetDemo(id)) {
+    const vu = reglageCarnetDemo(cur.attributes || {});
+    const depuis = Math.min(Date.parse(cur.last_changed) || maintenant, maintenant) / 1000;
+    LUMIERES_GESTES.push({ when: depuis, entity_id: id, state: 'on', bri: vu.bri, reglage: false, context_user_id: null, reglageLampe: vu });
+    NIVEAUX_LUMIERES.set(id, depuis);
+  }
+  const suite = appliquerLumiereDemo(cur, id, service, data, dernierCarnetDemo(id));
+  if (!suite) return false;
+  const iso = new Date(maintenant).toISOString();
+  const t = maintenant / 1000;
+  states[id] = { ...cur, state: suite.state, attributes: suite.attributes, last_updated: iso, last_changed: suite.state !== cur.state ? iso : cur.last_changed };
+  minuteurSiEteint(id, suite.state);
+  const r = suite.state === 'on' ? reglageCarnetDemo(suite.attributes) : null;
+  if (suite.state !== cur.state) {
+    LUMIERES_GESTES.push({ when: t, entity_id: id, state: suite.state, bri: r ? r.bri : null, reglage: false, context_user_id: utilisateur, reglageLampe: r });
+    // Le niveau est noté à l'allumage ; une extinction l'efface (`niveau_a`).
+    if (r) NIVEAUX_LUMIERES.set(id, t); else NIVEAUX_LUMIERES.delete(id);
+  } else if (r && r.bri !== reglageCarnetDemo(cur.attributes || {}).bri) {
+    /* Un réglage se fond dans la DERNIÈRE NOTE de la lampe, qu'elle soit son allumage ou un réglage — « Allumée à 60 % » —, à
+     * moins de 30 s du dernier niveau noté, chez le même auteur ou sans auteur : comme chez le serveur. La note garde son heure (celle
+     * du premier changement) et son auteur ; le niveau est noté à chaque pas, et prolonge les 30 s. La note silencieuse d'une couleur
+     * ou d'un blanc, qui garde le dernier réglage sans faire de ligne, n'est pas une note : elle ne compte pas, et ne reporte pas les
+     * 30 s (« Réglée à 70 % » ne paraissait jamais quand elle avalait le réglage). `maj` : l'instant où la note a eu son dernier mot,
+     * pour que `dernierCarnetDemo` ne prenne pas, derrière elle, une couleur seule plus récente que son heure. */
+    const avant = LUMIERES_GESTES.filter(x => x.entity_id === id && !x.silencieux).pop();
+    const niveauA = NIVEAUX_LUMIERES.get(id);
+    const memeAuteur = utilisateur == null || (avant && (avant.context_user_id || null) === utilisateur && !avant.context_event_type && !avant.context_name);
+    if (avant && avant.state === 'on' && niveauA != null && t - niveauA < FONDRE_S && memeAuteur) Object.assign(avant, { bri: r.bri, reglageLampe: r, maj: t });
+    else LUMIERES_GESTES.push({ when: t, entity_id: id, state: 'on', bri: r.bri, reglage: true, context_user_id: utilisateur, reglageLampe: r });
+    NIVEAUX_LUMIERES.set(id, t);
+  } else if (r) {
+    // Le blanc ou la couleur seuls : rien au journal, le dernier réglage le garde.
+    LUMIERES_GESTES.push({ when: maintenant / 1000, entity_id: id, state: 'on', bri: r.bri, reglage: true, silencieux: true, context_user_id: utilisateur, reglageLampe: r });
+  }
+  return true;
+}
+
+/**
+ * Ce que le carnet sait d'une lampe depuis la veille à 00:00 — son histoire, puis les gestes de la
+ * session, dans l'ordre du temps —, précédé de sa dernière note d'AVANT : l'état de la lampe quand
+ * la fenêtre s'ouvre (le contrat du plan 1). L'écran ne l'affiche pas, il s'en sert.
+ */
+function carnetLumiereDemo(id) {
+  const t = horlogeLumieres();
+  const depuis = aJour(t, -1, 0, 0) / 1000;
+  const siens = [...histoireLumieresAujourdhui().evenements, ...LUMIERES_GESTES].filter(e => e.entity_id === id && e.when * 1000 <= t)
+    .sort((a, b) => a.when - b.when);
+  const avant = siens.filter(e => e.when < depuis).pop();
+  return [...(avant ? [avant] : []), ...siens.filter(e => e.when >= depuis)];
+}
+
+/**
+ * `loggia/lumieres/journal` (§ 6.2) : les allumages, extinctions et réglages d'une lampe, contextes
+ * compris. Une lampe sans histoire ni geste (le salon, l'entrée…) : allumée, le carnet l'a vue
+ * s'allumer à l'heure de son état — sa fiche ne dit pas « Rien depuis minuit » sous une lampe allumée.
+ */
+function journalLumiereDemo(msg, states = {}) {
+  const id = msg && msg.entity_id;
+  if (typeof id !== 'string' || !id) return Promise.reject({ code: 'invalid_format', message: 'entity_id' });
+  let evenements = carnetLumiereDemo(id).filter(e => !e.silencieux).map(e => ({ when: e.when, state: e.state, bri: e.bri, reglage: !!e.reglage,
+    context_user_id: e.context_user_id || null, context_event_type: e.context_event_type || null, context_name: e.context_name || null }));
+  const st = states[id];
+  if (!evenements.length && !LUMIERES_DEMO.includes(id) && st && st.state === 'on' && st.last_changed) {
+    const b = st.attributes && st.attributes.brightness;
+    evenements = [{ when: Date.parse(st.last_changed) / 1000, state: 'on', bri: b == null ? null : Math.max(1, Math.round(b / 2.55)), reglage: false,
+      context_user_id: null, context_event_type: null, context_name: null }];
+  }
+  return Promise.resolve({ evenements });
+}
+
+/** Le dernier réglage d'une lampe que le carnet garde — celui de son dernier allumage ou réglage : `{ bri, mode, kelvin, hs }`, ou null. */
+function dernierCarnetDemo(id) {
+  // La note qui a eu le DERNIER mot : un réglage fondu dans une note plus ancienne (`maj`) passe devant une couleur seule posée entre-temps.
+  const e = carnetLumiereDemo(id).filter(x => x.state === 'on').reduce((a, x) => (!a || (x.maj != null ? x.maj : x.when) >= (a.maj != null ? a.maj : a.when) ? x : a), null);
+  if (!e) return null;
+  if (e.reglageLampe) return e.reglageLampe;
+  const lampe = LAMPES_DEMO[id];
+  return lampe ? { ...reglageCarnetDemo(allumeeDemo(e.bri, lampe.allumee)), bri: e.bri } : null;
+}
+
+/** `loggia/lumieres/etat` (§ 6.2) : le dernier niveau de chaque lampe suivie ; une lampe sans histoire, celui de son état si elle est allumée. */
+function lumieresDemo(states) {
+  const t = horlogeLumieres();
+  const lumieres = {};
+  for (const id of Object.keys(states)) {
+    if (id.indexOf('light.') !== 0 && !LUMIERES_DEMO.includes(id)) continue;
+    // Chaque lampe suivie ; `dernier` reste null tant qu'elle n'a jamais été vue allumée (le contrat du plan 1).
+    lumieres[id] = { dernier: dernierCarnetDemo(id) || (states[id].state === 'on' ? reglageCarnetDemo(states[id].attributes || {}) : null) };
+  }
+  // Des secondes, un nombre : le format du contrat, qui n'est pas celui de `loggia/prises/etat`.
+  return { maintenant: t / 1000, lumieres };
+}
+
+/* La pose du minuteur de l'ampoule, au journal de Loggia, comme le serveur l'écrit (chantier Prises, § 6.3). */
+function journalLumieresDemo() {
+  const m = histoireLumieresAujourdhui().minuteur;
+  if (m.pose * 1000 > horlogeLumieres()) return [];
+  return [ligneJournal({ module: 'minuteurs', regle: 'minuteur', quoi: 'poser', cibles: [m.id], n: 1, motif: [['{n} min', { n: MINUTEUR_LUMIERE_DEMO.minutes }]], detail: '', simule: false, ts: m.pose })];
+}
+
+/**
+ * La maison de la démo, son horloge des lumières réglée, pour
+ * tests/demo_lumieres.test.mjs : les états, l'index, le carnet, la règle Nuit,
+ * le journal de Loggia, et un geste (`geste(id, service, data)`) — une histoire
+ * neuve à chaque appel, fixée aussitôt ; `avancer(ms)` fait passer le temps SANS
+ * la refaire, comme une démo restée ouverte.
+ */
+export function maisonLumieresDemo({ quand = null } = {}) {
+  let t = quand == null ? Date.now() : Number(quand);
+  horlogeLumieres = () => t;
+  HISTOIRES_LUMIERES.clear();
+  LUMIERES_GESTES.length = 0;
+  NIVEAUX_LUMIERES.clear();
+  for (const k of Object.keys(MIN_DEMO)) delete MIN_DEMO[k];
+  const states = etatsInitiaux();
+  return {
+    states,
+    avancer: (ms) => { t += Number(ms) || 0; },
+    index: () => indexDemo(states),
+    etat: () => lumieresDemo(states),
+    journal: (id) => journalLumiereDemo({ entity_id: id }, states),
+    minuteur: () => ({ ...histoireLumieresAujourdhui().minuteur }),
+    // Les minuteurs d'extinction que lit `loggia/minuteurs/etat` (à l'heure du navigateur, comme la démo) : `{ <id>: { fin, duree } }`, et la pose d'un minuteur.
+    minuteurs: () => minuteursDemo().minuteurs,
+    poserMinuteur: (id, minutes) => minuteursPoser(id, minutes).minuteurs,
+    nuit: () => nuitDemo().config,
+    regles: () => reglesDemo(states).journal,
+    // Les scénarios de la maison, tels que `loggia/scenarios/etat` les rend : leur résumé compte les cibles (`scnCibles`).
+    scenarios: () => scenariosDemo(states).scenarios,
+    // Les cibles d'une action de scénario (`scnCibles`), et le lancement d'un scénario, comme `loggia/scenarios/lancer`.
+    cibles: (a) => scnCibles(a, states, null),
+    lancerScenario: (id) => scenariosLancer(id, states),
+    geste: (id, service, data = {}) => gesteLumiereDemo(states, id, service, data, { maintenant: t }),
+  };
 }
 
 /* Fenetre ouverte, chauffage coupe : la regle armee sur une piece, pour que la
@@ -1265,38 +2446,852 @@ function logbookDemo() {
   ];
 }
 
+/* ── Les mesures de la démo (chantier Capteurs, § 9) ─────────────────────────
+ *
+ * Celles de sa maquette « Cartes capteurs », à toute heure :
+ *  - le CO₂ de la chambre à 1 659 ppm (Confiné), avec un pic à 2 018 la nuit ;
+ *  - celui de la chambre de Lino à 1 177 (Moyen) ;
+ *  - la température du salon à 21,4 °C, sur un thermomètre qui porte aussi
+ *    l'hygromètre et une pile à 81 % ;
+ *  - l'humidité de la salle de bain à 68 % (Humide, après la douche) ;
+ *  - le bruit du salon à 34 dB ;
+ *  - la luminosité du salon à 120 lx, les particules à 8 µg/m³ et l'indice COV à
+ *    182 (Moyen) — les familles nouvelles de la table ;
+ *  - la station du jardin (C14, C15) : 12,4 °C (Frais) et 81 % d'humidité (Humide),
+ *    sur les zones du dehors (C15, révisé le 16/10 : leurs jauges), et un vent de
+ *    9 km/h (Calme) — sur un appareil physique (C16), dans le jardin, une pièce du
+ *    dehors de la démo depuis le 16/10 (C17 : une mesure n'est jugée que dans une
+ *    pièce de Loggia).
+ * Chacune a 24 heures de moyennes sur 5 minutes (`statsMesureDemo`), la courbe
+ * de sa maquette : des points en heures avant maintenant, reliés en ligne
+ * droite, et un aléa stable par tranche — la courbe ne scintille pas d'une
+ * lecture à l'autre. Comptée depuis l'heure de la démo, elle finit toujours sur
+ * la valeur de la carte. `maisonMesuresDemo` l'expose à
+ * tests/demo_mesures.test.mjs, son horloge réglée. */
+const COURBES_MESURES_DEMO = {
+  'sensor.chambre_co2': [[[-24, 1000], [-22, 420], [-17, 373], [-14, 400], [-11, 900], [-8, 1250], [-5.5, 2018], [-4, 1450], [-1.5, 1420], [0, 1659]], 50, 1],
+  'sensor.chambre_lino_co2': [[[-24, 900], [-20, 520], [-14, 480], [-9, 950], [-6, 1300], [-3, 1100], [0, 1177]], 40, 2],
+  'sensor.salon_temperature': [[[-24, 22.1], [-18, 20.6], [-14, 20.4], [-9, 21.8], [-5, 23.2], [-2, 22], [0, 21.4]], 0.15, 3],
+  'sensor.salle_de_bain_humidite': [[[-24, 55], [-15, 52], [-13.5, 82], [-12, 64], [-3, 58], [-1.2, 85], [0, 68]], 1.5, 4],
+  'sensor.salon_bruit': [[[-24, 38], [-22, 32], [-14, 30], [-12, 52], [-8, 58], [-4, 47], [-2, 36], [0, 34]], 3, 5],
+  'sensor.salon_luminosite': [[[-24, 140], [-23, 60], [-22.5, 1], [-15, 1], [-14, 180], [-12, 900], [-9, 1400], [-6, 600], [-4, 90], [-3, 40], [-2.5, 150], [0, 120]], 5, 8],
+  'sensor.salon_particules': [[[-24, 7], [-20, 5], [-14, 4], [-10, 12], [-9, 30], [-8.5, 34], [-7, 14], [-4, 9], [0, 8]], 1.2, 6],
+  'sensor.salon_cov': [[[-24, 110], [-18, 90], [-12, 140], [-10, 260], [-8, 200], [-3, 170], [0, 182]], 8, 7],
+  // La station du jardin : la nuit fraîche, l'après-midi doux, le vent qui tombe le soir.
+  'sensor.jardin_temperature': [[[-24, 13.1], [-20, 10.2], [-14, 8.1], [-10, 11.5], [-6, 16.8], [-3, 15.2], [0, 12.4]], 0.2, 9],
+  'sensor.jardin_humidite': [[[-24, 78], [-18, 88], [-14, 92], [-9, 74], [-5, 58], [-2, 66], [0, 81]], 1.5, 10],
+  'sensor.jardin_vent': [[[-24, 6], [-18, 4], [-12, 14], [-8, 22], [-5, 17], [-2, 11], [0, 9]], 2, 11],
+  // Le frigo (C17) : 4 °C, la porte ouverte au dîner — « Trop froid » pour toujours, s'il était jugé sur le confort d'une pièce.
+  'sensor.capteur_frigo_temperature': [[[-24, 4.1], [-14, 3.8], [-10.5, 6.2], [-9.5, 4.4], [-3.2, 6.8], [-2.5, 4.6], [0, 4.2]], 0.15, 12],
+};
+// Leur pièce : celles qui n'en avaient pas.
+const PIECES_MESURES_DEMO = { 'sensor.chambre_lino_co2': 'chambre', 'sensor.salon_luminosite': 'salon', 'sensor.salon_particules': 'salon', 'sensor.salon_cov': 'salon',
+  'sensor.salon_thermometre_pile': 'salon', 'sensor.salle_de_bain_temperature': 'sdb', 'sensor.salle_de_bain_humidite': 'sdb',
+  // Le jardin : une zone de Home Assistant, et une pièce du dehors de la configuration (C17, 16/10).
+  'sensor.jardin_temperature': 'jardin', 'sensor.jardin_humidite': 'jardin', 'sensor.jardin_vent': 'jardin', 'sensor.qualite_air_exterieur': 'jardin',
+  // Les cas de l'audit du 19/10 (point 15) : le monoxyde de la cuisine, les particules muettes du bureau.
+  'sensor.cuisine_monoxyde': 'cuisine', 'sensor.bureau_particules': 'bureau' };
+/* Les appareils des mesures : le thermomètre du salon, la station du jardin, et — passe 1 ter, 16/10 (C16 : une carte de
+ * mesure demande un appareil PHYSIQUE) — le capteur de chaque pièce, comme ses capteurs Netatmo et MQTT : la température,
+ * l'humidité et le CO₂ ; le CO₂ de Lino a le sien. Sans eux, les mesures des pièces quittaient Objets › Capteurs. Une pièce
+ * montre une carte par APPAREIL : au salon, la luminosité, les particules et les COV gardent chacun le leur, et sa vue les
+ * mêmes cartes qu'avant. `[pièce, nom de l'appareil, son modèle, ses mesures]`. */
+const APPAREILS_MESURES_DEMO = {
+  thermo_salon: ['salon', 'Thermomètre salon', 'Thermomètre', ['sensor.salon_temperature', 'sensor.salon_humidite', 'sensor.salon_thermometre_pile']],
+  capteur_salon: ['salon', 'Capteur salon', 'Capteur', ['sensor.salon_co2', 'sensor.salon_bruit']],
+  luxmetre_salon: ['salon', 'Luxmètre salon', 'Capteur', ['sensor.salon_luminosite']],
+  purificateur_salon: ['salon', 'Purificateur salon', 'Capteur', ['sensor.salon_particules']],
+  capteur_cov_salon: ['salon', 'Capteur COV salon', 'Capteur', ['sensor.salon_cov']],
+  capteur_cuisine: ['cuisine', 'Capteur cuisine', 'Capteur', ['sensor.cuisine_temperature', 'sensor.cuisine_humidite']],
+  capteur_chambre: ['chambre', 'Capteur chambre', 'Capteur', ['sensor.chambre_temperature', 'sensor.chambre_humidite', 'sensor.chambre_co2']],
+  capteur_lino: ['chambre', 'Capteur chambre Lino', 'Capteur', ['sensor.chambre_lino_co2']],
+  capteur_bureau: ['bureau', 'Capteur bureau', 'Capteur', ['sensor.bureau_temperature', 'sensor.bureau_humidite', 'sensor.bureau_co2']],
+  capteur_entree: ['entree', 'Capteur entrée', 'Capteur', ['sensor.entree_temperature']],
+  capteur_sdb: ['sdb', 'Capteur salle de bain', 'Capteur', ['sensor.salle_de_bain_temperature', 'sensor.salle_de_bain_humidite']],
+  /* Son indice de qualité de l'air (audit du 19/10, M8 : un capteur sans appareil n'entre plus dans Objets) : sur la station, dehors — neutre,
+   * la table ne connaît pas d'échelle d'indice qui vaille pour tous. */
+  station_jardin: ['jardin', 'Station météo', 'Station météo', ['sensor.jardin_temperature', 'sensor.jardin_humidite', 'sensor.jardin_vent', 'sensor.qualite_air_exterieur']],
+  // Un monoxyde en ppm (H10) : 2 ppm, « Bon » ; et un capteur de particules MUET, au bureau — une mesure indisponible dans Air.
+  capteur_co_cuisine: ['cuisine', 'Capteur CO cuisine', 'Capteur de monoxyde', ['sensor.cuisine_monoxyde']],
+  capteur_air_bureau: ['bureau', 'Capteur d’air bureau', 'Capteur', ['sensor.bureau_particules']],
+  // Le frigo (C17, 16/10) : un appareil SANS zone, comme son « Capteur Frigo » — sa carte entre dans Capteurs, neutre.
+  capteur_frigo: [null, 'Capteur Frigo', 'Capteur', ['sensor.capteur_frigo_temperature']],
+};
+const appareilMesureDemo = (id) => Object.keys(APPAREILS_MESURES_DEMO).find(d => APPAREILS_MESURES_DEMO[d][3].includes(id)) || null;
+
+/* L'horloge des mesures : celle du navigateur ; `maisonMesuresDemo` la règle. */
+let horlogeMesures = () => Date.now();
+
+/** La valeur d'une mesure de la démo à l'instant `x` : sa courbe, et l'aléa stable de sa tranche de 5 minutes. */
+function valeurMesureDemo(id, x) {
+  const [pts, bruit, graine] = COURBES_MESURES_DEMO[id];
+  const h = (x - horlogeMesures()) / 3600000;
+  let j = 0;
+  while (j < pts.length - 2 && pts[j + 1][0] < h) j++;
+  const [a, va] = pts[j], [b, vb] = pts[j + 1];
+  const f = Math.max(0, Math.min(1, (h - a) / (b - a)));
+  return Math.max(0, va + (vb - va) * f + (hasardStable(Math.floor(x / CINQ_MIN_MS) * 31 + graine) - 0.5) * bruit);
+}
+
+/** Les statistiques d'une mesure de la démo, au format de `recorder/statistics_during_period` : des tranches de 5 minutes, jamais celle en cours. */
+function statsMesureDemo(id, msg) {
+  if (!COURBES_MESURES_DEMO[id]) return null;
+  const t0 = Date.parse(msg.start_time);
+  const t1 = Math.min(horlogeMesures(), msg.end_time ? Date.parse(msg.end_time) : Infinity);
+  if (isNaN(t0)) return [];
+  const lignes = [];
+  for (let debut = Math.ceil(t0 / CINQ_MIN_MS) * CINQ_MIN_MS; debut + CINQ_MIN_MS <= t1; debut += CINQ_MIN_MS) {
+    lignes.push({ start: debut, end: debut + CINQ_MIN_MS, mean: Math.round(valeurMesureDemo(id, debut + CINQ_MIN_MS / 2) * 10) / 10 });
+  }
+  return lignes;
+}
+
+/** Les capteurs nouveaux, et la `state_class` des mesures qui ont des statistiques. */
+function etatsMesuresDemo(states) {
+  const mesure = (id) => ({ ...states[id], attributes: { ...states[id].attributes, state_class: 'measurement' } });
+  return {
+    ...Object.fromEntries(['sensor.chambre_co2', 'sensor.salon_temperature', 'sensor.salle_de_bain_humidite', 'sensor.salon_bruit'].map(id => [id, mesure(id)])),
+    'sensor.chambre_lino_co2': s(1177, { friendly_name: lieu('Chambre') + ' Lino CO2', unit_of_measurement: 'ppm', device_class: 'carbon_dioxide', state_class: 'measurement' }),
+    'sensor.salon_luminosite': s(120, { friendly_name: lieu('Salon') + ' ' + etiquette('luminosité'), unit_of_measurement: 'lx', device_class: 'illuminance', state_class: 'measurement' }),
+    'sensor.salon_particules': s(8, { friendly_name: lieu('Salon') + ' ' + etiquette('particules'), unit_of_measurement: 'µg/m³', device_class: 'pm25', state_class: 'measurement' }),
+    // Un INDICE, sans unité : celui que la table lit (chantier Capteurs, § 6).
+    'sensor.salon_cov': s(182, { friendly_name: lieu('Salon') + ' ' + etiquette('COV'), device_class: 'volatile_organic_compounds', state_class: 'measurement' }),
+    'sensor.salon_thermometre_pile': s(81, { friendly_name: etiquette('Thermomètre salon pile'), device_class: 'battery', unit_of_measurement: '%' }),
+    /* La station du jardin (C14, C15) : dehors, la température et l'humidité se lisent sur les zones du dehors — 12,4 °C y est
+     * « Frais », pas « Trop froid » (C15, révisé le 16/10) —, le vent garde les siennes ; rien n'y est une alerte. */
+    'sensor.jardin_temperature': s(12.4, { friendly_name: lieu('Jardin') + ' ' + etiquette('température'), unit_of_measurement: '°C', device_class: 'temperature', state_class: 'measurement' }),
+    'sensor.jardin_humidite': s(81, { friendly_name: lieu('Jardin') + ' ' + etiquette('humidité'), unit_of_measurement: '%', device_class: 'humidity', state_class: 'measurement' }),
+    'sensor.jardin_vent': s(9, { friendly_name: lieu('Jardin') + ' ' + etiquette('vent'), unit_of_measurement: 'km/h', device_class: 'wind_speed', state_class: 'measurement' }),
+    // Le monoxyde de la cuisine (audit du 19/10, H10) : 2 ppm, « Bon » ; et les particules du bureau, muettes — « Indisponible » dans Air.
+    'sensor.cuisine_monoxyde': s(2, { friendly_name: lieu('Cuisine') + ' ' + etiquette('monoxyde'), unit_of_measurement: 'ppm', device_class: 'carbon_monoxide', state_class: 'measurement' }),
+    'sensor.bureau_particules': s('unavailable', { friendly_name: lieu('Bureau') + ' ' + etiquette('particules'), unit_of_measurement: 'µg/m³', device_class: 'pm25' }),
+    // Le frigo (C17, 16/10) : sans zone, sa carte est neutre — le chiffre, la courbe, le dernier signal.
+    'sensor.capteur_frigo_temperature': s(4.2, { friendly_name: etiquette('Capteur Frigo'), unit_of_measurement: '°C', device_class: 'temperature', state_class: 'measurement' }),
+  };
+}
+
+/**
+ * La maison de la démo, son horloge des mesures réglée, pour
+ * tests/demo_mesures.test.mjs : les états, l'index, les statistiques, et ses
+ * pièces de Loggia (C17 : une mesure n'est jugée que dans l'une d'elles).
+ */
+export function maisonMesuresDemo({ quand = null } = {}) {
+  const t = quand == null ? Date.now() : Number(quand);
+  horlogeMesures = () => t;
+  const states = etatsInitiaux();
+  return { states, index: () => indexDemo(states), statistiques: (msg) => statistiquesDemo(msg), pieces: configDemo().loggia_rooms };
+}
+
+/* ── Les capteurs binaires, les plantes et les piles de sa maquette « Cartes capteurs » (chantier Capteurs, étapes 2 et 3, § 12) ──
+ *
+ * Ce que les groupes (Ouvertures, Sécurité, Présence), la carte d'une plante et la carte Piles ont à montrer, à toute heure :
+ *  - les six ouvrants, chacun sur son APPAREIL physique (C21) avec sa pile — la porte d'entrée à 9 %, la fenêtre de la chambre à
+ *    12 %, les autres au-dessus de 60 % — ; la baie vitrée et la fenêtre de la chambre ouvertes ; la porte d'entrée porte son
+ *    sabotage ;
+ *  - les deux fumées, le CO et la fuite, sur des appareils ; la fumée de l'entrée est MUETTE depuis 14:05 (C4 se voit) ;
+ *  - un radar au bureau, allumé ; le mouvement du salon, vu par le journal il y a 3 minutes ; le mouvement de l'entrée ; le
+ *    mouvement de la caméra, sur l'appareil de la caméra (§ 19.3 : les caméras comptent) ;
+ *  - MeteoAlarm, éteinte, sans appareil (C28) ; un « Besoin eau » de modèle, sans appareil (C21) : aucune carte ;
+ *  - le Dracaena Marginata, découvert (C29) : sol 28 %, 84 lx, 19,5 °C, 784 µS/cm, pile 100 % ; le Schefflera, découvert et muet
+ *    depuis samedi 14:05 — ses statistiques portent le dernier relevé, sol 12 %, pile 4 % ; tous deux dans la zone « Technique »,
+ *    qui n'est pas une pièce de Loggia ; le Basilic reste configuré (`loggia_plants`), sans appareil ;
+ *  - un bouton du salon à 14 % : avec la porte et la fenêtre, « 3 piles à changer » au seuil de la veille des piles, 15 % (C32,
+ *    § 19.8) ; la pile du Schefflera est muette ; la batterie de la maison reste celle d'Énergie, la tondeuse en charge est écartée.
+ * Les heures suivent l'horloge des capteurs (`maisonCapteursDemo` la règle) : une démo ouverte le matin ramène « 14:05 » une
+ * heure avant elle, comme les prises. */
+let horlogeCapteurs = () => Date.now();
+/** L'heure `h`:`m` d'aujourd'hui, ramenée `recul` minutes avant maintenant quand la démo s'ouvre plus tôt. */
+const avantCapteurs = (t, h, m, recul) => Math.min(aJour(t, 0, h, m), t - recul * MINUTE_MS);
+/** Samedi dernier à 14:05 — la semaine d'avant si l'on est samedi : toujours dans le passé. */
+const samediCapteurs = (t) => aJour(t, -(((new Date(t).getDay() + 1) % 7) || 7), 14, 5);
+/* Les appareils : `[zone, nom, modèle, [entités]]`. Les contacts, les détecteurs et le bouton sont Zigbee, derrière le pont ; les plantes en
+ * Bluetooth. Les portes du garage et de service n'ont pas de zone : leurs cartes prennent le nom de l'appareil (§ 3). */
+const APPAREILS_CAPTEURS_DEMO = {
+  contact_porte_entree: ['entree', 'Contact porte entrée', 'Contact de porte', ['binary_sensor.porte_entree', 'sensor.pile_porte_entree', 'binary_sensor.porte_entree_sabotage']],
+  contact_baie_vitree: ['salon', 'Contact baie vitrée', 'Contact de porte', ['binary_sensor.baie_vitree', 'sensor.baie_vitree_pile']],
+  contact_fenetre_salon: ['salon', 'Contact fenêtre salon', 'Contact de fenêtre', ['binary_sensor.fenetre_salon', 'sensor.fenetre_salon_pile']],
+  contact_fenetre_chambre: ['chambre', 'Contact fenêtre chambre', 'Contact de fenêtre', ['binary_sensor.fenetre_chambre', 'sensor.fenetre_chambre_pile']],
+  contact_porte_garage: [null, 'Contact porte de garage', 'Contact de porte', ['binary_sensor.porte_garage', 'sensor.porte_garage_pile']],
+  contact_porte_service: [null, 'Contact porte de service', 'Contact de porte', ['binary_sensor.porte_service', 'sensor.porte_service_pile']],
+  detecteur_fumee_cuisine: ['cuisine', 'Détecteur de fumée cuisine', 'Détecteur de fumée', ['binary_sensor.detecteur_fumee', 'sensor.detecteur_fumee_pile']],
+  detecteur_fumee_entree: ['entree', 'Détecteur de fumée entrée', 'Détecteur de fumée', ['binary_sensor.detecteur_fumee_entree', 'sensor.detecteur_fumee_entree_pile']],
+  detecteur_co_salon: ['salon', 'Détecteur de monoxyde salon', 'Détecteur de monoxyde', ['binary_sensor.detecteur_co_salon', 'sensor.detecteur_co_salon_pile']],
+  detecteur_fuite_evier: ['cuisine', 'Détecteur de fuite évier', 'Détecteur de fuite', ['binary_sensor.fuite_evier']],
+  radar_bureau: ['bureau', 'Radar bureau', 'Radar de présence', ['binary_sensor.radar_bureau']],
+  mouvement_salon: ['salon', 'Détecteur de mouvement salon', 'Détecteur de mouvement', ['binary_sensor.mouvement_salon', 'sensor.mouvement_salon_pile']],
+  mouvement_entree: ['entree', 'Détecteur de mouvement entrée', 'Détecteur de mouvement', ['binary_sensor.mouvement_entree', 'sensor.mouvement_entree_pile']],
+  bouton_salon: ['salon', 'Bouton salon', 'Bouton sans fil', ['sensor.bouton_salon_pile']],
+  // Un binaire À PART (audit du 19/10, point 15) : la vibration du lave-linge, d'aucun groupe — sa carte, dans Maison.
+  vibration_cuisine: ['cuisine', 'Capteur de vibration', 'Capteur de vibration', ['binary_sensor.lave_linge_vibration']],
+  plante_dracaena: ['technique', 'Dracaena Marginata', 'Capteur de plante', ['sensor.dracaena_marginata_humidite_du_sol', 'sensor.dracaena_marginata_temperature', 'sensor.dracaena_marginata_lumiere', 'sensor.dracaena_marginata_conductivite', 'sensor.dracaena_marginata_pile']],
+  plante_schefflera: ['technique', 'Schefflera', 'Capteur de plante', ['sensor.schefflera_humidite_du_sol', 'sensor.schefflera_temperature', 'sensor.schefflera_lumiere', 'sensor.schefflera_conductivite', 'sensor.schefflera_pile']],
+};
+const appareilCapteurDemo = (id) => Object.keys(APPAREILS_CAPTEURS_DEMO).find(d => APPAREILS_CAPTEURS_DEMO[d][3].includes(id)) || null;
+/** La plateforme et la catégorie d'une entité de ces appareils : Zigbee2MQTT ou Bluetooth, les piles en diagnostic ; sinon celles de la démo. */
+const metaCapteurDemo = (id) => { const d = appareilCapteurDemo(id); return d ? { platform: d.indexOf('plante_') === 0 ? 'xiaomi_ble' : 'mqtt', category: /(^sensor\.pile_|_pile$)/.test(id) ? 'diagnostic' : null } : { platform: 'demo', category: null }; };
+// Les entités SANS appareil (C21, C28) : un modèle « Besoin eau » et la vigilance MeteoAlarm — l'index dit leur plateforme.
+const SANS_APPAREIL_DEMO = { 'binary_sensor.basilic_besoin_eau': 'template', 'binary_sensor.meteoalarm': 'meteoalarm', 'sensor.paris_weather_alert': 'meteo_france' };
+// Les binaires dont la démo tient l'histoire du jour : ceux de ces appareils, et le mouvement de la caméra.
+const CAPTEURS_DEMO = new Set([...Object.keys(APPAREILS_CAPTEURS_DEMO).flatMap(d => APPAREILS_CAPTEURS_DEMO[d][3]).filter(id => id.indexOf('binary_sensor.') === 0), 'binary_sensor.camera_entree_mouvement']);
+
+/** Les états de ces capteurs, et ce qu'ils changent aux états d'avant : « depuis quand » (`last_changed`) et la fumée muette. */
+function etatsCapteursDemo(states) {
+  const t = horlogeCapteurs();
+  const iso = (ms) => new Date(ms).toISOString();
+  const depuis = (etat, ms) => ({ ...etat, last_changed: iso(ms), last_updated: iso(ms) });
+  const pile = (nom, n) => s(n, { friendly_name: etiquette(nom) + ' ' + etiquette('pile'), device_class: 'battery', unit_of_measurement: '%' });
+  const plante = (nom, quoi, v, classe, unite) => s(v, { friendly_name: etiquette(nom) + ' ' + etiquette(quoi), ...(classe ? { device_class: classe } : {}), unit_of_measurement: unite });
+  const samedi = samediCapteurs(t);
+  const muette = (etat) => depuis({ ...etat, state: 'unavailable' }, samedi);
+  return {
+    // Les ouvrants ouverts : la baie depuis 47 minutes, la fenêtre de la chambre depuis 2 h 10 (`last_changed`, ce que la carte Ouvertures lit, § 3.1).
+    'binary_sensor.baie_vitree': depuis(states['binary_sensor.baie_vitree'], t - 47 * MINUTE_MS),
+    'binary_sensor.fenetre_chambre': depuis(states['binary_sensor.fenetre_chambre'], t - 130 * MINUTE_MS),
+    'binary_sensor.porte_entree_sabotage': s('off', { friendly_name: etiquette('Contact porte entrée') + ' ' + etiquette('sabotage'), device_class: 'tamper' }),
+    'sensor.baie_vitree_pile': pile('Contact baie vitrée', 96), 'sensor.fenetre_salon_pile': pile('Contact fenêtre salon', 88), 'sensor.fenetre_chambre_pile': pile('Contact fenêtre chambre', 12),
+    'sensor.porte_garage_pile': pile('Contact porte de garage', 72), 'sensor.porte_service_pile': pile('Contact porte de service', 64),
+    // La fumée de l'entrée est MUETTE depuis 14:05 (C4) ; les détecteurs gardent leur pile.
+    'binary_sensor.detecteur_fumee_entree': depuis({ ...states['binary_sensor.detecteur_fumee_entree'], state: 'unavailable' }, avantCapteurs(t, 14, 5, 60)),
+    'sensor.detecteur_fumee_pile': pile('Détecteur de fumée cuisine', 92), 'sensor.detecteur_fumee_entree_pile': pile('Détecteur de fumée entrée', 88), 'sensor.detecteur_co_salon_pile': pile('Détecteur de monoxyde salon', 76),
+    // La présence : le radar du bureau allumé depuis 47 minutes ; le salon retombé il y a deux minutes et demie ; l'entrée il y a deux heures.
+    'binary_sensor.radar_bureau': depuis(s('on', { friendly_name: 'Radar bureau', device_class: 'occupancy' }), t - 47 * MINUTE_MS),
+    'binary_sensor.mouvement_salon': depuis(s('off', { friendly_name: 'Détecteur de mouvement salon', device_class: 'motion' }), t - 2.5 * MINUTE_MS),
+    'binary_sensor.mouvement_entree': depuis(states['binary_sensor.mouvement_entree'], t - 124 * MINUTE_MS),
+    'sensor.mouvement_salon_pile': pile('Détecteur de mouvement salon', 91), 'sensor.mouvement_entree_pile': pile('Détecteur de mouvement entrée', 67),
+    // Sans appareil : la vigilance, éteinte, et le « Besoin eau » d'un modèle.
+    'binary_sensor.meteoalarm': s('off', { friendly_name: 'MeteoAlarm', device_class: 'safety', attribution: 'Information provided by MeteoAlarm' }),
+    'binary_sensor.basilic_besoin_eau': s('off', { friendly_name: 'Basilic besoin eau', device_class: 'moisture' }),
+    /* Une vigilance ACTIVE, avec son niveau (audit du 19/10, point 15 ; décision D3) : le capteur d'alerte de Météo-France, en jaune pour le
+     * vent — Dehors a « 1 à regarder ». Ses phénomènes sont des attributs, tels que l'intégration les nomme. */
+    'sensor.paris_weather_alert': s('Jaune', { friendly_name: 'Vigilance Météo-France', 'Vent violent': 'Jaune', 'Orages': 'Vert', 'Pluie-inondation': 'Vert' }),
+    'binary_sensor.lave_linge_vibration': s('off', { friendly_name: 'Lave-linge vibration', device_class: 'vibration' }),
+    // Les plantes découvertes (C29) : le Dracaena, qui manque de lumière ; le Schefflera, muet depuis samedi 14:05.
+    'sensor.dracaena_marginata_humidite_du_sol': plante('Dracaena Marginata', 'humidité du sol', 28, 'moisture', '%'),
+    'sensor.dracaena_marginata_temperature': plante('Dracaena Marginata', 'température', 19.5, 'temperature', '°C'),
+    'sensor.dracaena_marginata_lumiere': plante('Dracaena Marginata', 'lumière', 84, 'illuminance', 'lx'),
+    'sensor.dracaena_marginata_conductivite': plante('Dracaena Marginata', 'conductivité', 784, 'conductivity', 'µS/cm'),
+    'sensor.dracaena_marginata_pile': plante('Dracaena Marginata', 'pile', 100, 'battery', '%'),
+    'sensor.schefflera_humidite_du_sol': muette(plante('Schefflera', 'humidité du sol', 12, 'moisture', '%')),
+    'sensor.schefflera_temperature': muette(plante('Schefflera', 'température', 20.1, 'temperature', '°C')),
+    'sensor.schefflera_lumiere': muette(plante('Schefflera', 'lumière', 310, 'illuminance', 'lx')),
+    'sensor.schefflera_conductivite': muette(plante('Schefflera', 'conductivité', 520, 'conductivity', 'µS/cm')),
+    'sensor.schefflera_pile': muette(plante('Schefflera', 'pile', 4, 'battery', '%')),
+    // Le bouton du salon : la troisième pile à changer.
+    'sensor.bouton_salon_pile': pile('Bouton salon', 14),
+  };
+}
+
+/** Ce que le journal de Home Assistant a vu des détecteurs de présence (ADR 0031), à l'instant `t` : le salon il y a 3 minutes, le radar
+ *  du bureau depuis 47 minutes, l'entrée il y a deux heures. Les lignes de la caméra restent celles d'avant. */
+function journalCapteursDemo(t) {
+  const ilYA = (min) => (t - min * MINUTE_MS) / 1000;
+  return [
+    { when: ilYA(2.9), entity_id: 'binary_sensor.mouvement_salon', state: 'on', name: etiquette('Détecteur de mouvement salon') },
+    { when: ilYA(2.5), entity_id: 'binary_sensor.mouvement_salon', state: 'off', name: etiquette('Détecteur de mouvement salon') },
+    { when: ilYA(47), entity_id: 'binary_sensor.radar_bureau', state: 'on', name: etiquette('Radar bureau') },
+    { when: ilYA(125), entity_id: 'binary_sensor.mouvement_entree', state: 'on', name: etiquette('Mouvement entrée') },
+    { when: ilYA(124), entity_id: 'binary_sensor.mouvement_entree', state: 'off', name: etiquette('Mouvement entrée') },
+  ];
+}
+
+/* L'histoire du JOUR des binaires (§ 9, § 12) : ce que les popups des groupes et la fiche d'un binaire lisent, de minuit à maintenant —
+ * les ouvertures de la journée, la fumée de l'entrée qui se tait à 14:05, les passages devant les détecteurs. `[instant, état]`, à
+ * l'horloge des capteurs ; un binaire absent d'ici n'a pas changé de la journée. */
+const HISTOIRES_CAPTEURS_DEMO = (t) => {
+  // Un passage du matin, seulement s'il est fini avant l'épisode en cours : une démo ouverte tôt n'en garde que l'épisode.
+  const matin = (h1, m1, h2, m2, avant) => (aJour(t, 0, h2, m2) < avant ? [[aJour(t, 0, h1, m1), 'on'], [aJour(t, 0, h2, m2), 'off']] : []);
+  return {
+    'binary_sensor.baie_vitree': [...matin(8, 12, 8, 19, t - 47 * MINUTE_MS), [t - 47 * MINUTE_MS, 'on']],
+    'binary_sensor.fenetre_chambre': [[t - 130 * MINUTE_MS, 'on']],
+    'binary_sensor.porte_entree': [[aJour(t, 0, 8, 12), 'on'], [aJour(t, 0, 8, 15), 'off'], [aJour(t, 0, 12, 40), 'on'], [aJour(t, 0, 12, 41), 'off']],
+    'binary_sensor.detecteur_fumee_entree': [[avantCapteurs(t, 14, 5, 60), 'unavailable']],
+    'binary_sensor.mouvement_salon': [...matin(7, 30, 7, 34, t - 3 * MINUTE_MS), [t - 2.9 * MINUTE_MS, 'on'], [t - 2.5 * MINUTE_MS, 'off']],
+    'binary_sensor.radar_bureau': [...matin(9, 2, 11, 48, t - 47 * MINUTE_MS), [t - 47 * MINUTE_MS, 'on']],
+    'binary_sensor.mouvement_entree': [[t - 125 * MINUTE_MS, 'on'], [t - 124 * MINUTE_MS, 'off']],
+    'binary_sensor.camera_entree_mouvement': [[t - 3 * MINUTE_MS, 'on'], [t - 2.5 * MINUTE_MS, 'off']],
+  };
+};
+/** `history/period`, la forme minimale : une liste par binaire, son état à `t0` d'abord (nommé), puis chaque changement jusqu'à `t1`. */
+function historiqueCapteursDemo(ids, t0, t1, states) {
+  const scripts = HISTOIRES_CAPTEURS_DEMO(horlogeCapteurs());
+  const contraire = (etat) => (etat === 'on' ? 'off' : etat === 'off' ? 'on' : 'off');
+  return ids.filter(id => states[id]).map(id => {
+    const changements = (scripts[id] || []).filter(([ms]) => ms > t0 && ms <= t1).sort((a, b) => a[0] - b[0]).filter((c, i, l) => !i || c[1] !== l[i - 1][1]);
+    const debut = changements.length ? contraire(changements[0][1]) : String(states[id].state);
+    return [{ entity_id: id, state: debut, last_changed: new Date(t0).toISOString() }, ...changements.map(([ms, etat]) => ({ state: etat, last_changed: new Date(ms).toISOString() }))];
+  });
+}
+
+/* Les statistiques de la plante MUETTE (§ 7.3, § 12) : ses relevés à l'heure jusqu'à samedi 14:05, plus rien après — le sol descendu de 30 à
+ * 12 %, la pile de 6 à 4 %. C'est ce que lit sa fiche : « Dernier relevé samedi 14:05 : sol à 12 % », « Changez la pile. ». */
+const STATS_PLANTES_DEMO = { 'sensor.schefflera_humidite_du_sol': [30, 12], 'sensor.schefflera_pile': [6, 4] };
+function statsPlanteDemo(id, msg) {
+  const [de, a] = STATS_PLANTES_DEMO[id];
+  const fin = samediCapteurs(horlogeCapteurs());
+  const t0 = Date.parse(msg.start_time);
+  const lignes = [];
+  for (let debut = Math.ceil(t0 / 3600e3) * 3600e3; debut + 3600e3 <= fin; debut += 3600e3) {
+    // De `de` à `a`, au fil des heures ; la dernière tranche dit `a`.
+    const f = debut + 2 * 3600e3 > fin ? 0 : (fin - debut - 3600e3) / (fin - t0 || 1);
+    lignes.push({ start: debut, end: debut + 3600e3, mean: Math.round((a + (de - a) * f) * 10) / 10 });
+  }
+  return lignes;
+}
+
+/**
+ * La maison des capteurs binaires, des plantes et des piles (§ 12), son horloge réglée, pour tests/demo_capteurs.test.mjs : les
+ * états, l'index, le journal des détecteurs de présence, l'histoire du jour, les statistiques et les pièces de Loggia.
+ */
+export function maisonCapteursDemo({ quand = null } = {}) {
+  const t = quand == null ? Date.now() : Number(quand);
+  horlogeCapteurs = () => t;
+  const states = etatsInitiaux();
+  return { states, index: () => indexDemo(states), journal: () => journalCapteursDemo(t), historique: (chemin) => historiqueDemo(chemin, states),
+    statistiques: (msg) => statistiquesDemo(msg), pieces: configDemo().loggia_rooms };
+}
+
+/* ── Les médias de la démo (chantier Médias, § 8 ; M1, M9, M13) ───────────────
+ *
+ * Les lecteurs de sa maquette « Cartes médias » entrent dans la maison, aux
+ * côtés de la TV du salon et de l'Enceinte salon qui restent :
+ *  - l'Apple TV de la chambre, éteinte, ses dix-neuf applications et sa
+ *    `remote.` : « Allumer » la met en « Rien en lecture », une appli la réveille
+ *    et devient sa source ;
+ *  - l'Echo Dot de la chambre, en lecture, une file de trois morceaux (les
+ *    titres, l'artiste et les durées de la maquette, une pochette par morceau),
+ *    volume 30 % — DEUX entités, comme chez lui : l'officielle (« Alexa
+ *    Devices », les bits 5644, les `notify` « Annoncer » et « Parler », la
+ *    prochaine alarme) et la jumelle HACS (`alexa_media`, 318399), que
+ *    l'appariement retrouve par leurs mots (M1 B, M14) — ce que le registre ne
+ *    dit pas, l'identifiant de l'appareil, se lit dans leurs noms ;
+ *  - l'Echo de la cuisine d'avant devient une jumelle HACS SANS officielle, rien
+ *    en lecture : une phrase de la maquette la fait jouer, et son annonce passe
+ *    par le service `notify.alexa_media` (M9) ;
+ *  - l'Echo Show du salon, en pause sur une radio sans durée (« En direct ») ;
+ *  - l'Echo Dot du bureau, indisponible depuis 14:05 — l'état que la maquette
+ *    n'avait pas (1h, l'appel, ne se construit pas : M3) ;
+ *  - « Partout », le groupe, officiel, rien en lecture, et sa `notify`
+ *    « Annoncer » : « Toute la maison ».
+ * Le faux serveur répond à chaque service de § 7.2 (`gesteMediaDemo`) : la
+ * lecture et la pause, la file (suivant, précédent), le volume et le muet, la
+ * marche et l'arrêt, `select_source`, la phrase (`custom` : la file change si la
+ * phrase nomme un des quatre titres), `media_seek`, `shuffle_set`, `repeat_set` ;
+ * une annonce (`notify`) ne change aucun état — Home Assistant ne raconte pas une
+ * annonce. La position avance avec l'heure de la démo (`media_position_updated_at`).
+ * Un lecteur mort reste mort. Les heures suivent l'horloge des médias
+ * (`maisonMediasDemo` la règle).
+ */
+let horlogeMedias = () => Date.now();
+const avantMedias = (t, h, m, recul) => Math.min(aJour(t, 0, h, m), t - recul * MINUTE_MS);
+/* Les morceaux de sa maquette : le titre, l'artiste, la durée (null : une radio, sans durée), la teinte de la pochette. */
+const MORCEAUX_DEMO = {
+  xib: { titre: 'Bin K’uchul Xibalba', artiste: 'Metal_Chaos', duree: 256, teinte: '150,104,58' },
+  temple: { titre: 'Templo de obsidiana', artiste: 'Metal_Chaos', duree: 231, teinte: '128,76,52' },
+  ruinas: { titre: 'Ruinas', artiste: 'Metal_Chaos', duree: 298, teinte: '102,90,72' },
+  inter: { titre: 'France Inter', artiste: 'Radio', duree: null, teinte: '186,72,98' },
+  soir: { titre: 'Playlist du soir', artiste: 'Amazon Music', duree: 214, teinte: '92,100,186' },
+  bruit: { titre: 'Bruit blanc', artiste: 'Sons pour dormir', duree: null, teinte: '112,132,152' },
+  dodo: { titre: 'Musique pour dormir', artiste: 'Amazon Music', duree: 1800, teinte: '70,96,140' },
+};
+/* Les quatre phrases de sa maquette, et le morceau que chacune lance (M19) : une phrase pour Alexa qui nomme l'un d'eux. */
+const PHRASES_MEDIAS_DEMO = [['Playlist du soir', 'soir'], ['France Inter', 'inter'], ['Bruit blanc', 'bruit'], ['Musique pour dormir', 'dodo']];
+/* La pochette d'un morceau : un SVG de la teinte de la maquette, servi en adresse `data:` — de la même origine, donc lisible par le
+ * canvas de la teinte (pochette.js) : la carte se teinte comme chez lui. */
+const pochetteDemo = (teinte) => 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" fill="rgb(' + teinte + ')"/><circle cx="48" cy="48" r="26" fill="rgba(0,0,0,.35)"/><circle cx="48" cy="48" r="5" fill="rgba(255,255,255,.9)"/></svg>');
+/* Les dix-neuf applications de l'Apple TV, telles qu'une Apple TV les écrit (`source_list`). */
+const APPLIS_ATV_DEMO = ['App Store', 'Arcade', 'Crunchyroll', 'Disney+', 'FaceTime', 'Forme', 'Free TV', 'HBO Max', 'Netflix', 'YouTube', 'Prime Video', 'Apple TV', 'Musique', 'Photos', 'Plex', 'Arte', 'France TV', 'Podcasts', 'Infuse'];
+/* Les appareils : `[zone, nom, modèle, intégration, [entités], empreintes]`. L'Echo Dot de la chambre est DEUX appareils, comme chez
+ * lui, et les deux portent la même EMPREINTE — ce que le serveur fait du numéro de série que les deux intégrations écrivent au registre
+ * (discovery.py) : c'est par elle que `resolveMedia` les apparie ; les mots des noms ne sont que le repli. « Partout » n'a pas de zone,
+ * et son modèle est celui que les deux intégrations écrivent pour un groupe d'enceintes, « Speaker Group » : c'est à lui que le groupe
+ * se reconnaît (ADR 0209). L'empreinte de la démo est une valeur inventée, de la forme de celles du serveur. */
+const EMPREINTE_ECHO_DOT_DEMO = '3f9a1c7e5b2d';
+const APPAREILS_MEDIAS_DEMO = {
+  apple_tv_chambre: ['chambre', 'Apple TV Chambre', 'Apple TV 4K', 'apple_tv', ['media_player.apple_tv_chambre', 'remote.apple_tv_chambre']],
+  echo_dot_chambre: ['chambre', 'Echo Dot - Chambre', 'Echo Dot (3e génération)', 'alexa_devices', ['media_player.chambre_echo_dot', 'notify.chambre_echo_dot_annoncer', 'notify.chambre_echo_dot_parler', 'sensor.chambre_echo_dot_prochaine_alarme', 'switch.chambre_echo_dot_annonces'], [EMPREINTE_ECHO_DOT_DEMO]],
+  echo_dot_chambre_hacs: ['chambre', 'Echo Dot Chambre', 'Echo Dot', 'alexa_media', ['media_player.echo_dot_chambre'], [EMPREINTE_ECHO_DOT_DEMO]],
+  echo_cuisine: ['cuisine', 'Echo de la cuisine', 'Echo', 'alexa_media', ['media_player.echo_cuisine']],
+  echo_show_salon: ['salon', 'Echo Show Salon', 'Echo Show', 'alexa_media', ['media_player.echo_show']],
+  echo_dot_bureau: ['bureau', 'Echo Dot - Bureau', 'Echo Dot (3e génération)', 'alexa_devices', ['media_player.bureau_echo_dot']],
+  partout: [null, 'Partout', 'Speaker Group', 'alexa_devices', ['media_player.partout', 'notify.partout_annoncer']],
+};
+const appareilMediaDemo = (id) => Object.keys(APPAREILS_MEDIAS_DEMO).find(d => APPAREILS_MEDIAS_DEMO[d][4].includes(id)) || null;
+/* La jumelle d'un lecteur de la démo : l'autre entité `media_player` qui partage son empreinte. Le faux serveur fait miroiter l'état
+ * d'un geste sur les deux (lecture, pause, le volume) : chez lui, les deux intégrations lisent la même enceinte. */
+const jumelleMediaDemo = (id) => {
+  const d = appareilMediaDemo(id);
+  const e = d && APPAREILS_MEDIAS_DEMO[d][5];
+  if (!e) return null;
+  const autre = Object.keys(APPAREILS_MEDIAS_DEMO).find(x => x !== d && APPAREILS_MEDIAS_DEMO[x][5] && APPAREILS_MEDIAS_DEMO[x][5].some(v => e.indexOf(v) >= 0));
+  return autre ? APPAREILS_MEDIAS_DEMO[autre][4].find(x => x.indexOf('media_player.') === 0) || null : null;
+};
+/* La plateforme d'une entité d'un lecteur, et la clé de traduction de ses `notify` — c'est à elle que l'appariement reconnaît
+ * « Annoncer » (`announce`) : rien ne se devine au nom. */
+const metaMediaDemo = (id) => { const d = appareilMediaDemo(id); return d ? { platform: APPAREILS_MEDIAS_DEMO[d][3], key: /_annoncer$/.test(id) ? 'announce' : /_parler$/.test(id) ? 'speak' : null } : {}; };
+/* La file de chaque Echo qui en a une : les morceaux, et celui qui joue. */
+const FILES_MEDIAS_DEMO = { 'media_player.echo_dot_chambre': { file: ['xib', 'temple', 'ruinas'], i: 0 } };
+/* Ce qu'un morceau pose sur l'entité qui le joue : le titre, l'artiste, le genre, la pochette ; la durée et la position publiée à `t`
+ * quand il en a une — une radio n'en a pas. */
+function attributsMorceau(cle, pos, t) {
+  const m = MORCEAUX_DEMO[cle];
+  return { media_title: m.titre, media_artist: m.artiste, media_content_type: m.duree ? 'music' : 'channel', entity_picture: pochetteDemo(m.teinte),
+    media_duration: m.duree, media_position: m.duree ? pos : null, media_position_updated_at: m.duree ? new Date(t).toISOString() : null };
+}
+/* La position du moment d'un lecteur de la démo : celle qu'il a publiée, avancée du temps écoulé en lecture, bornée par la durée. */
+function positionDemo(etat, t) {
+  const a = (etat && etat.attributes) || {};
+  if (a.media_position == null) return null;
+  let p = Number(a.media_position) || 0;
+  if (etat.state === 'playing' && a.media_position_updated_at) p += Math.max(0, (t - Date.parse(a.media_position_updated_at)) / 1000);
+  return a.media_duration ? Math.min(p, Number(a.media_duration)) : p;
+}
+// Ce que la bibliothèque de la démo (`parcoursDemo`) sait jouer : un titre par identifiant.
+const TITRES_PARCOURS_DEMO = { 'demo://radio/fip': ['FIP', true], 'demo://radio/inter': ['France Inter', true], 'demo://radio/classique': ['Radio Classique', true], 'demo://radio/nova': ['Nova', true],
+  'demo://musique/gymnopedie': ['Gymnopedie n1', false], 'demo://musique/clair': ['Clair de Lune', false], 'demo://musique/arabesque': ['Arabesque n1', false] };
+const RIEN_EN_LECTURE = { media_title: null, media_artist: null, media_content_type: null, entity_picture: null, media_duration: null, media_position: null, media_position_updated_at: null, app_name: null };
+
+/** Les états des lecteurs de sa maquette, à l'horloge des médias. */
+function etatsMediasDemo() {
+  const t = horlogeMedias();
+  const iso = (ms) => new Date(ms).toISOString();
+  const depuis = (etat, ms) => ({ ...etat, last_changed: iso(ms), last_updated: iso(ms) });
+  const soeur = (nom, quoi, attrs = {}) => s('unknown', { friendly_name: etiquette(nom) + ' ' + etiquette(quoi), ...attrs });
+  return {
+    // L'Apple TV de la chambre : éteinte, ses applications, sa télécommande sur le même appareil.
+    'media_player.apple_tv_chambre': s('off', { friendly_name: 'Apple TV Chambre', supported_features: 450487, device_class: 'tv', source_list: APPLIS_ATV_DEMO }),
+    'remote.apple_tv_chambre': s('off', { friendly_name: 'Apple TV Chambre', supported_features: 0 }),
+    // L'Echo Dot de la chambre, deux fois : l'officielle (le volume, le muet, les annonces ; ni lecture ni pause) et la jumelle HACS, qui joue.
+    // Son volume suit le mode enfant (§ 10) : 30 % dans les heures du profil, déjà ramené au plafond du coucher (20 %) en dehors.
+    'media_player.chambre_echo_dot': s('playing', { friendly_name: 'Echo Dot - Chambre', supported_features: 5644, volume_level: journeeEnfantDemo(ENFANT_CFG.profils[ENFANT_ZONE_DEMO], t).dans ? .3 : .2, device_class: 'speaker' }),
+    'notify.chambre_echo_dot_annoncer': soeur('Echo Dot - Chambre', 'Annoncer'),
+    'notify.chambre_echo_dot_parler': soeur('Echo Dot - Chambre', 'Parler'),
+    'sensor.chambre_echo_dot_prochaine_alarme': soeur('Echo Dot - Chambre', 'Prochaine alarme', { device_class: 'timestamp' }),
+    // La sœur « Annonces » de l'officielle (chantier Mode enfant, E23) : un `switch`, allumé — « Recevoir les annonces ».
+    'switch.chambre_echo_dot_annonces': { ...soeur('Echo Dot - Chambre', 'Annonces'), state: 'on' },
+    'media_player.echo_dot_chambre': s('playing', { friendly_name: 'Echo Dot Chambre', supported_features: 318399, volume_level: journeeEnfantDemo(ENFANT_CFG.profils[ENFANT_ZONE_DEMO], t).dans ? .3 : .2, app_name: 'Amazon Music', shuffle: false, repeat: 'off', ...attributsMorceau('xib', 91, t) }),
+    // L'Echo de la cuisine : la jumelle HACS seule, rien en lecture — une phrase de la maquette la fait jouer.
+    'media_player.echo_cuisine': s('idle', { friendly_name: 'Echo de la cuisine', supported_features: 318399, volume_level: .35, shuffle: false, repeat: 'off' }),
+    // L'Echo Show du salon : en pause sur une radio, sans durée.
+    'media_player.echo_show': s('paused', { friendly_name: 'Echo Show Salon', supported_features: 318399, volume_level: .25, app_name: 'TuneIn', shuffle: false, repeat: 'off', ...attributsMorceau('inter', null, t) }),
+    // L'Echo Dot du bureau : indisponible depuis 14:05, une heure au moins.
+    'media_player.bureau_echo_dot': depuis(s('unavailable', { friendly_name: 'Echo Dot - Bureau', supported_features: 5644 }), avantMedias(t, 14, 5, 60)),
+    // « Partout », le groupe : officiel, rien en lecture, et sa `notify` « Annoncer » — toute la maison.
+    'media_player.partout': s('idle', { friendly_name: 'Partout', supported_features: 5644, volume_level: .4 }),
+    'notify.partout_annoncer': soeur('Partout', 'Annoncer'),
+  };
+}
+
+/**
+ * Ce que le faux serveur fait d'un service des médias (§ 7.2), à l'instant `t` : les retouches à poser, `[entité, état, attributs]`
+ * — `état` nul garde l'état. Une annonce ou une phrase « Parler » (`notify`) ne change rien : Home Assistant ne raconte pas une
+ * annonce. Un lecteur mort reste mort. Rien ne bascule à l'aveugle : `media_play` et `media_pause` sont deux services.
+ */
+export function gesteMediaDemo(states, domaine, service, data = {}, t = Date.now()) {
+  const retouches = gesteMediaSeul(states, domaine, service, data, t);
+  // La paire jumelle : l'état et le volume d'un geste se lisent sur les deux entités de la même enceinte, jamais le titre
+  // (l'officielle n'en porte pas) ; une jumelle morte reste morte.
+  const id = data.entity_id;
+  const jumelle = typeof id === 'string' ? jumelleMediaDemo(id) : null;
+  if (!jumelle || !states[jumelle] || states[jumelle].state === 'unavailable') return retouches;
+  const miroir = [];
+  retouches.forEach(([ent, etat, attrs]) => {
+    if (ent !== id) return;
+    const reflet = {};
+    ['volume_level', 'is_volume_muted'].forEach(k => { if (attrs && k in attrs) reflet[k] = attrs[k]; });
+    if (etat != null || Object.keys(reflet).length) miroir.push([jumelle, etat, reflet]);
+  });
+  return [...retouches, ...miroir];
+}
+
+/* Le geste sur UNE entité : ce que le faux serveur en fait, sans la jumelle. */
+function gesteMediaSeul(states, domaine, service, data, t) {
+  if (domaine === 'notify') return [];
+  const id = data.entity_id;
+  const cur = domaine === 'media_player' && typeof id === 'string' ? states[id] : null;
+  if (!cur || cur.state === 'unavailable') return [];
+  const a = cur.attributes || {};
+  const iso = new Date(t).toISOString();
+  const file = FILES_MEDIAS_DEMO[id];
+  const joue = (cle, pos = 0) => [[id, 'playing', attributsMorceau(cle, pos, t)]];
+  switch (service) {
+    case 'media_play':
+      if (cur.state === 'paused') return [[id, 'playing', { media_position: positionDemo(cur, t), media_position_updated_at: iso }]];
+      if (cur.state === 'idle' && file) return joue(file.file[file.i], 0);
+      return [];
+    case 'media_pause':
+      return cur.state === 'playing' ? [[id, 'paused', { media_position: positionDemo(cur, t), media_position_updated_at: iso }]] : [];
+    case 'media_play_pause':
+      // Le service d'avant : plus aucune carte ne l'envoie (M13) ; la fiche universelle de Home Assistant peut encore.
+      return cur.state === 'playing' ? [[id, 'paused', { media_position: positionDemo(cur, t), media_position_updated_at: iso }]] : cur.state === 'paused' ? [[id, 'playing', { media_position_updated_at: iso }]] : [];
+    case 'media_stop':
+      return [[id, 'idle', RIEN_EN_LECTURE]];
+    case 'media_next_track':
+    case 'media_previous_track': {
+      if (!file) return [];
+      const n = file.file.length;
+      file.i = (file.i + (service === 'media_next_track' ? 1 : n - 1)) % n;
+      return joue(file.file[file.i], 0);
+    }
+    case 'volume_set':
+      return [[id, null, { volume_level: Math.max(0, Math.min(1, Number(data.volume_level) || 0)), is_volume_muted: false }]];
+    case 'volume_mute':
+      return [[id, null, { is_volume_muted: !!data.is_volume_muted }]];
+    case 'turn_on':
+      return cur.state === 'off' || cur.state === 'standby' ? [[id, 'idle', RIEN_EN_LECTURE]] : [];
+    case 'turn_off':
+      return [[id, 'off', RIEN_EN_LECTURE]];
+    case 'select_source': {
+      // Lancer une appli allume la TV (§ 6.8) : l'appli devient sa source, rien d'autre ne joue encore.
+      const liste = Array.isArray(a.source_list) ? a.source_list : [];
+      return liste.indexOf(data.source) >= 0 ? [[id, 'playing', { ...RIEN_EN_LECTURE, app_name: data.source, source: data.source }]] : [];
+    }
+    case 'play_media': {
+      if (data.media_content_type === 'custom') {
+        // Une phrase pour Alexa : la file change si elle nomme un des quatre titres de la maquette ; sinon l'Echo l'écoute, et rien ne se voit.
+        const dite = String(data.media_content_id || '').toLowerCase();
+        const hit = PHRASES_MEDIAS_DEMO.find(([phrase]) => dite.indexOf(phrase.toLowerCase()) >= 0);
+        return hit ? joue(hit[1], 0) : [];
+      }
+      const connu = TITRES_PARCOURS_DEMO[data.media_content_id];
+      if (connu) return [[id, 'playing', { ...RIEN_EN_LECTURE, media_title: connu[0], media_content_type: connu[1] ? 'channel' : 'music', media_duration: connu[1] ? null : 240, media_position: connu[1] ? null : 0, media_position_updated_at: connu[1] ? null : iso }]];
+      return [[id, 'playing', { ...RIEN_EN_LECTURE, media_title: String(data.media_content_id || ''), media_content_type: data.media_content_type || 'music' }]];
+    }
+    case 'media_seek':
+      return a.media_duration ? [[id, null, { media_position: Math.max(0, Math.min(Number(a.media_duration), Number(data.seek_position) || 0)), media_position_updated_at: iso }]] : [];
+    case 'shuffle_set':
+      return [[id, null, { shuffle: !!data.shuffle }]];
+    case 'repeat_set':
+      return ['off', 'all', 'one'].indexOf(data.repeat) >= 0 ? [[id, null, { repeat: data.repeat }]] : [];
+    default:
+      return [];
+  }
+}
+
+/* ── Le mode enfant (chantier Mode enfant, § 10 ; E24) ───────────────────────
+ *
+ * Le profil « Lino » sur la chambre de la maquette : l'Echo Dot (ses deux entités, « Parler », la sœur « Annonces ») et l'Apple TV
+ * ajoutée (`ajouts`). Le faux serveur répond aux six commandes du composant (`enfant.py`, spec 7.4), avec ses droits : `etat`,
+ * `demander` et `dormir` à tout compte ; `config`, `lever` et `repondre` au code de la maison — cinq minutes après `pin/verifier` —
+ * ou à un administrateur (E2 B), sinon `code_admin_requis`. Les TROIS situations de la maquette suivent l'heure de la démo : 55 min
+ * d'écran utilisées avant 18:15 (« encore 35 min »), le temps écoulé ensuite, le coucher hors des heures du jour — celles du profil,
+ * la semaine ou le week-end. Et la maison RAMÈNE (E24, `ramenerEnfantDemo`) : un volume au-dessus du plafond redescend une seconde
+ * après le geste, un écran bloqué rallumé s'éteint vingt secondes après ; chaque geste s'écrit au journal de la maison avec les mots
+ * du serveur. La notification de la demande (E13) se note au journal : la démo ne sonne pas et ne parle pas. */
+const ENFANT_ZONE_DEMO = 'chambre';
+const ENFANT_OFF_DEMO = 'media_player.chambre_echo_dot', ENFANT_HACS_DEMO = 'media_player.echo_dot_chambre', ENFANT_ECRAN_DEMO = 'media_player.apple_tv_chambre';
+const ENFANT_SOEURS_DEMO = { parler: 'notify.chambre_echo_dot_parler', annonces: 'switch.chambre_echo_dot_annonces' };
+// Les réglages par défaut de `profil_defaut` (enfant_calcul.py), sur la chambre ; le prénom de la maquette ne se traduit pas.
+const ENFANT_CFG_DEFAUT = () => ({ profils: { [ENFANT_ZONE_DEMO]: { nom: 'Lino', zone: ENFANT_ZONE_DEMO, actif: true, ajouts: [ENFANT_ECRAN_DEMO], ecrans: null, volume_max: 40, coucher_max: 20,
+  budget: { semaine: 90, weekend: 90 }, heures: { semaine: ['07:30', '20:30'], weekend: ['08:30', '21:00'] }, dormir: true, voix: true, phrases_dormir: ['joue du bruit blanc', 'joue de la musique pour dormir'] } }, simulation: { actif: false } });
+let ENFANT_CFG = ENFANT_CFG_DEFAUT();
+// L'état du jour, ce que le serveur garde dans `.storage/loggia_enfant_etat` : la levée, la demande, les minutes accordées, le son pour dormir.
+const ENFANT_ETAT_DEFAUT = () => ({ leve_jusqua: null, demande: null, bonus_min: 0, dormir: null });
+let ENFANT_ETAT = ENFANT_ETAT_DEFAUT();
+const ENFANT_JOURNAL = [];
+const minutesDe = (hhmm) => { const [h, m] = String(hhmm).split(':').map(Number); return h * 60 + m; };
+const heureValide = (v) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(v));
+/* La journée du mode enfant à l'instant `t` : les heures du jour (la semaine ou le week-end), si l'on est dedans, la reprise — le
+ * début des heures d'aujourd'hui si l'on est encore avant, sinon celui du jour suivant, qui a les siennes (`reprise`, enfant_calcul.py). */
+function journeeEnfantDemo(profil, t) {
+  const dt = new Date(t);
+  const weekend = (d) => d.getDay() === 0 || d.getDay() === 6;
+  const heures = profil.heures[weekend(dt) ? 'weekend' : 'semaine'];
+  const minutes = dt.getHours() * 60 + dt.getMinutes();
+  const debut = minutesDe(heures[0]), fin = minutesDe(heures[1]);
+  const dans = debut === fin ? true : debut < fin ? (minutes >= debut && minutes < fin) : (minutes >= debut || minutes < fin);
+  let reprise = heures[0];
+  if (minutes >= debut) { const demain = new Date(dt); demain.setDate(demain.getDate() + 1); reprise = profil.heures[weekend(demain) ? 'weekend' : 'semaine'][0]; }
+  return { dans, reprise, budget_min: profil.budget[weekend(dt) ? 'weekend' : 'semaine'], minutes };
+}
+/** `loggia/enfant/etat` (spec 7.4) : les profils, leurs appareils, et ce que le mode enfant fait de chaque lecteur à l'heure de la démo. */
+function enfantDemo(states) {
+  const t = horlogeMedias();
+  const p = ENFANT_CFG.profils[ENFANT_ZONE_DEMO];
+  const j = journeeEnfantDemo(p, t);
+  const leve = ENFANT_ETAT.leve_jusqua != null && ENFANT_ETAT.leve_jusqua * 1000 > t;
+  const agit = !!p.actif && !leve;
+  const plafond = j.dans ? p.volume_max : Math.min(p.volume_max, p.coucher_max);
+  // Le temps d'écran de la maquette (§ 10) : 55 min utilisées avant 18:15, tout le budget du jour ensuite.
+  const total_s = (j.budget_min + ENFANT_ETAT.bonus_min) * 60;
+  const brut_s = j.minutes >= 18 * 60 + 15 ? (j.budget_min ? j.budget_min * 60 : 5400) : 3300;
+  const utilise_s = j.budget_min ? Math.min(total_s, brut_s) : brut_s;
+  const reste_s = j.budget_min ? Math.max(0, total_s - utilise_s) : null;
+  const d = ENFANT_ETAT.demande;
+  const demande = d && (d.reponse || t / 1000 - d.quand < 1800) ? { appareil: d.appareil, quand: d.quand, reponse: d.reponse } : null;
+  const bloqueEcran = !agit ? null : !j.dans ? 'coucher' : (j.budget_min && reste_s === 0 ? 'temps' : null);
+  const bloqueEcho = !agit ? null : !j.dans ? 'coucher' : null;
+  const vue = (ecran) => ({ profil: ENFANT_ZONE_DEMO, nom: p.nom, actif: !!p.actif, leve_jusqua: leve ? ENFANT_ETAT.leve_jusqua : null, plafond: agit ? plafond : null,
+    bloque: ecran ? bloqueEcran : bloqueEcho, reprise: j.reprise, ecran: ecran ? { budget_min: j.budget_min, utilise_s, bonus_min: ENFANT_ETAT.bonus_min, reste_s } : null,
+    dormir: ENFANT_ETAT.dormir, demande });
+  const appareils = [{ entite: ENFANT_OFF_DEMO, ajoute: false, ecran: false, parler: ENFANT_SOEURS_DEMO.parler, annonces: ENFANT_SOEURS_DEMO.annonces, hacs: ENFANT_HACS_DEMO }];
+  const lecteurs = { [ENFANT_OFF_DEMO]: vue(false), [ENFANT_HACS_DEMO]: vue(false) };
+  for (const haid of p.ajouts) {
+    if (!states[haid] || lecteurs[haid]) continue;
+    const ecran = (states[haid].attributes || {}).device_class === 'tv';
+    appareils.push({ entite: haid, ajoute: true, ecran, parler: null, annonces: null, hacs: null });
+    lecteurs[haid] = vue(ecran);
+  }
+  return { maintenant: t / 1000, demarre: true, simulation: !!ENFANT_CFG.simulation.actif,
+    profils: { [ENFANT_ZONE_DEMO]: { nom: p.nom, zone: ENFANT_ZONE_DEMO, actif: !!p.actif, leve_jusqua: leve ? ENFANT_ETAT.leve_jusqua : null, demande, appareils, voix: !!p.voix, dormir: !!p.dormir } },
+    lecteurs };
+}
+/* Un patch de `loggia_enfant`, champ par champ, comme `poser_patch` (enfant_calcul.py) : une valeur que l'écran n'envoie pas fait tout refuser, rien n'est écrit. */
+function enfantPatch(patch) {
+  if (!patch || typeof patch !== 'object') throw new Error('mode enfant : patch illisible');
+  const neuf = { profils: { ...ENFANT_CFG.profils }, simulation: { ...ENFANT_CFG.simulation } };
+  const entier = (v, bas, haut) => (Number.isInteger(v) && v >= bas && v <= haut ? v : null);
+  if (patch.profils && typeof patch.profils === 'object') {
+    for (const [ident, p] of Object.entries(patch.profils)) {
+      if (p === null) { delete neuf.profils[ident]; continue; }
+      if (!p || typeof p !== 'object') throw new Error('mode enfant : profil illisible');
+      const cur = neuf.profils[ident] ? { ...neuf.profils[ident] } : { ...ENFANT_CFG_DEFAUT().profils[ENFANT_ZONE_DEMO], nom: typeof p.nom === 'string' && p.nom.trim() ? p.nom : ident, zone: ident, ajouts: [] };
+      if ('nom' in p) { if (typeof p.nom !== 'string' || !p.nom.trim()) throw new Error('mode enfant : nom illisible'); cur.nom = p.nom; }
+      for (const k of ['actif', 'dormir', 'voix']) if (k in p) { if (typeof p[k] !== 'boolean') throw new Error('mode enfant : ' + k + ' : vrai ou faux'); cur[k] = p[k]; }
+      if ('volume_max' in p) { const v = entier(p.volume_max, 10, 100); if (v == null) throw new Error('mode enfant : volume_max : un entier de 10 a 100'); cur.volume_max = v; }
+      if ('coucher_max' in p) { const v = entier(p.coucher_max, 0, 100); if (v == null) throw new Error('mode enfant : coucher_max : un entier de 0 a 100'); cur.coucher_max = v; }
+      if ('budget' in p) {
+        const b = p.budget;
+        if (!b || typeof b !== 'object' || !['semaine', 'weekend'].every(k => entier(b[k], 0, 1440) != null)) throw new Error('mode enfant : budget : des minutes de 0 a 1440');
+        cur.budget = { semaine: b.semaine, weekend: b.weekend };
+      }
+      if ('heures' in p) {
+        const h = p.heures;
+        if (!h || typeof h !== 'object' || !['semaine', 'weekend'].every(k => Array.isArray(h[k]) && h[k].length === 2 && h[k].every(heureValide))) throw new Error('mode enfant : heures illisibles');
+        cur.heures = { semaine: [...h.semaine], weekend: [...h.weekend] };
+      }
+      if ('ajouts' in p) {
+        if (!Array.isArray(p.ajouts) || !p.ajouts.every(x => typeof x === 'string' && x.indexOf('media_player.') === 0)) throw new Error('mode enfant : ajouts : une liste de lecteurs');
+        cur.ajouts = [...new Set(p.ajouts)];
+      }
+      neuf.profils[ident] = cur;
+    }
+  }
+  if ('simulation' in patch) {
+    if (!patch.simulation || typeof patch.simulation.actif !== 'boolean') throw new Error('mode enfant : simulation : {actif: vrai ou faux}');
+    neuf.simulation = { actif: patch.simulation.actif };
+  }
+  ENFANT_CFG = neuf;
+  return ENFANT_CFG;
+}
+// Une ligne du journal de la maison, avec les mots du serveur (`enfant.py`) : la règle, ce qui est fait, les cibles, le motif en parties.
+const noterEnfantDemo = (regle, quoi, cibles, motif = '', detail = '') => ENFANT_JOURNAL.push(ligneJournal({ module: 'enfant', regle, quoi, cibles, n: cibles.length, motif, detail, simule: false, ts: horlogeMedias() / 1000 }));
+/* Le code de la maison (ADR 0045) : vérifié « par le serveur », les essais comptés ; un code juste vaut laissez-passer cinq minutes
+ * (ADR 0080) — c'est lui qui ouvre les réglages du mode enfant à un compte ordinaire (E2 B). */
+function repondrePinDemo(msg) {
+  if (!msg) return null;
+  if (msg.type === 'loggia/pin/verifier') {
+    if (String(msg.pin) === PIN_DEMO.code) { PIN_DEMO.rates = 0; PIN_DEMO.passe = horlogeMedias() + 300000; return Promise.resolve({ ok: true }); }
+    PIN_DEMO.rates += 1;
+    return Promise.resolve({ ok: false, bloque: PIN_DEMO.rates >= 5 ? 60 : 0 });
+  }
+  if (msg.type === 'loggia/pin/definir') { PIN_DEMO.code = String(msg.pin); return Promise.resolve({ defini: true }); }
+  return null;
+}
+/* Les six commandes du mode enfant, la forme exacte du serveur et ses refus. `ordinaire` : le compte n'est pas administrateur ;
+ * `ecrireCfg` : où la configuration commune se réécrit ; `toucher` : comment un état change (celui d'`installerDemo` redessine l'écran). */
+function repondreEnfantDemo(msg, states, { ordinaire = false, ecrireCfg = null, toucher = null } = {}) {
+  if (!msg || typeof msg.type !== 'string' || msg.type.indexOf('loggia/enfant/') !== 0) return null;
+  const t = horlogeMedias();
+  const poser = toucher || ((x, et, attrs) => { const cur = states[x]; if (!cur) return; states[x] = { state: et != null ? String(et) : cur.state, attributes: { ...cur.attributes, ...(attrs || {}) }, last_updated: new Date(t).toISOString(), last_changed: new Date(t).toISOString() }; });
+  const refus = (code, message) => Promise.reject({ code, message });
+  const parent = () => !ordinaire || PIN_DEMO.passe > t;
+  const etat = () => Promise.resolve(enfantDemo(states));
+  const p = ENFANT_CFG.profils[ENFANT_ZONE_DEMO];
+  switch (msg.type) {
+    case 'loggia/enfant/etat': return etat();
+    case 'loggia/enfant/config': {
+      if (!parent()) return refus('code_admin_requis', 'le code de la maison est requis pour le mode enfant');
+      try { enfantPatch(msg.patch); } catch (e) { return refus('invalid_format', e.message); }
+      if (ecrireCfg) ecrireCfg(ENFANT_CFG);
+      return Promise.resolve({ config: ENFANT_CFG, etat: enfantDemo(states) });
+    }
+    case 'loggia/enfant/lever': {
+      if (!parent()) return refus('code_admin_requis', 'le code de la maison est requis pour le mode enfant');
+      if (msg.profil !== ENFANT_ZONE_DEMO) return refus('invalid_format', 'mode enfant : profil inconnu');
+      if ([0, 30].indexOf(msg.minutes) < 0) return refus('invalid_format', 'mode enfant : minutes : 0 ou 30');
+      ENFANT_ETAT.leve_jusqua = msg.minutes ? t / 1000 + msg.minutes * 60 : null;
+      noterEnfantDemo('levee', msg.minutes ? 'limites levées' : 'limites rétablies', [], msg.minutes ? [['{n} min', { n: msg.minutes }]] : '');
+      return etat();
+    }
+    case 'loggia/enfant/repondre': {
+      if (!parent()) return refus('code_admin_requis', 'le code de la maison est requis pour le mode enfant');
+      const d = ENFANT_ETAT.demande;
+      if (msg.profil !== ENFANT_ZONE_DEMO || !d || d.reponse || t / 1000 - d.quand >= 1800) return refus('invalid_format', 'mode enfant : aucune demande en attente');
+      d.reponse = msg.accorder ? 'accordee' : 'refusee';
+      if (msg.accorder) ENFANT_ETAT.bonus_min += 15;
+      noterEnfantDemo('demande', msg.accorder ? '15 min accordées' : 'demande refusée', [d.appareil], 'depuis l’écran');
+      return etat();
+    }
+    case 'loggia/enfant/demander': {
+      if (msg.profil !== ENFANT_ZONE_DEMO) return refus('invalid_format', 'mode enfant : profil inconnu');
+      const e = enfantDemo(states);
+      const ecrans = Object.keys(e.lecteurs).filter(h => e.lecteurs[h].ecran && e.lecteurs[h].bloque === 'temps');
+      const d = ENFANT_ETAT.demande;
+      if (!ecrans.length) return refus('invalid_format', 'mode enfant : aucun écran n’est bloqué par le temps');
+      if (d && ((!d.reponse && t / 1000 - d.quand < 1800) || d.reponse === 'refusee')) return refus('invalid_format', 'mode enfant : une demande a déjà été faite');
+      ENFANT_ETAT.demande = { appareil: ecrans[0], quand: t / 1000, reponse: null };
+      // La notification à boutons du téléphone (E13) : notée au journal, la démo ne sonne pas.
+      noterEnfantDemo('demande', 'demande', [ecrans[0]], [['{n} min', { n: 15 }]]);
+      return etat();
+    }
+    case 'loggia/enfant/dormir': {
+      if (msg.profil !== ENFANT_ZONE_DEMO) return refus('invalid_format', 'mode enfant : profil inconnu');
+      const phrases = Array.isArray(p.phrases_dormir) ? p.phrases_dormir : [];
+      if (!Number.isInteger(msg.son) || msg.son < 0 || msg.son >= phrases.length) return refus('invalid_format', 'mode enfant : son inconnu');
+      // La phrase pour Alexa, dite à la jumelle HACS (E10) : elle nomme un titre de la maquette, il joue.
+      gesteMediaDemo(states, 'media_player', 'play_media', { entity_id: ENFANT_HACS_DEMO, media_content_type: 'custom', media_content_id: phrases[msg.son] }, t).forEach(([x, et, attrs]) => poser(x, et, attrs));
+      ENFANT_ETAT.dormir = { depuis: t / 1000, titres: [] };
+      noterEnfantDemo('coucher', 'son pour dormir', [ENFANT_HACS_DEMO]);
+      return etat();
+    }
+    default: return null;
+  }
+}
+/* La maison RAMÈNE (E24) : un `volume_set` au-dessus du plafond d'un lecteur sous profil redescend une seconde après — sur les deux
+ * entités de l'Echo, par le miroir de `gesteMediaDemo` —, un écran bloqué rallumé (`turn_on`) s'éteint vingt secondes après ; le
+ * journal le dit chaque fois. `plusTard` : le minuteur (celui des tests ne tourne pas). Jamais une montée, jamais un allumage. */
+function ramenerEnfantDemo(states, service, data, toucher, plusTard = (f, ms) => setTimeout(f, ms)) {
+  const id = data && data.entity_id;
+  if (typeof id !== 'string') return;
+  const vue = enfantDemo(states).lecteurs[id];
+  if (!vue) return;
+  if (service === 'volume_set' && vue.plafond != null) {
+    const lu = Math.round((Number(data.volume_level) || 0) * 100);
+    if (lu <= vue.plafond) return;
+    plusTard(() => {
+      const actuel = Math.round((Number((states[id] && states[id].attributes || {}).volume_level) || 0) * 100);
+      if (actuel <= vue.plafond) return;
+      gesteMediaDemo(states, 'media_player', 'volume_set', { entity_id: id, volume_level: vue.plafond / 100 }, horlogeMedias()).forEach(([x, et, attrs]) => toucher(x, et, attrs));
+      noterEnfantDemo('plafond', 'volume ramené', [id], [['de {a} à {b} %', { a: lu, b: vue.plafond }], ['à la voix ou sur l’appareil', {}]]);
+    }, 1000);
+  }
+  if (service === 'turn_on' && vue.ecran && vue.bloque) {
+    plusTard(() => {
+      const cur = states[id];
+      if (!cur || cur.state === 'off' || cur.state === 'standby' || cur.state === 'unavailable') return;
+      const e = enfantDemo(states).lecteurs[id];
+      if (!e || !e.bloque) return;
+      gesteMediaDemo(states, 'media_player', 'turn_off', { entity_id: id }, horlogeMedias()).forEach(([x, et, attrs]) => toucher(x, et, attrs));
+      noterEnfantDemo('coupure', 'écran éteint', [id], 'rallumé');
+    }, 20000);
+  }
+}
+/* Tout remettre à sa base : la maison des tests repart neuve, la démo installée aussi. */
+function remettreEnfantDemo() {
+  ENFANT_CFG = ENFANT_CFG_DEFAUT();
+  ENFANT_ETAT = ENFANT_ETAT_DEFAUT();
+  ENFANT_JOURNAL.length = 0;
+  PIN_DEMO.rates = 0;
+  PIN_DEMO.passe = 0;
+}
+
+/**
+ * La maison des médias (§ 8), son horloge réglée, pour tests/demo_medias.test.mjs : les états, l'index, et le faux serveur appliqué
+ * aux états (`geste`), comme `installerDemo` l'applique. Et le mode enfant (chantier Mode enfant, § 10), pour tests/demo_enfant : son
+ * état (`enfant`), ses commandes et le code de la maison (`ws`), le journal de la maison (`regles`), la maison qui ramène (`ramener`).
+ */
+export function maisonMediasDemo({ quand = null } = {}) {
+  const t = quand == null ? Date.now() : Number(quand);
+  horlogeMedias = () => t;
+  Object.values(FILES_MEDIAS_DEMO).forEach(f => { f.i = 0; });
+  remettreEnfantDemo();
+  const states = etatsInitiaux();
+  const toucher = (id, etat, attrs, a = t) => { const cur = states[id]; if (!cur) return; states[id] = { state: etat != null ? String(etat) : cur.state, attributes: { ...cur.attributes, ...(attrs || {}) }, last_updated: new Date(a).toISOString(), last_changed: new Date(a).toISOString() }; };
+  const geste = (domaine, service, data, a = t) => {
+    const retouches = gesteMediaDemo(states, domaine, service, data, a);
+    retouches.forEach(([id, etat, attrs]) => toucher(id, etat, attrs, a));
+    return retouches;
+  };
+  return {
+    states, index: () => indexDemo(states), geste, config: () => configDemo(), position: (id, a = t) => positionDemo(states[id], a),
+    enfant: () => enfantDemo(states),
+    ws: (msg, { admin = true } = {}) => repondreEnfantDemo(msg, states, { ordinaire: !admin }) || repondrePinDemo(msg) || Promise.reject(new Error('démonstration : pas de composant serveur')),
+    regles: () => reglesDemo(states),
+    ramener: (service, data, plusTard) => ramenerEnfantDemo(states, service, data, (x, et, attrs) => toucher(x, et, attrs), plusTard),
+  };
+}
+
 /* Les registres, tels que le composant les enverrait : des zones, et les
  * entites qui y sont rangees. Le dashboard croise ensuite avec les etats. */
 function indexDemo(states) {
   const ZONES = [
     ['salon', lieu('Salon')], ['cuisine', lieu('Cuisine')], ['chambre', lieu('Chambre')],
     ['bureau', lieu('Bureau')], ['entree', lieu('Entrée')], ['sdb', lieu('Salle de bain')],
+    // Le jardin (chantier Capteurs, C14, C17) : une zone de Home Assistant, du nom de sa pièce du dehors — sa station y vit.
+    ['jardin', lieu('Jardin')],
+    // La zone des capteurs de plante (chantier Capteurs, étapes 2 et 3, § 12 ; C29) : une zone d'appareils, qui n'est pas une pièce de Loggia.
+    ['technique', lieu('Technique')],
   ];
   const ZONE_DE = {
-    salon: ['light.salon', 'media_player.salon', 'sensor.salon_temperature', 'sensor.salon_humidite', 'sensor.salon_co2', 'sensor.salon_bruit', 'cover.salon', 'cover.volet_salon',
-            'binary_sensor.fenetre_salon', 'switch.radiateur_salon', 'media_player.enceinte_salon', 'media_player.tv_salon', 'remote.tv_salon', 'binary_sensor.detecteur_co_salon'],
-    cuisine: ['light.cuisine', 'sensor.cuisine_temperature', 'sensor.cuisine_humidite', 'cover.cuisine', 'cover.volet_cuisine', 'binary_sensor.detecteur_fumee', 'binary_sensor.fuite_evier', 'valve.arrivee_eau', 'media_player.echo_cuisine'],
-    chambre: ['light.chambre', 'sensor.chambre_temperature', 'sensor.chambre_humidite', 'sensor.chambre_co2', 'cover.chambre', 'cover.volet_chambre',
-              'binary_sensor.fenetre_chambre', 'switch.radiateur_chambre'],
-    bureau: ['light.bureau', 'sensor.bureau_temperature', 'sensor.bureau_humidite', 'sensor.bureau_co2'],
+    salon: ['light.salon', 'media_player.salon', 'sensor.salon_temperature', 'sensor.salon_humidite', 'sensor.salon_co2', 'sensor.salon_bruit', 'cover.volet_salon', 'cover.store_banne',
+            'binary_sensor.fenetre_salon', 'binary_sensor.baie_vitree', 'switch.radiateur_salon', 'media_player.enceinte_salon', 'media_player.tv_salon', 'remote.tv_salon', 'binary_sensor.detecteur_co_salon',
+            'climate.poele'],
+    cuisine: ['light.cuisine', 'sensor.cuisine_temperature', 'sensor.cuisine_humidite', 'cover.volet_cuisine', 'binary_sensor.detecteur_fumee', 'binary_sensor.fuite_evier', 'valve.arrivee_eau'],
+    chambre: ['light.chambre', 'sensor.chambre_temperature', 'sensor.chambre_humidite', 'sensor.chambre_co2', 'cover.volet_chambre', 'cover.rideau_chambre',
+              'binary_sensor.fenetre_chambre', 'switch.radiateur_chambre', 'select.radiateur_chambre_fil_pilote', 'sensor.radiateur_chambre_puissance'],
+    bureau: ['light.bureau', 'cover.volet_bureau', 'sensor.bureau_temperature', 'sensor.bureau_humidite', 'sensor.bureau_co2',
+             'select.radiateur_bureau_fil_pilote', 'switch.radiateur_bureau', 'sensor.radiateur_bureau_puissance', 'climate.climatisation'],
     entree: ['light.entree', 'sensor.entree_temperature', 'binary_sensor.porte_entree', 'binary_sensor.detecteur_fumee_entree', 'binary_sensor.mouvement_entree', 'lock.porte_entree', 'siren.interieure',
              'camera.entree', 'switch.camera_entree_detection_mouvement', 'switch.camera_entree_suivi', 'switch.camera_entree_pleurs',
-             'switch.camera_entree_prive', 'switch.camera_entree_voyant', 'binary_sensor.camera_entree_mouvement', 'binary_sensor.camera_entree_personne'],
-    sdb: ['light.sdb', 'sensor.sdb_temperature'],
+             'switch.camera_entree_prive', 'switch.camera_entree_voyant', 'binary_sensor.camera_entree_mouvement', 'binary_sensor.camera_entree_personne',
+             'cover.volet_entree', 'cover.porte_garage', 'cover.portail'],
+    sdb: ['light.sdb', 'sensor.sdb_temperature', 'cover.volet_sdb'],
+    jardin: [],
+    technique: [],
   };
   // La camera de l'entree et ses reglages forment UN appareil : c'est par lui
-  // que la fiche retrouve les interrupteurs d'une camera.
-  const APPAREIL_DE = (id) => (id === 'media_player.echo_cuisine' ? 'echo_cuisine'
-    : /^(media_player|remote)\.tv_salon$/.test(id) ? 'tv_salon'
+  // que la fiche retrouve les interrupteurs d'une camera. Un module fil pilote
+  // aussi : son `select`, son interrupteur et sa puissance (planning de chauffe).
+  const APPAREIL_DE = (id) => appareilChauffageDemo(id) || appareilPriseDemo(id) || appareilMesureDemo(id) || appareilCapteurDemo(id) || appareilMediaDemo(id) || (
+    /^(media_player|remote)\.tv_salon$/.test(id) ? 'tv_salon'
     : /^(camera\.entree$|switch\.camera_entree_|binary_sensor\.camera_entree_)/.test(id) ? 'cam_entree' : null);
+  // Les prises de la démo, leurs capteurs et la sirène de l'alarme : chacune dans sa pièce (chantier Prises, § 10).
+  PRISES_DEMO.forEach(id => ZONE_DE[PIECES_PRISES_DEMO[id]].push(id, capteursPriseDemo(id).power, capteursPriseDemo(id).energy));
+  // Les lampes de sa maquette qui n'avaient pas de pièce (chantier Lumières, § 9).
+  Object.keys(PIECES_LUMIERES_DEMO).forEach(id => ZONE_DE[PIECES_LUMIERES_DEMO[id]].push(id));
+  // Les mesures de sa maquette « Cartes capteurs », et la salle de bain, qui n'avait pas les siennes (chantier Capteurs, § 9).
+  Object.keys(PIECES_MESURES_DEMO).forEach(id => ZONE_DE[PIECES_MESURES_DEMO[id]].push(id));
+  // Les capteurs binaires, les plantes et les piles de sa maquette (chantier Capteurs, étapes 2 et 3, § 12) : chaque entité dans la zone de son appareil.
+  Object.keys(APPAREILS_CAPTEURS_DEMO).forEach(d => { const z = APPAREILS_CAPTEURS_DEMO[d][0]; if (z) APPAREILS_CAPTEURS_DEMO[d][3].forEach(id => { if (ZONE_DE[z].indexOf(id) < 0) ZONE_DE[z].push(id); }); });
+  // Les lecteurs de sa maquette « Cartes médias » (chantier Médias, § 8) : chaque entité dans la zone de son appareil ; « Partout » n'en a pas.
+  Object.keys(APPAREILS_MEDIAS_DEMO).forEach(d => { const z = APPAREILS_MEDIAS_DEMO[d][0]; if (z) APPAREILS_MEDIAS_DEMO[d][4].forEach(id => { if (ZONE_DE[z].indexOf(id) < 0) ZONE_DE[z].push(id); }); });
+  ZONE_DE.entree.push(SIRENE_SWITCH_DEMO);
   const entities = [];
+  // Le pont de Zigbee2MQTT : un appareil sans pièce, son interrupteur d'appairage sans catégorie.
+  if (states[PONT_DEMO]) entities.push({ id: PONT_DEMO, name: 'Zigbee2MQTT Bridge Permit join', device: 'pont_z2m', area: null, platform: 'mqtt', category: null, device_class: null, unit: null, hidden: false });
+  // Le frigo (chantier Capteurs, C17, 16/10) : son appareil n'a pas de zone, son entité non plus — sa carte est neutre.
+  const frigo = states['sensor.capteur_frigo_temperature'];
+  if (frigo) entities.push({ id: 'sensor.capteur_frigo_temperature', name: frigo.attributes.friendly_name, device: 'capteur_frigo', area: null, platform: 'mqtt', category: null,
+    device_class: 'temperature', unit: '°C', hidden: false });
+  /* Les contacts des portes du garage et de service (chantier Capteurs, § 12) : des appareils SANS zone — leurs cartes prennent le nom de
+   * l'appareil (§ 3) ; et les entités sans appareil (C21, C28), dont l'index dit la plateforme. */
+  Object.keys(APPAREILS_CAPTEURS_DEMO).filter(d => !APPAREILS_CAPTEURS_DEMO[d][0]).forEach(d => APPAREILS_CAPTEURS_DEMO[d][3].forEach(id => {
+    if (!states[id]) return;
+    const at = states[id].attributes || {};
+    entities.push({ id, name: at.friendly_name || id, device: d, area: null, ...metaCapteurDemo(id), device_class: at.device_class || null, unit: at.unit_of_measurement || null, hidden: false });
+  }));
+  // Le groupe « Partout » (chantier Médias, § 8) : un appareil sans zone, sa `notify` « Annoncer » reconnue à sa clé de traduction.
+  Object.keys(APPAREILS_MEDIAS_DEMO).filter(d => !APPAREILS_MEDIAS_DEMO[d][0]).forEach(d => APPAREILS_MEDIAS_DEMO[d][4].forEach(id => {
+    if (!states[id]) return;
+    const at = states[id].attributes || {};
+    entities.push({ id, name: at.friendly_name || id, device: d, area: null, ...metaCapteurDemo(id), ...metaMediaDemo(id), device_class: at.device_class || null, unit: at.unit_of_measurement || null, hidden: false });
+  }));
+  Object.keys(SANS_APPAREIL_DEMO).forEach(id => {
+    if (!states[id]) return;
+    const at = states[id].attributes || {};
+    entities.push({ id, name: at.friendly_name || id, device: null, area: null, platform: SANS_APPAREIL_DEMO[id], category: null, device_class: at.device_class || null, unit: at.unit_of_measurement || null, hidden: false });
+  });
   Object.keys(ZONE_DE).forEach(zone => {
     ZONE_DE[zone].forEach(id => {
       if (!states[id]) return;
       const at = states[id].attributes || {};
+      // La famille d'un chauffage, que le composant pose dans l'index (plan 2,
+      // choix 1) — et seulement quand il en reconnaît une : pas de champ vide en plus.
+      const famille = familleChauffageDemo(id);
+      // La plateforme et la catégorie : celles de la démo, sauf pour les capteurs de sa maquette « Cartes capteurs » (Zigbee, Bluetooth, les piles en diagnostic).
       entities.push({ id, name: at.friendly_name || id, device: APPAREIL_DE(id), area: zone,
-        platform: 'demo', category: null, device_class: at.device_class || null,
-        unit: at.unit_of_measurement || null, hidden: false });
+        ...metaCapteurDemo(id), ...metaMediaDemo(id), device_class: at.device_class || null,
+        unit: at.unit_of_measurement || null, hidden: false, ...(famille ? { famille } : {}) });
     });
   });
   // Les robots (ADR 0042) : un appareil chacun. C'est par lui que leur vue
@@ -1310,6 +3305,8 @@ function indexDemo(states) {
       'sensor.aspirateur_nombre_total': ['total_stats_cleanings', null], 'button.aspirateur_reinitialiser_filtre': ['reset_lifespan_filter', 'config'],
       'select.aspirateur_mode_de_travail': ['work_mode', 'config'], 'select.aspirateur_debit_d_eau': ['water_amount', 'config'],
       'switch.aspirateur_detection_tapis': ['carpet_auto_fan_boost', 'config'], 'switch.aspirateur_mode_avance': ['advanced_mode', 'config'],
+      // La carte active et le compteur de passages (tranche robots 2, R11, Q2 A) : les clés de traduction de l'intégration Ecovacs.
+      'select.aspirateur_carte_active': ['active_map', 'config'], 'number.aspirateur_compteur_de_nettoyage': ['clean_count', 'config'],
     }],
     robot_tondeuse: ['mammotion', {
       'lawn_mower.tondeuse': [null, null], 'binary_sensor.tondeuse_en_charge': [null, 'diagnostic'],
@@ -1375,11 +3372,33 @@ function indexDemo(states) {
      * lawn », il ne se retirait plus : la puce de zone portait le nom entier,
      * et la fiche titrait en français. Le modèle aussi, qu'elle affiche. */
     devices: [{ id: 'tv_salon', name: etiquette('TV du salon'), area: 'salon', manufacturer: 'Démo', model: etiquette('Boîtier TV'), firmware: null, via: null, entry_type: null, integration: 'apple_tv' },
-      { id: 'echo_cuisine', name: etiquette('Echo de la cuisine'), area: 'cuisine', manufacturer: 'Démo', model: etiquette('Enceinte'), firmware: null, via: null, entry_type: null, integration: 'alexa_media' },
+      /* Les lecteurs de sa maquette « Cartes médias » (chantier Médias, § 8 ; M1) : l'Echo Dot de la chambre est DEUX appareils, l'un par
+       * intégration — comme chez lui — ; « Partout » n'a pas de zone. Le fabricant est celui du registre, le modèle dit le genre (§ 6.5). */
+      // Les lecteurs de sa maquette ; les empreintes des identifiants, comme le composant les pose pour un appareil qui porte un lecteur.
+      ...Object.keys(APPAREILS_MEDIAS_DEMO).map(id => ({ id, name: etiquette(APPAREILS_MEDIAS_DEMO[id][1]), area: APPAREILS_MEDIAS_DEMO[id][0], manufacturer: APPAREILS_MEDIAS_DEMO[id][3] === 'apple_tv' ? 'Apple' : 'Amazon',
+        model: etiquette(APPAREILS_MEDIAS_DEMO[id][2]), firmware: null, via: null, entry_type: null, integration: APPAREILS_MEDIAS_DEMO[id][3],
+        ...(APPAREILS_MEDIAS_DEMO[id][5] ? { empreintes: APPAREILS_MEDIAS_DEMO[id][5] } : {}) })),
       { id: 'cam_entree', name: etiquette('Caméra entrée'), area: 'entree', manufacturer: 'Démo', model: etiquette('Caméra'), firmware: null, via: null, entry_type: null, integration: 'demo' },
       { id: 'sysmon', name: 'System Monitor', area: null, manufacturer: 'Démo', model: 'System Monitor', firmware: null, via: null, entry_type: 'service', integration: 'systemmonitor' },
       { id: 'robot_aspirateur', name: etiquette('Aspirateur'), area: null, manufacturer: 'Démo', model: 'Orbit V3', firmware: null, via: null, entry_type: null, integration: 'ecovacs' },
       { id: 'robot_tondeuse', name: etiquette('Tondeuse'), area: null, manufacturer: 'Démo', model: 'Meadow M2', firmware: null, via: null, entry_type: null, integration: 'mammotion' },
+      // Les appareils du planning de chauffe : deux modules fil pilote, le poêle du salon.
+      { id: 'radiateur_chambre', name: etiquette('Radiateur chambre'), area: 'chambre', manufacturer: 'Démo', model: etiquette('Module fil pilote'), firmware: null, via: null, entry_type: null, integration: 'demo' },
+      { id: 'radiateur_bureau', name: etiquette('Radiateur bureau'), area: 'bureau', manufacturer: 'Démo', model: etiquette('Module fil pilote'), firmware: null, via: null, entry_type: null, integration: 'demo' },
+      { id: 'poele', name: etiquette('Poêle'), area: 'salon', manufacturer: 'Démo', model: etiquette('Poêle à granulés'), firmware: null, via: null, entry_type: null, integration: 'demo' },
+      // Les prises (chantier Prises, § 10) : des prises Zigbee, derrière le pont de Zigbee2MQTT ; la sirène de l'alarme aussi.
+      { id: 'pont_z2m', name: 'Zigbee2MQTT Bridge', area: null, manufacturer: 'Zigbee2MQTT', model: MODELE_PONT_DEMO, firmware: null, via: null, entry_type: 'service', integration: 'mqtt' },
+      ...PRISES_DEMO.map(id => ({ id: appareilPriseDemo(id), name: etiquette(NOMS_PRISES_DEMO[id]), area: PIECES_PRISES_DEMO[id], manufacturer: 'Démo', model: etiquette('Prise connectée'),
+        firmware: null, via: 'pont_z2m', entry_type: null, integration: 'mqtt' })),
+      { id: 'alarme_sirene', name: etiquette('Alarme sirène'), area: 'entree', manufacturer: 'Démo', model: etiquette('Sirène'), firmware: null, via: 'pont_z2m', entry_type: null, integration: 'mqtt' },
+      /* Les appareils des mesures (chantier Capteurs, § 9 ; C14, C16) : chacun PHYSIQUE, dans sa pièce — le thermomètre du salon, sa
+       * température, son hygromètre et sa pile ; le capteur de chaque pièce ; la station du jardin, dans sa pièce du dehors (C17). */
+      ...Object.keys(APPAREILS_MESURES_DEMO).map(id => ({ id, name: etiquette(APPAREILS_MESURES_DEMO[id][1]), area: APPAREILS_MESURES_DEMO[id][0], manufacturer: 'Démo',
+        model: etiquette(APPAREILS_MESURES_DEMO[id][2]), firmware: null, via: null, entry_type: null, integration: id === 'station_jardin' ? 'netatmo' : 'demo' })),
+      /* Les capteurs de sa maquette « Cartes capteurs » (chantier Capteurs, étapes 2 et 3, § 12 ; C21, C29) : des appareils PHYSIQUES — les contacts, les
+       * détecteurs et le bouton derrière le pont de Zigbee2MQTT, les deux plantes en Bluetooth. Deux contacts n'ont pas de zone. */
+      ...Object.keys(APPAREILS_CAPTEURS_DEMO).map(id => ({ id, name: etiquette(APPAREILS_CAPTEURS_DEMO[id][1]), area: APPAREILS_CAPTEURS_DEMO[id][0], manufacturer: 'Démo',
+        model: etiquette(APPAREILS_CAPTEURS_DEMO[id][2]), firmware: null, via: id.indexOf('plante_') === 0 ? null : 'pont_z2m', entry_type: null, integration: id.indexOf('plante_') === 0 ? 'xiaomi_ble' : 'mqtt' })),
       ...distribs.map(id => ({ id, name: etiquette('Distributeur de croquettes'), area: 'cuisine', manufacturer: APPAREIL_DIST[id].fabricant,
         model: APPAREIL_DIST[id].modele, firmware: null, via: null, entry_type: null, integration: DISTRIBUTEURS_DEMO[id][0] }))],
     entities,
@@ -1442,8 +3461,9 @@ function presencePatch(patch) {
  * pièce se montrait éteinte, et la toucher en rangeait une seconde. */
 let NUI_CFG_ = null;
 const NUI_CFG = () => (NUI_CFG_ || (NUI_CFG_ = {
-  veilleuse: { actif: true, lampes: ['light.chambre'], duree: 30, fondu: 5, depuis: '19:00' },
-  coucher: { actif: true, heure: '23:30', sauf: ['light.chambre'], jours: [0, 1, 2, 3, 4, 5, 6] },
+  // La veilleuse de Lino (chantier Lumières, § 9) : celle de sa maquette, réglée comme chez lui — éteinte une heure après son allumage.
+  veilleuse: { actif: true, lampes: ['light.veilleuse_chambre_lino'], duree: 60, fondu: 5, depuis: '19:00' },
+  coucher: { actif: true, heure: '23:30', sauf: ['light.veilleuse_chambre_lino'], jours: [0, 1, 2, 3, 4, 5, 6] },
   eclairage: { actif: true, luminosite: 10, duree: 3, pieces: { [lieu('Entrée')]: { actif: true, capteurs: ['binary_sensor.mouvement_entree'], lampes: ['light.entree'] } } },
 }));
 
@@ -1456,7 +3476,8 @@ function nuitDemo() {
       // Les gabarits de nuit.py et du socle (« sous la main »), parties comprises.
       ligneJournal({ module: 'nuit', regle: 'eclairage', quoi: 'allumer', cibles: ['light.entree'], n: 1, motif: [['mouvement : {piece}', { piece: lieu('Entrée') }]], detail: '', simule: false, ts: Date.now() / 1000 - 30000 }),
       ligneJournal({ module: 'nuit', regle: 'eclairage', quoi: 'eteindre', cibles: ['light.entree'], n: 1, motif: [['{n} min sans mouvement', { n: 3 }]], detail: '', simule: false, ts: Date.now() / 1000 - 29700 }),
-      ligneJournal({ module: 'nuit', regle: 'veilleuse', quoi: 'eteindre', cibles: ['light.chambre'], n: 1, motif: [['{n} min', { n: 30 }]], detail: '', simule: false, ts: Date.now() / 1000 - 50000 }),
+      // La veilleuse de Lino, éteinte dans sa journée (chantier Lumières, § 8 et 9) : le fondu qui suit est à cette ligne.
+      ligneJournal({ module: 'nuit', regle: 'veilleuse', quoi: 'eteindre', cibles: ['light.veilleuse_chambre_lino'], n: 1, motif: [['{n} min', { n: 60 }]], detail: '', simule: false, ts: histoireLumieresAujourdhui().veilleuse }),
       ligneJournal({ module: 'nuit', regle: 'coucher', quoi: 'eteindre', cibles: ['light.salon', 'light.cuisine'], n: 2, motif: '23:30', detail: [['{n} sous la main de quelqu’un', { n: 1 }]], simule: false, ts: Date.now() / 1000 - 54000 }),
     ],
   };
@@ -1484,6 +3505,8 @@ const VEI_CFG = {
   co2: { actif: true, seuil: 1400, capteurs: [], ventilation: [] },
   batterie: { actif: true, seuil: 15 },
   creuses: { actif: false, entite: '', valeur: '', prises: [] },
+  // « Observer sans agir » (audit du 19/10, H3) : le drapeau du vrai composant, que l'interrupteur des Règles pose avec les autres.
+  simulation: { actif: false },
 };
 
 /* Le journal de la maison : les lignes de chaque module, melees dans l'ordre
@@ -1491,22 +3514,44 @@ const VEI_CFG = {
  * main posee sur une lampe (le gel), un volet tenu par la protection
  * solaire, et une ligne simulee — de quoi voir chaque filtre agir. */
 const GELS_DEMO = { 'light.salon': 1260 };
+/* La ligne simulée de la chambre, une fermeture du soir : une heure après le
+ * dernier coucher du soleil passé, à l'horloge des volets — « il y a une
+ * heure » la montrait dans ses manœuvres à toute heure (relecture du 13/10,
+ * point 8). */
+function simuleeChambre() {
+  const t = horlogeVolets();
+  const ce = soleilDuJour(t, 0).coucher + 60 * MINUTE_MS;
+  return ce <= t ? ce : soleilDuJour(t, -1).coucher + 60 * MINUTE_MS;
+}
 /* Exporté pour `tests/demo_noms.test.mjs`, qui lit ce journal tel que l'écran
  * le reçoit (relecture du 03/10). */
 export function reglesDemo(states) {
+  const { volets } = voletsDemo(states);
   const lignes = [
     // La règle d'un interrupteur porte son NOM : traduit comme sa fiche (audit du 03/10).
     { module: 'interrupteurs', regle: etiquette('Variateur Salon'), quoi: 'bouton', cibles: ['light.salon'], n: 1, motif: 'on_press_release → light.turn_on', detail: '', simule: false, ts: Date.now() / 1000 - 540 },
-    ligneJournal({ module: 'volets', regle: 'planning', quoi: 'fermer', cibles: ['cover.chambre'], n: 1, motif: [['coucher du soleil {d} min', { d: '-20' }]], detail: '', simule: true, ts: Date.now() / 1000 - 3600 }),
+    ligneJournal({ module: 'volets', regle: 'planning', quoi: 'fermer', cibles: ['cover.volet_chambre'], n: 1, motif: [['coucher du soleil {d} min', { d: '+30' }]], detail: '', simule: true, ts: simuleeChambre() / 1000 }),
     ...voletsDemo(states).journal, ...fenetresDemo().journal, ...presenceDemo().journal,
     ...nuitDemo().journal, ...veillesDemo(states).journal,
+    // Le planning de chauffe écrit au même journal (§ 5.5) : ses lignes, une fois la maison montée.
+    ...journalChauffageDemo(),
+    // Le minuteur des prises : sa pose et son extinction (chantier Prises, § 6.3).
+    ...PRISES_JOURNAL,
+    // Les cycles du lave-vaisselle, comme le serveur les écrit (le contrat du plan 1).
+    ...journalCyclesDemo(),
+    // Le minuteur de l'ampoule de la chambre, posé dans sa journée (chantier Lumières, § 9).
+    ...journalLumieresDemo(),
+    // Le mode enfant (chantier Mode enfant, § 10) : ce que la maison a ramené, éteint, accordé — les mots du serveur.
+    ...ENFANT_JOURNAL,
   ];
   lignes.sort((a, b) => b.ts - a.ts);
   return {
     journal: lignes,
     gels: { ...GELS_DEMO },
-    tenues: VOL_CFG.soleil.actif ? { 'cover.volet_salon': { module: 'volets', regle: 'soleil' } } : {},
-    attentes: { 'cover.volet_chambre': { sens: 'fermer', motif: 'baie ouverte', expire: Date.now() / 1000 + 36000 } },
+    // Ce que la protection solaire tient, et ce qui attend une baie : ce que dit l'état des volets.
+    tenues: Object.fromEntries(Object.entries(volets).filter(([, v]) => v.protection).map(([id]) => [id, { module: 'volets', regle: 'soleil' }])),
+    attentes: Object.fromEntries(Object.entries(volets).filter(([, v]) => v.attente)
+      .map(([id, v]) => [id, { sens: v.attente.sens, motif: v.attente.motif, expire: Date.parse(v.attente.expire) / 1000 }])),
     calme: false,
   };
 }
@@ -1536,7 +3581,8 @@ function veillesPatch(patch) {
 /* Le planning des robots (ADR 0043). Lundi vaut 0, comme côté serveur. La
  * tondeuse de la démo a son capteur de pluie : c'est lui que l'onglet montre. */
 /* Le code administrateur de la demo : verifie « par le serveur », comme en vrai. */
-const PIN_DEMO = { code: '0000', rates: 0 };
+// `passe` (chantier Mode enfant, E2 B) : jusqu'à quand un code juste vaut laissez-passer — cinq minutes, pour les réglages du parent.
+const PIN_DEMO = { code: '0000', rates: 0, passe: 0 };
 
 /* Paresseux, comme `SCN_CFG()` (audit du 03/10) : la zone de la tondeuse porte
  * le nom de son interrupteur, et la langue de la maison n'est connue qu'à
@@ -1547,10 +3593,13 @@ const PIN_DEMO = { code: '0000', rates: 0 };
 let ROB_CFG_ = null;
 const ROB_CFG = () => (ROB_CFG_ || (ROB_CFG_ = {
   plannings: [
+    // Un passage par ZONES de Home Assistant (tranche robots 2, R5) : la zone garde son identifiant, jamais un segment.
     { id: 'p-semaine', robot: 'vacuum.aspirateur', heure: '09:30', jours: [0, 1, 2, 3, 4], actif: true,
-      zones: [{ id: 'salon', nom: lieu('Salon'), segments: [1] }, { id: 'cuisine', nom: lieu('Cuisine'), segments: [2] }] },
-    { id: 'p-samedi', robot: 'vacuum.aspirateur', heure: '18:00', jours: [5], actif: true, zones: [] },
-    { id: 'p-nuit', robot: 'vacuum.aspirateur', heure: '23:00', jours: [6], actif: false, zones: [] },
+      zones: [{ id: 'zone:salon', nom: lieu('Salon'), segments: [], zone: 'salon' }, { id: 'zone:cuisine', nom: lieu('Cuisine'), segments: [], zone: 'cuisine' }] },
+    // Un passage d'AVANT, par segments : il part comme avant tant que le robot sait les viser.
+    { id: 'p-samedi', robot: 'vacuum.aspirateur', heure: '18:00', jours: [5], actif: true, zones: [{ id: 'seg:3', nom: lieu('Bureau'), segments: [3] }] },
+    // 23:00 le dimanche, ALLUMÉ (chantier IoT, § 10) : pris dans « Ne pas déranger » (22:00–07:00), il le dit et ne partira pas.
+    { id: 'p-nuit', robot: 'vacuum.aspirateur', heure: '23:00', jours: [6], actif: true, zones: [] },
     { id: 'p-tonte', robot: 'lawn_mower.tondeuse', heure: '10:00', jours: [1, 4], actif: true,
       zones: [{ id: 'switch.tondeuse_zone_pelouse_avant', nom: etiquette('Pelouse avant'), segments: [] }] },
   ],
@@ -1564,6 +3613,12 @@ const copieRobots = () => JSON.parse(JSON.stringify(ROB_CFG()));
 /* Les minuteurs de la démo : en mémoire, comme la table du vrai composant —
  * une heure de fin en secondes, et le temps S'AJOUTE à ce qui reste. */
 const MIN_DEMO = {};
+/** Un appareil qui passe à `off` n'a plus de minuteur, comme chez le vrai composant (`minuteurs.py`, `_sur_etat`) : « off »
+ *  seulement — une lampe qui décroche (`unavailable`) n'a pas été éteinte, son minuteur tient. Éteinte à la main puis
+ *  rallumée, une lampe ou une prise ne retrouve donc pas son « S'éteint à ». */
+export function minuteurSiEteint(id, etat) {
+  if (String(etat).toLowerCase() === 'off') delete MIN_DEMO[id];
+}
 function minuteursDemo() {
   const maintenant = Date.now() / 1000;
   const en_cours = {};
@@ -1578,8 +3633,327 @@ function minuteursPoser(id, minutes) {
   return minuteursDemo();
 }
 
-function robotsDemo(states) {
-  return { config: copieRobots(), meteo: Object.keys(states).filter(id => id.startsWith('weather.')).sort()[0] || null, journal: [] };
+/* ── Le carnet des robots (chantier IoT, I3 A ; § 10 de la conception) ────────
+ *
+ * Ce que tient `robots.py` : les passages de sa maquette — relatifs à l'heure de
+ * la démo, en secondes comme le serveur — et la session en cours : la tondeuse en
+ * pleine tonte sur « Pelouse arrière » depuis 1 h 40 ; avec `?demo&robots=pause`,
+ * l'aspirateur en pause sur Salon et Cuisine, 23 m² faits. Il suit les robots
+ * comme le vrai (`suivreRobots`) : un robot qui se met au travail ouvre une
+ * session — les pièces d'un départ lancé par Loggia, sinon aucune —, la base,
+ * l'arrêt ou une erreur la ferment. Paresseux, comme `ROB_CFG()` : les noms
+ * suivent la langue de la maison, connue à `installerDemo`. */
+let horlogeRobots = () => Date.now();
+let VARIANTE_ROBOTS = null;
+let CARNET_ROB_ = null;
+const ROBOTS_DEMO = /^(vacuum|lawn_mower)\./;
+/* La phase d'un robot, celle de ses cartes (`phaseRobot`, robots.js), pour les états que la démo pose. Recopiée, pas importée :
+ * un import de robots.js depuis la démo — chargée à la demande, comme le démarrage — tirait du démarrage un morceau qu'ils
+ * partageaient (mesuré le 18/10 : `boot-*.js` −51 216 octets, mais un morceau de 52 576 chargé avec lui ; la borne ne mesurait
+ * plus ce que le démarrage charge). tests/demo_robots.test.mjs la compare à `phaseRobot`. */
+const PHASES_ROBOT_DEMO = { cleaning: 'travail', mowing: 'travail', paused: 'pause', returning: 'retour', docked: 'base', idle: 'repos', error: 'erreur' };
+export const phaseRobotDemo = (etat) => PHASES_ROBOT_DEMO[etat] || 'absent';
+// Les aires de la tondeuse, par leur interrupteur : le nom que la fiche leur donne (le sien, sans « Tondeuse Zone »).
+const AIRES_DEMO = { 'switch.tondeuse_zone_pelouse_avant': 'Pelouse avant', 'switch.tondeuse_zone_pelouse_arriere': 'Pelouse arrière', 'switch.tondeuse_zone_cote_garage': 'Côté garage' };
+const aireDemo = (id) => ({ id, nom: etiquette(AIRES_DEMO[id] || id) });
+function carnetRobots() {
+  if (CARNET_ROB_) return CARNET_ROB_;
+  const t = horlogeRobots();
+  const le = (jours, h, m) => { const d = new Date(t); d.setDate(d.getDate() - jours); d.setHours(h, m, 0, 0); return d.getTime() / 1000; };
+  // Les zones de Home Assistant, par leur identifiant de zone (tranche robots 2) : les puces de « Où » retrouvent ce qui se nettoie.
+  const salonCuisine = [{ id: 'zone:salon', nom: lieu('Salon') }, { id: 'zone:cuisine', nom: lieu('Cuisine') }];
+  const avant = [aireDemo('switch.tondeuse_zone_pelouse_avant')];
+  const passage = (robot, debut, min, issue, x) => ({ robot, debut, fin: debut + min * 60, travail_s: min * 60, issue, zones: [], tout: false, source: 'loggia', surface: null, motif: null, ...x });
+  CARNET_ROB_ = {
+    passages: [
+      passage('vacuum.aspirateur', le(1, 8, 30), 51, 'termine', { zones: salonCuisine, surface: 42 }),
+      passage('vacuum.aspirateur', le(3, 8, 30), 22, 'interrompu', { zones: salonCuisine, surface: 19, motif: etiquette('Bloqué sous le canapé') }),
+      passage('vacuum.aspirateur', le(5, 14, 2), 94, 'termine', { tout: true, surface: 68 }),
+      passage('lawn_mower.tondeuse', le(2, 10, 0), 72, 'termine', { zones: avant, surface: 210 }),
+      passage('lawn_mower.tondeuse', le(4, 10, 0), 40, 'interrompu', { zones: avant, surface: 96, motif: etiquette('Pluie détectée') }),
+    ],
+    en_cours: {
+      'lawn_mower.tondeuse': { debut: t / 1000 - 100 * 60, zones: [aireDemo('switch.tondeuse_zone_pelouse_arriere')], tout: false, source: 'loggia', surface: 140 },
+      ...(VARIANTE_ROBOTS === 'pause' ? { 'vacuum.aspirateur': { debut: t / 1000 - 25 * 60, zones: salonCuisine, tout: false, source: 'loggia', surface: 23 } } : {}),
+    },
+  };
+  return CARNET_ROB_;
+}
+
+/* Les variantes des robots (`?demo&robots=…`) : `pause` (§ 10 : l'aspirateur s'est arrêté au milieu de Salon et Cuisine), et celles
+ * de la tranche robots 2 (§ 9 de sa conception) — `sans-association` (le bit, rien d'associé, et un robot qui ne publie pas ses
+ * pièces, comme un Roborock : le chemin exact à un administrateur), `sans-association-rooms` (le bit, rien d'associé, les pièces
+ * publiées par `spot_area`), `exception` (un Ecovacs sans le bit qui publie `rooms`, sans aucun script de départ : la commande de ses
+ * scripts, avec le compteur de passages de l'appareil), `rooms-vide` (le même, un jour sans carte), `scripts` (ses interrupteurs et
+ * son script gardent la main devant une association de Home Assistant), `carte-changee` (la réparation de Home Assistant ouverte),
+ * `etages` (deux cartes) ; et, depuis la passe bis du 20/10 (sa décision « Mon script garde la main »), SON cas : `scripts-sans-pieces`
+ * (son Ecovacs sans le bit qui publie `rooms`, ses interrupteurs, ses cinq scripts par rôle SANS celui des pièces — aucune puce, la
+ * ligne qui dit où le désigner) et `scripts-avec-pieces` (le même, le script des pièces désigné — les puces sont ses interrupteurs). */
+const VARIANTES_ROBOTS = ['pause', 'sans-association', 'sans-association-rooms', 'exception', 'rooms-vide', 'scripts', 'carte-changee', 'etages', 'scripts-sans-pieces', 'scripts-avec-pieces'];
+const VARIANTES_SCRIPTS = ['scripts', 'scripts-sans-pieces', 'scripts-avec-pieces'];
+function varianteRobots(states) {
+  const id = 'vacuum.aspirateur';
+  if (!states[id]) return;
+  const v = VARIANTE_ROBOTS;
+  if (v === 'pause') states[id] = { ...states[id], state: 'paused' };
+  // Un robot qui ne publie pas ses pièces (Roborock n'a pas d'attribut `rooms`) : rien à offrir tant que l'association n'est pas faite.
+  if (v === 'sans-association') states[id] = { ...states[id], attributes: { ...states[id].attributes, rooms: {} } };
+  if (v === 'exception' || v === 'rooms-vide' || v === 'scripts-sans-pieces' || v === 'scripts-avec-pieces') {
+    // Sans le bit CLEAN_AREA : Home Assistant n'offre ni l'association ni `clean_area`, et refuse `spot_area` (R1).
+    states[id] = { ...states[id], attributes: { ...states[id].attributes, supported_features: 8828, ...(v === 'rooms-vide' ? { rooms: {} } : {}) } };
+    if (v === 'exception') states['number.aspirateur_compteur_de_nettoyage'] = s(2, { friendly_name: 'Aspirateur Compteur de nettoyage', min: 1, max: 4, step: 1 });
+  }
+  if (v === 'etages') states['select.aspirateur_carte_active'] = s(etiquette('Rez-de-chaussée'), { friendly_name: 'Aspirateur Carte active', options: [etiquette('Rez-de-chaussée'), etiquette('Étage')] });
+  if (VARIANTES_SCRIPTS.indexOf(v) >= 0) {
+    states['script.nettoyer_pieces_demo'] = s('off', { friendly_name: etiquette('Nettoyer les pièces choisies') });
+    states['input_boolean.nettoyer_salon_demo'] = s('off', { friendly_name: etiquette('Nettoyer le salon') });
+    states['input_boolean.nettoyer_cuisine_demo'] = s('off', { friendly_name: etiquette('Nettoyer la cuisine') });
+  }
+  if (v === 'scripts-sans-pieces' || v === 'scripts-avec-pieces') {
+    // Ses cinq scripts par rôle, et un script de la maison qui n'est pas au robot (les suggestions de la roue les rangent à part).
+    states['script.aspirateur_nettoyer_tout'] = s('off', { friendly_name: etiquette('Nettoyer tout le logement') });
+    states['script.aspirateur_pause'] = s('off', { friendly_name: etiquette('Pause de l’aspirateur') });
+    states['script.aspirateur_reprendre'] = s('off', { friendly_name: etiquette('Reprendre l’aspirateur') });
+    states['script.aspirateur_retour_base'] = s('off', { friendly_name: etiquette('Retour à la base') });
+    states['script.aspirateur_localiser'] = s('off', { friendly_name: etiquette('Localiser l’aspirateur') });
+    states['script.arroser_le_jardin_demo'] = s('off', { friendly_name: etiquette('Arroser le jardin') });
+  }
+}
+
+/* Les scripts de la maison que le faux serveur reconnaît (`vacuumScripts`) : ceux de la description de la maison telle qu'elle est
+ * dans le magasin de la démo quand on la lui donne (`entites`, lu par `installerDemo` — un rôle désigné dans la roue compte sur-le-champ),
+ * sinon ceux de la variante. */
+function scriptsDemo(entites = null) {
+  const e = entites && typeof entites === 'object' ? entites : configDemo().loggia_entities;
+  return e && e.vacuumScripts && typeof e.vacuumScripts === 'object' ? e.vacuumScripts : {};
+}
+const ROLES_SCRIPTS_DEMO = ['nettoyer_tout', 'pieces_selectionnees', 'pause', 'reprendre', 'retour_base', 'localiser'];
+
+/* `loggia/robots/scripts` (passe bis 2 du 20/10, relecture de contrôle) : la roue de la popup envoie le RÔLE seul, et le faux serveur
+ * le fond dans la description de la maison telle qu'elle est dans le magasin de la démo — `fusion_vacuum_scripts` du vrai : rien d'autre
+ * que `vacuumScripts[role]` ne bouge, un rôle vide (`script` null) est retiré et le dernier emporte `vacuumScripts`, une description
+ * illisible refuse (`invalid_format`). Pure : rend la description d'après. */
+export function designerScriptDemo(entites, role, script) {
+  const refus = (message) => Object.assign(new Error(message), { code: 'invalid_format' });
+  if (ROLES_SCRIPTS_DEMO.indexOf(role) < 0) throw refus('role de script invalide');
+  if (script != null && !(typeof script === 'string' && /^script\.[a-z0-9_]+$/.test(script))) throw refus('script invalide');
+  const e = entites == null ? {} : entites;
+  if (typeof e !== 'object' || Array.isArray(e)) throw refus('description de la maison illisible');
+  const scripts = { ...(e.vacuumScripts && typeof e.vacuumScripts === 'object' && !Array.isArray(e.vacuumScripts) ? e.vacuumScripts : {}) };
+  if (script == null) delete scripts[role]; else scripts[role] = script;
+  const suite = { ...e };
+  if (Object.keys(scripts).length) suite.vacuumScripts = scripts; else delete suite.vacuumScripts;
+  return suite;
+}
+
+/* Les zones de Home Assistant de la maison de la démo, associées à l'aspirateur : zone, nom, étage, numéro de pièce du robot. */
+const ZONES_ROBOT_DEMO = [['cuisine', 'Cuisine', 'rdc', 2], ['entree', 'Entrée', 'rdc', 5], ['salon', 'Salon', 'rdc', 1], ['bureau', 'Bureau', 'etage', 3], ['chambre', 'Chambre', 'etage', 4]];
+
+/* `pieces` de `loggia/robots/etat` (tranche robots 2, § 5.2 ; allégé à la passe bis du 20/10 de ce que l'écran ne lit pas) : ce que
+ * le vrai serveur lit de Home Assistant, selon la variante — et ses scripts de départ tels que le magasin de la démo les dit
+ * (`entites`), comme le vrai serveur lit la description de la maison. */
+function piecesRobotDemo(states, entites = null) {
+  const st = states['vacuum.aspirateur'];
+  if (!st) return null;
+  const a = st.attributes || {};
+  const v = VARIANTE_ROBOTS;
+  const capable = !!(Number(a.supported_features) & 16384);
+  const association = capable && v !== 'sans-association' && v !== 'sans-association-rooms';
+  const zones = [], autres_zones = [];
+  if (association) ZONES_ROBOT_DEMO.forEach(([zone, nom, etage, seg]) => {
+    if (v === 'etages' && etage === 'etage') { autres_zones.push(zone); return; }
+    zones.push({ id: 'zone:' + zone, nom: lieu(nom), zone, segments: ['m1_' + seg] });
+  });
+  const rooms = a.rooms && typeof a.rooms === 'object' ? a.rooms : {};
+  const segments = Object.keys(rooms).map(slug => ({ id: 'seg:' + rooms[slug], nom: slug.charAt(0).toUpperCase() + slug.slice(1).replace(/_/g, ' '), slug, segments: [Number(rooms[slug])] }))
+    .sort((x, y) => x.segments[0] - y.segments[0]);
+  // Un script de DÉPART désigné et présent (sa décision du 20/10) : la source `scripts`, et Loggia ne prend pas la main sur les pièces.
+  const scripts = scriptsDemo(entites);
+  const present = (id) => typeof id === 'string' && !!states[id];
+  const script = present(scripts.pieces_selectionnees) ? 'pieces' : present(scripts.nettoyer_tout) ? 'depart' : null;
+  const commande = script ? null : zones.length ? 'clean_area' : segments.length ? (capable ? 'spot_area' : 'clean_V2') : null;
+  return {
+    source: script ? 'scripts' : commande === 'clean_area' ? 'zones' : commande ? 'segments' : 'aucune',
+    capable, association, carte_changee: v === 'carte-changee', script_pieces: script === 'pieces', zones,
+    autres_cartes: autres_zones.length ? [{ carte: etiquette('Étage'), n: autres_zones.length }] : [], autres_zones,
+    segments,
+    // Les rôles désignés (passe bis 2 du 20/10) : la roue lit la vérité du serveur — ici, la description du magasin de la démo.
+    scripts: Object.fromEntries(Object.entries(scripts).filter(([r, s]) => ROLES_SCRIPTS_DEMO.indexOf(r) >= 0 && typeof s === 'string')),
+  };
+}
+
+/* Le carnet suit les robots, comme les écouteurs de `robots.py` : au travail sans session, il en ouvre une — partie sans Loggia,
+ * ses pièces ne se savent pas ; sur la base, arrêté ou en erreur, il la ferme — moins d'une minute, c'est un faux départ, qui ne se
+ * garde pas. Un robot muet garde la sienne ouverte. */
+function suivreRobots(states) {
+  const c = carnetRobots();
+  const t = horlogeRobots() / 1000;
+  Object.keys(states).filter(id => ROBOTS_DEMO.test(id)).forEach(id => {
+    const phase = phaseRobotDemo(states[id].state);
+    const s = c.en_cours[id];
+    if (phase === 'travail' && !s) c.en_cours[id] = { debut: t, zones: [], tout: false, source: 'appareil', surface: null };
+    else if (s && (phase === 'base' || phase === 'repos' || phase === 'erreur')) {
+      if (t - s.debut >= 60) {
+        c.passages.push({ robot: id, debut: s.debut, fin: t, travail_s: t - s.debut, issue: phase === 'base' ? 'termine' : phase === 'erreur' ? 'erreur' : 'interrompu',
+          zones: s.zones, tout: s.tout, source: s.source, surface: s.surface, motif: null });
+      }
+      delete c.en_cours[id];
+    }
+  });
+}
+
+/* `loggia/robots/etat` : la configuration, et le carnet tel que le serveur le rend — le passage le plus récent d'abord, une COPIE.
+ * `entites` : la description de la maison du magasin de la démo (ses scripts désignés dans la roue), quand l'appelant la donne. */
+function robotsDemo(states, entites = null) {
+  suivreRobots(states);
+  const c = carnetRobots();
+  const t = horlogeRobots() / 1000;
+  const zones = (l) => l.map(z => ({ ...z }));
+  const en_cours = {};
+  Object.keys(c.en_cours).forEach(id => {
+    const s = c.en_cours[id];
+    en_cours[id] = { debut: s.debut, phase: phaseRobotDemo(states[id] && states[id].state), duree_min: Math.max(0, Math.round((t - s.debut) / 60)),
+      zones: zones(s.zones), tout: s.tout, source: s.source, surface: s.surface, libelle: s.libelle || null };
+  });
+  return {
+    config: copieRobots(), meteo: Object.keys(states).filter(id => id.startsWith('weather.')).sort()[0] || null, journal: [],
+    passages: c.passages.slice().sort((a, b) => b.fin - a.fin).map(p => ({ robot: p.robot, debut: p.debut, fin: p.fin, duree_min: Math.round(p.travail_s / 60), issue: p.issue,
+      zones: zones(p.zones), tout: p.tout, source: p.source, surface: p.surface, motif: p.motif, libelle: p.libelle || null })),
+    // Plus de `maintenant` (passe bis du 18/10, point 10), comme le serveur : l'écran ne le lisait pas.
+    en_cours, erreurs: {},
+    // Les pièces de chaque aspirateur selon Home Assistant (tranche robots 2, R3) : la variante décide, et ses scripts désignés.
+    pieces: states['vacuum.aspirateur'] ? { 'vacuum.aspirateur': piecesRobotDemo(states, entites) } : {},
+  };
+}
+
+/* `loggia/robots/lancer` (I3 A), et ses refus — ceux du vrai composant, leurs codes avec : un robot muet, déjà en route, des
+ * pièces sans segment (l'aspirateur ne saurait pas les viser), une zone qui n'est pas la sienne. Le robot part ; une tondeuse
+ * allume ses aires choisies et éteint les autres ; le carnet ouvre le passage avec ses pièces. `entites` : la description de la
+ * maison du magasin de la démo (passe bis du 20/10) — ses scripts par rôle, un rôle désigné dans la roue compte sur-le-champ. */
+function lancerRobotDemo(states, msg, toucher, entites = null) {
+  const rid = msg && msg.robot;
+  const st = rid && ROBOTS_DEMO.test(rid) ? states[rid] : null;
+  const refus = (code, message) => Promise.reject({ code, message });
+  if (!st) return refus('invalid_format', 'robot invalide');
+  // Les scripts maison (`vacuumScripts`, passe bis du 18/10, point A) : le serveur ne lance que les siens — celui du RÔLE demandé,
+  // désigné pour l'aspirateur et présent ; la maison par défaut n'en a pas.
+  const scripts = rid === 'vacuum.aspirateur' ? scriptsDemo(entites) : {};
+  const script = msg.script != null;
+  if (script && !(scripts[msg.role] === msg.script && states[msg.script])) {
+    return refus('script_inconnu', 'script inconnu de ce robot : ' + rid);
+  }
+  const domaine = rid.split('.')[0];
+  const phase = phaseRobotDemo(st.state);
+  let zones = Array.isArray(msg.zones) ? msg.zones.filter(z => z && z.id) : [];
+  let tout = !zones.length;
+  suivreRobots(states); // le passage qui finissait se range d'abord
+  if (script && (msg.role === 'pause' || msg.role === 'reprendre' || msg.role === 'retour_base' || msg.role === 'localiser')) {
+    // Un GESTE par script (`script.turn_on` chez le vrai) : la démo joue ce que le script ferait ; localiser ne change rien.
+    const cible = { pause: 'paused', reprendre: 'cleaning', retour_base: 'returning' }[msg.role];
+    if (cible) toucher(rid, cible);
+    return Promise.resolve(robotsDemo(states, entites));
+  }
+  if (phase === 'absent') return refus('robot_injoignable', 'robot injoignable : ' + rid);
+  if (phase === 'travail' || phase === 'pause' || phase === 'retour') return refus('deja_en_route', 'deja en route : ' + rid);
+  if (script) {
+    // Un script de DÉPART part : le passage dit son nom — les pièces choisies par leurs interrupteurs, ou tout le logement.
+    const nom = (states[msg.script].attributes || {}).friendly_name || msg.script;
+    toucher(rid, 'cleaning');
+    carnetRobots().en_cours[rid] = { debut: horlogeRobots() / 1000, zones: zones.map(z => ({ id: String(z.id), nom: String(z.nom || z.id) })),
+      tout: msg.role === 'nettoyer_tout', source: 'loggia', surface: null, libelle: nom };
+    return Promise.resolve(robotsDemo(states, entites));
+  }
+  // Un passage ne mêle pas les zones de Home Assistant et les segments (`lire_zones` du vrai) : `invalid_format`, comme lui.
+  if (zones.length && zones.some(z => z.zone) && !zones.every(z => z.zone)) return refus('invalid_format', 'un passage vise des zones de Home Assistant ou des segments, pas les deux');
+  // Sa décision du 20/10 : un script de départ désigné et présent garde la main sur les pièces — ni zones, ni segments d'ici.
+  const scriptDepart = (typeof scripts.pieces_selectionnees === 'string' && states[scripts.pieces_selectionnees]) || (typeof scripts.nettoyer_tout === 'string' && states[scripts.nettoyer_tout]);
+  if (zones.length && domaine === 'vacuum' && scriptDepart) return refus('scripts_gardent_la_main', 'vos scripts gardent la main pour les pieces : ' + rid);
+  if (domaine === 'lawn_mower') {
+    const aires = Object.keys(states).filter(id => AIRES_DEMO[id]);
+    if (zones.some(z => aires.indexOf(z.id) < 0)) return refus('zone_inconnue', 'zone inconnue : ' + rid);
+    const visees = zones.map(z => z.id);
+    if (visees.length) { toucher(visees, 'on'); toucher(aires.filter(a => visees.indexOf(a) < 0), 'off'); }
+    // Sans aire choisie, elle tond ses aires DÉJÀ allumées, sans rien basculer, que le carnet nomme — comme le serveur (passe bis du
+    // 18/10, point 2) ; toutes ses aires visées : « tout le jardin ». Aucune allumée : elle ne part pas (passe bis 2, point D).
+    if (!zones.length) zones = aires.filter(a => states[a].state === 'on').map(aireDemo);
+    if (aires.length && !zones.length) return refus('aucune_aire', 'aucune zone allumee : ' + rid);
+    tout = !aires.length || aires.every(a => zones.some(z => z.id === a));
+    toucher(rid, 'mowing');
+  } else if (zones.length && zones.every(z => z.zone)) {
+    /* Des ZONES de Home Assistant (tranche robots 2, R4) : ce que le vrai serveur vérifie AVANT d'appeler `vacuum.clean_area` — le
+     * bit, l'association, une zone sans pièce, une zone d'une autre carte. */
+    const pieces = piecesRobotDemo(states, entites);
+    if (!pieces.capable) return refus('pieces_inconnues', 'pieces inconnues : ' + rid);
+    if (!pieces.association) return refus('association_absente', 'association absente : ' + rid);
+    const connues = new Set(pieces.zones.map(z => z.zone));
+    const hors = zones.find(z => !connues.has(z.zone));
+    if (hors) return refus(pieces.autres_zones.indexOf(hors.zone) >= 0 ? 'autre_carte' : 'zone_sans_piece', 'zone sans piece : ' + hors.zone);
+    toucher(rid, 'cleaning');
+  } else if (zones.length) {
+    // Chez Ecovacs, la liste que le robot publie fait foi (Q2) : un segment qu'il ne publie plus — ou plus rien publié — ne part pas ;
+    // la liste périmée se dit AVANT des pièces inconnues (passe bis du 20/10, point 3), comme chez le vrai.
+    const publies = new Set(Object.values((st.attributes || {}).rooms || {}).flat().map(Number));
+    if (zones.some(z => !Array.isArray(z.segments) || z.segments.some(seg => !publies.has(Number(seg))))) return refus('pieces_perimees', 'liste des pieces perimee : ' + rid);
+    if (zones.some(z => !z.segments.length)) return refus('pieces_inconnues', 'pieces inconnues : ' + rid);
+    toucher(rid, 'cleaning');
+  } else {
+    toucher(rid, 'cleaning');
+  }
+  carnetRobots().en_cours[rid] = { debut: horlogeRobots() / 1000, zones: zones.map(z => ({ id: String(z.id), nom: String(z.nom || z.id) })), tout, source: 'loggia', surface: null };
+  return Promise.resolve(robotsDemo(states, entites));
+}
+
+/* Les services d'un robot : des services explicites, jamais `toggle`. `send_command` est le départ par pièces des intégrations
+ * connues (`spot_area`, `app_segment_clean`) ; `locate` ne change rien — il bipe, la carte le dit. Un appareil mort reste mort.
+ * `plusTard` : le retour à la base prend quatre secondes (un test les fait passer d'un coup). */
+function serviceRobotDemo(states, domaine, service, data, toucher, plusTard = (f, ms) => setTimeout(f, ms)) {
+  [].concat((data && data.entity_id) || []).forEach(x => {
+    const st = states[x];
+    if (!st || st.state === 'unavailable') return;
+    // `clean_V2` : la commande de ses scripts, que l'écran envoie en direct à un Ecovacs sans le bit (tranche robots 2, Q2 A) ;
+    // `clean_area` : le contrat commun de Home Assistant ≥ 2026.3 (R4).
+    const piece = service === 'send_command' && /spot_area|segment_clean|clean_V2/.test(String(data.command));
+    const cible = piece ? 'cleaning' : { start_mowing: 'mowing', start: 'cleaning', clean_area: 'cleaning', pause: 'paused', dock: 'returning', return_to_base: 'returning', stop: 'idle' }[service];
+    if (cible) {
+      toucher(x, cible);
+      // Un robot qui rentre met du temps : sans ce délai la démonstration sauterait l'étape que la fiche sert justement à montrer.
+      if (cible === 'returning') plusTard(() => { if (states[x] && states[x].state === 'returning') toucher(x, 'docked'); }, 4000);
+    } else if (service === 'set_fan_speed') toucher(x, null, { fan_speed: data.fan_speed });
+  });
+}
+
+/**
+ * La maison des robots, son horloge réglée, pour tests/demo_robots.test.mjs : les états (et la variante `pause`), l'index,
+ * `loggia/robots/etat`, le départ et les services — le carnet et le planning neufs à chaque appel ; `avancer(ms)` fait passer le
+ * temps ; le retour à la base n'y attend pas ses quatre secondes.
+ */
+export function maisonRobotsDemo({ quand = null, variante = null } = {}) {
+  let t = quand == null ? Date.now() : Number(quand);
+  horlogeRobots = () => t;
+  VARIANTE_ROBOTS = VARIANTES_ROBOTS.indexOf(variante) >= 0 ? variante : null;
+  CARNET_ROB_ = null;
+  ROB_CFG_ = null;
+  const states = etatsInitiaux();
+  varianteRobots(states);
+  const toucher = (id, etat, attrs) => {
+    if (Array.isArray(id)) { id.forEach(x => toucher(x, etat, attrs)); return; }
+    const cur = states[id]; if (!cur) return;
+    const quandIso = new Date(t).toISOString();
+    states[id] = { ...cur, state: etat != null ? String(etat) : cur.state, attributes: { ...cur.attributes, ...(attrs || {}) }, last_updated: quandIso, last_changed: quandIso };
+  };
+  return {
+    states,
+    avancer: (ms) => { t += Number(ms) || 0; },
+    index: () => indexDemo(states),
+    // `entites` : la description de la maison telle qu'un test la pose (un rôle désigné dans la roue), sinon celle de la variante.
+    etat: (entites = null) => robotsDemo(states, entites),
+    lancer: (msg, entites = null) => lancerRobotDemo(states, msg, toucher, entites),
+    // La roue (passe bis 2 du 20/10) : le rôle seul, fondu dans la description — celle qu'on donne, sinon celle de la variante.
+    designer: (role, script, entites = null) => designerScriptDemo(entites || configDemo().loggia_entities, role, script),
+    service: (domaine, service, data) => serviceRobotDemo(states, domaine, service, data, toucher, (f) => f()),
+    // La configuration de la maison, selon la variante (ses scripts et interrupteurs dans `scripts`).
+    config: () => configDemo(),
+  };
 }
 
 function robotsPatch(patch) {
@@ -1603,7 +3977,11 @@ function robotsPatch(patch) {
  *
  * VARIANTES, par l'URL (`?demo&distributeur=…`), lue par `installerDemo` :
  * - aucune : un Aqara sous Zigbee2MQTT en mode manuel, commandé par deux
- *   automatisations — l'installation de l'utilisateur ;
+ *   automatisations — l'installation de l'utilisateur. « Poids d'une portion »
+ *   de Paramètres désigne son number en grammes : c'est le POIDS (D1), et sa
+ *   taille de ration est une sœur en « portion » (1, de 1 à 10), comme
+ *   Zigbee2MQTT la publie — le pas à pas de « Servir maintenant » se voit depuis
+ *   le lien public, et la carte dit le vrai total (passe bis 2, 19/10) ;
  * - `loggia` : aucune automatisation de repas, le planning de Loggia (deux
  *   repas, modifiables en mémoire) ;
  * - `petlibro` : un Petlibro au programme lisible ET une automatisation
@@ -1611,12 +3989,32 @@ function robotsPatch(patch) {
  * - `rien` : le réservoir seul, aucune commande — « Loggia ne sait pas
  *   commander ce distributeur » ;
  * - `horsligne` : l'Aqara tombé (un Zigbee2MQTT hors ligne fait tomber toutes
- *   ses entités) — le liseré, et plus de « Distribuer ».
+ *   ses entités) — le liseré, et plus de « Distribuer » ;
+ * - `bas` (étape 2 du chantier IoT, 19/10) : la maison par défaut, le bac sous
+ *   15 % (240 g sur 2 000) — la phrase de la carte et la réserve en ambre ;
+ * - `probleme` : la maison par défaut, et l'Aqara qui signale une erreur — la
+ *   carte le dit, la popup a sa rangée « État du distributeur » ; l'erreur a
+ *   les deux formes (passe bis, 19/10) : avec `device_class`, et sans, comme
+ *   Zigbee2MQTT la publie (« Erreur moteur ») ;
+ * - `reservoir` (passe bis) : la maison par défaut, l'aide du bac muette — la
+ *   carte dit « Réservoir indisponible », la vis répond, « Distribuer » reste ;
+ * - `programme` (passe bis) : l'Aqara en mode programmé, sans automatisation
+ *   qui le commande — un programme présent mais illisible : « Programme de
+ *   l'appareil » sur la carte et dans la tuile ;
+ * - `z2m` (passe bis, D1) : un Aqara tel que Zigbee2MQTT le publie — la taille
+ *   de ration en « portion » (2), le poids d'une portion en g (6), le select
+ *   aux options « » et START, l'erreur sans classe —, et « Poids d'une
+ *   portion » de Paramètres désigne l'entité de POIDS : « Distribuer 12 g ».
  * Chaque variante est une maison cohérente, pas un état bricolé : la fiche y
- * montre ce qu'elle montrerait chez quelqu'un. */
-const VARIANTES_DIST = ['loggia', 'petlibro', 'rien', 'horsligne'];
+ * montre ce qu'elle montrerait chez quelqu'un. L'horloge est `horlogeDist`, que
+ * les tests règlent (`maisonDistributeurDemo(v, { quand })`). */
+const VARIANTES_DIST = ['loggia', 'petlibro', 'rien', 'horsligne', 'bas', 'probleme', 'reservoir', 'programme', 'z2m'];
 let VARIANTE_DIST = 'aqara';
-const estAqara = () => VARIANTE_DIST === 'aqara' || VARIANTE_DIST === 'loggia' || VARIANTE_DIST === 'horsligne';
+let horlogeDist = () => Date.now();
+// `bas`, `probleme` et `reservoir` sont la maison par défaut, à un détail près : mêmes repas, mêmes automatisations.
+const familleDist = () => (VARIANTE_DIST === 'bas' || VARIANTE_DIST === 'probleme' || VARIANTE_DIST === 'reservoir' ? 'aqara' : VARIANTE_DIST);
+// L'Aqara de la cuisine (`dist_cuisine`), sous toutes ses variantes ; `z2m` est un autre appareil, le Petlibro aussi.
+const estAqara = () => familleDist() === 'aqara' || VARIANTE_DIST === 'loggia' || VARIANTE_DIST === 'horsligne' || VARIANTE_DIST === 'programme';
 
 /* Les appareils et leurs entités : [plateforme, { entity_id: [clé, catégorie] }],
  * le patron des ROBOTS d'`indexDemo`. Les références de modèle se lisent
@@ -1629,10 +4027,18 @@ const estAqara = () => VARIANTE_DIST === 'aqara' || VARIANTE_DIST === 'loggia' |
  * son Historique (contradicteur, 05/10). */
 const DISTRIBUTEURS_DEMO = {
   dist_cuisine: ['mqtt', {
-    'select.distributeur_feed': [null, null], 'number.distributeur_portion': [null, 'config'],
+    'select.distributeur_feed': [null, null], 'number.distributeur_portion': [null, 'config'], 'number.distributeur_serving_size': [null, 'config'],
     'sensor.distributeur_weight_per_day': [null, null], 'select.distributeur_mode': [null, 'config'],
     'sensor.distributeur_feeding_source': [null, 'diagnostic'], 'binary_sensor.distributeur_error': [null, 'diagnostic'],
-    'switch.distributeur_child_lock': [null, 'config'],
+    'binary_sensor.distributeur_motor_error': [null, 'diagnostic'], 'switch.distributeur_child_lock': [null, 'config'],
+  }],
+  /* La mangeoire (`z2m`, passe bis de l'étape 2) : un Aqara tel que Zigbee2MQTT le publie — la taille de ration ET le poids d'une
+   * portion, le compteur en portions à côté de celui en grammes, l'erreur sans classe. Noms inventés. */
+  dist_mangeoire: ['mqtt', {
+    'select.mangeoire_feed': [null, null], 'number.mangeoire_serving_size': [null, 'config'], 'number.mangeoire_portion_weight': [null, 'config'],
+    'sensor.mangeoire_weight_per_day': [null, null], 'sensor.mangeoire_portions_per_day': [null, null], 'select.mangeoire_mode': [null, 'config'],
+    'sensor.mangeoire_feeding_source': [null, 'diagnostic'], 'binary_sensor.mangeoire_error': [null, 'diagnostic'],
+    'switch.mangeoire_child_lock': [null, 'config'],
   }],
   dist_petlibro: ['petlibro', {
     'button.granary_manual_feed': ['manual_feed', null], 'button.granary_enable_feeding_plan': ['enable_feeding_plan', null],
@@ -1646,9 +4052,10 @@ const DISTRIBUTEURS_DEMO = {
 };
 const APPAREIL_DIST = {
   dist_cuisine: { fabricant: 'Aqara', modele: 'ZNCWWSQ01LM' },
+  dist_mangeoire: { fabricant: 'Aqara', modele: 'ZNCWWSQ01LM' },
   dist_petlibro: { fabricant: 'PETLIBRO', modele: 'PLAF103' },
 };
-const appareilDist = () => (VARIANTE_DIST === 'rien' ? null : VARIANTE_DIST === 'petlibro' ? 'dist_petlibro' : 'dist_cuisine');
+const appareilDist = () => (VARIANTE_DIST === 'rien' ? null : VARIANTE_DIST === 'petlibro' ? 'dist_petlibro' : VARIANTE_DIST === 'z2m' ? 'dist_mangeoire' : 'dist_cuisine');
 
 /* Les automatisations de la maison qui touchent au distributeur, telles que
  * `automatisations.py` les résumerait. `commande` dit si une ACTION commande
@@ -1671,20 +4078,25 @@ const PASSAGES_DIST = {
   horsligne: [['07:30', 1, 'remote'], ['19:00', 1, 'remote']],
   loggia: [['08:00', 1, 'remote'], ['18:30', 1, 'remote']],
   petlibro: [['07:00', 2, 'schedule'], ['07:30', 1, 'remote'], ['19:00', 1, 'remote'], ['19:30', 2, 'schedule']],
+  // Le programme de l'appareil, illisible pour Loggia : un seul repas, le soir — à 18:20, rien n'est encore parti aujourd'hui.
+  programme: [['19:00', 1, 'schedule']],
+  // La mangeoire sert 2 portions par appui (sa taille de ration), de 6 g chacune.
+  z2m: [['07:30', 2, 'remote'], ['19:00', 2, 'remote']],
   rien: [],
 };
-// Les grammes d'une portion : la portion de l'Aqara (45 g), un pas de Petlibro.
-const G_PORTION_DIST = { aqara: 45, horsligne: 45, loggia: 45, petlibro: 12, rien: 0 };
+// Les grammes d'une portion : la portion de l'Aqara (45 g), un pas de Petlibro, le poids d'une portion de la mangeoire (6 g).
+const G_PORTION_DIST = { aqara: 45, horsligne: 45, loggia: 45, programme: 45, petlibro: 12, z2m: 6, rien: 0 };
 const JOUR_MS = 86400000;
-// Le Zigbee2MQTT de la variante `horsligne` est tombé il y a trois heures.
-const TOMBE_DIST = Date.now() - 3 * 3600000;
+// Le Zigbee2MQTT de la variante `horsligne` est tombé il y a trois heures — à l'ouverture de la maison, puis il n'en bouge plus.
+let TOMBE_DIST_ = null;
+const tombeDist = () => (TOMBE_DIST_ == null ? (TOMBE_DIST_ = horlogeDist() - 3 * 3600000) : TOMBE_DIST_);
 // Ce que la démo a distribué depuis son ouverture (« Distribuer », planning).
 const DIST_LIVE = [];
 
 /** `HH:MM` il y a `n` jours (0 = aujourd'hui), en millisecondes, heure locale. */
 const aHeureDist = (hhmm, n = 0) => {
   const [h, m] = String(hhmm).split(':').map(Number);
-  const d = new Date(); d.setDate(d.getDate() - n); d.setHours(h, m, 0, 0);
+  const d = new Date(horlogeDist()); d.setDate(d.getDate() - n); d.setHours(h, m, 0, 0);
   return d.getTime();
 };
 const minuitDist = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
@@ -1692,18 +4104,18 @@ const isoDist = (t) => new Date(t).toISOString();
 
 /** Les repas partis entre `t0` et `t1`, du plus ancien au plus récent : `{ t, portions, g, source }`. */
 function passagesDistributeur(t0, t1) {
-  const v = VARIANTE_DIST, g = G_PORTION_DIST[v] || 0, out = [];
-  const fin = v === 'horsligne' ? Math.min(t1, TOMBE_DIST) : t1;
+  const v = VARIANTE_DIST, g = G_PORTION_DIST[familleDist()] || 0, out = [];
+  const fin = v === 'horsligne' ? Math.min(t1, tombeDist()) : t1;
   const pousser = (t, portions, source) => { if (t >= t0 && t <= fin) out.push({ t, portions, g: portions * g, source }); };
-  for (let n = Math.ceil((Date.now() - t0) / JOUR_MS) + 1; n >= 0; n--) {
-    (PASSAGES_DIST[v] || []).forEach(([h, portions, source]) => {
+  for (let n = Math.ceil((horlogeDist() - t0) / JOUR_MS) + 1; n >= 0; n--) {
+    (PASSAGES_DIST[familleDist()] || []).forEach(([h, portions, source]) => {
       // Le repas de 18:30 d'avant-hier tombait pendant un redémarrage : RIEN,
       // noté « manqué » au journal (décision 4 de l'ADR 0155).
       if (v === 'loggia' && n === 2 && h === '18:30') return;
       pousser(aHeureDist(h, n), portions, source);
     });
     // Une ration donnée au bouton de l'appareil : « Manuel » dans l'historique.
-    if ((v === 'aqara' || v === 'horsligne') && n === 2) pousser(aHeureDist('16:10', 2), 1, 'manual');
+    if ((familleDist() === 'aqara' || v === 'horsligne' || v === 'z2m') && n === 2) pousser(aHeureDist('16:10', 2), 1, 'manual');
   }
   DIST_LIVE.forEach(e => { if (e.t >= t0 && e.t <= t1) out.push(e); });
   return out.sort((a, b) => a.t - b.t);
@@ -1711,7 +4123,7 @@ function passagesDistributeur(t0, t1) {
 
 /** Le dernier déclenchement d'une automatisation à heures fixes, en ISO. */
 const dernierDeclenchement = (heures) => {
-  const t = Math.max(...heures.map(h => (aHeureDist(h, 0) <= Date.now() ? aHeureDist(h, 0) : aHeureDist(h, 1))));
+  const t = Math.max(...heures.map(h => (aHeureDist(h, 0) <= horlogeDist() ? aHeureDist(h, 0) : aHeureDist(h, 1))));
   return isoDist(t);
 };
 
@@ -1720,7 +4132,7 @@ const dernierDeclenchement = (heures) => {
  * repas déjà partis aujourd'hui, et la source du dernier repas la sienne. */
 function etatsDistributeur() {
   const v = VARIANTE_DIST, out = {};
-  const maintenant = Date.now();
+  const maintenant = horlogeDist();
   const jour = passagesDistributeur(minuitDist(maintenant), maintenant);
   const gJour = jour.reduce((a, e) => a + e.g, 0);
   const tous = passagesDistributeur(maintenant - 3 * JOUR_MS, maintenant);
@@ -1732,14 +4144,38 @@ function etatsDistributeur() {
     Object.assign(out, {
       'select.distributeur_feed': s(e('STOP'), { friendly_name: 'Distribuer', options: ['STOP', 'START'] }),
       'number.distributeur_portion': s(e(45), { friendly_name: 'Portion du distributeur', min: 5, max: 100, step: 5, unit_of_measurement: 'g' }),
+      // La taille de ration, comme Zigbee2MQTT la publie (passe bis 2) : 1 portion par appui — le pas à pas de « Servir maintenant ».
+      'number.distributeur_serving_size': s(e(1), { friendly_name: 'Taille de ration', min: 1, max: 10, step: 1, unit_of_measurement: 'portion' }),
       'sensor.distributeur_weight_per_day': s(e(gJour), { friendly_name: 'Croquettes distribuées aujourd’hui', unit_of_measurement: 'g', state_class: 'total_increasing' }),
-      // Mode manuel : les créneaux de l'appareil ne partent pas, ce sont ses automatisations qui distribuent.
-      'select.distributeur_mode': s(e('manual'), { friendly_name: 'Mode de distribution', options: ['schedule', 'manual'] }),
+      // Mode manuel : les créneaux de l'appareil ne partent pas, ce sont ses automatisations qui distribuent ; `programme` : le mode
+      // programmé, dont Loggia ne lit pas la liste — présent, illisible.
+      'select.distributeur_mode': s(e(v === 'programme' ? 'schedule' : 'manual'), { friendly_name: 'Mode de distribution', options: ['schedule', 'manual'] }),
       'sensor.distributeur_feeding_source': s(e(dernier ? dernier.source : 'remote'), { friendly_name: 'Source du dernier repas' }),
-      'binary_sensor.distributeur_error': s(e('off'), { friendly_name: 'Erreur du distributeur', device_class: 'problem' }),
+      // `probleme` : l'Aqara signale une erreur — « Problème signalé » sur la carte, la rangée « État du distributeur » dans la popup —,
+      // sous ses deux formes : avec `device_class`, et sans, comme Zigbee2MQTT la publie (passe bis, point B).
+      'binary_sensor.distributeur_error': s(e(v === 'probleme' ? 'on' : 'off'), { friendly_name: 'Erreur du distributeur', device_class: 'problem' }),
+      'binary_sensor.distributeur_motor_error': s(e(v === 'probleme' ? 'on' : 'off'), { friendly_name: 'Erreur moteur' }),
       'switch.distributeur_child_lock': s(e('off'), { friendly_name: 'Verrouillage enfant' }),
     });
   }
+  // `z2m` : la mangeoire telle que Zigbee2MQTT la publie (passe bis, D1) — 2 portions de 6 g par appui, 24 g et 4 portions par jour.
+  if (v === 'z2m') {
+    Object.assign(out, {
+      'select.mangeoire_feed': s('unknown', { friendly_name: 'Distribuer', options: ['', 'START'] }),
+      'number.mangeoire_serving_size': s(2, { friendly_name: 'Taille de ration', min: 1, max: 10, step: 1, unit_of_measurement: 'portion' }),
+      'number.mangeoire_portion_weight': s(6, { friendly_name: 'Poids d’une portion', min: 1, max: 20, step: 1, unit_of_measurement: 'g' }),
+      'sensor.mangeoire_weight_per_day': s(gJour, { friendly_name: 'Croquettes distribuées aujourd’hui', unit_of_measurement: 'g', state_class: 'total_increasing' }),
+      'sensor.mangeoire_portions_per_day': s(jour.reduce((a, x) => a + x.portions, 0), { friendly_name: 'Portions distribuées aujourd’hui', state_class: 'total_increasing' }),
+      'select.mangeoire_mode': s('manual', { friendly_name: 'Mode de distribution', options: ['schedule', 'manual'] }),
+      'sensor.mangeoire_feeding_source': s(dernier ? dernier.source : 'remote', { friendly_name: 'Source du dernier repas' }),
+      'binary_sensor.mangeoire_error': s('off', { friendly_name: 'Erreur du distributeur' }),
+      'switch.mangeoire_child_lock': s('off', { friendly_name: 'Verrouillage enfant' }),
+    });
+  }
+  // `bas` : le bac sous 15 % — 240 g sur 2 000, le même helper que la maison par défaut.
+  if (v === 'bas') out['input_number.croquettes_reservoir'] = s(240, { friendly_name: 'Réservoir de croquettes', min: 0, max: 2000, step: 10, unit_of_measurement: 'g' });
+  // `reservoir` : l'aide du bac seule muette — la vis répond, « Distribuer » reste (passe bis, point G).
+  if (v === 'reservoir') out['input_number.croquettes_reservoir'] = s('unavailable', { friendly_name: 'Réservoir de croquettes', min: 0, max: 2000, step: 10, unit_of_measurement: 'g' });
   if (v === 'petlibro') {
     const prochain = ['07:00', '19:30'].map(h => aHeureDist(h, 0)).find(t => t > maintenant) || aHeureDist('07:00', -1);
     // L'état du jour de chaque créneau : servi s'il est passé, en attente sinon.
@@ -1769,13 +4205,13 @@ function etatsDistributeur() {
    * déclenchement, comme Home Assistant les publie. Le planning de Loggia
    * (variante `loggia`) n'existe que faute d'automatisation de repas ; sans
    * commande (variante `rien`), une automatisation n'aurait rien à commander. */
-  if (v !== 'loggia' && v !== 'rien') {
+  if (v !== 'loggia' && v !== 'rien' && v !== 'programme') {
     out['automation.croquettes_matin_et_soir'] = s('on', { friendly_name: 'Croquettes matin et soir', id: '1728000000001', last_triggered: dernierDeclenchement(['07:30', '19:00']) });
   }
-  if (v === 'aqara' || v === 'horsligne') {
+  if (familleDist() === 'aqara' || v === 'horsligne' || v === 'z2m') {
     out['automation.croquettes_du_midi'] = s('off', { friendly_name: 'Croquettes du midi', id: '1728000000002', last_triggered: null });
   }
-  out['automation.alerte_bac_presque_vide'] = s('on', { friendly_name: 'Alerte bac presque vide', id: '1728000000003', last_triggered: ilYaMin(2 * 1440 + 300) });
+  out['automation.alerte_bac_presque_vide'] = s('on', { friendly_name: 'Alerte bac presque vide', id: '1728000000003', last_triggered: isoDist(maintenant - (2 * 1440 + 300) * 60000) });
   /* Les dates, comme Home Assistant les tient (contradicteur, 05/10). `s()`
    * date tout de l'ouverture de la page : la fiche, qui lit le dernier repas
    * sur la dernière hausse du compteur (`dernierRepas`), aurait annoncé un
@@ -1786,10 +4222,13 @@ function etatsDistributeur() {
   const finJour = jour.length ? jour[jour.length - 1].t : minuitDist(maintenant);
   let depuis = null;
   for (let i = tous.length - 1; i >= 0 && tous[i].source === (dernier && dernier.source); i--) depuis = tous[i].t;
-  if (v === 'horsligne') Object.keys(DISTRIBUTEURS_DEMO.dist_cuisine[1]).forEach(id => dater(id, TOMBE_DIST));
+  if (v === 'horsligne') Object.keys(DISTRIBUTEURS_DEMO.dist_cuisine[1]).forEach(id => dater(id, tombeDist()));
   else {
-    ['sensor.distributeur_weight_per_day', 'sensor.granary_today_feeding_quantity_weight'].forEach(id => dater(id, finJour));
+    // L'erreur de `probleme` est levée depuis vingt-cinq minutes.
+    if (v === 'probleme') ['binary_sensor.distributeur_error', 'binary_sensor.distributeur_motor_error'].forEach(id => dater(id, maintenant - 25 * 60000));
+    ['sensor.distributeur_weight_per_day', 'sensor.granary_today_feeding_quantity_weight', 'sensor.mangeoire_weight_per_day', 'sensor.mangeoire_portions_per_day'].forEach(id => dater(id, finJour));
     dater('sensor.distributeur_feeding_source', depuis);
+    dater('sensor.mangeoire_feeding_source', depuis);
     dater('sensor.granary_last_feed_time', dernier ? dernier.t : null);
   }
   return out;
@@ -1808,6 +4247,10 @@ function feederDemo() {
   if (v === 'rien') return { haids: { reservoir: 'input_number.croquettes_reservoir' }, meals: [] };
   // Un Petlibro n'a pas de réservoir en grammes : on le désigne par son appareil.
   if (v === 'petlibro') return { appareil: 'dist_petlibro', haid: 'button.granary_manual_feed', haids: {}, meals: [] };
+  // La mangeoire (`z2m`) : « Poids d'une portion » désigne l'entité de POIDS, comme son libellé y invite (passe bis, D1).
+  if (v === 'z2m') return { haids: { reservoir: 'input_number.croquettes_reservoir', portionWeight: 'number.mangeoire_portion_weight', distribuees: 'sensor.mangeoire_weight_per_day' }, haid: 'select.mangeoire_feed', meals: [] };
+  // Le programme de l'appareil seul (`programme`) : ni automatisation, ni ancienne liste.
+  if (v === 'programme') return { haids, haid: 'select.distributeur_feed', meals: [] };
   // Sans automatisation de repas, il ne reste de l'ancienne liste que ce qui ne distribuait rien.
   if (v === 'loggia') return { haids, haid: 'select.distributeur_feed', meals: [matin] };
   return { haids, haid: 'select.distributeur_feed', meals: [matin, soir] };
@@ -1837,9 +4280,9 @@ function programmeDemo(states) {
     return { source: 'petlibro', connu: true, presente: repas.length > 0, active: !!st && st.state === 'on' && repas.some(r => r.actif),
       lisible: true, mode: null, note: null, repas };
   }
-  if (!estAqara()) return rien;
+  if (!estAqara() && VARIANTE_DIST !== 'z2m') return rien;
   // Aqara sous Zigbee2MQTT : le MODE dit tout, la liste de créneaux n'est pas publiée ici.
-  const mode = ((states['select.distributeur_mode'] || {}).state || '').toLowerCase();
+  const mode = ((states[VARIANTE_DIST === 'z2m' ? 'select.mangeoire_mode' : 'select.distributeur_mode'] || {}).state || '').toLowerCase();
   if (mode === 'manual') return { ...rien, source: 'aqara', connu: true, mode: 'manuel', note: 'mode_manuel' };
   if (mode === 'schedule') return { ...rien, source: 'aqara', connu: true, presente: true, mode: 'programme', note: 'tenu_par_appareil' };
   // Mode illisible (hors ligne) : on ne sait pas, on ne dit ni « manuel » ni « tenu par l'appareil ».
@@ -1863,18 +4306,18 @@ function resumeAutoDemo(states, id, indice) {
 function journalDistributeurDemo() {
   const v = VARIANTE_DIST;
   const ligne = (n, heure, quoi, detail, decale = 0) => ligneJournal({
-    module: 'distributeurs', regle: 'repas', quoi, cibles: quoi === 'distribuer' ? ['select.distributeur_feed'] : [], n: quoi === 'distribuer' ? 1 : 0,
+    module: 'distributeurs', regle: 'repas', quoi, cibles: quoi === 'distribuer' ? [v === 'z2m' ? 'select.mangeoire_feed' : 'select.distributeur_feed'] : [], n: quoi === 'distribuer' ? 1 : 0,
     motif: [['repas {heure}', { heure }]], detail, simule: false, ts: (aHeureDist(heure, n) + decale) / 1000 });
   let lignes = [];
   if (v === 'loggia') {
     for (let n = 0; n <= 3; n++) {
       ['08:00', '18:30'].forEach(h => {
-        if (aHeureDist(h, n) > Date.now()) return;
+        if (aHeureDist(h, n) > horlogeDist()) return;
         // Le redémarrage d'avant-hier : noté au démarrage du module, rien n'est parti.
         lignes.push(n === 2 && h === '18:30' ? ligne(n, h, 'retenu', 'manque au redemarrage', 12 * 60000) : ligne(n, h, 'distribuer', ''));
       });
     }
-  } else if (v === 'aqara' || v === 'horsligne') {
+  } else if (familleDist() === 'aqara' || v === 'horsligne' || v === 'z2m') {
     // L'histoire de l'installation : le planning de Loggia distribuait, puis
     // les automatisations sont arrivées — et le serveur a retenu son repas.
     lignes = [ligne(5, '07:30', 'distribuer', ''), ligne(5, '19:00', 'distribuer', ''), ligne(4, '07:30', 'retenu', 'autre source')];
@@ -1960,16 +4403,50 @@ function distributeursPatch(patch) {
 /* La maison d'une variante, bâtie comme `installerDemo` la bâtit — sans
  * document ni magasin. Exporté pour `tests/distributeur_finition.test.mjs`,
  * qui rejoue la carte sur la variante `horsligne` (05/10). */
-export function maisonDistributeurDemo(variante) {
+export function maisonDistributeurDemo(variante, { quand = null } = {}) {
   VARIANTE_DIST = VARIANTES_DIST.indexOf(variante) >= 0 ? variante : 'aqara';
+  const t = quand == null ? Date.now() : Number(quand);
+  horlogeDist = quand == null ? () => Date.now() : () => t;
+  TOMBE_DIST_ = null;
   DIS_CFG_ = null;
+  DIST_LIVE.length = 0;
   const states = etatsInitiaux();
+  const toucher = (id, etat) => {
+    const cur = states[id]; if (!cur) return;
+    const iso = isoDist(horlogeDist());
+    states[id] = { ...cur, state: etat != null ? String(etat) : cur.state, last_updated: iso, last_changed: iso };
+  };
   return {
     states, feeder: feederDemo(), index: indexDemo(states),
     etat: (feeder) => distributeursDemo(states, feeder === undefined ? feederDemo() : feeder),
     historique: (chemin) => historiqueDemo(chemin, states),
     patch: distributeursPatch,
+    // « Distribuer » : `plusTard(f, ms)` tient la minuterie de la page — un test la déroule quand il veut.
+    distribuer: (portions, plusTard) => servirDistributeurDemo(states, portions, toucher, plusTard),
   };
+}
+
+/* Une ration partie de l'écran (« Distribuer », le planning) : l'appareil met un instant à la servir (étape 2 du chantier IoT,
+ * § 10) — la fiche dit d'abord « Demande envoyée à 18:20 », puis le compteur du jour monte et elle dit « Servi à 18:20 · 45 g ».
+ * L'historique la garde (`DIST_LIVE`), et l'appareil dit d'où elle vient. `plusTard(f, ms)` : la minuterie de la page. */
+const DELAI_SERVI_DIST = 2500;
+function servirDistributeurDemo(states, portions, toucher, plusTard = (f, ms) => setTimeout(f, ms)) {
+  const petlibro = VARIANTE_DIST === 'petlibro', z2m = VARIANTE_DIST === 'z2m';
+  // Un appui sert la taille de ration de l'appareil : la mangeoire 2 portions de 6 g (ce que ses deux compteurs comptent), l'Aqara de
+  // la cuisine 1 portion de 45 g — réglée par le pas à pas, la ration servie suit (passe bis 2).
+  const taille = z2m ? 'number.mangeoire_serving_size' : 'number.distributeur_serving_size';
+  const parAppui = petlibro ? 1 : (Number((states[taille] || {}).state) || (z2m ? 2 : 1));
+  const g1 = petlibro ? G_PORTION_DIST.petlibro : z2m ? (Number((states['number.mangeoire_portion_weight'] || {}).state) || G_PORTION_DIST.z2m)
+    : (Number((states['number.distributeur_portion'] || {}).state) || G_PORTION_DIST.aqara);
+  plusTard(() => {
+    const e = { t: horlogeDist(), portions: portions * parAppui, g: portions * parAppui * g1, source: 'remote' };
+    DIST_LIVE.push(e);
+    const compteur = petlibro ? 'sensor.granary_today_feeding_quantity_weight' : z2m ? 'sensor.mangeoire_weight_per_day' : 'sensor.distributeur_weight_per_day';
+    if (states[compteur]) toucher(compteur, (Number(states[compteur].state) || 0) + e.g);
+    if (z2m && states['sensor.mangeoire_portions_per_day']) toucher('sensor.mangeoire_portions_per_day', (Number(states['sensor.mangeoire_portions_per_day'].state) || 0) + e.portions);
+    if (petlibro) toucher('sensor.granary_last_feed_time', isoDist(e.t));
+    else toucher(z2m ? 'sensor.mangeoire_feeding_source' : 'sensor.distributeur_feeding_source', 'remote');
+  }, DELAI_SERVI_DIST);
 }
 
 /* L'historique du distributeur (onglet Historique), au format de l'API REST :
@@ -1981,6 +4458,7 @@ export function maisonDistributeurDemo(variante) {
  * demande les attributs. Dix jours au plus : la purge par défaut de HA. */
 const SERIES_DIST = new Map([
   ['sensor.distributeur_weight_per_day', 'compteur'], ['sensor.granary_today_feeding_quantity_weight', 'compteur'],
+  ['sensor.mangeoire_weight_per_day', 'compteur'], ['sensor.mangeoire_portions_per_day', 'portions'], ['sensor.mangeoire_feeding_source', 'source'],
   ['sensor.distributeur_feeding_source', 'source'], ['sensor.granary_last_feed_time', 'dernier'],
   ['automation.croquettes_matin_et_soir', 'auto'], ['automation.croquettes_du_midi', 'auto'],
   ['input_number.croquettes_reservoir', 'reservoir'],
@@ -1990,12 +4468,12 @@ const REMPLI_DIST = () => aHeureDist('10:00', 6);
 function historiqueDistributeurDemo(ids, chemin, states) {
   const d = chemin.match(/history\/period\/([^?]+)/);
   const f = chemin.match(/end_time=([^&]+)/);
-  const t1 = Math.min(Date.now(), f ? Date.parse(decodeURIComponent(f[1])) || Date.now() : Date.now());
-  const t0 = Math.max(d ? Date.parse(decodeURIComponent(d[1])) || 0 : 0, Date.now() - 10 * JOUR_MS);
+  const t1 = Math.min(horlogeDist(), f ? Date.parse(decodeURIComponent(f[1])) || horlogeDist() : horlogeDist());
+  const t0 = Math.max(d ? Date.parse(decodeURIComponent(d[1])) || 0 : 0, horlogeDist() - 10 * JOUR_MS);
   const attributs = chemin.indexOf('no_attributes') < 0;
   const avant = passagesDistributeur(minuitDist(t0) - 3 * JOUR_MS, t0 - 1);
   const dedans = passagesDistributeur(t0, t1);
-  const tombe = VARIANTE_DIST === 'horsligne' && TOMBE_DIST >= t0 && TOMBE_DIST <= t1 ? TOMBE_DIST : null;
+  const tombe = VARIANTE_DIST === 'horsligne' && tombeDist() >= t0 && tombeDist() <= t1 ? tombeDist() : null;
   const listes = [];
   ids.forEach(id => {
     const genre = SERIES_DIST.get(id);
@@ -2004,14 +4482,16 @@ function historiqueDistributeurDemo(ids, chemin, states) {
     if (!genre) { const [l] = historiqueDemo('history/period/' + isoDist(t0) + '?filter_entity_id=' + encodeURIComponent(id), states); if (l && l.length) { l[0].entity_id = id; listes.push(l); } return; }
     const pts = [];
     const point = (state, t, extra) => pts.push({ state: String(state), last_changed: isoDist(t), ...(extra || {}) });
-    if (genre === 'compteur') {
-      let v = avant.filter(e => e.t >= minuitDist(t0)).reduce((a, e) => a + e.g, 0);
+    if (genre === 'compteur' || genre === 'portions') {
+      // Le compteur du jour en grammes, ou en portions (la mangeoire compte les deux).
+      const qte = (e) => (genre === 'portions' ? e.portions : e.g);
+      let v = avant.filter(e => e.t >= minuitDist(t0)).reduce((a, e) => a + qte(e), 0);
       point(v, t0);
       let jour = minuitDist(t0);
       dedans.forEach(e => {
         // La remise à zéro de minuit, avant le premier repas du jour.
         if (minuitDist(e.t) !== jour) { jour = minuitDist(e.t); if (v !== 0) { v = 0; point(0, jour); } }
-        v += e.g; point(v, e.t);
+        v += qte(e); point(v, e.t);
       });
       // Minuit d'aujourd'hui, avant le premier repas — sauf sur un appareil déjà tombé.
       if (!tombe && minuitDist(t1) !== jour && v !== 0 && minuitDist(t1) >= t0) point(0, minuitDist(t1));
@@ -2039,7 +4519,7 @@ function historiqueDistributeurDemo(ids, chemin, states) {
       // Une automatisation coupée ne s'est pas déclenchée dans la fenêtre.
       const a = AUTOS_DIST[id], st = states[id];
       const fois = [];
-      if (st.state === 'on') for (let n = Math.ceil((Date.now() - t0) / JOUR_MS) + 2; n >= 0; n--) a.heures.forEach(h => { const t = aHeureDist(h, n); if (t <= t1) fois.push(t); });
+      if (st.state === 'on') for (let n = Math.ceil((horlogeDist() - t0) / JOUR_MS) + 2; n >= 0; n--) a.heures.forEach(h => { const t = aHeureDist(h, n); if (t <= t1) fois.push(t); });
       fois.sort((x, y) => x - y);
       const avantT0 = fois.filter(t => t0 > t).pop();
       const lt = (t) => (attributs ? { attributes: { last_triggered: t != null ? isoDist(t) : null } } : null);
@@ -2053,6 +4533,1049 @@ function historiqueDistributeurDemo(ids, chemin, states) {
     listes.push(pts);
   });
   return listes;
+}
+
+/* ── Le planning de chauffe (chantier Chauffage, plan 2, tâche 6) ─────────────
+ *
+ * Le faux moteur de `custom_components/loggia/chauffage.py` : ses quatre
+ * commandes — `loggia/chauffage/etat`, `/main`, `/maison`, `/config` —, en
+ * mémoire, avec la forme EXACTE de leurs réponses (`async_etat`, `_etat_un`,
+ * `_journee`). Il décide avec le calcul de l'écran
+ * (`src/chauffage.js`), le jumeau de `chauffage_calcul.py` : la démo décide
+ * comme le serveur. Ce que le serveur sait des appareils
+ * (`chauffage_familles.py`) et de la configuration (`chauffage_config.py`) est
+ * porté ici, au plus court.
+ *
+ * La maison : deux modules fil pilote, la Chambre (la semaine type) et le
+ * Bureau (une semaine à lui), et un poêle dans le salon dont le planning n'a
+ * jamais été allumé. Les deux thermostats de la démo y figurent aussi, jamais
+ * configurés : pour le serveur, un `climate` hors registre qui reçoit une
+ * consigne est un chauffage. La clé d'un chauffage est son `entity_id` — la
+ * démo n'a pas d'identifiant de registre, comme un `climate` en YAML.
+ *
+ * L'heure est celle du navigateur : la maison de la démo n'a pas d'autre
+ * fuseau. Les instants s'écrivent en ISO, à cette heure-là, AVEC leur décalage.
+ *
+ * Il ne dort pas : sans minuteur, la démo RATTRAPE à chaque lecture de l'état
+ * — le sondage de l'écran — ce que le serveur aurait fait à l'heure : un
+ * changement du planning, la fin d'une reprise en main ou des vacances.
+ * L'ordre décidé passe dans l'état de l'appareil (l'option du module, la
+ * consigne du poêle), sauf en « Observer sans agir » : on voit la carte
+ * bouger. Un changement d'état qui ne vient pas de lui est un geste fait
+ * ailleurs — une reprise en main jusqu'au prochain changement, comme sur le
+ * serveur. La fenêtre de la chambre est ouverte (`etatsInitiaux`) et la règle
+ * des fenêtres la surveille : son radiateur est coupé, le fait passe par
+ * l'interrupteur que la règle coche, ramené au `select` de son module.
+ *
+ * Il refuse comme le serveur ce qu'un geste ordinaire peut faire refuser —
+ * semaine vide, heure en double, douze changements par jour, températures
+ * dans le désordre, date de retour passée —, avec le même code et le même
+ * message : la clé après les deux-points, que l'écran lit (`src/refus.js`).
+ * Un compte ordinaire (`?compte=ordinaire`) n'écrit pas la configuration
+ * (`unauthorized`, comme `require_admin`) et ne touche pas à l'Été
+ * (`not_admin`) ; la reprise en main et la maison, si. */
+
+/* Les ordres d'un module NodOn, tels que Zigbee2MQTT les publie. */
+const OPTIONS_FIL_PILOTE = ['comfort', 'eco', 'frost_protection', 'off', 'comfort_-1', 'comfort_-2'];
+/* Les deux modules : leur appareil, leurs trois entités, la puissance du
+ * radiateur qu'ils commandent, et un décalage pour que les deux ne chauffent
+ * pas aux mêmes minutes. */
+const MODULES_CHA = [
+  { appareil: 'radiateur_chambre', select: 'select.radiateur_chambre_fil_pilote', interrupteur: 'switch.radiateur_chambre',
+    puissance: 'sensor.radiateur_chambre_puissance', watts: 1500, decalage: 3 },
+  { appareil: 'radiateur_bureau', select: 'select.radiateur_bureau_fil_pilote', interrupteur: 'switch.radiateur_bureau',
+    puissance: 'sensor.radiateur_bureau_puissance', watts: 1000, decalage: 7 },
+];
+const POELE_CHA = 'climate.poele';
+// La climatisation réversible du bureau : un thermostat pour le serveur, rangée dans sa pièce par le registre.
+const CLIM_CHA = 'climate.climatisation';
+
+/** L'appareil d'une entité du chauffage, pour l'index ; null pour les autres. */
+function appareilChauffageDemo(id) {
+  if (id === POELE_CHA) return 'poele';
+  const m = MODULES_CHA.find(x => x.select === id || x.interrupteur === id || x.puissance === id);
+  return m ? m.appareil : null;
+}
+/** La famille que le composant reconnaît et pose dans l'index (`chauffage_familles.famille`). */
+const familleChauffageDemo = (id) => (id === POELE_CHA || id === CLIM_CHA ? 'thermostat' : MODULES_CHA.some(x => x.select === id) ? 'fil_pilote' : null);
+const estModuleChauffageDemo = (id) => MODULES_CHA.some(x => x.select === id);
+/** Un service sur un chauffage ou sur l'interrupteur d'un module : le moteur doit le lire. */
+const toucheChauffageDemo = (id) => [].concat(id || []).some(x => typeof x === 'string'
+  && (x.indexOf('climate.') === 0 || MODULES_CHA.some(m => m.interrupteur === x)));
+
+/* Ce que `chauffage_familles.py` sait des appareils : les graphies d'un ordre
+ * fil pilote, le repli d'un mode qu'un chauffage ne comprend pas, les
+ * consignes par défaut, les états muets. Et les mots du journal, ceux que
+ * `chauffage.py` écrit (MOTS, MOTS_MAISON) : l'écran les traduit par leur clé. */
+const GRAPHIES_CHA = {
+  confort: ['comfort', 'confort', 'komfort'], confort_1: ['comfort_1', 'confort_1', 'komfort_1', 'comfort_minus_1'],
+  confort_2: ['comfort_2', 'confort_2', 'komfort_2', 'comfort_minus_2'], eco: ['eco', 'economy'],
+  hors_gel: ['frost_protection', 'frost', 'hors_gel', 'horsgel', 'antigel', 'anti_freeze', 'antifreeze'], arret: ['off', 'arret', 'stop'],
+};
+const REPLIS_CHA = { confort: [], confort_1: ['confort'], confort_2: ['confort_1', 'confort'], eco: ['hors_gel'], hors_gel: ['eco'], arret: ['hors_gel', 'eco'] };
+const TEMPERATURES_CHA = { confort: 20, eco: 17, hors_gel: 7 };
+const MUETS_CHA = ['unavailable', 'unknown', 'none', ''];
+const MOTS_CHA = { confort: 'Confort', confort_1: 'Confort −1', confort_2: 'Confort −2', eco: 'Éco', hors_gel: 'Hors-gel', arret: 'Arrêt' };
+const MOTS_MAISON_CHA = { planning: 'Planning', absence: 'Absence', vacances: 'Vacances', ete: 'Été' };
+const MAX_CHANGEMENTS_CHA = 12;
+const MAX_CHAUFFAGES_CHA = 32;
+// La part de chaque heure où un radiateur chauffe, en dixièmes, selon son mode.
+const PART_CHAUFFE_CHA = { confort: 6, confort_1: 5, confort_2: 4, eco: 2, hors_gel: 0, arret: 0 };
+
+const muetCha = (etat) => MUETS_CHA.includes(String(etat == null ? '' : etat).toLowerCase());
+const estObjetCha = (x) => !!x && typeof x === 'object' && !Array.isArray(x);
+// Une COPIE à chaque réponse, comme un vrai serveur ; et ce qui part par le fil est du JSON.
+const copieCha = (x) => JSON.parse(JSON.stringify(x));
+// Une clé venue de l'écran ne lit jamais le prototype d'un objet.
+const possedeCha = (objet, cle) => Object.prototype.hasOwnProperty.call(objet, cle);
+
+/** Le mode d'une option de `select`, quelle que soit sa graphie (`mode_option`). */
+function modeOptionCha(option) {
+  // Les noms collés de ZHA se découpent (« FrostProtection », « ComfortMinus1 »), comme `canonique`.
+  const c = String(option == null ? '' : option).normalize('NFKD').replace(/[^\x00-\x7f]/g, '')
+    .replace(/([a-z])(?=[A-Z])|([A-Za-z])(?=\d)/g, '$1$2_').trim().toLowerCase()
+    .replace(/[\s_-]+/g, '_').replace(/^_+|_+$/g, '');
+  return Object.keys(GRAPHIES_CHA).find(m => GRAPHIES_CHA[m].includes(c)) || null;
+}
+/** {mode: option}, avec l'option telle que le module l'écrit (`options_du_module`). */
+function optionsDuModuleCha(options) {
+  const sortie = {};
+  (Array.isArray(options) ? options : []).forEach(o => {
+    const m = modeOptionCha(o);
+    if (m && !possedeCha(sortie, m)) sortie[m] = String(o);
+  });
+  return sortie;
+}
+/** Les modes qu'un chauffage comprend, dans l'ordre de MODES (`modes_permis`). */
+function modesPermisCha(famille, attributs) {
+  const a = attributs || {};
+  if (famille === 'fil_pilote') {
+    const connus = optionsDuModuleCha(a.options);
+    return MODES.filter(m => possedeCha(connus, m));
+  }
+  if (famille === 'thermostat') {
+    const arret = Array.isArray(a.hvac_modes) && a.hvac_modes.includes('off');
+    return MODES.filter(m => m !== 'arret' || arret);
+  }
+  return [];
+}
+const modeApplicableCha = (mode, permis) => (permis.includes(mode) ? mode
+  : ((possedeCha(REPLIS_CHA, mode) ? REPLIS_CHA[mode] : []).find(r => permis.includes(r)) || null));
+/** La consigne d'un mode en °C ; Confort −1 et −2 jamais sous l'Éco (`temperature_du_mode`). */
+function temperatureDuModeCha(mode, temperatures) {
+  const t = { ...TEMPERATURES_CHA };
+  if (estObjetCha(temperatures)) Object.keys(t).forEach(k => { if (typeof temperatures[k] === 'number') t[k] = temperatures[k]; });
+  if (possedeCha(t, mode)) return t[mode];
+  if (mode === 'confort_1') return Math.max(t.confort - 1, t.eco);
+  if (mode === 'confort_2') return Math.max(t.confort - 2, t.eco);
+  return null;
+}
+const pasCha = (a) => (typeof a.target_temp_step === 'number' && a.target_temp_step > 0 ? a.target_temp_step : 0.5);
+/** La consigne telle qu'elle part : au pas de l'appareil, dans ses bornes (la démo est en °C). */
+function consigneCha(celsius, attributs) {
+  const a = attributs || {};
+  const pas = pasCha(a);
+  let v = Math.floor(celsius / pas + 0.5) * pas;
+  if (typeof a.min_temp === 'number') v = Math.max(v, a.min_temp);
+  if (typeof a.max_temp === 'number') v = Math.min(v, a.max_temp);
+  return Math.round(v * 1e4) / 1e4;
+}
+const modeChauffeCha = (a) => ['heat', 'heat_cool', 'auto'].find(m => Array.isArray((a || {}).hvac_modes) && a.hvac_modes.includes(m)) || null;
+/** Ce que l'appareil dit faire (`lire_appareil`) : sa signature change quand le MODE change. */
+/* Une pompe à chaleur qui refroidit (chauffage_familles.refroidit) : le planning n'y touche pas. */
+const FROID_CHA = ['cool', 'dry', 'fan_only'];
+function refroiditCha(famille, etat) {
+  return (famille === 'thermostat' || famille === 'vtherm') && FROID_CHA.includes(String(etat));
+}
+function lireAppareilCha(famille, etat, attributs) {
+  const s = String(etat == null ? '' : etat);
+  if (muetCha(s)) return { mode: null, temperature: null, signature: null };
+  if (famille === 'fil_pilote') return { mode: modeOptionCha(s), temperature: null, signature: [s] };
+  const t = typeof (attributs || {}).temperature === 'number' ? attributs.temperature : null;
+  return { mode: s === 'off' ? 'arret' : null, temperature: s === 'off' || t === null ? null : Math.round(t * 10) / 10, signature: [s, t] };
+}
+/** L'appareil est-il DÉJÀ dans `cible` ? On ne commande que s'il diffère (`deja`). */
+function dejaCha(famille, cible, etat, attributs, temperatures) {
+  const s = String(etat == null ? '' : etat);
+  const a = attributs || {};
+  if (muetCha(s)) return false;
+  if (famille === 'fil_pilote') return cible.mode != null && modeOptionCha(s) === cible.mode;
+  if (cible.mode === 'arret') return s === 'off';
+  if (s === 'off') return false;
+  const chauffe = modeChauffeCha(a);
+  if (chauffe && s !== chauffe) return false;
+  const t = typeof cible.temperature === 'number' ? cible.temperature : temperatureDuModeCha(cible.mode, temperatures);
+  if (t === null || typeof a.temperature !== 'number') return false;
+  return Math.abs(a.temperature - consigneCha(t, a)) <= Math.max(pasCha(a), 0.1) / 2;
+}
+
+/* L'heure de la maison : [jour (0 = lundi), minute]. */
+const muraleCha = (d) => [(d.getDay() + 6) % 7, d.getHours() * 60 + d.getMinutes()];
+const deuxCha = (x) => String(x).padStart(2, '0');
+const heureCha = (d) => deuxCha(d.getHours()) + ':' + deuxCha(d.getMinutes());
+/** Un instant en ISO, à l'heure de la maison et AVEC son décalage : « 2026-10-12T13:30:00+02:00 ». */
+function isoCha(d) {
+  const decalage = -d.getTimezoneOffset();
+  const abs = Math.abs(decalage);
+  const signe = '+-'.charAt(decalage < 0 ? 1 : 0);
+  return d.getFullYear() + '-' + deuxCha(d.getMonth() + 1) + '-' + deuxCha(d.getDate()) + 'T' + heureCha(d) + ':' + deuxCha(d.getSeconds())
+    + signe + deuxCha(Math.floor(abs / 60)) + ':' + deuxCha(abs % 60);
+}
+/* Un instant ISO AVEC son décalage, ou null (`lire_instant`) : une heure sans
+ * fuseau ne dit pas quand elle tombe. */
+const INSTANT_CHA = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/;
+function lireInstantCha(texte) {
+  if (typeof texte !== 'string' || !INSTANT_CHA.test(texte.trim())) return null;
+  const t = Date.parse(texte.trim().replace(' ', 'T'));
+  return Number.isFinite(t) ? new Date(t) : null;
+}
+/** Le premier instant APRÈS `apres` où l'horloge de la maison marque (jour, minute) (`instant_de`). */
+function instantCha(jour, minute, apres) {
+  const [j, m] = muraleCha(apres);
+  let ecart = (jour - j + 7) % 7;
+  if (ecart === 0 && minute <= m) ecart = 7;
+  const t = new Date(apres.getFullYear(), apres.getMonth(), apres.getDate() + ecart, Math.floor(minute / 60), minute % 60, 0, 0);
+  return t > apres ? t : new Date(t.getFullYear(), t.getMonth(), t.getDate() + 7, Math.floor(minute / 60), minute % 60, 0, 0);
+}
+
+/* La semaine type du premier allumage (`SEMAINE_OUVREE`, `SEMAINE_REPOS`). Le
+ * bureau a la sienne : occupé l'après-midi en semaine, hors gel la nuit et
+ * tout le week-end — deux jours sans changement, qui reprennent la veille —,
+ * et Confort −1 en fin de journée, pour que les six ordres du module aient de
+ * quoi se montrer. */
+const SEMAINE_OUVREE_CHA = [['06:30', 'confort'], ['08:30', 'eco'], ['18:00', 'confort'], ['22:30', 'eco']];
+const SEMAINE_REPOS_CHA = [['08:00', 'confort'], ['22:30', 'eco']];
+const SEMAINE_BUREAU_CHA = [['07:30', 'eco'], ['13:30', 'confort'], ['17:30', 'confort_1'], ['19:00', 'eco'], ['22:00', 'hors_gel']];
+const semaineCha = (ouvree, repos) => Object.fromEntries(JOURS.map(j => [j, (j === 'sam' || j === 'dim' ? repos : ouvree).map(([h, mode]) => ({ h, mode }))]));
+/* Une semaine dans les modes d'un chauffage (`adapter_aux_modes`,
+ * `semaine_adaptee` — chauffage_config.py) : un mode qu'il ne comprend pas
+ * devient le plus proche qu'il comprend SANS être plus chaud, à défaut le plus
+ * froid qu'il comprend ; les heures ne bougent pas. Sans aucun mode compris,
+ * telle quelle. L'écran en a le jumeau (`semaineAdaptee`, chauffageplanning.js),
+ * que tests/demo_chauffage.test.mjs tient égal à celui-ci. Un jumeau porté
+ * ici, au plus court, comme les autres : importer celui de la fiche ferait
+ * partager à la démo, chargée à côté du boot, le module de la fiche et ce
+ * qu'il tire — l'écran, i18n, l'état —, et la construction en sortait 33 Ko
+ * du boot dans un morceau à part (mesuré le 12/10, tâche 10 bis B). */
+function semaineAdapteeCha(semaine, permis) {
+  const compris = FROID.filter(m => Array.isArray(permis) && permis.includes(m));
+  const adapte = (mode) => {
+    if (!compris.length || compris.includes(mode)) return mode;
+    const rang = FROID.indexOf(mode);
+    const plusFroids = rang < 0 ? [] : compris.filter(m => FROID.indexOf(m) < rang);
+    return plusFroids.length ? plusFroids[plusFroids.length - 1] : compris[0];
+  };
+  return Object.fromEntries(JOURS.map(j => [j, (Array.isArray(semaine[j]) ? semaine[j] : []).map(c => ({ h: c.h, mode: adapte(c.mode) }))]));
+}
+/** Un chauffage qu'on vient de reconnaître (`chauffage_defaut`) : planning éteint, la semaine type dans SES
+ * modes (`permis`, ceux que le moteur lui reconnaît : l'Éco d'un module qui n'en a pas devient son Hors-gel,
+ * jamais plus chaud), les températures par défaut, la fenêtre qui coupe. Sans `permis`, la semaine type telle quelle. */
+const chauffageDefautCha = (entite, famille, permis = null) => ({ entite, famille, planning: false,
+  semaine: semaineAdapteeCha(semaineCha(SEMAINE_OUVREE_CHA, SEMAINE_REPOS_CHA), permis), temperatures: { ...TEMPERATURES_CHA }, fenetre: 'arret' });
+/* Un radiateur que Home Assistant ne connaît plus — renommé ou retiré — et
+ * dont la configuration reste : « En ce moment » le dit à un administrateur,
+ * sa fiche s'ouvre sur son Planning, où « Supprimer son planning » le retire
+ * (relecture des tâches 11 et 12 du plan 2). Aucune entité de la démo ne porte
+ * ce nom. */
+const GRENIER_CHA = 'select.radiateur_grenier_fil_pilote';
+/* La configuration de départ : les deux modules au planning, la maison en
+ * Planning, l'observation coupée. Le poêle n'y est pas : jamais configuré. Le
+ * radiateur du grenier, introuvable, garde la sienne, planning éteint. */
+function configDepartCha() {
+  const chambre = { ...chauffageDefautCha(MODULES_CHA[0].select, 'fil_pilote'), planning: true };
+  const bureau = { ...chauffageDefautCha(MODULES_CHA[1].select, 'fil_pilote'), planning: true, semaine: semaineCha(SEMAINE_BUREAU_CHA, []) };
+  const grenier = chauffageDefautCha(GRENIER_CHA, 'fil_pilote');
+  return { version: 1, chauffages: { [chambre.entite]: chambre, [bureau.entite]: bureau, [grenier.entite]: grenier },
+    maison: { mode: 'planning', vacances_fin: null, absence: 'eco', vacances: 'hors_gel' }, simulation: { actif: false } };
+}
+
+/* La mémoire du moteur : sa configuration, les reprises en main, son journal,
+ * et ce qu'il a vu de chaque appareil (`vus`, pour reconnaître un geste fait
+ * ailleurs) ou déjà noté en observation (`notes`, une ligne par décision). Une
+ * maison par onglet ; `demarrerChauffageDemo` la rebâtit. */
+let CHA_ = null;
+const chauffageCha = (cle) => (possedeCha(CHA_.cfg.chauffages, cle) ? CHA_.cfg.chauffages[cle] : null);
+const repriseCha = (cle) => (possedeCha(CHA_.reprises, cle) ? CHA_.reprises[cle] : null);
+
+/* Ce que Home Assistant n'ENREGISTRE pas d'un `climate`
+ * (`_entity_component_unrecorded_attributes`) : ses listes, ses bornes, son
+ * pas. L'historique de la démo ne les a pas plus que le vrai — la fiche les
+ * reprend de l'état vivant (relecture de la tâche 10, prise à la tâche 10 bis
+ * D). */
+const NON_ENREGISTRES_CLIMAT_CHA = ['hvac_modes', 'fan_modes', 'swing_modes', 'swing_horizontal_modes', 'min_temp', 'max_temp', 'min_humidity', 'max_humidity',
+  'target_temp_step', 'preset_modes'];
+const enregistresCha = (a) => Object.fromEntries(Object.entries(a || {}).filter(([k]) => !NON_ENREGISTRES_CLIMAT_CHA.includes(k)));
+
+/* L'historique d'un chauffage, sur la fenêtre demandée (`historiqueDemo`) :
+ * ce que sa fiche dessine (tâches 10 et 10 bis D) — les modes qu'un module a
+ * appliqués, et pour un thermostat sa pièce (`current_temperature`, la
+ * sinusoïde des pièces de la démo, `temperatureDemo`), sa consigne et ce
+ * qu'il fait (`hvac_action`, lu sur la pièce comme après un service,
+ * `actionClimatDemo`). Un module suit son planning (la semaine du moteur,
+ * sinon la semaine type) ; un thermostat, une journée réglée à la main :
+ * trois degrés de moins la nuit, un matin plus chaud que la pièce — il
+ * chauffe chaque jour, le poêle d'un salon déjà chaud aussi (relecture de la
+ * partie D) —, coupé à 13 h, une soirée plus chaude — que sa fiche dit « à la
+ * main ». Une entrée par quart d'heure, aux quarts de
+ * l'horloge ; la dernière est l'état du moment, celui que montre la carte —
+ * sans ce que Home Assistant n'enregistre pas. */
+function historiqueChauffageDemo(id, t0, t1, states) {
+  const st = states[id];
+  if (!st || !(t1 > t0)) return [];
+  const module = estModuleChauffageDemo(id);
+  const options = optionsDuModuleCha(OPTIONS_FIL_PILOTE);
+  const c = module && CHA_ ? chauffageCha(id) : null;
+  const semaine = c ? c.semaine : semaineCha(SEMAINE_OUVREE_CHA, SEMAINE_REPOS_CHA);
+  const a = st.attributes || {};
+  const enregistres = enregistresCha(a);
+  const consigne = typeof a.temperature === 'number' ? a.temperature : TEMPERATURES_CHA.confort;
+  const piece = typeof a.current_temperature === 'number' ? a.current_temperature : null;
+  const pts = [];
+  for (const t of instantsDemo(Math.floor(t0 / PAS_TEMPERATURE_DEMO) * PAS_TEMPERATURE_DEMO, t1)) {
+    const quand = new Date(Math.max(t, t0)).toISOString();
+    const dernier = t === t1;   // maintenant : l'état du moment
+    if (module) {
+      const [jour, minute] = muraleCha(new Date(t));
+      const enCours = changementEnCours(semaine, jour, minute);
+      const option = dernier ? String(st.state) : enCours ? options[enCours[2]] : null;
+      if (option && (!pts.length || pts[pts.length - 1].state !== option)) pts.push({ state: option, last_changed: quand });
+    } else if (dernier) {
+      pts.push({ state: String(st.state), attributes: enregistres, last_changed: quand, last_updated: quand });
+    } else {
+      const h = new Date(t).getHours();
+      const etat = h === 13 ? 'off' : st.state === 'off' ? 'heat' : String(st.state);
+      // Le matin (6 h – 9 h), ce qui chauffe vise deux degrés au-dessus de la pièce : il chauffe chaque jour.
+      const matin = etat === 'heat' && h >= 6 && h < 9 && piece !== null;
+      const temperature = matin ? piece + 2 : h < 6 ? consigne - 3 : h >= 18 && h < 20 ? consigne + 1.5 : consigne;
+      const mesure = piece === null ? null : temperatureDemo(piece, t, t1);
+      pts.push({ state: etat, attributes: { ...enregistres, temperature, current_temperature: mesure, hvac_action: actionClimatDemo(etat, { current_temperature: mesure, temperature }) },
+        last_changed: quand, last_updated: quand });
+    }
+  }
+  if (pts.length) pts[0].entity_id = id;
+  return [pts];
+}
+
+/** Une ligne au journal du module, comme `regles.noter` l'écrit (`ligneJournal`). */
+function noterCha(ctx, champs) {
+  if (ctx.silencieux) return;
+  CHA_.journal.unshift(ligneJournal({ ts: ctx.horloge().getTime() / 1000, module: 'chauffage', regle: '', quoi: '', cibles: [], n: 0,
+    motif: '', detail: '', simule: false, ...champs }));
+  CHA_.journal.length = Math.min(CHA_.journal.length, 100);
+}
+/** Les lignes du module pour le journal de la maison (`reglesDemo`), une fois la maison montée. */
+const journalChauffageDemo = () => (CHA_ ? copieCha(CHA_.journal) : []);
+/** « jusqu’à 21:00 », ou « jusqu’à relance » (`_motif_fin`). */
+const motifFinCha = (fin) => (fin ? [['jusqu’à {heure}', { heure: heureCha(fin) }]] : 'jusqu’à relance');
+// « %g » de Python : 21.5, 20, 19.25.
+const nombreCha = (t) => String(Math.round(t * 1e4) / 1e4);
+
+/* Les chauffages que la maison a (`candidats`) : ceux que l'index range avec
+ * une famille, puis chaque `climate` hors registre qui reçoit une consigne. */
+function candidatsCha(states) {
+  const index = indexDemo(states);
+  const connus = new Map();
+  const auRegistre = new Set();
+  index.entities.forEach(e => {
+    if (!/^(climate|select)\./.test(e.id)) return;
+    auRegistre.add(e.id);
+    if (e.famille) connus.set(e.id, { entite: e.id, famille: e.famille, permis: modesPermisCha(e.famille, (states[e.id] || {}).attributes), appareil: e.device || null });
+  });
+  Object.keys(states).filter(id => id.indexOf('climate.') === 0 && !auRegistre.has(id)).sort().forEach(id => {
+    const f = (states[id].attributes || {}).supported_features;
+    if (typeof f === 'number' && !(f & 1)) return;
+    // Une clim qui ne fait que du froid n'est pas un chauffage (chauffage_familles.famille, audit du 19/10).
+    const modes = (states[id].attributes || {}).hvac_modes;
+    if (Array.isArray(modes) && modes.length && !['heat', 'heat_cool', 'auto'].some(m => modes.includes(m))) return;
+    connus.set(id, { entite: id, famille: 'thermostat', permis: modesPermisCha('thermostat', states[id].attributes), appareil: null });
+  });
+  return { connus, index };
+}
+/** Les interrupteurs d'un module : jamais commandés, lus pour dire « module coupé ». */
+const interrupteursCha = (index, appareil) => (appareil
+  ? index.entities.filter(e => e.device === appareil && e.id.indexOf('switch.') === 0 && !e.category).map(e => e.id).sort() : []);
+/** Le `select` du module dont `haid` est l'interrupteur (`select_du_module`), sinon null. */
+function selectDuModuleCha(haid, connus, index) {
+  if (typeof haid !== 'string' || haid.indexOf('switch.') !== 0) return null;
+  const e = index.entities.find(x => x.id === haid);
+  const info = e && e.device ? [...connus.values()].find(i => i.famille === 'fil_pilote' && i.appareil === e.device) : null;
+  return info ? info.entite : null;
+}
+/** Un ouvrant ouvert, comme pour couper (`ouvrants_ouverts`, fenetres.py) : `on`, `open`, `opening` ; un capteur muet ne l'est pas. */
+const ouvertCha = (st) => !!st && ['on', 'open', 'opening'].includes(String(st.state).toLowerCase());
+/* Les FAITS de la règle des fenêtres (`async_fenetre`) : {chauffage: pièces
+ * dont un ouvrant est ouvert}, lus sur la configuration de la règle de la démo.
+ * L'interrupteur d'un module y est ramené à son `select`, comme sur le serveur. */
+function fenetresCha(states, connus, index) {
+  const faits = new Map();
+  const cfg = FEN_CFG();
+  if (!cfg.actif) return faits;
+  Object.keys(cfg.pieces || {}).forEach(nom => {
+    const piece = cfg.pieces[nom];
+    if (!estObjetCha(piece) || !piece.actif) return;
+    const ouverte = (piece.ouvrants || []).some(id => ouvertCha(states[id]));
+    if (!ouverte) return;
+    (piece.chauffages || []).forEach(haid => {
+      const vrai = selectDuModuleCha(haid, connus, index) || haid;
+      const pieces = faits.get(vrai) || [];
+      if (!pieces.includes(nom)) pieces.push(nom);
+      faits.set(vrai, pieces);
+    });
+  });
+  return faits;
+}
+/* Les chauffages que la règle des fenêtres de la démo SURVEILLE, et ce qu'elle
+ * voit MAINTENANT (`veille`, fenetres.py) : {chauffage: un ouvrant de l'une de
+ * ses pièces suivies est-il ouvert ?}, en un seul passage sur les pièces —
+ * celles qui sont actives et ont des ouvrants, l'interrupteur d'un module
+ * ramené à son `select`. Ailleurs, l'écran ne dit rien de la fenêtre
+ * (relecture de la partie B). */
+function surveillesCha(states, connus, index) {
+  const suivis = new Map();
+  const cfg = FEN_CFG();
+  if (!cfg.actif) return suivis;
+  Object.keys(cfg.pieces || {}).forEach(nom => {
+    const piece = cfg.pieces[nom];
+    if (!estObjetCha(piece) || !piece.actif || !(piece.ouvrants || []).length) return;
+    const ouverte = (piece.ouvrants || []).some(id => ouvertCha(states[id]));
+    (piece.chauffages || []).forEach(haid => {
+      const vrai = selectDuModuleCha(haid, connus, index) || haid;
+      suivis.set(vrai, suivis.get(vrai) === true || ouverte);
+    });
+  });
+  return suivis;
+}
+const entiteCha = (cle, c, states) => (c && states[c.entite] ? c.entite : states[cle] ? cle : null);
+
+/** `mode_voulu`, nourri de vrais instants : la reprise et sa fin ramenées à l'heure murale (`_voulu`). */
+function vouluCha(cle, c, entite, quand, faits) {
+  const [jour, minute] = muraleCha(quand);
+  const r = repriseCha(cle);
+  let reprise = null;
+  if (r) {
+    const fin = lireInstantCha(r.fin);
+    reprise = { mode: r.mode, reste: fin ? (fin - quand) / 60000 : null, fin: fin ? muraleCha(fin) : null };
+  }
+  return modeVoulu(c.semaine, CHA_.cfg.maison, reprise, (faits.get(entite) || []).length > 0, jour, minute, c.fenetre);
+}
+/** Le prochain changement du planning ; sans changement, 24 h (`_fin_par_defaut`). */
+function finParDefautCha(c, quand) {
+  const [jour, minute] = muraleCha(quand);
+  const suivant = prochainChangement(c.semaine, jour, minute);
+  return suivant ? instantCha(suivant[0], suivant[1], quand) : new Date(quand.getTime() + 24 * 3600000);
+}
+/** Une reprise en main, telle qu'elle se garde (`nouvelle_reprise`). */
+const nouvelleRepriseCha = (mode, temperature, fin, quand, par) => ({ mode: MODES.includes(mode) ? mode : null,
+  temperature: typeof temperature === 'number' ? temperature : null, fin: fin ? isoCha(fin) : null, depuis: isoCha(quand),
+  par: typeof par === 'string' ? par : null });
+/** Pourquoi : « planning 06:30 », la maison, les pièces dont la fenêtre est ouverte (`_motif`). */
+function motifCha(c, entite, voulu, quand, faits) {
+  if (voulu.source === 'planning') {
+    const [jour, minute] = muraleCha(quand);
+    const enCours = changementEnCours(c.semaine, jour, minute);
+    return enCours ? [['planning {heure}', { heure: ecrireHeure(enCours[1]) }]] : 'planning';
+  }
+  if (voulu.source === 'maison') return MOTS_MAISON_CHA[CHA_.cfg.maison.mode] || '';
+  if (voulu.source === 'fenetre') return (faits.get(entite) || []).slice().sort().join(', ') || 'fenêtre ouverte';
+  return '';
+}
+
+/* La question, pour chaque chauffage au planning allumé (`async_evaluer`) : la
+ * fin des vacances, puis chacun ; et la puissance des modules, qui suit leur
+ * mode. `raison` : « redemarrage » au montage de la maison, sans un mot au
+ * journal (`ctx.silencieux`) — les appareils y sont déjà. */
+function evaluerCha(ctx, raison) {
+  const quand = ctx.horloge();
+  finDesVacancesCha(ctx, quand);
+  const { connus, index } = candidatsCha(ctx.states);
+  const faits = fenetresCha(ctx.states, connus, index);
+  Object.keys(CHA_.cfg.chauffages).forEach(cle => {
+    const c = CHA_.cfg.chauffages[cle];
+    if (c.planning) evaluerUnCha(ctx, cle, c, quand, faits, raison);
+    else delete CHA_.vus[cle];
+  });
+  puissancesCha(ctx, quand);
+}
+function finDesVacancesCha(ctx, quand) {
+  const maison = CHA_.cfg.maison;
+  const fin = lireInstantCha(maison.vacances_fin);
+  if (maison.mode !== 'vacances' || !fin || fin > quand) return;
+  Object.assign(maison, { mode: 'planning', vacances_fin: null });
+  noterCha(ctx, { regle: 'maison', quoi: MOTS_MAISON_CHA.planning, n: 0, motif: 'fin des vacances' });
+}
+/* Un chauffage (`_evaluer_un`) : la reprise échue tombe ; un appareil qui
+ * n'est plus tel que le moteur l'a laissé a subi un geste — une reprise en
+ * main ; puis la décision, et l'ordre s'il diffère de ce que fait l'appareil. */
+function evaluerUnCha(ctx, cle, c, quand, faits, raison) {
+  const entite = entiteCha(cle, c, ctx.states);
+  if (!entite) return;
+  const r0 = repriseCha(cle);
+  if (r0 && r0.fin != null) {
+    const fin = lireInstantCha(r0.fin);
+    if (!fin || fin <= quand) {
+      delete CHA_.reprises[cle];
+      noterCha(ctx, { regle: 'main', quoi: 'reprendre le planning', cibles: [entite], n: 0, motif: 'fin de la reprise en main' });
+    }
+  }
+  let st = ctx.states[entite];
+  if (!st || muetCha(st.state)) { delete CHA_.vus[cle]; return; }   // injoignable : son retour n'est pas un geste
+  if (refroiditCha(c.famille, st.state)) {
+    // Elle refroidit : ni geste, ni ordre, comme sur le serveur (audit du 19/10). En repartir, si.
+    CHA_.vus[cle] = JSON.stringify(lireAppareilCha(c.famille, st.state, st.attributes).signature);
+    return;
+  }
+  const lu = lireAppareilCha(c.famille, st.state, st.attributes);
+  const vu = JSON.stringify(lu.signature);
+  if (CHA_.vus[cle] != null && CHA_.vus[cle] !== vu) {
+    const fin = finParDefautCha(c, quand);
+    CHA_.reprises[cle] = nouvelleRepriseCha(lu.mode, lu.temperature, fin, quand, (ctx.utilisateur || {}).id);
+    noterCha(ctx, { regle: 'main', quoi: 'reprise en main', cibles: [entite], n: 0, motif: motifFinCha(fin), detail: 'geste fait ailleurs' });
+  }
+  CHA_.vus[cle] = vu;
+  const voulu = vouluCha(cle, c, entite, quand, faits);
+  const r = repriseCha(cle);
+  let cible;
+  if (voulu.source === 'main' && r) cible = { mode: r.mode, temperature: r.temperature };
+  else {
+    cible = { mode: modeApplicableCha(voulu.mode, modesPermisCha(c.famille, st.attributes)), temperature: null };
+    // La fenêtre ne fait que baisser, une consigne posée à la main comprise.
+    if (voulu.source === 'fenetre' && c.famille === 'thermostat' && r && r.mode == null && typeof r.temperature === 'number') {
+      const froid = temperatureDuModeCha(voulu.mode, c.temperatures);
+      if (froid !== null) cible.temperature = Math.min(froid, r.temperature);
+    }
+  }
+  if (cible.mode == null && cible.temperature == null) return;
+  if (dejaCha(c.famille, cible, st.state, st.attributes, c.temperatures)) { delete CHA_.notes[cle]; return; }
+  const quoi = possedeCha(MOTS_CHA, cible.mode) ? MOTS_CHA[cible.mode] : [['{t} °C', { t: nombreCha(cible.temperature) }]];
+  const motif = voulu.source === 'main' ? motifFinCha(lireInstantCha((r || {}).fin)) : motifCha(c, entite, voulu, quand, faits);
+  const detail = raison === 'redemarrage' ? 'rattrapage au redémarrage' : '';
+  if (CHA_.cfg.simulation.actif) {
+    // « Observer sans agir » (ADR 0004) : le calcul et le journal, aucun ordre — une ligne par décision.
+    const note = JSON.stringify(['simule', voulu.source, cible.mode, cible.temperature]);
+    if (CHA_.notes[cle] !== note) {
+      CHA_.notes[cle] = note;
+      noterCha(ctx, { regle: voulu.source, quoi, cibles: [entite], n: 1, motif, detail, simule: true });
+    }
+    return;
+  }
+  appliquerCha(ctx, c.famille, entite, cible, st, c.temperatures);
+  st = ctx.states[entite];
+  CHA_.vus[cle] = JSON.stringify(lireAppareilCha(c.famille, st.state, st.attributes).signature);
+  delete CHA_.notes[cle];
+  noterCha(ctx, { regle: voulu.source, quoi, cibles: [entite], n: 1, motif, detail });
+}
+/* L'ordre, dans l'état de l'appareil (`commande`) : l'option du module, telle
+ * qu'il l'écrit ; pour un thermostat, le mode qui chauffe et la consigne du
+ * mode — ou l'arrêt. */
+function appliquerCha(ctx, famille, entite, cible, st, temperatures) {
+  const a = st.attributes || {};
+  if (famille === 'fil_pilote') {
+    const options = optionsDuModuleCha(a.options);
+    if (possedeCha(options, cible.mode)) ctx.ecrire(entite, options[cible.mode]);
+    return;
+  }
+  if (cible.mode === 'arret') { ctx.ecrire(entite, 'off', { hvac_action: 'off' }); return; }
+  const t = typeof cible.temperature === 'number' ? cible.temperature : temperatureDuModeCha(cible.mode, temperatures);
+  if (t === null) return;
+  const consigne = consigneCha(t, a);
+  const piece = typeof a.current_temperature === 'number' ? a.current_temperature : null;
+  ctx.ecrire(entite, modeChauffeCha(a) || st.state, { temperature: consigne, hvac_action: piece !== null && piece >= consigne ? 'idle' : 'heating' });
+}
+/* La puissance d'un module suit son mode : il chauffe une partie de chaque
+ * heure (`PART_CHAUFFE_CHA`, par tranches de six minutes), jamais en Arrêt ni
+ * en Hors-gel, jamais module coupé. La carte y lit « Chauffe » (plus de 10 W). */
+function puissancesCha(ctx, quand) {
+  const tranche = Math.floor((quand.getHours() * 60 + quand.getMinutes()) / 6);
+  MODULES_CHA.forEach(m => {
+    const select = ctx.states[m.select];
+    const capteur = ctx.states[m.puissance];
+    if (!select || !capteur) return;
+    const coupe = ctx.states[m.interrupteur] && ctx.states[m.interrupteur].state === 'off';
+    const part = coupe ? 0 : (PART_CHAUFFE_CHA[modeOptionCha(select.state)] || 0);
+    const watts = (tranche * 3 + m.decalage) % 10 < part ? m.watts : 0;
+    if (Number(capteur.state) !== watts) ctx.ecrire(m.puissance, watts);
+  });
+}
+
+/* ── Ce que l'écran lit : `loggia/chauffage/etat` (`async_etat`) ── */
+function etatCha(ctx) {
+  evaluerCha(ctx, 'heure');
+  const quand = ctx.horloge();
+  const { connus, index } = candidatsCha(ctx.states);
+  const faits = fenetresCha(ctx.states, connus, index);
+  const suivis = surveillesCha(ctx.states, connus, index);
+  // Les chauffages configurés d'abord, puis ceux que la maison a.
+  const cles = [...new Set([...Object.keys(CHA_.cfg.chauffages), ...connus.keys()])];
+  return copieCha({
+    chauffages: cles.map(cle => etatUnCha(ctx, cle, chauffageCha(cle), connus.get(cle) || null, quand, faits, index, suivis)),
+    maison: CHA_.cfg.maison, simulation: !!CHA_.cfg.simulation.actif,
+    // La règle des fenêtres de la démo en « Observer sans agir » : son drapeau, que l'interrupteur des Règles pose.
+    fenetres_observe: !!FEN_CFG().simulation,
+    maintenant: isoCha(quand), minute: muraleCha(quand),
+    // Un planning tourne-t-il ? Sur toute la configuration, comme le serveur (avant ses droits).
+    plannings_allumes: Object.values(CHA_.cfg.chauffages).some(c => !!c.planning),
+    demarrage: true, journal: CHA_.journal.slice(0, 40),
+  });
+}
+/** Le nom d'un appareil au registre (`_nom_appareil`), ou null : pas d'appareil, ou inconnu. */
+function nomAppareilCha(index, appareil) {
+  const d = appareil ? (index.devices || []).find(x => x.id === appareil) : null;
+  return d && typeof d.name === 'string' && d.name ? d.name : null;
+}
+/* Un chauffage, pour l'écran (`_etat_un`) : sa famille, ses modes, ce qu'il
+ * doit faire et pourquoi, jusqu'à quand, ce qui l'en empêche ; au planning
+ * allumé, sa journée (la fiche y lit ce que « Reprendre le planning »
+ * remettra) ; un fil pilote, les options de son module. Relecture de la partie B, comme le serveur : `mode`
+ * reste le mode VOULU, `applique` celui que le moteur envoie
+ * (`mode_applicable`), `fenetre_mode` celui qu'une ouverture appliquerait
+ * (null pour « ne rien faire ») ; `fenetre_ouverte` vrai sur un fait
+ * d'ouverture, faux là où la règle veille (`suivis`), null ailleurs ;
+ * `ouvrant_ouvert` l'ouvrant MAINTENANT, là où elle veille (relecture du
+ * 12/10). Sans état — introuvable —, ni mode appliqué ni mode d'ouverture :
+ * ce ne serait qu'une supposition, et le moteur ne lui envoie rien. */
+function etatUnCha(ctx, cle, c, info, quand, faits, index, suivis = null) {
+  const entite = info ? info.entite : entiteCha(cle, c, ctx.states);
+  const st = entite ? ctx.states[entite] : null;
+  const sansEtat = !st;
+  const attrs = (st && st.attributes) || {};
+  const famille = (info && info.famille) || (c && c.famille) || null;
+  const avertissements = [];
+  if (!entite) avertissements.push('introuvable');
+  else if (!st || muetCha(st.state)) avertissements.push('injoignable');
+  if (info && info.famille === 'fil_pilote'
+    && interrupteursCha(index, info.appareil).some(id => ctx.states[id] && String(ctx.states[id].state).toLowerCase() === 'off')) {
+    avertissements.push('module_coupe');
+  }
+  if (st && refroiditCha(famille, st.state)) avertissements.push('refroidit');
+  /* Un module fil pilote se nomme comme son APPAREIL, dans la langue de la démo
+   * (sous Zigbee2MQTT, son `select` porte en plus le nom de l'exposition) ; un
+   * thermostat garde son nom affiché. */
+  const nomAppareil = famille === 'fil_pilote' && info ? nomAppareilCha(index, info.appareil) : null;
+  const reglageFenetre = c ? c.fenetre : 'arret';
+  // Les modes tels que le moteur les compte quand il commande : ceux de la famille configurée, sinon reconnue.
+  const permis = c && c.famille ? modesPermisCha(c.famille, attrs) : famille ? modesPermisCha(famille, attrs) : [];
+  const ouverte = !entite ? null : (faits.get(entite) || []).length > 0 ? true : suivis && suivis.has(entite) ? false : null;
+  const sortie = {
+    // Introuvable, son nom est l'entité que retient sa configuration, comme sur le serveur.
+    cle, entite, nom: nomAppareil || attrs.friendly_name || entite || (c && c.entite) || null, famille, planning: !!(c && c.planning),
+    modes: famille ? modesPermisCha(famille, attrs) : [], mode: null, applique: null, source: null, fin: null, puis: null, reprise: null,
+    fenetre: reglageFenetre, fenetre_ouverte: ouverte,
+    ouvrant_ouvert: entite && suivis && suivis.has(entite) ? suivis.get(entite) : null,
+    fenetre_mode: sansEtat || reglageFenetre === 'rien' ? null : modeApplicableCha(reglageFenetre, permis),
+    semaine: c ? c.semaine : null, temperatures: c ? c.temperatures : null, avertissements,
+    options: famille === 'fil_pilote' && entite ? optionsDuModuleCha(attrs.options) : null, jour: null,
+  };
+  if (!c) return sortie;
+  const voulu = vouluCha(cle, c, entite, quand, faits);
+  const r = repriseCha(cle);
+  let fin = null;
+  if (voulu.source === 'main') fin = (r && r.fin) || null;
+  else if (voulu.fin) fin = isoCha(instantCha(voulu.fin[0], voulu.fin[1], quand));
+  Object.assign(sortie, { mode: voulu.mode, applique: sansEtat ? null : modeApplicableCha(voulu.mode, permis), source: voulu.source, fin, puis: voulu.puis,
+    reprise: r ? { ...r } : null });
+  if (c.planning) sortie.jour = journeeCha(c.semaine, muraleCha(quand)[0]);
+  return sortie;
+}
+/* Les bandes d'aujourd'hui, contiguës de 0 à 1440 en minutes murales
+ * (`_journee`) : bornes à minuit et à chaque changement du jour, le mode de la
+ * maison appliqué, sans reprise ni fenêtre ; deux voisines du même mode n'en
+ * font qu'une ; une semaine sans aucun changement : []. */
+function journeeCha(semaine, jour) {
+  if (!changementEnCours(semaine, 0, 0)) return [];
+  const liste = Array.isArray(semaine[JOURS[jour]]) ? semaine[JOURS[jour]] : [];
+  const bornes = new Set([0]);
+  liste.forEach(ch => { const mi = estObjetCha(ch) ? lireHeure(ch.h) : null; if (mi !== null) bornes.add(mi); });
+  const debuts = [...bornes].sort((x, y) => x - y);
+  const bandes = [];
+  debuts.forEach((de, i) => {
+    const a = i + 1 < debuts.length ? debuts[i + 1] : 1440;
+    const mode = modeVoulu(semaine, CHA_.cfg.maison, null, false, jour, de).mode;
+    if (bandes.length && bandes[bandes.length - 1].mode === mode) bandes[bandes.length - 1].a = a;
+    else bandes.push({ de, a, mode });
+  });
+  return bandes;
+}
+
+/* ── Les commandes : `main`, `maison`, `config` (websocket_api.py) ── */
+const invalideCha = (texte) => refusDemo('invalid_format', texte);
+function mainCha(msg, ctx) {
+  // Le schéma de la commande, comme voluptuous : `mode` parmi les six, `fin` parmi cinq.
+  if (typeof msg.chauffage !== 'string' || !msg.chauffage || msg.chauffage.length > 128) throw invalideCha("expected str for dictionary value @ data['chauffage']");
+  if ('mode' in msg && !MODES.includes(msg.mode)) throw invalideCha("value must be one of " + JSON.stringify(MODES) + " for dictionary value @ data['mode']");
+  const temperature = 'temperature' in msg ? Number(msg.temperature) : null;
+  if ('temperature' in msg && (msg.temperature === null || msg.temperature === '' || !Number.isFinite(temperature))) {
+    throw invalideCha("expected float for dictionary value @ data['temperature']");
+  }
+  const fin = 'fin' in msg ? msg.fin : 'prochain';
+  if (!['prochain', 'relance', 60, 120, 240].includes(fin)) throw invalideCha("no valid value for dictionary value @ data['fin']");
+  const reprendre = 'reprendre' in msg ? msg.reprendre : false;
+  if (typeof reprendre !== 'boolean') throw invalideCha("expected bool for dictionary value @ data['reprendre']");
+  if (reprendre) rendreAuPlanningCha(msg.chauffage, ctx);
+  else reprendreLaMainCha(msg.chauffage, 'mode' in msg ? msg.mode : null, temperature, fin, ctx);
+}
+/* Une reprise en main demandée à Loggia (`async_reprendre_la_main`) : un mode,
+ * ou une consigne en °C pour un thermostat, jusqu'au prochain changement — ou
+ * 1 h, 2 h, 4 h, ou jusqu'à relance. */
+function reprendreLaMainCha(cle, mode, temperature, fin, ctx) {
+  const c = chauffageCha(cle);
+  if (!c) throw refusDemo('chauffage_inconnu', 'chauffage inconnu : ' + cle);
+  if (!c.planning) throw refusDemo('chauffage_sans_planning', 'planning eteint pour ce chauffage : ' + cle);
+  const entite = entiteCha(cle, c, ctx.states);
+  if (!entite) throw refusDemo('chauffage_inconnu', 'chauffage introuvable : ' + cle);
+  if (mode == null && temperature == null) throw invalideCha('un mode ou une temperature');
+  if (mode != null && !modesPermisCha(c.famille, ctx.states[entite].attributes).includes(mode)) {
+    throw refusDemo('chauffage_mode_inconnu', 'mode ' + mode + ' inconnu de ce chauffage : mode');
+  }
+  if (temperature != null) {
+    if (c.famille !== 'thermostat') throw invalideCha('temperature : pour un thermostat seulement');
+    if (temperature < 5 || temperature > 30) throw refusDemo('chauffage_temperature_hors_bornes', 'temperature hors bornes (5 a 30 °C) : temperature');
+  }
+  const quand = ctx.horloge();
+  const instant = fin === 'prochain' ? finParDefautCha(c, quand) : fin === 'relance' ? null : new Date(quand.getTime() + fin * 60000);
+  CHA_.reprises[cle] = nouvelleRepriseCha(mode, temperature, instant, quand, (ctx.utilisateur || {}).id);
+  noterCha(ctx, { regle: 'main', quoi: 'reprise en main', cibles: [entite], n: 0, motif: motifFinCha(instant), detail: (ctx.utilisateur || {}).name || '' });
+  evaluerCha(ctx, 'main');
+}
+/** « Reprendre le planning » (`async_rendre_au_planning`) : la reprise tombe, le planning s'applique. */
+function rendreAuPlanningCha(cle, ctx) {
+  const c = chauffageCha(cle);
+  if (!c) throw refusDemo('chauffage_inconnu', 'chauffage inconnu : ' + cle);
+  const entite = entiteCha(cle, c, ctx.states);
+  if (repriseCha(cle)) {
+    delete CHA_.reprises[cle];
+    noterCha(ctx, { regle: 'main', quoi: 'reprendre le planning', cibles: entite ? [entite] : [], n: 0 });
+  }
+  evaluerCha(ctx, 'main');
+}
+/* Un jour seul (« 2026-10-20 », le champ date de l'écran) : minuit de ce jour
+ * à l'heure de la maison — celle du navigateur, la démo n'a pas d'autre
+ * fuseau (`_minuit_de_la_maison`). null pour un jour qui n'existe pas. */
+const DATE_SEULE_CHA = /^\d{4}-\d{2}-\d{2}$/;
+function minuitCha(jour) {
+  const [an, mois, j] = jour.split('-').map(Number);
+  const d = new Date(an, mois - 1, j);
+  return d.getFullYear() === an && d.getMonth() === mois - 1 && d.getDate() === j ? d : null;
+}
+/* Le mode de la maison (`async_maison`, `poser_maison`) : Planning, Absence,
+ * Vacances pour tous ; l'Été, y entrer comme en sortir, aux administrateurs.
+ * Seules les Vacances ont une fin, à venir : le jour du retour, seul — minuit
+ * de la maison —, ou un instant avec son décalage. */
+function maisonCha(msg, ctx) {
+  if (!possedeCha(MOTS_MAISON_CHA, msg.mode)) throw invalideCha("value must be one of ['absence', 'ete', 'planning', 'vacances'] for dictionary value @ data['mode']");
+  if ('fin' in msg && msg.fin !== null && typeof msg.fin !== 'string') throw invalideCha("expected str for dictionary value @ data['fin']");
+  const maison = CHA_.cfg.maison;
+  if (!(ctx.utilisateur && ctx.utilisateur.is_admin) && (msg.mode === 'ete' || maison.mode === 'ete')) {
+    throw refusDemo('not_admin', 'reglages reserves aux administrateurs Home Assistant : maison.ete');
+  }
+  const quand = ctx.horloge();
+  const fin = 'fin' in msg ? msg.fin : null;
+  let instant = null;
+  if (fin !== null) {
+    instant = DATE_SEULE_CHA.test(fin.trim()) ? minuitCha(fin.trim()) : lireInstantCha(fin);
+    if (msg.mode !== 'vacances' || !instant || instant <= quand) throw refusDemo('chauffage_date_illisible', 'date illisible ou passee : maison.vacances_fin');
+  }
+  Object.assign(maison, { mode: msg.mode, vacances_fin: instant ? isoCha(instant) : null });
+  noterCha(ctx, { regle: 'maison', quoi: MOTS_MAISON_CHA[msg.mode], n: 0, detail: (ctx.utilisateur || {}).name || '' });
+  evaluerCha(ctx, 'maison');
+}
+/* `loggia/chauffage/config` (`async_enregistrer`) : administrateurs seulement,
+ * d'un seul tenant — un refus n'écrit rien. Du simulé au réel, ou l'inverse,
+ * on repart de ce que la maison EST ; un planning coupé emporte sa reprise. */
+function configCha(msg, ctx) {
+  if (!estObjetCha(msg.patch)) throw invalideCha("expected dict for dictionary value @ data['patch']");
+  if (!(ctx.utilisateur && ctx.utilisateur.is_admin)) throw refusDemo('unauthorized', 'Unauthorized');
+  const simulait = !!CHA_.cfg.simulation.actif;
+  const cfg = copieCha(CHA_.cfg);
+  poserPatchCha(cfg, msg.patch, candidatsCha(ctx.states).connus);
+  CHA_.cfg = cfg;
+  if (!!cfg.simulation.actif !== simulait) Object.assign(CHA_, { reprises: {}, notes: {}, vus: {} });
+  Object.keys(CHA_.reprises).forEach(cle => { const c = chauffageCha(cle); if (!c || !c.planning) delete CHA_.reprises[cle]; });
+  evaluerCha(ctx, 'reglage');
+  return copieCha(CHA_.cfg);
+}
+/** Le patch, posé sur `cfg` — ou un refus qui NOMME la clé (`poser_patch`). */
+function poserPatchCha(cfg, patch, connus) {
+  const inconnues = Object.keys(patch).filter(k => !['chauffages', 'maison', 'simulation'].includes(k)).sort();
+  if (inconnues.length) throw invalideCha('cle inconnue : ' + inconnues.join(', '));
+  const chauffages = 'chauffages' in patch ? patch.chauffages : {};
+  if (!estObjetCha(chauffages)) throw invalideCha('chauffages : un objet par chauffage');
+  Object.keys(chauffages).forEach(cle => {
+    if (chauffages[cle] === null) { delete cfg.chauffages[cle]; return; }
+    const connu = connus.get(cle) || null;
+    let actuel = possedeCha(cfg.chauffages, cle) ? cfg.chauffages[cle] : null;
+    if (!actuel && !connu) throw refusDemo('chauffage_inconnu', 'chauffage inconnu : ' + cle);
+    if (!actuel) actuel = chauffageDefautCha(connu.entite, connu.famille, connu.permis);
+    else if (connu) actuel = { ...actuel, entite: connu.entite, famille: connu.famille };
+    cfg.chauffages[cle] = validerChauffageCha(chauffages[cle], actuel, connu ? connu.permis : null);
+  });
+  if (Object.keys(cfg.chauffages).length > MAX_CHAUFFAGES_CHA) throw refusDemo('chauffage_trop_de_chauffages', 'trop de chauffages, au plus : ' + MAX_CHAUFFAGES_CHA);
+  const maison = 'maison' in patch ? patch.maison : {};
+  if (!estObjetCha(maison)) throw invalideCha('maison : un objet');
+  Object.keys(maison).forEach(cle => {
+    if (cle !== 'absence' && cle !== 'vacances') throw invalideCha('maison.' + cle + ' : le mode de la maison passe par loggia/chauffage/maison');
+    if (!MODES.includes(maison[cle])) throw refusDemo('chauffage_mode_inconnu', 'mode ' + maison[cle] + ' inconnu : maison.' + cle);
+    cfg.maison[cle] = maison[cle];
+  });
+  if ('simulation' in patch) {
+    if (!estObjetCha(patch.simulation) || typeof patch.simulation.actif !== 'boolean') throw invalideCha('simulation : {actif: vrai ou faux}');
+    cfg.simulation = { actif: patch.simulation.actif };
+  }
+}
+/** Un chauffage modifié : `planning`, `semaine`, `temperatures`, `fenetre` (`valider_chauffage`). */
+function validerChauffageCha(brut, actuel, permis) {
+  if (!estObjetCha(brut)) throw invalideCha('chauffage : un objet');
+  const inconnues = Object.keys(brut).filter(k => !['planning', 'semaine', 'temperatures', 'fenetre'].includes(k)).sort();
+  if (inconnues.length) throw invalideCha('champ inconnu : ' + inconnues.join(', '));
+  const neuf = copieCha(actuel);
+  if ('planning' in brut) {
+    if (typeof brut.planning !== 'boolean') throw invalideCha('planning : vrai ou faux');
+    neuf.planning = brut.planning;
+  }
+  if ('semaine' in brut) neuf.semaine = validerSemaineCha(brut.semaine, permis);
+  if ('temperatures' in brut) neuf.temperatures = validerTemperaturesCha(brut.temperatures, neuf.temperatures);
+  if ('fenetre' in brut) {
+    if (!['arret', 'eco', 'rien'].includes(brut.fenetre)) throw invalideCha('fenetre : arret, eco ou rien');
+    if (brut.fenetre === 'eco' && permis && !permis.includes('eco')) throw refusDemo('chauffage_mode_inconnu', 'mode eco inconnu de ce chauffage : fenetre');
+    neuf.fenetre = brut.fenetre;
+  }
+  return neuf;
+}
+/* La semaine que l'écran envoie (`valider_semaine`) : chaque jour trié, au
+ * premier défaut un refus qui nomme sa clé — « jeu[2].h », « jeu » —, et
+ * jamais une semaine sans aucun changement. */
+function validerSemaineCha(brut, permis) {
+  if (!estObjetCha(brut)) throw invalideCha('semaine : un objet par jour');
+  const inconnus = Object.keys(brut).filter(k => !JOURS.includes(k)).sort();
+  if (inconnus.length) throw invalideCha('jour inconnu : ' + inconnus.join(', '));
+  const semaine = {};
+  JOURS.forEach(jour => {
+    const liste = possedeCha(brut, jour) ? brut[jour] : [];
+    if (!Array.isArray(liste)) throw invalideCha(jour + ' : une liste de changements');
+    if (liste.length > MAX_CHANGEMENTS_CHA) throw refusDemo('chauffage_trop_de_changements', 'plus de ' + MAX_CHANGEMENTS_CHA + ' changements ce jour : ' + jour);
+    const vus = new Map();
+    liste.forEach((c, i) => {
+      if (!estObjetCha(c)) throw invalideCha(jour + '[' + i + '] : un changement {h, mode}');
+      const minute = lireHeure(c.h);
+      if (minute === null) throw refusDemo('chauffage_heure_illisible', 'heure illisible : ' + jour + '[' + i + '].h');
+      if (!MODES.includes(c.mode) || (permis && !permis.includes(c.mode))) {
+        throw refusDemo('chauffage_mode_inconnu', 'mode ' + c.mode + ' inconnu de ce chauffage : ' + jour + '[' + i + '].mode');
+      }
+      if (vus.has(minute)) throw refusDemo('chauffage_heure_en_double', 'deux changements a la meme heure : ' + jour + '[' + i + '].h');
+      vus.set(minute, c.mode);
+    });
+    semaine[jour] = [...vus.keys()].sort((x, y) => x - y).map(mi => ({ h: ecrireHeure(mi), mode: vus.get(mi) }));
+  });
+  if (!JOURS.some(j => semaine[j].length)) throw refusDemo('chauffage_semaine_vide', 'planning sans aucun changement : semaine');
+  return semaine;
+}
+// `round` de Python arrondit au pair : 20,25 °C donne 20, pas 20,5.
+const auDemiCha = (v) => {
+  const x = v * 2, f = Math.floor(x), d = x - f;
+  return (d > 0.5 ? f + 1 : d < 0.5 ? f : (f % 2 === 0 ? f : f + 1)) / 2;
+};
+/* Les consignes d'un thermostat (`valider_temperatures`), en °C, de 5 à 30, au
+ * demi-degré, dans l'ordre du froid au chaud : hors_gel < eco <= confort. Le
+ * refus nomme celle qu'on vient de changer ; les deux, ou aucune : Éco. */
+function validerTemperaturesCha(brut, actuelles) {
+  if (!estObjetCha(brut)) throw invalideCha('temperatures : un objet {confort, eco, hors_gel}');
+  const t = { ...actuelles };
+  Object.keys(brut).forEach(cle => {
+    if (!possedeCha(TEMPERATURES_CHA, cle)) throw invalideCha('temperature inconnue : ' + cle);
+    const v = brut[cle];
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 5 || v > 30) {
+      throw refusDemo('chauffage_temperature_hors_bornes', 'temperature hors bornes (5 a 30 °C) : temperatures.' + cle);
+    }
+    t[cle] = auDemiCha(v);
+  });
+  const fautive = cleEnDesordreCha(t, Object.keys(brut));
+  if (fautive) throw refusDemo('chauffage_temperatures_desordre', 'temperatures en desordre (hors_gel < eco <= confort) : temperatures.' + fautive);
+  return t;
+}
+function cleEnDesordreCha(t, touchees) {
+  let enCause = null;
+  if (t.hors_gel >= t.eco) enCause = ['hors_gel', 'eco'];
+  else if (t.eco > t.confort) enCause = ['eco', 'confort'];
+  if (!enCause) return null;
+  const changees = enCause.filter(k => touchees.includes(k));
+  return changees.length === 1 ? changees[0] : 'eco';
+}
+
+/* ── Le bouchon : ce que `callWS` passe au moteur ── */
+/* Les champs que chaque commande accepte, `id` compris : le schéma de Home
+ * Assistant refuse tout autre champ (« extra keys not allowed »). */
+const CHAMPS_CHA = {
+  'loggia/chauffage/etat': ['type', 'id'],
+  'loggia/chauffage/main': ['type', 'id', 'chauffage', 'mode', 'temperature', 'fin', 'reprendre'],
+  'loggia/chauffage/maison': ['type', 'id', 'mode', 'fin'],
+  'loggia/chauffage/config': ['type', 'id', 'patch'],
+};
+/**
+ * La réponse du faux moteur à une commande du chauffage — une promesse, qui
+ * rejette comme Home Assistant (`code`, `message`) —, ou null si `envoye`
+ * n'en est pas une. `ctx` : `{ states, horloge, ecrire, utilisateur }`.
+ */
+function repondreChauffageDemo(envoye, ctx) {
+  if (!estObjetCha(envoye) || !possedeCha(CHAMPS_CHA, envoye.type)) return null;
+  try {
+    const msg = copieCha(envoye);   // ce qui part par le fil : un champ `undefined` n'arrive pas
+    if (!CHA_) demarrerChauffageDemo(ctx.states, ctx.horloge, ctx.ecrire);
+    const etranger = Object.keys(msg).find(k => !CHAMPS_CHA[msg.type].includes(k));
+    if (etranger) throw invalideCha("extra keys not allowed @ data['" + etranger + "']");
+    if (msg.type === 'loggia/chauffage/config') {
+      const config = configCha(msg, ctx);
+      return Promise.resolve({ config, etat: etatCha(ctx) });
+    }
+    if (msg.type === 'loggia/chauffage/main') mainCha(msg, ctx);
+    else if (msg.type === 'loggia/chauffage/maison') maisonCha(msg, ctx);
+    return Promise.resolve(etatCha(ctx));
+  } catch (e) {
+    return Promise.reject(e);
+  }
+}
+/* `select.select_option` sur un module : l'état prend l'option si le module la
+ * propose — Home Assistant refuse toute autre graphie —, puis le moteur y lit
+ * un éventuel geste fait ailleurs. */
+function choisirOptionChauffageDemo(ctx, id, option) {
+  const st = ctx.states[id];
+  const options = (st && st.attributes && st.attributes.options) || [];
+  if (!st || options.indexOf(option) < 0) {
+    return Promise.reject(Object.assign(new Error('Option ' + option + ' is not valid for entity ' + id), { code: 'service_validation_error' }));
+  }
+  ctx.ecrire(id, option);
+  evaluerChauffageDemo(ctx);
+  return Promise.resolve();
+}
+const evaluerChauffageDemo = (ctx) => { if (CHA_) evaluerCha(ctx, 'geste'); };
+/** Écrire dans les états sans passer par l'écran (la maison n'est pas encore montée, ou un test). */
+const ecrireDansEtatsCha = (states) => (id, etat, attributs) => {
+  const cur = states[id];
+  if (!cur) return;
+  states[id] = { ...cur, state: etat != null ? String(etat) : cur.state, attributes: { ...cur.attributes, ...(attributs || {}) },
+    last_changed: maintenant(), last_updated: maintenant() };
+};
+/* La maison montée (`_async_demarrer`, puis le rattrapage) : la configuration
+ * de départ, les appareils réglés sur ce qui est en vigueur — sans un mot au
+ * journal, ils y sont déjà —, et le journal des dernières vingt-quatre heures. */
+function demarrerChauffageDemo(states, horloge, ecrire = ecrireDansEtatsCha(states)) {
+  CHA_ = { cfg: configDepartCha(), reprises: {}, journal: [], vus: {}, notes: {} };
+  evaluerCha({ states, horloge, ecrire, utilisateur: null, silencieux: true }, 'redemarrage');
+  CHA_.journal = journalDepartCha(states, horloge());
+}
+/* Ce que le moteur a écrit ces dernières vingt-quatre heures : chaque
+ * changement EFFECTIF du planning des modules, et la fenêtre de la chambre,
+ * ouverte depuis vingt-cinq minutes — depuis, c'est elle qui tient le
+ * radiateur. Les mots sont ceux du serveur, rien n'est traduit ici. */
+function journalDepartCha(states, quand) {
+  const { connus, index } = candidatsCha(states);
+  const faits = fenetresCha(states, connus, index);
+  const veille = quand.getTime() - 24 * 3600000;
+  const ligne = (t, regle, quoi, entite, motif) => ligneJournal({ ts: t / 1000, module: 'chauffage', regle, quoi, cibles: [entite], n: 1,
+    motif, detail: '', simule: false });
+  const lignes = [];
+  Object.keys(CHA_.cfg.chauffages).forEach(cle => {
+    const c = CHA_.cfg.chauffages[cle];
+    if (!c.planning) return;
+    const ouverte = new Date(quand.getTime() - 25 * 60000);
+    const coupe = (faits.get(c.entite) || []).length > 0
+      ? modeVoulu(c.semaine, CHA_.cfg.maison, null, true, ...muraleCha(ouverte), c.fenetre) : null;
+    const limite = coupe && coupe.source === 'fenetre' ? ouverte.getTime() : quand.getTime();
+    [-1, 0].forEach(decale => {
+      const jourJ = new Date(quand.getFullYear(), quand.getMonth(), quand.getDate() + decale);
+      const j = (jourJ.getDay() + 6) % 7;
+      (c.semaine[JOURS[j]] || []).forEach(ch => {
+        const mi = lireHeure(ch.h);
+        const t = mi === null ? NaN : new Date(jourJ.getFullYear(), jourJ.getMonth(), jourJ.getDate(), Math.floor(mi / 60), mi % 60).getTime();
+        if (!(t > veille && t <= limite)) return;
+        // Un changement qui remet le mode déjà en cours n'est pas un ordre.
+        const avant = changementEnCours(c.semaine, mi === 0 ? (j + 6) % 7 : j, mi === 0 ? 1439 : mi - 1);
+        if (avant && avant[2] !== ch.mode) lignes.push(ligne(t, 'planning', MOTS_CHA[ch.mode], c.entite, [['planning {heure}', { heure: ecrireHeure(mi) }]]));
+      });
+    });
+    if (limite !== quand.getTime()) lignes.push(ligne(limite, 'fenetre', MOTS_CHA[coupe.mode], c.entite, faits.get(c.entite).slice().sort().join(', ')));
+  });
+  return lignes.sort((x, y) => y.ts - x.ts);
+}
+
+/* La maison du chauffage, bâtie comme `installerDemo` la bâtit — sans document
+ * ni magasin, l'heure figée si on le demande. Exporté pour
+ * `tests/demo_chauffage.test.mjs` : `ws` passe par le même bouchon que
+ * `callWS`, `option` par le même chemin que `select.select_option`. */
+export function maisonChauffageDemo({ admin = true, quand = null } = {}) {
+  let heure = quand ? new Date(quand) : new Date();
+  const horloge = () => new Date(heure.getTime());
+  const states = etatsInitiaux();
+  const ecrire = ecrireDansEtatsCha(states);
+  demarrerChauffageDemo(states, horloge, ecrire);
+  const contexte = (estAdmin) => ({ states, horloge, ecrire, utilisateur: { id: 'demo', name: 'Démo', is_admin: estAdmin } });
+  return {
+    states,
+    index: indexDemo(states),
+    regler: (t) => { heure = new Date(t); },
+    ws: (msg, { admin: estAdmin = admin } = {}) => repondreChauffageDemo({ ...msg, id: ++numeroMessageDemo }, contexte(estAdmin))
+      || Promise.reject(new Error('démonstration : pas de composant serveur')),
+    option: (id, option) => choisirOptionChauffageDemo(contexte(admin), id, option),
+    regles: () => reglesDemo(states),
+    /* La règle des fenêtres de la démo, par le même chemin que `loggia/fenetres/config`
+     * (`fenetresPatch`) : ce que le moteur en lit (`fenetres_observe`, `ouvrant_ouvert`).
+     * Une seule par onglet, comme `callWS` la tient : un test qui la change la remet. */
+    fenetres: (patch) => fenetresPatch(patch),
+  };
+}
+
+/* Un `climate` de la démo après un service (relecture de la partie B) — la
+ * climatisation du bureau surtout, qui sait chauffer, refroidir, sécher et
+ * ventiler :
+ *  - en `heat_cool`, plus de consigne unique (`temperature` à null) mais une
+ *    plage, 20 / 24 ; la consigne d'avant (`gardees`, par entité) revient à
+ *    la sortie — à défaut, le milieu de la plage, au demi-degré ;
+ *  - `hvac_action` se LIT sur la pièce, comme un vrai appareil : `heating`
+ *    sous la consigne (ou la borne basse) de plus de 0,3° dans un mode qui
+ *    chauffe, `cooling` au-dessus (ou de la borne haute) de plus de 0,3° dans
+ *    un mode qui refroidit, `idle` sinon ; `drying`, `fan`, `off` pour leurs
+ *    modes. Une climatisation en Auto à 23,5° pour 22° refroidit : plus de
+ *    « Chauffe » orange.
+ * Rend `{ etat, attributs }` pour `toucher` (`etat` null : il ne change pas),
+ * ou null — un service qu'elle ne connaît pas, une entité absente. Exportée
+ * pour tests/demo_chauffage.test.mjs. */
+const PLAGE_DEMO = [20, 24];
+const ECART_ACTION_DEMO = 0.3;
+function actionClimatDemo(mode, a) {
+  if (mode === 'off') return 'off';
+  if (mode === 'dry') return 'drying';
+  if (mode === 'fan_only') return 'fan';
+  const piece = typeof a.current_temperature === 'number' ? a.current_temperature : null;
+  if (piece === null) return 'idle';
+  const plage = mode === 'heat_cool';
+  const bas = plage ? a.target_temp_low : a.temperature;
+  const haut = plage ? a.target_temp_high : a.temperature;
+  if (['heat', 'heat_cool', 'auto'].includes(mode) && typeof bas === 'number' && piece < bas - ECART_ACTION_DEMO) return 'heating';
+  if (['cool', 'heat_cool', 'auto'].includes(mode) && typeof haut === 'number' && piece > haut + ECART_ACTION_DEMO) return 'cooling';
+  return 'idle';
+}
+export function climatApresServiceDemo(id, courant, service, data, gardees) {
+  if (!courant) return null;
+  const a = courant.attributes || {};
+  const d = data || {};
+  let etat = null;
+  let attributs;
+  if (service === 'set_hvac_mode') {
+    etat = String(d.hvac_mode);
+    attributs = {};
+    if (etat === 'heat_cool' && courant.state !== 'heat_cool') {
+      gardees.set(id, a.temperature);
+      attributs = { temperature: null, target_temp_low: PLAGE_DEMO[0], target_temp_high: PLAGE_DEMO[1] };
+    } else if (etat !== 'heat_cool' && courant.state === 'heat_cool') {
+      const milieu = typeof a.target_temp_low === 'number' && typeof a.target_temp_high === 'number' ? Math.round(a.target_temp_low + a.target_temp_high) / 2 : null;
+      attributs = { temperature: typeof gardees.get(id) === 'number' ? gardees.get(id) : milieu, target_temp_low: null, target_temp_high: null };
+      gardees.delete(id);
+    }
+  } else if (service === 'set_temperature') {
+    attributs = d.target_temp_low != null ? { target_temp_low: d.target_temp_low, target_temp_high: d.target_temp_high } : { temperature: d.temperature };
+  } else if (service === 'set_preset_mode') {
+    attributs = { preset_mode: d.preset_mode };
+  } else return null;
+  attributs.hvac_action = actionClimatDemo(etat != null ? etat : courant.state, { ...a, ...attributs });
+  return { etat, attributs };
 }
 
 /* Deux agendas, pas un : le choix des agendas et la mention du calendrier
@@ -2301,7 +5824,7 @@ export function installerDemo(langue) {
    * garde ses noms francais. */
   if (langue && LIEUX.Salon[langue]) LANGUE_DEMO = langue;
   /* Deux réglages d'aperçu lus dans l'URL, comme `?lang=` (05/10) :
-   * `distributeur=loggia|petlibro|rien|horsligne`, la variante du distributeur
+   * `distributeur=loggia|petlibro|rien|horsligne|bas|probleme|reservoir|programme|z2m`, la variante du distributeur
    * (ADR 0155), et `compte=ordinaire`, un compte Home Assistant sans droits
    * d'administration — ce qu'il ne peut pas faire doit disparaître de l'écran
    * (ADR 0144), et le faux serveur le refuse comme `require_admin`. Lus AVANT
@@ -2310,7 +5833,15 @@ export function installerDemo(langue) {
   try {
     const q = new URLSearchParams(window.location.search);
     if (VARIANTES_DIST.indexOf(q.get('distributeur')) >= 0) VARIANTE_DIST = q.get('distributeur');
+    // `robots=pause` (chantier IoT, § 10) : l'aspirateur en pause au milieu de Salon et Cuisine ; et les variantes de la tranche
+    // robots 2 (`sans-association`, `sans-association-rooms`, `exception`, `rooms-vide`, `scripts`, `carte-changee`, `etages`,
+    // et son cas de la passe bis du 20/10 : `scripts-sans-pieces`, `scripts-avec-pieces`).
+    if (VARIANTES_ROBOTS.indexOf(q.get('robots')) >= 0) VARIANTE_ROBOTS = q.get('robots');
     ordinaire = q.get('compte') === 'ordinaire';
+    /* `heure=HH:MM` (chantier Mode enfant, § 10) : l'horloge des médias figée à cette heure du jour — les trois situations du mode
+     * enfant se regardent l'une après l'autre (`?demo&heure=18:20`, `?demo&heure=21:30`) sans attendre l'heure. */
+    const heure = q.get('heure');
+    if (heure && /^([01]\d|2[0-3]):[0-5]\d$/.test(heure)) { const [h, mn] = heure.split(':').map(Number); horlogeMedias = () => { const d = new Date(); d.setHours(h, mn, 0, 0); return d.getTime(); }; }
   } catch { /* rien : la maison par défaut */ }
 
   // ── 1. Magasin mémoire à la place du localStorage ─────────────────────────
@@ -2331,13 +5862,79 @@ export function installerDemo(langue) {
 
   // ── 2. La maison ──────────────────────────────────────────────────────────
   const states = etatsInitiaux();
+  varianteRobots(states);
+  /* Le planning de chauffe : le faux moteur règle les radiateurs sur ce qui est
+   * en vigueur AVANT le premier rendu — la carte ne passe pas d'un mode à
+   * l'autre sous les yeux à l'ouverture. */
+  demarrerChauffageDemo(states, () => new Date());
   const toucher = (id, patch, attrs) => {
     // entity_id à la manière de HA : une chaîne ou un tableau d'ids.
     if (Array.isArray(id)) { id.forEach(x => toucher(x, patch, attrs)); return; }
     const cur = states[id]; if (!cur) return;
     states[id] = { state: patch != null ? String(patch) : cur.state, attributes: { ...cur.attributes, ...(attrs || {}) }, last_updated: maintenant(), last_changed: maintenant() };
+    minuteurSiEteint(id, states[id].state);
     el.hass = { ...el.hass, states };
   };
+  /* Le faux moteur des volets (chantier Volets, § 9) : 6 % par seconde — une
+   * course complète en 17 s —, `opening` ou `closing` pendant qu'il tourne, une
+   * position toutes les 500 ms ; Stop l'arrête là où il est. L'écran voit ainsi
+   * une course PUBLIÉE ; la bascule de Netatmo se teste par le modèle (§ 5). */
+  const moteurs = new Map();
+  const moteurVolet = (x, service, data) => {
+    const cur = states[x];
+    if (!cur) return;
+    // Un volet muet ne répond pas (audit du 19/10) : rien ne bouge, la carte reste « Indisponible ».
+    if (cur.state === 'unavailable' || cur.state === 'unknown') return;
+    const lue = Number((cur.attributes || {}).current_position);
+    const depart = Number.isFinite(lue) ? lue : cur.state === 'closed' ? 0 : 100;
+    clearInterval(moteurs.get(x));
+    moteurs.delete(x);
+    /* Sans position (`supported_features` 3 : le rideau, le garage, le
+     * portail) : `opening` / `closing` le temps d'une course complète, puis
+     * `open` / `closed` — jamais de `current_position`. Stop : `open`, comme
+     * Home Assistant pour un ouvrant arrêté en chemin. */
+    if (!Object.prototype.hasOwnProperty.call(cur.attributes || {}, 'current_position')) {
+      if (service === 'stop_cover') { if (cur.state === 'opening' || cur.state === 'closing') toucher(x, 'open'); return; }
+      const vers = service === 'open_cover' ? 'open' : service === 'close_cover' ? 'closed' : null;
+      if (!vers || cur.state === vers) return;
+      toucher(x, vers === 'open' ? 'opening' : 'closing');
+      moteurs.set(x, setTimeout(() => { moteurs.delete(x); toucher(x, vers); }, 17000));
+      return;
+    }
+    if (service === 'stop_cover') { toucher(x, depart > 0 ? 'open' : 'closed', { current_position: depart }); return; }
+    const voulue = service === 'open_cover' ? 100 : service === 'close_cover' ? 0
+      : service === 'set_cover_position' ? Math.max(0, Math.min(100, Math.round(Number((data || {}).position) || 0))) : null;
+    if (voulue == null) return;
+    /* « Façon Netatmo » (§ 0) : l'état BASCULE tout de suite, la position
+     * d'avant ; la vraie position n'arrive qu'au bout de la course — et une
+     * fermeture finit `open` à 1 %, la chambre du 09/10. Ni `opening` ni
+     * `closing` : l'écran joue la course lui-même (voletcourse.js, source 4). */
+    if (VOLETS_NETATMO_DEMO.has(x)) {
+      if (voulue === depart || (voulue === 0 && depart <= 1)) return;   // déjà en butée : rien ne bascule
+      toucher(x, voulue > 0 ? 'open' : 'closed', { current_position: depart });
+      const arrivee = voulue === 0 ? 1 : voulue;
+      moteurs.set(x, setTimeout(() => { moteurs.delete(x); toucher(x, 'open', { current_position: arrivee }); }, Math.abs(voulue - depart) / 6 * 1000));
+      return;
+    }
+    // Déjà à la position voulue : en pleine course, le moteur s'arrête là, et l'état le dit — jamais `opening` à l'arrêt (relecture du 13/10, point 9).
+    if (voulue === depart) { if (cur.state === 'opening' || cur.state === 'closing') toucher(x, depart > 0 ? 'open' : 'closed', { current_position: depart }); return; }
+    const sens = voulue > depart ? 'opening' : 'closing';
+    let pos = depart;
+    toucher(x, sens, { current_position: pos });
+    moteurs.set(x, setInterval(() => {
+      pos = voulue > pos ? Math.min(voulue, pos + 3) : Math.max(voulue, pos - 3);
+      if (pos !== voulue) { toucher(x, sens, { current_position: pos }); return; }
+      clearInterval(moteurs.get(x));
+      moteurs.delete(x);
+      toucher(x, pos > 0 ? 'open' : 'closed', { current_position: pos });
+    }, 500));
+  };
+  // La consigne d'un `climate` passé en `heat_cool`, rendue à sa sortie (`climatApresServiceDemo`).
+  const consignesAvantPlage = new Map();
+  /* Ce que le faux moteur du chauffage reçoit à chaque commande : la maison,
+   * l'heure du navigateur, l'écriture qui redessine, et le compte du moment
+   * (`?compte=ordinaire` n'est pas administrateur). */
+  const contexteChauffage = () => ({ states, horloge: () => new Date(), ecrire: toucher, utilisateur: el.hass.user });
   /* `target` compte autant que `data`.
    *
    * Home Assistant accepte l'entite des deux facons : dans les donnees du
@@ -2379,18 +5976,30 @@ export function installerDemo(langue) {
       // `input_boolean` (04/10) : le moteur d'actions prefere le service du
       // domaine a `homeassistant.turn_on/off`, et les repas du distributeur de
       // la demo en sont — leur interrupteur de la fiche revenait au bout de 6 s.
-      if (service === 'turn_on') toucher(id, 'on');
-      else if (service === 'turn_off') toucher(id, 'off');
-      else if (service === 'toggle') toucher(id, states[id] && states[id].state === 'on' ? 'off' : 'on');
+      // Une prise muette ne répond pas : la démo ne la rallume pas (chantier Prises, § 10).
+      if ([].concat(id || []).some(x => states[x] && states[x].state === 'unavailable')) return Promise.resolve();
+      /* Une lumière (chantier Lumières, § 9) : sa luminosité, son blanc, sa couleur, et son carnet
+       * (`gesteLumiereDemo`) ; le reste bascule, comme avant. */
+      const lampes = [].concat(id || []).filter(lampeDemo);
+      const autres = [].concat(id || []).filter(x => !lampeDemo(x));
+      if (lampes.filter(x => gesteLumiereDemo(states, x, service, data || {})).length) el.hass = { ...el.hass, states };
+      if (service === 'turn_on') toucher(autres, 'on');
+      else if (service === 'turn_off') toucher(autres, 'off');
+      else if (service === 'toggle') toucher(autres, states[id] && states[id].state === 'on' ? 'off' : 'on');
+      [].concat(id || []).forEach(x => gestePriseDemo(x));
     } else if (domaine === 'number' || domaine === 'input_number') {
       if (service === 'set_value') toucher(id, data.value);
     } else if (domaine === 'cover') {
-      if (service === 'open_cover') toucher(id, 'open', { current_position: 100 });
-      else if (service === 'close_cover') toucher(id, 'closed', { current_position: 0 });
-      else if (service === 'set_cover_position') toucher(id, (data.position || 0) > 0 ? 'open' : 'closed', { current_position: data.position || 0 });
+      [].concat(id || []).forEach(x => moteurVolet(x, service, data));
     } else if (domaine === 'climate') {
-      if (service === 'set_temperature') toucher(id, null, { temperature: data.temperature });
-      else if (service === 'set_hvac_mode') toucher(id, data.hvac_mode, { hvac_action: data.hvac_mode === 'off' ? 'off' : 'heating' });
+      /* Une plage (`heat_cool`) part en deux bornes, la consigne revient à la
+       * sortie ; ce que fait l'appareil se lit sur la pièce — la
+       * climatisation du bureau (tâche 10 bis B) ne « chauffe » ni en mode
+       * froid, ni en Auto au-dessus de sa consigne (`climatApresServiceDemo`). */
+      [].concat(id || []).forEach((x) => {
+        const apres = climatApresServiceDemo(x, states[x], service, data, consignesAvantPlage);
+        if (apres) toucher(x, apres.etat, apres.attributs);
+      });
     } else if (domaine === 'alarm_control_panel') {
       // Un vrai panneau laisse le temps de sortir : la démo passe par `arming`
       // avec le délai et le mode visé (les attributs d'Alarmo), puis arme.
@@ -2401,14 +6010,7 @@ export function installerDemo(langue) {
       toucher(cid, 'arming', { delay, arm_mode: cible });
       setTimeout(() => { const s = states[cid]; if (s && s.state === 'arming' && s.attributes.arm_mode === cible) toucher(cid, cible); }, delay * 1000);
     } else if (domaine === 'lawn_mower' || domaine === 'vacuum') {
-      const cible = { start_mowing: 'mowing', start: 'cleaning', pause: 'paused',
-        dock: 'returning', return_to_base: 'returning', stop: 'idle' }[service];
-      if (cible) {
-        toucher(id, cible);
-        // Un robot qui rentre met du temps : sans ce delai la demonstration
-        // sauterait l etape que la fiche sert justement a montrer.
-        if (cible === 'returning') setTimeout(() => toucher(id, 'docked'), 4000);
-      } else if (service === 'set_fan_speed') toucher(id, null, { fan_speed: data.fan_speed });
+      serviceRobotDemo(states, domaine, service, { ...(data || {}), entity_id: id }, toucher);
     } else if (domaine === 'lock') {
       // Une serrure motorisee met deux bonnes secondes : sans ce passage par
       // `locking`, la demo montrerait un mouvement instantane qui n'existe pas.
@@ -2416,16 +6018,22 @@ export function installerDemo(langue) {
       const vise = service === 'lock' ? 'locked' : 'unlocked';
       toucher(lid, vise === 'locked' ? 'locking' : 'unlocking');
       setTimeout(() => toucher(lid, vise), 2000);
-    } else if (domaine === 'media_player' && service === 'media_play_pause') {
-      toucher(id, states[id] && states[id].state === 'playing' ? 'paused' : 'playing');
-    } else if (domaine === 'select' && service === 'select_option' && /^select\.distributeur_/.test(String(id))) {
-      /* Le distributeur (ADR 0155). START sur le select feed d'un Aqara
-       * distribue sans que le select change d'état — Zigbee2MQTT le laisse
-       * vide ; le mode, lui, change, et le programme de la fiche avec. Un
-       * appareil tombé ne répond pas. */
+    } else if (domaine === 'media_player' || domaine === 'notify') {
+      // Les lecteurs (chantier Médias, § 8) : chaque service de § 7.2 ; une annonce ne change aucun état.
+      gesteMediaDemo(states, domaine, service, { ...(data || {}), entity_id: id }, Date.now()).forEach(([x, etat, attrs]) => toucher(x, etat, attrs));
+      // Le mode enfant (chantier Mode enfant, E24) : la maison ramène — le volume au-dessus du plafond, l'écran bloqué rallumé.
+      ramenerEnfantDemo(states, service, { ...(data || {}), entity_id: id }, toucher);
+    } else if (domaine === 'select' && service === 'select_option' && estModuleChauffageDemo(id)) {
+      /* Un module fil pilote (planning de chauffe) : l'état prend l'option si
+       * le module la propose, et le moteur de la démo y lit un geste. */
+      return choisirOptionChauffageDemo(contexteChauffage(), id, (data || {}).option);
+    } else if (domaine === 'select' && service === 'select_option' && /^select\.(distributeur|mangeoire)_/.test(String(id))) {
+      /* Le distributeur (ADR 0155), et la mangeoire de la variante `z2m` (passe bis de l'étape 2). START sur le select feed d'un
+       * Aqara distribue sans que le select change d'état — Zigbee2MQTT le laisse vide ; le mode, lui, change, et le programme de
+       * la fiche avec. Un appareil tombé ne répond pas. */
       const opt = (data || {}).option;
       if (!states[id] || states[id].state === 'unavailable') return Promise.resolve();
-      if (id === 'select.distributeur_feed') { if (opt === 'START') distribuerDemo(1); }
+      if (id === 'select.distributeur_feed' || id === 'select.mangeoire_feed') { if (opt === 'START') distribuerDemo(1); }
       else if (opt != null) toucher(id, opt);
     } else if (domaine === 'button' && service === 'press' && /^button\.granary_/.test(String(id))) {
       // L'état d'un bouton est l'heure du dernier appui, comme dans Home Assistant.
@@ -2433,20 +6041,55 @@ export function installerDemo(langue) {
       if (id === 'button.granary_manual_feed') distribuerDemo(Number((states['number.granary_manual_feed_quantity'] || {}).state) || 1);
       if (id === 'button.granary_desiccant_reset') toucher('sensor.granary_remaining_desiccant', 30);
     }
+    /* Un chauffage touché d'ailleurs — une consigne, l'interrupteur d'un
+     * module — : le moteur du chauffage le lit, comme le serveur suit l'état
+     * de ce qu'il pilote. */
+    if (toucheChauffageDemo(id)) evaluerChauffageDemo(contexteChauffage());
     return Promise.resolve();
   };
-  /* Une ration partie de l'écran : le compteur du jour monte, l'historique la
-   * garde (`DIST_LIVE`), et l'appareil dit d'où elle vient. */
-  const distribuerDemo = (portions) => {
-    const petlibro = VARIANTE_DIST === 'petlibro';
-    const g1 = petlibro ? G_PORTION_DIST.petlibro : (Number((states['number.distributeur_portion'] || {}).state) || G_PORTION_DIST.aqara);
-    const e = { t: Date.now(), portions, g: portions * g1, source: 'remote' };
-    DIST_LIVE.push(e);
-    const compteur = petlibro ? 'sensor.granary_today_feeding_quantity_weight' : 'sensor.distributeur_weight_per_day';
-    if (states[compteur]) toucher(compteur, (Number(states[compteur].state) || 0) + e.g);
-    if (petlibro) toucher('sensor.granary_last_feed_time', isoDist(e.t));
-    else toucher('sensor.distributeur_feeding_source', 'remote');
+  /* Une prise basculée (chantier Prises, § 10) : sa puissance suit — rien
+   * coupée, celle de son appareil allumée —, et le logbook garde le geste, au
+   * nom du compte de la démo. Le pont de Zigbee2MQTT referme l'appairage de
+   * lui-même, comme le vrai, au bout de 254 s. */
+  const gestePriseDemo = (x) => {
+    if (x === PONT_DEMO && states[x] && states[x].state === 'on') {
+      setTimeout(() => { if (states[x] && states[x].state === 'on') toucher(x, 'off'); }, 254000);
+      return;
+    }
+    if (!PRISES_DEMO.includes(x) || !states[x]) return;
+    const on = states[x].state === 'on';
+    toucher(capteursPriseDemo(x).power, on ? String(Math.round(wattsPriseDemo(x, Date.now()) * 10) / 10 || 0.6) : '0');
+    PRISES_GESTES.push({ when: Date.now() / 1000, entity_id: x, state: on ? 'on' : 'off', name: states[x].attributes.friendly_name, context_id: 'demo-' + Date.now(), context_user_id: 'demo' });
   };
+  /* Le minuteur d'une prise ou d'une lumière (chantiers Prises, § 6.3 et 10 ; Lumières, § 9) : sa pose se
+   * note au journal de Loggia ; à l'échéance, l'appareil s'éteint et le journal le dit. Une lumière, éteinte
+   * par le serveur, n'a aucun compte au carnet : c'est la ligne du minuteur qui dit « Loggia ». */
+  const armerMinuteurDemo = (x) => {
+    const fin = MIN_DEMO[x] ? MIN_DEMO[x].fin : 0;
+    setTimeout(() => {
+      if (!MIN_DEMO[x] || MIN_DEMO[x].fin !== fin || !states[x] || states[x].state !== 'on') return;
+      delete MIN_DEMO[x];
+      if (lampeDemo(x)) { if (gesteLumiereDemo(states, x, 'turn_off', {}, { utilisateur: null })) el.hass = { ...el.hass, states }; }
+      else toucher(x, 'off');
+      gestePriseDemo(x);
+      PRISES_JOURNAL.push(ligneJournal({ module: 'minuteurs', regle: 'minuteur', quoi: 'eteindre', cibles: [x], n: 1, motif: 'minuteur', detail: '', simule: false, ts: Date.now() / 1000 }));
+    }, Math.max(0, fin * 1000 - Date.now()));
+  };
+  const minuteurDemo = (x, minutes) => {
+    if (!PRISES_DEMO.includes(x) && !lampeDemo(x)) return;
+    const n = Math.max(1, Math.min(24 * 60, Number(minutes) || 30));
+    PRISES_JOURNAL.push(ligneJournal({ module: 'minuteurs', regle: 'minuteur', quoi: 'poser', cibles: [x], n: 1, motif: [['{n} min', { n }]], detail: '', simule: false, ts: Date.now() / 1000 }));
+    armerMinuteurDemo(x);
+  };
+  // Le minuteur de l'ampoule de la chambre, posé dans sa journée (§ 9) : s'il tourne encore, il l'éteindra.
+  const minuteurAmpoule = histoireLumieresAujourdhui().minuteur;
+  if (minuteurAmpoule.fin * 1000 > Date.now() && states[minuteurAmpoule.id] && states[minuteurAmpoule.id].state === 'on') {
+    MIN_DEMO[minuteurAmpoule.id] = { fin: minuteurAmpoule.fin, duree: MINUTEUR_LUMIERE_DEMO.minutes };
+    armerMinuteurDemo(minuteurAmpoule.id);
+  }
+  /* Une ration partie de l'écran : l'appareil met un instant à la servir, puis le compteur du jour monte
+   * (`servirDistributeurDemo`). */
+  const distribuerDemo = (portions) => servirDistributeurDemo(states, portions, toucher);
 
   const el = document.createElement('home-assistant');
   el.hass = {
@@ -2460,7 +6103,8 @@ export function installerDemo(langue) {
      *
      * Paris, parce qu'il faut bien un point et que celui-la n'appartient a
      * personne. La maison de demonstration est inventee ; sa position aussi. */
-    config: { latitude: 48.8566, longitude: 2.3522, time_zone: 'Europe/Paris' },
+    // La version d'un Home Assistant récent (tranche robots 2, R4) : `spot_area` attend une liste depuis 2026.3.
+    config: { latitude: 48.8566, longitude: 2.3522, time_zone: 'Europe/Paris', version: '2026.10.1' },
     user: { id: 'demo', name: 'Démo', is_admin: !ordinaire },
     /* Le websocket n'existe pas ici — sauf pour les PRÉVISIONS météo, que la
      * vue Météo demande par service. Sans elles, sa bannière n'aurait ni
@@ -2508,8 +6152,22 @@ export function installerDemo(langue) {
       }
       if (msg && msg.type === 'loggia/volets/etat') return Promise.resolve(voletsDemo(states));
       if (msg && msg.type === 'loggia/volets/config') {
+        // Un compte ordinaire est refusé comme `require_admin` (chantier Volets, V10).
+        if (ordinaire) return Promise.reject({ code: 'unauthorized', message: 'Unauthorized' });
         return Promise.resolve({ config: voletsPatch(msg.patch) });
       }
+      if (msg && msg.type === 'loggia/volets/manoeuvres') return manoeuvresVoletsDemo(msg, states);
+      /* Les prises (chantier Prises, § 6.1 et 10) : l'état, ouvert à tout compte ; la configuration,
+       * refusée au compte ordinaire comme `require_admin` ; le logbook d'une prise, contextes compris. */
+      if (msg && msg.type === 'loggia/prises/etat') return Promise.resolve(prisesDemo());
+      if (msg && msg.type === 'loggia/prises/config') {
+        if (ordinaire) return Promise.reject({ code: 'unauthorized', message: 'Unauthorized' });
+        return Promise.resolve({ config: prisesPatch(msg.patch), etat: prisesDemo() });
+      }
+      if (msg && msg.type === 'logbook/get_events') return Promise.resolve(logbookPrisesDemo(msg, states));
+      // Le carnet des lumières (chantier Lumières, § 6.2) : ouvert à tout compte, d'après leur histoire et les gestes de la session.
+      if (msg && msg.type === 'loggia/lumieres/etat') return Promise.resolve(lumieresDemo(states));
+      if (msg && msg.type === 'loggia/lumieres/journal') return journalLumiereDemo(msg, states);
       // Les services notify : ceux que la section Alertes propose comme cible.
       if (msg && msg.type === 'get_services') return Promise.resolve({ notify: { mobile_app_telephone_de_camille: {}, notify: {}, persistent_notification: {} } });
       if (msg && msg.type === 'loggia/fenetres/etat') return Promise.resolve(fenetresDemo());
@@ -2526,16 +6184,21 @@ export function installerDemo(langue) {
       if (msg && msg.type === 'loggia/nuit/config') {
         return Promise.resolve({ config: nuitPatch(msg.patch) });
       }
-      if (msg && msg.type === 'loggia/pin/verifier') {
-        if (String(msg.pin) === PIN_DEMO.code) { PIN_DEMO.rates = 0; return Promise.resolve({ ok: true }); }
-        PIN_DEMO.rates += 1;
-        return Promise.resolve({ ok: false, bloque: PIN_DEMO.rates >= 5 ? 60 : 0 });
-      }
-      if (msg && msg.type === 'loggia/pin/definir') { PIN_DEMO.code = String(msg.pin); return Promise.resolve({ defini: true }); }
+      /* Le mode enfant (chantier Mode enfant, § 10) : ses six commandes, avec les droits du vrai composant ; un réglage réécrit la
+       * configuration commune dans le magasin, comme `loggia/config/suivre` le ferait chez lui. */
+      const enfant = repondreEnfantDemo(msg, states, { ordinaire, ecrireCfg: (c) => faux.setItem('loggia_enfant', JSON.stringify(c)), toucher });
+      if (enfant) return enfant;
+      // Le code de la maison : vérifié ici, les essais comptés ; un code juste vaut laissez-passer cinq minutes (E2 B).
+      const pin = repondrePinDemo(msg);
+      if (pin) return pin;
       /* Les minuteurs d'extinction, comme le vrai composant (`minuteurs.py`) :
        * une heure de fin par appareil, et l'heure du serveur pour le décompte. */
       if (msg && msg.type === 'loggia/minuteurs/etat') return Promise.resolve(minuteursDemo());
-      if (msg && msg.type === 'loggia/minuteurs/poser') return Promise.resolve(minuteursPoser(msg.entity_id, msg.minutes));
+      if (msg && msg.type === 'loggia/minuteurs/poser') {
+        const r = minuteursPoser(msg.entity_id, msg.minutes);
+        minuteurDemo(msg.entity_id, msg.minutes);
+        return Promise.resolve(r);
+      }
       if (msg && msg.type === 'loggia/minuteurs/annuler') { delete MIN_DEMO[msg.entity_id]; return Promise.resolve(minuteursDemo()); }
       /* Le test d'une sirene, comme le vrai composant (`sirene.py`) : le
        * serveur l'allume et l'eteint trois secondes plus tard, ecran ouvert
@@ -2548,8 +6211,20 @@ export function installerDemo(langue) {
         const maintenant = Date.now() / 1000;
         return Promise.resolve({ entity_id: sid, duree: 3, fin: maintenant + 3, maintenant });
       }
-      if (msg && msg.type === 'loggia/robots/etat') return Promise.resolve(robotsDemo(states));
+      if (msg && msg.type === 'loggia/robots/etat') return Promise.resolve(robotsDemo(states, lireCfgDemo('loggia_entities')));
       if (msg && msg.type === 'loggia/robots/config') return Promise.resolve({ config: robotsPatch(msg.patch) });
+      /* Un départ (chantier IoT, I3 A) : le robot part, le carnet ouvre le passage avec ses pièces ; les refus du vrai composant,
+       * leurs codes avec. L'état rendu est celui de `loggia/robots/etat`. */
+      if (msg && msg.type === 'loggia/robots/lancer') return lancerRobotDemo(states, msg, toucher, lireCfgDemo('loggia_entities'));
+      /* La roue de la popup (passe bis 2 du 20/10) : le rôle seul, fondu dans la description du magasin de la démo — administrateurs,
+       * comme chez le vrai (`require_admin`) ; l'état rendu porte les rôles désignés, et la fiche le pose. */
+      if (msg && msg.type === 'loggia/robots/scripts') {
+        if (ordinaire) return Promise.reject({ code: 'unauthorized', message: 'Unauthorized' });
+        let suite;
+        try { suite = designerScriptDemo(lireCfgDemo('loggia_entities'), msg.role, msg.script); } catch (e) { return Promise.reject({ code: e.code || 'invalid_format', message: e.message }); }
+        faux.setItem('loggia_entities', JSON.stringify(suite));
+        return Promise.resolve(robotsDemo(states, suite));
+      }
       /* Le distributeur (ADR 0155) : l'état, ouvert à tout compte, et le
        * planning de Loggia, réservé aux administrateurs (`require_admin`). La
        * configuration est relue au magasin mémoire à chaque appel. */
@@ -2559,6 +6234,11 @@ export function installerDemo(langue) {
         try { return Promise.resolve({ config: distributeursPatch(msg.patch), etat: distributeursDemo(states, lireCfgDemo('loggia_feeder')) }); }
         catch (e) { return Promise.reject(e); }
       }
+      /* Le planning de chauffe (chantier Chauffage, plan 2) : ses quatre
+       * commandes au faux moteur — la forme exacte du serveur, ses refus, et
+       * `?compte=ordinaire` refusé comme `require_admin`. */
+      const chauffage = repondreChauffageDemo(msg, contexteChauffage());
+      if (chauffage) return chauffage;
       if (msg && msg.type === 'loggia/veilles/etat') return Promise.resolve(veillesDemo(states));
       if (msg && msg.type === 'loggia/regles/etat') return Promise.resolve(reglesDemo(states));
       if (msg && msg.type === 'loggia/regles/degeler') {
@@ -2644,6 +6324,8 @@ export function installerDemo(langue) {
             { when: ilYA(2.5), entity_id: 'binary_sensor.camera_entree_mouvement', state: 'off', name: etiquette('Caméra entrée Mouvement') },
             { when: ilYA(41), entity_id: 'binary_sensor.camera_entree_personne', state: 'on', name: etiquette('Caméra entrée Personne') },
             { when: ilYA(40), entity_id: 'binary_sensor.camera_entree_personne', state: 'off', name: etiquette('Caméra entrée Personne') },
+            // Les détecteurs de présence de sa maquette « Cartes capteurs » (chantier Capteurs, étapes 2 et 3, § 12) : ce que la carte Présence lit.
+            ...journalCapteursDemo(Date.now()),
           ].filter(e => !ids || ids.indexOf(e.entity_id) >= 0);
           let mort = false;
           setTimeout(() => { if (!mort && vus.length) rappel({ events: vus }); }, 120);

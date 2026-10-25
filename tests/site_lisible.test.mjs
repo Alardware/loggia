@@ -125,12 +125,17 @@ test('le site annonce les langues que Loggia parle VRAIMENT — les sept, pas de
 
 test('chaque vue a un titre, et l’Accueil des titres de section', () => {
   const app = lire('src', 'App.jsx');
+  /* Les ambiances Hue — et leur titre de section — vivent depuis le 11/10
+   * dans scenes.jsx, chargé à la demande ; le style des titres est partagé
+   * par styles.js (tâche 6 bis du chantier Chauffage). Les cinq titres se
+   * comptent donc sur les deux fichiers. */
+  const sections = app + '\n' + lire('src', 'scenes.jsx');
   assert.ok(app.includes("<h1 className=\"o-vh\">{tr('Accueil')}</h1>"), 'l’Accueil n’a plus de titre de page');
   assert.ok(lire('src', 'index.css').includes('.o-vh { position: absolute !important; width: 1px; height: 1px;'), 'lu, pas vu');
-  assert.ok(!app.includes('<div style={sectionTitle}>'), 'un titre de section est redevenu un simple bloc');
-  assert.equal(app.split('<h2 style={sectionTitle}>').length - 1, 5);
+  assert.ok(!sections.includes('<div style={sectionTitle}>'), 'un titre de section est redevenu un simple bloc');
+  assert.equal(sections.split('<h2 style={sectionTitle}>').length - 1, 5);
   // Un h2 sans ces deux annulations changerait de taille et de marge à l'œil.
-  assert.ok(app.includes("const sectionTitle = { margin: 0, fontWeight: 400,"));
+  assert.ok(lire('src', 'styles.js').includes("export const sectionTitle = { margin: 0, fontWeight: 400,"));
 });
 
 test('aucune image sans texte alternatif, et celles qui disent quelque chose ont un nom', () => {

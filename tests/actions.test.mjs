@@ -317,10 +317,14 @@ test('le rejet d’une commande atteint le seul canal visible', () => {
    * vues, elles, ne pouvaient pas l'appeler — deux commandes des Paramètres
    * gardaient la route directe pour cette seule raison. */
   const moteur = readFileSync(join(RACINE_SRC, 'actions.js'), 'utf8');
-  const i = moteur.indexOf('export function commander(');
+  /* ASSERTION MODIFIÉE (passe bis de l'étape 2 IoT, 19/10 ; point C) : le corps de `commander` vit dans `lancerCommande`, qui rend
+   * aussi la promesse de l'appel — `commanderService` la rend à ses appelants, et le verrou de « Distribuer » tient jusqu'à la réponse.
+   * ASSERTION MODIFIÉE (ticket #34, 20/10) : l'envoi d'UN appel vit dans `lancerUn` ; `lancerCommande` découpe un ordre groupé. */
+  const i = moteur.indexOf('function lancerUn(');
   const corps = moteur.slice(i, moteur.indexOf('\n}', i));
   assert.match(corps, /Promise\.reject\(Object\.assign\(new Error\(motif\), \{ code: 'service_error' \}\)\)/,
     'commander avale de nouveau le rejet : les commandes qui passent par lui échoueront sans un mot');
+  assert.ok(/export function commander\([^)]*\) \{\n  return lancerCommande\([^)]*\)\.valeur;/.test(moteur), 'commander ne passe plus par lancerCommande');
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -397,7 +401,9 @@ test('la démo lit l’entité dans la cible autant que dans les données', () =
 
 test('un plan refusé ne meurt plus en silence', () => {
   const moteur = readFileSync(join(RACINE_SRC, 'actions.js'), 'utf8');
-  const i = moteur.indexOf('export function commander(');
+  // ASSERTION MODIFIÉE (passe bis de l'étape 2 IoT, 19/10 ; point C) : le corps de `commander` vit dans `lancerCommande`.
+  // ASSERTION MODIFIÉE (ticket #34, 20/10) : l'envoi d'UN appel, et son refus, vivent dans `lancerUn`.
+  const i = moteur.indexOf('function lancerUn(');
   const corps = moteur.slice(i, moteur.indexOf('\n}', i));
   /* `planAction` dit POURQUOI il refuse. Cette raison mourait ici : on appuyait,
    * rien ne se passait, rien ne l'expliquait.

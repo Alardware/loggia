@@ -9,11 +9,18 @@ minute un volet qu'on vient de mettre a l'abri.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+import json
+import logging
+import sys
+import time
+import types
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
 from conftest import FauxStore, charger
+from test_chauffage import FuseauParis
 
 
 def lancer(coro):
@@ -127,6 +134,10 @@ def creer(module, store_module, regles_module):
         v._defait_attente = None
         # Les ordres partis qu'il reste a verifier (ADR 0007).
         v._verifs = {}
+        # Ce que l'etat garde d'un sondage a l'autre : la fin de chaque
+        # protection, les heures du soleil de la journee.
+        v._fins = {}
+        v._jours_soleil = None
         v.armes = {"ouverture": {}, "fermeture": {}}
         v.raison = ""
         faits.append(v)
@@ -181,8 +192,8 @@ def test_les_jours_choisis(module):
     dimanche = datetime(2026, 9, 13)
     assert module.jour_actif([0, 1, 2, 3, 4], lundi)
     assert not module.jour_actif([0, 1, 2, 3, 4], dimanche)
-    # Une liste vide ou absente vaut « tous les jours ».
-    assert module.jour_actif([], dimanche)
+    # Absente, elle vaut « tous les jours » ; vide, « aucun » (audit du 19/10).
+    assert not module.jour_actif([], dimanche)
     assert module.jour_actif(None, dimanche)
 
 
@@ -555,6 +566,8 @@ def test_le_calme_revenu_ne_suffit_pas_de_justesse(creer):
     v.hass.states.table["sensor.vent"] = FauxEtat("48")     # juste sous 50
     assert lancer(v._async_vent()) is True
     v.hass.states.table["sensor.vent"] = FauxEtat("40")     # sous 85 % du seuil
+    assert lancer(v._async_vent()) is True, "le calme doit TENIR avant de lever l'abri"
+    _calme_tenu(v)
     assert lancer(v._async_vent()) is False
 
 
@@ -590,43 +603,15 @@ def test_sans_volet_regle_le_planning_prend_le_domaine(creer):
     lancer(v._async_planifie("fermer"))
     assert v.hass.services.appels[0][2]["entity_id"] == ["cover.a", "cover.b"]
 
-def test_jours_propres_par_sens_ANCIEN(module):
-    """Un volet peut ne pas s'ouvrir certains jours, et fermer quand meme.
-
-    Le cas qui l'a demande : travailler de nuit. La chambre ne doit pas
-    s'ouvrir le matin les jours ou l'on dort, mais doit s'ouvrir les jours de
-    repos — et la fermeture du soir, elle, ne change pas. Une seule liste de
-    jours pour les deux sens ne saurait pas dire cela.
-    """
-    lundi, samedi = datetime(2026, 9, 7), datetime(2026, 9, 12)   # weekday 0 et 5
-    plan = {"ouverture": {"decalage": 0}, "fermeture": {"decalage": 0},
-            "volets": {COVERS[0]: {"perso": True, "jours_ouverture": [5, 6]}}}
-
-    # Lundi : le volet ne s'ouvre pas, les autres si.
-    g = module.groupes_horaires(plan, COVERS, "ouverture", lundi)
-    assert COVERS[0] not in [x for v in g.values() for x in v], "le volet s'ouvre un jour ecarte"
-    assert COVERS[1] in [x for v in g.values() for x in v], "les autres volets ont ete emportes"
-
-    # Samedi : il s'ouvre.
-    g = module.groupes_horaires(plan, COVERS, "ouverture", samedi)
-    assert COVERS[0] in [x for v in g.values() for x in v], "le volet ne s'ouvre pas un jour retenu"
-
-    # La FERMETURE ignore les jours d'ouverture : sans liste propre, elle suit
-    # les jours generaux, tous les jours de la semaine.
-    g = module.groupes_horaires(plan, COVERS, "fermeture", lundi)
-    assert COVERS[0] in [x for v in g.values() for x in v], "les jours d'ouverture bloquent aussi la fermeture"
-
-
-def test_sans_date_aucun_filtre(module):
-    """`quand` absent : la fonction reste ce qu'elle etait.
-
-    Ses appels d'origine ne passent pas de date. S'ils se mettaient a filtrer,
-    ils ecarteraient des volets sans que rien ne l'ait demande.
-    """
+def test_les_groupes_ne_filtrent_jamais_par_jour(module):
+    """Les jours se jugent quand la cloche sonne (`volets_du_jour`), jamais en
+    formant les groupes : sept jours decoches ne retirent pas le volet de son
+    rendez-vous. Le filtre `quand`, que plus aucun appel ne passait, est parti
+    le 19/10."""
     plan = {"ouverture": {"decalage": 0},
             "volets": {COVERS[0]: {"perso": True, "jours_ouverture": []}}}
     g = module.groupes_horaires(plan, COVERS, "ouverture")
-    assert COVERS[0] in [x for v in g.values() for x in v], "un appel sans date s'est mis a filtrer"
+    assert COVERS[0] in [x for v in g.values() for x in v], "les groupes se sont mis a filtrer par jour"
 
 def test_le_rendez_vous_est_pose_meme_un_jour_ecarte(module):
     """Filtrer a la programmation aurait prive le volet de tout rendez-vous.
@@ -644,7 +629,7 @@ def test_le_rendez_vous_est_pose_meme_un_jour_ecarte(module):
 
 def test_le_filtre_agit_quand_la_cloche_sonne(module):
     lundi, samedi = datetime(2026, 9, 7), datetime(2026, 9, 12)   # weekday 0 et 5
-    plan = {"volets": {COVERS[0]: {"jours_ouverture": [5, 6]}}}
+    plan = {"volets": {COVERS[0]: {"perso": True, "jours_ouverture": [5, 6]}}}
     assert COVERS[0] not in module.volets_du_jour(plan, COVERS, "ouverture", lundi),         "le volet s'ouvre un jour ecarte"
     assert COVERS[0] in module.volets_du_jour(plan, COVERS, "ouverture", samedi),         "le volet ne s'ouvre pas un jour retenu"
     assert COVERS[1] in module.volets_du_jour(plan, COVERS, "ouverture", lundi),         "les autres volets ont ete emportes"
@@ -655,12 +640,11 @@ def test_le_filtre_agit_quand_la_cloche_sonne(module):
 def test_tous_les_jours_decoches_veut_dire_jamais(module):
     """`[]` est un choix, pas une absence de choix.
 
-    `jour_actif([])` repond « tous les jours » — juste pour les jours GENERAUX,
-    ou l'absence de liste dit « aucune restriction ». Pour un volet, la liste
-    vide vient de quelqu'un qui a decoche les sept cases : lui repondre
-    « toujours » serait l'exact contraire de ce qu'il a demande.
+    La liste vide vient de quelqu'un qui a decoche les sept cases : lui
+    repondre « toujours » serait l'exact contraire de ce qu'il a demande. Les
+    jours de la maison le lisent de meme depuis le 19/10 (`jour_actif`).
     """
-    plan = {"volets": {COVERS[0]: {"jours_ouverture": []}}}
+    plan = {"volets": {COVERS[0]: {"perso": True, "jours_ouverture": []}}}
     for jour in (datetime(2026, 9, 7), datetime(2026, 9, 12)):
         assert COVERS[0] not in module.volets_du_jour(plan, COVERS, "ouverture", jour),             "sept jours decoches ouvrent le volet au lieu de le laisser tranquille"
 
@@ -671,7 +655,7 @@ def test_des_jours_en_chaines_restent_compris(module):
     `weekday() in ["0","1"]` est faux tous les jours : le volet ne bougerait
     plus jamais, sans erreur ni journal pour le dire.
     """
-    plan = {"volets": {COVERS[0]: {"jours_ouverture": ["5", "6"]}}}
+    plan = {"volets": {COVERS[0]: {"perso": True, "jours_ouverture": ["5", "6"]}}}
     assert COVERS[0] in module.volets_du_jour(plan, COVERS, "ouverture", datetime(2026, 9, 12)),         "des jours ecrits en chaines excluent le volet pour toujours"
 
 def test_le_declenchement_quotidien_applique_le_filtre():
@@ -833,25 +817,6 @@ def test_un_horaire_sans_volet_ne_commande_rien(creer):
                             "ouverture": {"decalage": 0}}}, etats)
     lancer(v._async_planifie("ouvrir", decalage=120))
     assert v.hass.services.appels == []
-
-
-def test_les_heures_viennent_du_bon_module(module):
-    """`get_astral_event_next` vit dans `helpers.sun`, pas dans `components.sun`.
-
-    La premiere version se trompait de module, et son `except` avalait
-    l'ImportError : `prochains` rendait un dictionnaire vide sans un mot — dans
-    la fonction meme dont le role est de rendre les regles visibles. Constate
-    le 10/09/2026 sur l'installation, apres redemarrage : `armes` etait juste,
-    `prochains` etait vide.
-    """
-    from pathlib import Path
-    src = Path(module.__file__)
-    texte = src.read_text(encoding="utf-8")
-    corps = texte[texte.index("def _prochains"):]
-    assert "from homeassistant.helpers.sun import get_astral_event_next" in corps
-    assert "from homeassistant.components.sun import" not in corps
-    # Et l'echec se DIT, il ne rend plus un vide indistinguable d'un succes.
-    assert "heures indisponibles" in corps,         "un garde-fou muet ne garde rien : l'erreur doit remonter"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1064,6 +1029,7 @@ def test_le_vent_tient_les_volets_puis_les_rend(creer):
     lancer(v._async_vent())
     assert v.regles.tenues("volets") == {"cover.salon": "vent"}
     v.hass.states.table["sensor.vent"] = FauxEtat("30")
+    _calme_tenu(v)
     lancer(v._async_vent())
     assert v.regles.tenues("volets") == {}, "calme revenu, le vent retient encore les volets"
 
@@ -1413,3 +1379,1469 @@ def test_le_reglage_des_tentatives_a_son_defaut_et_ses_bornes(creer):
     for mauvais in (0, 4, "2"):
         with pytest.raises(ValueError):
             lancer(v.async_enregistrer({"verification": {"tentatives": mauvais}}))
+
+
+# ── Le calcul suit le moteur (chantier Volets, spec 6.2) ────────────────────
+# `volets_calcul.py` dit a l'ecran quand chaque volet bougera ; c'est le MOTEUR
+# qui le fait bouger. Ici le vrai `_async_planifie`, cloche par cloche, sur
+# chaque plan de la fixture partagee et chaque jour d'une semaine : ce qu'il
+# commande doit etre ce que le calcul annonce - le jour, et le decalage.
+
+PARITE = json.loads((Path(__file__).resolve().parents[2] / "tests" / "fixtures"
+                     / "volets_parite.json").read_text(encoding="utf-8"))
+
+
+def _commande_du_moteur(module, creer, plan, haid, sens):
+    """Les decalages auxquels `_async_planifie` commande ce volet ce jour-la, un
+    par ordre : une LISTE, pour qu'un moteur qui le commanderait deux fois se
+    voie - et le plan tel que le moteur le lit (les defauts compris)."""
+    court = "ouvrir" if sens == "ouverture" else "fermer"
+    etats = {h: FauxEtat("open", {"supported_features": 15, "current_position": 50}) for h in PARITE["volets"]}
+    v = creer({"planning": plan}, etats)
+    commandes = []
+    for decalage in sorted(module.decalages_du_plan(v.cfg["planning"], sens)):
+        v.hass.services.appels.clear()
+        lancer(v._async_planifie(court, decalage=decalage))
+        commandes += [decalage for a in v.hass.services.appels if haid in a[2]["entity_id"]]
+    return commandes, v.cfg["planning"]
+
+
+@pytest.mark.parametrize("nom", sorted(PARITE["plans"]))
+@pytest.mark.parametrize("haid", PARITE["volets"])
+def test_le_calcul_suit_le_moteur(module, creer, monkeypatch, nom, haid):
+    calc = charger("volets_calcul")
+    for jour in range(7):
+        quand = datetime(2026, 10, 19 + jour, 12, 0)       # lundi 19/10, puis la semaine
+        monkeypatch.setattr(sys.modules["homeassistant.util.dt"], "now", lambda q=quand: q)
+        for sens in ("ouverture", "fermeture"):
+            commandes, plan = _commande_du_moteur(module, creer, PARITE["plans"][nom], haid, sens)
+            annonce = [calc.decalage_de(plan, haid, sens)] if calc.bouge(plan, haid, sens, jour) else []
+            assert commandes == annonce, (nom, haid, sens, jour)
+
+
+# ── Ce que l'etat publie pour chaque volet (chantier Volets, spec 6.1) ──────
+# Les doublures de Home Assistant n'ont ni `helpers.sun` ni `const` : on les
+# pose le temps d'un test. L'heure de la maison est figee au mercredi
+# 21/10/2026 a 12:00, a Paris (+02:00) - le vrai fuseau de Paris, changements
+# d'heure compris (`FuseauParis`, ecrit a la main dans test_chauffage.py : la
+# machine de developpement n'a pas de base des fuseaux). L'heure d'hiver revient
+# le dimanche 25/10.
+
+PARIS = FuseauParis()
+MIDI = datetime(2026, 10, 21, 12, 0, tzinfo=PARIS)
+
+
+@pytest.fixture
+def maintenant(monkeypatch):
+    monkeypatch.setattr(sys.modules["homeassistant.util.dt"], "now", lambda: MIDI)
+    return MIDI
+
+
+@pytest.fixture
+def soleil_ha(monkeypatch):
+    """`homeassistant.helpers.sun` et `homeassistant.const`, comme les vrais :
+    `get_astral_event_date` rend l'evenement de la date UTC qu'on lui donne, en
+    instant UTC, ou None quand il n'a pas lieu. Ici le lever a 06:14:10 UTC et le
+    coucher a 16:58:40 UTC chaque jour (`heures` les change) ; `sans` : les dates
+    sans soleil ; `panne` : une erreur qui passe - le vrai avale ValueError, et
+    rend alors None comme pour un jour sans lever ; `appels` : ce qu'on lui a
+    demande."""
+    etat = types.SimpleNamespace(sans=set(), panne=False, appels=0,
+                                 heures={"sunrise": (6, 14, 10), "sunset": (16, 58, 40)})
+
+    def get_astral_event_date(hass, evenement, jour):
+        etat.appels += 1
+        if etat.panne:
+            raise RuntimeError("emplacement illisible")
+        if jour in etat.sans:
+            return None
+        h, m, s = etat.heures[evenement]
+        return datetime(jour.year, jour.month, jour.day, h, m, s, tzinfo=timezone.utc)
+
+    sun = types.ModuleType("homeassistant.helpers.sun")
+    sun.get_astral_event_date = get_astral_event_date
+    const = types.ModuleType("homeassistant.const")
+    const.SUN_EVENT_SUNRISE, const.SUN_EVENT_SUNSET = "sunrise", "sunset"
+    monkeypatch.setitem(sys.modules, "homeassistant.helpers.sun", sun)
+    monkeypatch.setitem(sys.modules, "homeassistant.const", const)
+    return etat
+
+
+# Sa configuration du 12/10 : la chambre ne s'ouvre jamais seule, le salon
+# garde l'ancienne forme, le groupe est exclu ; le garage n'est pas un volet.
+CHEZ_LUI = {"planning": {"actif": True, "mode": "auto", "ouverture": {"decalage": 30},
+                         "fermeture": {"decalage": 30}, "volets": {
+                             "cover.chambre": {"perso": True, "ouverture": None, "fermeture": 30,
+                                               "jours_ouverture": []},
+                             "cover.salon": {"ouverture": 30, "fermeture": 30},
+                             "cover.groupe": {"exclu": True}}}}
+TROIS = {"cover.chambre": FauxEtat("closed", {"supported_features": 15, "current_position": 1}),
+         "cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 100}),
+         "cover.groupe": FauxEtat("open", {"supported_features": 15}),
+         "cover.garage": FauxEtat("closed", {"device_class": "garage"})}
+
+
+def test_l_etat_dit_l_heure_de_la_maison_et_le_soleil_de_la_semaine(creer, maintenant, soleil_ha):
+    etat = lancer(creer(CHEZ_LUI, TROIS).async_etat())
+    assert etat["maintenant"] == "2026-10-21T12:00:00+02:00"
+    jours = etat["soleil_jours"]
+    # Du lundi de la semaine en cours a aujourd'hui + 7 jours : 19/10 -> 28/10.
+    assert [j["date"] for j in jours] == ["2026-10-%02d" % d for d in range(19, 29)]
+    assert jours[0] == {"date": "2026-10-19", "lever": "2026-10-19T08:14:10+02:00",
+                        "coucher": "2026-10-19T18:58:40+02:00"}
+
+
+def test_un_jour_sans_lever_ni_coucher_se_dit_par_none(creer, maintenant, soleil_ha):
+    soleil_ha.sans = {date(2026, 10, 22)}
+    jours = lancer(creer(CHEZ_LUI, TROIS).async_etat())["soleil_jours"]
+    assert jours[3] == {"date": "2026-10-22", "lever": None, "coucher": None}
+
+
+def test_le_soleil_illisible_vide_la_semaine_et_se_dit_une_fois(creer, maintenant, soleil_ha, caplog, monkeypatch):
+    caplog.set_level(logging.WARNING)
+    v = creer(CHEZ_LUI, TROIS)
+    soleil_ha.panne = True
+    for _ in range(3):
+        etat = lancer(v.async_etat())
+        assert etat["soleil_jours"] == [] and etat["volets"]["cover.salon"]["a_venir"] == []
+    dits = [r for r in caplog.records if "heures du soleil illisibles" in r.getMessage()]
+    assert len(dits) == 1, "le sondage de l'ecran remplirait le journal"
+    # Revenu, il se lit, et ses heures se gardent pour la journee : reparti le
+    # meme jour, il ne se voit pas. Le lendemain, il se redit - une fois.
+    soleil_ha.panne = False
+    assert lancer(v.async_etat())["soleil_jours"]
+    soleil_ha.panne = True
+    assert lancer(v.async_etat())["soleil_jours"], "les heures de la journee sont gardees"
+    monkeypatch.setattr(sys.modules["homeassistant.util.dt"], "now", lambda: MIDI + timedelta(days=1))
+    lancer(v.async_etat())
+    lancer(v.async_etat())
+    assert len([r for r in caplog.records if "heures du soleil illisibles" in r.getMessage()]) == 2
+
+
+def test_l_heure_d_hiver_se_dit_par_son_decalage(creer, maintenant, soleil_ha):
+    """Paris repasse a l'heure d'hiver le dimanche 25/10 a 03:00 : un lever a
+    06:14:10 UTC s'ecrit 08:14:10+02:00 le samedi, 07:14:10+01:00 le lundi."""
+    jours = {j["date"]: j for j in lancer(creer(CHEZ_LUI, TROIS).async_etat())["soleil_jours"]}
+    assert jours["2026-10-24"]["lever"] == "2026-10-24T08:14:10+02:00"
+    assert jours["2026-10-26"] == {"date": "2026-10-26", "lever": "2026-10-26T07:14:10+01:00",
+                                   "coucher": "2026-10-26T17:58:40+01:00"}
+
+
+def test_le_lundi_apres_minuit_la_fermeture_du_dimanche_est_encore_a_venir(creer, soleil_ha, monkeypatch):
+    """Le coucher du dimanche 14/06 a 21:57:22, +240 min : la fermeture sonne le
+    lundi a 01:57:22, et la maison ferme le lundi. A 00:30, elle est encore a
+    venir. `soleil_jours` publie pourtant la semaine A PARTIR du lundi : la
+    veille ne sert qu'au calcul (cas « veille_du_lundi » de la fixture)."""
+    lundi = datetime(2026, 6, 15, 0, 30, tzinfo=PARIS)
+    monkeypatch.setattr(sys.modules["homeassistant.util.dt"], "now", lambda: lundi)
+    soleil_ha.heures = {"sunrise": (3, 46, 2), "sunset": (19, 57, 22)}
+    tard = {"planning": {"actif": True, "mode": "auto", "ouverture": {"decalage": 0},
+                         "fermeture": {"decalage": 240}, "jours": [0, 1, 2, 3, 4]}}
+    etat = lancer(creer(tard, TROIS).async_etat())
+    assert [j["date"] for j in etat["soleil_jours"]] == ["2026-06-%02d" % d for d in range(15, 23)]
+    assert etat["volets"]["cover.salon"]["a_venir"][:2] == [
+        {"sens": "fermeture", "heure": "2026-06-15T01:57:22+02:00", "source": "coucher", "decalage": 240},
+        {"sens": "ouverture", "heure": "2026-06-15T05:46:02+02:00", "source": "lever", "decalage": 0}]
+
+
+@pytest.mark.parametrize("decalage,heures,premier", [
+    (9, {"sunrise": (20, 30, 0), "sunset": (8, 0, 0)},
+     {"date": "2026-10-19", "lever": "2026-10-19T05:30:00+09:00", "coucher": "2026-10-19T17:00:00+09:00"}),
+    (-7, {"sunrise": (14, 0, 0), "sunset": (2, 30, 0)},
+     {"date": "2026-10-19", "lever": "2026-10-19T07:00:00-07:00", "coucher": "2026-10-19T19:30:00-07:00"}),
+], ids=["tokyo", "los_angeles"])
+def test_loin_de_l_utc_chaque_evenement_se_range_sous_sa_date_locale(creer, soleil_ha, monkeypatch,
+                                                                    decalage, heures, premier):
+    """`get_astral_event_date` rend l'evenement de la DATE UTC qu'on lui donne. A
+    Tokyo, le lever de 05:30 tombe a 20:30 UTC la veille ; a Los Angeles l'ete, le
+    coucher de 19:30 tombe a 02:30 UTC le lendemain. Chaque ligne porte les
+    heures de SA date, a l'heure de la maison."""
+    fuseau = timezone(timedelta(hours=decalage))
+    monkeypatch.setattr(sys.modules["homeassistant.util.dt"], "now",
+                        lambda: datetime(2026, 10, 21, 12, 0, tzinfo=fuseau))
+    soleil_ha.heures = heures
+    jours = lancer(creer(CHEZ_LUI, TROIS).async_etat())["soleil_jours"]
+    assert [j["date"] for j in jours] == ["2026-10-%02d" % d for d in range(19, 29)]
+    assert jours[0] == premier
+    for j in jours:
+        assert j["lever"].startswith(j["date"] + "T") and j["coucher"].startswith(j["date"] + "T"), j
+
+
+def test_les_heures_du_soleil_se_gardent_pour_la_journee(creer, maintenant, soleil_ha, monkeypatch):
+    """L'ecran sonde toutes les cinq secondes : les heures du soleil ne se
+    redemandent qu'a un autre jour, un autre fuseau ou un autre emplacement de
+    la maison - ce dont elles dependent."""
+    v = creer(CHEZ_LUI, TROIS)
+    premier = lancer(v.async_etat())["soleil_jours"]
+    demandes = soleil_ha.appels
+    assert demandes > 0
+    assert lancer(v.async_etat())["soleil_jours"] == premier
+    assert soleil_ha.appels == demandes, "le second sondage a tout redemande"
+    monkeypatch.setattr(sys.modules["homeassistant.util.dt"], "now", lambda: MIDI + timedelta(days=1))
+    assert lancer(v.async_etat())["soleil_jours"][-1]["date"] == "2026-10-29", "le lendemain, la semaine avance"
+    lendemain = soleil_ha.appels
+    assert lendemain > demandes
+    v.hass.config.latitude = 43.3
+    lancer(v.async_etat())
+    assert soleil_ha.appels > lendemain, "la maison a change de place"
+
+
+def test_chaque_volet_dit_sa_regle_et_ses_prochains_mouvements(creer, maintenant, soleil_ha):
+    volets = lancer(creer(CHEZ_LUI, TROIS).async_etat())["volets"]
+    assert sorted(volets) == ["cover.chambre", "cover.groupe", "cover.salon"], "un garage n'est pas un volet"
+    assert {h: v["regle"] for h, v in volets.items()} == {
+        "cover.chambre": "perso", "cover.groupe": "jamais", "cover.salon": "perso"}
+    assert volets["cover.salon"]["a_venir"][:2] == [
+        {"sens": "fermeture", "heure": "2026-10-21T19:28:40+02:00", "source": "coucher", "decalage": 30},
+        {"sens": "ouverture", "heure": "2026-10-22T08:44:10+02:00", "source": "lever", "decalage": 30}]
+    assert len(volets["cover.salon"]["a_venir"]) == 14
+    assert {m["sens"] for m in volets["cover.chambre"]["a_venir"]} == {"fermeture"}, "la chambre ne s'ouvre jamais seule"
+    assert volets["cover.groupe"]["a_venir"] == []
+
+
+def test_la_porte_devant_se_lit_meme_quand_la_regle_est_coupee(creer, maintenant, soleil_ha):
+    cfg = {**CHEZ_LUI, "baies": {"actif": False, "volets": {"cover.salon": "binary_sensor.baie",
+                                                             "cover.chambre": "binary_sensor.fenetre"}}}
+    etats = {**TROIS, "binary_sensor.baie": FauxEtat("on", {"device_class": "door"}),
+             "binary_sensor.fenetre": FauxEtat("unavailable", {})}
+    volets = lancer(creer(cfg, etats).async_etat())["volets"]
+    assert volets["cover.salon"]["porte"] == {"entite": "binary_sensor.baie", "etat": "ouverte"}
+    assert volets["cover.chambre"]["porte"] == {"entite": "binary_sensor.fenetre", "etat": "muette"}
+    assert volets["cover.groupe"]["porte"] is None
+
+
+def test_l_attente_l_abri_et_la_facade_se_lisent_volet_par_volet(creer, maintenant, soleil_ha, monkeypatch):
+    # L'horloge du module, figee au meme midi que `dt_util.now` (MIDI, le 21/10) :
+    # la publication de l'etat purge les attentes expirees sur `time.time()` - la
+    # vraie heure -, et l'attente du 22/10 ci-dessous disparaissait des que ce
+    # jour etait passe (vu le 25/10). Le test ne depend plus du jour ou il tourne.
+    monkeypatch.setattr(time, "time", lambda: maintenant.timestamp())
+    cfg = {**CHEZ_LUI, "soleil": {"volets": {"cover.salon": {"orientation": 225},
+                                             "cover.chambre": {"orientation": "-45"}}}}
+    v = creer(cfg, TROIS)
+    expire = datetime(2026, 10, 22, 8, 14, 10, tzinfo=PARIS).timestamp()
+    v.attente["cover.salon"] = {"sens": "fermer", "expire": expire, "motif": "baie ouverte"}
+    v.a_l_abri = True
+    volets = lancer(v.async_etat())["volets"]
+    assert volets["cover.salon"]["attente"] == {"sens": "fermer", "motif": "baie ouverte",
+                                                "expire": "2026-10-22T08:14:10+02:00"}
+    assert volets["cover.chambre"]["attente"] is None
+    assert all(x["abri"] is True for x in volets.values())
+    assert volets["cover.salon"]["orientation"] == 225
+    assert volets["cover.chambre"]["orientation"] == 315
+    assert volets["cover.groupe"]["orientation"] is None
+
+
+# ── Quand la protection relache (chantier Volets, spec 6.3) ─────────────────
+
+class SoleilQuiTourne:
+    """Un soleil de test : plein sud (180) a 12:00 UTC le 21/10/2026, qui tourne
+    de 15 degres par heure, a 40 degres de haut jusqu'a midi puis descend de 5
+    degres par heure. Il sert de `position_soleil` et d'emplacement astral
+    (`solar_azimuth`, `solar_elevation`), et compte ce qu'on lui demande."""
+
+    MIDI_UTC = datetime(2026, 10, 21, 12, 0, tzinfo=timezone.utc)
+
+    def __init__(self):
+        self.appels = 0
+
+    def _heures(self, instant):
+        return (instant - self.MIDI_UTC).total_seconds() / 3600
+
+    def __call__(self, instant):
+        self.appels += 1
+        return self.solar_azimuth(instant, 0), self.solar_elevation(instant, 0)
+
+    def solar_azimuth(self, instant, altitude):
+        return 180.0 + 15.0 * self._heures(instant)
+
+    def solar_elevation(self, instant, altitude):
+        return 40.0 - 5.0 * max(0.0, self._heures(instant))
+
+
+def test_la_protection_relache_quand_le_soleil_descend_sous_la_hauteur_minimale(module):
+    """A 17:00 UTC il est a 15 degres pile - encore au soleil (`au_soleil` veut
+    moins de 15 pour sortir) ; a 17:05 il est dessous : la grille le dit."""
+    fin = module.fin_protection(SoleilQuiTourne(), 225, 90, 15, MIDI)
+    assert fin == datetime(2026, 10, 21, 17, 5, tzinfo=timezone.utc)
+
+
+def test_la_protection_relache_avec_l_hysterese_de_la_regle(module):
+    """Facade 225, cone de 90 : le soleil a 310 y est encore SANS hysterese
+    (310 <= 315), plus AVEC (310 > 307) - et c'est avec elle que la regle rend
+    le volet. La premiere case de la grille le dit."""
+    def fixe(instant):
+        return 310.0, 40.0
+    assert module.fin_protection(fixe, 225, 90, 15, MIDI) == datetime(2026, 10, 21, 10, 5, tzinfo=timezone.utc)
+
+
+def test_vingt_quatre_heures_au_plus_par_pas_de_cinq_minutes(module):
+    soleil = SoleilQuiTourne()
+
+    def toujours_en_face(instant):
+        soleil(instant)
+        return 225.0, 40.0
+    assert module.fin_protection(toujours_en_face, 225, 90, 15, MIDI) is None
+    assert soleil.appels == 288, "24 h par pas de 5 min"
+
+
+def test_une_position_illisible_ne_dit_rien(module):
+    def panne(instant):
+        raise ValueError("astral")
+    assert module.fin_protection(panne, 225, 90, 15, MIDI) is None
+    assert module.fin_protection(lambda instant: (None, 40.0), 225, 90, 15, MIDI) is None
+
+
+@pytest.fixture
+def lieu_ha(soleil_ha, monkeypatch):
+    """`get_astral_location`, comme le vrai : (l'emplacement astral, l'altitude)."""
+    lieu = SoleilQuiTourne()
+    monkeypatch.setattr(sys.modules["homeassistant.helpers.sun"], "get_astral_location",
+                        lambda hass: (lieu, 35), raising=False)
+    return lieu
+
+
+def _tenu_au_soleil(v, haid, avant):
+    """Ce que laisse la protection quand elle baisse un volet (`_async_soleil`) :
+    elle le TIENT, par le socle, et retient d'ou elle l'a pris."""
+    lancer(v.regles.agir("volets", "soleil", "cover", "set_cover_position", [haid], {"position": 30},
+                         quoi="proteger", priorite=charger("volets").PRIORITES["soleil"], tenir=True))
+    v.abaisses[haid] = avant
+
+
+PROTEGE = {**CHEZ_LUI, "soleil": {"actif": True, "elevation_min": 15,
+                                  "volets": {"cover.salon": {"orientation": 225, "ouverture": 90}}}}
+
+
+def test_un_volet_protege_dit_jusqu_a_quand_et_ou_il_reviendra(creer, maintenant, lieu_ha):
+    cfg = {**CHEZ_LUI, "soleil": {"actif": True, "elevation_min": 15,
+                                  "volets": {"cover.salon": {"orientation": 225, "ouverture": 90}}}}
+    v = creer(cfg, TROIS)
+    _tenu_au_soleil(v, "cover.salon", 70)
+    volets = lancer(v.async_etat())["volets"]
+    assert volets["cover.salon"]["protection"] == {"jusqu_a": "2026-10-21T19:05:00+02:00",
+                                                   "position": 70, "orientation": 225}
+    assert volets["cover.chambre"]["protection"] is None
+    # Une position d'avant inconnue : elle le rendra grand ouvert (`_async_rendre`).
+    v.abaisses = {"cover.salon": None}
+    assert lancer(v.async_etat())["volets"]["cover.salon"]["protection"]["position"] == 100
+
+
+def test_sans_la_position_du_soleil_la_protection_ne_dit_pas_d_heure(creer, maintenant, soleil_ha, caplog):
+    caplog.set_level(logging.WARNING)
+    cfg = {**CHEZ_LUI, "soleil": {"actif": True, "volets": {"cover.salon": {"orientation": 225}}}}
+    v = creer(cfg, TROIS)
+    _tenu_au_soleil(v, "cover.salon", 70)
+    for _ in range(2):
+        assert lancer(v.async_etat())["volets"]["cover.salon"]["protection"] == {
+            "jusqu_a": None, "position": 70, "orientation": 225}
+    assert len([r for r in caplog.records if "position du soleil illisible" in r.getMessage()]) == 1
+
+
+def test_la_protection_ne_promet_que_ce_qu_elle_rendra(creer, maintenant, lieu_ha):
+    """Releve a la main, un volet reste dans `abaisses`, mais la protection ne le
+    rendra pas : `_async_rendre` exige qu'elle le tienne encore. Coupee, elle ne
+    rend plus rien : `_async_soleil` s'arrete. L'etat ne promet pas une remontee
+    qui n'arrivera pas."""
+    from homeassistant.core import Context
+
+    class Main:
+        data = {"entity_id": "cover.salon"}
+        context = Context(user_id="quelqu-un")
+
+    v = creer(PROTEGE, TROIS)
+    _tenu_au_soleil(v, "cover.salon", 70)
+    assert lancer(v.async_etat())["volets"]["cover.salon"]["protection"]["position"] == 70
+    v.regles._sur_changement(Main())
+    assert v.abaisses == {"cover.salon": 70}, "il reste baisse aux yeux de la regle"
+    assert lancer(v.async_etat())["volets"]["cover.salon"]["protection"] is None
+    coupee = creer({**PROTEGE, "soleil": {**PROTEGE["soleil"], "actif": False}}, TROIS)
+    _tenu_au_soleil(coupee, "cover.salon", 70)
+    assert lancer(coupee.async_etat())["volets"]["cover.salon"]["protection"] is None
+
+
+def test_la_fin_de_la_protection_se_garde_tant_qu_elle_n_est_pas_passee(creer, maintenant, lieu_ha, monkeypatch):
+    """Chercher la fin coute jusqu'a 288 pas de cinq minutes, et l'ecran sonde
+    toutes les cinq secondes : on la garde, par volet et par reglages, tant
+    qu'elle n'est pas passee - la grille est fixe. Mesure : les positions du
+    soleil demandees, sur deux sondages."""
+    positions = []
+    vraie = lieu_ha.solar_azimuth
+    lieu_ha.solar_azimuth = lambda instant, altitude: positions.append(instant) or vraie(instant, altitude)
+    v = creer(PROTEGE, TROIS)
+    _tenu_au_soleil(v, "cover.salon", 70)
+    premier = lancer(v.async_etat())["volets"]["cover.salon"]["protection"]
+    assert premier["jusqu_a"] == "2026-10-21T19:05:00+02:00"
+    assert len(positions) == 85, "de 10:05 a 17:05 UTC, par pas de cinq minutes"
+    assert lancer(v.async_etat())["volets"]["cover.salon"]["protection"] == premier
+    assert len(positions) == 85, "le second sondage a tout recalcule"
+    # La fin passee - le soleil sous la hauteur minimale -, on cherche la suivante.
+    monkeypatch.setattr(sys.modules["homeassistant.util.dt"], "now", lambda: MIDI + timedelta(hours=7, minutes=6))
+    assert lancer(v.async_etat())["volets"]["cover.salon"]["protection"]["jusqu_a"] == "2026-10-21T19:10:00+02:00"
+    assert len(positions) == 86
+    # D'autres reglages, ou une maison qui change de place : on recalcule.
+    v.cfg["soleil"]["volets"]["cover.salon"]["ouverture"] = 60
+    lancer(v.async_etat())
+    assert len(positions) == 87
+    v.hass.config.latitude = 43.3
+    lancer(v.async_etat())
+    assert len(positions) == 88
+    # Un volet qui n'est plus baisse sort de ce qu'on garde.
+    v.abaisses.clear()
+    lancer(v.async_etat())
+    assert v._fins == {}
+
+
+# ── Le journal plus precis, et la manoeuvre en cours (spec 6.4 et 6.1) ──────
+
+def test_la_protection_note_sa_facade_et_la_temperature_du_dehors(creer):
+    haut = {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 70})}
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **haut})
+    lancer(v._async_soleil())
+    proteger = lancer(v.regles.journal(module="volets"))[0]
+    assert (proteger["quoi"], proteger["cible"], proteger["orientation"], proteger["dehors"]) == (
+        "proteger", 30, 225, 29.0)
+    v.hass.states.table["sun.sun"] = FauxEtat("above_horizon", {"azimuth": 60, "elevation": 30})
+    lancer(v._async_soleil())
+    rouvrir = lancer(v.regles.journal(module="volets"))[0]
+    assert (rouvrir["quoi"], rouvrir["cible"], rouvrir["orientation"], rouvrir["dehors"]) == (
+        "rouvrir", 70, 225, 29.0)
+
+
+def test_le_planning_note_sa_cible_sans_facade(creer):
+    v = creer(CFG_PLAN, {"cover.salon": FauxEtat("open", {"supported_features": 15})})
+    _fermer(v)
+    ligne = lancer(v.regles.journal(module="volets"))[0]
+    assert ligne["cible"] == 0 and "orientation" not in ligne and "dehors" not in ligne
+
+
+def test_la_reprise_d_une_protection_garde_sa_facade(creer, rdv):
+    haut = {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 70})}
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **haut})
+    lancer(v._async_soleil())
+    _echoir(v, rdv)                       # 120 s : une position ne bascule rien, premier tour
+    _echoir(v, rdv)                       # 240 s : toujours a 70, on redemande
+    reprise = lancer(v.regles.journal(module="volets"))[0]
+    assert reprise["motif"].endswith("essai 1/2")
+    assert (reprise["cible"], reprise["orientation"], reprise["dehors"]) == (30, 225, 29.0)
+
+
+def test_la_manoeuvre_en_cours_est_publiee_puis_effacee(creer, rdv, maintenant, monkeypatch):
+    ordre = datetime(2026, 10, 21, 11, 58, 30, tzinfo=PARIS).timestamp()
+    monkeypatch.setattr(time, "time", lambda: ordre)
+    v = creer(CFG_PLAN, {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 100})})
+    _fermer(v)
+    assert lancer(v.async_etat())["volets"]["cover.salon"]["manoeuvre"] == {
+        "cible": 0, "depuis": "2026-10-21T11:58:30+02:00", "regle": "planning"}
+    v.hass.states.table["cover.salon"] = FauxEtat("closed", {"supported_features": 15, "current_position": 0})
+    _echoir(v, rdv)
+    assert lancer(v.async_etat())["volets"]["cover.salon"]["manoeuvre"] is None
+
+
+def test_une_main_efface_la_manoeuvre_en_cours(creer, rdv, maintenant):
+    """Le planning ferme le salon, puis quelqu'un le rouvre depuis l'appli : la
+    descente n'est plus ce que fait le volet. La verification attend encore,
+    mais l'ecran ne doit plus jouer cette course."""
+    from homeassistant.core import Context
+
+    class Main:
+        data = {"entity_id": "cover.salon"}
+        context = Context(user_id="quelqu-un")
+
+    v = creer(CFG_PLAN, {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 100})})
+    _fermer(v)
+    assert lancer(v.async_etat())["volets"]["cover.salon"]["manoeuvre"]["cible"] == 0
+    v.regles._sur_changement(Main())
+    assert "cover.salon" in v._verifs, "la verification attend encore"
+    assert lancer(v.async_etat())["volets"]["cover.salon"]["manoeuvre"] is None
+
+
+def test_une_regle_qui_reprend_le_volet_efface_la_manoeuvre(creer, rdv, maintenant):
+    """Le planning ferme le salon ; une alerte le remonte, et le TIENT : ce n'est
+    plus la regle de l'ordre qui le tient, la descente n'est plus a jouer. Une
+    regle des volets qui tient elle-meme son volet - la protection - garde sa
+    manoeuvre."""
+    v = creer(CFG_PLAN, {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 100})})
+    _fermer(v)
+    lancer(v.regles.agir("alertes", "danger", "cover", "open_cover", ["cover.salon"], quoi="remonter",
+                         priorite=charger("alertes").PRIORITE, tenir=True))
+    assert "cover.salon" in v._verifs and v.regles.tenues_toutes()["cover.salon"]["module"] == "alertes"
+    assert lancer(v.async_etat())["volets"]["cover.salon"]["manoeuvre"] is None
+    haut = {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 70})}
+    w = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **haut})
+    lancer(w._async_soleil())
+    assert lancer(w.async_etat())["volets"]["cover.salon"]["manoeuvre"]["regle"] == "soleil"
+
+
+def test_la_forme_publiee_est_celle_du_contrat(creer, maintenant, soleil_ha):
+    """Spec 6.1 : l'ecran lit ces noms-la. Ceux d'avant restent, sauf
+    `prochains`, que plus aucun ecran ne lisait (audit du 19/10)."""
+    etat = lancer(creer(CHEZ_LUI, TROIS).async_etat())
+    for cle in ("config", "soleil", "abaisses", "a_l_abri", "journal", "priorites", "tenues", "armes",
+                "attente", "raison", "maintenant", "soleil_jours", "volets"):
+        assert cle in etat, cle
+    for haid, volet in etat["volets"].items():
+        assert set(volet) == {"regle", "a_venir", "protection", "abri", "attente", "porte",
+                              "orientation", "manoeuvre"}, haid
+
+
+# ── Les manoeuvres d'un volet (chantier Volets, spec 6.5) ───────────────────
+
+def test_les_lignes_d_un_volet_viennent_de_tous_les_modules(creer):
+    v = creer(CFG_PLAN, VOLET)
+    r = v.regles
+    lignes = [
+        lancer(r.noter("volets", "planning", "fermer", cibles=["cover.salon"])),
+        lancer(r.noter("alertes", "danger", "ouvrir", cibles=["cover.cuisine", "cover.salon"])),
+        lancer(r.noter("volets", "non abouti", "fermer", n=0, detail="cover.salon", echec=True)),
+        lancer(r.noter("volets", "non abouti", "fermer", n=0, detail="cover.salon_2")),
+        lancer(r.noter("volets", "planning", "ouvrir", cibles=["cover.cuisine"])),
+        lancer(r.noter("scenarios", "cinema", "Cinema", cibles=["light.a", "cover.salon"])),
+    ]
+    for i, e in enumerate(lignes):
+        e["ts"] = 1000.0 + i                     # une seconde d'ecart, la plus vieille d'abord
+    lignes[0]["ts"] = 900.0                      # avant `depuis`
+    rep = lancer(v.async_manoeuvres("cover.salon", 950.0))
+    assert [(e["module"], e["regle"]) for e in rep["lignes"]] == [
+        ("scenarios", "cinema"), ("volets", "non abouti"), ("alertes", "danger")]
+    assert rep["couvre_depuis"] == 900.0, "la plus vieille ligne du journal entier"
+
+
+def test_au_plus_deux_cents_lignes_les_plus_recentes(creer):
+    v = creer(CFG_PLAN, VOLET)
+    for i in range(250):
+        e = lancer(v.regles.noter("volets", "planning", "fermer", cibles=["cover.salon"]))
+        e["ts"] = 2000.0 + i
+    rep = lancer(v.async_manoeuvres("cover.salon", 0))
+    assert len(rep["lignes"]) == 200
+    assert rep["lignes"][0]["ts"] == 2249.0 and rep["lignes"][-1]["ts"] == 2050.0
+
+
+def test_coupee_a_deux_cents_la_reponse_ne_couvre_que_ce_qu_elle_montre(creer):
+    """Le journal garde 250 lignes de ce volet, la reponse en montre 200 : avant
+    la plus vieille montree, elle ne sait plus rien, meme si le journal, lui,
+    remonte plus loin. L'ecran ne dit pas « a la main » sans le savoir."""
+    v = creer(CFG_PLAN, VOLET)
+    for i in range(250):
+        e = lancer(v.regles.noter("volets", "planning", "fermer", cibles=["cover.salon"]))
+        e["ts"] = 2000.0 + i
+    rep = lancer(v.async_manoeuvres("cover.salon", 0))
+    assert rep["lignes"][-1]["ts"] == 2050.0 and rep["couvre_depuis"] == 2050.0
+    # Sans coupe, c'est le journal entier qui dit jusqu'ou il remonte.
+    assert lancer(v.async_manoeuvres("cover.salon", 2100.0))["couvre_depuis"] == 2000.0
+
+
+def test_un_journal_vide_ne_couvre_rien(creer):
+    v = creer(CFG_PLAN, VOLET)
+    assert lancer(v.async_manoeuvres("cover.salon", 0)) == {"lignes": [], "couvre_depuis": None}
+
+
+def test_un_volet_se_nomme_par_son_identifiant_entier(module):
+    assert module.nomme("cover.salon", "cover.salon")
+    assert module.nomme("capteur indisponible : cover.salon, cover.cuisine", "cover.salon")
+    assert not module.nomme("cover.salon_2", "cover.salon")
+    assert not module.nomme("xcover.salon", "cover.salon")
+    assert not module.nomme(None, "cover.salon") and not module.nomme("cover.salon", "")
+
+
+# ── La verification attend un volet qui a repondu (nuance de l'ADR 0007) ────
+# Netatmo bascule l'etat tout de suite apres l'ordre et ne publie la position
+# qu'une a trois minutes apres. A deux minutes, l'ancienne regle redonnait
+# l'ordre : 83 ordres redonnes sur 119, du 22/09 au 12/10, sur une installation.
+
+def _bascule(position):
+    """Ce que Netatmo publie apres `close_cover` : `closed` tout de suite, la
+    position d'avant tant que la vraie n'est pas arrivee."""
+    return FauxEtat("closed", {"supported_features": 15, "current_position": position})
+
+
+OUVERT = {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 100})}
+
+
+def test_le_cas_netatmo_n_est_pas_redemande(creer, rdv):
+    v = creer(CFG_PLAN, dict(OUVERT))
+    _fermer(v)
+    v.hass.states.table["cover.salon"] = _bascule(100)       # la bascule, aussitot
+    _echoir(v, rdv)                                           # 120 s : il a repondu
+    assert len(v.hass.services.appels) == 1, "l'ordre a ete redonne a un volet qui obeissait"
+    assert (v._verifs["cover.salon"]["essais"], v._verifs["cover.salon"]["attentes"]) == (0, 1)
+    # 150 s : la position arrive - la chambre s'arrete a 1 %, publiee `open`.
+    v.hass.states.table["cover.salon"] = FauxEtat("open", {"supported_features": 15, "current_position": 1})
+    _echoir(v, rdv)                                           # 240 s : arrive
+    assert len(v.hass.services.appels) == 1 and v._verifs == {} and rdv.verifs() == []
+    assert _rouges(v) == []
+    assert not any("immobile" in (e.get("motif") or "") for e in lancer(v.regles.journal(module="volets")))
+
+
+def test_un_volet_vraiment_immobile_est_redemande_a_deux_minutes_comme_avant(creer, rdv):
+    v = creer(CFG_PLAN, dict(OUVERT))
+    _fermer(v)
+    _echoir(v, rdv)                                           # 120 s : rien n'a change
+    assert [a[1] for a in v.hass.services.appels] == ["close_cover", "close_cover"]
+    assert (v._verifs["cover.salon"]["essais"], v._verifs["cover.salon"]["attentes"]) == (1, 0)
+
+
+def test_un_volet_en_mouvement_a_deux_minutes_merite_un_tour(creer, rdv):
+    """Deja `closing` a l'ordre, et toujours `closing` a deux minutes : sa
+    signature n'a pas change, c'est le mouvement SEUL qui dit qu'il repond."""
+    v = creer(CFG_PLAN, {"cover.salon": FauxEtat("closing", {"supported_features": 15, "current_position": 100})})
+    _fermer(v)
+    assert v._verifs["cover.salon"]["signature"] == ["closing", 100]
+    _echoir(v, rdv)
+    assert len(v.hass.services.appels) == 1 and v._verifs["cover.salon"]["attentes"] == 1
+
+
+@pytest.mark.parametrize("avant,retour,services,tours", [
+    ("unavailable", "closed", ["open_cover", "open_cover"], (1, 0)),
+    ("unknown", "closed", ["open_cover", "open_cover"], (1, 0)),
+    ("unavailable", "opening", ["open_cover"], (0, 1)),
+], ids=["injoignable_revenu_immobile", "inconnu_revenu_immobile", "injoignable_revenu_en_mouvement"])
+def test_un_volet_injoignable_a_l_ordre_ne_repond_pas_en_revenant(creer, rdv, avant, retour, services, tours):
+    """Le vent remonte tout, meme un volet injoignable. Il revient sans avoir
+    bouge : sa signature change, mais ce n'est pas une reponse - on redemande a
+    deux minutes, au lieu d'attendre deux tours. Revenu EN MOUVEMENT, il repond."""
+    etats = {**SOLEIL_HAUT, **CHAUD, "sensor.vent": FauxEtat("70"),
+             "cover.salon": FauxEtat(avant, {"supported_features": 15})}
+    v = creer(cfg_vent(), etats)
+    lancer(v._async_vent())
+    assert v._verifs["cover.salon"]["signature"] == [avant, None]
+    v.hass.states.table["cover.salon"] = FauxEtat(retour, {"supported_features": 15, "current_position": 0})
+    _echoir(v, rdv)
+    assert [a[1] for a in v.hass.services.appels] == services
+    assert (v._verifs["cover.salon"]["essais"], v._verifs["cover.salon"]["attentes"]) == tours
+
+
+def test_une_position_demandee_merite_un_premier_tour_sans_bascule(creer, rdv):
+    """La protection demande 30 a un volet a 100 : il reste `open`, rien ne
+    bascule, et Netatmo ne publie la position qu'une a trois minutes apres. Le
+    premier tour s'accorde sans reponse ; le second en exige une."""
+    haut = {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 100})}
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **haut})
+    lancer(v._async_soleil())
+    assert [a[1] for a in v.hass.services.appels] == ["set_cover_position"]
+    _echoir(v, rdv)                                           # 120 s : rien n'a change, on attend
+    assert len(v.hass.services.appels) == 1 and v._verifs["cover.salon"]["attentes"] == 1
+    _echoir(v, rdv)                                           # 240 s : toujours rien, on redemande
+    assert len(v.hass.services.appels) == 2
+    assert (v._verifs["cover.salon"]["essais"], v._verifs["cover.salon"]["attentes"]) == (1, 0)
+
+
+def test_ouvrir_un_volet_deja_ouvert_merite_un_premier_tour(creer, rdv):
+    """La chambre s'arrete a 1 % le soir, publiee `open` : l'ouverture du matin
+    ne fait rien basculer. Premier tour sans reponse ; la position arrive, c'est
+    fini - sans ordre redonne ni ligne « immobile »."""
+    v = creer(CFG_PLAN, {"cover.chambre": FauxEtat("open", {"supported_features": 15, "current_position": 1})})
+    lancer(v._async_planifie("ouvrir"))
+    _echoir(v, rdv)                                           # 120 s : rien encore
+    assert len(v.hass.services.appels) == 1 and v._verifs["cover.chambre"]["attentes"] == 1
+    v.hass.states.table["cover.chambre"] = FauxEtat("open", {"supported_features": 15, "current_position": 100})
+    _echoir(v, rdv)                                           # 240 s : arrivee
+    assert len(v.hass.services.appels) == 1 and v._verifs == {} and _rouges(v) == []
+    assert not any("immobile" in (e.get("motif") or "") for e in lancer(v.regles.journal(module="volets")))
+
+
+def test_un_volet_qui_bascule_sans_jamais_arriver_finit_en_rouge(creer, rdv):
+    """Deux tours d'attente au plus pour chaque ordre ; ensuite la regle de
+    l'ADR 0007 : on redemande, puis la ligne rouge."""
+    v = creer(CFG_PLAN, dict(OUVERT))
+    _fermer(v)
+    v.hass.states.table["cover.salon"] = _bascule(100)        # la bascule, et plus rien
+    _echoir(v, rdv)                                           # 120 s : on attend
+    _echoir(v, rdv)                                           # 240 s : on attend encore
+    assert len(v.hass.services.appels) == 1 and v._verifs["cover.salon"]["attentes"] == 2
+    _echoir(v, rdv)                                           # 360 s : essai 1/2
+    assert len(v.hass.services.appels) == 2 and v._verifs["cover.salon"]["attentes"] == 0
+    _echoir(v, rdv)                                           # rien n'a change depuis : essai 2/2
+    assert len(v.hass.services.appels) == 3
+    _echoir(v, rdv)                                           # la ligne rouge
+    (rouge,) = _rouges(v)
+    assert rouge["motif"] == "immobile apres 2 essais"
+    assert v._verifs == {} and rdv.verifs() == []
+
+
+def test_la_manoeuvre_reste_publiee_pendant_les_tours_d_attente(creer, rdv, maintenant, monkeypatch):
+    horloge = [datetime(2026, 10, 21, 11, 58, 30, tzinfo=PARIS).timestamp()]
+    monkeypatch.setattr(time, "time", lambda: horloge[0])
+    v = creer(CFG_PLAN, dict(OUVERT))
+    _fermer(v)
+    v.hass.states.table["cover.salon"] = _bascule(100)
+    horloge[0] += 120
+    _echoir(v, rdv)
+    assert lancer(v.async_etat())["volets"]["cover.salon"]["manoeuvre"] == {
+        "cible": 0, "depuis": "2026-10-21T11:58:30+02:00", "regle": "planning"}, "l'heure de l'ordre ne bouge pas"
+
+
+# ── V5 : les jours d'un volet « Heures a lui » remplacent ceux de la maison ──
+
+def test_les_jours_propres_remplacent_ceux_de_la_maison(creer, monkeypatch):
+    """La maison du lundi au vendredi, la chambre le samedi et le dimanche : elle
+    s'ouvre le week-end, et plus en semaine. Le salon suit la maison."""
+    plan = {"actif": True, "mode": "auto", "jours": [0, 1, 2, 3, 4], "ouverture": {"decalage": 0},
+            "volets": {"cover.chambre": {"perso": True, "ouverture": 30, "jours_ouverture": [5, 6]}}}
+    etats = {"cover.chambre": FauxEtat("closed", {"supported_features": 15, "current_position": 0}),
+             "cover.salon": FauxEtat("closed", {"supported_features": 15, "current_position": 0})}
+    ouverts = {}
+    for jour in range(7):
+        quand = datetime(2026, 10, 19 + jour, 9, 0)
+        monkeypatch.setattr(sys.modules["homeassistant.util.dt"], "now", lambda q=quand: q)
+        v = creer({"planning": plan}, etats)
+        for decalage in (0, 30):
+            lancer(v._async_planifie("ouvrir", decalage=decalage))
+        ouverts[jour] = sorted(h for a in v.hass.services.appels for h in a[2]["entity_id"])
+    assert ouverts == {0: ["cover.salon"], 1: ["cover.salon"], 2: ["cover.salon"], 3: ["cover.salon"],
+                       4: ["cover.salon"], 5: ["cover.chambre"], 6: ["cover.chambre"]}
+
+
+def test_sans_heures_a_lui_des_jours_propres_ne_comptent_pas(module):
+    """Des jours sans « Heures a lui » - une forme que l'ecran n'ecrit pas : le
+    volet suit la maison, comme la fiche le montre (« Comme les autres »)."""
+    lundi, samedi = datetime(2026, 10, 19), datetime(2026, 10, 24)
+    plan = {"jours": [0, 1, 2, 3, 4], "volets": {COVERS[0]: {"jours_ouverture": [5, 6]}}}
+    assert COVERS[0] in module.volets_du_jour(plan, COVERS, "ouverture", lundi)
+    assert COVERS[0] not in module.volets_du_jour(plan, COVERS, "ouverture", samedi)
+
+
+def test_un_volet_heures_a_lui_sans_jours_suit_la_maison(module):
+    dimanche = datetime(2026, 10, 25)
+    plan = {"jours": [0, 1, 2, 3, 4], "volets": {COVERS[0]: {"perso": True, "ouverture": 30}}}
+    assert module.volets_du_jour(plan, COVERS, "ouverture", dimanche) == []
+
+
+# ── Les manoeuvres se lisent sous les droits du compte (audit du 19/10) ─────
+
+def test_les_manoeuvres_d_un_volet_qu_on_ne_lit_pas_sont_refusees(creer):
+    """Comme `loggia/lumieres/journal` : c'est le compte - jamais un champ du
+    client - qui dit ce qu'il peut lire ; un volet qu'il ne lit pas se refuse."""
+    import types as _types
+
+    class Permissions:
+        def check_entity(self, haid, sorte):
+            return sorte == "read" and haid == "cover.salon"
+
+    v = creer(CFG_PLAN, VOLET)
+    lancer(v.regles.noter("volets", "planning", "fermer", cibles=["cover.salon"]))
+    lancer(v.regles.noter("volets", "planning", "fermer", cibles=["cover.cuisine"]))
+    restreint = _types.SimpleNamespace(id="u-lea", is_admin=False, permissions=Permissions())
+    assert len(lancer(v.async_manoeuvres("cover.salon", 0, restreint))["lignes"]) == 1
+    with pytest.raises(PermissionError):
+        lancer(v.async_manoeuvres("cover.cuisine", 0, restreint))
+    admin = _types.SimpleNamespace(id="u-papa", is_admin=True, permissions=Permissions())
+    assert len(lancer(v.async_manoeuvres("cover.cuisine", 0, admin))["lignes"]) == 1
+    assert len(lancer(v.async_manoeuvres("cover.cuisine", 0))["lignes"]) == 1
+
+
+# ── Audit du 19/10 : un geste hors de Home Assistant n'est pas « immobile » ──
+#
+# L'appli Netatmo et l'interrupteur mural n'ont pas d'utilisateur dans Home
+# Assistant : rien ne gele le volet. La verification, qui ne regardait qu'a ses
+# rendez-vous de 120 s, prenait un volet arrive PUIS rouvert a la main pour un
+# volet immobile, et le refermait.
+
+
+class _Evt:
+    def __init__(self, haid):
+        self.data = {"entity_id": haid}
+
+
+def _publier(v, etat, position):
+    v.hass.states.table["cover.salon"] = FauxEtat(etat, {"supported_features": 15, "current_position": position})
+    v._sur_verif(_Evt("cover.salon"))
+    while v.hass.taches:
+        lancer(v.hass.taches.pop())
+
+
+def test_arrive_la_verification_s_arrete_aussitot_et_une_main_n_est_pas_contredite(creer, rdv):
+    v = creer(CFG_PLAN, dict(OUVERT))
+    _fermer(v)
+    _publier(v, "closed", 100)            # la bascule : il repond
+    assert set(v._verifs) == {"cover.salon"}
+    _publier(v, "closed", 0)              # ~135 s : la position arrive, il est en bas
+    assert v._verifs == {} and rdv.verifs() == [], "arrive : plus rien a verifier"
+    v.hass.states.table["cover.salon"] = FauxEtat("open", {"supported_features": 15, "current_position": 100})
+    assert [a[1] for a in v.hass.services.appels] == ["close_cover"], "rouvert a la main : Loggia ne le referme pas"
+
+
+def test_reparti_dans_l_autre_sens_c_est_une_main(creer, rdv):
+    v = creer(CFG_PLAN, dict(OUVERT))
+    _fermer(v)
+    _publier(v, "closing", 40)            # il descend…
+    _publier(v, "opening", 80)            # … et quelqu'un le remonte depuis l'appli
+    assert v._verifs == {} and rdv.verifs() == []
+    assert [a[1] for a in v.hass.services.appels] == ["close_cover"]
+    (ligne,) = [e for e in lancer(v.regles.journal(module="volets")) if e.get("regle") == "repris a la main"]
+    assert ligne["detail"] == "cover.salon" and ligne["n"] == 0 and "echec" not in ligne
+    assert ligne["motif"] == "reparti dans l'autre sens"
+
+
+def test_arrete_en_chemin_il_n_est_pas_redemande(creer, rdv):
+    v = creer(CFG_PLAN, dict(OUVERT))
+    _fermer(v)
+    v.hass.states.table["cover.salon"] = _bascule(100)
+    _echoir(v, rdv)                                           # 120 s : il a repondu
+    v.hass.states.table["cover.salon"] = FauxEtat("open", {"supported_features": 15, "current_position": 40})
+    _echoir(v, rdv)                                           # 240 s : arrete a 40
+    v.hass.states.table["cover.salon"] = FauxEtat("open", {"supported_features": 15, "current_position": 40})
+    _echoir(v, rdv)                                           # 360 s : toujours 40, il ne bougera plus
+    assert [a[1] for a in v.hass.services.appels] == ["close_cover"], "arrete a la main a 40 : pas d'ordre redonne"
+    assert v._verifs == {} and rdv.verifs() == [] and _rouges(v) == []
+    (ligne,) = [e for e in lancer(v.regles.journal(module="volets")) if e.get("regle") == "repris a la main"]
+    assert ligne["motif"] == "arrete en chemin"
+
+
+def test_une_position_perimee_qui_ne_bouge_pas_reste_redemandee(creer, rdv):
+    """Le cas Netatmo d'avant reste vrai : la bascule sans position n'est pas un
+    volet arrete en chemin — sa position est encore celle de l'ordre."""
+    v = creer(CFG_PLAN, dict(OUVERT))
+    _fermer(v)
+    v.hass.states.table["cover.salon"] = _bascule(100)
+    _echoir(v, rdv)
+    _echoir(v, rdv)
+    assert v._verifs["cover.salon"]["attentes"] == 2
+    _echoir(v, rdv)                                           # toujours rien : la regle de l'ADR 0007
+    assert [a[1] for a in v.hass.services.appels] == ["close_cover", "close_cover"]
+
+
+# ── Audit du 19/10 : ce que le redemarrage effacait ─────────────────────────
+#
+# Les 11/10 et 18/10, Netatmo etait injoignable au lever : l'ordre est parti en
+# attente, en MEMOIRE seulement. Le redemarrage qui a ramene Netatmo l'a efface,
+# et le salon est reste ferme jusqu'a ce qu'on l'ouvre a la main. Et une
+# sonnerie qui tombe pendant que Home Assistant redemarre n'etait jamais
+# rattrapee.
+
+FERME = {"cover.salon": FauxEtat("closed", {"supported_features": 15, "current_position": 0})}
+PARIS = FuseauParis()
+LUNDI_0820 = datetime(2026, 10, 19, 8, 20, tzinfo=PARIS)
+JOURS = [{"date": "2026-10-18", "lever": "2026-10-18T07:58:00+02:00", "coucher": "2026-10-18T19:02:00+02:00"},
+         {"date": "2026-10-19", "lever": "2026-10-19T08:00:00+02:00", "coucher": "2026-10-19T19:00:00+02:00"}]
+
+
+def _ts(texte):
+    return datetime.fromisoformat(texte).timestamp()
+
+
+def _vider(v):
+    while v.hass.taches:
+        lancer(v.hass.taches.pop())
+
+
+def test_l_attente_survit_au_redemarrage(creer):
+    v = creer(CFG_PLAN, {"cover.salon": FauxEtat("unavailable", {"supported_features": 15})})
+    v._depot_memoire = FauxStore(None)
+    lancer(v._async_planifie("ouvrir"))
+    _vider(v)
+    assert set(v._depot_memoire.contenu["attente"]) == {"cover.salon"}
+    # Home Assistant redemarre ; Netatmo revient avec lui.
+    w = creer(CFG_PLAN, dict(FERME))
+    w._depot_memoire = FauxStore(v._depot_memoire.contenu)
+    lancer(w._async_charger_memoire())
+    _vider(w)
+    assert w.hass.services.appels == [("cover", "open_cover", {"entity_id": ["cover.salon"]})]
+    assert w.attente == {} and w._depot_memoire.contenu["attente"] == {}
+
+
+def test_une_attente_perimee_ne_revient_pas(creer):
+    w = creer(CFG_PLAN, dict(FERME))
+    w._depot_memoire = FauxStore({"attente": {"cover.salon": {"sens": "ouvrir", "expire": time.time() - 60, "motif": "volet injoignable"}}})
+    lancer(w._async_charger_memoire())
+    _vider(w)
+    assert w.hass.services.appels == [] and w.attente == {}
+
+
+def _redemarre(creer, derniere, maintenant=LUNDI_0820, etats=None, cfg=None):
+    w = creer(cfg or CFG_PLAN, dict(etats or FERME))
+    w._depot_memoire = FauxStore({"attente": {}, "derniere": derniere})
+    w._soleil_jours = lambda _m: JOURS
+    lancer(w._async_charger_memoire(maintenant))
+    _vider(w)
+    return w
+
+
+def test_le_lever_manque_pendant_le_redemarrage_se_rattrape(creer):
+    w = _redemarre(creer, {"ouvrir": _ts("2026-10-18T07:58:00+02:00"), "fermer": _ts("2026-10-18T19:02:00+02:00")})
+    assert w.hass.services.appels == [("cover", "open_cover", {"entity_id": ["cover.salon"]})]
+    (ligne,) = [e for e in lancer(w.regles.journal(module="volets")) if e.get("quoi") == "ouvrir"]
+    assert "rattrape au demarrage" in json.dumps(ligne["motif"])
+
+
+def test_rien_a_rattraper(creer):
+    # La sonnerie du matin est passee, Loggia tournait : rien.
+    w = _redemarre(creer, {"ouvrir": _ts("2026-10-19T08:00:05+02:00"), "fermer": _ts("2026-10-18T19:02:00+02:00")})
+    assert w.hass.services.appels == []
+    # Premier demarrage, rien de note : Loggia ne devine pas.
+    assert _redemarre(creer, {}).hass.services.appels == []
+    # Trop tard : passe trois heures, la journee a continue sans lui.
+    tard = datetime(2026, 10, 19, 11, 30, tzinfo=PARIS)
+    assert _redemarre(creer, {"ouvrir": _ts("2026-10-18T07:58:00+02:00")}, tard).hass.services.appels == []
+    # En « Manuel », le planning ne touche a rien, rattrapage compris.
+    manuel = {"planning": {"actif": True, "mode": "manuel"}}
+    assert _redemarre(creer, {"ouvrir": _ts("2026-10-18T07:58:00+02:00")}, cfg=manuel).hass.services.appels == []
+
+
+def test_une_sonnerie_note_son_heure(creer):
+    v = creer(CFG_PLAN, dict(FERME))
+    v._depot_memoire = FauxStore(None)
+    avant = time.time()
+    lancer(v._async_planifie("ouvrir", decalage=0))
+    _vider(v)
+    assert v._depot_memoire.contenu["derniere"]["ouvrir"] >= avant
+
+
+# ── Audit du 19/10, les points restants ─────────────────────────────────────
+#
+# Le vent (anemometre muet, fermeture du soir jamais rejouee), la verification
+# qui mettait en attente l'ordre de n'importe quelle regle, l'hysterese de la
+# protection solaire, son journal noye, la position perimee de Netatmo, la
+# configuration (protection coupee, bornes), l'attente perimee publiee, le
+# volet « tilt seul », les courses au dechargement, les rafales, les fenetres de
+# toit sur une alerte, les jours de la maison vides et le code mort.
+
+OUVERT_100 = {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 100})}
+DIX_NEUF_TRENTE = datetime(2026, 10, 19, 19, 30, tzinfo=PARIS)
+
+
+def _lignes(v, **filtre):
+    return [e for e in lancer(v.regles.journal(module="volets"))
+            if all(e.get(k) == x for k, x in filtre.items())]
+
+
+def test_un_anemometre_muet_relache_l_abri_apres_trente_minutes(creer):
+    """Point 1. Un capteur de vent qui se tait laissait `a_l_abri` vrai pour
+    toujours : le planning se taisait sans fin."""
+    v = creer(cfg_vent(), {**OUVERT_100, "sensor.vent": FauxEtat("70")})
+    assert lancer(v._async_vent()) is True and v.a_l_abri
+    v.hass.states.table["sensor.vent"] = FauxEtat("unavailable")
+    # Muet depuis moins de trente minutes : l'abri tient, et il prime encore.
+    assert lancer(v._async_vent()) is True and v.a_l_abri
+    debut = v._vent_muet_depuis
+    assert debut is not None
+    assert lancer(v._async_vent()) is True and v._vent_muet_depuis == debut, "le silence garde son debut"
+    v._vent_muet_depuis = debut - 31 * 60
+    assert lancer(v._async_vent()) is False
+    assert v.a_l_abri is False and "cover.salon" not in v.regles.tenues("volets")
+    (ligne,) = _lignes(v, regle="vent", quoi="abri relache")
+    assert ligne["motif"] == "anemometre muet" and ligne["n"] == 0
+
+
+def test_un_anemometre_qui_reparle_remet_le_silence_a_zero(creer):
+    v = creer(cfg_vent(), {**OUVERT_100, "sensor.vent": FauxEtat("70")})
+    lancer(v._async_vent())
+    v.hass.states.table["sensor.vent"] = FauxEtat("unknown")
+    lancer(v._async_vent())
+    v.hass.states.table["sensor.vent"] = FauxEtat("60")
+    assert lancer(v._async_vent()) is True and v._vent_muet_depuis is None
+
+
+def test_une_sonnerie_retenue_par_l_abri_se_note_une_fois(creer):
+    """Point 1. Le planning se taisait pendant l'abri sans rien noter."""
+    v = creer(CFG_PLAN, dict(OUVERT_100))
+    v.a_l_abri = True
+    lancer(v._async_planifie("fermer", decalage=0))
+    assert v.hass.services.appels == []
+    (ligne,) = _lignes(v, regle="planning")
+    assert ligne["n"] == 0 and ligne["quoi"] == "fermer" and "a l'abri du vent" in ligne["detail"]
+
+
+def test_la_fermeture_manquee_pendant_l_abri_se_rejoue_a_sa_levee(creer, monkeypatch):
+    """Point 2. Le coucher passe pendant l'abri n'etait jamais rejoue : les
+    volets restaient ouverts toute la nuit."""
+    monkeypatch.setattr(sys.modules["homeassistant.util.dt"], "now", lambda: DIX_NEUF_TRENTE)
+    cfg = {**CFG_PLAN, "vent": {"actif": True, "entite": "sensor.vent", "seuil": 50}}
+    w = creer(cfg, {**OUVERT_100, "sensor.vent": FauxEtat("70")})
+    w._soleil_jours = lambda _m: JOURS
+    lancer(w._async_vent())
+    w._abri_depuis = _ts("2026-10-19T18:50:00+02:00")    # avant le coucher de 19:00
+    w.hass.services.appels.clear()
+    w.hass.states.table["sensor.vent"] = FauxEtat("20")
+    _calme_tenu(w)
+    assert lancer(w._async_vent()) is False
+    assert w.hass.services.appels == [("cover", "close_cover", {"entity_id": ["cover.salon"]})]
+    (ligne,) = _lignes(w, quoi="fermer", regle="planning")
+    assert "apres le vent" in ligne["motif"]
+
+
+def test_un_coup_de_vent_apres_le_coucher_referme_a_sa_levee(creer, monkeypatch):
+    """Sa decision du 19/10 : le vent a rouvert les volets apres le coucher ; une
+    fois retombe, la nuit les veut fermes - le dernier mouvement prevu se rejoue,
+    meme s'il precede l'abri."""
+    monkeypatch.setattr(sys.modules["homeassistant.util.dt"], "now", lambda: DIX_NEUF_TRENTE)
+    cfg = {**CFG_PLAN, "vent": {"actif": True, "entite": "sensor.vent", "seuil": 50}}
+    w = creer(cfg, {**OUVERT_100, "sensor.vent": FauxEtat("70")})
+    w._soleil_jours = lambda _m: JOURS
+    lancer(w._async_vent())
+    w._abri_depuis = _ts("2026-10-19T19:10:00+02:00")    # apres le coucher
+    w.hass.services.appels.clear()
+    w.hass.states.table["sensor.vent"] = FauxEtat("20")
+    _calme_tenu(w)
+    lancer(w._async_vent())
+    assert w.hass.services.appels == [("cover", "close_cover", {"entity_id": ["cover.salon"]})]
+
+
+def test_un_ordre_du_vent_injoignable_ne_part_pas_en_attente(creer, rdv):
+    """Point 3. Seuls le planning et son rattrapage s'attendent : le vent et le
+    soleil se reevaluent d'eux-memes."""
+    v = creer(cfg_vent(), {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 40}),
+                           "sensor.vent": FauxEtat("70")})
+    lancer(v._async_vent())
+    v.hass.states.table["cover.salon"] = FauxEtat("unavailable", {})
+    _echoir(v, rdv)
+    assert v.attente == {}
+
+
+def test_la_protection_ne_rend_qu_un_degre_sous_le_seuil(creer):
+    """Point 4. A 25 °C pile, la protection battait a chaque dixieme."""
+    haut = {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 70})}
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **haut})
+    lancer(v._async_soleil())
+    assert v.abaisses == {"cover.salon": 70}
+    v.hass.states.table["sensor.dehors"] = FauxEtat("24.5")
+    lancer(v._async_soleil())
+    assert len(v.hass.services.appels) == 1 and v.abaisses == {"cover.salon": 70}, "rendu a 24,5 °C"
+    v.hass.states.table["sensor.dehors"] = FauxEtat("23.9")
+    lancer(v._async_soleil())
+    assert v.hass.services.appels[-1] == ("cover", "set_cover_position",
+                                          {"entity_id": ["cover.salon"], "position": 70})
+    # Sous le seuil mais dans la marge : un volet qui n'est pas baisse ne l'est pas.
+    w = creer(cfg_soleil(), {**SOLEIL_HAUT, "sensor.dehors": FauxEtat("24.5"), **haut})
+    lancer(w._async_soleil())
+    assert w.hass.services.appels == [] and w.abaisses == {}
+
+
+def test_un_volet_gele_ou_tenu_par_plus_fort_ne_se_retente_pas(creer):
+    """Point 5. « proteger 0 · sous la main » a chaque mise a jour du soleil."""
+    haut = {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 70})}
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **haut})
+    lancer(v.regles.geler("interrupteurs", "bouton", ["cover.salon"]))
+    lancer(v._async_soleil())
+    lancer(v._async_soleil())
+    assert v.hass.services.appels == [] and _lignes(v, quoi="proteger") == []
+    w = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **haut})
+    lancer(w.regles.agir("alertes", "danger", "cover", "open_cover", ["cover.salon"], quoi="remonter",
+                         priorite=charger("alertes").PRIORITE, tenir=True))
+    lancer(w._async_soleil())
+    assert len(w.hass.services.appels) == 1 and _lignes(w, quoi="proteger") == []
+
+
+def test_une_position_perimee_de_netatmo_ne_se_protege_pas(creer):
+    """Point 6. `closed` publie avec la position d'avant (100) : la protection
+    croyait le volet en haut, et l'aurait OUVERT a 30 %."""
+    perime = {"cover.salon": FauxEtat("closed", {"supported_features": 15, "current_position": 100})}
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **perime})
+    lancer(v._async_soleil())
+    assert v.hass.services.appels == [] and v.abaisses == {}
+    # La verification, elle, garde la position publiee.
+    assert v._position_actuelle("cover.salon") == 100
+    # Ferme a 1 % (sa chambre) : rien a dire, c'est en bas.
+    bas = {"cover.salon": FauxEtat("closed", {"supported_features": 15, "current_position": 2})}
+    assert creer(cfg_soleil(), bas)._position_pour_proteger("cover.salon") == 2
+
+
+# ASSERTION MODIFIEE (25/10, fusion volet par volet) : une facade se retire par `None`, plus par omission.
+@pytest.mark.parametrize("patch", [{"soleil": {"actif": False}}, {"soleil": {"volets": {"cover.salon": None}}},
+                                   {"soleil": {"volets": {"cover.salon": {"orientation": None}}}}])
+def test_couper_la_protection_rend_les_volets_baisses(creer, patch):
+    """Point 7. Coupee, ou la facade retiree, la protection ne rendait plus
+    jamais ce qu'elle avait baisse."""
+    haut = {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 70})}
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **haut})
+    lancer(v._async_soleil())
+    lancer(v.async_enregistrer(patch))
+    assert v.hass.services.appels[-1] == ("cover", "set_cover_position",
+                                          {"entity_id": ["cover.salon"], "position": 70})
+    assert v.abaisses == {} and v.regles.tenues("volets") == {}
+    (ligne,) = _lignes(v, quoi="rouvrir")
+    assert ligne["motif"] == "protection coupee"
+
+
+def test_garder_la_protection_ne_rend_rien(creer):
+    haut = {"cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 70})}
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **haut})
+    lancer(v._async_soleil())
+    lancer(v.async_enregistrer({"soleil": {"position": 20}}))
+    assert len(v.hass.services.appels) == 1 and v.abaisses == {"cover.salon": 70}
+
+
+@pytest.mark.parametrize("patch,code,nomme", [
+    ({"planning": {"ouverture": {"decalage": 241}}}, "volets_decalage_hors_bornes", "planning.ouverture.decalage"),
+    ({"planning": {"fermeture": {"decalage": -121}}}, "volets_decalage_hors_bornes", "planning.fermeture.decalage"),
+    ({"planning": {"ouverture": {"decalage": "tot"}}}, "volets_decalage_hors_bornes", "planning.ouverture.decalage"),
+    ({"planning": {"ouverture": 15}}, "volets_decalage_hors_bornes", "planning.ouverture"),
+    ({"planning": {"volets": {"cover.salon": {"fermeture": 300}}}}, "volets_decalage_hors_bornes",
+     "planning.volets.cover.salon.fermeture"),
+    ({"planning": {"volets": {"cover.salon": {"ouverture": True}}}}, "volets_decalage_hors_bornes",
+     "planning.volets.cover.salon.ouverture"),
+    ({"vent": {"seuil": 0}}, "volets_seuil_vent", "vent.seuil"),
+    ({"vent": {"seuil": -5}}, "volets_seuil_vent", "vent.seuil"),
+    ({"vent": {"seuil": "fort"}}, "volets_seuil_vent", "vent.seuil"),
+    ({"vent": {"seuil": None}}, "volets_seuil_vent", "vent.seuil"),
+    ({"vent": {"seuil": True}}, "volets_seuil_vent", "vent.seuil"),
+    ({"vent": {"seuil": float("nan")}}, "volets_seuil_vent", "vent.seuil"),
+])
+def test_les_bornes_du_planning_et_du_vent_se_refusent_par_leur_nom(creer, patch, code, nomme):
+    """Point 8. Un decalage de 3 000 min ou un seuil de vent nul passaient : le
+    second mettait la maison a l'abri pour toujours."""
+    refus = charger("refus")
+    v = creer(CFG_PLAN, dict(VOLET))
+    with pytest.raises(refus.RefusNomme) as err:
+        lancer(v.async_enregistrer(patch))
+    assert err.value.code == code and err.value.nomme == nomme
+    assert lancer(v.async_config())["planning"]["ouverture"] == {"decalage": 0}, "rien n'est ecrit"
+
+
+def test_les_bornes_admettent_ce_que_l_ecran_ecrit(creer):
+    v = creer(CFG_PLAN, dict(VOLET))
+    cfg = lancer(v.async_enregistrer({"planning": {"ouverture": {"decalage": -120}, "fermeture": {"decalage": 240},
+                                                   "volets": {"cover.salon": {"perso": True, "ouverture": None,
+                                                                              "fermeture": "15"}}},
+                                      "vent": {"seuil": 12.5}}))
+    assert cfg["planning"]["ouverture"]["decalage"] == -120 and cfg["vent"]["seuil"] == 12.5
+
+
+def test_une_valeur_deja_enregistree_hors_bornes_se_borne_a_la_lecture(creer):
+    v = creer({"planning": {"actif": True, "ouverture": {"decalage": 400}, "fermeture": {"decalage": -300},
+                            "volets": {"cover.salon": {"ouverture": 999, "fermeture": "tard"}}},
+               "vent": {"seuil": 0}})
+    assert v.cfg["planning"]["ouverture"]["decalage"] == 240
+    assert v.cfg["planning"]["fermeture"]["decalage"] == -120
+    assert v.cfg["planning"]["volets"]["cover.salon"] == {"ouverture": 240, "fermeture": "tard"}
+    assert v.cfg["vent"]["seuil"] == 50, "un seuil nul mettrait la maison a l'abri pour toujours"
+    # Et un enregistrement voisin passe : la table relue est dans les bornes.
+    lancer(v.async_enregistrer({"planning": {"volets": dict(v.cfg["planning"]["volets"])}}))
+
+
+def test_l_etat_ne_publie_pas_une_attente_perimee(creer, maintenant, soleil_ha):
+    """Point 9. Une attente expiree restait publiee tant qu'aucun volet ne
+    bougeait."""
+    v = creer(CHEZ_LUI, TROIS)
+    v.attente["cover.salon"] = {"sens": "fermer", "expire": time.time() - 60, "motif": "volet injoignable"}
+    v.attente["cover.chambre"] = {"sens": "fermer", "expire": time.time() + 3600, "motif": "baie ouverte"}
+    etat = lancer(v.async_etat())
+    assert set(etat["attente"]) == {"cover.chambre"} and etat["volets"]["cover.salon"]["attente"] is None
+    assert set(v.attente) == {"cover.chambre"}
+    (ligne,) = _lignes(v, regle="attente expiree")
+    assert ligne["detail"] == "cover.salon"
+
+
+def test_un_ordre_du_planning_efface_l_attente_du_sens_oppose(creer):
+    """Point 10. Une ouverture attendue depuis le matin partait le soir, juste
+    apres la fermeture."""
+    v = creer(CFG_PLAN, dict(OUVERT_100))
+    loin = time.time() + 3600
+    v.attente["cover.salon"] = {"sens": "ouvrir", "expire": loin, "motif": "volet injoignable"}
+    v.attente["cover.absent"] = {"sens": "ouvrir", "expire": loin, "motif": "volet injoignable"}
+    lancer(v._async_planifie("fermer"))
+    assert "cover.salon" not in v.attente and "cover.absent" in v.attente
+
+
+TILT_SEUL = 16 | 32 | 128       # OPEN_TILT, CLOSE_TILT, SET_TILT_POSITION
+
+
+def test_un_volet_qui_ne_fait_que_s_incliner_reste_hors_des_ordres_groupes(creer, module):
+    """Point 11. Un volet « tilt seul » faisait refuser l'appel groupe entier."""
+    etats = {**OUVERT_100, "cover.lames": FauxEtat("open", {"supported_features": TILT_SEUL}),
+             "sensor.vent": FauxEtat("70")}
+    v = creer({**CFG_PLAN, **cfg_vent()}, etats)
+    lancer(v._async_planifie("fermer"))
+    assert v.hass.services.appels == [("cover", "close_cover", {"entity_id": ["cover.salon"]})]
+    v.hass.services.appels.clear()
+    lancer(v._async_vent())
+    assert v.hass.services.appels == [("cover", "open_cover", {"entity_id": ["cover.salon"]})]
+    ouvrants = charger("ouvrants")
+    assert ouvrants.ouvre_et_ferme(15) and ouvrants.ouvre_et_ferme(1) and ouvrants.ouvre_et_ferme(2)
+    assert not ouvrants.ouvre_et_ferme(TILT_SEUL)
+    # Sans `supported_features` publie, on ne sait pas : il reste.
+    assert ouvrants.ouvre_et_ferme(None) and ouvrants.ouvre_et_ferme(0)
+
+
+def test_un_module_arrete_ne_rearme_plus_rien(creer, rdv, monkeypatch):
+    """Point 12. Une tache en vol apres le dechargement reposait une ecoute ou
+    un rendez-vous que plus personne ne retirerait."""
+    ev = sys.modules["homeassistant.helpers.event"]
+    poses = []
+    for nom in ("async_track_state_change_event", "async_track_sunrise", "async_track_sunset"):
+        monkeypatch.setattr(ev, nom, lambda *a, _n=nom, **k: poses.append(_n) or (lambda: None))
+    v = creer({"planning": {"actif": True, "mode": "auto"}, "vent": {"actif": True, "entite": "sensor.vent"}},
+              {"cover.salon": FauxEtat("unavailable", {"supported_features": 15}), **OUVERT_100})
+    v.async_arreter()
+    poses.clear()
+    lancer(v._async_reprogrammer())
+    v._reabonner_etat()
+    v._mettre_en_attente(["cover.salon"], "fermer")
+    v._programmer_verif(["cover.salon"], "close_cover", None, regle="planning", quoi="fermer", motif="",
+                        priorite=0, tenir=False, essai=0)
+    assert poses == [] and rdv.verifs() == [] and v._verifs == {}
+    # Et plus rien ne part d'un module arrete.
+    assert lancer(v._async_service("close_cover", ["cover.salon"], regle="planning")) == []
+    assert v.hass.services.appels == []
+
+
+def test_une_seconde_rafale_ne_renvoie_pas_les_ordres(creer):
+    """Point 13. Deux mises a jour du vent rapprochees envoyaient deux fois
+    l'ordre : l'abri n'etait pose qu'apres."""
+    v = creer(cfg_vent(), {**OUVERT_100, "sensor.vent": FauxEtat("70")})
+    appels = v.hass.services.appels
+
+    async def lent(domaine, service, data, blocking=False, context=None):
+        await asyncio.sleep(0)
+        appels.append((domaine, service, dict(data)))
+    v.hass.services.async_call = lent
+
+    async def deux():
+        await asyncio.gather(v._async_vent(), v._async_vent())
+    lancer(deux())
+    assert [a[1] for a in appels] == ["open_cover"]
+
+
+def test_des_jours_de_la_maison_vides_ne_bougent_rien(creer, module):
+    """Point 15. Parametres dit « aucun jour » ; le moteur lisait « tous »."""
+    calc = charger("volets_calcul")
+    lundi = datetime(2026, 9, 7)
+    assert not module.jour_actif([], lundi) and module.jour_actif(None, lundi)
+    assert not calc.jour_de_la_maison({"jours": []}, 0) and calc.jour_de_la_maison({}, 0)
+    v = creer({"planning": {"actif": True, "jours": []}}, dict(OUVERT_100))
+    lancer(v._async_planifie("fermer"))
+    assert v.hass.services.appels == []
+    # Un volet « Heures a lui » qui porte ses jours les garde.
+    w = creer({"planning": {"actif": True, "jours": [],
+                            "volets": {"cover.salon": {"perso": True, "jours_fermeture": [0, 1, 2, 3, 4, 5, 6]}}}},
+              dict(OUVERT_100))
+    lancer(w._async_planifie("fermer"))
+    assert [a[1] for a in w.hass.services.appels] == ["close_cover"]
+
+
+def test_le_code_mort_est_parti(module, creer, maintenant, soleil_ha):
+    """Point 16. `groupes_horaires` ne filtre plus par jour, et l'etat ne
+    publie plus `prochains`, que plus aucun ecran ne lit."""
+    import inspect
+    assert list(inspect.signature(module.groupes_horaires).parameters) == ["plan", "covers", "sens"]
+    assert not hasattr(module.LoggiaVolets, "_prochains")
+    assert "prochains" not in lancer(creer(CHEZ_LUI, TROIS).async_etat())
+
+
+
+# ── Relecture du 19/10 : la levee de l'abri ne bouge que ce que le vent a bouge ──
+
+
+def _calme_tenu(v):
+    """Le calme dure depuis plus de CALME_S (15 min)."""
+    v._calme_depuis = time.time() - 15 * 60 - 1
+
+
+def test_des_rafales_qui_oscillent_ne_font_pas_battre_les_volets(creer):
+    etats = {**SOLEIL_HAUT, **CHAUD, **VOLET, "sensor.vent": FauxEtat("70")}
+    v = creer(cfg_vent(), etats)
+    lancer(v._async_vent())
+    ordres = len(v.hass.services.appels)
+    for vent in ("40", "55", "40", "60", "41"):
+        v.hass.states.table["sensor.vent"] = FauxEtat(vent)
+        assert lancer(v._async_vent()) is True, vent
+    assert len(v.hass.services.appels) == ordres, "les volets ont battu"
+
+
+def _ids(appel):
+    return (appel[2] or {}).get("entity_id", [])
+
+
+def test_un_store_banne_replie_ne_se_redeploie_pas_a_la_levee(creer, monkeypatch):
+    monkeypatch.setattr(sys.modules["homeassistant.util.dt"], "now",
+                        lambda: datetime(2026, 10, 19, 12, 0, tzinfo=PARIS))
+    store = FauxEtat("open", {"supported_features": 15, "current_position": 100, "device_class": "awning"})
+    cfg = {**CFG_PLAN, "vent": {"actif": True, "entite": "sensor.vent", "seuil": 50}}
+    w = creer(cfg, {**OUVERT_100, "cover.store": store, "sensor.vent": FauxEtat("70")})
+    w._soleil_jours = lambda _m: JOURS
+    lancer(w._async_vent())
+    assert any(a[1] == "close_cover" and "cover.store" in _ids(a) for a in w.hass.services.appels), "le vent replie le store"
+    w.hass.services.appels.clear()
+    w.hass.states.table["sensor.vent"] = FauxEtat("20")
+    _calme_tenu(w)
+    lancer(w._async_vent())
+    assert not any("cover.store" in _ids(a) for a in w.hass.services.appels), \
+        "le store s'est redeploye a la levee de l'abri"
+
+
+def test_un_volet_sous_la_main_n_est_pas_rouvert_a_la_levee(creer, monkeypatch):
+    monkeypatch.setattr(sys.modules["homeassistant.util.dt"], "now",
+                        lambda: datetime(2026, 10, 19, 12, 0, tzinfo=PARIS))
+    chambre = FauxEtat("closed", {"supported_features": 15, "current_position": 0})
+    cfg = {**CFG_PLAN, "vent": {"actif": True, "entite": "sensor.vent", "seuil": 50}}
+    w = creer(cfg, {**OUVERT_100, "cover.chambre": chambre, "sensor.vent": FauxEtat("70")})
+    w._soleil_jours = lambda _m: JOURS
+    w.regles._gel["cover.chambre"] = time.time() + 1800     # fermee a la main : la sieste
+    lancer(w._async_vent())
+    assert "cover.chambre" not in w._abrites
+    w.regles._gel.pop("cover.chambre")                      # le gel expire pendant l'abri
+    w.hass.services.appels.clear()
+    w.hass.states.table["sensor.vent"] = FauxEtat("20")
+    _calme_tenu(w)
+    lancer(w._async_vent())
+    assert not any("cover.chambre" in _ids(a) for a in w.hass.services.appels), \
+        "Loggia a ouvert un volet que le vent n'avait pas touche"
+
+
+def test_un_volet_qui_ne_sait_que_se_placer_recoit_sa_position(creer):
+    """Relecture du 19/10 : SET_POSITION sans OPEN ni CLOSE (features 4 ou 12).
+    Ecarte des ordres groupes, il etait oublie en silence ; il recoit sa
+    position a part, et les autres volets leur ordre groupe."""
+    v = creer(CFG_PLAN, {**OUVERT_100,
+                         "cover.place": FauxEtat("open", {"supported_features": 4, "current_position": 100})})
+    lancer(v._async_planifie("fermer"))
+    appels = sorted(v.hass.services.appels, key=lambda a: a[1])
+    assert appels == [("cover", "close_cover", {"entity_id": ["cover.salon"]}),
+                      ("cover", "set_cover_position", {"entity_id": ["cover.place"], "position": 0})]
+
+
+# ── Le store banne au soleil (sa demande du 25/10) ──────────────────────────
+#
+# La protection « baissait » tout ouvrant a 30 % : un store banne deploye se
+# repliait donc a moitie en plein soleil, la ou il protege justement en se
+# deployant. Il se deploie en entier, et revient d'ou il etait (replie, s'il
+# n'en disait rien) quand le soleil quitte la facade.
+
+def _store(etat="closed", position=0, features=15):
+    return {"cover.salon": FauxEtat(etat, {"supported_features": features, "current_position": position,
+                                           "device_class": "awning"})}
+
+
+def test_au_soleil_un_store_banne_se_deploie(creer):
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **_store()})
+    lancer(v._async_evaluer())
+    assert v.hass.services.appels == [("cover", "set_cover_position", {"entity_id": ["cover.salon"], "position": 100})]
+    assert v.abaisses == {"cover.salon": 0}
+
+
+def test_un_store_deja_deploye_ne_bouge_pas(creer):
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **_store("open", 100)})
+    lancer(v._async_evaluer())
+    assert v.hass.services.appels == [] and v.abaisses == {}
+
+
+def test_le_soleil_parti_le_store_revient_replie(creer):
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **_store()})
+    lancer(v._async_evaluer())
+    v.hass.services.appels.clear()
+    v.hass.states.table["sun.sun"] = FauxEtat("above_horizon", {"azimuth": 60, "elevation": 40})
+    lancer(v._async_evaluer())
+    assert v.hass.services.appels == [("cover", "set_cover_position", {"entity_id": ["cover.salon"], "position": 0})]
+
+
+def test_un_store_qui_ne_sait_pas_se_placer_s_ouvre(creer):
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **_store(features=3)})
+    lancer(v._async_evaluer())
+    assert v.hass.services.appels == [("cover", "open_cover", {"entity_id": ["cover.salon"]})]
+
+
+def test_un_store_rendu_sans_position_connue_se_replie(creer):
+    """Sans position d'avant, un volet se rouvre (100) ; un store banne, lui, se
+    replie (0) : le deployer, c'est exposer la toile."""
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD, **_store("open", 100)})
+    v.abaisses["cover.salon"] = None
+    v.regles.tenir("volets", "soleil", ["cover.salon"])
+    lancer(v._async_rendre("cover.salon"))
+    assert v.hass.services.appels == [("cover", "set_cover_position", {"entity_id": ["cover.salon"], "position": 0})]
+
+
+def test_un_volet_au_soleil_se_baisse_toujours_a_30(creer):
+    v = creer(cfg_soleil(), {**SOLEIL_HAUT, **CHAUD,
+                             "cover.salon": FauxEtat("open", {"supported_features": 15, "current_position": 100})})
+    lancer(v._async_evaluer())
+    assert v.hass.services.appels == [("cover", "set_cover_position", {"entity_id": ["cover.salon"], "position": 30})]
+
+
+# ── Un volet renomme (sa demande du 25/10) ──────────────────────────────────
+#
+# Les reglages d'un volet sont ranges par son entity_id. Renomme dans Home
+# Assistant, il les perdait en silence et suivait la maison : sa chambre, reglee
+# pour ne jamais s'ouvrir seule, se serait mise a s'ouvrir chaque matin. La
+# configuration et ce que le module tient en memoire suivent le renommage, comme
+# pour les fenetres (fenetres.py, audit du 19/10).
+
+class _EvRenomme:
+    def __init__(self, neuf, ancien, action="update"):
+        self.data = {"action": action, "entity_id": neuf, "old_entity_id": ancien}
+
+
+CFG_RENOMME = {
+    "planning": {"actif": True, "volets": {"cover.chambre": {"perso": True, "ouverture": None, "jours_ouverture": []},
+                                           "cover.salon": {"ouverture": 30}}},
+    "soleil": {"actif": True, "temp_entite": "sensor.dehors", "volets": {"cover.chambre": {"orientation": 135}}},
+    "baies": {"actif": True, "volets": {"cover.chambre": "binary_sensor.porte_chambre"}},
+    "vent": {"actif": True, "entite": "sensor.vent", "seuil": 50},
+}
+
+
+def test_renommer_dans_la_configuration_des_volets(module):
+    cfg = json.loads(json.dumps(CFG_RENOMME))
+    assert module.renommer_dans_volets(cfg, "cover.chambre", "cover.chambre_parents") is True
+    assert "cover.chambre" not in cfg["planning"]["volets"]
+    assert cfg["planning"]["volets"]["cover.chambre_parents"] == {"perso": True, "ouverture": None, "jours_ouverture": []}
+    assert cfg["soleil"]["volets"] == {"cover.chambre_parents": {"orientation": 135}}
+    assert cfg["baies"]["volets"] == {"cover.chambre_parents": "binary_sensor.porte_chambre"}
+    # Le capteur d'une porte, le thermometre et l'anemometre suivent aussi.
+    assert module.renommer_dans_volets(cfg, "binary_sensor.porte_chambre", "binary_sensor.baie") is True
+    assert cfg["baies"]["volets"] == {"cover.chambre_parents": "binary_sensor.baie"}
+    assert module.renommer_dans_volets(cfg, "sensor.vent", "sensor.anemometre") is True
+    assert cfg["vent"]["entite"] == "sensor.anemometre"
+    assert module.renommer_dans_volets(cfg, "sensor.dehors", "sensor.exterieur") is True
+    assert cfg["soleil"]["temp_entite"] == "sensor.exterieur"
+    # Ce qu'il ne connait pas ne change rien.
+    assert module.renommer_dans_volets(cfg, "light.salon", "light.sejour") is False
+
+
+def test_un_volet_renomme_garde_ses_reglages_et_sa_memoire(creer):
+    v = creer(CFG_RENOMME, {"cover.chambre": FauxEtat("closed", {"supported_features": 15, "current_position": 0})})
+    v._depot_memoire = FauxStore(None)
+    v.attente["cover.chambre"] = {"sens": "fermer", "expire": time.time() + 3600, "motif": "baie ouverte"}
+    v.abaisses["cover.chambre"] = 100
+    v.regles.tenir("volets", "soleil", ["cover.chambre"])
+    v._sur_registre(_EvRenomme("cover.chambre_parents", "cover.chambre"))
+    while v.hass.taches:
+        lancer(v.hass.taches.pop())
+    assert "cover.chambre_parents" in v.cfg["planning"]["volets"] and "cover.chambre" not in v.cfg["planning"]["volets"]
+    enregistre = lancer(v.async_config())
+    assert enregistre["planning"]["volets"]["cover.chambre_parents"]["jours_ouverture"] == []
+    assert enregistre["baies"]["volets"] == {"cover.chambre_parents": "binary_sensor.porte_chambre"}
+    assert set(v.attente) == {"cover.chambre_parents"} and set(v.abaisses) == {"cover.chambre_parents"}
+    assert v.regles.tient("volets", "soleil", "cover.chambre_parents")
+    assert not v.regles.tient("volets", "soleil", "cover.chambre")
+    assert set(v._depot_memoire.contenu["attente"]) == {"cover.chambre_parents"}
+
+
+def test_un_renommage_sans_rapport_ne_touche_a_rien(creer):
+    v = creer(CFG_RENOMME, {})
+    avant = json.dumps(v.cfg, sort_keys=True)
+    v._sur_registre(_EvRenomme("light.sejour", "light.salon"))
+    v._sur_registre(_EvRenomme("cover.neuf", None, action="create"))
+    v._sur_registre(_EvRenomme("cover.chambre", "cover.chambre"))
+    assert v.hass.taches == [] and json.dumps(v.cfg, sort_keys=True) == avant
+
+
+# ── La fusion volet par volet (sa demande du 25/10) ─────────────────────────
+#
+# Les tables `planning.volets`, `soleil.volets` et `baies.volets` arrivaient
+# ENTIERES de l'ecran, et le serveur les remplacait : deux ecrans qui reglent
+# deux volets presque ensemble, et le second effacait le reglage du premier. Le
+# serveur fusionne desormais volet par volet ; `None` retire un volet.
+
+def test_deux_volets_regles_de_deux_ecrans_survivent_tous_les_deux(creer):
+    v = creer({"planning": {"actif": True}}, {})
+    lancer(v.async_enregistrer({"planning": {"volets": {"cover.salon": {"perso": True, "ouverture": 30}}}}))
+    lancer(v.async_enregistrer({"planning": {"volets": {"cover.chambre": {"exclu": True}}}}))
+    assert v.cfg["planning"]["volets"] == {"cover.salon": {"perso": True, "ouverture": 30}, "cover.chambre": {"exclu": True}}
+    lancer(v.async_enregistrer({"soleil": {"volets": {"cover.salon": {"orientation": 225, "ouverture": 90}}}}))
+    lancer(v.async_enregistrer({"soleil": {"volets": {"cover.bureau": {"orientation": 135, "ouverture": 90}}}}))
+    assert set(v.cfg["soleil"]["volets"]) == {"cover.salon", "cover.bureau"}
+    lancer(v.async_enregistrer({"baies": {"volets": {"cover.salon": "binary_sensor.baie"}}}))
+    lancer(v.async_enregistrer({"baies": {"volets": {"cover.chambre": "binary_sensor.porte"}}}))
+    assert v.cfg["baies"]["volets"] == {"cover.salon": "binary_sensor.baie", "cover.chambre": "binary_sensor.porte"}
+    # Ce qui est ENREGISTRE, pas seulement le cache.
+    assert lancer(v.async_config())["planning"]["volets"]["cover.salon"] == {"perso": True, "ouverture": 30}
+
+
+def test_none_retire_un_volet_et_seulement_lui(creer):
+    v = creer({"planning": {"actif": True, "volets": {"cover.salon": {"ouverture": 30}, "cover.chambre": {"exclu": True}}},
+               "soleil": {"volets": {"cover.salon": {"orientation": 225}}}}, {})
+    lancer(v.async_enregistrer({"planning": {"volets": {"cover.salon": None}, "actif": False},
+                                "soleil": {"volets": {"cover.salon": None}}}))
+    assert v.cfg["planning"]["volets"] == {"cover.chambre": {"exclu": True}}
+    assert v.cfg["planning"]["actif"] is False, "le reste de la section suit toujours le patch"
+    assert v.cfg["soleil"]["volets"] == {}

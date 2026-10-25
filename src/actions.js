@@ -51,6 +51,10 @@ const PLANS = {
     },
     set_color: { service: 'turn_on', field: 'rgb_color', kind: 'rgb' },
     set_effect: { service: 'turn_on', field: 'effect', kind: 'option', list: 'effect_list' },
+    /* Le mode `white` d'un ruban `hs + white` (audit du 19/10, B6) : `light.turn_on` avec `white: <luminosité 0-255>` — le
+     * schéma de Home Assistant accepte `true` ou un entier de 0 à 255 ; l'entier passe partout depuis 2021.4, `true` seulement
+     * depuis 2023. L'appelant donne le niveau (lumieresfiche.js, `niveauBlanc`) ; `octet` le borne. */
+    set_white: { service: 'turn_on', field: 'white', kind: 'octet' },
   },
   cover: {
     open: { service: 'open_cover' },
@@ -316,6 +320,8 @@ function valeur(plan, brute, attrs) {
   if (!isFinite(n)) return { ok: false, reason: 'valeur numérique attendue' };
 
   if (plan.kind === 'pct') return { ok: true, v: Math.max(0, Math.min(100, Math.round(n))) };
+  // Un octet : la luminosité telle que Home Assistant la compte, de 0 à 255 (`white`).
+  if (plan.kind === 'octet') return { ok: true, v: Math.max(0, Math.min(255, Math.round(n))) };
   if (plan.kind === 'ratio') return { ok: true, v: Math.max(0, Math.min(1, n)) };
 
   // `range` : les bornes viennent de l'entité, jamais d'une constante. Une
@@ -591,7 +597,8 @@ export function peut(hass, id, capability) {
  * envoye, jamais ce qui a ete demande.
  *
  * Rend `null` si l'entite ne declare pas la capacite — la vue ne doit alors
- * afficher aucun changement, puisqu'il n'y en aura pas.
+ * afficher aucun changement, puisqu'il n'y en aura pas. Un refus de Home
+ * Assistant arrive PLUS TARD : `surEchec(motif)`, s'il est donne, le dit.
  */
 /**
  * Un appel de service par son nom, passe par la validation quand c'est possible.
@@ -691,13 +698,61 @@ export function commanderService(hass, id, domaine, service, data) {
   if (trad && extras.length === admis.length) {
     const options = {};
     admis.forEach((k) => { options[k] = d[k]; });
-    return commander(hass, id, trad.capacite, trad.champ ? d[trad.champ] : undefined, null, options);
+    /* La promesse de l'appel (passe bis de l'étape 2 IoT, 19/10 ; point C) : réglée quand Home Assistant a répondu — ce qui a été
+     * ENVOYÉ, bornes de l'entité appliquées, si l'appel a abouti ; `null` sinon —, et `null` tout de suite pour un plan refusé, comme
+     * avant ; un appelant qui l'ignorait n'y voit rien. Le verrou de « Distribuer » tient jusqu'à cette réponse : un distributeur en
+     * nuage qui répond en 3 s servait deux rations. */
+    const { valeur, fait } = lancerCommande(hass, id, trad.capacite, trad.champ ? d[trad.champ] : undefined, null, options);
+    return valeur == null ? null : fait;
   }
-  if (hass && hass.callService) hass.callService(domaine, service, d);
+  if (hass && hass.callService) return reglee(hass.callService(domaine, service, d));
   return null;
 }
 
-export function commander(hass, id, capability, value, champ, options) {
+/* Une promesse réglée quand `p` l'est — à `null` : la route directe ne prétend pas savoir ce qui a été appliqué. Son rejet d'origine
+ * est relancé tel quel, ORPHELIN : c'est lui que l'écoute globale des rejets attend (le toast « Commande non exécutée »), et
+ * l'attendre ici le lui aurait caché. */
+const reglee = (p) => Promise.resolve(p).then(() => null, (e) => { Promise.reject(e); return null; });
+
+export function commander(hass, id, capability, value, champ, options, surEchec) {
+  return lancerCommande(hass, id, capability, value, champ, options, surEchec).valeur;
+}
+
+/* Le cœur de `commander` : la commande vérifiée, envoyée, et son refus relancé. Rend `{ valeur, fait }` — la valeur que `commander`
+ * rend (ce qui part : le champ, ou la charge utile ; null pour un plan refusé — trois cartes la lisent) et la promesse de l'appel,
+ * réglée quand Home Assistant a répondu (cette valeur si l'appel a abouti, null sinon), que `commanderService` rend à ses appelants
+ * (point C). `surEchec` est le rappel de `commander` (les volets, 19/10) : il doit arriver jusqu'ici, où le refus se lit. */
+/* Un ordre GROUPÉ part en autant d'appels qu'il en faut (ticket #34, 20/10).
+ *
+ * `planGroupe` ne garde qu'un appel — celui de la première entité acceptée —
+ * et range les autres dans `ecartees`. Personne ne les lisait : une pièce qui
+ * mêlait une lampe (`light.turn_off`) et une prise déclarée lumière
+ * (`switch.turn_off`) n'éteignait que la lampe, la prise restait allumée, la
+ * tuile la voyait encore « allumée » et l'appui suivant renvoyait « éteindre ».
+ * On repart donc des écartées tant qu'il en reste qu'un autre appel accepte ;
+ * ce que plus aucun appel n'accepte se DIT, une fois, par le même canal que
+ * tout refus — le reste part quand même. */
+function lancerCommande(hass, id, capability, value, champ, options, surEchec) {
+  if (!Array.isArray(id)) return lancerUn(hass, id, capability, value, champ, options, surEchec);
+  const ctx = actionCtx(hass);
+  const lots = [];
+  let reste = id.filter(Boolean);
+  let refus = null;
+  while (reste.length) {
+    const p = planGroupe(reste, capability, value, ctx, options || {});
+    if (!p.ok) { refus = { ids: reste, raison: p.reason }; break; }
+    lots.push(p.target.entity_id);
+    reste = p.ecartees || [];
+  }
+  if (!lots.length) return lancerUn(hass, id, capability, value, champ, options, surEchec);
+  if (refus) {
+    Promise.reject(Object.assign(new Error((refus.raison || 'commande impossible') + ' (' + refus.ids.join(', ') + ')'), { code: 'service_error' }));
+  }
+  const parties = lots.map(lot => lancerUn(hass, lot, capability, value, champ, options, surEchec));
+  return { valeur: parties[0].valeur, fait: Promise.all(parties.map(x => x.fait)).then(r => r[0]) };
+}
+
+function lancerUn(hass, id, capability, value, champ, options, surEchec) {
   const ctx = actionCtx(hass);
   const p = planAction(id, capability, value, ctx, options || {});
   if (!p.ok) {
@@ -709,7 +764,7 @@ export function commander(hass, id, capability, value, champ, options) {
      *
      * Meme canal qu'un echec d'envoi : le toast dit qu'il ne s'est rien passe. */
     Promise.reject(Object.assign(new Error(p.reason || 'commande impossible'), { code: 'service_error' }));
-    return null;
+    return { valeur: null, fait: Promise.resolve(null) };
   }
   /* `runPlan` attrape le rejet pour pouvoir en donner la raison — et l'echec
    * s'arretait la. L'ecoute globale des rejets, seul canal d'erreur visible du
@@ -722,11 +777,19 @@ export function commander(hass, id, capability, value, champ, options) {
    * bouger personne, et la carte reste sur une position que rien n'a atteinte.
    *
    * On relance donc le rejet, sans le traiter, pour que l'ecoute s'en saisisse.
-   * `code` le fait passer le filtre de l'ecouteur. */
-  runPlan(hass, p).then((r) => {
-    if (r && r.ok) return;
+   * `code` le fait passer le filtre de l'ecouteur.
+   *
+   * `surEchec` (19/10) : l'appelant l'apprend AUSSI. Un volet dont Home
+   * Assistant refuse l'ordre jouait sa course a l'ecran pendant pres de
+   * 200 s : le refus arrive apres le retour de `commander`, qui ne rend null
+   * que pour un refus local. Le rappel tombe une fois, avec le motif. */
+  const valeur = champ ? p.data[champ] : (p.data || {});
+  const fait = runPlan(hass, p).then((r) => {
+    if (r && r.ok) return valeur;
     const motif = (r && r.reason) ? String(r.reason) : 'service';
+    if (typeof surEchec === 'function') { try { surEchec(motif); } catch { /* un rappel tombe n'efface pas le toast */ } }
     Promise.reject(Object.assign(new Error(motif), { code: 'service_error' }));
+    return null;
   });
-  return champ ? p.data[champ] : (p.data || {});
+  return { valeur, fait };
 }

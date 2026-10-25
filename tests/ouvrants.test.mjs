@@ -28,7 +28,11 @@ test('la carte d’un ouvrant : celle d’avant, plus le filigrane qui suit l’
 });
 
 test('la fiche du capteur est restee celle d’avant', () => {
-  const f = bloc('function RoomBinarySheet(', NL + '}');
+  // ASSERTION MODIFIÉE (chantier Capteurs, tâche 1) : la fiche d'un capteur binaire est chargée à la demande, de son propre fichier.
+  const fc = readFileSync(join(RACINE, 'src', 'fichecapteur.jsx'), 'utf8');
+  const d = fc.indexOf('export function RoomBinarySheet(');
+  assert.ok(d >= 0, 'la fiche d’un capteur binaire introuvable');
+  const f = fc.slice(d, fc.indexOf(NL + '}', d));
   assert.ok(!f.includes('RoomActivityCard'), 'pas de journal ajoute');
   assert.ok(!src.includes('dureeDepuis'), 'plus de duree nulle part');
 });
@@ -39,6 +43,8 @@ test('plus de petit carre : le coin haut droit d’un capteur montre sa pile, ou
   assert.ok(c.includes("const pile = (dom === 'binary_sensor' || dom === 'sensor') && !mort ? pileDe(S, id) : null;"), 'la pile vient du capteur soeur, pour les capteurs seulement');
   assert.ok(c.includes(': pile != null ? <PileRepere n={pile} onOuvrir={ouvrable ? () => onOpen(id) : null} /> : null}'), 'la pile, sinon rien — et son clic ouvre la fiche, comme la surface qu’il recouvre');
   const p = bloc('function PileRepere(', NL + '}');
-  assert.ok(p.includes("n < 12 ? 'battery-empty' : n < 37 ? 'battery-quarter' : n < 62 ? 'battery-half' : n < 87 ? 'battery-three-quarters' : 'battery-full'"), 'l’icone suit le niveau');
-  assert.ok(p.includes("n < 20 ? 'var(--o-bad)' : n < 50 ? 'var(--o-warn)' : 'var(--o-text3)'"), 'rouge sous 20 %, ambre sous 50 %, comme la rangee Pile de la fiche');
+  // ASSERTIONS MODIFIÉES (chantier Capteurs, étapes 2 et 3, tâche 11 ; C32) : la glyphe et la couleur viennent de la seule règle de la maison
+  // (`glyphePile`, piles.js ; `couleurPile`, attention.js) — l'ambre au seuil de la veille des piles, le rouge au critique, rien avant.
+  assert.ok(p.includes('const ico = glyphePile(n);'), 'l’icone suit le niveau');
+  assert.ok(p.includes("const col = couleurPile(n, 'var(--o-text3)');"), 'la couleur de la maison, comme la rangee Pile de la fiche');
 });

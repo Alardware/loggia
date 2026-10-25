@@ -17,9 +17,10 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cleCamera } from '../src/present.js';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
 
 test('une caméra sans entité reçoit quand même une clé', () => {
   // Le cas de la démo, et de toute caméra déclarée par son nom seul.
@@ -120,12 +121,12 @@ test('la carte camera porte sa couleur : lavis, icone et repere en bleu quand el
   assert.ok(carte.includes("const allume = !mort && (danger || direct || (actif"), 'une camera en direct est allumee : lavis compris');
   // Depuis le 26/09, une icone CHOISIE a la main passe devant (`iconeChoisie`)
   // — sans rien changer d'autre. Le defaut, lui, n'a pas bouge.
-  assert.ok(carte.includes("const ico = iconeChoisie(id) || (dom === 'camera' ? 'camera' : carteDePrise ? tp.ico : cvIcoEntite(dom, id, st, nom));"), 'appareil photo dans le carre, camera video en repere');
+  assert.ok(carte.includes("const ico = iconeChoisie(id) || (dom === 'camera' ? 'camera' : cvIcoEntite(dom, id, st, nom));"), 'appareil photo dans le carre, camera video en repere');
   assert.ok(carte.includes("RM_ICO(allume ? icoFond : 'var(--o-s1)', allume ? icoTexte : 'var(--o-text3)')"), 'la teinte de l’icone suit allume');
   assert.ok(carte.includes("color: direct ? icoTexte : 'var(--o-text3)'"), 'le repere en haut a droite aussi');
   // Le lavis suit toujours `allume` — une prise EN VEILLE fait seule exception
   // depuis le 26/09 : elle est allumee, mais elle ne travaille pas.
-  assert.ok(carte.includes('(allume && LAVIS && (!carteDePrise || priseVive))'), 'le lavis suit allume, donc la camera en direct');
+  assert.ok(carte.includes('...((allume && LAVIS) ? { background: lavisCarte('), 'le lavis suit allume, donc la camera en direct');
 });
 
 test('l’Accueil et la fiche dessinent la meme tuile camera', () => {

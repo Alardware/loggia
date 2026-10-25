@@ -300,7 +300,8 @@ def test_les_lumieres_de_la_maison_moins_les_veilleuses_et_la_configuration(cree
     assert "light.borne_led" not in maison["entites"], "une entite de configuration n'est pas une lampe"
     action = {"famille": "lumieres", "geste": "eteindre", "portee": "maison", "sauf_veilleuses": True}
     assert module.cibles(action, maison, None, lancer(s._veilleuses())) == ["light.chambre", "light.jardin", "light.salon"]
-    # Sans epargne, la veilleuse y passe ; une lampe eteinte, jamais.
+    # Sans veilleuse CONNUE (la regle Nuit pas lue), la veilleuse y passe ; une lampe eteinte, jamais.
+    # Connue, elle est epargnee que l'option soit cochee ou non (retouches du 19/10, R6 : voir plus bas).
     assert module.cibles({"famille": "lumieres", "geste": "eteindre", "portee": "maison"}, maison, None) \
         == ["light.chambre", "light.jardin", "light.salon", "light.veilleuse"]
 
@@ -332,6 +333,19 @@ def test_un_garage_n_est_pas_un_volet(creer, module):
     maison = s.inventaire()
     assert module.cibles({"famille": "volets", "geste": "fermer", "portee": "maison"}, maison, None) \
         == ["cover.volet_cuisine", "cover.volet_salon"]
+
+
+def test_un_volet_qui_ne_fait_que_s_incliner_reste_hors_de_l_ordre_groupe(module):
+    """Audit du 19/10 (point 11) : sans OPEN ni CLOSE dans `supported_features`,
+    il ferait refuser l'appel groupe entier. Sans `supported_features`, on ne
+    sait pas : il reste."""
+    maison = {"entites": {
+        "cover.salon": {"etat": "open", "classe": "shutter", "attrs": {"supported_features": 15}},
+        "cover.lames": {"etat": "open", "classe": "blind", "attrs": {"supported_features": 16 | 32 | 128}},
+        "cover.simple": {"etat": "open", "classe": "shutter", "attrs": {}},
+    }}
+    assert module.cibles({"famille": "volets", "geste": "fermer", "portee": "maison"}, maison, None) \
+        == ["cover.salon", "cover.simple"]
 
 
 def test_les_medias_selon_le_geste(creer, module):
@@ -515,3 +529,127 @@ def test_un_scenario_lie_refuse_ne_part_pas(creer, module):
     r = lancer(s.async_lancer("nuit", user_id="u2", controle=ctrl))
     assert s.hass.services.appels == [], "la scene n'est pas lancee"
     assert r["n"] == 0 and r["refusees"] == 1 and r["fait"] == [{"famille": "lien", "geste": "scene", "n": 0}]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Une seule idee de la lumiere de la maison (audit du 19/10, ADR 0260) : la
+# famille « lumieres » d'un scenario, c'est la definition commune - l'interrupteur
+# declare lumiere compris, par SON service -, et « sauf les veilleuses » epargne
+# aussi le groupe qui en contient une.
+# ─────────────────────────────────────────────────────────────────────────────
+
+EXTERIEUR = "switch.lumiere_exterieur"
+NUIT_LINO = {"loggia_nuit": {"veilleuse": {"actif": True, "lampes": ["light.veilleuse"]}}}
+
+
+def etats_avec_groupe_et_interrupteur():
+    return {**etats_de_base(),
+            "light.chambre_tout": FauxEtat("on", {"entity_id": ["light.chambre", "light.veilleuse"]}),
+            EXTERIEUR: FauxEtat("on"), "switch.prise_nas": FauxEtat("on")}
+
+
+def test_sauf_les_veilleuses_epargne_aussi_le_groupe_qui_en_contient_une(creer, module):
+    s = creer(partage=NUIT_LINO, etats=etats_avec_groupe_et_interrupteur())
+    maison = s.inventaire()
+    action = {"famille": "lumieres", "geste": "eteindre", "portee": "maison", "sauf_veilleuses": True}
+    assert module.cibles(action, maison, None, lancer(s._veilleuses())) == ["light.chambre", "light.jardin", "light.salon"]
+    # Sans epargne, le groupe y passe avec les autres - et le contexte complet l'efface devant ses membres.
+    assert "light.chambre_tout" in module.cibles(dict(action, sauf_veilleuses=False), maison, None, [])
+    c = lancer(s._contexte())
+    assert "light.chambre_tout" not in c["maison"]["lumieres"]
+    assert module.cibles(dict(action, sauf_veilleuses=False), c["maison"], None, []) == [
+        "light.chambre", "light.jardin", "light.salon", "light.veilleuse"]
+
+
+def test_la_famille_lumieres_compte_l_interrupteur_declare_par_son_service(creer, module):
+    s = creer(partage={**NUIT_LINO, "loggia_switchlights": [EXTERIEUR]}, etats=etats_avec_groupe_et_interrupteur())
+    c = lancer(s._contexte())
+    assert EXTERIEUR in c["maison"]["lumieres"] and "switch.prise_nas" not in c["maison"]["lumieres"]
+    assert c["maison"]["entites"][EXTERIEUR]["etat"] == "on"
+    action = {"famille": "lumieres", "geste": "eteindre", "portee": "maison", "sauf_veilleuses": True}
+    haids = module.cibles(action, c["maison"], None, c["veilleuses"])
+    assert haids == ["light.chambre", "light.jardin", "light.salon", EXTERIEUR]
+    assert module.ordres(action, haids, c["maison"]) == [
+        ("light", "turn_off", ["light.chambre", "light.jardin", "light.salon"], {}),
+        ("homeassistant", "turn_off", [EXTERIEUR], {}),
+    ]
+    allumer = {"famille": "lumieres", "geste": "allumer", "portee": "maison", "valeur": 40}
+    assert module.ordres(allumer, ["light.salon", EXTERIEUR], c["maison"]) == [
+        ("light", "turn_on", ["light.salon"], {"brightness_pct": 40}),
+        ("homeassistant", "turn_on", [EXTERIEUR], {}),
+    ]
+    # Lance : les deux ordres partent, le compte dit les vraies lampes.
+    r = lancer(s.async_lancer("nuit", user_id="u1"))
+    par_service = {(d, sv): data for d, sv, data, _ in s.hass.services.appels}
+    assert par_service[("light", "turn_off")]["entity_id"] == ["light.chambre", "light.jardin", "light.salon"]
+    assert par_service[("homeassistant", "turn_off")]["entity_id"] == [EXTERIEUR]
+    assert next(f for f in r["fait"] if f["famille"] == "lumieres")["n"] == 4
+    # Le resume de l'etat compte de meme.
+    etat = lancer(s.async_etat())
+    nuit = next(x for x in etat["scenarios"] if x["id"] == "nuit")
+    assert nuit["resume"][0] == {"famille": "lumieres", "geste": "eteindre", "portee": "maison", "piece": None,
+                                 "valeur": None, "si": None, "n": 4}
+
+
+def test_une_veilleuse_absente_ou_une_liste_vide_ne_genent_pas_un_scenario(creer, module):
+    action = {"famille": "lumieres", "geste": "eteindre", "portee": "maison", "sauf_veilleuses": True}
+    s = creer(partage={"loggia_nuit": {"veilleuse": {"lampes": ["light.partie", 5]}}})
+    c = lancer(s._contexte())
+    assert module.cibles(action, c["maison"], None, c["veilleuses"]) == [
+        "light.chambre", "light.jardin", "light.salon", "light.veilleuse"]
+    s = creer(partage={"loggia_nuit": {"veilleuse": {"lampes": []}}})
+    c = lancer(s._contexte())
+    assert "light.veilleuse" in module.cibles(action, c["maison"], None, c["veilleuses"])
+
+
+# ── Les veilleuses sont epargnees PARTOUT (retouches du 19/10, R6) ────────
+
+def test_une_extinction_par_un_scenario_epargne_toujours_les_veilleuses(creer, module):
+    """Sa decision : une EXTINCTION de la famille lumieres epargne la veilleuse
+    de la regle Nuit - et le groupe qui en contient une -, que l'option « sauf
+    les veilleuses » soit cochee ou non. Un ALLUMAGE n'est pas concerne."""
+    s = creer(partage=NUIT_LINO, etats=etats_avec_groupe_et_interrupteur())
+    c = lancer(s._contexte())
+    sans_option = {"famille": "lumieres", "geste": "eteindre", "portee": "maison"}
+    assert module.cibles(sans_option, c["maison"], None, c["veilleuses"]) == ["light.chambre", "light.jardin", "light.salon"]
+    assert module.cibles(dict(sans_option, sauf_veilleuses=False), c["maison"], None, c["veilleuses"]) == [
+        "light.chambre", "light.jardin", "light.salon"], "l'option a faux ne change rien"
+    # Sur l'inventaire seul, le groupe qui contient la veilleuse est epargne lui aussi.
+    maison = s.inventaire()
+    haids = module.cibles(sans_option, maison, None, lancer(s._veilleuses()))
+    assert "light.veilleuse" not in haids and "light.chambre_tout" not in haids
+    # Un allumage : la veilleuse est une cible comme une autre.
+    allumer = {"famille": "lumieres", "geste": "allumer", "portee": "maison", "valeur": 20}
+    assert "light.veilleuse" in module.cibles(allumer, c["maison"], None, c["veilleuses"])
+    # Lance : « Je pars » (sans l'option) n'eteint pas la veilleuse, et le resume compte de meme.
+    r = lancer(s.async_lancer("depart", user_id="u1"))
+    eteints = [h for d, sv, data, _ in s.hass.services.appels if sv == "turn_off" for h in data["entity_id"]]
+    assert "light.veilleuse" not in eteints and "light.chambre" in eteints
+    assert next(f for f in r["fait"] if f["famille"] == "lumieres")["n"] == 3
+    etat = lancer(s.async_etat())
+    depart = next(x for x in etat["scenarios"] if x["id"] == "depart")
+    assert depart["resume"][0]["n"] == 3, "le resume dit ce qui partira vraiment"
+
+
+def test_ouvrir_ou_fermer_selon_la_position_pas_seulement_l_etat(module):
+    """Audit du 19/10 : un scenario « ouvrir » sautait tout volet publie
+    `open` — meme a 30 % (baisse par la protection solaire) ou a 1 % (sa
+    chambre qui bute). Le verdict est celui de l'ecran (V12) : deux pour cent
+    aux deux bouts, et `closed` fait foi."""
+    def v(etat, pos=None, classe="shutter"):
+        attrs = {} if pos is None else {"current_position": pos}
+        return {"piece": None, "classe": classe, "etat": etat, "attrs": attrs, "nom": "x"}
+    maison = {"zones": {}, "entites": {
+        "cover.a_30": v("open", 30),
+        "cover.b_1": v("open", 1),
+        "cover.c_100": v("open", 100),
+        "cover.d_99": v("open", 99),
+        "cover.e_sans_position": v("open"),
+        "cover.f_ferme": v("closed", 0),
+        "cover.g_ferme_perime": v("closed", 100),   # Netatmo : l'etat bascule, la position suit 1 a 3 min apres
+        "cover.h_garage": v("open", 40, "garage"),
+    }}
+    ouvrir = {"famille": "volets", "geste": "ouvrir", "portee": "maison"}
+    fermer = {"famille": "volets", "geste": "fermer", "portee": "maison"}
+    assert module.cibles(ouvrir, maison, None) == ["cover.a_30", "cover.b_1", "cover.f_ferme", "cover.g_ferme_perime"]
+    assert module.cibles(fermer, maison, None) == ["cover.a_30", "cover.c_100", "cover.d_99", "cover.e_sans_position"]

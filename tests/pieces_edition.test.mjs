@@ -11,6 +11,8 @@ import { fileURLToPath } from 'node:url';
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
 const par = readFileSync(join(RACINE, 'src', 'views', 'parametres.jsx'), 'utf8');
+// ASSERTION MODIFIÉE (audit du 19/10) : la fiche d'une pièce est chargée à la demande — elle vit dans fichepiece.jsx.
+const fp = readFileSync(join(RACINE, 'src', 'fichepiece.jsx'), 'utf8');
 const en = readFileSync(join(RACINE, 'src', 'langues', 'en.js'), 'utf8');
 const NL = String.fromCharCode(10);
 const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = src.indexOf(fin, d + 1); return src.slice(d, f < 0 ? undefined : f); };
@@ -75,7 +77,8 @@ test('l’Accueil : la carte d’edition remplace la tuile, la case d’ajout fe
 });
 
 test('la fiche : nom, icone, teinte, tuile compacte, entites — et un nom deja pris ne s’enregistre pas', () => {
-  const f = bloc('function FichePiece(', NL + '}');
+  const f = fp.slice(fp.indexOf('export default function FichePiece('));
+  assert.ok(src.includes("const FichePiece = lazyRecharge(() => import('./fichepiece.jsx'));") && !src.includes('function FichePiece('), 'la fiche quitte le démarrage');
   // « ICÔNE » est l'etiquette du selecteur partage, pas de la fiche.
   ['NOM', 'TEINTE', 'ENTITÉS', 'Tuile compacte', 'Ajouter une pièce', 'Modifier la pièce', 'Température', 'Humidité', 'CO₂', 'Lumières'].forEach(k => assert.ok(f.includes("tr('" + k + "')"), k));
   assert.ok(f.includes("tr('La pièce apparaîtra sur l’accueil et dans le sélecteur de pièces.')"), 'la phrase de la maquette');
@@ -91,7 +94,10 @@ test('la fiche : nom, icone, teinte, tuile compacte, entites — et un nom deja 
   ['temperature', 'humidity', 'carbon_dioxide'].forEach(c => assert.ok(f.includes("'" + c + "'"), 'les capteurs proposes par device_class ' + c));
   assert.ok(f.includes('<ChampSuggere id={id} label={lbl} value={v} onChange={set}') && f.includes('suggestions={capteurs(classe).map('), 'une liste de suggestions par capteur, aux couleurs du thème');
   assert.ok(f.includes('{existante && <button onClick={() => { onSupprimer(nom); close(); }}'), 'Supprimer seulement pour une piece existante');
-  assert.ok(f.includes("haid: { temp: temp.trim() || null, humidity: hum.trim() || null, co2: co2.trim() || null, lights: lumieres.split(',').map(s => s.trim()).filter(Boolean) }"), 'les capteurs sous haid, comme Parametres');
+  // ASSERTION MODIFIÉE (audit du 19/10, H7) : ce que la fiche n'édite pas reste sous `haid` — le seuil CO₂ de la pièce.
+  assert.ok(f.includes("haid: { ...h, temp: temp.trim() || null, humidity: hum.trim() || null, co2: co2.trim() || null, lights: lumieres.split(',').map(s => s.trim()).filter(Boolean) }"), 'les capteurs sous haid, comme Parametres');
+  // ASSERTION AJOUTÉE (audit du 19/10, décision D5) : « Pièce du dehors » — Auto, Oui, Non — se range avec la pièce.
+  assert.ok(f.includes("[[null, tr('Auto')], [true, tr('Oui')], [false, tr('Non')]]") && f.includes('dehors: dehors == null ? undefined : dehors'), 'la pièce du dehors');
 });
 
 test('ecrire une piece : un seul lot, et renommer emporte sa grille', () => {
@@ -123,8 +129,9 @@ test('ecrire une piece : un seul lot, et renommer emporte sa grille', () => {
 });
 
 test('Parametres ne perd ni l’icone ni la teinte a l’enregistrement', () => {
-  assert.ok(par.includes("icon: r.icon || null, teinte: r.teinte || null, temp:"), 'lues avec la piece');
-  assert.ok(par.includes("...(r.icon ? { icon: r.icon } : {}), ...(r.teinte ? { teinte: r.teinte } : {}), haid: {"), 'reecrites avec elle');
+  // ASSERTIONS MODIFIÉES (audit du 19/10, décision D5) : ni « Pièce du dehors », réglée dans la fiche de la pièce.
+  assert.ok(par.includes("icon: r.icon || null, teinte: r.teinte || null, dehors: typeof r.dehors === 'boolean' ? r.dehors : null, temp:"), 'lues avec la piece');
+  assert.ok(par.includes("...(r.icon ? { icon: r.icon } : {}), ...(r.teinte ? { teinte: r.teinte } : {}), ...(typeof r.dehors === 'boolean' ? { dehors: r.dehors } : {}), haid: {"), 'reecrites avec elle');
 });
 
 test('les boutons d’une carte de pièce survivent au glisser, comme ceux d’Appareils', () => {

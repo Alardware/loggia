@@ -8,6 +8,7 @@
 // Retirer l'onglet Entites ne doit laisser AUCUNE liste d'entites sans fiche :
 // c'est ce que le dernier bloc verifie, a partir des sources.
 
+// ASSERTIONS MODIFIÉES (19/10, vouvoiement de l'interface générale) : les textes cités ici passent au « vous » ; seule la clé française change (tests/vouvoiement_interface_1910.test.mjs).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -15,10 +16,11 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { detecterCapteursPieces } from '../src/resolve.js';
 import { DROITS_IDS } from '../src/state.js';
+import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
-const app = lire('src', 'App.jsx');
+const app = (lire('src', 'App.jsx') + lire('src', 'views', 'voletsplan.jsx') + VUES_SORTIES); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
 const par = lire('src', 'views', 'parametres.jsx');
 const ui = lire('src', 'ui.jsx');
 const en = lire('src', 'langues', 'en.js');
@@ -64,7 +66,7 @@ test('le bandeau porte « Entites de la vue » et sait changer son mot d’ordre
   assert.ok(b.includes("{ouvrirEnt && <button onClick={ouvrirEnt} style={btn(false)}><Fi i=\"list\" size={12} />{entLabel || tr('Entités de la vue')}</button>}"), 'le bouton des entites, au style des autres');
   // Il ecrit la configuration de la maison : masque a un compte ordinaire (03/10).
   assert.ok(b.includes('const ouvrirEnt = onEnt && !compteOrdinaire(ctx.hass) ? onEnt : null;'), 'les entites de la vue se proposent a qui ne pourra pas les enregistrer');
-  assert.ok(b.includes("{texte || tr('Mode édition : attrape une carte pour la déplacer où tu veux, ou ajoute, renomme et retire une carte.')}"), 'le mot d’ordre par defaut reste celui de la maquette');
+  assert.ok(b.includes("{texte || tr('Mode édition : attrapez une carte pour la déplacer où vous voulez, ou ajoutez, renommez et retirez une carte.')}"), 'le mot d’ordre par defaut reste celui de la maquette');
   assert.ok(b.indexOf('{extra}') < b.indexOf('{ouvrirEnt &&') && b.indexOf('{ouvrirEnt &&') < b.indexOf("tr('Terminer')"), 'Terminer ferme la marche');
   // Qui le recoit : les vues qui ont une fiche d'entites.
   assert.ok(bloc(app, 'function Dashboard(', NL + 'function ').includes('</>} onEnt={onEnt} />'), 'l’Accueil passe par la propriete, plus par un bouton a lui');
@@ -149,8 +151,8 @@ test('detecter : la zone Home Assistant d’abord, le nom ensuite, jamais contre
 });
 
 test('les mots nouveaux sont traduits', () => {
-  for (const k of ['IoT', 'Mode édition : avance, recule ou modifie un scénario, ou ajoutes-en un.',
-    'Mode édition : attrape une carte pour la déplacer, clique-la pour la régler, ou ajoutes-en une.']) {
+  for (const k of ['IoT', 'Mode édition : avancez, reculez ou modifiez un scénario, ou ajoutez-en un.',
+    'Mode édition : attrapez une carte pour la déplacer, cliquez-la pour la régler, ou ajoutez-en une.']) {
     assert.ok(en.includes("'" + k + "':"), k + ' manque a en.js');
   }
   assert.ok(en.includes("\"Entité météo : la carte météo sur le côté de l'Accueil, le fond de la bannière, la veille et les conseils d'extérieur.\":"), 'le mot de la section meteo');

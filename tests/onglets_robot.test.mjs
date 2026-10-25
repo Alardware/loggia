@@ -52,31 +52,37 @@ test('le clavier d’une barre d’onglets : les flèches bouclent, Début et Fi
 });
 
 test('les onglets du robot : un seul arrêt de Tab, les flèches, un panneau désigné', () => {
-  assert.ok(ROBOT.includes("import { ongletVoisin } from './choix.js';"), 'le clavier commun des barres d’onglets');
-  assert.ok(ROBOT.includes('<div role="tablist" aria-label={robot.nom} className="rb-onglets"'), 'la barre a perdu son nom');
-  assert.ok(ROBOT.includes("<button key={id} id={idOnglets + '-t-' + id} type=\"button\" role=\"tab\" aria-selected={actuel === id}"), 'chaque onglet a son identifiant');
-  assert.ok(ROBOT.includes("aria-controls={actuel === id ? idOnglets + '-p-' + id : undefined} tabIndex={actuel === id ? 0 : -1}"),
+  /* ASSERTION MODIFIÉE (chantier IoT, tâche 8, 18/10 ; I15) : la fiche du robot passe sur le socle commun des fiches
+   * (fichecommune.jsx, ADR 0155). Sa barre (`FicheOnglets`) et son panneau (`PanneauOnglet`) sont ceux du distributeur, du
+   * chauffage, d'un volet — qui tenaient ce motif du robot : on le relit donc LÀ, puis on vérifie que le robot s'en sert. */
+  const COMMUNE = lire('src', 'fichecommune.jsx');
+  assert.ok(COMMUNE.includes("import { ongletVoisin } from './choix.js';"), 'le clavier commun des barres d’onglets');
+  assert.ok(COMMUNE.includes('<div role="tablist" aria-label={nom} className="rb-onglets"'), 'la barre a perdu son nom');
+  assert.ok(COMMUNE.includes("<button key={id} id={idBase + '-t-' + id} type=\"button\" role=\"tab\" aria-selected={actuel === id}"), 'chaque onglet a son identifiant');
+  assert.ok(COMMUNE.includes("aria-controls={actuel === id ? idBase + '-p-' + id : undefined} tabIndex={actuel === id ? 0 : -1}"),
     'l’onglet actif désigne son panneau, et lui seul est un arrêt de Tab');
-  assert.ok(ROBOT.includes('onClick={() => setOnglet(id)} onKeyDown={(e) => allerOnglet(e, i)} className="rb-onglet"'), 'les flèches ne répondent plus');
+  assert.ok(COMMUNE.includes('onClick={() => onChoisir(id)} onKeyDown={(e) => aller(e, i)} className="rb-onglet"'), 'les flèches ne répondent plus');
   // Les flèches déplacent le focus ET ouvrent l'onglet.
-  const d = ROBOT.indexOf('const allerOnglet = (e, i) => {');
+  const d = COMMUNE.indexOf('const aller = (e, i) => {');
   assert.ok(d > 0, 'le clavier des onglets a disparu');
-  const corps = ROBOT.slice(d, ROBOT.indexOf('\n  };', d));
+  const corps = COMMUNE.slice(d, COMMUNE.indexOf('\n  };', d));
   assert.ok(corps.includes('const j = ongletVoisin(onglets.length, i, e.key);') && corps.includes('e.preventDefault();'));
   const f = corps.indexOf('voisin.focus()');
-  assert.ok(f > 0 && f < corps.indexOf('setOnglet(onglets[j][0]);'), 'le focus ne suit plus l’onglet ouvert');
-  // Le panneau, nommé par son onglet, enveloppe les cinq onglets — pas la page des réglages.
-  const p = ROBOT.indexOf("<div role={avecOnglets ? 'tabpanel' : undefined} id={idOnglets + '-p-' + actuel} aria-labelledby={avecOnglets ? idOnglets + '-t-' + actuel : undefined}>");
+  assert.ok(f > 0 && f < corps.indexOf('onChoisir(onglets[j][0]);'), 'le focus ne suit plus l’onglet ouvert');
+  assert.ok(COMMUNE.includes("<div role={avecOnglets ? 'tabpanel' : undefined} id={idBase + '-p-' + actuel} aria-labelledby={avecOnglets ? idBase + '-t-' + actuel : undefined}>"), 'plus de panneau désigné');
+  // Le robot s'en sert : la barre nommée par lui ; le panneau enveloppe les quatre onglets — pas la page des réglages.
+  assert.ok(ROBOT.includes('{avecOnglets && <FicheOnglets idBase={idOnglets} nom={nom} onglets={onglets} actuel={actuel} onChoisir={setOnglet} />}'), 'la barre commune');
+  const p = ROBOT.indexOf('<PanneauOnglet idBase={idOnglets} actuel={actuel} avecOnglets={avecOnglets}>');
   assert.ok(p > 0, 'plus de panneau désigné');
-  const fin = ROBOT.indexOf("{actuel === 'reglages' && <PageReglages", p);
-  assert.ok(fin > p, 'la page des réglages est entrée dans le panneau');
-  for (const o of ['OngletAccueil', 'OngletZones', 'OngletPlanning', 'OngletHistorique', 'OngletEntretien']) {
+  const fin = ROBOT.indexOf('</PanneauOnglet>', p);
+  for (const o of ['OngletAccueil', 'OngletPlanning', 'OngletHistorique', 'OngletEntretien']) {
     const k = ROBOT.indexOf('<' + o + ' ', p);
     assert.ok(k > p && k < fin, o + ' est sorti du panneau');
   }
+  assert.ok(ROBOT.indexOf('<PageReglagesAppareil ', fin) > fin, 'la page des réglages est entrée dans le panneau');
   // Le hook des identifiants passe AVANT le retour anticipé : un hook ne se saute jamais.
   const h = ROBOT.indexOf('const idOnglets = useId();');
-  assert.ok(h > 0 && h < ROBOT.indexOf('if (!idRobot || !robot.st) {'), 'useId appelé sous condition');
+  assert.ok(h > 0 && h < ROBOT.indexOf('if (!idRobot || !st) {'), 'useId appelé sous condition');
 });
 
 test('aucun rôle « tab » sans le comportement qu’il promet', () => {

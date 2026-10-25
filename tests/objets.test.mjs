@@ -9,14 +9,18 @@ import { fileURLToPath } from 'node:url';
 import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, OBJ_ORDRE, DOMAINES_IOT, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from '../src/objets.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + readFileSync(join(RACINE, 'src', 'views', 'voletsplan.jsx'), 'utf8'); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
 
 test('chaque domaine trouve son filtre ; une prise declaree lumiere est une lumiere', () => {
   const f = (o) => filtresObjet(o);
   assert.deepEqual(f({ domaine: 'light' }), ['lumieres']);
   assert.deepEqual(f({ domaine: 'switch', estLumiere: true }), ['lumieres']);
-  assert.deepEqual(f({ domaine: 'switch' }), ['prises'], '« les prises n’ont rien a faire dans iot […] une prise c’est une prise »');
-  assert.deepEqual(f({ domaine: 'input_boolean' }), ['prises']);
+  /* ASSERTIONS MODIFIÉES (chantier Prises, tâche 3, P1) : « une prise c’est une
+   * prise » — un switch QUI MESURE. Celui qui ne mesure pas, et un
+   * input_boolean, rejoignent les appareils. */
+  assert.deepEqual(f({ domaine: 'switch', estPrise: true }), ['prises'], '« les prises n’ont rien a faire dans iot […] une prise c’est une prise »');
+  assert.deepEqual(f({ domaine: 'switch' }), ['iot'], 'un switch qui ne mesure pas n’est pas une prise');
+  assert.deepEqual(f({ domaine: 'input_boolean' }), ['iot']);
   assert.deepEqual(f({ domaine: 'cover' }), ['volets']);
   assert.deepEqual(f({ domaine: 'climate' }), ['chauffage']);
   assert.deepEqual(f({ domaine: 'switch', type: 'zone' }), ['chauffage'], 'une zone fil pilote est du chauffage, pas une prise');
@@ -41,7 +45,7 @@ test('l’epingle s’ajoute ; etre dehors ne range nulle part : la puce Jardin 
   // et une prise » (17/09) : ils ont deja leur famille.
   assert.deepEqual(filtresObjet({ domaine: 'light', dehors: true }), ['lumieres']);
   assert.deepEqual(filtresObjet({ domaine: 'lawn_mower', dehors: true }), ['iot'], 'le robot');
-  assert.deepEqual(filtresObjet({ domaine: 'switch', dehors: true }), ['prises'], 'la prise');
+  assert.deepEqual(filtresObjet({ domaine: 'switch', estPrise: true, dehors: true }), ['prises'], 'la prise');
   assert.deepEqual(filtresObjet({ domaine: 'camera', dehors: true }), []);
   assert.deepEqual(filtresObjet({ domaine: 'cover', epingle: true }), ['volets', 'favoris']);
   assert.equal(filtresObjet({ domaine: 'light', epingle: true })[0], 'lumieres', 'le principal reste premier');
@@ -95,6 +99,8 @@ test('les puces : Tous toujours, Favoris s’il y a une epingle, puis dans l’o
   const rendus = new Set();
   ['light', 'switch', 'input_boolean', 'cover', 'climate', 'water_heater', 'media_player', 'binary_sensor', 'sensor', 'camera', 'lock', 'vacuum', 'fan', 'humidifier', 'valve', 'lawn_mower', 'siren']
     .forEach(d => filtresObjet({ domaine: d }).forEach(x => rendus.add(x)));
+  // Une prise est un switch qui mesure (chantier Prises, P1) : c'est elle qui rend la puce Prises.
+  filtresObjet({ domaine: 'switch', estPrise: true }).forEach(x => rendus.add(x));
   [...rendus].forEach(x => assert.ok(OBJ_ORDRE.indexOf(x) >= 0, x + ' n’a pas de puce'));
   assert.deepEqual([...rendus].sort(), OBJ_ORDRE.slice().sort(), 'et aucune puce sans appareil possible');
 });
@@ -151,7 +157,8 @@ test('la vue Objets dessine les cartes de la piece, une par appareil, derriere d
   // `epingles` est passé du dehors depuis l'audit du 27/09 : lu dans
   // `objetsDeLaMaison`, il était invisible à la règle des dépendances, et le
   // résultat en dépend. La liste est mémoïsée par la vue, qui la transmet.
-  assert.ok(vue.includes('objetsDeLaMaison(hass, ajoutes, epingles)') && vue.includes('return compacte ? dc.compact(cle, ed.labelOf(o.cle) || null) : dc.card(cle, ed.labelOf(o.cle) || null);'), 'les cartes de la piece');
+  // ASSERTION MODIFIÉE (chantier Capteurs, tâche 7) : la carte standard d'une mesure porte le nom de sa pièce, que l'objet lui donne (C13).
+  assert.ok(vue.includes('objetsDeLaMaison(hass, ajoutes, epingles)') && vue.includes('return compacte ? dc.compact(cle, ed.labelOf(o.cle) || null) : dc.card(cle, ed.labelOf(o.cle) || o.nomCarte || null);'), 'les cartes de la piece');
   assert.ok(vue.includes('dc.card(null, nomDe(o), o.zone)'), 'une zone fil pilote a sa carte');
   assert.ok(vue.includes('borderRadius: 9') && !vue.includes('borderRadius: 999'), 'des puces, pas des pilules');
   assert.ok(vue.includes(`className="o-favrow o-objfiltres" style={{ display: 'flex', gap: 8, overflowX: 'auto', flexWrap: 'nowrap' }}`), 'une seule ligne, pas de retour a la ligne ; elle defile si elle deborde');
@@ -174,8 +181,9 @@ test('la vue Objets dessine les cartes de la piece, une par appareil, derriere d
   assert.ok(vue.includes('<span className="o-objfiltre-mot">{f.label}</span>'), 'le mot a sa classe');
   assert.ok(vue.includes("aria-label={f.label + ' · ' + trN(n, '{n} appareil', '{n} appareils')} title={f.label}"),
     'l’etiquette dit la famille ET ce qu’elle porte');
-  assert.ok(vue.includes("const n = f.id === 'tous' ? objets.length : objets.filter(o => o.filtres.indexOf(f.id) >= 0).length;"),
-    '« Tous » compte tout, une famille compte les siens');
+  // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 9 ; C20) : un groupe de capteurs compte ses membres — le poids d'une carte (`compteObjets`).
+  assert.ok(vue.includes("const n = compteObjets(objets, f.id);"),
+    '« Tous » compte tout, une famille compte les siens — un groupe, ses membres');
   const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
   const tel = css.slice(css.indexOf('.o-objfiltres { gap: 6px'));
   assert.ok(css.includes('.o-objfiltres > .o-objfiltre { flex: 1 1 0 !important; min-width: 0;') && css.includes('.o-objfiltre-mot, .o-objfiltre-nb { display: none; }') && tel.indexOf('overflow-x: visible') > 0, 'la regle du telephone');
@@ -244,15 +252,20 @@ test('la fiche du distributeur et la fiche de la plante : le squelette commun, e
   const fd = readFileSync(join(RACINE, 'src', 'fichedistributeur.jsx'), 'utf8');
   const accueil = fd.slice(fd.indexOf('function OngletAccueil('), fd.indexOf('function OngletAccueil(') > 0 ? fd.indexOf('\n}\n', fd.indexOf('function OngletAccueil(')) : 0);
   assert.ok(fd.includes('<EnteteFiche ') && fd.includes('<FicheOnglets '), 'le socle commun des fiches à onglets');
-  assert.ok(accueil.indexOf("tr('Réservoir')") > 0 && accueil.indexOf("tr('Réservoir')") < accueil.indexOf("tr('Taille de la portion')"), 'le bac en premier');
-  ['Dernier repas', 'Prochain repas', 'Taille de la portion', 'Distribuer', 'Réservoir rempli'].forEach(k => assert.ok(fd.includes("tr('" + k + "')"), k));
+  /* ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I22, I23) : l'Accueil de sa maquette « Cartes IoT », 1e — le réservoir, puis « Servir
+   * maintenant » (la taille de ration y vit) ; « Je l'ai rempli » et sa question remplacent « Réservoir rempli » ; « Dernier repas »
+   * part (l'Historique le dit), la tuile « Aujourd'hui » reste. */
+  assert.ok(accueil.indexOf("tr('Réservoir')") > 0 && accueil.indexOf("tr('Réservoir')") < accueil.indexOf("tr('Servir maintenant')"), 'le bac en premier');
+  ['Prochain repas', 'Aujourd’hui', 'Servir maintenant', 'Distribuer', 'Je l’ai rempli', 'Remettre le niveau à 100 % ?'].forEach(k => assert.ok(fd.includes("tr('" + k + "')"), k));
   assert.ok(fd.includes("commanderService(hass, p.entity_id, 'number', 'set_value', { entity_id: p.entity_id, value: borne });"), 'la portion est le nombre de l’appareil');
   assert.ok(fd.includes("reservoir.indexOf('input_number.') === 0 && !reservoirMort"), 'Rempli n’existe que si le bac est un input_number vivant');
   assert.ok(!fd.includes('Seuil d’alerte') && !fd.includes('Rappel de remplissage') && !fd.includes('repas est sauté'), 'pas de bascule sans regle derriere');
   assert.ok(!src.includes("<FicheRangee premiere titre={tr('Réservoir')}"), 'l’ancienne fiche du distributeur est restée dans App.jsx');
-  const p = src.indexOf('function FichePlante(');
-  const fp = src.slice(p, src.indexOf(String.fromCharCode(10) + '}', p));
-  assert.ok(fp.includes('verdictsPlante(pl)') && fp.includes("tr('Lumière reçue')") && fp.includes("tr('Pile du capteur')"), 'chaque mesure avec son mot');
+  /* ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 10 ; C31) : la fiche d'une plante se charge à la demande (ficheplante.jsx) ; App.jsx n'en
+   * garde que la coquille. Chaque mesure avec sa plage (`PLAGES_PLANTE`, la seule table), la pile du capteur ; toujours pas d'arrosage inventé. */
+  const fp = readFileSync(join(RACINE, 'src', 'ficheplante.jsx'), 'utf8');
+  assert.ok(src.includes('function FichePlante({ pl, hass, onClose }) {') && src.includes('<FichePlanteContent pl={vive} hass={H} onFiche={setFiche} />'), 'la coquille');
+  assert.ok(fp.includes('PLAGES_PLANTE') && fp.includes("tr('Lumière reçue')") && fp.includes("tr('Pile du capteur')"), 'chaque mesure avec sa plage');
   assert.ok(!fp.includes('Seuil d’alerte') && !fp.includes('Rappel d’arrosage') && !fp.includes('Marquer comme arrosé'), 'pas d’arrosage invente');
   assert.ok(!src.includes('function ObjSheet('), 'l’ancienne feuille generique a disparu');
 });
@@ -260,8 +273,11 @@ test('la fiche du distributeur et la fiche de la plante : le squelette commun, e
 test('les cartes du distributeur et de la plante : la maquette, au gabarit', () => {
   const f = src.indexOf('function RoomFeederCard(');
   const carte = src.slice(f, src.indexOf('function RoomPlantCard(', f));
-  assert.ok(carte.includes("{tr('Distribuer')}") && carte.includes("{tr('Rempli')}"), 'Distribuer et Rempli au pied');
-  assert.ok(carte.includes("RM_ICO('rgba(var(--o-orange-rgb),.16)', orange)"), 'la patte orange');
+  /* ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I8, I10) : sa maquette « Cartes IoT », 1a — UNE puce au pied, « Distribuer 12 g » ;
+   * « Rempli » quitte la carte (il vit près du réservoir, dans la popup) ; la patte orange devient la plaque ambre, sans lavis. */
+  assert.ok(carte.includes("tr('Distribuer {g} g', { g })") && !carte.includes("tr('Rempli')"), 'Distribuer au pied, Rempli parti');
+  assert.ok(src.includes("const PLAQUE_DISTRIBUTEUR = ['rgba(var(--o-piece-ambre-rgb),.18)', 'var(--o-piece-ambre)'];") && carte.includes('RM_ICO(fond, encre)'), 'la plaque ambre');
+  assert.ok(!carte.includes('lavisCarte('), 'pas de lavis : la couleur n’alerte pas');
   assert.ok(!carte.includes("style={{ ...RM_BTN, background: 'var(--o-accent-fond)'"), 'plus le bouton plein d’avant');
   // Depuis le composeur (15/09), c'est la fabrique commune qui dessine ces cartes, pour toute vue.
   const v = src.indexOf('function useDomainCards(');
@@ -269,9 +285,16 @@ test('les cartes du distributeur et de la plante : la maquette, au gabarit', () 
   // La carte du distributeur passe par CarteDistributeur, abonnée à l'état du serveur (ADR 0155).
   const c = src.indexOf('function CarteDistributeur(');
   const cd = src.slice(c, src.indexOf(String.fromCharCode(10) + '}', c));
-  assert.ok(cd.includes('sub={d.sous}') && cd.includes('onRempli={d.onRempli}') && vue.includes('lire={distributeur}'), 'le bac et le dernier repas en sous-titre, Rempli branche');
-  assert.ok(vue.includes('rgb={v.rgb}') && vue.includes('verdictCartePlante(pl)'), 'la plante prend la couleur de son verdict');
-  assert.ok(vue.includes("String(croq.reservoir).indexOf('input_number.') === 0"), 'Rempli n’existe que si le bac est un input_number');
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; § 6) : la carte lit sa vue (`useVueDistributeur`, sur `carteDistributeur`) : la phrase remplace le sous-titre, « Rempli » quitte la carte.
+  assert.ok(cd.includes('<RoomFeederCard v={useVueDistributeur(hass, nom)} chip={chip} onOpen={onOpen} />') && vue.includes("<CarteDistributeur chip={chip} hass={hass} nom={label || tr('Distributeur')}"), 'la carte sur sa vue');
+  // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 10 ; C30) : la carte lit sa plante (`lirePlante`) et en tire sa vue elle-même (`vuePlante`).
+  assert.ok(vue.includes('<RoomPlantCard chip={chip} pl={pl} nom={label || pl.name} onOpen={() => setPlantPop(pl)} />') && vue.includes('const plante = (base) => lirePlante(hass, base);'), 'la plante, lue une fois pour sa carte et sa fiche');
+  // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I22) : « Je l'ai rempli » vit dans la popup, et seulement sur une aide `input_number` vivante.
+  // ASSERTION MODIFIÉE (passe bis de l'étape 2, 19/10 ; point G) : la règle vit dans la popup seule (`onRempli`, fichedistributeur.jsx) —
+  // la carte n'en calcule plus rien ; le geste se JOUE dans tests/fiche_distributeur_accueil.test.mjs.
+  const fiche = readFileSync(join(RACINE, 'src', 'fichedistributeur.jsx'), 'utf8');
+  assert.ok(fiche.includes("const onRempli = typeof reservoir === 'string' && reservoir.indexOf('input_number.') === 0 && !reservoirMort && !dejaPlein"), 'Rempli n’existe que si le bac est un input_number vivant, pas déjà plein');
+  assert.ok(!readFileSync(join(RACINE, 'src', 'distributeur.js'), 'utf8').includes('rempli:'), 'la carte recalcule ce que la popup seule décide');
 });
 
 /* 05/10 (ADR 0155). « Actif » au sens d'objets.js : l'appareil FAIT quelque
@@ -357,4 +380,43 @@ test('Objets : le distributeur est actif quand il distribue, et son appareil ne 
   } finally {
     setLoggiaState({ index: null, cfg: {} });
   }
+});
+
+test('relecture du 13/10, point 6 — un volet qui bute à 1 % n’est pas actif (V12, le verdict des cartes)', () => {
+  const a = (etat, attributs) => objetActif({ domaine: 'cover', etat, attributs });
+  assert.equal(a('open', { current_position: 1 }), false, 'sa chambre, fermée à 1 %');
+  assert.equal(a('open', { current_position: 3 }), true);
+  assert.equal(a('opening'), true, 'en mouvement sans position : pas encore fermé');
+  assert.equal(a('closing', { current_position: 1 }), false);
+});
+
+/* ── Passe de finition 11 bis (chantier Lumières), R9 : les tuiles du haut d'Objets à 320 px ──────────────────
+ *
+ * Trois tuiles — « 50 appareils reliés », « 4 scènes », « 1 entités absentes » — sur UNE rangée : à 320 px, 88 px chacune, rembourrées de 20 px, il reste 46 px
+ * de texte. Un mot de plus de 46 px — « verbundene » (71,6 px à 12,5 px), « urządzenia », « dispositivos », « ontbrekende » (76,7) — débordait dans le rembourrage,
+ * et au-delà de la tuile : de 4,6 px en allemand. Une tuile ÉTROITE — la grille de moins de 330 px, un téléphone de moins de 358 px — resserre son rembourrage
+ * (12 px) et prend une police un cran plus petite (11,5 px) : le mot le plus long des sept langues finit à 4 px de sa tuile au lieu de la dépasser. */
+test('11 bis, R9 : à 320 px, les libellés des tuiles du haut d’Objets tiennent dans leur tuile — rembourrage de 12 px, police de 11,5 px sous 330 px de grille ; au-delà, rien ne change', () => {
+  const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8').replace(/\r\n/g, '\n');
+  assert.ok(css.includes('.grid-objstats { container-type: inline-size; }'), 'la grille des tuiles est le conteneur de ses requêtes');
+  const m = /@container \(width < (\d+)px\) \{\n  \.grid-objstats > div \{ padding-left: (\d+)px !important; padding-right: (\d+)px !important; \}\n  \.grid-objstats > div > :last-child \{ font-size: ([\d.]+)px !important; \}\n\}/.exec(css);
+  assert.ok(m, 'la règle des tuiles étroites');
+  const [seuil, gauche, droite, police] = m.slice(1).map(Number);
+  assert.deepEqual([seuil, gauche, droite, police], [330, 12, 12, 11.5]);
+  // Les mots les plus longs des trois libellés, dans les sept langues — largeur à 12,5 px / 600 (Manrope), mesurée dans la démo.
+  const MOTS = { fr: 55.4, en: 64.4, de: 71.6, nl: 76.7, it: 61.3, es: 72, pl: 65.4 };   // « absentes », « connected », « verbundene », « ontbrekende », « dispositivi », « dispositivos », « urządzenia »
+  // La tuile : la grille de la page (320 px de téléphone − 2 × 14 px de marge) moins deux écarts de 14 px, en trois ; son liseré d'un pixel.
+  const tuile = (grille) => (grille - 2 * 14) / 3;
+  const src12 = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  assert.ok(src12.includes("<div className=\"grid-objstats\" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>") && src12.includes("padding: '18px 20px'"), 'les tuiles : 3 colonnes, 14 px d’écart, 18 × 20 px de rembourrage large');
+  for (const [lang, large] of Object.entries(MOTS)) {
+    // Étroite (320 px : une grille de 292 px, des tuiles de 88 px) : le mot commence à gauche + 1 px, et finit dans sa tuile.
+    const fin = gauche + 1 + large * police / 12.5;
+    assert.ok(fin <= tuile(292) - 3, lang + ' : à 320 px le mot finit à ' + fin.toFixed(1) + ' px d’une tuile de ' + tuile(292) + ' px');
+    // Large (la grille ne descend pas sous 330 px sans que la règle ne joue) : 20 px + le mot, dans une tuile d'au moins 100,7 px.
+    const finLarge = 20 + 1 + large;
+    assert.ok(finLarge <= tuile(seuil) - 2.5, lang + ' : sans la règle, à ' + seuil + ' px de grille le mot finit à ' + finLarge.toFixed(1) + ' px d’une tuile de ' + tuile(seuil).toFixed(1) + ' px');
+  }
+  // Le défaut : à 320 px, sans la règle, l'allemand et l'espagnol dépassaient leur tuile.
+  assert.ok(20 + 1 + MOTS.de > tuile(292), 'sans la règle, « verbundene » dépasserait de ' + (20 + 1 + MOTS.de - tuile(292)).toFixed(1) + ' px (mesuré : 4,6)');
 });

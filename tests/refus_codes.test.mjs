@@ -20,7 +20,18 @@ import { fileURLToPath } from 'node:url';
 
 // La langue de la machine ne doit pas changer le résultat (garde-fou de la CI).
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
-const { texteRefus, raisonEchec } = await import('../src/refus.js');
+const { texteRefus, raisonEchec, enregistrerRefus } = await import('../src/refus.js');
+/* MODIFIÉ (relecture des tâches 11 et 12 du chantier Chauffage) : les refus
+ * de la configuration et de la maison du planning de chauffe sont sortis du
+ * démarrage ; la fiche d'un chauffage et la barre « Maison », les seules à
+ * pouvoir les recevoir, les enregistrent en se chargeant. L'écran les sait
+ * donc dire une fois l'une d'elles chargée — enregistrés ici comme elles le
+ * font (tests/chauffage_refus.test.mjs tient le partage). */
+enregistrerRefus((await import('../src/refuschauffage.js')).REFUS_CHAUFFAGE);
+/* ASSERTION MODIFIÉE (chantier IoT, tâche 4, 18/10 ; I3 A) : les refus d'un
+ * départ de robot (`loggia/robots/lancer`) se chargent à la demande, au
+ * premier refus (refusrobots.js) ; enregistrés ici comme l'écran le fait. */
+enregistrerRefus((await import('../src/refusrobots.js')).REFUS_ROBOTS);
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8').replace(/\r\n/g, '\n');
@@ -41,6 +52,19 @@ test('une limite atteinte se dit dans la langue de l’écran, et la limite y es
   assert.equal(texteRefus(refus('trop_d_actions', 'trop d\'actions (13 > 12)')), null);
   assert.equal(raisonEchec(refus('trop_d_actions', 'trop d\'actions (13 > 12)')),
     'Réglage non enregistré — le composant l’a refusé : trop d\'actions (13 > 12)');
+});
+
+/* TEST AJOUTÉ (chantier IoT, tâche 4, 18/10 ; I3 A) : ce que le serveur
+ * nomme — l'identifiant d'un robot, d'une zone — ne s'affiche jamais. */
+test('un départ de robot refusé se dit, sans l’identifiant que le serveur nomme', () => {
+  assert.equal(texteRefus(refus('robot_injoignable', 'robot injoignable : vacuum.robot')), 'Départ non lancé — le robot ne répond pas');
+  assert.equal(texteRefus(refus('deja_en_route', 'deja en route : vacuum.robot')), 'Départ non lancé — le robot est déjà en route');
+  assert.equal(texteRefus(refus('pieces_inconnues', 'pieces inconnues de cette integration : vacuum.robot')),
+    'Départ non lancé — Loggia ne sait pas viser des pièces avec ce robot');
+  assert.equal(texteRefus(refus('zone_inconnue', 'zone inconnue de ce robot : switch.voisin_zone')),
+    'Départ non lancé — cette zone n’appartient pas au robot');
+  assert.equal(texteRefus(refus('commande_refusee', 'commande refusee par Home Assistant : vacuum.robot')),
+    'Départ non lancé — Home Assistant a refusé la commande');
 });
 
 test('le passage refusé vers un profil Admin a son code, et sa phrase', () => {
@@ -89,8 +113,10 @@ test('le câblage : plus de motif brut à l’écran, plus d’expression sur le
   assert.ok(!app.includes('/code administrateur/i'), 'le toast relit de nouveau le motif français du composant');
   assert.ok(app.includes(": texteRefus(r) || tr('Commande non exécutée — Home Assistant a refusé ou n’a pas répondu');"),
     'les refus prévisibles ne passent plus par la table au toast');
-  const i = app.indexOf('function FicheScenario(');
-  const fiche = app.slice(i, app.indexOf('const valider = (close) =>', i));
+  // ASSERTION MODIFIÉE (contre-relecture du lot 3 des capteurs) : la fiche d'un scénario est chargée à la demande — fichescenario.jsx.
+  const fs = lire('src', 'fichescenario.jsx');
+  const i = fs.indexOf('function FicheScenario(');
+  const fiche = fs.slice(i, fs.indexOf('const valider = (close) =>', i));
   assert.ok(fiche.includes('setErr(estRefus(e) ? raisonEchec(e)'), 'la fiche d’un scénario affiche de nouveau le motif du serveur');
   const ui = lire('src', 'ui.jsx');
   const sondage = ui.slice(ui.indexOf('export function useEtatServeur('), ui.indexOf('export function RegleEntete('));

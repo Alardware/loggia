@@ -10,6 +10,8 @@
  */
 
 import { estCleAppareil, estCleServeur, horsSauvegarde } from './config.js';
+import { lumieresDe } from './lumieres.js';
+import { reportContenu, profilEstAdmin } from './contenupartage.js';
 
 /** Index de la decouverte : zones, appareils, entites. */
 export let LOGGIA_INDEX = null;
@@ -22,6 +24,8 @@ export let LOGGIA_CFG = {};
 
 // Fournie par App : envoie un lot de reglages au serveur et rafraichit l'etat.
 let cfgSave = null;
+// Fournie par App : pose dans son etat une cle que le COMPOSANT vient d'ecrire (`cfgRecue`).
+let cfgRecu = null;
 
 /**
  * Alimente l'etat. Appele par App a chaque rendu ; avant la premiere reponse
@@ -29,14 +33,18 @@ let cfgSave = null;
  */
 /** Vrai des que le composant a repondu : le serveur fait alors autorite. */
 let LOGGIA_SERVER = false;
+/** Le profil que CET écran affiche, posé par App (ADR 0220) ; null avant. */
+let PROFIL_ECRAN = null;
 
-export function setLoggiaState({ index, ent, resolved, cfg, save, server }) {
+export function setLoggiaState({ index, ent, resolved, cfg, save, recu, server, profil }) {
   if (index !== undefined) LOGGIA_INDEX = index;
   if (ent !== undefined) LOGGIA_ENT = ent;
   if (resolved !== undefined) LOGGIA_RESOLVED = resolved;
   if (cfg !== undefined) LOGGIA_CFG = cfg;
   if (save !== undefined) cfgSave = save;
+  if (recu !== undefined) cfgRecu = recu;
   if (server !== undefined) LOGGIA_SERVER = server;
+  if (profil !== undefined) PROFIL_ECRAN = profil == null ? null : String(profil);
 }
 
 /**
@@ -106,6 +114,8 @@ const PAR_PROFIL = new Set([
   'loggia_roomlayout', 'loggia_objlayout', 'loggia_coverlayout',
   'loggia_enlayout', 'loggia_seclayout',
   'loggia-hiddenviews', 'loggia-shownviews', 'loggia-vueordre',
+  // L'apparence suit le PROFIL, et un écran peut avoir la sienne (ADR 0223).
+  'loggia_apparence',
 ]);
 export const estParProfil = (cle) => PAR_PROFIL.has(String(cle));
 
@@ -139,10 +149,176 @@ const MARQUE = '__profils';
 const indexe = (v) => !!v && typeof v === 'object' && !Array.isArray(v)
   && Object.prototype.hasOwnProperty.call(v, MARQUE);
 
-/** Le profil qui regarde CET ecran. Personnel, donc la tablette garde le sien
- *  quand l'ordinateur change — sans quoi indexer par profil ne separerait
- *  rien, les deux ecrans lisant la meme part. */
-export const profilActif = () => String(cfgVal('loggia_active_user', '0') ?? '0');
+/* ── Le profil appartient a l'ECRAN (ADR 0220, 17/10) ─────────────────────
+ *
+ * `loggia_active_user` se disait personnel a l'appareil, et le composant le
+ * rangeait sous le COMPTE Home Assistant. Un seul compte pour le PC et la
+ * tablette : changer de profil sur l'un le changeait sur l'autre, en silence —
+ * la tablette affichait encore « Luna » (`userIdx`, lu au montage) et rangeait
+ * deja les cartes de Guillaume (`profilActif`, relu a chaque appel).
+ *
+ * Desormais, dans l'ordre :
+ *   1. ce que l'ecran AFFICHE, pose par App — une seule source pour le prenom
+ *      et pour la part lue ;
+ *   2. la FICHE de cet appareil (`loggia_appareils`, composant `appareils.py`),
+ *      qui le retrouve au rechargement ;
+ *   3. l'ancienne cle, pour la demo, les tests et un ecran sans composant.
+ *
+ * Borne a la liste des profils : un rang hors liste ne fait pas lire la part
+ * d'un profil qui n'existe pas. */
+const CLE_APPAREILS = 'loggia_appareils';
+const CLE_ID_APPAREIL = 'loggia-appareil';
+
+/** L'identifiant de CET ecran, tire la premiere fois, garde dans son stockage. */
+export function appareilId() {
+  try {
+    let v = localStorage.getItem(CLE_ID_APPAREIL);
+    if (!v || !/^[a-z0-9]{8,40}$/.test(v)) {
+      v = Array.from({ length: 16 }, () => Math.floor(Math.random() * 36).toString(36)).join('');
+      localStorage.setItem(CLE_ID_APPAREIL, v);
+    }
+    return v;
+  } catch { return null; }
+}
+
+/** Le profil que la fiche de cet appareil retient, ou null. */
+export function profilAppareil() {
+  const tous = cfgBrute(CLE_APPAREILS, null);
+  const id = appareilId();
+  const f = (id && tous && typeof tous === 'object') ? tous[id] : null;
+  return (f && typeof f.profil === 'string' && /^[0-9]{1,3}$/.test(f.profil)) ? f.profil : null;
+}
+
+/** Un rang qui existe dans la liste des profils, sinon « 0 ». */
+function borne(p) {
+  const s = String(p ?? '0');
+  const liste = cfgBrute('loggia_users', null);
+  if (!Array.isArray(liste) || !liste.length) return s;
+  const n = parseInt(s, 10);
+  return (n >= 0 && n < liste.length) ? String(n) : '0';
+}
+
+/** Le profil qui regarde CET ecran. */
+export const profilActif = () => borne(PROFIL_ECRAN ?? profilAppareil() ?? cfgVal('loggia_active_user', '0') ?? '0');
+
+/** Retenir sur la fiche de cet appareil le profil qu'il affiche (ADR 0220).
+ *
+ * N'envoie que SA fiche : le composant la fusionne a la liste. Rien ne part
+ * quand la fiche dit deja la meme chose, ni sans composant — l'ancienne cle,
+ * ecrite par `applyUser`, suffit alors. Rend l'issue de `cfgSave`. */
+export function retenirProfilAppareil(profil, format) {
+  return poserFiche(appareilId(), { profil: String(profil), ...(format ? { format } : {}) });
+}
+
+/* ── Les appareils NOMMÉS (tranche 3, ADR 0222) ────────────────────────────
+ *
+ * « Sur chaque appareil l'utilisateur peut personnaliser la mise en page. »
+ * Un appareil suit son type d'écran tant qu'il n'a pas choisi la sienne
+ * (`propre`). Il reçoit alors un nom automatique — « Tablette », « Tablette 2 »
+ * — qu'on change quand on veut dans Paramètres › Appareils. */
+
+/** Toutes les fiches connues, telles que le composant les sert. */
+export function appareilsConnus() {
+  const tous = cfgBrute(CLE_APPAREILS, null);
+  return (tous && typeof tous === 'object' && !Array.isArray(tous)) ? tous : {};
+}
+
+/** La fiche de CET écran, ou `{}`. */
+export function ficheAppareil() {
+  const id = appareilId();
+  return (id && appareilsConnus()[id]) || {};
+}
+
+/** L'identifiant de cet écran s'il range SA mise en page, sinon null : il suit
+ *  alors son type d'écran. */
+export function appareilPropre() {
+  return ficheAppareil().propre === true ? appareilId() : null;
+}
+
+/** Écrire des champs sur une fiche : à l'écran tout de suite, la liste
+ *  entière ; au composant, cette seule fiche. Rien ne part sans composant, ni
+ *  quand la fiche dit déjà la même chose. `null` à la place des champs retire
+ *  la fiche. */
+export function poserFiche(id, champs) {
+  if (!LOGGIA_SERVER || !cfgSave || !id) return Promise.resolve(null);
+  const tous = appareilsConnus();
+  const f = tous[id] || {};
+  if (champs && Object.keys(champs).every(k => f[k] === champs[k])) return Promise.resolve(true);
+  const liste = { ...tous };
+  if (champs) liste[id] = { ...f, ...champs }; else delete liste[id];
+  LOGGIA_CFG = { ...(LOGGIA_CFG || {}), [CLE_APPAREILS]: liste };
+  return Promise.resolve(cfgSave({ [CLE_APPAREILS]: { [id]: champs ? champs : null } }));
+}
+
+/** Le nom proposé à un appareil qui prend sa mise en page : celui de son type
+ *  d'écran, numéroté s'il est déjà pris. `base` est déjà traduit. */
+export function nomAutoAppareil(base) {
+  const pris = new Set(Object.values(appareilsConnus()).map(f => (f && f.nom) || ''));
+  if (!pris.has(base)) return base;
+  let n = 2;
+  while (pris.has(base + ' ' + n)) n++;
+  return base + ' ' + n;
+}
+
+/** Cet écran reprend l'identifiant d'un appareil déjà connu : son cache a été
+ *  vidé, ou il passe par une autre adresse. */
+export function adopterAppareil(id) {
+  try {
+    if (!/^[a-z0-9]{8,40}$/.test(String(id))) return false;
+    localStorage.setItem(CLE_ID_APPAREIL, id);
+    return true;
+  } catch { return false; }
+}
+
+/* ── L'APPARENCE suit le profil, un écran peut avoir la sienne (ADR 0223) ──
+ *
+ * Signalé par une relecture du dépôt (18/10) : le README disait l'apparence
+ * « propre à l'appareil » ; en réalité le mode et le thème vivaient dans le
+ * navigateur — donc aussi propres à l'ADRESSE, local et distant différaient —,
+ * et la teinte, les fonds, le reste (`loggia_look`) étaient communs à toute la
+ * maison. Son choix, « C » : le profil par défaut, et un écran peut prendre
+ * la sienne, comme pour la mise en page (ADR 0222).
+ *
+ *   loggia_apparence = { mode, theme, ha, look, appareils: { <id>: {…} } }
+ *
+ * rangée par profil (`PAR_PROFIL`). Un champ absent n'a rien dit : l'écran
+ * garde ce qu'il montrait — son navigateur pour le mode et le thème, la
+ * maison pour `loggia_look`. Rien ne s'écrit au démarrage : seul un geste
+ * écrit, sinon le premier écran allumé imposerait son thème à tous. */
+const CLE_APPARENCE = 'loggia_apparence';
+
+/** L'identifiant de cet écran s'il a SA propre apparence, sinon null. */
+function apparencePropre() {
+  return ficheAppareil().apparence === true ? appareilId() : null;
+}
+
+/** L'apparence que cet écran doit montrer : celle du profil, et par-dessus,
+ *  champ par champ, la sienne s'il en a une. Rend `{}` quand rien n'est dit. */
+export function apparence() {
+  const v = cfgVal(CLE_APPARENCE, null);
+  const o = (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};
+  const { appareils, ...profil } = o;
+  const id = apparencePropre();
+  const a = id && appareils && typeof appareils === 'object' ? appareils[id] : null;
+  return (a && typeof a === 'object') ? { ...profil, ...a } : profil;
+}
+
+/** Ranger un changement d'apparence : dans la part de l'écran s'il a la
+ *  sienne, sinon dans celle du profil. Rien ne part quand rien ne change. */
+export function poserApparence(champs) {
+  const actuelle = apparence();
+  if (Object.keys(champs).every(k => JSON.stringify(actuelle[k]) === JSON.stringify(champs[k]))) return Promise.resolve(true);
+  const id = apparencePropre();
+  /* Une VALEUR, jamais une fonction : `cfgSet` applique une fonction à la
+   * part de CHAQUE profil (geste de structure) — l'apparence de l'un serait
+   * devenue celle de tous. `cfgVal` rend la part de celui qui regarde. */
+  const cur = cfgVal(CLE_APPARENCE, null);
+  const o = (cur && typeof cur === 'object' && !Array.isArray(cur)) ? cur : {};
+  if (!id) return cfgSet({ [CLE_APPARENCE]: { ...o, ...champs } });
+  const ap = { ...((o.appareils && typeof o.appareils === 'object') ? o.appareils : {}) };
+  ap[id] = { ...((ap[id] && typeof ap[id] === 'object') ? ap[id] : {}), ...champs };
+  return cfgSet({ [CLE_APPARENCE]: { ...o, appareils: ap } });
+}
 
 /** La part de `id` dans une valeur rangee par profil ; la valeur telle quelle
  *  si elle vient d'avant la bascule.
@@ -294,8 +470,23 @@ export function cfgSet(patch) {
   Object.keys(patch).forEach((k) => {
     // Une FONCTION transforme ce qui est deja la, au lieu de le remplacer : par
     // part pour un reglage range par profil, sur la valeur entiere sinon.
-    if (estParProfil(k)) reel[k] = poserProfil(cfgBrute(k, null), id, patch[k]);
-    else reel[k] = (typeof patch[k] === 'function') ? patch[k](cfgBrute(k, null)) : patch[k];
+    if (estParProfil(k)) {
+      const brut = cfgBrute(k, null);
+      reel[k] = poserProfil(brut, id, patch[k]);
+      /* L'ADMIN QUI AJOUTE OU RETIRE agit pour tous (20/10, contenupartage.js) :
+       * le changement de CONTENU de sa part part dans celle de chaque profil ;
+       * son rangement, lui, reste à lui. */
+      if (typeof patch[k] !== 'function' && profilEstAdmin(cfgVal('loggia_users', []), id)) {
+        const report = reportContenu(k, partProfil(brut, id, COMMUN_AU_PREMIER.has(k)), patch[k]);
+        if (report) {
+          reel[k] = poserProfil(reel[k], id, report);
+          /* Un profil qui n'a jamais rien rangé lit la part commune « * » ; sans
+           * elle (maison neuve), il serait resté sur le contenu d'avant. */
+          const p = reel[k] && reel[k][MARQUE];
+          if (p && !Object.prototype.hasOwnProperty.call(p, '*')) reel[k] = { [MARQUE]: { ...p, '*': report(undefined) } };
+        }
+      }
+    } else reel[k] = (typeof patch[k] === 'function') ? patch[k](cfgBrute(k, null)) : patch[k];
   });
   const next = { ...(LOGGIA_CFG || {}) };
   Object.keys(reel).forEach((k) => {
@@ -310,6 +501,28 @@ export function cfgSet(patch) {
     });
   } catch { /* stockage indisponible : la valeur serveur suffit */ }
   return Promise.resolve(cfgSave ? cfgSave(reel) : true);
+}
+
+/**
+ * Une cle que le COMPOSANT vient d'ecrire lui-meme, telle qu'il la rend.
+ *
+ * `loggia/enfant/config` ecrit `loggia_enfant` cote serveur et rend la
+ * configuration entiere. Rien d'autre ne la relit : le flux de l'ADR 0067 ne
+ * parle que des ecritures du client (`config/set`), pas de celles d'un
+ * module. Le cache restait donc sur l'ancienne valeur, et la feuille du parent
+ * la redessinait — le « Volume maximum » repassait de 20 a 40 % six secondes
+ * apres le reglage, quand l'etat optimiste expirait, alors que le serveur
+ * tenait bien 20 (retour du 18/10).
+ *
+ * Posee dans le cache tout de suite, puis dans l'etat d'App, qui le recopie a
+ * chaque rendu : sans lui, le rendu suivant la remettait. Elle ne repart PAS
+ * au serveur — c'est lui qui vient de l'ecrire —, ni au carnet, ni dans le
+ * stockage de l'appareil. Une cle commune, entiere : jamais une part de profil.
+ */
+export function cfgRecue(cle, valeur) {
+  if (typeof cle !== 'string' || !cle || estParProfil(cle) || valeur == null) return;
+  LOGGIA_CFG = { ...(LOGGIA_CFG || {}), [cle]: valeur };
+  if (cfgRecu) cfgRecu(cle, valeur);
 }
 
 /**
@@ -698,6 +911,32 @@ export async function resetLoggiaComplet() {
 // Un objet à la place de la liste (configuration abîmée) levait `.filter` dans
 // le corps d'App : tout l'écran tombait (05/10, suite du point 10b).
 export const switchLightsCfg = () => { const v = cfgVal('loggia_switchlights', []); return Array.isArray(v) ? v.filter(Boolean) : []; };
+/* Les switch que la maison déclare lumière : la description du serveur (`loggia_entities`, `switchLights`), sinon le
+ * réglage. UN seul endroit (ADR 0261) : App.jsx et Paramètres en avaient chacun une copie. */
+export const switchLights = () => { const c = loggiaEnt('switchLights', null); return (Array.isArray(c) && c.length) ? c : switchLightsCfg(); };
+/** Ce qu'il faut à `lumieresDe` (lumieres.js) pour dire quelles entités sont des lumières de la maison (L11) : les
+ * catégories et les masques de l'index, les switch déclarés lumière. */
+export const ctxLumieres = () => ({ meta: LOGGIA_INDEX && LOGGIA_INDEX.entityMeta, switchsLumiere: switchLights() });
+
+// Lumières réglables en luminosité : le choix de l'utilisateur s'il en a fait
+// un, sinon celles des lumières de la maison (L11, `lumieresDe` — ni la LED
+// d'une borne, ni un groupe en double) que Home Assistant déclare variables.
+//
+// Elle vivait dans App.jsx, avec la bibliothèque Hue. Les Scènes se chargent
+// à la demande depuis le 11/10 (scenes.jsx), mais App.jsx sonde ces lampes
+// pour les Lumières et les Scènes avant toute ouverture (`lightKeys`) : elle
+// reste au démarrage, ici, où les deux la lisent sans cycle.
+export function dimmableLights(hass) {
+  const cfg = loggiaEnt('hue', null);
+  const S = (hass && hass.states) || null;
+  if (Array.isArray(cfg) && cfg.length) return S ? cfg.filter(id => S[id]) : cfg;
+  if (!S) return [];
+  return lumieresDe(S, ctxLumieres()).filter(id => {
+    if (id.indexOf('light.') !== 0) return false;
+    const m = (S[id].attributes && S[id].attributes.supported_color_modes) || [];
+    return m.some(x => x !== 'onoff');
+  });
+}
 
 /* L'icone qu'on a CHOISIE pour une entite : `{ "<entity_id>": "<glyphe>" }`.
  *
@@ -798,7 +1037,9 @@ export function normRooms(raw) {
     if (typeof x === 'string') return byName[x] || { room: x, haid: { temp: null, humidity: null, co2: null, lights: [] } };
     if (!x || !x.room) return null;
     const d = byName[x.room], h = x.haid || {};
-    return { ...x, haid: { temp: h.temp || (d && d.haid.temp) || null, humidity: h.humidity || (d && d.haid.humidity) || null, co2: h.co2 || (d && d.haid.co2) || null, lights: Array.isArray(h.lights) ? h.lights : [] } };
+    /* Les clés que cette fonction ne complète pas restent (audit du 19/10, H7) : le seuil CO₂ d'une pièce (`co2seuil`) se perdait
+     * au premier enregistrement, et l'Accueil restait à 1 400. */
+    return { ...x, haid: { ...h, temp: h.temp || (d && d.haid.temp) || null, humidity: h.humidity || (d && d.haid.humidity) || null, co2: h.co2 || (d && d.haid.co2) || null, lights: Array.isArray(h.lights) ? h.lights : [] } };
   }).filter(Boolean);
   return out.length ? out : (discoveredRooms() || []);
 }
@@ -806,11 +1047,16 @@ export function normRooms(raw) {
 
 export const medPlayers = () => {
   const raw = cfgVal('loggia_medias', null);
-  // Sans choix explicite : les lecteurs trouvés, chacun avec son compagnon.
+  // Sans choix explicite : les lecteurs trouvés, chacun avec son jumeau (chantier Médias, M1, M14).
   if (!Array.isArray(raw) || !raw.length) return medResolved().map((m, i) => ({ ...m, c: MED_COLORS[i % MED_COLORS.length] }));
   // `p.haid.replace` plus bas : un identifiant qui n'est pas une chaîne faisait
   // tomber tout l'écran (05/10, suite du point 10b).
-  return raw.filter(p => p && typeof p.haid === 'string' && p.haid).map((p, i) => ({ id: p.id || p.haid, name: p.name || p.haid.replace('media_player.', '').replace(/_/g, ' '), haid: p.haid, ma: p.ma || undefined, c: p.c || MED_COLORS[i % MED_COLORS.length] }));
+  /* Un lecteur choisi à la main garde ce que la résolution sait de lui — son jumeau retrouvé, une Echo, son modèle, sa sœur
+   * « Annoncer » (`resolveMedia`, source « utilisateur ») : la configuration ne porte que le nom, l'entité et le jumeau. */
+  return raw.filter(p => p && typeof p.haid === 'string' && p.haid).map((p, i) => {
+    const r = medResolved().find(m => m && m.haid === p.haid) || {};
+    return { ...r, id: p.id || p.haid, name: p.name || p.haid.replace('media_player.', '').replace(/_/g, ' '), haid: p.haid, ma: p.ma || r.ma || undefined, c: p.c || MED_COLORS[i % MED_COLORS.length] };
+  });
 };
 
 // Compagnon manquant dans une configuration ancienne : la résolution le retrouve
@@ -856,6 +1102,12 @@ const FAM_SCHEMA = [
  * pas — sauf dans une famille du schema qu'elle a touchee, ou elle reste seule
  * maitresse (voir `FAM_SCHEMA`).
  */
+/** La plateforme d'une entité — le domaine de l'intégration qui l'a créée —, lue dans l'index ; null si l'index ne la connaît pas. */
+export function plateformeDe(id) {
+  const m = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && typeof LOGGIA_INDEX.entityMeta.get === 'function' ? LOGGIA_INDEX.entityMeta.get(id) : null;
+  return (m && m.platform) || null;
+}
+
 export function enHaids() {
   const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.energy;
   const deduit = (r && r.haids && typeof r.haids === 'object') ? r.haids : {};
@@ -900,7 +1152,9 @@ export function enVente() {
 // palette existante, Home Assistant ne le fournissant pas.
 
 // Configurable (Paramètres → Entités) : {name, haid, ma?} — id/couleur auto-complétés.
-const MED_COLORS = ['var(--o-cyan)', 'var(--o-accent)', 'var(--o-purple)', 'var(--o-ok)', '#ff8a4c', '#f472b6', '#8fb7ff', '#ffce73'];
+/* La palette des pièces nouvelles et des lecteurs (chantier IoT, I17) : les jetons de sa maquette — le cyan, le froid, le violet, le
+ * vert, l'ambre des pièces —, puis d'autres teintes du thème ; plus une couleur en dur : le mode clair et les thèmes la suivent. */
+const MED_COLORS = ['var(--o-cyan)', 'var(--o-cold)', 'var(--o-purple)', 'var(--o-ok)', 'var(--o-piece-ambre)', 'var(--o-piece-tendre)', 'var(--o-piece-bain)', 'var(--o-accent)'];
 
 // Lecteurs multimédia : la configuration, sinon ce que la résolution apparie.
 function medResolved() {

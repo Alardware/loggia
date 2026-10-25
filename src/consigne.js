@@ -16,8 +16,11 @@
  * champs, deux jeux de bornes, l'écart minimal que l'appareil impose entre
  * eux) et deux paires de boutons sur une carte de 184 px — beaucoup de
  * surface, et autant de façons d'envoyer une plage fausse, pour un mode que
- * l'on règle rarement. La plage se LIT dans la fiche ; elle se règle dans
- * Home Assistant, ou en repassant l'appareil sur un mode à consigne unique.
+ * l'on règle rarement. La plage se LIT dans la fiche d'un thermostat ; elle
+ * se RÈGLE dans la fiche d'un chauffage (fichechauffage.jsx, hors du
+ * planning : ses deux bornes partent ensemble, d'un pas de l'appareil,
+ * `plageVoisine`), dans Home Assistant, ou en repassant l'appareil sur un
+ * mode à consigne unique. Jamais sur la carte.
  *
  * Aucune conversion ici : la valeur arrive déjà dans l'unité de
  * l'installation et repart telle quelle (ADR 0128). */

@@ -42,10 +42,13 @@ test('du plus bas au plus haut, jamais par ordre alphabétique', () => {
   assert.deepEqual(etagesDe(MAISON).map(e => e.nom), ['Sous-sol', 'Rez-de-chaussée', 'Étage'],
     'le sous-sol (−1) avant le rez-de-chaussée (0), avant l’étage (1)');
   assert.deepEqual(etagesDe(MAISON).map(e => e.niveau), [-1, 0, 1]);
+  // Le nom court du telephone (25/10) : le niveau, comme un bouton d'ascenseur.
+  assert.deepEqual(etagesDe(MAISON).map(e => e.court), ['−1', '0', '1']);
   // Un étage sans niveau déclaré passe en dernier plutôt qu'au hasard.
   const bancal = { floors: [{ id: 'x', name: 'Combles' }, { id: 'rdc', name: 'Rez', level: 0 }] };
   assert.deepEqual(etagesDe(bancal).map(e => e.nom), ['Rez', 'Combles']);
   assert.deepEqual(etagesDe(bancal).map(e => e.niveau), [0, null]);
+  assert.deepEqual(etagesDe(bancal).map(e => e.court), ['0', 'C'], 'sans niveau, les initiales du nom');
   // Le niveau 0 est une VRAIE valeur : il ne doit pas passer pour « absent ».
   assert.equal(etagesDe({ floors: [{ id: 'r', name: 'Rez', level: 0 }] })[0].niveau, 0);
   assert.deepEqual(etagesDe(PLAIN_PIED), [], 'pas d’étage déclaré : rien');
@@ -109,12 +112,11 @@ test('le branchement : un filtre, et surtout PAS un découpage de la grille', ()
     'la grille dessine les pièces filtrées, dans l’ordre que l’agencement leur donne');
   assert.ok(APP.includes("{tr('{n} pièces', { n: piecesVues.length })}"), 'le compte suit le filtre');
   assert.ok(APP.includes('const etagesPuces = infosEtages.utile ? ('), 'aucune puce quand il n’y a rien à choisir');
-  /* Au TELEPHONE les puces faisaient deborder l'en-tete : titre tronque,
-   * compte disparu, « Cartes / Plan » coupe. Deux rangees alors, comme la
-   * barre des ambiances — rien a faire glisser. */
-  assert.ok(APP.includes('{!etroitPieces && etagesPuces}'), 'sur grand ecran, les puces restent sur la ligne du titre');
-  assert.ok(APP.includes('{etroitPieces && etagesPuces && <div style={{ marginTop: 10 }}>{etagesPuces}</div>}'),
-    'au telephone, elles passent sur leur propre rangee');
+  /* Au TELEPHONE (25/10) : une seule ligne avec le titre — noms courts,
+   * compte efface, « Cartes / Plan » en icones seules. Plus de seconde rangee. */
+  assert.ok(APP.includes('const serre = etroitPieces && !!etagesPuces;') && APP.includes('{!serre && <span')
+    && APP.includes('{planActif && segmentPlan(serre)}'), 'au telephone, les puces restent sur la ligne du titre');
+  assert.ok(!APP.includes('{etroitPieces && etagesPuces && ('), 'la seconde rangee est revenue');
   /* Les positions enregistrees valent pour la maison ENTIERE : appliquees a
    * un sous-ensemble, elles laissaient les trous des pieces masquees. */
   assert.ok(APP.includes('disposer(piecesNoms, piecesTailles, etageChoisi ? {} : grille.places, piecesCols);'),
@@ -122,7 +124,7 @@ test('le branchement : un filtre, et surtout PAS un découpage de la grille', ()
   assert.ok(APP.includes('const piecesNoms = ordrePieces(piecesVues.map(p => p.name));'),
     'le placement se calcule sur les pieces VISIBLES, pas sur toutes');
   // La puce choisie se remplit d'accent, comme toutes les puces de Loggia.
-  assert.ok(APP.includes("background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text1)' }}>{e.nom}</button>"),
+  assert.ok(APP.includes("background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text1)' }}>{etroitPieces ? e.court : e.nom}</button>"),
     'puce choisie = accent plein, texte blanc');
 });
 

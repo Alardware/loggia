@@ -1,8 +1,9 @@
 """Une configuration ecrite par l'ecran est reprise tout de suite (03/10).
 
-Sept modules gardent leur configuration en memoire : la nuit, les volets, la
-presence, les fenetres, les veilles, les robots et le planning du distributeur
-(05/10, ADR 0155). Ils la relisent a leur
+Dix modules gardent leur configuration en memoire : la nuit, les volets, la
+presence, les fenetres, les veilles, les robots, le planning du distributeur
+(05/10, ADR 0155), le moteur du chauffage, les prises, et le carnet des
+lumieres (les interrupteurs declares lumieres). Ils la relisent a leur
 demarrage, et quand l'ecran l'enregistre par LEUR commande — qui les
 reabonne et repose leurs rendez-vous.
 
@@ -46,6 +47,19 @@ CLES_DES_MODULES: dict[str, str] = {
     # Le planning de Loggia seulement : `loggia_feeder` (Parametres) est relu
     # a chaque depart et a chaque etat, rien a recharger pour lui.
     "loggia_distributeurs": "distributeurs",
+    # Le moteur du chauffage (chantier Chauffage) : un import remplace ses
+    # plannings, il les reprend tout de suite.
+    "loggia_chauffage": "chauffage",
+    # Les prises (chantier Prises) : la protection, les types imposes, les
+    # alertes de fin de cycle - et donc les prises dont on suit le cycle.
+    "loggia_prises": "prises",
+    # Le carnet des lumieres (chantier Lumieres) : un interrupteur declare
+    # lumiere - Parametres > Entites, un import - se suit tout de suite.
+    "loggia_switchlights": "lumieres",
+    # Le mode enfant (chantier Mode enfant) : un import remplace ses profils,
+    # il les recense tout de suite. Son ETAT du jour (`loggia_enfant_etat`)
+    # est un fichier a part, pas une configuration : rien a recharger.
+    "loggia_enfant": "enfant",
 }
 
 

@@ -98,17 +98,15 @@ test('le bouton dit « défaire », pas « annuler »', () => {
 });
 
 test('l’ordinateur écrit dans la base, les autres dans leur grille', () => {
-  const i = src.indexOf('const saveGrille = (g, avec) => {');
-  assert.notEqual(i, -1, 'saveGrille a disparu');
-  const corps = src.slice(i, src.indexOf('\n  };', i));
-  // L'ordinateur garde les clés historiques : une installation existante
-  // retrouve son accueil sans rien migrer.
-  assert.match(corps, /formatGrille === 'pc'/, 'l’ordinateur n’écrit plus dans les clés historiques');
-  assert.match(corps, /formats: \{ \.\.\.\(accL\.formats \|\| \{\}\), \[formatGrille\]/,
-    'les autres formats n’écrivent plus dans leur propre grille');
-  // Une grille de format ne doit pas contenir la table des formats.
-  assert.match(corps, /const \{ formats: _ignore, \.\.\.base \} = grille;/,
-    'la grille recopiée embarque de nouveau la table des formats');
+  // La règle vit dans disposition.js (`poserGrille`, ADR 0221), dont les tests
+  // rejouent le comportement : l'ordinateur garde les clés historiques — une
+  // installation existante retrouve son accueil sans rien migrer —, un format
+  // n'écrit que SA part, sans la table des formats ni ce qu'il hérite encore.
+  assert.ok(src.includes('const saveGrille = (g, avec) => saveAccL(poserGrille(accL, formatGrille, g, appareilAcc), avec);'),
+    'saveGrille ne passe plus par poserGrille');
+  const dispo = readFileSync(join(RACINE, 'src', 'disposition.js'), 'utf8');
+  assert.ok(dispo.includes("if (format === 'pc' && !appareil) return { ...l, ...g };"), 'l’ordinateur n’écrit plus dans les clés historiques');
+  assert.ok(dispo.includes("if (k === 'formats' || k === 'appareils') return;"), 'la grille d’un format embarque de nouveau la table des formats');
 });
 
 test('« Suivre l’ordinateur » supprime la surcharge, il ne la recopie pas', () => {
@@ -124,7 +122,7 @@ test('« Suivre l’ordinateur » supprime la surcharge, il ne la recopie pas', 
 test('un format sans grille propre suit l’ordinateur', () => {
   // Dupliquer d’avance laisserait le téléphone figé sur un vieil état dès la
   // première retouche faite sur grand écran.
-  assert.match(src, /const grille = grillePropre \? accL\.formats\[formatGrille\] : accL;/,
+  assert.ok(src.includes('const grille = grilleDuFormat(accL, formatGrille, appareilAcc);'),
     'un format sans grille propre ne retombe plus sur celle de l’ordinateur');
   assert.match(src, /const formatGrille = formatEcran\(tactile, wide\);/,
     'le format n’est plus décidé par le type d’appareil');

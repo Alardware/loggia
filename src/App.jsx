@@ -1,16 +1,20 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, useId, createContext, useContext, cloneElement, Suspense, Fragment } from 'react';
 import { lazyRecharge } from './recharge.js';
-import { formatEcran, vueFormat, patchFormat, echangerPartout, ordonnerSelon, ordreDuFormat, vuePiecesDe, poserVuePieces } from './disposition.js';
+import { OUTILS_VUES } from './outilsvues.js';
+import { formatEcran, vueFormat, patchFormat, possede, sansPart, grilleDuFormat, poserGrille, echangerPartout, ordonnerSelon, ordreDuFormat, vuePiecesDe, poserVuePieces } from './disposition.js';
+import { poserDefautsAccueil } from './contenupartage.js';
+import { refletCarte } from './refletcarte.js';
 import { fondre, nonLues as journalNonLues, marquerLues } from './journal.js';
+import { profilAppareil, retenirProfilAppareil, appareilPropre, ficheAppareil, appareilsConnus, adopterAppareil, apparence, poserApparence } from './state.js';
 // Les deux fonds animes tirent three.js : 448 Ko a analyser, pour un decor. En
 // import direct, ce cout etait paye a CHAQUE ouverture, meme par quelqu'un qui
 // a coupe les effets. En differe, il n'est paye que si le fond s'affiche.
 // La table des conditions, elle, est de la donnee pure et reste immediate.
-import { WX_PRESETS } from './wxpresets.js';
+import { CIEL_HA, CIEL_SOMBRES } from './wxpresets.js';
 import { lisibleSurLavis, versHex } from './contraste.js';
-import { enPanne, sansAccents } from './outils.js';
+import { enPanne, sansAccents, gestesCover, positionPubliee } from './outils.js';
 import { LAVIS, SAFE_NOLOOK, applyTheme, lav, readLook, signatureHaTheme } from './theme.js';
-import { uniteTemp, versCelsius, deCelsius, uniteVent, versKmh, wattsDe, kwhDe, facteurKwh, moyenneTemperatures } from './unites.js';
+import { uniteTemp, versCelsius, deCelsius, uniteVent, versKmh, wattsDe, kwhDe, moyenneTemperatures, uniteVentConnue, signeTemp } from './unites.js';
 import { consigneClimat, plageClimat, pasConsigne } from './consigne.js';
 // Le mode clair, lu sur la racine : les couleurs d'appareils s'y assombrissent.
 const estClair = () => typeof document !== 'undefined' && document.documentElement.classList.contains('loggia-light');
@@ -20,30 +24,31 @@ const estClair = () => typeof document !== 'undefined' && document.documentEleme
  * l'écran sur « Loggia n'a pas pu s'afficher ». Le fond météo est un DÉCOR :
  * introuvable même après le rechargement, il ne rend rien. */
 const WeatherGL = lazyRecharge(() => import('./wx3d.jsx'), { decor: true });
+/* Le plan 3D (chantier Plan 3D) : three.js et le modèle ne se chargent que
+ * pour qui choisit « Plan » dans la section Pièces. */
+const PlanPieces = lazyRecharge(() => import('./planpieces.jsx'));
 // Vue chargee a la demande : personne n'atterrit sur Meteo en ouvrant le
 // dashboard, son code n'a donc pas a etre analyse au demarrage.
 /* Systeme : on l'ouvre pour regarder l'etat des machines, pas au demarrage. */
 const SystemeContent = lazyRecharge(() => import('./views/systeme.jsx'));
-/* Le tarif, l'historique et le calendrier de l'Energie : trente kilo-octets de
- * statistiques longue duree et de graphes, que l'Accueil n'affiche pas. Les
- * deux composants viennent du MEME module : un seul chargement pour les deux
- * (ADR 0104, 0145). */
-const CarteTarif = lazyRecharge(() => import('./views/energiehisto.jsx').then(m => ({ default: m.CarteTarif })));
-const BilansEnergie = lazyRecharge(() => import('./views/energiehisto.jsx').then(m => ({ default: m.BilansEnergie })));
-const SectionHistorique = lazyRecharge(() => import('./views/energiehisto.jsx').then(m => ({ default: m.SectionHistorique })));
-const EnergieCalendrier = lazyRecharge(() => import('./views/energiehisto.jsx').then(m => ({ default: m.EnergieCalendrier })));
+/* Énergie et Sécurité (ADR 0274) : deux vues qu'on ouvre d'un tap, sorties du
+ * boot. Elles empruntent le reste au monolithe par `OUTILS_VUES`, posé en fin
+ * de fichier. */
+const EnergieContent = lazyRecharge(() => import('./views/energie.jsx').then(m => ({ default: m.EnergieContent })));
+const SecuriteContent = lazyRecharge(() => import('./views/securite.jsx').then(m => ({ default: m.SecuriteContent })));
+// « Cet écran est-il l'un de ceux-ci ? » (ADR 0222) : rare, chargée à la demande.
+const QuestionAppareil = lazyRecharge(() => import('./views/appareils.jsx').then(m => ({ default: m.QuestionAppareil })));
 // Parametres : 1300 lignes ou l'on n'arrive que volontairement. Le formulaire
 // d'entites vient du meme morceau — il ne s'ouvre qu'en mode edition.
 const ParametresContent = lazyRecharge(() => import('./views/parametres.jsx').then(m => ({ default: m.ParametresContent })));
 const ViewEntSheet = lazyRecharge(() => import('./views/parametres.jsx').then(m => ({ default: m.ViewEntSheet })));
 import { useDiscovery, report as discoveryReport, DISCOVERY_VERSION, buildIndex as discoveryBuildIndex, capabilities as discoveryCapabilities, pickSibling, siblingsOf, cameraModes } from './discovery.js';
-import { DOMAINES_ROBOT } from './robots.js';
+import { DOMAINES_ROBOT, phaseRobot, phraseRobot, commandesEnVol, gestePermis, PHASE_GESTE, batterieRobot, airesTondeuse } from './robots.js';
+import { useEtatRobots, useBipe, useGeste, gesteEnVol, poserGeste, oublierGeste, GARDE_DEPART_MS, vueCarnetRobot, departRobot, lancerRobot, apresCommandeRobot, bipeRobot, signalerRobot } from './robotsetat.js';
 import {
   planAction as actionsPlan,
   availableActions as actionsAvailable,
-  runPlan,
   actionCtx,
-  peut,
   commander,
   commanderService,
 } from './actions.js';
@@ -53,65 +58,90 @@ import { healthReport, healthText } from './health.js';
 import { probe as configProbe, reportLive as configReportLive, migrateFromLocalStorage, completerDepuisLocal, collectLocal, createConfig, brancherVidage, doitRelire, CONFIG_VERSION } from './config.js';
 import { compteDe, poserEnAttente, purgerEnAttente, renvoyerEnAttente } from './enattente.js';
 import { lotPiece, lotSansPiece, grilleAvecPiece, grilleSansPiece } from './ecrirepiece.js';
-import { ecrireRegle, estRefus, raisonEchec, texteRefus } from './refus.js';
-import { resolveAll, report as resolveReport } from './resolve.js';
-import { LoggiaContext, buildRuntime, useLoggia, useEntities } from './runtime.js';
+import { estRefus, texteRefus } from './refus.js';
+import { resolveAll, report as resolveReport, interrupteurDeModule, modulesHorsSaisie } from './resolve.js';
+import { LoggiaContext, buildRuntime, useLoggia } from './runtime.js';
 import { isViewAvailable, viewReason } from './views.js';
 import { etagesDesPieces, piecesDeLEtage } from './etages.js';
 import {
   REDUCE_MOTION, Fi, Anim, useTilt, editBtn, HIDDEN_VIEWS, readViewsCfg, HX_TOKENS,
   userBg, personPicture, LOOK_DEF, cvInp, cvName, cvEstTpl, cvKey, cvId, TplForm, lireFondPhoto, FlipText,
-  BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur, ListeChoix, ChampSuggere, CroixFeuille, TitreFeuille,
-  useIdTitreFeuille, NomFeuille, Barriere, Surface, nomCarte, FERMER_TOUT, MetricTile
+  BottomSheet, onPaintReady, PAINT_READY, EntPicker, CV_DOM_ICON, cvDomain, useEtatServeur, ListeChoix, CroixFeuille, TitreFeuille,
+  useIdTitreFeuille, NomFeuille, Barriere, Surface, nomCarte, FERMER_TOUT, kbSlider
 } from './ui.jsx';
 import { WxMini, WeatherIco, haWeatherMode, haWeatherLabel, weatherEntity } from './wxutil.jsx';
 import { CarteMeteo } from './cartemeteo.jsx';
 import { BarreConfort } from './barreconfort.jsx';
 import { HorlogeRail, Co2Rail } from './widgetsrail.jsx';
 import { bornesRail } from './railcolonne.js';
-import { CarteAgenda, FeuilleAgenda } from './agendarail.jsx';
+import { CarteAgenda } from './agendarail.jsx';
+/* La feuille de l'agenda : ouverte par la carte du rail, chargée à ce moment-là
+ * (chantier Prises, la borne du démarrage). */
+const FeuilleAgenda = lazyRecharge(() => import('./feuilleagenda.jsx').then(m => ({ default: m.FeuilleAgenda })));
 import { CarteRappels, BandeauCollecte, useTodos, marquerFait, ajouterTache, useRelecture } from './rappelsrail.jsx';
 import { listesTodo } from './todos.js';
 import { joursCollecte } from './collecte.js';
-import { NouvelEvenement } from './formevenement.jsx';
+/* Le formulaire d'un rendez-vous (« + » de la feuille du Calendrier) a suivi la feuille dans feuillecalendrier.jsx (boot, 19/10) :
+ * plus rien ici ne l'ouvrait. Le rail a le sien dans feuilleagenda.jsx. */
 import { pireCapteur, seuilCo2, ventilationVeille, voletsDeLaZone, actionAerer } from './air.js';
-import { TYPES_PRISE, NOMS_PRISE, typeDePrise, modePrise, motDuMode, animationPrise, couleurPrise, libelleType } from './prises.js';
+import { TYPES_PRISE, NOMS_PRISE, DEMANDE_PRISE_MS, typeDePrise, estPrise, compteursMaison, estPontZigbee, ligneDePrise, phrasePrise, appuiBascule, clesDesPrises, kwhPrise, dureePrise, puissancePrise, cheminsCourbe, insecable } from './prises.js';
+import { useEtatPrises, useLecturePrises, useMesuresPrise, prisesDe, finMinuteur, lireEtatPrises, abonnesPrises, gardeDePrise, gardeDeSwitch, cyclesElectromenager } from './prisesetat.js';
+import { lumieresDe, capacitesLumiere, teinteDeCarte, couleursLumiere, encreLumiere, lavisLumiere, phraseLumiere, luminosite, veilleusesLues, estEpargnee } from './lumieres.js';
+import { useEtatLumieres, dernierDe, avanceDe, useAvancesLumieres, useRelireMinuteurs } from './lumieresetat.js';
+import { lireLecteur, commandesLecteur, phraseLecteur, titreLecteur, volumeTexte, pourcentTexte, etatVolume, glypheLecteur, posLecteur, nomLecteur, compteLecteurs } from './lecteur.js';
+import { useAnnonces, annonceDe, useTeintePochette } from './lecteuretat.js';
+import { useEtatEnfant, maisonAvecEnfant, lecteurEnfant, budgetEcran, dureeTexte } from './enfantetat.js';
+/* Le mode enfant sur la carte d'un lecteur (chantier Mode enfant, E15 à E17 ; passe bis du 17/10, point 14) : la pastille, le glyphe du
+ * haut de la carte étroite, le pied du temps d'écran et la puce « Revient à » (carteenfant.jsx, la pièce par `quoi`) ne se chargent que
+ * pour un lecteur sous profil (`v.enfant`), dans un `Suspense` au repli nul — UN import, le boot n'en porte que l'adresse, et regagne
+ * leur poids (lot14_chargement). Un DÉCOR de carte, comme l'orbe et le fond météo (passe bis 2 du 17/10) : introuvable même après le
+ * rechargement unique, il ne rend rien — aucune barrière ne sépare la carte de la vue, et « Cette vue n'a pas pu s'afficher » pour toute
+ * maison sous profil serait payer un pied du temps manquant au prix de l'écran. */
+const CarteEnfant = lazyRecharge(() => import('./carteenfant.jsx'), { decor: true });
+import { cleTeinte, TEINTE_REPLI } from './pochette.js';
 import { DESSINS_CAT, FONTE_CAT, NOMS_DESSINS } from './dessins.js';
-import { applisDe, appelPourLancer, appliCourante, telecommandeDe } from './applis.js';
-import { entreeFavorite, memeFavori, basculerFavori, appelPourJouer, phraseAlexa, cibleAlexa, TYPE_PHRASE } from './favlecture.js';
-import { integrationDe, telecommandePour, appelPourTouche } from './telecommande.js';
-import { marqueDe } from './marques.js';
 import { WIDGETS_OPTION, STYLES_WIDGETS, NOMS_STYLES, styleDe, prochainSoleil } from './horloge.js';
-import { indiceConfort, verdictMesure, capteurBruit, echelleMesure, jaugeMesure, cleMesure, barresPile, mesuresFiche } from './confort.js';
-import { pilesMaison } from './piles.js';
-import { RoomActivityCard, etatJournal, grouperJournal, useRoomLogbook, useDerniersEvenements } from './historique.jsx';
-import { AnneauEnergie } from './anneau.jsx';
-import { armerReleve } from './releve.js';
-import { useOptimiste } from './optimiste.js';
+import { indiceConfort, verdictMesure, capteurBruit, cleMesure, zoneMesure, barreMesure, phraseMesure, chiffreMesure, nomMesure, nomClasse, nomDitFamille, jugeeDehors, iconeMesure, versRepere } from './confort.js';
+import { horsAir, CLE_NON_JUGEES } from './horsair.js';
+import { pilesDeLaMaison as pilesCarte, vuePiles, glyphePile } from './piles.js';
+import { GROUPES, groupeDeClasse, membresGroupes, nomsMembres, vueOuvertures, vuePresence, vueSecurite, estMuet as muetDeGroupe, sonne as sonneMembre } from './groupes.js';
+import { estVigilance, vueVigilance } from './vigilance.js';
+import { plantesMaison, vuePlante } from './plantes.js';
+import { etatJournal, grouperJournal, useRoomLogbook, useDerniersEvenements } from './historique.jsx';
+import { useOptimiste, useOptimistePartage, poserPartage, oublierPartage, brutPartage } from './optimiste.js';
 import { sysKeys } from './sysconf.js';
-import { consoJourKwh, autosuffisance, resumeEnergie } from './bilan.js';
-import { compteurDuJour, useTotauxJour } from './jourstat.js';
+import { minuitLocal } from './jourstat.js';
 import { useAssistant } from './assistant.js';
 import { CamLive } from './camera.jsx';
 import { colonnesCam, camDispoDe, poserCamDispo, camDisposDe, camSerre, CAM_AUTO } from './camdispo.js';
-import { decalageServeur, resteMinuteur, decompte } from './minuteur.js';
 import { disposer, poser, premiereLibre, hauteur as hauteurCarte, cellulePointee, colonnesPour, nettoyer } from './placement.js';
 import { bloquerDefilement, defileurAuto } from './glisser.js';
-import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, domaineEdition, identifiantEdition, verdictsPlante } from './objets.js';
-import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, tuileAlarme, estSirene, ICONES_ARMEMENT, pointsAttention, niveauMax, resumeAttention, couleurNiveau, niveauPile, animationNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE } from './attention.js';
-import { CARTE_RAIL, CARTE_MAISON, ICONE_CARTE, NOM_CARTE, SOUS_CARTE, LISERE } from './styles.js';
+import { filtresObjet, objetActif, statsObjets, pucesObjets, compteObjets, trierObjets, domaineEdition, identifiantEdition } from './objets.js';
+import { tuileAlarme, estSirene, ICONES_ARMEMENT, pointsAttention, niveauMax, resumeAttention, couleurNiveau, niveauPile, couleurPile, reglerSeuilPile, seuilsPile, fuiteCalculee, animationNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE, CLASSES_OUVRANT, motsSurete } from './attention.js';
+import { useJournee, depuisQuand } from './journeelue.js';
+import { CARTE_RAIL, CARTE_MAISON, ICONE_CARTE, NOM_CARTE, SOUS_CARTE, LISERE, sectionTitle, petitesCapitales } from './styles.js';
 import { fmtWatts, relTime, minutesDepuisHeure, nombre } from './format.js';
-import { voletMode, voletDays, croqHaids, hueScripts, notifIds, roomHidden, plantsCfg } from './lectures.js';
-import { lireDistributeur, envoiDistribuer, niveauDuBac, prochainRepas, dernierRepas, trouverDistributeur, TABLES as TABLES_DISTRIBUTEUR } from './distributeur.js';
-import { useEtatDistributeur, lireEtatDistributeur, poserEtatDistributeur } from './distributeuretat.js';
-import { PinModal } from './pinmodal.jsx';
+import { voletMode, voletDays, croqHaids, hueScripts, notifIds, plantsCfg } from './lectures.js';
+import { lireDistributeur, carteDistributeur, trouverDistributeur, TABLES as TABLES_DISTRIBUTEUR } from './distributeur.js';
+import { useEtatDistributeur, lireEtatDistributeur, poserEtatDistributeur, lancerDistribution, useDistribution } from './distributeuretat.js';
+import { useEtatChauffage, chauffageDe, chauffageParCle, commanderChauffage, refroidit } from './chauffageetat.js';
+import { coverFerme, coverOuvert, coverActif, estVolet, vueVolet, plaqueVolet, iconeSelonEtat } from './voletecran.js';
+import { useCourseVolet, ordreEtCourse, ordreEtArret, useSensCourses } from './voletcourse.js';
+import { useEtatVolets, voletDe } from './voletsetat.js';
+import { motMode, couleurMode, modeVoisin, consigneVoisine, etatModule, modeDuModule, phrasePlanning, mesureLisible,
+  enChauffe, consigneAtteinte, estMuet, moduleMuet, teinteClimat, plaqueMode, etiquetteCarte, lignesMoment, barreMaisonUtile } from './chauffageecran.js';
+// Le code d'un profil Admin : chargé quand on passe à ce profil (chantier Volets, la borne du démarrage).
+const PinModal = lazyRecharge(() => import('./pinmodal.jsx').then(m => ({ default: m.PinModal })));
 import { reposerFocus, titreDeVue } from './focus.js';
-import { AmbientOverlay } from './ecranveille.jsx';
+/* L'écran de veille (chantier Volets, la borne du démarrage) : il ne paraît
+ * qu'après un temps sans geste — un décor, chargé à ce moment-là ;
+ * introuvable même après le rechargement, il ne rend rien. */
+const AmbientOverlay = lazyRecharge(() => import('./ecranveille.jsx').then(m => ({ default: m.AmbientOverlay })), { decor: true });
 import { Ico } from './icones.jsx';
 import { ambiancePiece, ambiancesParPiece } from './ambiance.js';
 import { evenementCamera, detecteursDe, reduireDerniers, depuis, heureJournal } from './evenement.js';
-import { plageSemaine, jourPlus, ecartJours, lireCalendriers, garderDansFenetre, cleJour } from './agenda.js';
-import { GESTES_SCENARIO as GESTES_SCN, FAMILLES as FAMILLES_SCN, PORTEES as PORTEES_SCN, NOMS_INTEGRES, NOMS_FAMILLES, NOMS_GESTES, NOMS_PORTEES, NOMS_CONDITIONS, ICONES_FAMILLES, TEINTES_SCENARIO, ICONES_SCENARIO, nomScenario, teinteScenario, resumeScenario, nombreActions, nombreCibles, libelleDernier, scenariosVisibles, scenariosAccueil, bordsDefilement, actionVide, scenarioVide, versEnregistrement, rangerScenarios } from './scenarios.js';
+import { plageSemaine, ecartJours, lireCalendriers, garderDansFenetre, cleJour } from './agenda.js';
+import { nomScenario, teinteScenario, resumeScenario, nombreActions, nombreCibles, libelleDernier, scenariosVisibles, scenariosAccueil, bordsDefilement, rangerScenarios } from './scenarios.js';
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
 /* Aspirateur : on l'ouvre pour regarder le robot, pas au demarrage. */
@@ -121,6 +151,62 @@ const FicheRobotContent = lazyRecharge(() => import('./ficherobot.jsx'));
 // La fiche du distributeur, à onglets comme celle du robot (ADR 0155, 05/10) :
 // chargée à la demande par `FicheDistributeur`, la coquille posée ici.
 const FicheDistributeurContent = lazyRecharge(() => import('./fichedistributeur.jsx'));
+// La fiche d'un chauffage, à onglets elle aussi (plan 2 du chantier Chauffage,
+// tâche 8) : chargée à la demande par `FicheChauffage`, avec la semaine, le
+// calcul du planning (chauffageplanning.js, chauffage.js) et son historique
+// (tâche 10 bis D) — le démarrage n'en embarque rien : la carte écrit sa
+// phrase avec `chauffageecran.js` (tâche 10 bis A).
+const FicheChauffageContent = lazyRecharge(() => import('./fichechauffage.jsx'));
+// La fiche d'un VOLET (chantier Volets, § 3.5) : chargée à la demande par
+// `FicheVolet`, avec sa semaine (le jumeau voletsplanning.js), son historique et
+// ses mots — le démarrage n'en embarque rien.
+const FicheVoletContent = lazyRecharge(() => import('./fichevolet.jsx'));
+// La fiche d'une PRISE (chantier Prises, § 3.5) : chargée à la demande par `FichePrise`, avec ses calculs
+// (prisesfiche.js) — le démarrage n'en embarque rien.
+const FichePriseContent = lazyRecharge(() => import('./ficheprise.jsx'));
+// La feuille d'un switch qui n'est pas une prise, et son minuteur (audit des prises, 19/10) : chargée à la demande par
+// `RoomSwitchSheet` — le démarrage n'en embarque rien.
+const FicheSwitchContent = lazyRecharge(() => import('./ficheswitch.jsx'));
+// La fiche d'une LUMIÈRE (chantier Lumières, § 3.5) : chargée à la demande par `FicheLumiere` — le démarrage n'en embarque rien.
+const FicheLumiereContent = lazyRecharge(() => import('./fichelumiere.jsx'));
+/* La feuille du Calendrier (audit des lumières, 19/10 : la borne du démarrage) : le mois entier et le choix des agendas se chargent
+ * à la demande par `FeuilleCalendrier` — l'Accueil n'en montre que la carte du rail, le démarrage n'en embarque rien. */
+const FeuilleCalendrierContent = lazyRecharge(() => import('./feuillecalendrier.jsx'));
+// Les fiches d'un CAPTEUR (chantier Capteurs, C12) : chargées à la demande par `FicheCapteur` et `FicheBinaire` — le démarrage n'en embarque rien.
+const FicheCapteurContent = lazyRecharge(() => import('./fichecapteur.jsx'));
+const FicheBinaireContent = lazyRecharge(() => import('./fichecapteur.jsx').then(m => ({ default: m.RoomBinarySheet })));
+// La fiche de confort d'une PIÈCE (ADR 0039 ; chantier Capteurs, tâche 1) : chargée à la demande par `RoomComfortModal`.
+const FicheConfortContent = lazyRecharge(() => import('./ficheconfort.jsx'));
+// La feuille d'un LECTEUR (passe téléphone, T16) : chargée à la demande par `FicheMedia` — le démarrage n'en embarque rien.
+const FicheMediaContent = lazyRecharge(() => import('./fichemedia.jsx'));
+// La fiche météo (sa maquette « Cartes météo », cadre 1b, 20/10) : à la demande, comme les autres fiches.
+const FicheMeteoContenu = lazyRecharge(() => import('./fichemeteo.jsx'));
+// L'en-tête d'Objets › Volets (chantier Volets, § 3.4) : ni l'Accueil ni une carte ne
+// l'affichent — il se charge à la première ouverture du filtre, comme la barre « Maison ».
+const EnteteVolets = lazyRecharge(() => import('./entetevolets.jsx'));
+// L'en-tête d'Objets › Prises (chantier Prises, § 3.4) : de même, à la première ouverture du filtre.
+const EntetePrises = lazyRecharge(() => import('./enteteprises.jsx'));
+// L'en-tête d'Objets › Lumières (chantier Lumières, § 3.4) : le compte et « Tout éteindre », à la première ouverture du filtre.
+const EnteteLumieres = lazyRecharge(() => import('./entetelumieres.jsx'));
+// L'en-tête d'Objets › Multimédia (chantier Médias, tâche 8 ; M15).
+const EnteteMedias = lazyRecharge(() => import('./entetemedias.jsx'));
+// L'en-tête d'Objets › IoT (chantier IoT, tâche 7 ; I14) : le compte de sa maquette, à la première ouverture du filtre.
+const EnteteIot = lazyRecharge(() => import('./enteteiot.jsx'));
+// Objets › Capteurs en sections (chantier Capteurs, § 5) : son en-tête et ses sections, à la première ouverture du filtre.
+const SectionsCapteurs = lazyRecharge(() => import('./capteurssections.jsx'));
+// Les popups des groupes de capteurs (chantier Capteurs, étape 2 ; C27) : à l'ouverture d'une carte de groupe.
+const FicheGroupeContent = lazyRecharge(() => import('./fichegroupe.jsx'));
+// La fiche d'une plante (chantier Capteurs, étape 3 ; C31, C34) : à l'ouverture de sa carte — le démarrage n'en embarque rien.
+const FichePlanteContent = lazyRecharge(() => import('./ficheplante.jsx'));
+// La barre « Maison » d'Objets › Chauffage (plan 2 du chantier Chauffage,
+// tâche 11) : ni l'Accueil ni une carte ne l'affichent — elle se charge à la
+// première ouverture du filtre, et le démarrage n'en embarque rien.
+const BarreMaison = lazyRecharge(() => import('./barremaison.jsx'));
+/* Les ambiances Hue (11/10, tâche 6 bis du chantier Chauffage) : la
+ * bibliothèque et la section qui s'en sert, sous les scénarios. L'Accueil
+ * n'en montre rien : elles se chargent à la première ouverture des
+ * Scénarios — entières (règle « Garder la bibliothèque Hue »). */
+const ScenesContent = lazyRecharge(() => import('./scenes.jsx'));
 /* L'assistant : sa popup tire l'orbe, qui tire Three.js. Rien de tout cela
  * ne se telecharge tant qu'on ne lui a pas parle. */
 const AssistantSheet = lazyRecharge(() => import('./views/assistant.jsx'));
@@ -131,18 +217,14 @@ const AssistantSheet = lazyRecharge(() => import('./views/assistant.jsx'));
 // elle ne rend rien.
 const OrbeMini = lazyRecharge(() => import('./orbe.jsx'), { decor: true });
 import {
-  LOGGIA_INDEX, LOGGIA_RESOLVED, setLoggiaState, readLS, cfgVal, cfgSet, getHass, loggiaEnt, estPersonnelle, enPrix, enVente,
-  enHaids, medPlayers, normRooms, secAlarm, switchLightsCfg, LOGGIA_CONFIG_KEYS, droitsDe, usersSig,
-  vacSensors, iconesCfg, compteOrdinaire
+  LOGGIA_INDEX, LOGGIA_RESOLVED, setLoggiaState, readLS, cfgVal, cfgSet, getHass, loggiaEnt, estPersonnelle, 
+  enHaids, plateformeDe, medPlayers, normRooms, secAlarm, switchLights, ctxLumieres, LOGGIA_CONFIG_KEYS, droitsDe, usersSig,
+  vacSensors, iconesCfg, compteOrdinaire, dimmableLights
 } from './state.js';
 // L'accueil de premiere installation ne sert qu'une fois : son code n'a pas a
 // peser dans le bundle de chaque ouverture.
 const Onboarding = lazyRecharge(() => import('./Onboarding.jsx'));
 import { VACUUM_STATE_FR } from './resolve.js';
-import energyHomeImg from './assets/energy/home.webp';
-import energySolarImg from './assets/energy/solar.webp';
-import energyEvImg from './assets/energy/ev-car-home.webp';
-import energyBatImg from './assets/energy/battery.webp';
 import { tr, trN, trHA, preparerLangue, locale, nomProfil, trCourt, trSens, comparerTextes } from './i18n.js';
 // Decimales a la francaise partout : un Americain ou un Polonais lisait un
 // nombre ecrit dans une convention qui n'est pas la sienne. `nombre`
@@ -172,65 +254,6 @@ const decMax = (n, d) => nombre(n, d, 0);
  *
  * Voir `tests/composants.test.mjs`.
  */
-
-// Bloc du bandeau : libellé + contrôle, comme la vue Pièce
-const QuickBox = ({ label, children, className = null }) => (
-  <div className={'o-qb' + (className ? ' ' + className : '')} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px 5px 11px', borderRadius: 10, background: 'var(--o-s2)' }}>
-    <span className="o-qb-lbl" style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{label}</span>
-    {children}
-  </div>
-);
-
-const RAD = Math.PI / 180;
-
-// Chip SVG façon Helios : icône mini + texte (soleil/panneau/maison/pylône)
-const CHIP_ICONS = {
-  sun: (c) => <g stroke={c} strokeWidth="1.2" fill="none"><circle cx="0" cy="0" r="2.6" fill={c} stroke="none" />{[0, 60, 120, 180, 240, 300].map(a => <line key={a} x1={4 * Math.cos(a * RAD)} y1={4 * Math.sin(a * RAD)} x2={5.8 * Math.cos(a * RAD)} y2={5.8 * Math.sin(a * RAD)} />)}</g>,
-  panel: (c) => <path d="M 1.5 -5.5 L -3.5 0.5 L -0.5 0.5 L -1.5 5.5 L 3.5 -0.5 L 0.5 -0.5 Z" fill={c} />,
-  house: (c) => <path d="M -5 0.5 L 0 -4.5 L 5 0.5 L 3.6 0.5 L 3.6 5 L -3.6 5 L -3.6 0.5 Z" fill={c} />,
-  pylon: (c) => <g stroke={c} strokeWidth="1.3" fill="none"><path d="M -3.5 5.5 L -1 -5 L 1 -5 L 3.5 5.5" /><line x1="-4.8" y1="-2.6" x2="4.8" y2="-2.6" /><line x1="-2.6" y1="2" x2="2.6" y2="2" /></g>,
-};
-
-/* LA GEOMETRIE DE LA SCENE ENERGIE, ecrite UNE fois (08/10).
- *
- * « Sur mobile, la maison est trop petite » : elle tenait dans 180 x 135 px
- * sur un ecran de 375. Le cadre faisait 600 de large parce que l'arc du soleil
- * en occupait tout le pourtour ; la maison, elle, n'en prenait que le tiers
- * central. L'arc parti, le cadre se resserre sur ce qu'on dessine encore.
- *
- * « C'est encore un peu petit » : le cadre etait SYMETRIQUE autour du centre
- * de la maison, ce qui reservait a gauche autant de vide que la pastille du
- * reseau en demandait a droite — un dixieme du cadre perdu pour rien.
- *
- * L'invariant qui compte n'est pas la symetrie, c'est que LA SCENE TIENNE SON
- * RAPPORT. Un SVG en `meet` ne se recentre que dans un conteneur d'un autre
- * rapport que le sien ; c'est la seule chose qui faisait glisser les pastilles
- * par rapport au dessin. Le plafond de hauteur de la scene devient donc un
- * plafond de LARGEUR (index.css) : le rapport ne se rompt plus jamais, et le
- * cadre peut enfin coller au dessin, bord a bord a gauche.
- *
- * Ces nombres etaient semes entre le composant et la feuille de style, avec
- * un « 55.56% » a tenir a la main des que l'un bougeait. Ils vivent ici, et
- * la scene comme la maison s'y calent. */
-const CHIP_RESEAU_X = 452;   // la pastille du réseau, posée au bout de son câble
-/* C'est elle qui décide du bord DROIT du cadre, et elle est la seule à
- * dépasser du dessin : son libellé le plus long (« ↑ 12,3 kW ») lui donne 92
- * d'envergure, et son halo d'activité déborde encore de 6 — elle s'arrête donc
- * à 504. À gauche, rien ne dépasse : le cadre commence au bord de la maison. */
-const SCENE = { x0: 133.33, w: CHIP_RESEAU_X + 46 + 6 - 133.33, h: 250, mx: 133.33, mw: 333.33 };
-const SCENE_RATIO = (SCENE.w / SCENE.h).toFixed(4);
-
-const Chip = ({ x, y, color, txt, icon, live = false }) => {
-  const w = 22 + txt.length * 6.4 + 12;
-  return (
-    <g transform={`translate(${x - w / 2} ${y - 11})`}>
-      {live && !REDUCE_MOTION && <rect x="-3" y="-3" width={w + 6} height="28" rx="14" fill="none" stroke={color} strokeWidth="1.4" opacity=".45"><animate attributeName="opacity" values=".45;.08;.45" dur="2.4s" repeatCount="indefinite" /><animate attributeName="x" values="-3;-6;-3" dur="2.4s" repeatCount="indefinite" /><animate attributeName="y" values="-3;-6;-3" dur="2.4s" repeatCount="indefinite" /><animate attributeName="width" values={`${w + 6};${w + 12};${w + 6}`} dur="2.4s" repeatCount="indefinite" /><animate attributeName="height" values="28;34;28" dur="2.4s" repeatCount="indefinite" /></rect>}
-      <rect width={w} height="22" rx="11" fill="rgba(8,13,22,.9)" stroke={color} strokeWidth="1.6" />
-      <g transform="translate(13 11)">{(CHIP_ICONS[icon] || CHIP_ICONS.sun)(color)}</g>
-      <text x={(w + 22) / 2 - 1} y="15" textAnchor="middle" fontSize="11" fontWeight="800" fill="#eaf0fb" fontFamily="var(--o-font)">{txt}</text>
-    </g>
-  );
-};
 
 const Titre = ({ i, c, t }) => (
   <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '26px 0 12px' }}>
@@ -634,27 +657,6 @@ function Num({ v, d = 0, prefix = '', suffix = '', fallback = '—', fmt }) {
   const txt = fmt ? fmt(a) : (d > 0 ? dec(a, d) : String(Math.round(a)));
   return <span style={{ fontVariantNumeric: 'tabular-nums' }}>{prefix}{txt}{suffix}</span>;
 }
-function kbSlider(label, value, commit, { min = 0, max = 100, step = 5, unit = '%' } = {}) {
-  return {
-    role: 'slider', tabIndex: 0, 'aria-label': label,
-    'aria-valuemin': min, 'aria-valuemax': max,
-    'aria-valuenow': value == null ? undefined : Math.round(value * 10) / 10,
-    'aria-valuetext': value == null ? undefined : decMax(value, 1) + (unit ? ' ' + unit : ''),
-    onKeyDown: (e) => {
-      let d;
-      if (e.key === 'ArrowRight' || e.key === 'ArrowUp') d = step;
-      else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') d = -step;
-      else if (e.key === 'PageUp') d = step * 2;
-      else if (e.key === 'PageDown') d = -step * 2;
-      else if (e.key === 'Home') { e.preventDefault(); e.stopPropagation(); commit(min); return; }
-      else if (e.key === 'End') { e.preventDefault(); e.stopPropagation(); commit(max); return; }
-      else return;
-      e.preventDefault(); e.stopPropagation();
-      const cur = value == null ? min : value;
-      commit(Math.max(min, Math.min(max, Math.round((cur + d) / step) * step)));
-    },
-  };
-}
 // ── Animations lot 6 ──
 // fxTap(e) : ripple au point de clic + pop bref sur le bouton courant (feedback scènes)
 function fxTap(e) {
@@ -752,7 +754,73 @@ function tailleParDefaut(i, tactile, large) {
   return (Math.floor(i / 3) % 2 === 0) ? (col === 1 ? 'c' : 's') : (col === 1 ? 's' : 'c');
 }
 
-function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = [] }) {
+/* Les appareils que la recherche (Ctrl+K) propose pour `nq` — le texte tapé,
+ * sans accents, dès deux caractères : par nom, huit au plus. Une lampe, un
+ * ventilateur, une prise libre se basculent sur place ; les autres mènent à
+ * leur vue.
+ *
+ * Mais Entrée est UN appui : il ne coupe pas ce qui en demande deux
+ * (relecture finale, point A1). Une PRISE allumée dont la protection est vraie
+ * — ou pas encore lue : dans le doute, on demande, comme sa carte — mène à
+ * Objets, sur le filtre Prises, où sa carte demande. Le switch du pont de
+ * Zigbee2MQTT (« Permit join ») ne se bascule JAMAIS d'ici : l'appairage ouvert
+ * laisse n'importe quel appareil rejoindre le réseau, l'ouvrir demande deux
+ * appuis (§ 9) — il mène à Paramètres › Interrupteurs, sans le droit de
+ * l'ouvrir il ne se propose pas, comme toute section interdite. Les deux
+ * arrivent par une mémoire de session lue à l'arrivée, comme les résultats
+ * « Réglages ». Une SIRÈNE (un switch qu'`estSirene` reconnaît) ne vit que dans
+ * Sécurité (P1) : Entrée ne la fait pas sonner, elle mène à cette vue (relecture
+ * finale, B10). L'état des prises se lit dans le cache, sans s'y abonner :
+ * rien ne part au serveur pour une recherche. Mais personne ne relit ce cache
+ * quand aucune carte de prise n'est montée : sans abonné (`abonnesPrises`), il
+ * vaut une protection INCONNUE — et la prise allumée mène à Objets, où sa carte
+ * s'abonne et demande (F5). Et jamais de `toggle` : l'ordre est explicite
+ * (`turn_on`, `turn_off`), d'après l'état que la recherche affiche — un
+ * `toggle` inverse l'état RÉEL, et coupait une prise rallumée entre-temps.
+ * Un switch que l'index ne classe pas encore suit la même règle que partout
+ * (`gardeDeSwitch`, F2). `h` : le `hass` ; `onNav` : la navigation. */
+/* `onFiche(id)` (audit du 19/10, point 12) : une prise gardée ouvre SA fiche, qui demande, par-dessus la vue — sans lui,
+ * Objets › Prises, où sa carte demande. */
+function appareilsRecherche(nq, h, { onNav, droits = [], onFiche = null }) {
+  const S = (h && h.states) || {};
+  const lecture = abonnesPrises() > 0 ? lireEtatPrises() : { etat: null, erreur: false };
+  const DOMS = { light: 'bulb', switch: 'bolt', climate: 'thermometer-half', cover: 'blinds', media_player: 'tv-music', vacuum: 'broom', lawn_mower: 'tractor', fan: 'wind' };
+  // Un robot n'a pas de vue : sa carte, dans Objets, ouvre sa fiche.
+  const VUE_DOM = { climate: 'climat', cover: 'volets', media_player: 'medias', vacuum: 'objets', lawn_mower: 'objets' };
+  const mene = (cle, valeur, vue) => (close) => { try { sessionStorage.setItem(cle, valeur); } catch { /* stockage indisponible */ } onNav(vue); close(); };
+  const out = [];
+  for (const id in S) {
+    if (out.length >= 8) break;
+    const dom = id.split('.')[0];
+    if (!DOMS[dom]) continue;
+    const st = S[id];
+    // Muet — absent, `unavailable` ou `unknown` (`enPanne`, la règle des cartes ; audit du 19/10, point 3) : rien à basculer d'ici.
+    if (enPanne(id, st)) continue;
+    const nom = (st.attributes && st.attributes.friendly_name) || id;
+    if (sansAccents(nom).indexOf(nq) < 0) continue;
+    const ecart = dom === 'switch' ? ecartDe(S, id) : null;
+    const pont = ecart === 'pont';
+    // Une sirène (P1) ne vit que dans Sécurité : Entrée ne la fait pas sonner d'un appui, elle mène à sa vue.
+    const sirene = ecart === 'sirene';
+    if (pont && droits.indexOf('inter') < 0) continue;
+    const allumee = st.state === 'on';
+    const garde = dom === 'switch' && !pont && !sirene && allumee && !cvEstLumiere(id) && gardeDeSwitch(lecture, id, { reconnue: priseDe(S, id).prise, indexLu: indexLu() });
+    const togglable = !pont && !sirene && !garde && (dom === 'light' || dom === 'switch' || dom === 'fan');
+    out.push({
+      group: tr('Appareils'), label: nom, sub: id, run: togglable, runLabel: tr('Basculer'),
+      icon: <Fi i={DOMS[dom]} color="var(--o-cyan)" />,
+      act: pont ? mene('loggia-par-section', 'inter', 'parametres') : sirene ? (close) => { onNav('securite'); close(); } : garde ? (onFiche ? (close) => { onFiche(id); close(); } : mene('loggia-objets-filtre', 'prises', 'objets'))
+        : (close) => {
+          if (togglable) { commander(h, id, allumee ? 'turn_off' : 'turn_on'); }
+          else if (VUE_DOM[dom]) onNav(VUE_DOM[dom]);
+          close();
+        },
+    });
+  }
+  return out;
+}
+
+function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = [], onFiche = null }) {
   const { views: avail } = useLoggia();
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(0);
@@ -765,36 +833,8 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
   HIDDEN_VIEWS().forEach(h => { if (isViewAvailable(avail, h.vid) && match(h.label)) results.push({ group: tr('Vues'), label: tr(h.label), icon: <Fi i={h.icon} color={h.c} />, act: (close) => { onNav(h.vid); close(); } }); });
   customViews.forEach(cv => { if (match(cv.name)) results.push({ group: tr('Vues'), label: cv.name, icon: <Fi i={cv.icon || 'sparkles'} color="var(--o-accent-soft)" />, act: (close) => { onNav('cv:' + cv.id); close(); } }); });
   scenarios().forEach(s => { const nom = nomScenario(s); if (!match(nom)) return; results.push({ group: tr('Scénarios'), label: nom, sub: resumeScenario(s, nomsLiens()), icon: <Ico name={s.icone || 'sparkles'} color={teinteScenario(s).col} />, run: true, act: (close) => { lancerScenario(getHass(), s.id); close(); } }); });
-  // Appareils : par nom, dès deux caractères tapés — le déluge n'aide personne.
-  // Les togglables se basculent sur place ; les autres mènent à leur vue.
-  if (nq.length >= 2) {
-    const h = getHass();
-    const S = (h && h.states) || {};
-    const DOMS = { light: 'bulb', switch: 'bolt', climate: 'thermometer-half', cover: 'blinds', media_player: 'tv-music', vacuum: 'broom', lawn_mower: 'tractor', fan: 'wind' };
-    // Un robot n'a pas de vue : sa carte, dans Objets, ouvre sa fiche.
-    const VUE_DOM = { climate: 'climat', cover: 'volets', media_player: 'medias', vacuum: 'objets', lawn_mower: 'objets' };
-    let n = 0;
-    for (const id in S) {
-      if (n >= 8) break;
-      const dom = id.split('.')[0];
-      if (!DOMS[dom]) continue;
-      const st = S[id];
-      if (!st || st.state === 'unavailable') continue;
-      const nom = (st.attributes && st.attributes.friendly_name) || id;
-      if (!match(nom)) continue;
-      n++;
-      const togglable = dom === 'light' || dom === 'switch' || dom === 'fan';
-      results.push({
-        group: tr('Appareils'), label: nom, sub: id, run: togglable, runLabel: tr('Basculer'),
-        icon: <Fi i={DOMS[dom]} color="var(--o-cyan)" />,
-        act: (close) => {
-          if (togglable) { commander(h, id, 'toggle'); }
-          else if (VUE_DOM[dom]) onNav(VUE_DOM[dom]);
-          close();
-        },
-      });
-    }
-  }
+  // Appareils : par nom, dès deux caractères tapés — le déluge n'aide personne (`appareilsRecherche`).
+  if (nq.length >= 2) results.push(...appareilsRecherche(nq, getHass(), { onNav, droits, onFiche }));
   // Réglages : chaque section des Paramètres se trouve par son nom — la
   // mémoire de session `loggia-par-section` fait atterrir au bon endroit.
   /* Une section qu'on n'a pas le droit d'ouvrir ne se propose pas : la
@@ -885,6 +925,8 @@ function Header() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  // La fiche d'une prise que la recherche ouvre (point 12) : elle survit à la fermeture de la recherche.
+  const [fichePrise, setFichePrise] = useState(null);
   // ⌘K (mac) / Ctrl+K : ouvre/ferme la recherche globale
   useEffect(() => {
     const onKey = (e) => { if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); setSearchOpen(o => !o); } };
@@ -984,7 +1026,8 @@ function Header() {
   return (
     <>
     {/* hors du <header> : son transform (auto-hide) ferait de lui le containing block du position:fixed du sheet */}
-    {searchOpen && <SearchSheet onClose={() => setSearchOpen(false)} onNav={onNav} customViews={customViews} rooms={rooms} droits={droits} />}
+    {searchOpen && <SearchSheet onClose={() => setSearchOpen(false)} onNav={onNav} customViews={customViews} rooms={rooms} droits={droits} onFiche={setFichePrise} />}
+    {fichePrise && <FichePrise id={fichePrise} hass={getHass()} onClose={() => setFichePrise(null)} />}
     <header ref={hdrRef} className="loggia-hdr" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 'calc(14px + var(--o-safe-top,0px)) 28px 14px', borderBottom: '1px solid var(--o-s1)', position: 'sticky', top: 0, background: 'var(--o-header)', backdropFilter: 'blur(12px)', zIndex: 40, transform: hidden ? 'translateY(-100%)' : 'translateY(0)', transition: REDUCE_MOTION ? 'none' : 'transform .3s ease', willChange: 'transform' }}>
       <button onClick={onToggleNav} title={tr('Afficher / masquer le menu')} style={{ width: 42, height: 42, borderRadius: 14, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0 }}><Ico name="menu-burger" size={20} /></button>
       {/* Sa largeur minimale vit dans index.css (`.o-hdr-search`) : elle
@@ -1020,7 +1063,10 @@ function Header() {
           * date de 50 px. Même classe : au doigt, la règle la retire aussi. */}
         {!onAssistant && ctx.assistantAttendu && <span className="o-hdr-assist" aria-hidden="true" style={{ width: 42, height: 42, flexShrink: 0 }} />}
         {peutEditer && <button onClick={onToggleEdit} title={editMode ? tr('Quitter le mode édition') : tr('Mode édition')} style={editBtn}><Ico name="edit" size={17} /></button>}
-        <button onClick={onToggleTheme} title={tr('Changer de thème')} style={hbtn}><Ico name="brightness" size={18} /></button>
+        {/* Le mode OÙ L'ON EST (18/10) : le soleil restait dans les deux — « le bouton
+          * mode sombre / clair ne change pas d'icône ». `light` est le rendu réel,
+          * thème de HA suivi compris. */}
+        <button onClick={onToggleTheme} title={tr('Changer de thème')} style={hbtn}><Ico name={ctx.light ? 'sun' : 'moon'} size={18} /></button>
         {/* La cloche annonce ce qu'elle porte (plan M7) : le point rouge des
           * non-lues ne se voit pas d'un lecteur d'écran, et « Notifications »
           * seul ne disait pas s'il y avait quelque chose à lire.
@@ -1072,10 +1118,6 @@ function Header() {
   );
 }
 
-/* Un VRAI titre (`<h2>`) depuis le 20/09 : un lecteur d'écran saute de section
- * en section par les titres, et un bloc stylé n'en est pas un. `margin` et
- * `fontWeight` annulent ce que le navigateur donne à un h2 — rien ne bouge à l'œil. */
-const sectionTitle = { margin: 0, fontWeight: 400, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' };
 // Carte de pièce : le liseré du réglage (04/10), comme toutes les cartes.
 const card = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: LISERE };
 
@@ -1183,10 +1225,10 @@ function bordPiece(p, on, amb) {
  * qui rend une couleur a partir d'une alpha — les cartes qui partent d'un hex
  * passent leur `hx`. Sans teinte, SURF_CARTE : c'est la carte au repos, que la
  * maquette laisse grise. */
-function lavisCarte(teinte, base = .2) {
+function lavisCarte(teinte, base = .2, bas = base / 4) {
   if (!teinte || !LAVIS) return SURF_CARTE;
   const f = typeof teinte === 'function' ? teinte : (a) => `rgba(${teinte},${a})`;
-  return `linear-gradient(180deg,${f(lav(base))},${f(lav(base / 4))} 72%), ${SURF_CARTE}`;
+  return `linear-gradient(180deg,${f(lav(base))},${f(lav(bas))} 72%), ${SURF_CARTE}`;
 }
 function lavisPiece(p, on) {
   return on ? lavisCarte(rgbDePiece(p)) : SURF_CARTE;
@@ -1205,17 +1247,24 @@ const PIECES = [
 // Mini-pilule d'action des tuiles pièces — même gabarit 38×26 r9 que les
 // minis des cartes denses.
 const MINI_PIECE = { width: 38, height: 26, borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text2)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 };
-function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, mains = null, onToggleLights, covers = null, clim = null, idx = 0, ambiance = null }) {
-  // Format compact (PC ≥1180) : compteur = luminaires non-« Ampoule » ; interrupteur = plafonnier(s) SEULS
+function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, mains = null, attente = false, onToggleLights, covers = null, clim = null, idx = 0, ambiance = null }) {
+  // Format compact (PC ≥1180) : compteur = toutes les lumières de la pièce ; interrupteur = `mains`, les lampes du bouton (sans les veilleuses, ADR 0261)
   const tilt = useTilt(4);
   const [flashRef, flash] = useFlash();
   // La mini-courbe 24 h a été retirée (retour 01/09) : la teinte de la pièce
   // et la température suffisent, et l'historique n'est plus interrogé.
-  // Optimiste : l'interrupteur bascule tout de suite, puis se réconcilie avec HA au poll suivant
-  const realOn = (mains && mains.length) ? mains.some(l => l.on) : null;
+  // Optimiste : l'interrupteur bascule tout de suite, puis se réconcilie avec HA au poll suivant.
+  // `mains` vide alors que la pièce a des lampes : il ne reste que des veilleuses (ADR 0261) — la tuile est ÉTEINTE, pas
+  // « inconnue » ; vide ET sans lampe, on ne sait rien (null : l'optimiste ne se jette pas, voir useOptimiste).
+  const realOn = (mains && mains.length) ? mains.some(l => l.on) : (mains && lights && lights.length ? false : null);
   // Le filet des 6 s est celui d'`useOptimiste`, comme partout ailleurs.
   const [ov, setOv] = useOptimiste(realOn);
-  const doToggle = () => { flash(p.tc || 'var(--o-accent)'); if (realOn != null) setOv(!(ov != null ? ov : realOn)); onToggleLights && onToggleLights(); };
+  /* `attente` (audit du 19/10, B15 — les veilleuses sont épargnées PARTOUT) : la règle Nuit n'est pas encore lue, on ne sait pas
+   * quelles lampes épargner. L'interrupteur est dessiné à sa place, grisé et inerte : un appui ne touche aucune lampe, et ne
+   * bascule pas l'affichage. La règle lue, il reste là, actif — sauf dans une pièce qui n'a QUE sa veilleuse : `mains` se vide,
+   * il n'y a plus rien à commander, le bouton s'en va (ADR 0262, corrigée le 19/10). */
+  const doToggle = () => { if (attente) return; flash(p.tc || 'var(--o-accent)'); if (realOn != null) setOv(!(ov != null ? ov : realOn)); onToggleLights && onToggleLights(); };
+  const inerte = attente ? { 'aria-disabled': true } : {};
   if (chip) {
     // Pièce COMPACTE, direction « teinte pièce » (choix 31/08) : la couleur de
     // la pièce baigne la carte (son lavis en dégradé), icône NUE sans boîte,
@@ -1223,7 +1272,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
     // 03/10). Une rangée de 88 px.
     const n = lights ? lights.filter(l => l.on).length : (p.status.kind === 'active' ? p.status.n : 0);
     // La ligne d'etat (ADR 0029) : un probleme, sinon l'activite, sinon le calme.
-    const amb = lights ? ambiancePiece({ lumieres: n, ...(ambiance || {}), co2: p.live && p.live.co2 }) : null;
+    const amb = lights ? ambiancePiece({ lumieres: n, lampes: lights.length, ...(ambiance || {}), co2: p.live && p.live.co2 }) : null;
     const on = ov != null ? ov : (realOn != null ? realOn : n > 0);
     const canToggle = !!(mains && mains.length && onToggleLights);
     const temp = p.live && p.live.temp != null ? decMax(p.live.temp, 1) + '°' : null;
@@ -1252,10 +1301,10 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 25 }}>
           <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>{cloneElement(p.icon, { size: 24 })}</span>
           {canToggle && (
-            <span role="switch" aria-checked={on} aria-label={tr('Lumières') + ' ' + p.name} tabIndex={0}
+            <span role="switch" aria-checked={on} aria-label={tr('Lumières') + ' ' + p.name} tabIndex={0} {...inerte}
               onClick={e => { e.stopPropagation(); doToggle(); }}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
-              style={{ width: 44, height: 25, borderRadius: 14, position: 'relative', zIndex: 1, cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,var(--o-lampe),var(--o-lampe-b))' : 'var(--o-bd1)', transition: 'background .25s' }}>
+              style={{ width: 44, height: 25, borderRadius: 14, position: 'relative', zIndex: 1, cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,var(--o-lampe),var(--o-lampe-b))' : 'var(--o-bd1)', transition: 'background .25s', ...(attente ? { cursor: 'default', opacity: .5 } : null) }}>
               <span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
             </span>
           )}
@@ -1272,7 +1321,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
   if (compact) {
     const n = lights ? lights.filter(l => l.on).length : (p.status.kind === 'active' ? p.status.n : 0);
     // La ligne d'etat (ADR 0029) : un probleme, sinon l'activite, sinon le calme.
-    const amb = lights ? ambiancePiece({ lumieres: n, ...(ambiance || {}), co2: p.live && p.live.co2 }) : null;
+    const amb = lights ? ambiancePiece({ lumieres: n, lampes: lights.length, ...(ambiance || {}), co2: p.live && p.live.co2 }) : null;
     const on = ov != null ? ov : (realOn != null ? realOn : n > 0);
     const canToggle = !!(mains && mains.length && onToggleLights);
     /* Relecture du lot 13 : les deux tuiles RENDUES de l'Accueil se nomment
@@ -1346,8 +1395,8 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
             )}
             {clim && (
               <button type="button" aria-label={tr('Chauffage') + ' ' + p.name} title={clim.on ? tr('Éteindre le chauffage') : tr('Allumer le chauffage')}
-                onClick={e => { e.stopPropagation(); flash('var(--o-bad)'); clim.onToggle(); }}
-                style={{ ...MINI_PIECE, ...(clim.on ? { background: 'rgba(var(--o-bad-rgb),.16)', color: 'var(--o-bad)' } : null), transition: 'background .2s, color .2s' }}>
+                onClick={e => { e.stopPropagation(); flash(clim.froid ? 'var(--o-cold)' : 'var(--o-warn2)'); clim.onToggle(); }}
+                style={{ ...MINI_PIECE, ...(clim.on ? (clim.froid ? { background: 'rgba(var(--o-cold-rgb),.16)', color: 'var(--o-cold)' } : { background: 'rgba(var(--o-warn2-rgb),.16)', color: 'var(--o-warn2)' }) : null), transition: 'background .2s, color .2s' }}>
                 <Ico name={clim.froid ? 'snowflake' : 'flame'} size={14} />
               </button>
             )}
@@ -1358,10 +1407,10 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
               * et il mesurait 38 × 21 — sous les 24 que demande la règle. La
               * marge négative rend les trois pixels empruntés : la rangée ne
               * bouge pas d'un cheveu, et le dessin est le même. */
-            <span role="switch" aria-checked={on} aria-label={tr('Lumières') + ' ' + p.name} tabIndex={0}
+            <span role="switch" aria-checked={on} aria-label={tr('Lumières') + ' ' + p.name} tabIndex={0} {...inerte}
               onClick={e => { e.stopPropagation(); doToggle(); }}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
-              style={{ display: 'inline-flex', alignItems: 'center', height: 24, cursor: 'pointer', flexShrink: 0, margin: '-1.5px 0', marginLeft: 'auto' }}>
+              style={{ display: 'inline-flex', alignItems: 'center', height: 24, cursor: 'pointer', flexShrink: 0, margin: '-1.5px 0', marginLeft: 'auto', ...(attente ? { cursor: 'default', opacity: .5 } : null) }}>
               <span aria-hidden="true" style={{ display: 'block', width: 38, height: 21, borderRadius: 999, background: on ? 'linear-gradient(135deg,var(--o-lampe),var(--o-lampe-b))' : 'var(--o-s1)', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), transition: 'background .2s' }}>
                 <span style={{ display: 'block', position: 'relative', top: 2, left: on ? 18 : 2, width: 15, height: 15, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} />
               </span>
@@ -1400,59 +1449,8 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
 }
 
 // ════════════ POPUP CONFORT PIÈCE (temp / humidité / CO2 + barres dégradées + courbe 24h) ════════════
-// Échelles de confort : min/max de la barre, dégradé traffic-light, ticks chiffrés, verdict(valeur).
-// Les VERDICTS viennent de `confort.js` (ADR 0039) : la barre de la pièce et cette fiche lisent la même table.
-/* La barre de la fiche : l'échelle de la jauge des cartes (`echelleMesure`) —
- * mêmes bornes, mêmes couleurs par palier, mêmes repères (captures du 19/09). */
-const echelleFiche = (cle, suffixe = '') => {
-  const e = echelleMesure(cle);
-  return { min: e.de, max: e.a, grad: 'linear-gradient(90deg,' + e.bandes.map(b => b.c + ' ' + b.de + '% ' + b.a + '%').join(',') + ')', ticks: e.reperes.map(r => r.v + suffixe), tickV: e.reperes.map(r => r.v) };
-};
-/* Une FONCTION, appelée au rendu de la fiche (relecture du 03/10). Objet du
- * module, la table se bâtissait une seule fois, à l'import : ses quatre titres
- * gardaient la langue du démarrage. Passer à l'allemand sans recharger
- * laissait « Qualité de l'air » en français ; de même au premier démarrage,
- * quand Home Assistant ne parle pas la langue du navigateur. L'ancien nom,
- * `COMFORT`, est aussi un mot des catalogues (« COMFORT INDEX ») : devenu
- * fonction, tests/listes_fonctions l'y aurait vu mentionné sans appel. */
-const FICHE_CONFORT = () => ({
-  temp: { key: 'temp', label: tr('Température'), ico: 'thermometer-half', ...echelleFiche('temp', '°'), verdict: v => verdictMesure('temp', v) },
-  hum: { key: 'hum', label: tr('Humidité'), ico: 'humidity', ...echelleFiche('hum', '%'), verdict: v => verdictMesure('hum', v) },
-  co2: { key: 'co2', label: tr("Qualité de l'air"), ico: 'leaf', ...echelleFiche('co2'), verdict: v => verdictMesure('co2', v) },
-  bruit: { key: 'bruit', label: tr('Bruit'), ico: 'volume', ...echelleFiche('bruit'), verdict: v => verdictMesure('bruit', v) },
-});
-const cf_pct = (v, m) => Math.max(0, Math.min(100, (v - m.min) / (m.max - m.min) * 100));
-// `v` est TOUJOURS en Celsius (c'est ce que verdictMesure/indiceConfort et l'échelle de la
-// barre attendent) : seule la température se reconvertit vers l'unité réelle à l'affichage.
-const cf_big = (v, m, uniteT = 'C') => m.key === 'temp' ? dec(deCelsius(v, uniteT), 1) + ' °' + uniteT : m.key === 'hum' ? Math.round(v) + ' %' : m.key === 'bruit' ? Math.round(v) + ' dB' : Math.round(v) + ' ppm';
-const cf_tag = (v, m, uniteT = 'C') => m.key === 'temp' ? Math.round(deCelsius(v, uniteT)) + '°' + uniteT : m.key === 'hum' ? Math.round(v) + '%' : m.key === 'bruit' ? Math.round(v) + ' dB' : Math.round(v) + ' ppm';
-// Sévérité par couleur de verdict (tokens theme-aware). Trop froid (--o-cold, <16°) = rank 2 → jamais « Sain ».
-const cf_rank = { 'var(--o-ok)': 0, 'var(--o-accent-soft)': 1, 'var(--o-cold)': 2, 'var(--o-warn)': 2, 'var(--o-warn2)': 3, 'var(--o-bad)': 4 };
-
-// Barre dégradée + bulle marqueur sur la valeur + ticks (reproduit l'appli air-quality de référence).
-function ComfortBar({ m, value, uniteT = 'C' }) {
-  const pct = cf_pct(value, m);
-  return (
-    <div>
-      <div style={{ position: 'relative', height: 24 }}>
-        <div style={{ position: 'absolute', left: `clamp(28px, ${pct}%, calc(100% - 28px))`, bottom: 0, transform: 'translateX(-50%)', transition: 'left .55s cubic-bezier(.23,1,.32,1)', willChange: 'left' }}>
-          <span style={{ position: 'relative', display: 'block', background: 'var(--o-text)', color: 'var(--o-bg)', fontSize: 11, fontWeight: 800, padding: '2px 7px', borderRadius: 10, whiteSpace: 'nowrap' }}>
-            {cf_tag(value, m, uniteT)}
-            <span style={{ position: 'absolute', bottom: -4, left: '50%', transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderTop: '4px solid var(--o-text)' }} />
-          </span>
-        </div>
-      </div>
-      <div style={{ height: 13, borderRadius: 10, background: m.grad, marginTop: 3 }} />
-      <div style={{ position: 'relative', height: 15, marginTop: 5 }}>
-        {m.ticks.map((t, i) => (
-          <span key={t} style={{ position: 'absolute', left: cf_pct(m.tickV[i], m) + '%', transform: 'translateX(-50%)', fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>
-            {m.key === 'temp' ? Math.round(deCelsius(m.tickV[i], uniteT)) + '°' : t}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
+// La fiche vit dans ficheconfort.jsx, chargée à la demande (chantier Capteurs, plan 1, tâche 1) ; la courbe du
+// jour reste ici : la fiche de l’Extérieur la dessine aussi.
 
 // Sparkline 24h (SVG, auto-échelle, trait + aire). points = tableau de nombres.
 function Sparkline({ points, color }) {
@@ -1464,105 +1462,27 @@ function Sparkline({ points, color }) {
   const line = xs.map((x, i) => (i ? 'L' : 'M') + x.toFixed(1) + ' ' + ys[i].toFixed(1)).join(' ');
   const area = line + ' L' + xs[xs.length - 1].toFixed(1) + ' ' + H + ' L' + xs[0].toFixed(1) + ' ' + H + ' Z';
   return (
-    <svg viewBox={'0 0 ' + W + ' ' + H} preserveAspectRatio="none" style={{ width: '100%', height: 46, display: 'block' }}>
+    /* Sans texte qui la dise, la courbe se tait : le chiffre et « 24 dernières heures » sont écrits à côté (audit du 19/10, lot 4). */
+    <svg aria-hidden="true" focusable="false" viewBox={'0 0 ' + W + ' ' + H} preserveAspectRatio="none" style={{ width: '100%', height: 46, display: 'block' }}>
       <path className="o-fadein" style={{ animationDelay: '.5s', animationPlayState: PAINT_READY ? 'running' : 'paused' }} d={area} fill={color} opacity=".13" />
       <path className="o-draw" pathLength="1" style={{ animationPlayState: PAINT_READY ? 'running' : 'paused' }} d={line} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }
 
+/* La fiche de confort d’une PIÈCE (ADR 0039) : chargée à la demande (`ficheconfort.jsx`, chantier Capteurs, plan 1,
+ * tâche 1 : la borne du démarrage). Elle n’importe jamais App.jsx : la coquille lui passe la courbe du jour et la
+ * teinte de ses pastilles. Comme `FicheMedia`, la coquille GARDE la feuille et pose la frontière Suspense DEDANS
+ * (correction bis, point 3) : un morceau qui ne se charge pas se dit dans la feuille, par sa barrière — et non à la
+ * place de la vue de la pièce. Le repli tient la hauteur d’une fiche (260 px). */
 function RoomComfortModal({ piece, hass, onClose, bruitId = null }) {
-  const live = piece.live || null;
-  const parseNum = (s) => { if (s == null) return null; const n = parseFloat(String(s).replace(',', '.')); return isNaN(n) ? null : n; };
-  // `vals.temp` est converti en Celsius tout de suite : verdictMesure, indiceConfort et
-  // l'échelle de la barre (14-30) raisonnent tous en Celsius. Seul `uniteT` (affichage) suit
-  // l'unité réelle du capteur.
-  // Une pièce réelle ne lit que ses capteurs : une mesure absente reste null,
-  // et la fiche la tait comme la barre. Les chaînes de `piece` ne servent
-  // qu'à l'écran d'avant la connexion (`mesuresFiche`, audit du 03/10).
-  const mesures = mesuresFiche(live, piece);
-  const uniteT = uniteTemp(live && live.tempId && hass && hass.states && hass.states[live.tempId] ? hass.states[live.tempId].attributes : null, hass);
-  const vals = {
-    temp: versCelsius(mesures.temp, uniteT),
-    hum: mesures.hum,
-    co2: mesures.co2,
-    // Le bruit ne vit pas dans la configuration des pièces : la vue le trouve dans la zone (ADR 0039).
-    bruit: bruitId && hass && hass.states && hass.states[bruitId] ? parseNum(hass.states[bruitId].state) : null,
-  };
-  const ids = { temp: live && live.tempId, hum: live && live.humId, co2: live && live.co2Id, bruit: bruitId };
-  const table = FICHE_CONFORT();
-  const metrics = [table.temp, table.hum, table.co2, table.bruit].filter(m => vals[m.key] != null);
-  const verdicts = metrics.map(m => ({ m, vd: m.verdict(vals[m.key]) }));
-  const worst = verdicts.reduce((a, b) => (cf_rank[b.vd.c] || 0) > (cf_rank[a.vd.c] || 0) ? b : a, verdicts[0]);
-  // Le mot de la fiche est celui de la barre : l'indice de confort (ADR 0039).
-  const confort = indiceConfort(vals, uniteT);
-  const overall = confort ? confort.verdict : { t: '—', c: 'var(--o-text2)' };
-  const advice = !verdicts.length ? tr('Aucune donnée capteur pour cette pièce.')
-    : (cf_rank[worst.vd.c] <= 1 ? tr('Conditions idéales dans cette pièce.')
-      : worst.m.key === 'co2' ? tr('Niveau de CO2 élevé, pensez à aérer la pièce.')
-        : worst.m.key === 'bruit' ? tr('Niveau sonore élevé dans la pièce.')
-        : worst.m.key === 'temp' ? (vals.temp > 24 ? tr('Il fait chaud, pensez à ventiler ou rafraîchir.') : tr('Il fait frais, un peu de chauffage ?'))
-          : (vals.hum > 60 ? tr('Air humide, aérez pour assainir.') : tr('Air un peu sec, pensez à humidifier.')));
-
-  const [hist, setHist] = useState({});
-  const [histState, setHistState] = useState('loading');
-  useEffect(() => {
-    let alive = true;
-    const list = metrics.map(m => ({ k: m.key, id: ids[m.key] })).filter(x => x.id);
-    if (!hass || !hass.callApi || !list.length) { setHistState('none'); return; }
-    const start = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-    Promise.all(list.map(x =>
-      hass.callApi('GET', 'history/period/' + start + '?filter_entity_id=' + encodeURIComponent(x.id) + '&minimal_response&no_attributes')
-        .then(res => ({ k: x.k, arr: (res && res[0]) ? res[0] : [] }))
-        .catch(() => ({ k: x.k, arr: [] }))
-    )).then(results => {
-      if (!alive) return;
-      const map = {};
-      results.forEach(r => { const pts = r.arr.map(s => parseFloat(s.state)).filter(v => !isNaN(v)); if (pts.length >= 2) map[r.k] = pts; });
-      setHist(map);
-      setHistState(Object.keys(map).length ? 'done' : 'none');
-    }).catch(() => { if (alive) setHistState('error'); });
-    return () => { alive = false; };
-  }, [piece.name]);
-
   return (
     <BottomSheet onClose={onClose}>
-      {() => (<>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ width: 38, height: 38, borderRadius: 14, background: piece.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{piece.icon}</span>
-          <NomFeuille><span style={{ flex: 1, fontSize: 19, fontWeight: 700, color: 'var(--o-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{piece.name}</span></NomFeuille>
-          <CroixFeuille />
-        </div>
-        <div style={{ textAlign: 'center', margin: '16px 0 2px' }}>
-          <div style={{ fontSize: 30, fontWeight: 800, color: overall.c, letterSpacing: '-.01em' }}>{overall.t}</div>
-          {confort && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)', marginTop: 4 }}>{tr('Indice de confort')} · {confort.indice} / 100</div>}
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 6, lineHeight: 1.45, maxWidth: 320, marginLeft: 'auto', marginRight: 'auto' }}>{advice}</div>
-        </div>
-        {!metrics.length
-          ? <div style={{ padding: '28px 0 10px', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Pas de capteur configuré pour cette pièce.')}</div>
-          : <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 18 }}>
-              {metrics.map(m => { const v = vals[m.key], vd = m.verdict(v); return (
-                <div key={m.key} style={{ background: 'var(--o-s3)', border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: 18, padding: '15px 16px 13px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                    <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: hx(vd.c, .16), color: vd.c }}><Fi i={m.ico} size={16} /></span>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--o-text)' }}>{m.label}</span>
-                    <span style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                      <span style={{ fontSize: 19, fontWeight: 800, color: 'var(--o-text)' }}>{cf_big(v, m, uniteT)}</span>
-                      <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: vd.c, marginTop: 1 }}>{vd.t}</span>
-                    </span>
-                  </div>
-                  <ComfortBar m={m} value={v} uniteT={uniteT} />
-                  <div style={{ marginTop: 14 }}>
-                    {histState === 'loading'
-                      ? <div style={{ height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{tr("Chargement de l'historique…")}</div>
-                      : hist[m.key]
-                        ? <><Sparkline points={hist[m.key]} color={vd.c} /><div style={{ fontSize: 11, color: 'var(--o-text3)', fontWeight: 600, marginTop: 3 }}>{tr('24 dernières heures')}</div></>
-                        : <div style={{ height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Historique indisponible')}</div>}
-                  </div>
-                </div>
-              ); })}
-            </div>}
-      </>)}
+      {() => (
+        <Suspense fallback={<div style={{ minHeight: 260 }} />}>
+          <FicheConfortContent piece={piece} hass={hass} bruitId={bruitId} briques={{ Sparkline, hx }} />
+        </Suspense>
+      )}
     </BottomSheet>
   );
 }
@@ -1573,20 +1493,20 @@ function RoomComfortModal({ piece, hass, onClose, bruitId = null }) {
 // `windAffiche`/`uniteV` restent dans l'unité réelle, pour ne pas mentir au lecteur.
 function outdoorTips(mode, temp, wind, isNight, rainProb, windAffiche, uniteV) {
   const T = [];
-  if (mode === 'rain') T.push(['raindrops', 'var(--o-cyan)', tr('Pluie prévue, prends un parapluie')]);
+  if (mode === 'rain') T.push(['raindrops', 'var(--o-cyan)', tr('Pluie prévue, prenez un parapluie')]);
   else if (rainProb != null && rainProb >= 50) T.push(['raindrops', 'var(--o-cyan)', tr('Risque de pluie ({p} %), parapluie conseillé', { p: rainProb })]);
-  if (mode === 'storm') T.push(['bolt', 'var(--o-purple)', tr('Orage, limite les sorties')]);
+  if (mode === 'storm') T.push(['bolt', 'var(--o-purple)', tr('Orage, limitez les sorties')]);
   if (mode === 'snow') T.push(['snowflake', '#bcd6f0', tr('Neige, prudence sur la route')]);
   if (temp != null) {
-    if (temp <= 2) T.push(['snowflake', 'var(--o-cold)', tr('Risque de gel, couvre-toi bien')]);
-    else if (temp < 10) T.push(['thermometer-half', '#38bdf8', tr('Frais dehors, prends une veste')]);
-    else if (temp >= 30) T.push(['humidity', 'var(--o-orange)', tr('Forte chaleur, pense à t’hydrater')]);
+    if (temp <= 2) T.push(['snowflake', 'var(--o-cold)', tr('Risque de gel, couvrez-vous bien')]);
+    else if (temp < 10) T.push(['thermometer-half', '#38bdf8', tr('Frais dehors, prenez une veste')]);
+    else if (temp >= 30) T.push(['humidity', 'var(--o-orange)', tr('Forte chaleur, pensez à vous hydrater')]);
     else if (temp >= 25) T.push(['sun', 'var(--o-lampe)', tr('Il fait chaud, vêtements légers conseillés')]);
   }
   if ((mode === 'sun' || mode === 'partly') && !isNight && temp != null && temp >= 22) T.push(['sun', 'var(--o-gold)', tr('Grand soleil, crème solaire et lunettes')]);
   if (wind != null && wind >= 30) T.push(['wind', '#9fb4d6', tr('Vent fort ({v} {u}), sois prudent', { v: Math.round(windAffiche != null ? windAffiche : wind), u: uniteV || 'km/h' })]);
-  if (isNight) T.push(['moon-stars', '#aeb9e0', tr('Nuit tombée, pense à l’éclairage extérieur')]);
-  if (!T.length) T.push(['sun', 'var(--o-ok)', tr('Conditions agréables, profite du dehors')]);
+  if (isNight) T.push(['moon-stars', '#aeb9e0', tr('Nuit tombée, pensez à l’éclairage extérieur')]);
+  if (!T.length) T.push(['sun', 'var(--o-ok)', tr('Conditions agréables, profitez du dehors')]);
   return T;
 }
 
@@ -1748,7 +1668,6 @@ function capteurBruitPiece(S, roomName) {
 function roomEntitiesBrutes(hass, roomName) {
   if (!hass || !hass.states) return [];
   const target = rmNorm(roomName);
-  const hidden = roomHidden();
   const out = [];
   // 1) éclairages — ordre voulu : plafonnier, lampadaire, puis ampoules/rubans (comme la vue Lumières)
   const LT_ORDER = { plafonnier: 0, lampadaire: 1, ampoule: 2, veilleuse: 3 };
@@ -1757,8 +1676,9 @@ function roomEntitiesBrutes(hass, roomName) {
       .sort((a, b) => (LT_ORDER[lightType(a)] - LT_ORDER[lightType(b)]) || comparerTextes(a.name, b.name))
       .forEach(l => out.push(l.id));
   } catch {}
-  // 2) chauffage : toutes les zones de la pièce — poêle (climate.*) ET radiateurs fil pilote (switch + input_*),
-  //    ces derniers référencés par « zone:<id> » car ils n'ont pas d'entité climate unique.
+  // 2) chauffage : toutes les zones de la pièce — poêle (climate.*) ET radiateurs fil pilote (switch + input_*,
+  //    ou le select d'un module découvert), ces derniers référencés par « zone:<id> » car ils n'ont pas
+  //    d'entité climate unique.
   climateZones(hass && hass.states).filter(z => rmNorm(z.room) === target).forEach(z => {
     if (estClimate(z) && z.haid && hass.states[z.haid]) out.push(z.haid);
     else if (hass.states[z.haid] || hass.states[z.tempCible]) out.push('zone:' + z.id);
@@ -1785,23 +1705,134 @@ function roomEntitiesBrutes(hass, roomName) {
       const d = id.split('.')[0]; const dc = (st.attributes || {}).device_class || '';
       const rang = ROOM_ZONE_DOMAINES.indexOf(d); if (rang < 0) return;
       if (d === 'switch' && cvEstLumiere(id)) return;
+      // L'interrupteur d'un module fil pilote le rend sourd une fois coupé :
+      // l'appareil a la carte de sa zone (étape 2), lui reste dans la fiche.
+      if (d === 'switch' && interrupteurDeModule(LOGGIA_INDEX, id)) return;
+      // Le pont de Zigbee2MQTT et une sirène n'ont pas de carte dans une pièce (chantier Prises, P1).
+      if (d === 'switch' && ecartDe(hass.states, id)) return;
       if (d === 'binary_sensor' && ROOM_BIN_CLASSES.indexOf(dc) < 0) return;
-      if (d === 'sensor' && ROOM_SENSOR_CLASSES.indexOf(dc) < 0) return;
+      if (d === 'sensor' && (ROOM_SENSOR_CLASSES.indexOf(dc) < 0 || dc === 'temperature' || dc === 'humidity')) return;
       candidats.push({ id, rang, appareil: m.deviceId || null });
     });
     const parAppareil = new Set();
-    candidats.sort((x, y) => x.rang - y.rang || comparerTextes(x.id, y.id)).forEach(c => {
+    candidats.sort((x, y) => x.rang - y.rang || rangClasse(x.id, hass.states) - rangClasse(y.id, hass.states) || comparerTextes(x.id, y.id)).forEach(c => {
       if (c.appareil) { if (parAppareil.has(c.appareil)) return; parAppareil.add(c.appareil); }
       out.push(c.id);
     });
   } catch {}
-  return out.filter((id, i) => out.indexOf(id) === i && hidden.indexOf(id) < 0);
+  return out.filter((id, i) => out.indexOf(id) === i);
 }
 // Ce que la zone d'une piece apporte a sa grille, par ordre de preference dans
 // un meme appareil : la commande avant le capteur.
 const ROOM_ZONE_DOMAINES = ['lock', 'camera', 'switch', 'fan', 'humidifier', 'valve', 'vacuum', 'lawn_mower', 'binary_sensor', 'sensor'];
-const ROOM_BIN_CLASSES = ['smoke', 'gas', 'carbon_monoxide', 'moisture', 'safety', 'motion', 'occupancy', 'presence', 'door', 'window', 'garage_door', 'opening', 'vibration', 'tamper'];
-const ROOM_SENSOR_CLASSES = ['carbon_dioxide', 'pm25', 'pm10', 'aqi', 'illuminance', 'pressure', 'volatile_organic_compounds'];
+// Les binaires d'une pièce : LA table des classes (attention.js) — la sûreté, la présence, les ouvrants —, plus la vibration.
+const ROOM_BIN_CLASSES = [...CLASSES_SURETE, ...CLASSES_MOUVEMENT, ...CLASSES_OUVRANT, 'vibration'];
+/* Les mesures d'une pièce, par ordre de PRIORITÉ (audit du 19/10, M9) : la carte unique d'un appareil est celle de sa première classe —
+ * un purificateur montre son CO₂, pas son indice. Le monoxyde, les PM1, les COV en ppb, le dioxyde d'azote, l'ozone et la pression
+ * atmosphérique y entrent (H10, M7) ; la température et l'humidité, l'en-tête de la pièce les porte. */
+const ROOM_SENSOR_CLASSES = ['carbon_dioxide', 'carbon_monoxide', 'pm25', 'volatile_organic_compounds', 'volatile_organic_compounds_parts', 'pm10', 'pm1', 'nitrogen_dioxide', 'ozone',
+  'temperature', 'humidity', 'aqi', 'sound_pressure', 'illuminance', 'pressure', 'atmospheric_pressure'];
+const rangClasse = (id, S) => { const r = ROOM_SENSOR_CLASSES.indexOf(((S[id] && S[id].attributes) || {}).device_class); return r < 0 ? ROOM_SENSOR_CLASSES.length : r; };
+
+/* ── Qu'est-ce qu'une prise (chantier Prises, P1, § 6.4) ──────────────────────
+ *
+ * La règle vit dans prises.js (`estPrise`, le jumeau du serveur) ; ici, ce
+ * qu'elle lit : l'entité, son appareil et ses sœurs, d'après l'index de Loggia
+ * et les états. Les sœurs d'un appareil se rangent une fois par index — sans
+ * cela, chaque switch de la maison parcourait tout le registre à chaque rendu.
+ * Le nom d'une entité : celui de son état, sinon celui du registre. */
+const SOEURS_PAR_INDEX = new WeakMap();
+function soeursDe(id) {
+  const t = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta;
+  const m = t && t.get(id);
+  if (!m || !m.deviceId) return [];
+  let parAppareil = SOEURS_PAR_INDEX.get(t);
+  if (!parAppareil) {
+    parAppareil = new Map();
+    t.forEach((x, e) => { if (!x || !x.deviceId) return; const l = parAppareil.get(x.deviceId); if (l) l.push(e); else parAppareil.set(x.deviceId, [e]); });
+    SOEURS_PAR_INDEX.set(t, parAppareil);
+  }
+  return (parAppareil.get(m.deviceId) || []).filter(e => e !== id);
+}
+/** L'appareil d'une entité, tel que la règle le lit : son fabricant, son modèle et son nom (dont les mots ne départagent pas
+ *  deux sorties, `estPrise`), ou `null`. */
+function appareilDe(id) {
+  const m = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && LOGGIA_INDEX.entityMeta.get(id);
+  const dev = m && m.deviceId && LOGGIA_INDEX.deviceMeta ? LOGGIA_INDEX.deviceMeta.get(m.deviceId) : null;
+  return dev ? { fabricant: dev.manufacturer, modele: dev.model, nom: dev.name } : null;
+}
+/* Les compteurs de la maison (`compteursMaison`, prises.js ; décision du 19/10) : ceux que le tableau de bord Énergie
+ * déclare sources. Calculés UNE fois par préférences lues (`poserCompteursMaison`, à chaque runtime), pas à chaque switch. */
+let PREFS_MAISON = null, COMPTEURS_MAISON = null;
+function poserCompteursMaison(prefs) {
+  if (prefs === PREFS_MAISON) return;
+  PREFS_MAISON = prefs;
+  COMPTEURS_MAISON = prefs ? new Set(compteursMaison(prefs)) : null;
+}
+/* Les entrées de la règle, comme les lit le jumeau du serveur (plan 1, « Les
+ * entrées, côté écran ») : la classe du REGISTRE — l'attribut de l'état pour
+ * une entité hors registre —, sa catégorie, et le nom affiché, sinon celui du
+ * registre, sinon rien. */
+function lirePrise(S, id) {
+  const t = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta;
+  const decrire = (e) => {
+    const m = t && t.get(e);
+    const a = (S[e] && S[e].attributes) || {};
+    return { entity_id: e, device_class: (m ? m.deviceClass : a.device_class) || null, entity_category: (m && m.category) || null, nom: a.friendly_name || (m && m.name) || '' };
+  };
+  return { entite: decrire(id), appareil: appareilDe(id), soeurs: soeursDe(id).map(decrire) };
+}
+/** `{ prise, puissance, energie }` d'une entité : seul un switch peut être une prise. */
+function priseDe(S, id) {
+  if (String(id).indexOf('switch.') !== 0) return { prise: false, puissance: null, energie: null };
+  return estPrise({ ...lirePrise(S || {}, id), lumiere: cvEstLumiere(id), filPilote: interrupteurDeModule(LOGGIA_INDEX, id), sirene: estSirene(id, (S || {})[id]), compteurs: COMPTEURS_MAISON });
+}
+/** L'index de la découverte est-il lu ? Tant qu'il ne l'est pas, `priseDe` ne reconnaît AUCUNE prise (ni appareil, ni sœurs, ni capteur) :
+ *  un switch dont on ne sait pas encore s'il en est une. */
+const indexLu = () => !!(LOGGIA_INDEX && LOGGIA_INDEX.entityMeta);
+/**
+ * Ce que couper à la main un `switch.` doit DEMANDER, et s'il est une prise (relecture finale, F2, F3) : la règle de
+ * `gardeDeSwitch` (prisesetat.js), avec ce que l'écran sait ici — l'index (`priseDe`) et l'état des prises. L'état se
+ * SUIT tant que la garde en dépend : une prise reconnue, ou un switch que l'index ne connaît pas encore (le
+ * chargement, que l'état aura bientôt tranché) ; un switch ordinaire ne s'abonne à rien. `actif` faux : ni garde ni
+ * abonnement — la compacte d'une prise a déjà la sienne (`useVuePrise`). Rend `{ prise, garde }`.
+ */
+function useGardeSwitch(S, id, actif = true) {
+  const sw = actif && String(id).indexOf('switch.') === 0 && !cvEstLumiere(id);
+  const prise = sw && priseDe(S, id).prise;
+  const lu = indexLu();
+  const lecture = useEtatPrises(sw && (prise || !lu));
+  return { prise, garde: sw && gardeDeSwitch(lecture, id, { reconnue: prise, indexLu: lu }) };
+}
+/** Les filtres d'Objets d'une ENTITÉ, tels que « Ajouter une carte » les range (relecture finale, A5) :
+ *  comme Objets, avec la règle des prises — sans elle, le NAS, le PC et le lave-vaisselle passaient
+ *  sous IoT, et la puce « Prises » disparaissait du composeur. */
+function filtresEntite(S, id) {
+  const dom = String(id).slice(0, String(id).indexOf('.'));
+  const classe = ((S[id] && S[id].attributes) || {}).device_class || '';
+  return filtresObjet({ domaine: dom, estLumiere: cvEstLumiere(id), estPrise: dom === 'switch' && !cvEstLumiere(id) && priseDe(S, id).prise, classe });
+}
+/** Un switch qui n'a de carte ni dans Objets ni dans une pièce : le pont de Zigbee2MQTT ('pont' :
+ *  Paramètres › Interrupteurs), une sirène ('sirene' : Sécurité) — sinon `null`. */
+function ecartDe(S, id) {
+  if (String(id).indexOf('switch.') !== 0) return null;
+  if (estPontZigbee(appareilDe(id))) return 'pont';
+  return estSirene(id, (S || {})[id]) ? 'sirene' : null;
+}
+/** Les switch écartés de la maison, ceux que montrerait Objets : `[{ id, nom, ou }]`, le pont d'abord. */
+function switchsEcartes(S) {
+  const meta = (id) => (LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && LOGGIA_INDEX.entityMeta.get(id)) || {};
+  return Object.keys(S || {}).filter(id => id.indexOf('switch.') === 0 && !meta(id).hidden && !meta(id).disabled && !meta(id).category)
+    .map(id => ({ id, nom: cvName(S[id], id), ou: ecartDe(S, id) })).filter(e => e.ou)
+    .sort((a, b) => (a.ou === b.ou ? comparerTextes(a.nom, b.nom) : a.ou === 'pont' ? -1 : 1));
+}
+/** « Plus ici : Zigbee2MQTT Bridge Permit join (Paramètres › Interrupteurs) et Alarme sirène Siren on (Sécurité). » */
+function noteEcartes(ecartes) {
+  const morceaux = ecartes.map(e => tr(e.ou === 'pont' ? '{nom} (Paramètres › Interrupteurs)' : '{nom} (Sécurité)', { nom: e.nom }));
+  let liste = morceaux.join(', ');
+  try { liste = new Intl.ListFormat(locale(), { type: 'conjunction' }).format(morceaux); } catch { /* Safari 14.0 : la virgule */ }
+  return tr('Plus ici : {liste}.', { liste });
+}
 
 
 /* Cartes de la vue Pièce — style Loggia, format de la maquette : tuiles de même hauteur,
@@ -1819,6 +1850,13 @@ const RM_ICO = (bg, col) => ({ ...ICONE_CARTE, background: bg, color: col });
 const RM_BTN = { position: 'relative', flex: 1, padding: '9px 6px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12, cursor: 'pointer' };
 const RM_NAME = NOM_CARTE;
 const RM_SUB = SOUS_CARTE;
+/* La rangée du milieu d'une carte qui porte un chiffre — la température d'un
+ * radiateur, le pourcentage d'une lumière ou d'un volet : le nom et la phrase à
+ * gauche, le chiffre à droite, aligné sur leur bas. Le chiffre se place à la
+ * première rangée, deuxième colonne. Sur une carte étroite, la grille commune
+ * (`o-gabarit`, index.css ; passe téléphone) tait ce chiffre — elle l'écrit en
+ * haut — et la colonne du nom et de la phrase prend toute la largeur. */
+const RM_MILIEU = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'end', marginTop: 'var(--o-milieu-haut, 14px)' };
 
 /* LA TOUCHE D'UN BOUTON N'EST PAS CELLE DE SA CARTE (audit du 03/10).
  *
@@ -1842,70 +1880,214 @@ const RM_SUB = SOUS_CARTE;
  * glissiere fine dont le remplissage EST la valeur, un curseur court juste
  * apres, un point au bout du rail. Une seule ecriture, donc. */
 const RM_ROSE = 'var(--o-rose)';
-function RmBascule({ on, nom, onToggle, couleur = RM_ROSE }) {
+/* `inerte` : la bascule reste dessinée, s'efface et ne répond plus — celle
+ * d'une prise muette (chantier Prises, § 3.1). Elle garde son arrêt de
+ * propagation : un appui sur elle n'ouvre pas la fiche non plus. `className` :
+ * l'écriture où elle vit, quand une carte n'en montre qu'une (`o-seul-large`,
+ * passe téléphone). */
+function RmBascule({ on, nom, onToggle, couleur = RM_ROSE, inerte = false, className = undefined }) {
   return (
-    <span role="switch" aria-checked={!!on} tabIndex={0} aria-label={(on ? tr('Éteindre') : tr('Allumer')) + ' ' + nom}
-      onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(e); } }}
-      onClick={(e) => { e.stopPropagation(); onToggle(e); }}
-      style={{ width: 46, height: 26, borderRadius: 14, background: on ? couleur : 'rgba(150,162,184,.2)', position: 'relative', cursor: 'pointer', flexShrink: 0, display: 'inline-block', transition: 'background .25s' }}>
+    <span className={className} role="switch" aria-checked={!!on} aria-disabled={inerte || undefined} tabIndex={0} aria-label={(on ? tr('Éteindre') : tr('Allumer')) + ' ' + nom}
+      onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!inerte) onToggle(e); } }}
+      onClick={(e) => { e.stopPropagation(); if (!inerte) onToggle(e); }}
+      style={{ width: 46, height: 26, borderRadius: 14, background: on ? couleur : 'rgba(150,162,184,.2)', position: 'relative', cursor: inerte ? 'default' : 'pointer', opacity: inerte ? .4 : 1, flexShrink: 0, display: 'inline-block', transition: 'background .25s' }}>
       <span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 5px rgba(0,0,0,.35)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} />
     </span>
+  );
+}
+
+/* ── Les pièces de la carte étroite (passe téléphone, ADR 0202 ; index.css, « une grille commune ») ── */
+
+/* La largeur du chiffre du haut, en em de sa taille, mesurée dans la démo (Manrope, 15/10) : un chiffre
+ * tabulaire en 800 fait 0,6 em, la virgule et le point 0,3, le tiret 0,76 ; l'unité, écrite à 0,545 em,
+ * « % » 0,9, « W » 0,98, « k » 0,54 — toute autre lettre compte pour la plus large ; le « ° », à 0,6 em,
+ * 0,45. La feuille en tire la taille qui tient entre la plaque et le bord (`--o-em`).
+ * Les chiffres d'une MESURE (chantier Capteurs, tâche 4 bis ; mesurés le 16/10, arrondis au-dessus) : l'espace
+ * fine des milliers 0,17 (« 1 659 »), l'espace insécable 0,2 ; les lettres de leurs unités — « ppm », « lx »,
+ * « dB », « °C », « µg/m³ », « km/h » —, de 0,3 (« l ») à 0,92 (« m »). */
+const EM_CHIFFRE = { ',': .3, '.': .3, '−': .52, '-': .4, '—': .76, '\u202f': .17, '\u00a0': .2, ' ': .2 };
+const EM_UNITE = { '%': .9, W: .98, k: .54, p: .63, m: .92, l: .3, x: .57, d: .63, B: .64, C: .75, F: .53, '°': .46, 'µ': .64, g: .63, '/': .44, '³': .41, h: .63 };
+function emChiffre(v, u = null, degre = false) {
+  const chiffres = [...String(v)].reduce((s, c) => s + (/\d/.test(c) ? .6 : EM_CHIFFRE[c] || .98), 0);
+  const unite = degre ? .6 * .45 : [...String(u || '')].reduce((s, c) => s + (EM_UNITE[c] || .98), 0) * .545;
+  return Math.round((chiffres + unite) * 1000) / 1000;
+}
+/* Le CHIFFRE du haut d'une carte étroite (T6) : celui de la carte d'un capteur (`RoomGenericCard`) — 22 px /
+ * 800, l'unité en 12 px / 700 au gris doux, 4 px sous le haut de la plaque ; le « ° » d'une température en
+ * haut, à 60 % (`TemperaturePiece`). Sa taille vit dans la feuille (`o-gab-chiffre`) : une valeur longue
+ * rétrécit jusqu'à 16 px, jamais coupée. Il ne paraît que sur la carte étroite ; la carte large garde le sien,
+ * en bas. Caché au lecteur d'écran quand la surface le dit déjà (`lu` faux) ; lu tel quel pour la
+ * température d'un chauffage, comme celle de la carte large. */
+function ChiffreHaut({ v, u = null, degre = false, couleur = 'var(--o-text)', lu = false, haut = 4 }) {
+  // `haut` : sa marge sous le haut de la plaque — 4 px, sauf quand un nom vit dessous (`ChiffreNommeHaut`, passe bis IoT du 18/10, point 16).
+  return (
+    <span aria-hidden={lu ? undefined : 'true'} className="o-gab-chiffre o-seul-etroit"
+      style={{ display: 'flex', alignItems: degre ? 'flex-start' : 'baseline', gap: u ? 3 : 0, marginTop: haut, fontWeight: 800, lineHeight: 1, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: couleur, '--o-em': emChiffre(v, u, degre) }}>
+      <span style={{ letterSpacing: '-.02em' }}>{v}</span>
+      {degre ? <span style={{ fontSize: '.6em', marginTop: '.08em' }}>°</span> : u ? <span style={{ fontSize: '.545em', fontWeight: 700, color: 'var(--o-text2)' }}>{u}</span> : null}
+    </span>
+  );
+}
+/* La PLAQUE d'une lumière est son interrupteur, sur la carte étroite seulement (T1, T12) : un vrai bouton
+ * (`role="switch"`, `aria-checked`), nommé comme la bascule — « Allumer Plafonnier Bureau » —, qui n'ouvre pas la
+ * fiche (`stopPropagation`) et passe au-dessus de la surface (positionné). Le bouton natif répond à Entrée et à
+ * Espace : pas de `onKeyDown`. Muette, elle reste dessinée et ne répond plus : `aria-disabled`, et non `disabled`,
+ * qui ferait tomber le focus. Au toucher elle se laisse traverser (`pointerEvents: 'none'`) : le toucher descend à la
+ * surface de la carte, qui ouvre la fiche — comme avant que la plaque ne soit un bouton (correction bis, point 3) ; au
+ * clavier, Entrée et Espace ne commandent rien. Sa zone de toucher fait 44 × 44 (`o-gab-plaque`, index.css), sans
+ * l'allongement de ± 12 px des interrupteurs au téléphone : avec 10 px d'air sous la plaque, il mordrait sur le nom.
+ * Elle ne contient que son glyphe. */
+function PlaqueBascule({ on, nom, fond, encre, inerte = false, onToggle, children }) {
+  return (
+    <button type="button" role="switch" aria-checked={!!on} aria-disabled={inerte || undefined} aria-label={(on ? tr('Éteindre') : tr('Allumer')) + ' ' + nom}
+      className="o-gab-plaque o-seul-etroit" onClick={(e) => { e.stopPropagation(); if (!inerte) onToggle(e); }}
+      style={{ ...RM_ICO(fond, encre), position: 'relative', border: 'none', padding: 0, cursor: inerte ? 'default' : 'pointer', pointerEvents: inerte ? 'none' : undefined }}>{children}</button>
   );
 }
 
 /* La place du curseur et du point, hors remplissage : a 100 % le remplissage
  * s'arrete avant eux, comme sur la maquette. */
 const RM_JAUGE_RESERVE = 26;
-function RmJauge({ v, couleur, grade = null, actif = true, label = '', onCommit, marge = 8 }) {
-  const val = Math.max(0, Math.min(100, Math.round(v || 0)));
+/* Une LUMIÈRE (chantier Lumières, L7) y passe quatre réglages de plus ; sans
+ * eux, la jauge d'un volet ou d'un volume ne change pas :
+ *  - `min` : la jauge va de `min` à 100 — 1 pour une lampe, qui ne s'éteint
+ *    plus par sa jauge mais par sa bascule ;
+ *  - `eteinte` (vrai ou faux pour une lampe ; null ailleurs) : éteinte, pas de
+ *    remplissage, et le repère en gris au dernier niveau (`v`) — sans niveau
+ *    connu, pas de repère ; glisser l'allume à ce niveau. Le point de la fin ne
+ *    paraît que sous 95 %, comme sur sa maquette ;
+ *  - `zone` : la hauteur où le doigt prend la jauge, la piste au milieu — 44 px
+ *    sur une carte, 52 dans la fiche ;
+ *  - `piste` : son épaisseur, 24 px — 32 dans la fiche ; le repère et le point
+ *    grandissent avec elle.
+ * Le MODE ENFANT (chantier Mode enfant, E7, E15 ; § 6.1) y passe deux réglages de plus :
+ *  - `plafond` : la borne haute (null : aucune). Sous 100, la zone du plafond à la fin de la piste est HACHURÉE (le motif de sa
+ *    maquette, dans les jetons du thème), un trait de 2 px marque le plafond, et un cadenas se pose au milieu de la zone quand elle
+ *    est assez large (le plafond à 80 % ou moins) ; `aria-valuemax` vaut le plafond ; ni le doigt ni le clavier ne le dépassent.
+ *    La VALEUR, elle, se dessine telle qu'elle est lue — au-delà du plafond s'il le faut : la maison ramène, la carte ne ment pas ;
+ *  - `pas` : le pas du geste (1 par défaut ; 5 dans la feuille des réglages, le volume maximum de 10 à 100 par 5).
+ * Et le CHIFFRE qui l'accompagne (passe bis 2 du chantier Mode enfant, 17/10 : « quand je règle le volume, le pourcentage ne suit pas
+ * comme sur la maquette ») suit le doigt :
+ *  - `onGlisse` (null : rien) : appelée avec la valeur sous le doigt — bornée, au pas, jamais au-delà du plafond — chaque fois qu'elle
+ *    CHANGE pendant le geste, puis avec `null` quand le doigt s'en va : relâché, APRÈS `onCommit` (le geste d'abord est déjà posé, le
+ *    chiffre ne repasse jamais par l'ancienne valeur), ou annulé. Elle ne commande rien : l'ordre part une fois, par `onCommit`, au
+ *    relâcher. L'appelant garde la valeur dans un état et dessine son chiffre dessus ; la barre, elle, reste peinte à la main. */
+function RmJauge({ v, couleur, grade = null, actif = true, label = '', onCommit, onGlisse = null, rafale = false, marge = 8, etat = null, min = 0, eteinte = null, zone = 0, piste = 24, plafond = null, pas = 1 }) {
+  const val = v == null && eteinte != null ? null : Math.max(min, Math.min(100, Math.round(v || 0)));
+  // La borne du geste : le plafond s'il y en a un, 100 sinon ; au pas demandé.
+  const haut = plafond == null ? 100 : Math.max(min, Math.min(100, Math.round(plafond)));
+  const borner = (x) => Math.max(min, Math.min(haut, Math.round(x / pas) * pas));
   const largeur = (x) => `calc((100% - ${RM_JAUGE_RESERVE}px) * ${x / 100})`;
   const gauche = (x) => `calc((100% - ${RM_JAUGE_RESERVE}px) * ${x / 100} + 6px)`;
+  const grand = piste > 24;
+  /* Le geste en cours (passe bis 3 du 17/10, point 1) : de quoi l'ARRÊTER, sans ordre. Une barre qui s'en va sous le doigt (une Echo
+   * devenue indisponible : la carte retire son pied) ne reçoit jamais le relâcher — il tombe sur un élément détaché —, et `onGlisse(null)`
+   * ne partait pas : la carte gardait « Volume 80 % » d'une Echo revenue à 35 %, et « Muet » ne pouvait plus reparaître. Démontée, la
+   * barre lâche le doigt ; devenue inerte (une lampe qui tombe en panne), aussi, et elle reprend le dessin de MAINTENANT — le relâcher
+   * qui suivra ne commande rien. */
+  const enCours = useRef(null);
+  useEffect(() => () => { if (enCours.current) enCours.current(null); }, []);
+  useEffect(() => { if (!actif && enCours.current) enCours.current({ val, eteinte }); });
   // Peinture DOM directe pendant le geste, commit au relacher — le rendu React
   // ne suit pas un doigt a 60 images par seconde.
   const glisse = (e) => {
     if (!actif) return;
     e.stopPropagation(); e.preventDefault();
     const el = e.currentTarget, fill = el.querySelector('[data-fill]'), kn = el.querySelector('[data-knob]'), r = el.getBoundingClientRect();
-    const calc = (x) => Math.max(0, Math.min(100, Math.round((x - r.left) / Math.max(1, r.width - RM_JAUGE_RESERVE) * 100)));
-    let n = calc(e.clientX);
-    const paint = () => { if (fill) { fill.style.transition = 'none'; fill.style.width = largeur(n); } if (kn) { kn.style.transition = 'none'; kn.style.left = gauche(n); } };
+    const calc = (x) => borner((x - r.left) / Math.max(1, r.width - RM_JAUGE_RESERVE) * 100);
+    let n = calc(e.clientX), dit;
+    // Le chiffre de l'appelant suit le doigt (`onGlisse`) : une fois par valeur (`dit`), et `n` est déjà borné au plafond.
+    const paint = () => { if (fill) { fill.style.transition = 'none'; fill.style.width = largeur(n); } if (kn) { kn.style.transition = 'none'; kn.style.left = gauche(n); kn.style.opacity = '1'; } if (onGlisse && n !== dit) { dit = n; onGlisse(n); } };
     paint(); el.classList.add('o-sliding'); try { el.setPointerCapture(e.pointerId); } catch {}
     el.onpointermove = (ev) => { n = calc(ev.clientX); paint(); };
-    const end = () => { el.classList.remove('o-sliding'); el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; if (kn) kn.style.transition = ''; };
-    el.onpointerup = () => { end(); onCommit(n); };
-    el.onpointercancel = () => { end(); if (fill) fill.style.width = largeur(val); if (kn) kn.style.left = gauche(val); };
+    const end = () => { enCours.current = null; el.classList.remove('o-sliding'); el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; if (kn) kn.style.transition = ''; };
+    // Relâché : l'ordre d'abord, puis le doigt s'en va (`onGlisse(null)`) — le chiffre garde la valeur posée, sans repasser par l'ancienne.
+    el.onpointerup = () => { end(); try { onCommit(n); } finally { if (onGlisse) onGlisse(null); } };
+    // Arrêté sans ordre (`pointercancel`, la barre démontée ou inerte) : le dessin `vu` revient (null : démontée, plus rien à peindre), le doigt s'en va.
+    const arreter = (vu) => {
+      end();
+      if (vu && fill) fill.style.width = vu.eteinte || vu.val == null ? '0px' : largeur(vu.val);
+      if (vu && kn) { kn.style.left = gauche(vu.val == null ? min : vu.val); kn.style.opacity = vu.val == null ? '0' : '1'; }
+      if (onGlisse) onGlisse(null);
+    };
+    el.onpointercancel = () => arreter({ val, eteinte });
+    enCours.current = arreter;
   };
-  const kb = actif ? kbSlider(label, val, onCommit) : {};
-  return (
-    /* Inactive, la jauge n'est qu'un dessin : la regle voit alors un clic
-     * sans clavier, mais ce clic ne sert qu'a ne pas ouvrir la fiche. */
-    /* Active, le clavier arrive par `{...kb}` (rôle slider, flèches) : la règle
-     * ne sait pas lire ce qu'un étalement apporte. */
+  /* Éteinte, la barre le dit au lecteur d'écran : « Éteinte · 80 % » (le dernier niveau connu), « Éteinte » sans lui — ni « 80 % »
+   * seul, qui l'annoncerait allumée, ni un curseur sans valeur (ARIA 1.2 : `aria-valuenow`, le minimum faute de mieux). `etat` : ce
+   * que l'appelant veut dire avec la valeur — « Muet » pour un volume coupé (la carte l'écrit, la barre le dit aussi). */
+  /* `rafale` (les lumières, audit du 19/10, B11) : une flèche tenue ne commande plus à chaque répétition — la barre et le
+   * chiffre (`onGlisse`) suivent la touche, et UN ordre part au relâcher (`kbSlider`, `differe`), le doigt s'en va après. */
+  const peindre = (el, n) => {
+    const fill = el && el.querySelector ? el.querySelector('[data-fill]') : null, kn = el && el.querySelector ? el.querySelector('[data-knob]') : null;
+    if (fill) fill.style.width = eteinte && n == null ? '0px' : largeur(n);
+    if (kn) { kn.style.left = gauche(n); kn.style.opacity = '1'; }
+  };
+  const clavier = rafale ? { differe: true, apercu: (n, el) => { peindre(el, n); if (onGlisse) onGlisse(n); } } : {};
+  const commettre = rafale ? (n) => { try { onCommit(n); } finally { if (onGlisse) onGlisse(null); } } : onCommit;
+  const kb = actif ? kbSlider(label, val, commettre, { min, max: haut, ...(pas !== 1 ? { step: pas } : {}), etat: etat || (eteinte ? tr('Éteinte') : null), ...clavier }) : {};
+  const dessin = (
+    <>
+      <span data-fill style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: eteinte || val == null ? 0 : largeur(val), borderRadius: piste / 2, background: grade || couleur, transition: 'width .3s' }} />
+      <span data-knob style={{ position: 'absolute', top: grand ? 7 : 5, bottom: grand ? 7 : 5, width: grand ? 4 : 3, borderRadius: 2, background: eteinte ? 'var(--o-text3)' : couleur, left: gauche(val == null ? min : val), opacity: val == null ? 0 : undefined, transition: 'left .3s' }} />
+      {(eteinte == null || val == null || val < 95) && <span aria-hidden="true" style={{ position: 'absolute', right: 6, top: (piste - (grand ? 5 : 4)) / 2, width: grand ? 5 : 4, height: grand ? 5 : 4, borderRadius: '50%', background: 'var(--o-text3)', opacity: .6 }} />}
+      {/* Le plafond du mode enfant (§ 6.1) : la zone hachurée jusqu'à la fin (le motif vit dans la feuille, `o-jauge-plafond` — passe bis du
+        * 17/10, point 14 : la place du boot), son cadenas quand elle est assez large, le trait de 2 px. */}
+      {haut < 100 && (<>
+        <span aria-hidden="true" data-plafond className="o-jauge-plafond" style={{ position: 'absolute', top: 0, bottom: 0, left: gauche(haut), right: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {haut <= 80 && <Fi i="lock" size={10} color="var(--o-text2)" />}
+        </span>
+        <span aria-hidden="true" data-trait style={{ position: 'absolute', top: 0, bottom: 0, width: 2, left: gauche(haut), background: 'var(--o-text3)' }} />
+      </>)}
+    </>
+  );
+  /* 24 px de haut, comme la glissiere d'avant la refonte (retour user du
+   * 14/09 : « elargis un petit peu la barre ») — le dessin, lui, reste. */
+  const pisteStyle = { position: 'relative', display: 'block', height: piste, borderRadius: piste / 2, background: 'var(--o-s1)', overflow: 'hidden', opacity: actif ? 1 : .4 };
+  /* `pan-y`, jamais `none` (revue du 14/10, R1) : avec `none`, le doigt posé sur la barre pour FAIRE DÉFILER la page ne la
+   * faisait pas défiler, et au relâcher l'ordre partait — une lampe éteinte s'allumait. Avec `pan-y`, un geste vertical est
+   * celui de la page : le navigateur l'annule (`pointercancel`, géré plus haut : le dessin d'avant revient, aucun ordre ne part)
+   * et seul un geste horizontal pilote la barre. Pour tous ses emplois : lumière, volet, volume. */
+  const geste = { cursor: actif ? 'ew-resize' : 'default', touchAction: 'pan-y', marginTop: marge };
+  /* Inactive, la jauge n'est qu'un dessin : la regle voit alors un clic
+   * sans clavier, mais ce clic ne sert qu'a ne pas ouvrir la fiche. */
+  /* Active, le clavier arrive par `{...kb}` (rôle slider, flèches) : la règle
+   * ne sait pas lire ce qu'un étalement apporte. */
+  if (!zone) {
     /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- voir les deux commentaires ci-dessus */
-    <span {...kb} onClick={(e) => e.stopPropagation()} onPointerDown={glisse}
-      /* 24 px de haut, comme la glissiere d'avant la refonte (retour user du
-       * 14/09 : « elargis un petit peu la barre ») — le dessin, lui, reste. */
-      style={{ position: 'relative', display: 'block', height: 24, borderRadius: 12, marginTop: marge, background: 'var(--o-s1)', overflow: 'hidden', opacity: actif ? 1 : .4, cursor: actif ? 'ew-resize' : 'default', touchAction: 'none' }}>
-      <span data-fill style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: largeur(val), borderRadius: 12, background: grade || couleur, transition: 'width .3s' }} />
-      <span data-knob style={{ position: 'absolute', top: 5, bottom: 5, width: 3, borderRadius: 2, background: couleur, left: gauche(val), transition: 'left .3s' }} />
-      <span aria-hidden="true" style={{ position: 'absolute', right: 6, top: 10, width: 4, height: 4, borderRadius: '50%', background: 'var(--o-text3)', opacity: .6 }} />
+    return <span {...kb} onClick={(e) => e.stopPropagation()} onPointerDown={glisse} style={{ ...pisteStyle, ...geste }}>{dessin}</span>;
+  }
+  return (
+    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- voir les deux commentaires ci-dessus */
+    <span {...kb} onClick={(e) => e.stopPropagation()} onPointerDown={glisse} style={{ position: 'relative', display: 'flex', alignItems: 'center', height: zone, ...geste }}>
+      <span style={{ ...pisteStyle, flex: 1 }}>{dessin}</span>
     </span>
   );
 }
 
 /* Ce qu'un capteur binaire dit, selon sa `device_class` — en mots, pas en
  * « on / off ». Le troisieme champ : ce qui est un DANGER quand c'est vrai.
+ * Jamais « Tout va bien » (chantier Capteurs, C26 ; sa règle du 18/09) :
+ * `safety` éteint dit « Normal », `problem` éteint « Aucun problème ».
  * Un capteur de froid dit ce qu'on RESSENT (`trSens`, audit du 03/10) : la
- * clé nue « Froid » est le mode d'une climatisation, « Kühlen » en allemand. */
+ * clé nue « Froid » est le mode d'une climatisation, « Kühlen » en allemand.
+ * Un danger dit le mot de l'Accueil : LA table de sûreté (`motsSurete`, attention.js ; audit du 19/10, lot 4) — « Monoxyde détecté »
+ * partout à l'écran, plus « CO détecté » ici et « Monoxyde détecté » là ; « Boîtier ouvert » pour un sabotage. */
+const DANGER = (c) => tr(motsSurete(c)[1]);
 const BIN_ETATS = () => ({
-  smoke: [tr('Fumée détectée'), tr('Aucune fumée'), true], gas: [tr('Gaz détecté'), tr('Pas de gaz'), true],
-  carbon_monoxide: [tr('Monoxyde détecté'), tr('Pas de monoxyde'), true], moisture: [tr('Fuite détectée'), tr('Aucune fuite'), true],
-  safety: [tr('Danger'), tr('Tout va bien'), true], problem: [tr('Problème'), tr('Tout va bien'), true],
-  motion: [tr('Mouvement'), tr('Aucun mouvement'), false], occupancy: [tr('Occupé'), tr('Libre'), false], presence: [tr('Présent'), tr('Absent'), false],
+  smoke: [DANGER('smoke'), tr('Aucune fumée'), true], gas: [DANGER('gas'), tr('Pas de gaz'), true],
+  carbon_monoxide: [DANGER('carbon_monoxide'), tr('Pas de monoxyde'), true], moisture: [DANGER('moisture'), tr('Aucune fuite'), true],
+  safety: [tr('Danger'), tr('Normal'), true], problem: [tr('Problème'), tr('Aucun problème'), true],
+  motion: [tr('Mouvement'), tr('Aucun mouvement'), false], occupancy: [tr('Occupé'), tr('Vide'), false], presence: [tr('Présent'), tr('Absent'), false],
   door: [tr('Ouverte'), tr('Fermée'), false], window: [tr('Ouverte'), tr('Fermée'), false], garage_door: [tr('Ouverte'), tr('Fermée'), false], opening: [tr('Ouvert'), tr('Fermé'), false],
   lock: [tr('Déverrouillé'), tr('Verrouillé'), false], connectivity: [tr('Connecté'), tr('Déconnecté'), false], battery: [tr('Pile faible'), tr('Pile en forme'), true],
   plug: [tr('Branché'), tr('Débranché'), false], power: [tr('Sous tension'), tr('Hors tension'), false], vibration: [tr('Vibration'), tr('Calme'), false], sound: [tr('Bruit'), tr('Silence'), false],
-  light: [tr('Lumière'), tr('Sombre'), false], cold: [trSens('Froid · ressenti'), tr('Normal'), false], heat: [tr('Chaud'), tr('Normal'), true], tamper: [tr('Sabotage'), tr('Intact'), true],
+  light: [tr('Lumière'), tr('Sombre'), false], cold: [trSens('Froid · ressenti'), tr('Normal'), false], heat: [tr('Chaud'), tr('Normal'), true], tamper: [DANGER('tamper'), tr('Intact'), true],
+});
+/* La famille d'un capteur binaire, sous le nom de sa fiche : « Séjour · Porte » (chantier Capteurs, C26, § 5.2). */
+const FAMILLES_BINAIRES = () => ({
+  door: tr('Porte'), window: tr('Fenêtre'), garage_door: tr('Porte de garage'), opening: tr('Ouverture'), smoke: tr('Fumée'), carbon_monoxide: tr('Monoxyde de carbone'),
+  gas: tr('Gaz'), moisture: tr("Fuite d'eau"), safety: tr('Sécurité'), motion: tr('Mouvement'), occupancy: tr('Présence'), presence: tr('Présence'), tamper: tr('Sabotage'), vibration: tr('Vibration'),
 });
 
 /* L'illustration d'un ouvrant, en filigrane de sa carte — posee comme celle
@@ -1914,8 +2096,11 @@ const BIN_ETATS = () => ({
  * ou ferme ») : une fenetre a deux battants ou une porte, grise fermee,
  * ambre entrouverte avec le battant qui pivote. Trait fin, un voile leger sur
  * le battant, rien d'opaque ; le dessin ne prend pas le tap. */
-function IlluOuvrant({ type, ouvert }) {
-  const style = { position: 'absolute', right: 8, bottom: 8, height: 100, width: 'auto', color: ouvert ? 'var(--o-warn)' : 'var(--o-text3)', opacity: ouvert ? .6 : .28, pointerEvents: 'none' };
+function IlluOuvrant({ type, ouvert, taille = 0 }) {
+  /* `taille` : le petit dessin de la plaque d'une rangée de la popup Ouvertures (chantier Capteurs, § 4.2) — 28 px de haut, à pleine
+   * opacité, dans la plaque et non plus en filigrane. */
+  const style = taille ? { display: 'block', height: taille, width: 'auto', color: ouvert ? 'var(--o-warn)' : 'var(--o-text3)' }
+    : { position: 'absolute', right: 8, bottom: 8, height: 100, width: 'auto', color: ouvert ? 'var(--o-warn)' : 'var(--o-text3)', opacity: ouvert ? .6 : .28, pointerEvents: 'none' };
   const trait = { fill: 'none', stroke: 'currentColor', strokeWidth: 2.2, strokeLinejoin: 'round', strokeLinecap: 'round' };
   if (type === 'fenetre') {
     return (
@@ -1940,11 +2125,13 @@ function IlluOuvrant({ type, ouvert }) {
 
 /* Le repere pile d'un capteur, en haut a droite (retour user du 15/09 :
  * « c'est quoi ce petit carre partout ? pour les capteurs remplace-le par la
- * batterie ») : l'icone au niveau et le pourcentage, rouge sous 20 %, ambre
- * sous 50 %. Sans capteur de pile, rien du tout — plus de carre. */
+ * batterie ») : l'icone au niveau et le pourcentage, à la règle de la maison
+ * (chantier Capteurs, C32 : `couleurPile` — l'ambre au seuil de la veille des
+ * piles, le rouge au critique ; une pile à 45 % reste discrète). Sans capteur
+ * de pile, rien du tout — plus de carre. */
 function PileRepere({ n, onOuvrir = null }) {
-  const ico = n < 12 ? 'battery-empty' : n < 37 ? 'battery-quarter' : n < 62 ? 'battery-half' : n < 87 ? 'battery-three-quarters' : 'battery-full';
-  const col = n < 20 ? 'var(--o-bad)' : n < 50 ? 'var(--o-warn)' : 'var(--o-text3)';
+  const ico = glyphePile(n);
+  const col = couleurPile(n, 'var(--o-text3)');
   return (
     /* Positionné, il passe AU-DESSUS de la surface de la carte (relecture du
      * lot 13, 04/10) : dessous, c'est elle qui prenait le survol, et la bulle
@@ -1959,44 +2146,8 @@ function PileRepere({ n, onOuvrir = null }) {
   );
 }
 
-/* Les noms des mesures d'un capteur, par classe Home Assistant : ce que dit
- * le sous-titre quand aucune regle ne donne de verdict. */
-const MESURES_NOMS = () => ({ temperature: tr('Température'), humidity: tr('Humidité'), carbon_dioxide: tr('CO₂'), pm25: tr('Particules fines'), pm10: tr('Particules'), aqi: tr('Qualité d’air'), power: tr('Puissance'), energy: tr('Énergie'), voltage: tr('Tension'), current: tr('Courant'), illuminance: tr('Luminosité'), pressure: tr('Pression'), atmospheric_pressure: tr('Pression'), battery: tr('Pile'), sound_pressure: tr('Bruit'), signal_strength: tr('Signal'), volatile_organic_compounds: tr('COV'), moisture: tr('Humidité du sol'), wind_speed: tr('Vent'), precipitation: tr('Précipitations'), gas: tr('Gaz'), water: tr('Eau') });
-/* La teinte de carte d'un palier de la table de confort : lavis et icone. */
-const TEINTE_PALIER = { 'var(--o-cold)': 'froid', 'var(--o-ok)': 'ok', 'var(--o-warn)': 'or', 'var(--o-warn2)': 'orange', 'var(--o-bad)': 'bad' };
-
-/* La JAUGE d'une mesure, sous le texte de la carte STANDARD (retour user du
- * 19/09, captures Netatmo a l'appui : « pour le co2 ajouter une jauge en
- * dessous », puis « un trait pas un rond ») : les paliers de la table de
- * confort bout a bout, un TRAIT a la valeur, les reperes des captures
- * dessous. Une barre de 8 px (« epaissis legerement la graduation »). La
- * compacte n'en a pas : « laisse comme sur la 2e photo ». La valeur et son mot
- * sont deja ecrits sur la carte : la jauge ne se lit pas a voix haute. */
-function JaugeMesure({ jauge }) {
-  const h = 8, haut = 18;
-  const der = jauge.bandes.length - 1;
-  return (
-    <div className="o-jauge" aria-hidden="true" style={{ marginTop: 12 }}>
-      <div style={{ position: 'relative', height: haut }}>
-        {jauge.bandes.map((b, i) => (
-          <span key={i} style={{ position: 'absolute', top: (haut - h) / 2, height: h, left: b.de + '%', width: 'calc(' + (b.a - b.de) + '%' + (i < der ? ' - 2px' : '') + ')', background: b.c, opacity: .9, borderRadius: i === 0 ? '4px 0 0 4px' : i === der ? '0 4px 4px 0' : 0 }} />
-        ))}
-        <span className="o-jauge-trait" style={{ position: 'absolute', top: 0, left: 'calc(' + jauge.pos + '% - 1.5px)', width: 3, height: haut, borderRadius: 2, background: 'var(--o-text)', boxShadow: '0 0 0 2px var(--o-surfB)' }} />
-      </div>
-      <div style={{ position: 'relative', height: 13, marginTop: 4, fontSize: 10, fontWeight: 700, lineHeight: 1, color: 'var(--o-text2)', fontVariantNumeric: 'tabular-nums' }}>
-        {jauge.reperes.map(r => {
-          /* `t` : le chiffre dans l'unite du capteur (°F aux Etats-Unis) ; `v`
-           * reste la cle, dans le repere de la table (audit du 03/10). */
-          const demi = String(r.t).length * 3;
-          return <span key={r.v} style={{ position: 'absolute', left: 'clamp(' + demi + 'px, ' + r.pos + '%, calc(100% - ' + demi + 'px))', transform: 'translateX(-50%)', whiteSpace: 'nowrap' }}>{r.t}</span>;
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* La PILE en cinq barres, comme la capture du 19/09 : une barre par 20 %, la
- * couleur au nombre de barres (confort.js, `barresPile`). */
+/* La PILE en cinq barres, comme la capture du 19/09 : une barre par 20 % — au plus proche, jamais moins d'une —, dans LA couleur
+ * d'une pile (`couleurPile`, ADR 0206 ; audit du 19/10) : ambre au seuil de la veille, rouge au critique, vert sinon. */
 function JaugePile({ barres }) {
   return (
     <div className="o-jauge-pile" aria-hidden="true" style={{ marginTop: 12, marginRight: 5, position: 'relative', height: 20, display: 'flex', gap: 2, padding: 2, boxSizing: 'border-box', border: '1.5px solid var(--o-text3)', borderRadius: 6 }}>
@@ -2021,9 +2172,10 @@ const ROOM_GENERIQUES = ['switch', 'input_boolean', 'fan', 'humidifier', 'siren'
  * reste » (27/09). Une carte passe donc par ici, et son dessin d'origine n'est
  * plus qu'un défaut.
  */
-const GlypheCarte = ({ id, size = 19, anime = false, children }) => {
+const GlypheCarte = ({ id, size = 19, anime = false, selon = null, children }) => {
   const mien = iconeChoisie(id);
-  return mien ? <Ico name={mien} size={size} anime={anime} /> : children;
+  // `selon` : l'icône choisie suit l'état de l'appareil quand elle a des variantes (un volet roulant, 25/10).
+  return mien ? <Ico name={selon ? selon(mien) : mien} size={size} anime={anime} /> : children;
 };
 
 function RoomGenericCard({ id, hass, onOpen, label = null }) {
@@ -2041,46 +2193,25 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   const on = !mort && (dom === 'valve' ? s === 'open' : dom === 'lock' ? s === 'locked' : s === 'on');
   const [ov, setOv] = useOptimiste(s);
   const actif = ov != null ? ov : on;
+  // Avant l'index de la découverte, une PRISE s'affiche ici, en switch ordinaire : la règle commune des switch que l'index ne classe pas (F2).
+  const gs = useGardeSwitch(S, id, dom === 'switch');
   const basculer = () => {
+    /* Avant l'index de la découverte, une PRISE s'affiche ici, en switch ordinaire
+     * (relecture finale, A3, F2) : si l'état du serveur la nomme dans `protegees`,
+     * ou n'a pas encore répondu — le chargement —, et qu'elle est allumée, sa
+     * fiche demande ; la carte ne coupe pas d'un appui. Une erreur sans état ne
+     * garde rien : un serveur trop vieux ne gêne pas indéfiniment. */
+    if (dom === 'switch' && onOpen && appuiBascule({ on: actif, garde: gs.garde, ouvrable: true }) === 'fiche') { onOpen(id); return; }
     const nv = !actif; setOv(nv);
     if (dom === 'lock') call('lock', nv ? 'lock' : 'unlock');
     else if (dom === 'valve') call('valve', nv ? 'open_valve' : 'close_valve');
     else call('homeassistant', nv ? 'turn_on' : 'turn_off');
   };
-  // La puissance vit dans un capteur SŒUR (une prise mesurante), jamais dans
-  // l'attribut de la prise.
-  const puissance = (() => {
-    if (dom !== 'switch' && dom !== 'input_boolean') return null;
-    const sid = pickSibling(LOGGIA_INDEX, S, id, { domain: 'sensor', deviceClass: 'power' });
-    /* En WATTS, quelle que soit l'unité du capteur (audit du 03/10) : le seuil
-     * de veille de `modePrise` et `fmtW` ci-dessous comptent en watts. Une
-     * prise qui publie 1,25 kW se lisait « 1 W » — « En veille » sur un
-     * radiateur qui chauffe. */
-    return sid && S[sid] ? wattsDe(S[sid]) : null;
-  })();
-  /* L'unité se choisit APRÈS l'arrondi (05/10), comme `fmtWatts` : 999,6 W
-   * s'écrivait « 1000 W » à côté de 1000 W en « 1,0 kW ». Une décimale en kW,
-   * pas les deux de `fmtWatts` : le sous-titre d'une prise est court. */
-  const fmtW = (w) => Math.round(w) >= 1000 ? dec(Math.round(w / 100) / 10, 1) + ' kW' : Math.round(w) + ' W';
   const fmtN = (n) => decMax(Math.round(n * 10) / 10, 1);
-  /* LA PRISE DIT CE QU'ELLE ALIMENTE (26/09).
-   *
-   * Une prise commandée ne publie que `on`/`off` : toutes portaient le même
-   * dessin et le même mot. Le nom que l'utilisateur lui a donné dit pourtant ce
-   * qu'il y a au bout, et son capteur de puissance dit si l'appareil travaille
-   * ou dort. Voir `src/prises.js`.
-   *
-   * Ce bloc vient APRÈS `puissance` : il la lit, et une constante ne se lit pas
-   * avant sa ligne — l'écran entier tombait en « erreur de rendu » (mesuré dans
-   * la démonstration). */
-  const carteDePrise = dom === 'switch' && !mort && !cvEstLumiere(id);
-  const typePrise = carteDePrise ? typeDePrise(nom, null, id) : null;
-  const modeDePrise = carteDePrise ? modePrise(actif, puissance) : null;
-  const tp = carteDePrise ? TYPES_PRISE[typePrise] : null;
-  const priseVive = carteDePrise && modeDePrise === 'marche';
-  const anim = carteDePrise ? animationPrise(typePrise, modeDePrise) : null;
-  const etiquetteType = carteDePrise ? libelleType(typePrise, nom, NOMS_PRISE()) : null;
-  const ico = iconeChoisie(id) || (dom === 'camera' ? 'camera' : carteDePrise ? tp.ico : cvIcoEntite(dom, id, st, nom));
+  /* Une PRISE n'arrive plus ici : elle a sa carte (`RoomPriseCard`, chantier
+   * Prises), sa puissance, sa phrase et sa courbe. Un switch qui n'est pas une
+   * prise (P1) n'a pas de mesure à montrer. */
+  const ico = iconeChoisie(id) || (dom === 'camera' ? 'camera' : cvIcoEntite(dom, id, st, nom));
   const etatsBin = BIN_ETATS()[a.device_class] || null;
   const danger = dom === 'binary_sensor' && !!(etatsBin && etatsBin[2]) && s === 'on';
   // Un ouvrant (porte, fenetre, garage, portail) : la carte d'avant, plus son
@@ -2100,80 +2231,55 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   // de la tuile et de la pastille. `parseFloat` y lisait l'année, « 2 026 |
   // Passage facteur | Mesure ».
   const dateTxt = dom === 'sensor' && !mort ? texteDate(st) : null;
-  // Le capteur : sa mesure (en grand, en haut a droite) et, dessous, sa JAUGE
-  // quand la table de confort la connait (CO2, temperature, humidite, bruit)
-  // ou ses cinq barres quand c'est une pile (retour user du 19/09).
-  let mesure = null, avis = null, jauge = null, barres = null, subLu = null, ligneVerdict = null;
-  if (mort) sub = tr('Indisponible');
+  // Le capteur : sa mesure (en grand, en haut a droite) et, dessous, ses cinq
+  // barres quand c'est une pile (retour user du 19/09). Une mesure de la table
+  // a sa carte (`RoomMesureCard`, chantier Capteurs, C6).
+  let mesure = null, barres = null, subLu = null;
+  // Muet : « Indisponible » ; en rouge pour un capteur binaire (chantier Capteurs, C26), comme la carte d'une mesure.
+  if (mort) { sub = tr('Indisponible'); if (dom === 'binary_sensor') couleur = 'var(--o-bad)'; }
   else if (dom === 'lock') { sub = s === 'locked' ? tr('Verrouillée') : s === 'unlocked' ? tr('Déverrouillée') : s === 'locking' ? tr('Verrouillage…') : s === 'unlocking' ? tr('Déverrouillage…') : s === 'jammed' ? tr('Bloquée') : String(s); teinte = 'ok'; couleur = actif ? 'var(--o-ok)' : 'var(--o-warn2)'; }
   else if (dom === 'camera') { sub = direct ? tr('En direct') : String(s); couleur = 'var(--o-accent-soft)'; }
-  else if (dom === 'binary_sensor') { sub = etatsBin ? (s === 'on' ? etatsBin[0] : etatsBin[1]) : (s === 'on' ? tr('Détecté') : tr('RAS')); couleur = danger ? 'var(--o-bad)' : 'var(--o-warn)'; teinte = danger ? 'bad' : 'or'; }
+  /* Le calme en neutre (chantier Capteurs, C26) : fermé, sans fumée, sans mouvement, intact — le gris doux ; ouvert, l'ambre du
+   * dessin ; un mouvement, une présence, l'accent ; un danger qui sonne, le rouge, sa plaque et son lavis. */
+  else if (dom === 'binary_sensor') {
+    sub = etatsBin ? (s === 'on' ? etatsBin[0] : etatsBin[1]) : (s === 'on' ? tr('Détecté') : tr('RAS'));
+    couleur = danger ? 'var(--o-bad)' : s !== 'on' ? 'var(--o-text2)' : CLASSES_MOUVEMENT.indexOf(a.device_class) >= 0 ? 'var(--o-accent-soft)' : 'var(--o-warn)';
+    teinte = danger ? 'bad' : 'or';
+  }
   // Une date n'est pas une mesure : ni le coin chiffré (22 px n'ont pas la
   // place d'un « 15 janv. 2027, 14:00 »), ni jauge, ni « Mesure ». Elle se dit
   // sur la ligne d'état, où elle passe à la ligne au lieu de s'y couper (la
   // mise en page cède, pas les mots) ; le nom de la carte la lit en clair.
   else if (dateTxt != null) { sub = <span style={{ whiteSpace: 'normal' }}>{dateTxt}</span>; subLu = dateTxt; }
   else if (dom === 'sensor') {
-    // La mesure en grand en haut a droite (le gabarit) ; dessous, le verdict
-    // de la table de confort et sa jauge. Plus de puces soeurs (retour user du
-    // 19/09 : « revenir a la carte de base ») — la temperature et l'humidite
-    // d'une station vivent dans la barre de confort de la piece.
-    const n = parseFloat(s);
+    // La mesure en grand en haut a droite (le gabarit). Plus de puces soeurs
+    // (retour user du 19/09 : « revenir a la carte de base ») — la temperature et
+    // l'humidite d'une station vivent dans la barre de confort de la piece. Une
+    // mesure de la table n'arrive plus ici : sa carte a sa phrase et sa barre, et
+    // la ligne « Libellé · VERDICT » est partie avec la jauge (chantier Capteurs, C11).
+    const n = lireNombre(s);
     const unite = a.unit_of_measurement || '';
-    mesure = isNaN(n) ? { v: String(s), u: '' } : { v: fmtN(n), u: unite };
-    const cle = isNaN(n) ? null : cleMesure(a.device_class);
-    if (cle) {
-      // jaugeMesure (confort.js) attend du Celsius : un capteur de temperature en
-      // Fahrenheit y entrait brut, et finissait toujours « TROP CHAUD » au rouge.
-      // Son unite repart avec elle pour les CHIFFRES des reperes : sans elle, la
-      // carte d'un capteur en °F ecrivait 15 · 17 · 23 · 26 · 29 sous « 72 °F »
-      // (audit du 03/10). Le trait et le mot, eux, restent calcules en Celsius.
-      const uniteJauge = uniteTemp(a, hass);
-      jauge = jaugeMesure(cle, cle === 'temp' ? versCelsius(n, uniteJauge) : n, uniteJauge);
-      // Le nom lit le verdict tel que la table l'écrit, « Bon » : en
-      // capitales, une synthèse vocale épelle un mot court (« B-O-N », eSpeak
-      // de NVDA). L'écran garde ses capitales — relecture du lot 13.
-      const libMesure = cle === 'co2' ? tr('Qualité d’air') : MESURES_NOMS()[a.device_class];
-      sub = libMesure + ' · ' + jauge.verdict.t.toLocaleUpperCase(locale());
-      subLu = libMesure + ' · ' + jauge.verdict.t;
-      couleur = jauge.verdict.c;
-      // Le CO2 allume sa carte, comme avant : lavis, icone et valeur dans la
-      // couleur de son palier.
-      if (cle === 'co2') { avis = jauge.verdict; teinte = TEINTE_PALIER[couleur] || 'or'; }
-      // La ligne d'une mesure à verdict se dessine en deux morceaux, libellé
-      // et verdict (05/10) : voir `ligneVerdict` plus bas. Toute mesure, et
-      // non plus le seul CO₂ : la température, l'humidité et le bruit
-      // coupaient leur verdict aussi (suite, 05/10).
-      ligneVerdict = [libMesure, jauge.verdict.t.toLocaleUpperCase(locale())];
-    } else if (a.device_class === 'battery' && !isNaN(n)) {
-      barres = barresPile(n);
+    mesure = n == null ? { v: String(s), u: '' } : { v: fmtN(n), u: unite };
+    if (a.device_class === 'battery' && n != null) {
+      barres = { n: Math.max(1, Math.min(5, Math.round(n / 20))), c: couleurPile(n, 'var(--o-ok)') };
       const faible = niveauPile(n) != null;
       sub = faible ? tr('Pile faible') : tr('Pile');
       couleur = faible ? barres.c : 'var(--o-text3)';
-    } else { sub = MESURES_NOMS()[a.device_class] || unite || tr('Mesure'); couleur = 'var(--o-text3)'; teinte = 'or'; }
+    } else {
+      // Le nom de sa classe — qui se tait quand le nom de la carte le dit déjà (« Qualité de l'air » deux fois, audit du 19/10).
+      const nc = nomClasse(a.device_class, unite);
+      sub = (nc && !nomDitFamille(nom, nc) ? nc : '') || unite || tr('Mesure'); couleur = 'var(--o-text3)'; teinte = 'or';
+    }
   }
   else if (dom === 'fan') { sub = actif ? (a.percentage != null ? tr('Vitesse {n} %', { n: Math.round(a.percentage) }) : tr('En marche')) : tr('Éteint'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
   else if (dom === 'humidifier') { sub = actif ? (a.current_humidity != null ? tr('Humidité {n} %', { n: Math.round(a.current_humidity) }) : tr('En marche')) : tr('Éteint'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
   else if (dom === 'valve') { sub = actif ? tr('Ouverte') : tr('Fermée'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
-  else if (carteDePrise) {
-    // « En veille · 1 W » et « Chauffe · 1 250 W » ne se lisent pas pareil :
-    // c'est tout l'objet du changement. Éteinte, aucune puissance — zéro watt
-    // sur une prise coupée n'apprend rien.
-    sub = motDuMode(typePrise, modeDePrise) + (puissance != null && modeDePrise !== 'eteinte' ? ' · ' + fmtW(puissance) : '');
-    couleur = couleurPrise(typePrise, modeDePrise);
-  }
-  else { sub = (actif ? tr('Allumée') : tr('Éteinte')) + (puissance != null ? ' · ' + fmtW(puissance) : ''); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
+  else { sub = actif ? tr('Allumée') : tr('Éteinte'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
   const TEINTES = { accent: ['rgba(var(--o-accent-rgb),.16)', 'var(--o-accent-soft)', 'rgba(var(--o-accent-rgb),'], ok: ['rgba(var(--o-ok-rgb),.16)', 'var(--o-ok)', 'rgba(var(--o-ok-rgb),'], bad: ['rgba(var(--o-bad-rgb),.16)', 'var(--o-bad)', 'rgba(var(--o-bad-rgb),'], or: [hx('var(--o-lampe)', .16), 'var(--o-warn)', 'rgba(var(--o-lampe-rgb),'], froid: ['rgba(var(--o-cold-rgb),.16)', 'var(--o-cold)', 'rgba(var(--o-cold-rgb),'], orange: ['rgba(var(--o-warn2-rgb),.16)', 'var(--o-warn2)', 'rgba(var(--o-warn2-rgb),'] };
-  const [icoFondT, icoTexteT, lavisT] = TEINTES[teinte];
-  // Une prise qui travaille prend la couleur de SON appareil — plaque, glyphe
-  // et lavis. En veille, elle reste sobre : sans quoi veille et marche se
-  // ressembleraient de loin, et le partage ne servirait à rien.
-  const icoFond = priseVive ? 'rgba(' + tp.rgb + ',.18)' : icoFondT;
-  const icoTexte = priseVive ? tp.col : icoTexteT;
-  const lavisBase = priseVive ? 'rgba(' + tp.rgb + ',' : lavisT;
-  // Un capteur qui a un verdict est ALLUME au sens de la carte : lavis, icone
-  // et repere dans sa teinte.
-  const allume = !mort && (danger || direct || (actif && dom !== 'sensor' && dom !== 'binary_sensor' && dom !== 'camera')) || avis != null;
+  const [icoFond, icoTexte, lavisBase] = TEINTES[teinte];
+  // Un capteur n'allume plus cette carte : une mesure de la table a la sienne,
+  // qui prend la couleur de sa zone (chantier Capteurs, C5).
+  const allume = !mort && (danger || direct || (actif && dom !== 'sensor' && dom !== 'binary_sensor' && dom !== 'camera'));
   const ouvrable = !!onOpen && !mort;
   // Ce que la carte affiche, dans son ordre : la mesure d'un capteur (en grand,
   // en haut à droite), puis la ligne d'état. Le nom du bouton de surface n'en
@@ -2202,28 +2308,23 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
      * carte inerte par un `none` hérité, qu'un `auto` percerait. */
     <div className={'o-rmcard' + (mort ? ' o-panne' : '')}
       style={{ ...RM_CARD, position: 'relative', cursor: ouvrable ? 'pointer' : 'default',
-        // Le lavis dit « ça travaille ». Une prise en veille ne travaille pas :
-        // elle garde la surface ordinaire, et c'est ce qui la distingue.
-        ...((allume && LAVIS && (!carteDePrise || priseVive)) ? { background: lavisCarte((a) => `${lavisBase}${a})`) } : null),
+        ...((allume && LAVIS) ? { background: lavisCarte((a) => `${lavisBase}${a})`) } : null),
         border: LISERE }}>
       {ouvrable && <Surface onClick={() => onOpen(id)} label={nomCarte(nom, valeur, subLu || sub)} />}
       {ouvrant && <IlluOuvrant type={a.device_class === 'window' ? 'fenetre' : 'porte'} ouvert={ouvert} />}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        {/* La plaque, et l'animation de l'appareil QUAND IL TRAVAILLE : le
-          * tambour tourne, la sirène tremble, la lueur respire, les témoins du
-          * NAS clignotent. Rien ne bouge en veille — et `prefers-reduced-motion`
-          * coupe tout, comme partout. Positionnée, elle passerait devant la
-          * surface : elle laisse filer le clic (lot 13 de l'audit du 03/10). */}
+        {/* La plaque. Positionnée, elle passerait devant la surface : elle
+          * laisse filer le clic (lot 13 de l'audit du 03/10). Plus rien ne s'y
+          * anime : les prises ont leur carte (chantier Prises, P11). */}
         <span style={{ ...RM_ICO(allume ? icoFond : 'var(--o-s1)', allume ? icoTexte : 'var(--o-text3)'), position: 'relative', pointerEvents: 'none' }}>
-          {/* `Ico` et non `Fi` : l'électroménager n'existe pas dans la fonte,
-            * il est dessiné dans `icones.jsx`. Pour un nom de la fonte, les
-            * deux rendent la même chose. */}
-          <span className={anim ? 'o-prise-' + anim : undefined} style={{ display: 'inline-flex' }}>{ico ? <Ico name={ico} size={17} anime={priseVive} /> : <PlugIcon size={17} />}</span>
+          {/* `Ico` et non `Fi` : une icône choisie peut être un appareil
+            * dessiné (`icones.jsx`), que la fonte n'a pas. */}
+          {ico ? <Ico name={ico} size={17} /> : <PlugIcon size={17} />}
         </span>
         {(togglable || dom === 'lock') && !mort
           ? <RmBascule on={actif} nom={nom} onToggle={basculer} />
           : (dom === 'sensor' && mesure && !mort)
-            ? <span style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginTop: 4, fontSize: 22, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: avis != null ? couleur : 'var(--o-text)' }}>{mesure.v}{mesure.u ? <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)' }}>{mesure.u}</span> : null}</span>
+            ? <span style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginTop: 4, fontSize: 22, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: 'var(--o-text)' }}>{mesure.v}{mesure.u ? <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)' }}>{mesure.u}</span> : null}</span>
           : dom === 'camera'
             ? <span aria-hidden="true" style={{ color: direct ? icoTexte : 'var(--o-text3)', display: 'flex', alignItems: 'center', height: 26 }}><Fi i="video-camera" size={15} /></span>
             : pile != null ? <PileRepere n={pile} onOuvrir={ouvrable ? () => onOpen(id) : null} /> : null}
@@ -2233,27 +2334,8 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
         * d'une caméra porte « Voir le flux » : il reste dans le flux, sous la
         * surface, et seul le bouton se positionne (lot 13 de l'audit du 03/10). */}
       <div style={voirFlux ? { marginTop: 14 } : { marginTop: 14, position: 'relative', pointerEvents: 'none' }}>
-        {/* Ce que la prise alimente, au-dessus de son nom — et seulement quand
-          * on le sait : « PRISE » écrit au-dessus d'une prise n'apprend rien. */}
-        {etiquetteType && (
-          <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: allume ? icoTexte : 'var(--o-text3)', marginBottom: 3 }}>{etiquetteType}</div>
-        )}
         <div style={RM_NAME}>{nom}</div>
-        {/* La ligne d'une mesure à verdict (05/10) : depuis le lot 16, le mot
-          * du palier du CO₂ dit une qualité, et au téléphone (cartes de 141 à
-          * 176 px) « Qualité d'air · X » ne tenait plus — c'est le VERDICT que
-          * l'ellipse coupait (« SCHLECHT », « SCARSA » dès 360 px, « WYSOKI »,
-          * « DUSZNO »). La température, l'humidité et le bruit aussi, et plus
-          * souvent (suite, 05/10, mesuré dans la démo) : « Température · TROP
-          * FROID », « UN PEU CHAUD », « TROP CHAUD » perdaient leur fin dès
-          * 390 px en français ; à 320 px, 12 lignes sur 28 en français, 20 en
-          * polonais. Une seule rangée pour toutes, celle du CO₂.
-          * La mise en page cède, pas les mots : le libellé se réduit, le
-          * verdict garde sa largeur, séparateur compris (`pre` garde son
-          * espace de tête) ; il ne s'ellipse que s'il ne tient pas SEUL dans
-          * la ligne. Le nom accessible reste `subLu`. */}
-        {ligneVerdict ? <div style={{ ...RM_SUB, color: couleur, display: 'flex' }}><span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{ligneVerdict[0]}</span><span style={{ flexShrink: 0, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'pre' }}>{' · ' + ligneVerdict[1]}</span></div> : <div style={{ ...RM_SUB, color: couleur }}>{sub}</div>}
-        {jauge && !mort && <JaugeMesure jauge={jauge} />}
+        <div style={{ ...RM_SUB, color: couleur }}>{sub}</div>
         {barres && !mort && <JaugePile barres={barres} />}
         {voirFlux && (
           <button type="button" onClick={(e) => { e.stopPropagation(); if (onOpen) onOpen(id); }} aria-label={tr('Voir le flux') + ' ' + nom} aria-haspopup="dialog" className="o-rmbtn" style={{ ...RM_BTN, marginTop: 11, width: '100%', position: 'relative' }}>{tr('Voir le flux')}</button>
@@ -2263,363 +2345,1309 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   );
 }
 
-function RoomLightCard({ id, hass, onOpen, label = null, onFiche = null }) {
-  const st = hass && hass.states ? hass.states[id] : null;
+/* ── La carte d'une MESURE (chantier Capteurs, § 3 ; C5, C6, C8, C11) ─────────
+ *
+ * La carte 1a de sa maquette « Cartes capteurs », aux tailles de la maison (184 ;
+ * 176 de large au téléphone), pour une mesure de la table (`confort.js`) : CO₂,
+ * température, humidité, bruit, luminosité, particules, COV, vent. La plaque
+ * seule en haut à gauche ; 14 px plus bas, le nom et la phrase à gauche, le
+ * chiffre à droite, aligné en bas sur la phrase, et sa famille dessous en
+ * petites capitales — rien pour le CO₂, que l'unité dit déjà ; la barre des
+ * zones au pied. HORS DU BON, la carte prend la couleur de sa zone : la plaque,
+ * la phrase, un lavis de 0,1 en haut (0,16 pour la dernière zone), 0,03 en bas ;
+ * une zone bonne s'écrit en neutre, sans teinte ni lavis (C5). Muette,
+ * « Indisponible » en rouge et le liseré qui respire (ADR 0048), sans chiffre ni
+ * barre. Un appui ouvre sa fiche. Son nom passe sur deux lignes au plus, entre deux
+ * mots ; dans Objets, la vue lui donne celui de sa pièce, et la surface dit la famille
+ * avec le chiffre (C13). Dehors (C15, révisé le 16/10), la température et l'humidité ont
+ * les zones du dehors — la barre, le mot, les repères —, sans rien d'une alerte : ni teinte
+ * ni lavis ; le CO₂, le bruit, les COV et la luminosité s'y écrivent en neutre, sans barre.
+ * Sa carte ÉTROITE — sous 188 px de contenu, celle du téléphone — est celle de la
+ * grille commune (`o-gabarit`, passe téléphone, ADR 0202 ; tâche 4 bis) : en haut, la
+ * plaque, et à droite le chiffre (`ChiffreHaut`) et sa famille ; le nom en entier, deux
+ * lignes au plus ; la phrase, sous sa forme courte ; la barre des zones à la place de la
+ * ligne de commandes, ses chiffres en 9,5 px, ceux qui se toucheraient tus. Ce qui change
+ * de place — le chiffre et sa famille, la phrase courte — s'écrit deux fois, et la
+ * feuille n'en montre qu'une.
+ */
+
+/* La température d'un appareil dit aussi son humidité (C8) : l'hygromètre de son APPAREIL. */
+const humiditeDe = (S, id) => soeursDe(id).find(e => e.indexOf('sensor.') === 0 && S[e] && (S[e].attributes || {}).device_class === 'humidity') || null;
+/** Une mesure de la table : un capteur dont la classe — et l'unité, pour un COV — a une famille (`cleMesure`). */
+const estMesure = (st) => !!st && !!cleMesure((st.attributes || {}).device_class, (st.attributes || {}).unit_of_measurement);
+/* Une mesure DU DEHORS (C15, révisé le 16/10) : une famille de la table dans une pièce du dehors — le dehors se lit au nom
+ * de sa zone Home Assistant (`estDehors`), comme ses sections —, ou un vent, d'où qu'il soit : sa section est Dehors. Elle se
+ * lit sur les zones du dehors, et rien n'y est une alerte : ni teinte, ni lavis, ni « à regarder », ni conseil. */
+const dehorsDe = (cle, id) => cle === 'vent' || (!!cle && estDehors(LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function' ? LOGGIA_INDEX.areaNameOf(id) : null));
+/* Une mesure NEUTRE, que la table ne juge pas à dessein : un vent dans une unité qu'elle ne connaît pas (le Beaufort ;
+ * correction bis, point 11) ; dehors, une famille qui n'y a pas de zones — le CO₂, le bruit, les COV, la luminosité. */
+const ventInconnu = (cle, unite) => cle === 'vent' && !uniteVentConnue(unite);
+const neutreDe = (cle, unite, dehors) => ventInconnu(cle, unite) || (dehors && !jugeeDehors(cle));
+/* La pièce de Loggia d'une entité (C17, 16/10) : celle que sa zone Home Assistant désigne — par son nom, comme la vue d'une pièce
+ * (`roomEntitiesBrutes`) ; '' sans zone du tout ; null dans une zone que Loggia ne compte pas parmi ses pièces (« network »). */
+function pieceLoggiaDe(id) {
+  const z = LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function' ? LOGGIA_INDEX.areaNameOf(id) : null;
+  if (!z) return '';
+  const p = normRooms(cfgVal('loggia_rooms', null)).find(r => rmNorm(r.room) === rmNorm(z));
+  return p ? p.room : null;
+}
+/* Une mesure HORS D'UNE PIÈCE de Loggia (C17, 16/10) n'est pas jugée : sans zone, ou dans une zone que Loggia ne compte pas — les
+ * sondes d'une carte mère, d'une passerelle, un frigo —, elle est neutre : le chiffre, la courbe, le dernier signal ; jugée sur le
+ * confort d'une pièce, elle était « Trop chaud » ou « Trop froid » pour toujours. Le vent et les particules se jugent partout, du
+ * dehors par nature. Une entité que le registre ne connaît pas — la maison fictive de la Bibliothèque — garde la table : rien ne
+ * dit où elle est. */
+const horsPiece = (cle, id) => !!cle && cle !== 'vent' && cle !== 'pm25' && !!(LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && LOGGIA_INDEX.entityMeta.has(id)) && !pieceLoggiaDe(id);
+/* Une mesure qu'on NE JUGE PAS (audit du 19/10, H8 ; décision D5) : la découverte DEVINE — une température ou une humidité qui n'est
+ * pas l'air de la pièce (`horsAir` : un diagnostic, un frigo, un processeur, la buse d'une imprimante, un point de rosée, l'appareil
+ * d'une prise) — et le réglage « Ne pas juger cette mesure » de sa fiche CORRIGE, dans les deux sens (`loggia_mesures_nonjugees`,
+ * réservé aux administrateurs, comme la configuration des pièces). Elle reste visible, neutre, sous son nom de Home Assistant. */
+function nonJugee(S, id, cle) {
+  const t = cfgVal(CLE_NON_JUGEES, null);
+  if (t && typeof t === 'object' && typeof t[id] === 'boolean') return t[id];
+  if (cle !== 'temp' && cle !== 'hum') return false;
+  const em = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta, dm = LOGGIA_INDEX && LOGGIA_INDEX.deviceMeta;
+  const m = em && em.get(id);
+  if (!m) return false;
+  return horsAir(id, S, (e) => (em.get(e) || {}), m.deviceId && dm ? dm.get(m.deviceId) : null, soeursDe(id), LOGGIA_INDEX.areaNameOf(id));
+}
+/* Un nombre, LU STRICTEMENT (audit du 19/10) : « 21,5 » vaut 21,5 ; « 1,659 » ne vaut plus 1, « 21.4abc », « nan » ou une chaîne vide
+ * ne valent rien. null sinon. */
+function lireNombre(v) {
+  const t = String(v == null ? '' : v).trim().replace(/^(-?\d+),(\d+)$/, '$1.$2');
+  // Des chiffres, un point décimal, un exposant (« 1e-05 », que Home Assistant écrit) — pas « 0x10 », pas « Infinity ».
+  return /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(t) ? Number(t) : null;
+}
+/** Une mesure qui peut être « à regarder » : une famille de la table, dans une pièce du dedans (C15, révisé ; C17). Elle seule peut
+ *  changer le décompte : l'enveloppe des sections d'Objets › Capteurs ne s'abonne qu'à elle (correction bis 2, point 2). */
+function mesureJugee(S, id) {
+  const a = (S && S[id] && S[id].attributes) || {};
+  const cle = cleMesure(a.device_class, a.unit_of_measurement);
+  return !!cle && !dehorsDe(cle, id) && !horsPiece(cle, id) && !nonJugee(S, id, cle);
+}
+
+/* Ce que la carte, la compacte et la fiche d'une mesure lisent : sa famille, sa zone, sa phrase, son chiffre et sa
+ * barre. Un capteur en Fahrenheit, un vent en m/s se lisent dans la table en Celsius et en km/h (`versTable`) ; les
+ * chiffres s'écrivent dans l'unité du capteur (`uniteTable`). Tout capteur ouvre la fiche : celui qu'aucune famille ne
+ * lit (une pression, une puissance) n'a ni zone ni barre, et son chiffre garde une décimale. `humId` : l'hygromètre
+ * de son appareil, que la phrase d'une température redit (C8). Dehors (C15, révisé le 16/10 ; `dehors`), la
+ * température et l'humidité se lisent sur les zones du dehors, le vent et les particules sur les leurs : la barre et le
+ * mot de la zone restent, et rien n'est une alerte — la carte, la compacte et la fiche n'y prennent ni teinte ni lavis.
+ * Une autre famille y est NEUTRE (`neutre`) — ni zone, ni barre, ni teinte. Le dehors se lit au nom de sa zone Home
+ * Assistant (`estDehors`), comme ses sections.
+ * Correction bis : un vent dans une unité que la table ne connaît pas (le Beaufort) est neutre lui aussi — sans zone,
+ * `inconnue` (point 11) ; un état qui n'est pas un nombre (« erreur ») devient la phrase, que la surface lit (point 10) ;
+ * `phraseRepli`, la forme de repli de la carte LARGE trop étroite pour la phrase entière (point 6).
+ * Correction bis 2 : `famille`, celle que la carte (large et étroite), sa surface et la fiche écrivent, se tait quand le nom
+ * affiché la dit déjà (« Chambre CO2 », « Salle de bain température » ; `nomDitFamille`, point 1).
+ * C17 (16/10) : hors d'une pièce de Loggia — sans zone, ou dans une zone qu'elle ne compte pas —, une mesure est NEUTRE
+ * (`horsPiece`) : ni zone, ni barre, ni teinte, ni « à regarder » ; le vent et les particules exceptés. */
+function vueMesure(H, id, label = null, humId = null) {
+  const S = (H && H.states) || {};
+  const st = S[id] || null;
   const a = (st && st.attributes) || {};
-  const modes = a.supported_color_modes || [];
-  const rgb = modes.some(m => ['hs', 'xy', 'rgb', 'rgbw', 'rgbww'].indexOf(m) >= 0);
-  const ct = modes.indexOf('color_temp') >= 0;
-  const dimmable = rgb || ct || modes.indexOf('brightness') >= 0 || a.brightness != null;
-  const isSwitch = id.indexOf('switch.') === 0;
-  const realOn = st ? st.state === 'on' : false;
-  const [ov, setOv] = useOptimiste(realOn);
-  const on = ov != null ? ov : realOn;
-  const bri = a.brightness != null ? Math.round(a.brightness / 255 * 100) : 100;
-  const color = a.rgb_color ? versHex(a.rgb_color) : null;
-  const mort = !st || st.state === 'unavailable';
-  const accent = (rgb && color) ? color : 'var(--o-lampe)';
-  // L'icone et la jauge : la meme couleur, rendue lisible sur le lavis qu'elle pose.
-  const accentLu = (rgb && color) ? lisibleSurLavis(color, estClair(), .7) : accent;
-  const ltype = lightType({ id, name: (a.friendly_name || id), rgb, ct });
-  const adjustable = !isSwitch && dimmable && !mort;
-  const nom = label || a.friendly_name || id;
-  const [flashRef, flash] = useFlash();
-  // Le filet des 6 s est celui d'`useOptimiste` : la bascule ne le porte plus.
-  const toggle = () => { flash(accent); setOv(!on); commander(hass, id, on ? 'turn_off' : 'turn_on'); };
-  // Luminosité optimiste : fenêtre plus courte, 4 s (l'écho Zigbee rejoue l'ancienne valeur).
-  const [ovBri, setOvBri] = useOptimiste(bri, 4000);
-  const poseBri = (pct) => {
-    setOvBri(pct); setOv(pct > 0);
-    if (pct > 0) commander(hass, id, 'set_brightness', pct);
-    else commander(hass, id, 'turn_off');
+  const muette = enPanne(id, st);
+  const cle = cleMesure(a.device_class, a.unit_of_measurement);
+  const n = st ? lireNombre(st.state) : null;
+  const lu = !muette && n != null;
+  const uT = uniteTemp(a, H);
+  const uniteTable = cle === 'temp' ? uT : a.unit_of_measurement;
+  const versTable = (x) => versRepere(cle, x, uniteTable);
+  const v = lu ? versTable(n) : null;
+  const inconnue = ventInconnu(cle, uniteTable);
+  const dehors = dehorsDe(cle, id);
+  const neutre = neutreDe(cle, uniteTable, dehors) || horsPiece(cle, id) || nonJugee(S, id, cle);
+  const zone = cle && v != null && !neutre ? zoneMesure(cle, v, dehors) : null;
+  const hum = lu && humId && S[humId] ? lireNombre(S[humId].state) : null;
+  const phrase = muette ? tr('Indisponible') : !lu ? tr('Valeur illisible') : phraseMesure(cle, zone, hum);
+  const repli = zone ? phraseMesure(cle, zone, hum, true) : null;
+  const nom = label || cvName(st, id);
+  const famille = nomMesure(cle);
+  return {
+    nom, muette, cle, famille: nomDitFamille(nom, famille) ? '' : famille, zone, neutre, inconnue, dehors,
+    chiffre: !lu ? null : cle ? chiffreMesure(cle, n) : nombre(n, 1, 0), unite: cle === 'temp' ? signeTemp(uT) : (a.unit_of_measurement || ''),
+    barre: zone ? barreMesure(cle, v, uniteTable, dehors) : null,
+    phrase,
+    phraseRepli: repli && repli !== phrase ? repli : null,
+    // Sa forme courte, sur une carte étroite (tâche 4 bis) : une température qui a sa zone n'y redit pas l'humidité de son appareil.
+    phraseCourte: !muette && zone && cle === 'temp' && hum != null ? phraseMesure(cle, zone) : null,
+    hass: H, st, versTable, uniteTable,
   };
-  const briAff = ovBri != null ? ovBri : (on ? bri : 0);
-  const grade = (rgb && color) ? color : 'linear-gradient(90deg,var(--o-lampe),var(--o-lampe-b))';
-  // Une entité qui n'existe plus le dit en clair : « Éteint » ferait chercher l'interrupteur.
-  const sub = mort ? tr('Entité absente · vérifie l’appairage') : on ? (adjustable ? tr('{n} % de luminosité', { n: briAff }) : tr('Allumé')) : tr('Éteint');
-  // Le geste « ouvrir » : la fiche de la lampe quand elle se règle, sinon celle
-  // de l'appareil ; sans l'une ni l'autre, la carte ne s'ouvre pas.
-  const ouvre = (adjustable && onOpen) ? () => onOpen({ id, name: a.friendly_name || id, on, bri, color, rgb, ct, dimmable, lc: st && st.last_changed })
-    : onFiche ? () => onFiche(id) : null;
+}
+
+/* Le `hass` d'une carte : le relevé VIVANT, s'il connaît l'entité ; sinon celui qu'on lui a passé — la Bibliothèque des
+ * cartes passe une maison fictive (`biblioStates`), que la vraie ne connaît pas : ses aperçus disaient « Indisponible »
+ * (correction bis, point 7). */
+const hassQuiConnait = (vivant, hass, id) => (vivant && vivant.states && vivant.states[id] ? vivant : hass || vivant);
+
+/* La vue d'une mesure dans un `hass` VIVANT : elle s'abonne à SA mesure, et à l'hygromètre de son appareil pour une
+ * température (la leçon des prises : les vues ne surveillent pas `sensor.`, qui bouge sans cesse ; une clé bruyante
+ * ne surveille rien). `actif` faux : rien ne s'abonne, et rien ne se rend. */
+function useVueMesure(hass, id, label = null, actif = true) {
+  const S0 = (hass && hass.states) || {};
+  const a0 = (S0[id] && S0[id].attributes) || {};
+  const humId = actif && cleMesure(a0.device_class, a0.unit_of_measurement) === 'temp' ? humiditeDe(S0, id) : null;
+  const vivant = useHass(actif ? [id, humId].filter(Boolean) : []);
+  return actif ? vueMesure(hassQuiConnait(vivant, hass, id), id, label, humId) : null;
+}
+
+/* Le nom d'une carte de mesure (C13) : deux lignes au plus, passé à la ligne ENTRE deux mots ; une troisième ligne, ou
+ * un mot plus large que la carte, finit en « … ». Ses lignes font 18 px : deux tiennent dans les 184 de la carte, avec la
+ * phrase et la barre (38 + 14 + 2 × 18 + 18 + 8 + 34 = 148 px de contenu, pour 150). Sur une carte étroite, la grille
+ * commune le règle (`o-gab-nom`, 14 px), sur des lignes de 16 (`--o-nom-ligne`, index.css). */
+const NOM_MESURE = { ...RM_NAME, fontSize: 15, lineHeight: 'var(--o-nom-ligne, 18px)', whiteSpace: 'normal', overflowWrap: 'normal', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2 };
+
+/* La largeur d'une PHRASE de carte large, en em (Manrope 600 ; mesurée le 16/10, « Idéal · 47 % d’humidité » à 1 % près), plus
+ * 3 % de marge : la phrase d'une carte large rétrécit de 12 à 10,5 px dans sa colonne, puis cède la place à sa forme de repli
+ * (`--o-larg`, correction bis, point 6). Une lettre absente de la table compte 0,6 em, une capitale 0,68. */
+const EM_PHRASE = { i: .27, l: .27, j: .28, 'ł': .28, I: .27, '’': .27, "'": .24, '.': .29, ',': .29, '·': .25, ':': .33, ' ': .2, '\u00a0': .2, f: .37, r: .39, t: .42, 1: .42, '-': .42, m: .88, w: .79, M: .85, W: .96, '%': .9 };
+const emPhrase = (s) => Math.round([...String(s)].reduce((n, c) => n + (EM_PHRASE[c] || (c !== c.toLowerCase() ? .68 : .6)), 0) * 103) / 100;
+
+function RoomMesureCard({ id, hass, onOpen, label = null }) {
+  const v = useVueMesure(hass, id, label);
+  // Hors du bon, la couleur de la zone (C5) ; bonne, ou dehors — rien n'y est une alerte (C15, révisé) —, le neutre.
+  const teinte = v.zone && !v.zone.bon && !v.dehors ? v.zone : null;
+  const derniere = !!teinte && teinte.i === v.barre.zones.length - 1;
+  const valeur = v.chiffre == null ? null : v.chiffre + (v.unite ? '\u00a0' + v.unite : '');
+  /* La famille, sous le chiffre — le CO₂ compris (correction bis, point 8) : dans Objets, la carte porte le nom de sa pièce (C13).
+   * La surface la dit avec le chiffre. Elle se tait quand le nom affiché la dit déjà — « Chambre CO2 », « Salle de bain
+   * température » (`vueMesure`, correction bis 2, point 1) : sa maquette la taisait sous « CO₂ Chambre ». */
+  const famille = v.famille;
+  // Le plancher de la colonne du chiffre, sur la carte large (correction bis 2, point 4) ; avec l'écart de 10 px, ce que le nom lui laisse.
+  const plancher = v.chiffre != null ? plancherChiffre(v.chiffre, v.unite) : 0;
+  // L'encre de la phrase : le rouge d'une mesure muette, la couleur de la zone hors du bon, sinon le gris doux.
+  const encre = v.muette ? 'var(--o-bad)' : teinte ? teinte.c : 'var(--o-text2)';
   return (
-    /* LA LAMPE N'EST PLUS UN `button` (lot 13 de l'audit du 03/10, ADR 0074).
-     *
-     * Un bouton qui contient un interrupteur et une glissière : les deux
-     * disparaissaient d'un lecteur d'écran (`nested-interactive`, six lampes
-     * sur Objets dans la démonstration). Elle devient un `div` au même
-     * dessin : les classes restent (la CSS, l'enfoncement au doigt et le
-     * retour haptique lisent `.o-light-card`), et `lineHeight: 'normal'`
-     * reprend ce que le `button` imposait à son texte. Le geste « ouvrir »
-     * passe par le bouton de SURFACE, nommé de ce que la carte affiche :
-     * « Plafonnier, 60 % de luminosité ». La bascule et la glissière,
-     * positionnées, passent au-dessus de lui ; l'icône et le texte, non : un
-     * clic sur eux ouvre la fiche, comme avant. */
-    <div ref={flashRef} className={'o-light-card o-rmcard o-cvdense' + (mort ? ' o-panne' : '')}
-      style={{ ...RM_CARD, position: 'relative', alignItems: 'stretch', textAlign: 'left', lineHeight: 'normal', width: '100%', cursor: (adjustable || onFiche) ? 'pointer' : 'default', overflow: 'hidden',
-        // Le lavis est une COUCHE posée sur la surface, jamais la surface elle-même :
-        // sinon le bas de carte restait un alpha .22 sur le fond de page — faux-transparent
-        // en mode opaque, et un rendu différent d'un matériau à l'autre (retour user 29/08).
-        background: on && LAVIS ? lavisCarte((a) => hx(accent, a)) : SURF_CARTE,
+    /* Pas un `button` (ADR 0074) : le geste « ouvrir » passe par la SURFACE, nommée de ce que la carte affiche —
+     * « CO₂ Chambre, 1 659 ppm, Confiné · aérez », « Séjour, Température 21,4 °C, Idéal ». */
+    <div className={'o-rmcard o-gabarit' + (v.muette ? ' o-panne' : '')} data-mesure=""
+      style={{ ...RM_CARD, position: 'relative', justifyContent: 'flex-start', cursor: onOpen ? 'pointer' : 'default',
+        // Le lavis, seulement hors du bon : 0,1 en haut, 0,16 pour la dernière zone, 0,03 en bas.
+        ...(teinte && LAVIS ? { background: lavisCarte(teinte.rgb, derniere ? .16 : .1, .03) } : null),
         border: LISERE }}>
-      {ouvre && <Surface onClick={ouvre} label={nomCarte(nom, sub)} />}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        {/* Sans halo (retour 31/08) : il noyait le carré de l'icône en rond. */}
-        <span style={RM_ICO(on ? hx(accent, .3) : 'var(--o-s1)', on ? accentLu : 'var(--o-text3)')}><GlypheCarte id={id} size={19}><LightIcon type={ltype} size={19} /></GlypheCarte></span>
-        {!mort && <RmBascule on={on} nom={nom} onToggle={toggle} />}
-      </div>
-      <div>
-        <div style={RM_NAME}>{nom}</div>
-        <div style={{ ...RM_SUB, color: on ? 'var(--o-warn)' : 'var(--o-text3)' }}>{sub}</div>
-        {/* La glissière, seule : les préréglages Nuit / Doux / Plein ont
-          * quitté la carte (maquettes du 14/09), la fiche les garde. Grisée
-          * quand la lampe ne se règle pas. */}
-        <RmJauge v={adjustable ? briAff : (on ? 100 : 0)} couleur={accentLu} grade={grade} actif={adjustable} label={tr('Luminosité') + ' ' + nom} onCommit={poseBri} />
-      </div>
-    </div>
-  );
-}
-
-/* Carte machine (aspirateur, tondeuse) au GABARIT MAISON — le même que les
- * volets et radiateurs : icône en haut à gauche, batterie en haut à droite,
- * nom et état SOUS l'icône, les boutons ronds en bas. La vitesse d'aspiration
- * ne vit que dans la fiche. */
-function RoomMachineCard({ id, hass, onOpen, label = null, extra = null }) {
-  const st = hass && hass.states ? hass.states[id] : null;
-  const a = (st && st.attributes) || {};
-  const dom = String(id).split('.')[0];
-  const s = st ? st.state : null;
-  const mort = !st || s === 'unavailable';
-  const en = dom === 'vacuum' ? s === 'cleaning' : s === 'mowing';
-  const actif = en || s === 'returning';
-  const call = (svc) => commanderService(hass, id, dom, svc, { entity_id: id });
-  const f = a.supported_features || 0;
-  // La batterie vit rarement dans l'attribut : le capteur SŒUR fait foi.
-  const bat = (() => {
-    if (a.battery_level != null) return a.battery_level;
-    const S = (hass && hass.states) || {};
-    const sid = pickSibling(LOGGIA_INDEX, S, id, { domain: 'sensor', deviceClass: 'battery' });
-    const n = sid && S[sid] ? parseFloat(S[sid].state) : NaN;
-    return isNaN(n) ? null : n;
-  })();
-  const etat = ({ docked: tr('Sur la base'), cleaning: tr('Nettoyage'), mowing: tr('Tonte'), returning: tr('Retour à la base'), paused: tr('En pause'), idle: tr('Inactif'), error: tr('Erreur') })[s] || (s == null ? '—' : String(s));
-  const btns = [];
-  if (dom === 'vacuum') {
-    if (en ? (f & 4) : (f & 8192)) btns.push([en ? 'pause' : 'play', en ? 'pause' : 'start', en ? tr('Pause') : tr('Démarrer le nettoyage')]);
-    if (f & 16) btns.push(['home', 'return_to_base', tr('Renvoyer au dock')]);
-    if (f & 512) btns.push(['marker', 'locate', tr('Localiser')]);
-  } else {
-    if (en ? (f & 2) : (f & 1)) btns.push([en ? 'pause' : 'play', en ? 'pause' : 'start_mowing', en ? tr('Pause') : tr('Lancer la tonte')]);
-    if (f & 4) btns.push(['home', 'dock', tr('Renvoyer au dock')]);
-  }
-  // Ce que la carte AFFICHE, son nom et la ligne dessous : la surface les
-  // reprend tels quels pour se nommer (lot 13 de l'audit du 03/10).
-  const nom = label || a.friendly_name || id;
-  const etatAff = mort ? tr('Indisponible') : etat;
-  return (
-    /* Plus de `role="button"` autour de Démarrer, Dock et Localiser (lot 13 de
-     * l'audit du 03/10) : un rôle bouton rend sa descendance
-     * présentationnelle — un lecteur d'écran perdait les commandes, et
-     * axe-core les comptait en `nested-interactive` sur Objets. « Ouvrir la
-     * fiche » passe par la surface (ADR 0074), FRÈRE des boutons, sous le nom
-     * que la carte affiche : « Aspirateur, Sur la base », plus « Ouvrir
-     * Aspirateur ». */
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default' }}>
-      {onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(nom, etatAff)} />}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO(actif ? 'rgba(var(--o-ok-rgb),.16)' : 'var(--o-s1)', actif ? 'var(--o-ok)' : 'var(--o-text3)')}><GlypheCarte id={id} size={17}><Ico name={dom === 'vacuum' ? 'vacuum' : 'mower'} size={17} color={actif ? 'var(--o-ok)' : 'var(--o-text3)'} /></GlypheCarte></span>
-        {bat != null && <span style={{ fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: bat < 20 ? 'var(--o-bad)' : bat < 50 ? 'var(--o-warn)' : 'var(--o-text2)' }}>{Math.round(bat)}%</span>}
-      </div>
-      <div>
-        <div style={RM_NAME}>{nom}</div>
-        <div style={{ ...RM_SUB, color: actif ? 'var(--o-ok)' : 'var(--o-text3)' }}>{etatAff}</div>
-        {btns.length > 0 && !mort && (
-          /* Les boutons SEULS sont positionnés (RM_BTN), pas la rangée : peints
-           * après la surface, ils reçoivent leurs clics, et l'écart entre eux
-           * la laisse recevoir les siens — un appui y ouvre la fiche (relecture
-           * du lot 13). Leur nom nomme l'appareil, « Pause Tondeuse » ;
-           * l'infobulle garde le geste. */
-          <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
-            {btns.map(([gi, svc, lbl2], bi) => (
-              <button key={svc} title={lbl2} aria-label={lbl2 + ' ' + nom} onClick={(e) => { e.stopPropagation(); call(svc); }} className="o-rmbtn"
-                style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '9px 6px', ...(bi === 0 ? { background: 'var(--o-accent-fond)', border: '1px solid transparent', color: '#fff' } : {}) }}><Fi i={gi} size={13} /></button>
-            ))}
-          </div>
+      {onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(v.nom, valeur && famille ? famille + ' ' + valeur : valeur, v.phrase)} />}
+      {/* La ligne du haut : la plaque ; sur une carte étroite (la grille commune, passe téléphone), le chiffre à droite et
+        * sa famille dessous — la feuille n'en montre qu'une écriture. La famille y passe en minuscules, de 10 à 8 px, dans
+        * la place que laisse la plaque (`--o-reserve`, 38 + 8 px), comme l'étiquette d'un chauffage. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+        <span style={RM_ICO(teinte ? 'rgba(' + teinte.rgb + ',.16)' : 'var(--o-s1)', teinte ? teinte.c : v.muette ? 'var(--o-text3)' : 'var(--o-text1)')}>
+          <Ico name={cvIcoEntite('sensor', id, v.st, v.nom)} size={17} /></span>
+        {v.chiffre != null && (
+          <span className="o-seul-etroit" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 0 }}>
+            <ChiffreHaut v={v.chiffre} u={v.unite || null} />
+            {famille && <span aria-hidden="true" className="o-gab-etiquette" style={{ marginTop: 3, lineHeight: 1, whiteSpace: 'nowrap', color: 'var(--o-text3)', '--o-n': famille.length, '--o-reserve': '46px' }}>{famille}</span>}
+          </span>
         )}
-        {extra}
+      </div>
+      {/* La rangée de la carte d'une prise : le nom et la phrase à gauche, le chiffre à droite, aligné sur leur bas. Sur une
+        * carte large (correction bis, point 6), la colonne du nom ne descend pas sous son mot le plus long (`o-mesure-gauche`,
+        * index.css) : c'est d'abord le CHIFFRE qui rétrécit, jusqu'à son plancher de 14 px (correction bis 2, point 4) ;
+        * au-delà, en dernier recours, le nom cède et finit en « … » (`--o-plancher`). Sur une carte étroite, le
+        * chiffre se tait — il est en haut — et le nom et la phrase prennent toute la largeur (`o-gab-nom`, `o-gab-phrase`) ;
+        * la longueur de la phrase (`--o-n`) règle sa taille, de 12 à 10,5 px. */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 'var(--o-milieu-haut, 14px)', '--o-plancher': plancher ? plancher + 10 + 'px' : undefined }}>
+        <div className="o-mesure-gauche" style={{ flex: '1 1 0%', minWidth: 0 }}>
+          <div className="o-mesure-nom o-gab-nom" style={NOM_MESURE}>{v.nom}</div>
+          {/* La phrase de la carte LARGE, dans son cadre (`o-mesure-phrases`, index.css) : elle rétrécit de 12 à 10,5 px d'après sa
+            * largeur estimée (`--o-larg`), puis cède sa place à sa forme de repli — « Idéal · 47 % », « Confiné » —, écrite une
+            * seconde fois et tue au lecteur d'écran : la première, même effacée, reste lue en entier. */}
+          <div className="o-mesure-phrases o-seul-large">
+            <div className="o-mesure-phrase" data-longue={v.phraseRepli ? '' : undefined} style={{ ...RM_SUB, color: encre, '--o-larg': emPhrase(v.phrase) }}>{v.phrase}</div>
+            {v.phraseRepli && <div aria-hidden="true" className="o-mesure-phrase" data-repli="" style={{ ...RM_SUB, color: encre, '--o-larg': emPhrase(v.phrase), '--o-larg-repli': emPhrase(v.phraseRepli) }}>{v.phraseRepli}</div>}
+          </div>
+          {/* Sur une carte étroite, la phrase de la grille commune, sous sa forme courte s'il y en a une : « Idéal », sans l'humidité
+            * de l'appareil — elle a sa carte, et sa pastille dans la pièce. */}
+          <div className="o-mesure-phrase-courte o-gab-phrase o-seul-etroit" style={{ ...RM_SUB, color: encre, '--o-n': Math.max(1, (v.phraseCourte || v.phrase).length) }}>{v.phraseCourte || v.phrase}</div>
+        </div>
+        {v.chiffre != null && <ChiffreMesure chiffre={v.chiffre} unite={v.unite} famille={famille} />}
+      </div>
+      {v.barre && <BarreMesure barre={v.barre} />}
+    </div>
+  );
+}
+
+/* Le chiffre : « 21,4 » en 25 px / 800 et son unité en 13, à droite du nom et de la phrase, aligné sur leur bas ;
+ * dessous, sa famille en petites capitales : TEMPÉRATURE, HUMIDITÉ, CO₂… La surface le dit déjà. La carte large seule
+ * l'écrit : une carte étroite écrit son chiffre en haut (`ChiffreHaut`), et sa famille dessous.
+ * Il passe en premier tant qu'il y a la place ; un mot du nom plus large que sa colonne le fait CÉDER (correction bis,
+ * point 6) : sa colonne rétrécit, et sa ligne — un conteneur large de sa taille estimée (`emLigne` : le chiffre, 3 px et
+ * l'unité en 13 px, à 0,3 px près), qui ne dépasse jamais la colonne — l'écrit à la taille qui y tient, de 25 à 14 px, son
+ * unité à 0,52 de lui (`o-mesure-ligne`, index.css).
+ * Sa colonne a un PLANCHER (correction bis 2, point 4 ; à 1 280 px, « Schlafzimmerluftqualität CO2 » la menait à 0, et
+ * « 1.659 ppm » sortait de la carte) : le chiffre en 14 px, sa plus petite taille. Au-delà, c'est le nom qui cède (la carte
+ * pose `--o-plancher`). Sa famille, plus large que la colonne, peut prendre 8 des 10 px de l'écart, jamais plus : au-delà, elle
+ * finit en « … » — elle passait sinon sur la phrase. */
+const emLigne = (v, u) => Math.round(([...String(v)].reduce((s, c) => s + (/\d/.test(c) ? .6 : EM_CHIFFRE[c] || .98), 0)
+  + (u ? (3 + 13 * [...String(u)].reduce((s, c) => s + (EM_UNITE[c] || .98), 0)) / 25 : 0)) * 1000) / 1000;
+const plancherChiffre = (chiffre, unite) => Math.ceil(emLigne(chiffre, unite) * 14);
+function ChiffreMesure({ chiffre, unite, famille }) {
+  const em = emLigne(chiffre, unite);
+  return (
+    <span aria-hidden="true" className="o-mesure-chiffre o-seul-large"
+      style={{ flex: '0 1 auto', minWidth: plancherChiffre(chiffre, unite), display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1, whiteSpace: 'nowrap' }}>
+      <span className="o-mesure-ligne" style={{ display: 'block', width: Math.ceil(em * 25) + 'px', maxWidth: '100%', '--o-em': em }}>
+        <span style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: '.12em', fontWeight: 800, color: 'var(--o-text)' }}>
+          <span style={{ fontSize: '1em', letterSpacing: '-.02em' }}>{chiffre}</span>
+          {unite && <span className="o-mesure-unite" style={{ fontSize: '.52em' }}>{unite}</span>}
+        </span>
+      </span>
+      {famille && <span className="o-mesure-famille" style={{ ...petitesCapitales(10), marginTop: 5, maxWidth: 'calc(100% + 8px)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{famille}</span>}
+    </span>
+  );
+}
+
+/* Les repères qui toucheraient leur voisin sur la carte étroite la plus serrée (chantier Capteurs, tâche 4 bis) : 104 px
+ * de contenu, une vue personnelle au téléphone de 320 px, les chiffres en 9,5 px — un chiffre fait 0,6 em, un séparateur
+ * de milliers 0,2 em ; gardés dans la barre comme la feuille les garde (`demi`), et 2 px d'air au moins. De gauche à
+ * droite : un repère qui toucherait le dernier gardé se tait (`data-serre`, index.css, sous 120 px de contenu). */
+const REPERES_SERRES = 104;
+function reperesSerres(reperes) {
+  let fin = -Infinity;
+  return reperes.map(r => {
+    const l = [...r.t].reduce((s, c) => s + (/\d/.test(c) ? 5.7 : 1.9), 0), demi = r.t.length * 3.2;
+    const x = Math.max(demi, Math.min(REPERES_SERRES - demi, r.pos / 100 * REPERES_SERRES));
+    if (x - l / 2 < fin + 2) return true;
+    fin = x + l / 2;
+    return false;
+  });
+}
+
+/* La barre des zones (§ 3), collée au pied, 8 px d'air au moins au-dessus d'elle — pour un nom de deux lignes (C13) :
+ * une bande par zone de la table, sa part de l'échelle, 8 px de haut, 2 px entre elles, rayon 3 — la zone où l'on est
+ * en couleur pleine, les autres à 0,28 ; un repère de 4 px sur 16 à la valeur, en `--o-text`, cerclé de la surface ;
+ * dessous, les chiffres des repères (10,5 / 700, `--o-text3`), dans l'unité du capteur, gardés dans la barre. La
+ * phrase et le chiffre sont déjà dits : elle ne se lit pas à voix haute. Sur une carte étroite, elle est la ligne du bas
+ * de la grille commune : ses chiffres passent en 9,5 px, et ceux qui se toucheraient se taisent (`reperesSerres`). */
+function BarreMesure({ barre }) {
+  const serres = reperesSerres(barre.reperes);
+  return (
+    <div aria-hidden="true" className="o-mesure-barre" style={{ marginTop: 'auto', paddingTop: 'var(--o-pied-haut, 8px)' }}>
+      <div style={{ position: 'relative', height: 16 }}>
+        <div style={{ position: 'absolute', left: 0, right: 0, top: 4, height: 8, display: 'flex', gap: 2 }}>
+          {barre.zones.map((z, k) => <span key={k} data-bande="" style={{ flexGrow: z.part, flexShrink: 1, flexBasis: 0, minWidth: 0, borderRadius: 3, background: 'rgba(' + z.rgb + ',' + (k === barre.i ? 1 : .28) + ')' }} />)}
+        </div>
+        <span data-repere="" style={{ position: 'absolute', top: 0, left: barre.pos + '%', width: 4, height: 16, marginLeft: -2, borderRadius: 2, background: 'var(--o-text)', boxShadow: '0 0 0 2px var(--o-surfB)' }} />
+      </div>
+      <div className="o-mesure-reperes" style={{ position: 'relative', height: 14, marginTop: 4, fontSize: 10.5, fontWeight: 700, lineHeight: '14px', color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>
+        {barre.reperes.map((r, k) => {
+          const demi = r.t.length * 3.2;
+          return <span key={r.t} data-serre={serres[k] ? '' : undefined} style={{ position: 'absolute', left: 'clamp(' + demi + 'px, ' + r.pos + '%, calc(100% - ' + demi + 'px))', transform: 'translateX(-50%)', whiteSpace: 'nowrap' }}>{r.t}</span>;
+        })}
       </div>
     </div>
   );
 }
 
-/* Distributeur de croquettes, même gabarit : patte en haut à gauche, RÉSERVOIR
- * en haut à droite, nom et prochaine ration sous l'icône, Distribuer en bas. */
-function RoomFeederCard({ nom, sub, pct, prochaine, onFeed, onRempli = null, onOpen, extra = null, chip = false, mort = false }) {
-  // Deux appuis rapprochés — un doigt qui hésite, un double-clic — faisaient
-  // deux rations : le geste se verrouille le temps que le distributeur parte
-  // (audit 18/09). Le service, lui, n'a pas de garde-fou.
-  const verrou = useRef(0);
-  const distribuer = () => { const t = Date.now(); if (t < verrou.current) return; verrou.current = t + 2500; onFeed(); };
-  /* Ni la compacte ni la standard ne sont plus un `role="button"` autour de
-   * Distribuer (lot 13 de l'audit du 03/10) : un rôle bouton rend sa
-   * descendance présentationnelle, la commande disparaissait d'un lecteur
-   * d'écran, et axe-core la comptait en `nested-interactive`. La surface
-   * (ADR 0074) porte « ouvrir la fiche » sous le nom que la carte affiche —
-   * « Distributeur, Réservoir 38 % · … », plus « Ouvrir Distributeur » — et
-   * les boutons, positionnés, passent au-dessus d'elle en nommant l'appareil. */
-  // Compacte 1×1 : gabarit CvCard dense — réservoir à droite, ration en mini.
+/* ── La carte d'un GROUPE (chantier Capteurs, étape 2 ; § 3 ; C20 à C24) ─────────────────────────────
+ *
+ * Une carte pour Ouvertures, Sécurité et Présence, aux tailles de la maison, dans `RM_CARD`, avec la `Surface` qui ouvre sa
+ * popup — pas un bouton (ADR 0074) ; la surface dit ce qu'elle affiche : « Ouvertures, 1 ouverte sur 4, Baie vitrée · 22:25 ».
+ *  - La carte LARGE (184) : la plaque de la maison (38 px) — au calme `--o-s1` et `--o-text1`, en alerte la couleur de
+ *    l'alerte à 0,16 et son encre, au mouvement l'accent ; 14 px plus bas, le nom (15 / 700, deux lignes au plus) et la
+ *    phrase (12 ; neutre, ambre ou rouge) ; au pied, UNE rangée de puces (6 × 10 px, rayon 10, `--o-s1`, 11,5 / 700) — ce qui
+ *    ne tient pas devient « +{k} », estimé sur la plus étroite des cartes larges (188 px), comme la phrase (`emPhrase`).
+ *    Le lavis, seulement en alerte : l'ambre à 0,08, le rouge à 0,16. Budget : 38 + 14 + 2 × 18 + 16 + 10 + 26 = 140 px.
+ *  - La carte ÉTROITE (sous 188 px de contenu, la grille commune, ADR 0202) : la plaque, le nom en 14 px sur deux lignes, la
+ *    phrase sur une ligne, de 12 à 10,5 px — pas de puces (la maquette « Moyennes » n'en montre pas).
+ *  - La COMPACTE (88) : la plaque de 34, le nom, la phrase sur une ligne, et le chiffre à droite s'il y en a un.
+ * Elle s'abonne à SES membres (`useHass`), jamais au domaine entier (la leçon des prises).
+ */
+// Les membres des groupes, lus une fois par relevé de la maison et par index (`groupes.js`).
+let MEMBRES_LUS = null;
+function membresDeLaMaison(S) {
+  if (!MEMBRES_LUS || MEMBRES_LUS.S !== S || MEMBRES_LUS.ix !== LOGGIA_INDEX) MEMBRES_LUS = { S, ix: LOGGIA_INDEX, m: membresGroupes(S || {}, ctxCapteurs()) };
+  return MEMBRES_LUS.m;
+}
+const NOMS_GROUPES = () => ({ ouvertures: tr('Ouvertures'), securite: tr('Sécurité'), presence: tr('Présence'), piles: tr('Piles') });
+/* Les piles de la carte Piles (chantier Capteurs, C32, § 8), lues une fois par relevé et par index (piles.js) ; la batterie de la
+ * maison — le rôle `batSoc` d'Énergie — reste à Énergie. */
+let PILES_LUES = null;
+function pilesDeLaMaisonCarte(S) {
+  if (!PILES_LUES || PILES_LUES.S !== S || PILES_LUES.ix !== LOGGIA_INDEX) PILES_LUES = { S, ix: LOGGIA_INDEX, p: pilesCarte(S || {}, ctxCapteurs(), { exclure: [enHaids().batSoc] }) };
+  return PILES_LUES.p;
+}
+/* Le seuil de la veille des piles (§ 19.8), lu avec les veilles du serveur (`loggia/veilles/etat`, toutes les 30 s) et retenu pour
+ * toute la règle (attention.js). UNE lecture, à la racine (`App`, passe bis du 17/10) : réglé depuis la carte Piles, la section et
+ * la popup, l'Accueil — « En ce moment », les points d'attention, `deriveNotifs` — jugeait au défaut tant qu'on n'avait pas ouvert
+ * Objets › Capteurs, et chaque montage remettait le seuil au défaut le temps que la veille réponde. Sans serveur — la démo —, le défaut. */
+function useSeuilPile(hass) {
+  /* Le seuil seul en état, pas la réponse : la racine ne se redessine que s'il CHANGE. Avec `useEtatServeur`, chaque relevé (un
+   * objet neuf toutes les 30 s) redessinait toute l'application (relecture de la passe bis du 17/10). */
+  const [seuil, setSeuil] = useState(() => seuilsPile().alerte);
+  const hRef = useRef(null);
+  const courant = hass && typeof hass.callWS === 'function' ? hass : null;
+  /* Sans tableau : à chaque rendu, avant l'effet de sondage déclaré plus bas (le motif de `useEtatServeur`). */
+  useEffect(() => { hRef.current = courant; });
+  const connecte = !!courant;
+  useEffect(() => {
+    if (!connecte) return undefined;
+    let vivant = true;
+    const lire = () => {
+      const h = hRef.current;
+      if (!h) return;
+      h.callWS({ type: 'loggia/veilles/etat' })
+        .then(r => { if (vivant) setSeuil(reglerSeuilPile(r).alerte); })
+        .catch(() => {});   // une veille muette garde le dernier seuil connu (attention.js)
+    };
+    lire();
+    const t = setInterval(lire, 30000);
+    return () => { vivant = false; clearInterval(t); };
+  }, [connecte]);
+  return seuil;
+}
+// Les tons d'une carte de groupe : l'encre, son compagnon pour la plaque et le lavis, et l'intensité du lavis.
+const TONS_GROUPE = { warn: ['var(--o-warn)', 'var(--o-warn-rgb)', .08], warn2: ['var(--o-warn2)', 'var(--o-warn2-rgb)', .1], bad: ['var(--o-bad)', 'var(--o-bad-rgb)', .16] };
+const NOM_GROUPE = { ...RM_NAME, fontSize: 15, lineHeight: '18px', whiteSpace: 'normal', overflowWrap: 'normal', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2 };
+const PUCE_GROUPE = { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 10, background: 'var(--o-s1)', fontSize: 11.5, fontWeight: 700, lineHeight: '14px', whiteSpace: 'nowrap', flexShrink: 0 };
+/* Combien de puces tiennent sur une rangée de 188 px, la plus étroite des cartes larges (la grille d'Objets en donne 192 à 1 280 px,
+ * 232 à 1 440 ; mesuré le 17/10), « +{k} » compris : une puce fait ses 20 px de rembourrage, 16 de glyphe et d'écart, et son texte en
+ * 11,5 px gras (`emPhrase`, 4 % de plus — mesurée au canevas sur Manrope 700, l'estimation est PESSIMISTE de 5 % : ce qu'elle dit
+ * tenir tient). `n` : une au moins ; `suite` : « +{k} » après elles, seulement s'il tient AVEC elles. Partager la rangée avec la seule
+ * puce qui tenait la coupait en « … » (« Contact porte entrée · 9 % » à 1 280 px ; passe bis du 17/10, point 8) : la puce entière vaut
+ * mieux que le compte — la phrase le dit déjà, et la popup dit le reste. */
+function pucesQuiTiennent(puces) {
+  const largeur = (t, glyphe) => 20 + (glyphe ? 16 : 0) + Math.ceil(emPhrase(t) * 11.5 * 1.04);
+  let w = 0, k = 0;
+  for (; k < puces.length; k++) {
+    const reste = puces.length - k - 1;
+    if (w + (k ? 6 : 0) + largeur(puces[k].t, true) + (reste ? 6 + largeur('+' + reste, false) : 0) > 188) break;
+    w += (k ? 6 : 0) + largeur(puces[k].t, true);
+  }
+  return { n: Math.max(1, k), suite: k > 0 && k < puces.length };
+}
+/* La carte, d'après la vue de son groupe (`groupes.js`) : `{ glyphe, phrase, ton, puces, chiffre, legende }`. */
+function CarteGroupe({ v, nom, groupe, onOpen = null, chip = false }) {
+  const ton = v.ton ? TONS_GROUPE[v.ton] : null;
+  const encre = ton ? ton[0] : 'var(--o-text2)';
+  // Au calme, la plaque de la maison ; en alerte, la couleur de l'alerte ; pendant un mouvement, l'accent (Présence, C24).
+  const plaque = ton ? ['rgba(' + ton[1] + ',.16)', ton[0]] : v.accent ? ['rgba(var(--o-accent-rgb),.16)', 'var(--o-accent-soft)'] : ['var(--o-s1)', 'var(--o-text1)'];
+  const lavis = ton && ton[2] && LAVIS ? lavisCarte(ton[1], ton[2], ton[2] / 4) : null;
+  const dites = v.puces.filter(p => p.ton).map(p => p.t).join(', ');
+  const surface = onOpen && <Surface onClick={onOpen} label={nomCarte(nom, v.phrase, dites || null)} />;
   if (chip) {
-    const ligne = prochaine || sub;
     return (
-      <div className={'o-piece o-cvdense' + (mort ? ' o-panne' : '')}
-        style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: LISERE, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
-        {onOpen && <Surface onClick={() => onOpen()} label={nomCarte(nom, ligne)} />}
-        <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center' }}>
-          <span className="o-cvico" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-lampe-rgb),.14)', color: 'var(--o-lampe)' }}><Fi i="paw" size={15} /></span>
-          <div className="o-cvtxt">
+      /* La rangée de la compacte, comme celle d'une plante : les classes de la rangée, de la pastille et du texte de CvCard
+       * lui restent réservées (tests/lot16_boutons_compacts, tests/cartes_compactes_gabarit). */
+      <div className={'o-piece o-cvdense' + (v.muette ? ' o-panne' : '')} data-groupe={groupe} style={{ position: 'relative', background: lavis || SURF_CARTE, border: LISERE, borderRadius: 'var(--o-radius,18px)', padding: '12px 14px', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', cursor: onOpen ? 'pointer' : 'default', transition: 'all .25s', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        {surface}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: plaque[0], color: plaque[1] }}><Fi i={v.glyphe} size={15} /></span>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ligne || '—'}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: encre, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.phrase}</div>
           </div>
-          {pct != null && <span style={{ fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums', flexShrink: 0, color: pct < 25 ? 'var(--o-bad)' : 'var(--o-text2)' }}>{pct}%</span>}
-          {onFeed && (
-            /* Le bouton SEUL est positionné, pas la rangée : le nom et le
-             * réservoir restent sous la surface, un appui dessus ouvre la fiche. */
-            <button aria-label={tr('Distribuer une ration') + ' ' + nom} onClick={(e) => { e.stopPropagation(); distribuer(); }}
-              style={{ position: 'relative', width: 38, height: 26, borderRadius: 10, border: 'none', background: 'var(--o-accent-fond)', color: '#fff', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Ico name="bowl-rice" color="#fff" size={14} />
-            </button>
-          )}
+          {v.chiffre && <span style={{ fontSize: 13, fontWeight: 800, flexShrink: 0, fontVariantNumeric: 'tabular-nums', color: encre }}>{v.chiffre}</span>}
         </div>
       </div>
     );
   }
-  // Standard (maquettes du 14/09) : patte orange, RESERVOIR en repere, le bac
-  // et le dernier repas en sous-titre, Distribuer et Rempli au pied.
-  const orange = 'var(--o-orange)';
-  const ligne = sub || prochaine;
+  const { n, suite } = pucesQuiTiennent(v.puces);
+  const reste = suite ? v.puces.length - n : 0;
   return (
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')}
-      style={{ ...RM_CARD, position: 'relative', cursor: 'pointer', border: LISERE,
-        ...(LAVIS ? { background: lavisCarte('var(--o-orange-rgb)') } : null) }}>
-      {onOpen && <Surface onClick={() => onOpen()} label={nomCarte(nom, ligne)} />}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO('rgba(var(--o-orange-rgb),.16)', orange)}><Fi i="paw" size={17} /></span>
-        {pct != null && <span style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: pct < 25 ? 'var(--o-bad)' : orange, marginTop: 4 }}>{pct} %</span>}
+    <div className={'o-rmcard o-gabarit' + (v.muette ? ' o-panne' : '')} data-groupe={groupe} style={{ ...RM_CARD, position: 'relative', justifyContent: 'flex-start', cursor: onOpen ? 'pointer' : 'default', ...(lavis ? { background: lavis } : null), border: LISERE }}>
+      {surface}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+        <span style={RM_ICO(plaque[0], plaque[1])}><Fi i={v.glyphe} size={17} /></span>
+        {v.chiffre && <ChiffreHaut v={v.chiffre} couleur={encre} />}
       </div>
-      {/* PAS DE MARGE SUR LE CORPS (09/10). Le parent est en
-        * `space-between` : le corps est deja colle en bas, la marge n'y
-        * ajoute rien — sauf quand le contenu remplit la carte, et la elle le
-        * pousse DEHORS. « Il y a un souci au niveau de l'organisation,
-        * arrange la carte volet que ce soit au meme niveau que l'Echo » :
-        * mesure, le corps du volet finissait 12 px sous sa zone quand celui
-        * du media tombait pile. */}
-      <div>
-        <div style={RM_NAME}>{nom}</div>
-        <div style={{ ...RM_SUB, color: orange }}>{ligne || '—'}</div>
-        {(onFeed || onRempli) && (
-          // Les boutons au-dessus de la surface (RM_BTN), pas leur rangée,
-          // comme ceux de la machine : l'écart entre Distribuer et Rempli
-          // ouvre la fiche (relecture du lot 13).
-          <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
-            {onFeed && <button className="o-rmbtn" aria-label={tr('Distribuer') + ' ' + nom} onClick={(e) => { e.stopPropagation(); distribuer(); }} style={RM_BTN}>{tr('Distribuer')}</button>}
-            {onRempli && <button className="o-rmbtn" aria-label={tr('Rempli') + ' ' + nom} onClick={(e) => { e.stopPropagation(); onRempli(); }} style={RM_BTN}>{tr('Rempli')}</button>}
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 'var(--o-milieu-haut, 14px)', position: 'relative', pointerEvents: 'none' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="o-gab-nom" style={NOM_GROUPE}>{nom}</div>
+          {/* La phrase ; sur une carte étroite, sa forme courte s'il y en a une (« Séjour · 3 min ») — la feuille n'en montre qu'une. */}
+          <div className={'o-gab-phrase' + (v.phraseCourte ? ' o-seul-large' : '')} style={{ ...RM_SUB, color: encre, '--o-n': Math.max(1, v.phrase.length) }}>{v.phrase}</div>
+          {v.phraseCourte && <div aria-hidden="true" className="o-gab-phrase o-seul-etroit" style={{ ...RM_SUB, color: encre, '--o-n': Math.max(1, v.phraseCourte.length) }}>{v.phraseCourte}</div>}
+        </div>
+        {v.chiffre && (
+          <span aria-hidden="true" className="o-seul-large" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1, flexShrink: 0 }}>
+            <span style={{ fontSize: 25, fontWeight: 800, color: encre, fontVariantNumeric: 'tabular-nums' }}>{v.chiffre}</span>
+            {v.legende && <span style={{ ...petitesCapitales(10), marginTop: 5, whiteSpace: 'nowrap' }}>{v.legende}</span>}
+          </span>
+        )}
+      </div>
+      {v.puces.length > 0 && (
+        <div aria-hidden="true" className="o-seul-large" data-puces="" style={{ display: 'flex', gap: 6, marginTop: 'auto', paddingTop: 10, overflow: 'hidden', position: 'relative', pointerEvents: 'none' }}>
+          {v.puces.slice(0, n).map((p, k) => (
+            <span key={k} style={{ ...PUCE_GROUPE, color: p.ton ? TONS_GROUPE[p.ton][0] : 'var(--o-text3)', ...(k === 0 ? { flexShrink: 1, minWidth: 0 } : null) }}>
+              <Fi i={p.glyphe} size={11} /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.t}</span>
+            </span>
+          ))}
+          {reste > 0 && <span style={{ ...PUCE_GROUPE, color: 'var(--o-text2)' }}>{'+' + reste}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+/* La carte d'un groupe dans un `hass` VIVANT : ses membres, lus dans le relevé de la vue ; leurs états, dans le sien. Présence
+ * lit aussi le JOURNAL de Home Assistant (`useDerniersEvenements`, 24 h), jamais `last_changed` (ADR 0031), et se relit à la
+ * minute : « il y a 3 min » ne vieillit pas sur place. Ouvertures lit l'historique du JOUR de ses ouvertes, comme sa popup
+ * (`useJournee`, `depuisQuand`) : sa puce disait « Baie · 23:48 », l'heure du redémarrage (audit du 19/10, lot 4) ; une ouverte
+ * depuis hier tait son heure, et la lecture se refait quand une porte s'ouvre ou se ferme. */
+/* La carte Vigilance météo (chantier Capteurs, étape 2 ; C28, § 19.5) : dans Dehors, sous son nom d'aujourd'hui, la carte des groupes
+ * sans puces, avec la vue de vigilance.js — le niveau au calme, jamais « Tout va bien » ; l'ambre, l'orange ou le rouge en alerte ;
+ * muette, le liseré qui respire. Elle garde sa clé d'entité : son agencement la range déjà. Elle s'abonne à son entité. */
+function RoomVigilanceCard({ id, hass, onOpen = null, label = null, chip = false }) {
+  const H = hassQuiConnait(useHass([id]), hass, id);
+  const v = vueVigilance((H && H.states) || {}, id);
+  return <CarteGroupe v={v} nom={label || tr('Vigilance météo')} groupe="vigilance" onOpen={onOpen ? () => onOpen(id) : null} chip={chip} />;
+}
+function RoomGroupeCard({ groupe, hass, onOpen = null, label = null, chip = false }) {
+  const membres = membresDeLaMaison((hass && hass.states) || {})[groupe] || [];
+  const H = hassQuiConnait(useHass(membres), hass, membres[0]);
+  const S = (H && H.states) || {};
+  const derniers = useDerniersEvenements(H, groupe === 'presence' ? membres : [], reduireDerniers);
+  const [, setMinute] = useState(0);
+  useEffect(() => { if (groupe !== 'presence') return undefined; const iv = setInterval(() => setMinute(x => x + 1), 60000); return () => clearInterval(iv); }, [groupe]);
+  const ouvertes = groupe === 'ouvertures' ? membres.filter(id => S[id] && S[id].state === 'on') : [];
+  const jour = useJournee(H, ouvertes);
+  const lu = jour && jour !== 'erreur' ? jour : null;
+  const depuis = (id) => depuisQuand(lu ? lu.etats[id] || null : null, lu && lu.debut, S[id]);
+  const ctx = ctxCapteurs();
+  const noms = nomsMembres(membres, S, ctx);
+  const v = groupe === 'presence' ? vuePresence(membres, S, noms, derniers, Date.now(), ctx) : groupe === 'securite' ? vueSecurite(membres, S, noms) : vueOuvertures(membres, S, noms, heureDe, depuis);
+  return <CarteGroupe v={v} nom={label || NOMS_GROUPES()[groupe]} groupe={groupe} onOpen={onOpen} chip={chip} />;
+}
+/* La carte PILES (chantier Capteurs, étape 3 ; C32, § 8, § 19.8) : les piles de la maison (piles.js) dans la carte des groupes — « {k} piles à
+ * changer » au seuil de la veille, sinon les muettes, sinon « {n} piles · la plus basse à {p} % » ; le chiffre et « ≤ 15 % » seulement s'il y en
+ * a à changer. Elle s'abonne à ses piles, jamais au domaine ; le seuil est celui que la racine a relu avec les veilles (`useSeuilPile`). */
+function RoomPilesCard({ hass, onOpen = null, label = null, chip = false }) {
+  const piles = pilesDeLaMaisonCarte((hass && hass.states) || {});
+  const H = hassQuiConnait(useHass(piles.map(p => p.id)), hass, piles.length ? piles[0].id : null);
+  const v = vuePiles(pilesCarte((H && H.states) || {}, ctxCapteurs(), { exclure: [enHaids().batSoc] }));
+  return <CarteGroupe v={v} nom={label || NOMS_GROUPES().piles} groupe="piles" onOpen={onOpen} chip={chip} />;
+}
+
+/* ── La carte d'une PRISE (chantier Prises, § 3.1-3.2 ; sa maquette « Cartes
+ * prises », cadre 1a ; ADR 0193) ─────────────────────────────────────────────
+ *
+ * Dans le cadre des cartes de la maison (`RM_CARD`, le liseré, le lavis, la
+ * surface qui ouvre la fiche, `o-panne` muette), à leurs tailles (184 ; 176
+ * de large au téléphone) : la plaque de l'appareil en haut à gauche, le
+ * cadenas d'une prise protégée et la bascule rose à droite ; 14 px plus bas
+ * le nom, la puissance en grand à sa droite et la phrase du § 4 dessous ; au
+ * pied, « Aujourd'hui », ses kWh, et la courbe du jour. Seulement pour une
+ * PRISE (P1, `priseDe`) : les autres switch gardent la carte générique.
+ *
+ * Couper À LA MAIN une prise protégée demande d'abord (P5) — ou dont la
+ * protection n'est pas encore lue : dans le doute, on demande, mais le cadenas
+ * ne s'affiche que pour une protection connue (A3) : la question
+ * prend la place de la phrase, Annuler et Couper celle du pied — une carte de
+ * 184 px ne loge pas les trois sous la phrase. La demande prend le focus, se
+ * défait seule au bout de 6 s, et rend le focus à la bascule. Ni animation,
+ * ni étiquette du type au-dessus du nom (P11) : la fiche dit le type.
+ *
+ * Sur une carte étroite (le téléphone, sous 188 px de contenu), la grille
+ * commune (`o-gabarit`, index.css ; passe téléphone, T10, T11, T17) : la
+ * puissance monte en haut à droite (`ChiffreHaut`), le nom et la phrase — sa
+ * forme courte quand la bascule dit déjà l'état — passent sur toute la largeur,
+ * et la ligne de commandes porte la bascule et les kWh du jour, « Aujourd'hui »
+ * dessous. Une prise PROTÉGÉE n'y a pas d'interrupteur : une pastille,
+ * « Protégée », que l'on touche pour ouvrir la fiche. La courbe, le pied et la
+ * demande sur place restent à la carte large ; une prise gardée dont la
+ * protection n'est pas encore lue ouvre sa fiche au toucher de la bascule.
+ */
+const PAS_DE_PRISE = { prise: false, puissance: null, energie: null };
+// Annuler et Couper : 40 px de haut, arrondi 10, le gris doux, sans bordure (le `ChipButton` de sa maquette) ; leur mot, sans glyphe.
+const RM_PRISE_BTN = { ...RM_BTN, height: 40, padding: '0 6px', borderRadius: 10, border: 'none', minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
+
+/* La demande À DEUX APPUIS (P5, relecture finale A4), pour les cartes qui n'ont
+ * pas la place des deux boutons de `RoomPriseCard` : la compacte sans fiche à
+ * ouvrir, le gros interrupteur d'une vue personnalisée. Le premier appui pose
+ * la demande — la phrase d'état dit « Couper la prise ? » —, le second coupe ;
+ * Échap ou 6 secondes la défont. Pas de bouton dans le bouton : c'est la
+ * bascule elle-même qui reçoit le second appui.
+ *
+ * `allumee` : la prise l'est encore. Coupée ou muette entre-temps, la question n'a plus
+ * d'objet — et ne doit pas attendre, tapie, qu'une automatisation la rallume dans les
+ * six secondes : « Couper la prise ? » reviendrait de nulle part, et l'appui suivant, pris
+ * pour le second, couperait sans que personne ait rien demandé (relecture finale, F4 ;
+ * la fiche et la carte font de même). */
+function useDemandeCoupure(allumee = true) {
+  const [demande, setDemande] = useState(false);
+  useEffect(() => { if (demande && !allumee) setDemande(false); }, [demande, allumee]);
+  useEffect(() => {
+    if (!demande) return undefined;
+    const fin = setTimeout(() => setDemande(false), DEMANDE_PRISE_MS);
+    const echap = (ev) => { if (ev.key === 'Escape') setDemande(false); };
+    document.addEventListener('keydown', echap);
+    return () => { clearTimeout(fin); document.removeEventListener('keydown', echap); };
+  }, [demande]);
+  return [demande, setDemande];
+}
+
+/** Ce que la carte et la compacte d'une prise lisent (§ 3.1, 3.3, § 4) : sa
+ * règle (`priseDe`), l'état du serveur (prisesetat.js), la mesure du moment
+ * et — `jour`, la carte seulement — celles du jour. `actif` faux : rien ne
+ * s'abonne, et rien ne se rend.
+ *
+ * Elle s'abonne à SA bascule et à SON capteur de puissance (relecture finale,
+ * A2) : les vues qui la portent ne surveillent pas `sensor.` — il jitte sans
+ * cesse et redessinerait tout l'écran —, et sans cet abonnement « 146 W »
+ * restait figé jusqu'au prochain changement d'un `switch.`. Seule la carte se
+ * redessine, à 10 W près (clé bruyante, ADR 0119). Les états se lisent dans
+ * CE `hass` vivant, pas dans celui du parent : il faut les DEUX clés, sinon une
+ * carte redessinée par son parent après un geste lirait un relevé vieux de deux
+ * secondes, où la bascule n'a pas encore bougé. Inactive, la liste est vide : ni
+ * relevé ni intervalle (`useHass`), une compacte qui n'est pas une prise ne paie rien. */
+function useVuePrise(hass, id, label = null, actif = true, { jour: avecJour = true } = {}) {
+  // Ce que le parent a lu : la règle des prises s'y lit (le registre, pas les mesures) ; les ÉTATS, eux, se lisent plus bas dans le hass vivant.
+  let S = (hass && hass.states) || {};
+  const prise = actif ? priseDe(S, id) : PAS_DE_PRISE;
+  const { cles, bruyantes } = clesDesPrises(actif ? [{ id, puissance: prise.puissance }] : []);
+  const vivant = useHass(cles, bruyantes);
+  if (vivant && vivant.states) S = vivant.states;
+  const st = S[id] || null;
+  const { etat, minuteurs } = useEtatPrises(actif);
+  const jour = useMesuresPrise(prise.puissance, prise.energie, actif && avecJour);
+  const [ov, poser] = useOptimiste(st ? st.state : null);
+  if (!actif) return null;
+  const maintenant = Date.now();
+  const e = prisesDe(etat, id);
+  const g = gardeDePrise(etat, id);
+  const nom = label || cvName(st, id);
+  // `muette`, et non `muet` : des tests extraient la PREMIÈRE ligne qui déclare `muet` dans App.jsx, celle de la fabrique des cartes (croquettes_popup, distributeur_finition).
+  const muette = !st || st.state === 'unavailable' || st.state === 'unknown';
+  // Le geste d'abord (`useOptimiste`, il expire) : « Coupée depuis » l'heure du geste.
+  const enAvance = !muette && ov != null && ov !== (st.state === 'on');
+  const vu = enAvance ? { ...st, state: ov ? 'on' : 'off', last_changed: new Date(maintenant).toISOString() } : st;
+  const on = !muette && vu.state === 'on';
+  // En WATTS, quelle que soit l'unité du capteur (audit du 03/10), dans celui que la règle retient (P1).
+  const watts = prise.puissance && S[prise.puissance] ? wattsDe(S[prise.puissance]) : null;
+  const type = e && TYPES_PRISE[e.type] ? e.type : typeDePrise(nom, null, id);
+  // Une fin passée n'est plus un minuteur (audit du 19/10, point 5) : « Se coupe à 20:40 » le temps que le sondage l'apprenne.
+  const ligne = ligneDePrise({ st: vu, mesure: !!prise.puissance, watts, minuteur: finMinuteur(minuteurs, id, maintenant),
+    cycle: e && e.cycle, cycles: e ? e.cycles : [], type, maintenant });
+  return {
+    // `protegee` : la protection CONNUE — elle seule met le cadenas ; `garde` : ce que couper à la main doit demander, protection inconnue comprise (A3).
+    nom, muet: muette, on, type, tp: TYPES_PRISE[type], protegee: g.protegee, garde: g.garde, puissance: prise.puissance,
+    // Le chiffre : allumée, vivante, mesurée ; active à 1 W ou plus (le lavis). Sans mesure, rien.
+    watts: on && watts != null ? watts : null, vive: on && (watts == null || watts >= 1),
+    mesure: !!(prise.puissance || prise.energie), jour, maintenant, phrase: phrasePrise(ligne, { maintenant }),
+    /* La forme courte de la carte étroite (passe téléphone, T17) : « Depuis le 4 sept. », seulement quand l'état se VOIT déjà — sans
+     * protection (la bascule le dit) ou allumée (la plaque teintée, la puissance). Protégée et COUPÉE, la pastille « Protégée » ne dit
+     * rien de l'état, et seul le gris de la plaque le laisse deviner : « Coupée depuis le 5 oct. » reste entière (correction bis, point 2). */
+    phraseCourte: phrasePrise(ligne, { maintenant, courte: !g.protegee || on }),
+    commander: (allumer) => { poser(allumer); commanderService(hass, id, 'homeassistant', allumer ? 'turn_on' : 'turn_off', { entity_id: id }); },
+  };
+}
+
+/* La demande se défait : le focus qui y était reste DANS la carte, posé AVANT que
+ * ses boutons ne disparaissent (sinon il tomberait sur la page, `<body>`).
+ *
+ * Où il va (passe téléphone, corrections bis 2, point 1). La carte d'une prise
+ * écrit sa bascule deux fois (`o-seul-large`, `o-seul-etroit`) et la feuille en
+ * cache une ; mais PENDANT la demande, la ligne de commandes étroite n'est pas
+ * rendue : il ne reste que la bascule de la carte large. Sur une carte devenue
+ * étroite pendant les 6 s de la demande, celle-là est cachée (`display: none`,
+ * aucun rectangle) et ne prendrait pas le focus. Dans l'ordre :
+ *  1. la bascule qui se VOIT ;
+ *  2. sinon la SURFACE de la carte (`.o-surface`, le bouton qui l'ouvre) : la
+ *     carte la pose dès qu'elle a `onOpen`, et son seul appelant le passe. */
+function defaireDemande(el, setDemande) {
+  const pied = el && el.querySelector('[data-demande]');
+  if (pied && pied.contains(document.activeElement)) {
+    const bascule = [...el.querySelectorAll('[role="switch"]')].find(n => n.getClientRects().length);
+    const cible = bascule || el.querySelector('.o-surface');
+    if (cible) cible.focus();
+  }
+  setDemande(false);
+}
+
+/* La puissance d'une carte LARGE : « 146 » en 25 px / 800 et « W » en 15 à droite du nom
+ * ET de la phrase, alignée sur leur bas comme le pourcentage d'une lumière et celui
+ * d'un volet. Elle ne remonte plus de 7 px dans l'air du dessus (la marge négative,
+ * retirée le 14/10) : c'est la rangée, alignée par le bas, qui la pose. Une carte
+ * étroite l'écrit en haut (`ChiffreHaut`, passe téléphone), et la feuille n'en montre
+ * qu'une (`o-seul-large`). La surface la dit déjà. */
+function ChiffrePrise({ w }) {
+  const { v, u } = puissancePrise(w);
+  return (
+    <span aria-hidden="true" className="o-prise-chiffre o-seul-large"
+      style={{ display: 'flex', flexShrink: 0, alignItems: 'baseline', gap: 3, fontWeight: 800, lineHeight: 1, whiteSpace: 'nowrap', color: 'var(--o-text)' }}>
+      <span style={{ fontSize: 25, letterSpacing: '-.02em' }}>{v}</span><span style={{ fontSize: 15 }}>{u}</span>
+    </span>
+  );
+}
+
+/* La courbe du jour (§ 3.1, P8) : de minuit à maintenant, les moyennes sur
+ * 5 minutes puis la puissance du moment ; la ligne de base en `--o-bd1`,
+ * l'aire à .22 de la teinte, la ligne de 1,5 px — grises pour une prise
+ * muette, comme sa plaque : ce qu'elle a tiré avant de se taire, sans la
+ * couleur de ce qui vit. Dessinée en 240 × 36, étirée à la largeur de la
+ * carte ; elle prend la hauteur qui reste au pied, de 18 à 36 px (`flex`),
+ * 28 dans une carte sans hauteur imposée. */
+function CourbeJour({ points, watts, maintenant, tp, muet = false }) {
+  const pts = Array.isArray(points) ? (watts == null ? points : [...points, { t: maintenant, w: watts }]) : [];
+  const c = cheminsCourbe(pts, { largeur: 240, hauteur: 36, debut: minuitLocal(maintenant), fin: maintenant });
+  return (
+    <svg aria-hidden="true" className="o-prise-courbe" viewBox="0 0 240 36" preserveAspectRatio="none"
+      style={{ display: 'block', width: '100%', flex: '1 1 28px', minHeight: 18, maxHeight: 36, marginTop: 6, overflow: 'visible' }}>
+      <line x1="0" y1="36" x2="240" y2="36" vectorEffect="non-scaling-stroke" style={{ stroke: 'var(--o-bd1)', strokeWidth: 1 }} />
+      {c && <path d={c.aire} style={{ fill: muet ? 'var(--o-s2)' : 'rgba(' + tp.rgb + ',.22)' }} />}
+      {c && <path d={c.ligne} vectorEffect="non-scaling-stroke" style={{ fill: 'none', stroke: muet ? 'var(--o-text3)' : tp.col, strokeWidth: 1.5, strokeLinejoin: 'round', strokeLinecap: 'round' }} />}
+    </svg>
+  );
+}
+
+function RoomPriseCard({ id, hass, onOpen, titre = null }) {
+  const v = useVuePrise(hass, id, titre);
+  const [demande, setDemande] = useState(false);
+  const racine = useRef(null);
+  // La demande prend le focus (Annuler) et se défait seule au bout de 6 s.
+  useEffect(() => {
+    if (!demande) return undefined;
+    const el = racine.current;
+    const annuler = el && el.querySelector('[data-annuler]');
+    if (annuler) annuler.focus();
+    const t = setTimeout(() => defaireDemande(el, setDemande), DEMANDE_PRISE_MS);
+    /* Échap la défait, comme la compacte et le gros interrupteur (audit du 19/10, point 9) — à la CAPTURE, et arrêté : posée
+     * dans une feuille, la carte ne la ferme pas en même temps (la feuille ferme sur Échap, ui.jsx). */
+    const echap = (ev) => { if (ev.key !== 'Escape') return; if (ev.stopPropagation) ev.stopPropagation(); defaireDemande(el, setDemande); };
+    document.addEventListener('keydown', echap, true);
+    return () => { clearTimeout(t); document.removeEventListener('keydown', echap, true); };
+  }, [demande]);
+  // Coupée ou muette entre-temps, la question n'a plus d'objet — et elle TOMBE : rallumée dans les 6 s, elle ne revient pas (F4, comme la fiche).
+  useEffect(() => { if (demande && !v.on) setDemande(false); }, [demande, v.on]);
+  const enDemande = demande && v.on;
+  // Allumée et gardée — protégée, ou protection pas encore lue (A3) : elle demande, elle ne coupe pas d'un appui.
+  const toucher = () => { if (v.on && v.garde) setDemande(true); else v.commander(!v.on); };
+  const tp = v.tp;
+  // La plaque : la teinte de l'appareil allumée et vivante ; coupée, le gris lisible ; muette, le gris éteint.
+  const [fond, encre] = v.muet ? ['var(--o-s1)', 'var(--o-text3)'] : v.on ? ['rgba(' + tp.rgb + ',.18)', tp.col] : ['var(--o-s1)', 'var(--o-text2)'];
+  const chiffre = v.watts != null && !enDemande;
+  /* La bascule de la carte ÉTROITE (passe téléphone, T10) : allumée et gardée — protection pas encore lue —, elle ouvre la fiche, qui
+   * demande (`appuiBascule`, comme la compacte) ; ailleurs, le geste de la carte large. La carte étroite ne demande pas sur place. */
+  const toucherEtroite = () => { if (appuiBascule({ on: v.on, garde: v.garde, ouvrable: !!onOpen }) === 'fiche') onOpen(id); else toucher(); };
+  const pp = chiffre ? puissancePrise(v.watts) : null;
+  const phrase = (texte, classe) => <div className={classe} style={{ ...RM_SUB, color: v.muet ? 'var(--o-bad)' : 'var(--o-text2)', '--o-n': Math.max(1, texte.length) }}>{texte}</div>;
+  return (
+    <div ref={racine} className={'o-rmcard o-gabarit' + (v.muet ? ' o-panne' : '')} data-prise=""
+      style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
+        // Active (allumée, 1 W ou plus) : le lavis de son appareil, 0,16 en haut, 0,04 en bas.
+        ...(v.vive && LAVIS ? { background: lavisCarte(tp.rgb, .16) } : null),
+        border: LISERE }}>
+      {onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(v.nom, v.phrase, v.watts == null ? null : fmtWatts(v.watts))} />}
+      {/* La ligne du haut. Carte large : la plaque, le cadenas d'une prise protégée, la bascule. Carte étroite : la plaque, et la puissance
+        * à droite — le cadenas descend dans la pastille, la bascule dans la ligne de commandes. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <span style={{ ...RM_ICO(fond, encre), marginRight: 'auto' }}><GlypheCarte id={id} size={17}>{tp.ico ? <Ico name={tp.ico} size={17} /> : <PlugIcon size={17} />}</GlypheCarte></span>
+        {v.protegee && <span role="img" aria-label={tr('Protégée')} title={tr('Protégée')} className="o-seul-large" style={{ display: 'flex', alignItems: 'center', height: 26, color: 'var(--o-text3)' }}><Fi i="lock" size={12} /></span>}
+        <RmBascule className="o-seul-large" on={v.on} nom={v.nom} onToggle={toucher} inerte={v.muet} />
+        {chiffre && <ChiffreHaut v={pp.v} u={pp.u} />}
+      </div>
+      {/* Le nom et la phrase à gauche, la puissance à droite, en bas : la disposition de la carte d'une lumière et de celle d'un volet
+        * (sa demande du 14/10, « aligne aussi la puissance des prises en bas »). Pendant la demande, la question prend la place de la
+        * phrase et la puissance se tait : la colonne a toute la largeur. Sur une carte étroite, la puissance du bas se tait, et la phrase
+        * prend sa forme courte quand elle en a une (T17). */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 'var(--o-milieu-haut, 14px)' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="o-gab-nom" style={{ ...RM_NAME, fontSize: 15 }}>{v.nom}</div>
+          {enDemande
+            ? <div className="o-gab-phrase" style={{ ...RM_SUB, fontSize: 12.5, fontWeight: 700, color: 'var(--o-text1)' }}>{tr('Couper la prise ?')}</div>
+            : v.phraseCourte === v.phrase ? phrase(v.phrase, 'o-gab-phrase')
+              : <>{phrase(v.phrase, 'o-gab-phrase o-seul-large')}{phrase(v.phraseCourte, 'o-gab-phrase o-seul-etroit')}</>}
+        </div>
+        {chiffre && <ChiffrePrise w={v.watts} />}
+      </div>
+      {/* La question s'annonce (point 13) : elle remplace la phrase sans que le focus y aille toujours. */}
+      <span className="o-vh" aria-live="polite">{enDemande ? tr('Couper la prise ?') : ''}</span>
+      {/* Annuler et Couper : leur mot, la demande d'une carte large ; le mot dit aussi leur nom et leur bulle. */}
+      {enDemande ? (
+        <div role="group" aria-label={tr('Couper la prise ?')} data-demande="" style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 10 }}>
+          <button type="button" data-annuler="" aria-label={tr('Annuler')} title={tr('Annuler')} onClick={(e) => { e.stopPropagation(); defaireDemande(racine.current, setDemande); }}
+            className="o-rmbtn" style={RM_PRISE_BTN}>{tr('Annuler')}</button>
+          <button type="button" aria-label={tr('Couper') + ' ' + v.nom} title={tr('Couper')} onClick={(e) => { e.stopPropagation(); defaireDemande(racine.current, setDemande); v.commander(false); }}
+            className="o-rmbtn" style={{ ...RM_PRISE_BTN, color: 'var(--o-bad)' }}>{tr('Couper')}</button>
+        </div>
+      ) : (<>
+        {/* Le pied d'une carte large : « Aujourd'hui », ses kWh, et la courbe du jour. */}
+        {v.mesure && (
+          <div className="o-prise-pied o-seul-large" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', flex: '1 1 auto', minHeight: 0, paddingTop: 'var(--o-pied-haut, 14px)' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 11, fontWeight: 700, lineHeight: '13px', color: 'var(--o-text3)' }}>
+              <span>{tr('Aujourd’hui')}</span>
+              <span style={{ marginLeft: 'auto', flexShrink: 0, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{v.jour.kwh == null ? '—' : kwhPrise(v.jour.kwh)}</span>
+            </div>
+            {v.puissance && <CourbeJour points={v.jour.points} watts={v.watts} maintenant={v.maintenant} tp={tp} muet={v.muet} />}
           </div>
         )}
-        {extra}
-      </div>
+        {/* La ligne de commandes d'une carte étroite (T10, T11), 44 px collés au pied : la bascule — ou, protégée, la pastille, sans
+          * interrupteur, que l'on touche pour ouvrir la fiche —, et les kWh du jour, « Aujourd'hui » dessous. Une prise sans mesure n'a
+          * que sa bascule. */}
+        <div className="o-seul-etroit" data-pastille={v.protegee ? '' : undefined}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto', paddingTop: 'var(--o-pied-haut, 14px)', minHeight: 'calc(var(--o-pied-haut, 14px) + 44px)', '--o-reserve': v.protegee ? undefined : '54px' }}>
+          {v.protegee
+            ? <span role="img" aria-label={tr('Protégée')} title={tr('Protégée')} className="o-gab-pastille"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0, height: 26, padding: '0 7px', borderRadius: 9, background: 'var(--o-s1)', color: 'var(--o-text2)', '--o-n': tr('Protégée').length }}>
+              <Fi i="lock" size={12} /><span aria-hidden="true" className="o-gab-pastille-mot" style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{tr('Protégée')}</span></span>
+            : <RmBascule on={v.on} nom={v.nom} onToggle={toucherEtroite} inerte={v.muet} />}
+          {v.mesure && <ValeurEtiquette valeur={v.jour.kwh == null ? '—' : insecable(kwhPrise(v.jour.kwh))} dit={tr('Aujourd’hui')} etiquette={tr('Aujourd’hui')} kwh />}
+        </div>
+      </>)}
     </div>
   );
 }
 
-/* Capteur de plante, même gabarit : pousse en haut à gauche, HUMIDITÉ en haut
- * à droite (à la couleur du verdict), nom et verdict sous l'icône. */
-function RoomPlantCard({ mort = false, nom, sub, hum, verdict, verdictCol, lux, cond, temp, uniteTemp: uniteT = 'C', img = null, onOpen, chip = false, rgb = 'var(--o-ok-rgb)' }) {
-  // L'icône pousse du gabarit maison ; l'illustration de la plante vit en
-  // FILIGRANE au fond de la carte, comme sur la vue Objets.
-  /* La COMPACTE passe sa classe : sa taille vient alors de la feuille, qui la
-   * rapetisse quand la carte est étroite. En ligne, elle ne le pourrait pas. */
-  const portrait = (taille, cls = null) => (
-    <span className={cls || undefined} style={{ ...(cls ? null : { width: taille, height: taille, borderRadius: taille > 40 ? 13 : 10 }), flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-ok-rgb),.14)', color: 'var(--o-ok)' }}><Fi i="seedling" size={taille > 40 ? 17 : 15} /></span>
+/* ── La carte d'une lumière (chantier Lumières, § 3.1, 3.2 ; L3 à L7, L11) ────
+ *
+ * La carte 1a de sa maquette, aux tailles de la maison (184, et 176 de large au
+ * téléphone) : la plaque et la bascule en haut, seules ; le nom, la phrase d'état
+ * (§ 4) et, allumée et variable, le pourcentage en grand à droite du nom ; la barre
+ * au pied. Sur une carte étroite (le téléphone : passe téléphone, ADR 0202), le
+ * modèle 1c de la grille commune : la plaque EST l'interrupteur (`PlaqueBascule`),
+ * le pourcentage monte à droite, le nom passe sur toute la largeur et la phrase
+ * s'écrit à l'encre de la lampe allumée.
+ * Elle prend la couleur de la VRAIE lumière (L6, `teinteDeCarte`) — la plaque, le
+ * lavis, d'autant plus fort qu'elle éclaire, et la barre ; éteinte, elle se
+ * tait : le gris, et le repère de la barre au dernier niveau que garde le
+ * carnet du serveur. Les gestes de Loggia restent (L3) : un appui ouvre la
+ * fiche, la bascule allume ou éteint — `turn_on` / `turn_off` d'après l'état
+ * affiché, jamais `toggle` (la leçon des prises, F5) —, on glisse sur la barre ;
+ * glisser sur une lampe éteinte l'allume à ce niveau. Un switch déclaré lumière
+ * garde sa place, sans barre, en or (L11).
+ */
+
+/* Ce que la carte et la compacte d'une lumière lisent : la lampe dans un `hass`
+ * VIVANT — elle s'abonne à SA lampe (la leçon des prises, A2 : la vue qui la
+ * porte ne surveille pas toujours `light.`, et un geste se relit dans ce
+ * relevé-là) ; le carnet du serveur (le dernier niveau) et le minuteur
+ * (lumieresetat.js) ; le geste d'abord — la variante PARTAGÉE d'optimiste.js
+ * (`useOptimistePartage`, audit du 19/10, B2 : la carte et la fiche, ouvertes
+ * ensemble, tiennent la MÊME avance, par lampe ; 6 s pour la marche, 4 s pour
+ * la luminosité — l'écho Zigbee rejoue l'ancienne valeur ; et l'état réel ne
+ * répond qu'en ATTEIGNANT ce qu'on a demandé, `cible` (B3) : l'écho d'un ordre
+ * plus ancien, les paliers d'un fondu ne la lèvent pas) ; l'avance de « Tout
+ * éteindre ». `actif` faux : rien ne s'abonne, et rien ne se rend. */
+const CLE_LUMIERE = (id) => 'lumiere:' + id, CLE_LUMINOSITE = (id) => 'lumiere:bri:' + id, CLE_DOIGT = (id) => 'lumiere:doigt:' + id;
+function useVueLumiere(hass, id, label = null, actif = true) {
+  const vivant = useHass(actif ? [id] : []);
+  // Le relevé vivant s'il connaît la lampe ; sinon la maison qu'on lui passe — celle, fictive, de la Bibliothèque (correction bis du chantier Capteurs, point 7).
+  const H = hassQuiConnait(vivant, hass, id);
+  const S = (H && H.states) || {};
+  const st = S[id] || null;
+  const a = (st && st.attributes) || {};
+  const { etat, minuteurs } = useEtatLumieres(actif);
+  useAvancesLumieres();
+  // La lampe a changé d'état (son `last_changed` RÉEL) : le serveur a pu annuler son minuteur — les minuteurs se relisent (B10).
+  useRelireMinuteurs(actif && st ? st.last_changed : null);
+  const lue = luminosite(a);
+  const ov = useOptimistePartage(actif ? CLE_LUMIERE(id) : null, { reel: st ? st.state : undefined, change: st ? st.last_changed : null });
+  const ovBri = useOptimistePartage(actif ? CLE_LUMINOSITE(id) : null, { reel: lue, change: st ? st.last_updated : null });
+  /* La luminosité SOUS LE DOIGT (passe bis 3 du 17/10, point 3 : sa demande pour le volume — « quand je règle le volume, le pourcentage
+   * ne suit pas comme sur la maquette » — vaut pour la luminosité) : tant que la barre est tenue (`RmJauge`, `onGlisse`), le chiffre de
+   * la carte large, celui de la carte étroite et le grand pourcentage de la fiche suivent le doigt — le doigt posé sur la barre de la
+   * fiche se voit sur la carte derrière (B2 : la même clé). L'ordre (`turn_on`, `brightness_pct`) ne part qu'au relâcher (`regler`), et
+   * le geste d'abord (`ovBri`, 4 s) prend le relais : le chiffre ne repasse pas par l'ancienne valeur. Une lampe éteinte (L7) montre son
+   * chiffre dès le glisser ; rien ne part avant le relâcher. Un doigt qui ne se relève jamais (la barre démontée sans le dire) : 60 s. */
+  const glisse = useOptimistePartage(actif ? CLE_DOIGT(id) : null);
+  const suivre = (v) => { if (v == null) { const e = brutPartage(CLE_DOIGT(id)); if (e) oublierPartage(CLE_DOIGT(id), e.id); } else poserPartage(CLE_DOIGT(id), v, { filet: 60000 }); };
+  // Muette : la règle de toutes les cartes (`enPanne`, 05/10) — absente, `unavailable` ou `unknown`.
+  const muette = enPanne(id, st);
+  // Muette, plus de doigt sur sa barre (la garde du lecteur, passe bis 3, point 1) : la valeur glissée s'oublie, même si la barre n'a pas pu le dire.
+  useEffect(() => { if (actif && muette && glisse != null) suivre(null); });
+  if (!actif) return null;
+  const maintenant = Date.now();
+  const nom = label || cvName(st, id);
+  const doigt = muette ? null : glisse;
+  // Le geste d'abord : la marche posée pour la carte ET la fiche (B2), que seul l'état demandé lève (B3).
+  const poser = (allumer) => poserPartage(CLE_LUMIERE(id), !!allumer, { reel: st ? st.state : undefined, change: st ? st.last_changed : null, cible: allumer ? 'on' : 'off' });
+  const poserBri = (pct) => poserPartage(CLE_LUMINOSITE(id), pct, { reel: lue, change: st ? st.last_updated : null, filet: 4000, cible: pct });
+  // Le geste de la carte d'abord, puis celui de l'en-tête (« Tout éteindre ») ; « depuis » prend l'heure du geste (§ 4).
+  const voulu = ov != null ? ov : muette ? null : avanceDe(id, st, maintenant);
+  const enAvance = !muette && voulu != null && voulu !== (st.state === 'on');
+  const vu = enAvance ? { ...st, state: voulu ? 'on' : 'off', last_changed: new Date(maintenant).toISOString() } : st;
+  const on = !muette && vu.state === 'on';
+  const cap = capacitesLumiere(id, a);
+  const dernier = dernierDe(etat, id);
+  // La teinte qui peint la plaque et le lavis : la vraie ; en thème clair, un blanc plafonné à 4 000 K — le blanc froid d'une carte claire ne s'y voyait pas (R7).
+  const teinte = on ? teinteDeCarte(a, dernier, estClair()) : null;
+  const couleurs = couleursLumiere(teinte);
+  /* Sous le doigt, la valeur du geste — éteinte comprise ; sinon le geste d'abord, puis ce que dit la lampe ; allumée sans
+   * `brightness`, le dernier niveau que le carnet garde — celui de son dernier allumage avec un niveau, le serveur le tient à
+   * jour —, sinon RIEN : plus de « 100 % » inventé (audit du 19/10, B12 — la fiche dit « Allumée », la carte tait son chiffre). */
+  const bri = !cap.variable ? null : doigt != null ? doigt : ovBri != null ? ovBri : !on ? null : lue != null ? lue : dernier && dernier.bri ? dernier.bri : null;
+  /* L'encre de la plaque et du repère, et le dégradé de la barre (lumieres.js) : la teinte vraie rendue lisible sur le
+   * fond VRAI de la glyphe — la plaque (0,22) posée sur le lavis de la carte, au plus 0,22 en haut, fois le réglage « Teinte »
+   * du thème (`lav`) —, tirée du blanc de 4 000 K au plus froid ; en thème clair, la barre se peint de cette encre. */
+  const { encre, degrade } = encreLumiere(on ? a : null, on ? dernier : null, { clair: estClair(), lavis: lav(lavisLumiere(100).haut) });
+  return {
+    // `dernierMode` : le mode que le carnet garde (`color_temp`, `xy`…) — la fiche d'une lampe éteinte s'ouvre dessus (B13).
+    nom, muette, on, variable: cap.variable, bri, dernier: dernier ? dernier.bri : null, dernierMode: dernier ? dernier.mode : null, couleurs, encre, degrade,
+    phrase: phraseLumiere({ st: vu, fin: finMinuteur(minuteurs, id), maintenant }),
+    commander: (allumer) => { poser(allumer); commanderService(H, id, id.indexOf('light.') === 0 ? 'light' : 'homeassistant', allumer ? 'turn_on' : 'turn_off', { entity_id: id }); },
+    regler: (pct) => { poserBri(pct); poser(true); commander(H, id, 'set_brightness', pct); },
+    // La luminosité sous le doigt (`RmJauge`, `onGlisse`) : la valeur du geste, `null` quand le doigt s'en va ; `glisse` la dit (null hors geste).
+    glisse: doigt, suivre,
+    // Pour la fiche (§ 3.6, 3.7) : le `hass` vivant, les attributs, l'heure de l'état montré, et le geste d'abord d'un blanc ou d'une couleur.
+    hass: H, attributs: a, depuis: vu ? vu.last_changed : null, avancer: poser,
+  };
+}
+
+/* Le pourcentage : « 45 » en 25 px / 800 et « % » en 15, à droite du nom ET de
+ * la phrase, posé en bas comme le pourcentage d'un volet et la température
+ * d'une clim (retour du 14/10 : « par rapport aux autres cartes il doit être
+ * plus bas »). Une fois (L5) : la phrase ne le redit pas, la surface le dit au
+ * lecteur d'écran.
+ * Sur une carte large, il s'écrit à la première rangée, deuxième colonne de la grille
+ * du milieu (`RM_MILIEU`) — la place de la température d'un radiateur (retour du
+ * 15/10 : « pourquoi le % et en haut entre l'icone et le toggle […] alors que les
+ * radiateur lui c'est bien placé ») ; sa taille et son écart se lisent dans la feuille
+ * (`--o-chiffre-taille`, `--o-chiffre-ecart`), la valeur large pour repli — 25 px sur
+ * une carte large, 21 sur une carte moyenne. Une carte étroite l'écrit en haut
+ * (`ChiffreHaut`, passe téléphone), et la feuille n'en montre qu'un (`o-seul-large`). */
+function ChiffreLumiere({ bri }) {
+  return (
+    <span aria-hidden="true" className="o-lumiere-chiffre o-seul-large"
+      style={{ gridColumn: 2, gridRow: 1, marginLeft: 'var(--o-chiffre-ecart, 10px)', display: 'flex', alignItems: 'baseline', gap: 3, fontWeight: 800, lineHeight: 1, whiteSpace: 'nowrap', color: 'var(--o-text)' }}>
+      <span style={{ fontSize: 'var(--o-chiffre-taille, 25px)', letterSpacing: '-.02em' }}>{bri}</span>
+      <span style={{ fontSize: 'calc(var(--o-chiffre-taille, 25px) * .6)' }}>%</span>
+    </span>
   );
-  const filigrane = img && PLANT_ART[img] && (
-    <span aria-hidden="true" style={{ position: 'absolute', right: 6, bottom: -10, width: 120, height: 120, backgroundImage: `url("${PLANT_ART[img]}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.14, pointerEvents: 'none' }} />
+}
+
+function RoomLightCard({ id, hass, onOpen, label = null }) {
+  const v = useVueLumiere(hass, id, label);
+  const [flashRef, flash] = useFlash();
+  const c = v.couleurs;
+  const lavis = lavisLumiere(v.bri);
+  // Le chiffre : allumée et variable — ou sous le doigt, une lampe éteinte comprise (passe bis 3, point 3) : il suit dès le glisser, rien ne part avant le relâcher.
+  const chiffre = (v.on || v.glisse != null) && v.bri != null;
+  // La plaque : la teinte de la lampe allumée, le gris lisible éteinte, le gris éteint muette — la même sur les deux écritures.
+  const fond = v.on ? 'rgba(' + c.rgb + ',.22)' : 'var(--o-s1)';
+  const encre = v.on ? v.encre : v.muette ? 'var(--o-text3)' : 'var(--o-text2)';
+  // Allumer ou éteindre, d'après l'état AFFICHÉ — `turn_on` / `turn_off`, jamais `toggle` (`v.commander`) ; le halo du geste d'abord.
+  const basculer = () => { flash(c.col); v.commander(!v.on); };
+  return (
+    /* La lampe n'est pas un `button` (lot 13 de l'audit du 03/10, ADR 0074) : la
+     * bascule et la barre ne sont dans aucun bouton. Le geste « ouvrir » passe par
+     * la SURFACE, nommée de ce que la carte affiche : « Ampoule Chambre, 45 %,
+     * S'éteint à 21:10 ». Les classes restent : la CSS, l'enfoncement au doigt et
+     * le retour haptique lisent `.o-light-card`. */
+    <div ref={flashRef} className={'o-light-card o-rmcard o-gabarit' + (v.muette ? ' o-panne' : '')} data-lumiere=""
+      style={{ ...RM_CARD, position: 'relative', textAlign: 'left', lineHeight: 'normal', width: '100%', cursor: onOpen ? 'pointer' : 'default', overflow: 'hidden',
+        // Le nom reste sous la plaque, la barre seule descend au pied : une lampe sans barre ne pose pas son nom en bas.
+        justifyContent: 'flex-start',
+        // Le lavis est une COUCHE posée sur la surface (retour user 29/08) ; il monte avec la luminosité (L6).
+        background: v.on && LAVIS ? lavisCarte(c.rgb, lavis.haut, lavis.bas) : SURF_CARTE,
+        border: LISERE }}>
+      {onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(v.nom, chiffre ? v.bri + ' %' : null, v.phrase.texte)} />}
+      {/* La ligne du haut. Carte LARGE : la plaque à gauche, la bascule à droite, rien d'autre — le pourcentage a sa place plus bas, à côté
+        * du nom (retour du 15/10). Carte ÉTROITE (passe téléphone, T12) : la plaque EST l'interrupteur, et le pourcentage monte à droite. La
+        * feuille ne montre qu'une écriture. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 4 }}>
+        <span className="o-seul-large" style={RM_ICO(fond, encre)}>
+          <GlypheCarte id={id} size={17}><Fi i="bulb" size={17} /></GlypheCarte></span>
+        <PlaqueBascule on={v.on} nom={v.nom} fond={fond} encre={encre} inerte={v.muette} onToggle={basculer}>
+          <GlypheCarte id={id} size={17}><Fi i="bulb" size={17} /></GlypheCarte></PlaqueBascule>
+        <RmBascule className="o-seul-large" on={v.on} nom={v.nom} onToggle={basculer} inerte={v.muette} />
+        {chiffre && <ChiffreHaut v={v.bri} u="%" />}
+      </div>
+      {/* La rangée du radiateur (`RM_MILIEU`) : le nom et la phrase à gauche, le pourcentage d'une carte large à droite, aligné sur leur bas.
+        * Sur une carte étroite il se tait : le nom et la phrase prennent toute la largeur (`o-gab-nom`, `o-gab-phrase`) — la longueur de la
+        * phrase (`--o-n`) règle sa taille, de 12 à 10,5 px, et une lampe allumée l'écrit à son encre (T8, `--o-encre`), gardée lisible
+        * comme du texte sur son lavis. */}
+      <div style={RM_MILIEU}>
+        <div style={{ minWidth: 0 }}>
+          <div className="o-gab-nom" style={{ ...RM_NAME, fontSize: 15 }}>{v.nom}</div>
+          <div className="o-gab-phrase" data-encre={v.on && !v.phrase.panne ? '' : undefined}
+            style={{ ...RM_SUB, color: v.phrase.panne ? 'var(--o-bad)' : 'var(--o-text2)', '--o-n': Math.max(1, v.phrase.texte.length), '--o-encre': v.on ? v.encre : undefined }}>{v.phrase.texte}</div>
+        </div>
+        {chiffre && <ChiffreLumiere bri={v.bri} />}
+      </div>
+      {/* La barre, variable seulement, collée au pied : de 1 à 100 %, la teinte allumée, le repère gris éteinte (L7). */}
+      {v.variable && (
+        <div style={{ marginTop: 'auto', paddingTop: 'var(--o-pied-haut, 14px)' }}>
+          <RmJauge v={v.on ? v.bri : v.dernier} couleur={v.encre} grade={v.degrade} actif={!v.muette} min={1} eteinte={!v.on} zone={44} marge={0}
+            label={tr('Luminosité') + ' ' + v.nom} onCommit={v.regler} onGlisse={v.suivre} rafale />
+        </div>
+      )}
+    </div>
   );
-  /* Sans commande, la plante reste un bouton entier — rien à y enfermer.
-   * Son NOM change (lot 13 de l'audit du 03/10) : ce qu'elle affiche,
-   * « Monstera, À arroser bientôt », et non plus « Ouvrir Monstera », qui
-   * taisait le verdict (WCAG 2.5.3) ; `aria-haspopup` dit la fiche qu'elle
-   * ouvre. Sans verdict ni lieu, le tiret de l'écran ne se lit pas. */
-  /* Relecture du lot 13 : l'humidité s'affiche en chiffres (« 38% ») et le
-   * verdict n'en porte aucun — le nom la dit aussi, à sa place dans chaque
-   * gabarit : après le verdict en compacte, avant lui en standard. */
-  const humLue = hum != null ? Math.round(hum) + ' %' : null;
-  // Compacte 1×1 : gabarit CvCard dense — l'humidité à la couleur du verdict.
+}
+
+/* ── Les robots : l'aspirateur et la tondeuse (chantier IoT, étape 1 ; sa maquette « Cartes IoT », 1a ; I5 à I9, I12, I33) ──
+ *
+ * La carte d'un robot au gabarit commun (`o-gabarit`, ADR 0202), ses deux écritures :
+ *  - large (184 × 225) : la plaque seule en haut ; 10 px plus bas, la rangée `RM_MILIEU` — le nom et la phrase à gauche, la
+ *    batterie NOMMÉE à droite, alignées sur leur bas ; au pied, une ou deux puces de 44 px qui se partagent la largeur —
+ *    38 + 10 + 40 + 9 + 44 = 141 px des 150 de contenu ;
+ *  - étroite (1c, sous 188 px de contenu) : la plaque et la batterie nommée en haut, le nom entier, la phrase, UNE ligne de
+ *    puces en glyphes — 38 + 10 + 32 + 2 + 15 + 9 + 44 = 150.
+ * La couleur n'alerte que : au travail, la plaque à 0,18 et le lavis de 0,14 à 0,03 dans la teinte du robot — l'accent pour
+ * l'aspirateur, le vert pour la tondeuse (I8) ; au repos, le gris, sans lavis ; muet, le liseré qui respire (`o-panne`).
+ * Les puces sont celles de la phase et des bits de l'appareil (`commandesRobot`, I9), chacune par son service explicite —
+ * jamais `toggle` — ; « Démarrer » passe par le serveur (`lancerRobot`), qui note le départ au carnet. Les pièces se
+ * choisissent dans la popup, pas ici. Le geste d'abord (I33) : l'avance PARTAGÉE d'optimiste.js, une par robot, que la carte, la
+ * compacte, la popup et la fiche universelle lisent ensemble (`useVueRobot` ; passe bis 2 du 18/10, point N). */
+
+// La teinte d'un robot au travail (I8) : son lavis, et l'encre de sa plaque — celle de sa phrase (robots.js).
+const TEINTE_ROBOT = { vacuum: ['var(--o-accent-rgb)', 'var(--o-accent-soft)'], lawn_mower: ['var(--o-ok-rgb)', 'var(--o-ok)'] };
+/* La puce de sa maquette (`ChipButton`) au pied d'une carte : 44 px, arrondi 10, le gris doux, sans bordure, le glyphe et le mot
+ * à 7 px ; choisie — la base pendant le retour —, le bleu plein et le blanc. Positionnée (`RM_BTN`) : peinte après la surface,
+ * elle reçoit son clic. */
+const RM_PUCE_ROBOT = { ...RM_BTN, height: 44, padding: '0 8px', borderRadius: 10, border: 'none', minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 12.5 };
+const RM_PUCE_CHOISIE = { background: 'var(--o-accent-fond)', color: '#fff' };
+
+/* « Localiser » : son script maison s'il en désigne un (`vacuumScripts.localiser`, la roue de la popup — l'aspirateur principal seul ;
+ * passe bis 2 du 20/10), par le serveur avec son rôle ; sinon le service `locate`. Puis « Il bipe : suivez le son » trois secondes —
+ * quand Home Assistant a ACCEPTÉ (I7). Un serveur d'avant (`invalid_format` : son schéma ignore le rôle ; `unknown_command`), ou un
+ * script qu'il ne reconnaît pas — absent, `unavailable` : il ne lance rien et ne note rien (`_etat_script`) — : le service, sans toast ;
+ * un autre refus remonte au toast, comme toute commande (`signalerRobot`). La carte, la compacte, la popup et la fiche universelle
+ * passent toutes ici. Rend ce qui a pris. */
+function localiserRobot(H, id, domaine) {
+  const bip = () => (bipeRobot(id), apresCommandeRobot(), true);
+  // Le service par le moteur d'actions (`commanderService`) : la capacité vérifiée, un refus au toast ; réglé non nul quand Home Assistant a accepté.
+  const direct = () => Promise.resolve(commanderService(H, id, domaine, 'locate', { entity_id: id })).then((r) => r != null && bip());
+  const v = LOGGIA_RESOLVED && LOGGIA_RESOLVED.vacuum, d = v && v.main === id && cfgVal('loggia_entities'), sc = d && d.vacuumScripts && d.vacuumScripts.localiser;
+  if (!sc) return direct();
+  return lancerRobot(H, id, [], { script: sc, role: 'localiser', depart: false, direct }).then((etat) => !etat || bip(),
+    (e) => (/^(invalid_format|script_inconnu)$/.test(e && e.code) ? direct() : (signalerRobot(e), false)));
+}
+
+/* Ce que la carte, la compacte, la popup et « En ce moment » lisent d'un robot, dans un `hass` VIVANT (I7, I33, I35) : la carte
+ * s'abonne à SON entité et à ses sœurs de batterie et de charge (`useHass`) ; la phase, l'avance d'un geste comprise ; la batterie
+ * (l'attribut, sinon la sœur) ; ce que le carnet du serveur sait (robotsetat.js : les pièces du passage, ou celles que cet onglet
+ * vient de lancer, sa dernière erreur, le prochain passage qui partira) ; « Il bipe » ; la phrase et les puces (robots.js), chacune
+ * avec son geste. `actif` faux : rien ne s'abonne, et rien ne se rend.
+ *
+ * Le geste en vol (passe bis du 18/10, point 1) n'est plus à la carte : c'est l'avance PARTAGÉE d'optimiste.js, PAR ROBOT
+ * (robotsetat.js, `poserGeste` ; passe bis 2, point N), que la carte large, l'étroite, la compacte, la popup et la fiche
+ * universelle lisent ensemble — deux appuis rapprochés sur « Pause » relançaient le robot, la puce ayant basculé sous le doigt sur
+ * « Reprendre ». Son filet, le modèle de celui du volume (`useVueLecteur`) : la latence de l'appareil, cinq secondes, et un relevé du
+ * pont ; un départ par le serveur le GARDE tant que `loggia/robots/lancer` n'a pas répondu, borné (point E). Une réponse de Home
+ * Assistant le lève, passé 1,5 s — sa phase, ou son `last_changed` —, et pour de bon : la maison revenue à la phase d'avant ne le
+ * réarme pas (point G). Un refus ne fait tomber que SON geste, par son jeton (point F). Tant qu'il vole, la puce qui l'a lancé reste
+ * sur lui et ne fait rien, et rien n'offre l'inverse (`commandesEnVol`, `gestePermis`) ; un second appui le lit au moment même,
+ * avant que l'écran ne se redessine. Une tondeuse à aires dont aucune n'est allumée n'offre pas « Démarrer », et sa phrase le dit
+ * (`sansZone`, point D) : toucher la carte ouvre la fiche, où l'on choisit. */
+const FILET_ROBOT_MS = 5000;
+function useVueRobot(hass, id, label = null, actif = true, { rapide = false } = {}) {
+  const S0 = (hass && hass.states) || {};
+  const domaine = String(id).split('.')[0];
+  const soeur = (domain, deviceClass) => (actif ? pickSibling(LOGGIA_INDEX, S0, id, { domain, deviceClass }) : null);
+  const idBat = soeur('sensor', 'battery');
+  const idCharge = soeur('binary_sensor', 'battery_charging');
+  // Les aires d'une tondeuse (point D), suivies comme ses sœurs : l'une s'allume, « Démarrer » revient.
+  const aires = actif && domaine === 'lawn_mower' ? airesTondeuse(LOGGIA_INDEX, id) : [];
+  const vivant = useHass(actif ? [id, idBat, idCharge, ...aires].filter(Boolean) : []);
+  const H = hassQuiConnait(vivant, hass, id);
+  const S = (H && H.states) || {};
+  const st = actif ? S[id] || null : null;
+  const reelle = phaseRobot(domaine, st ? st.state : null);
+  const change = st ? st.last_changed || null : null;
+  const { etat } = useEtatRobots(actif, { rapide });
+  const bipe = useBipe(actif ? id : null);
+  const enVol = useGeste(actif ? id : null, reelle, change);
+  if (!actif) return null;
+  const maintenant = Date.now();
+  // Muet : la règle de toute la maison (`enPanne`) ; un geste n'y change rien.
+  const panne = enPanne(id, st);
+  const geste = panne ? null : enVol;
+  const phase = panne ? 'absent' : geste ? geste.phase || reelle : reelle;
+  const a = (st && st.attributes) || {};
+  const sansZone = aires.length > 0 && !aires.some(x => S[x] && S[x].state === 'on');
+  // L'attribut d'abord, la sœur ensuite ; bornée de 0 à 100, et une valeur vide est inconnue — pas « 0 % » (passe bis du 18/10, point 8).
+  const batterie = batterieRobot(a, idBat && S[idBat] ? S[idBat].state : null);
+  const charge = !!(idCharge && S[idCharge] && S[idCharge].state === 'on');
+  const carnet = vueCarnetRobot(etat, id, maintenant, departRobot(id, maintenant), { sansZone });
+  // Le carnet porte exactement ce que la phrase lit : `pieces`, `tout`, `libelle`, `erreur`, `prochain`.
+  const phrase = phraseRobot({ domaine, phase, depuis: st && st.last_changed, bipe, ...carnet, charge, sansZone, maintenant });
+  const service = (svc) => { commanderService(H, id, domaine, svc, { entity_id: id }); apresCommandeRobot(); };
+  /* Le geste en vol, l'avance partagée : `cle` (la puce), la phase qu'il annonce, la phase réelle d'avant lui et son `last_changed` ;
+   * `mot` : celui de la puce de la popup (« Nettoyer 2 pièces ») ; `garde` : un départ par le serveur, tenu jusqu'à sa réponse.
+   * Rend son jeton : un refus n'oublie que lui (`oublier`). */
+  const poser = (cle, { mot = null, garde = false } = {}) => poserGeste(id, { cle, phase: PHASE_GESTE[cle] || null, depuis: reelle, mot, change },
+    FILET_ROBOT_MS + HASS_POLL_MS, { garde: garde ? GARDE_DEPART_MS : 0 });
+  const oublier = (jeton) => oublierGeste(id, jeton);
+  // Le geste est-il permis MAINTENANT ? Lu au magasin à l'appui même : un second appui arrive avant que l'écran ne se redessine.
+  const permis = (cle) => !enPanne(id, st) && gestePermis(cle, gesteEnVol(id, reelle, change));
+  const agir = (p) => {
+    if (p.enVol || !permis(p.cle)) return;
+    if (p.cle === 'demarrer') {
+      // Jamais `start_mowing` sans aire allumée (point D) : le serveur le refuserait, et le repli direct ne part pas non plus.
+      if (sansZone) return;
+      const jeton = poser('demarrer', { garde: true });
+      lancerRobot(H, id, [], { geste: jeton, direct: () => commanderService(H, id, domaine, p.service, { entity_id: id }) })
+        .catch((e) => { oublier(jeton); signalerRobot(e); });
+    } else if (p.cle === 'localiser') {
+      // Le geste partagé, sans garde (passe bis 2 du 20/10) : un second appui ne rebipe pas, rien d'autre n'est retenu ; refusé, il tombe.
+      const j = poser('localiser');
+      localiserRobot(H, id, domaine).then((ok) => ok || oublier(j));
+    } else { poser(p.cle); service(p.service); }
+  };
+  return {
+    id, domaine, st, hass: H, nom: label || a.friendly_name || id, phase, batterie, charge, phrase, carnet, etat, bipe, sansZone,
+    travail: phase === 'travail', panne, teinte: TEINTE_ROBOT[domaine] || TEINTE_ROBOT.vacuum,
+    cmd: commandesEnVol(domaine, phase, a.supported_features, geste, { depart: !sansZone }).map(p => ({ ...p, agir: () => agir(p) })),
+    // Pour la popup : le geste en vol (le même que celui de la carte), le poser — son jeton rendu —, l'oublier, et savoir s'il en
+    // permet un autre.
+    geste, avancer: poser, oublier, permis,
+  };
+}
+
+/* Le chiffre NOMMÉ d'une carte large (I6) : la batterie en grand — 25 px / 800, « % » en 15 — et son nom dessous, en petites
+ * capitales (10 px / 800, `--o-text3`) : 25 + 5 + 10 = 40 px, la hauteur de la rangée. À la première rangée, deuxième colonne de
+ * `RM_MILIEU`, aligné sur le bas du nom et de la phrase. Sa couleur : la règle des piles (`couleurPile`) — neutre, sauf sous le
+ * seuil. Caché au lecteur d'écran : la surface le dit. */
+function ChiffreNomme({ v, u = '%', nom, couleur = 'var(--o-text)' }) {
+  return (
+    <span aria-hidden="true" className="o-seul-large" style={{ gridColumn: 2, gridRow: 1, marginLeft: 10, display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+      <span style={{ display: 'flex', alignItems: 'baseline', gap: 3, fontWeight: 800, lineHeight: 1, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: couleur }}>
+        <span style={{ fontSize: 25, letterSpacing: '-.02em' }}>{v}</span><span style={{ fontSize: 15 }}>{u}</span>
+      </span>
+      <span style={{ ...petitesCapitales(10), marginTop: 5, lineHeight: '10px', whiteSpace: 'nowrap' }}>{nom}</span>
+    </span>
+  );
+}
+/* Le même, sur la carte ÉTROITE : en haut à droite, le chiffre de la grille (`ChiffreHaut`, 22 px) et son nom en 9,5 px dessous —
+ * 22 + 2 + 11 = 35 px, dans les 38 de la plaque (I6). Le nom s'y écrit en minuscules, comme les étiquettes de 1c. La marge du chiffre
+ * passe de 4 à 3 px (passe bis du 18/10, point 16) : 4 + 35 = 39 grandissait la rangée du haut d'un pixel, et un nom sur deux lignes
+ * poussait le pied hors des 150 px de contenu ; 3 + 35 = 38, la hauteur de la plaque. */
+function ChiffreNommeHaut({ v, u = '%', nom, couleur = 'var(--o-text)' }) {
+  return (
+    <span aria-hidden="true" className="o-seul-etroit" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+      <ChiffreHaut v={v} u={u} couleur={couleur} haut={3} />
+      <span style={{ fontSize: 9.5, fontWeight: 700, lineHeight: '11px', marginTop: 2, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>{nom}</span>
+    </span>
+  );
+}
+
+/* La plaque d'un robot (I8), sur sa carte comme en tête de sa fiche : la teinte à 0,18 au travail ; au repos le gris doux ; muet, le
+ * gris éteint. Rend `[fond, encre]`. */
+const plaqueRobot = (v) => (v.panne ? ['var(--o-s1)', 'var(--o-text3)'] : v.travail ? ['rgba(' + v.teinte[0] + ',.18)', v.teinte[1]] : ['var(--o-s1)', 'var(--o-text1)']);
+
+function RoomRobotCard({ id, hass, onOpen, label = null }) {
+  const v = useVueRobot(hass, id, label);
+  const dom = v.domaine;
+  const [fond, encrePlaque] = plaqueRobot(v);
+  // Une batterie d'avant la panne ne se donne pas pour vraie.
+  const pile = v.panne ? null : v.batterie;
+  const couleur = couleurPile(pile, 'var(--o-text)');
+  const n = v.cmd.length;
+  return (
+    /* La carte n'est pas un bouton (ADR 0074) : la surface, premier enfant, dit ce que la carte affiche — le nom, la phrase, la
+     * batterie — et les puces, positionnées, passent au-dessus d'elle. */
+    <div className={'o-rmcard o-gabarit' + (v.panne ? ' o-panne' : '')} data-robot="" style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
+      ...(v.travail && LAVIS ? { background: lavisCarte(v.teinte[0], .14, .03) } : null), border: LISERE }}>
+      {onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(v.nom, v.phrase.texte, pile == null ? null : tr('batterie {p} %', { p: pile }))} />}
+      {/* La ligne du haut : la plaque, et la batterie nommée de la carte étroite. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+        <span style={RM_ICO(fond, encrePlaque)}><GlypheCarte id={id} size={17}><Ico name={dom === 'vacuum' ? 'vacuum' : 'mower'} size={17} /></GlypheCarte></span>
+        {pile != null && <ChiffreNommeHaut v={pile} nom={tr('Batterie')} couleur={couleur} />}
+      </div>
+      {/* La rangée du milieu, 10 px sous la plaque : le nom et la phrase à gauche — sur une carte étroite, toute la largeur, la phrase
+        * de 12 à 10,5 px selon sa longueur (`--o-n`) —, la batterie nommée de la carte large à droite. */}
+      <div style={{ ...RM_MILIEU, marginTop: 'var(--o-milieu-haut, 10px)' }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="o-gab-nom" style={{ ...RM_NAME, fontSize: 15 }}>{v.nom}</div>
+          <div className="o-gab-phrase" style={{ ...RM_SUB, color: v.phrase.encre, '--o-n': Math.max(1, v.phrase.texte.length) }}>{v.phrase.texte}</div>
+        </div>
+        {pile != null && <ChiffreNomme v={pile} nom={tr('Batterie')} couleur={couleur} />}
+      </div>
+      {/* Le pied (I9), collé en bas par la marge auto : une ou deux puces qui se partagent la largeur. Deux n'ont que leur glyphe
+        * sous 200 px de contenu (index.css) ; le mot reste dans leur nom, qui nomme aussi l'appareil — « Pause Tondeuse ». */}
+      {n > 0 && (
+        <div className="o-puces-robot" data-n={n} style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 'var(--o-pied-haut, 9px)' }}>
+          {/* Un geste en vol (passe bis du 18/10, point 1) : sa puce reste à sa place, choisie, et ne fait plus rien (`aria-disabled`,
+            * le focus reste) — un second appui ne la retourne pas. */}
+          {v.cmd.map(p => (
+            <button key={p.cle} type="button" aria-label={p.mot + ' ' + v.nom} title={p.mot} aria-disabled={p.enVol ? 'true' : undefined} onClick={(e) => { e.stopPropagation(); p.agir(); }}
+              className="o-rmbtn" style={{ ...RM_PUCE_ROBOT, ...(p.choisie ? RM_PUCE_CHOISIE : null) }}>
+              <Fi i={p.glyphe} size={14} /><span className="o-puce-robot-mot">{p.mot}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Le distributeur de croquettes (étape 2 du chantier IoT, 19/10 ; sa maquette « Cartes IoT », 1a ; I5, I6, I8, I10, I12, § 6) ──
+ *
+ * La carte au gabarit commun (`o-gabarit`, ADR 0202), ses deux écritures, celles du robot :
+ *  - large (184 × 225) : la plaque seule en haut ; 10 px plus bas, la rangée `RM_MILIEU` — le nom et la phrase à gauche, le
+ *    réservoir NOMMÉ à droite (« 38 % » · « RÉSERVOIR ») ; au pied, UNE puce de 44 px, « Distribuer 12 g » ;
+ *  - étroite (1c) : la plaque et le réservoir nommé en haut, le nom entier, la phrase, la même puce.
+ * La couleur n'alerte que (I8) : la plaque ambre, sans lavis — l'orange d'avant part ; grise quand l'appareil ne répond plus, avec
+ * le liseré qui respire ; la phrase (`phraseDistributeur`, § 6) passe à l'ambre sous 15 % de bac ou sur une anomalie. « Rempli »
+ * quitte la carte (I10) : un appui par erreur remettait le bac à 100 % ; il vit près du réservoir, dans la popup, et demande.
+ * « Distribuer » est UN geste pour tout l'écran (distributeuretat.js, la variante partagée d'optimiste.js) : le verrou de 2,5 s
+ * que la carte tenait seule vaut pour la carte large, l'étroite, la compacte et la popup — deux appuis, une ration.
+ * La compacte (I12) garde la disposition de la maison : la plaque, le nom, la phrase, le réservoir à droite, son mini « Distribuer ».
+ * Ni l'une ni l'autre n'est un `role="button"` autour de sa commande (lot 13 de l'audit du 03/10) : la surface (ADR 0074) porte
+ * « ouvrir la fiche » sous ce que la carte affiche, et la puce, positionnée, passe au-dessus d'elle en nommant l'appareil. */
+const PLAQUE_DISTRIBUTEUR = ['rgba(var(--o-piece-ambre-rgb),.18)', 'var(--o-piece-ambre)'];
+// Le mini « Distribuer » de la compacte : celui d'un robot (`miniAccent` de `CvCard`), le bleu plein et le blanc.
+const RM_MINI_DISTRIBUER = { position: 'relative', width: 38, height: 26, borderRadius: 10, border: 'none', background: 'var(--o-accent-fond)', color: '#fff', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 };
+
+function RoomFeederCard({ v, onOpen, chip = false }) {
+  const g = v.ration == null ? null : v.ration.toLocaleString(locale(), { maximumFractionDigits: 1 });
+  const mot = g ? tr('Distribuer {g} g', { g }) : tr('Distribuer');
+  const label = nomCarte(v.nom, v.phrase.texte, v.pct == null ? null : tr('réservoir {p} %', { p: v.pct }));
+  const [fond, encre] = v.mort && v.raison !== 'reservoir' ? ['var(--o-s1)', 'var(--o-text3)'] : PLAQUE_DISTRIBUTEUR;
+  // Un geste en vol : la puce reste à sa place, choisie, et ne fait rien (`aria-disabled`, le focus reste).
+  const puce = (style, enfants) => (
+    <button type="button" aria-label={mot + ' ' + v.nom} title={mot} aria-disabled={v.enVol ? 'true' : undefined}
+      onClick={(e) => { e.stopPropagation(); v.distribuer(); }} className={chip ? undefined : 'o-rmbtn'} style={{ ...style, ...(v.enVol ? RM_PUCE_CHOISIE : null) }}>{enfants}</button>
+  );
   if (chip) {
-    const ligne = verdict || sub;
     return (
-      <div className={'o-piece o-cvdense' + (mort ? ' o-panne' : '')} role="button" tabIndex={0} aria-label={nomCarte(nom, ligne, humLue)} aria-haspopup="dialog"
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
-        onClick={onOpen} style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: LISERE, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
+      <div className={'o-piece o-cvdense' + (v.mort ? ' o-panne' : '')}
+        style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', background: SURF_CARTE, border: LISERE, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
+        {onOpen && <Surface onClick={() => onOpen()} label={label} />}
+        <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center' }}>
+          <span className="o-cvico" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: fond, color: encre }}><Fi i="paw" size={15} /></span>
+          <div className="o-cvtxt">
+            <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.nom}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: v.phrase.encre, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.phrase.texte}</div>
+          </div>
+          {v.pct != null && <span style={{ fontSize: 12, fontWeight: 800, flexShrink: 0, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: 'var(--o-text2)' }}>{pourcentTexte(v.pct)}</span>}
+          {/* Le bouton SEUL est positionné, pas la rangée : le nom et le réservoir restent sous la surface, un appui dessus ouvre la fiche.
+            * En vol, la mini-puce — déjà à l'accent — le montre par son glyphe, le sablier (passe bis, point G). */}
+          {v.envoi && puce(RM_MINI_DISTRIBUER, <Fi i={v.enVol ? 'hourglass-end' : 'paw'} size={13} />)}
+        </div>
+      </div>
+    );
+  }
+  return (
+    /* La carte n'est pas un bouton (ADR 0074) : la surface, premier enfant, dit ce que la carte affiche — le nom, la phrase, le
+     * réservoir — et la puce, positionnée, passe au-dessus d'elle. */
+    <div className={'o-rmcard o-gabarit' + (v.mort ? ' o-panne' : '')} style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default', border: LISERE }}>
+      {onOpen && <Surface onClick={() => onOpen()} label={label} />}
+      {/* La ligne du haut : la plaque, et le réservoir nommé de la carte étroite. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+        <span style={RM_ICO(fond, encre)}><Fi i="paw" size={17} /></span>
+        {v.pct != null && <ChiffreNommeHaut v={v.pct} nom={tr('Réservoir')} />}
+      </div>
+      {/* La rangée du milieu, 10 px sous la plaque : le nom et la phrase à gauche, le réservoir nommé de la carte large à droite. */}
+      <div style={{ ...RM_MILIEU, marginTop: 'var(--o-milieu-haut, 10px)' }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="o-gab-nom" style={{ ...RM_NAME, fontSize: 15 }}>{v.nom}</div>
+          <div className="o-gab-phrase" style={{ ...RM_SUB, color: v.phrase.encre, '--o-n': Math.max(1, v.phrase.texte.length) }}>{v.phrase.texte}</div>
+        </div>
+        {v.pct != null && <ChiffreNomme v={v.pct} nom={tr('Réservoir')} />}
+      </div>
+      {/* Le pied, collé en bas par la marge auto : UNE puce, son mot et ses grammes. L'appareil muet n'en a pas : rien d'inerte. */}
+      {v.envoi && (
+        <div className="o-puces-robot" data-n={1} style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 'var(--o-pied-haut, 9px)' }}>
+          {puce(RM_PUCE_ROBOT, <><Fi i="paw" size={14} /><span className="o-puce-robot-mot">{mot}</span></>)}
+        </div>
+      )}
+    </div>
+  );
+}
+/* Le distributeur de la bibliothèque des cartes : un exemple à 74 %, sa phrase et sa puce, sans geste. */
+const biblioDistributeur = () => ({ nom: tr('Croquettes'), pct: 74, ration: 18, envoi: {}, enVol: null, mort: false, raison: null, distribuer: () => {},
+  phrase: { texte: tr('Repas à {h}', { h: '18:00' }) + ' · ' + tr('≈ {n} j', { n: 8 }), encre: 'var(--o-text2)' } });
+
+/* ── La carte d'une PLANTE (chantier Capteurs, étape 3 ; C29 à C31, § 7.2) ──────────────────────
+ *
+ * La carte 1a de sa maquette « Cartes capteurs », aux tailles de la maison, pour une plante lue par `lirePlante` (`pl`) :
+ *  - la plaque : la feuille, sur le vert de la plante à 0,14 — son identité, pas un verdict ;
+ *  - le nom (15 / 700, deux lignes au plus) et la phrase de sa vue (`vuePlante`, plantes.js) : muette, « Indisponible depuis … »
+ *    en rouge et le liseré qui respire ; ce qui presse, en ambre ; sinon le mot du sol, en neutre — jamais « Tout lui convient » ;
+ *  - le chiffre à droite, aligné sur la phrase : le sol, « 28 % », et « SOL » dessous ; muette, « — » ;
+ *  - au pied, la grille 2 × 2 : sol, lumière, température, engrais — une valeur ne passe en ambre que si elle presse ; l'engrais et un
+ *    sol très humide restent neutres sur la carte, la fiche les dit ;
+ *  - le dessin choisi (`img`), à 0,14, en filigrane — un fichier (C34) ; une plante découverte n'en a pas ;
+ *  - le lavis ambre à 0,1, seulement quand quelque chose presse. Plus de lavis vert (C5).
+ * La carte ÉTROITE (la grille commune, ADR 0202) : la plaque et le sol en haut (`ChiffreHaut`), le nom, la phrase — pas de grille.
+ * La COMPACTE : sa disposition d'aujourd'hui, avec la phrase, le sol à droite et ces couleurs.
+ * Sans commande, la plante reste un bouton entier (lot 13 de l'audit du 03/10) : son nom dit ce qu'elle affiche — le nom, le sol,
+ * la phrase —, et `aria-haspopup` la fiche qu'elle ouvre. Budget : 38 + 14 + 2 × 18 + 16 + 8 + 14 + 6 + 14 = 146 px, pour 150. */
+function RoomPlantCard({ pl, nom, onOpen, chip = false }) {
+  const v = vuePlante(pl, { quand: heureDe, deCelsius });
+  const mort = v.muette;
+  const encre = v.ton === 'bad' ? 'var(--o-bad)' : v.ton === 'warn' ? 'var(--o-warn)' : 'var(--o-text2)';
+  const lavis = v.ton === 'warn' && LAVIS ? lavisCarte('var(--o-warn-rgb)', .1, .03) : null;
+  /* La plaque : la feuille sur le vert de la plante. La COMPACTE passe sa classe (`o-cvico`) : sa taille vient alors de la feuille, qui
+   * la rapetisse quand la carte est étroite — en ligne, elle ne le pourrait pas (tests/cartes_compactes_gabarit). */
+  const portrait = (taille, cls = null) => (
+    <span className={cls || undefined} style={{ ...(cls ? null : { width: taille, height: taille, borderRadius: taille > 36 ? 14 : 10 }), flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-ok-rgb),.14)', color: 'var(--o-ok)' }}><Fi i="leaf" size={taille > 36 ? 17 : 15} /></span>
+  );
+  // Ce que la carte affiche, dans l'ordre : le nom, le sol, la phrase.
+  const label = nomCarte(nom, v.sol == null ? null : v.chiffre, v.phrase);
+  const clavier = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } };
+  if (chip) {
+    return (
+      <div className={'o-piece o-cvdense' + (mort ? ' o-panne' : '')} data-plante="" role="button" tabIndex={0} aria-label={label} aria-haspopup="dialog" onKeyDown={clavier}
+        onClick={onOpen} style={{ position: 'relative', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px', borderRadius: 'var(--o-radius,18px)', cursor: 'pointer', background: lavis || SURF_CARTE, border: LISERE, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', transition: 'all .25s' }}>
         <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center' }}>
           {portrait(34, 'o-cvico')}
           <div className="o-cvtxt">
             <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: verdictCol || 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ligne || '—'}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: encre, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.phrase}</div>
           </div>
-          {hum != null && <span style={{ fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums', flexShrink: 0, color: verdictCol || 'var(--o-text2)' }}>{Math.round(hum)}%</span>}
+          <span style={{ fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums', flexShrink: 0, color: v.sol == null ? 'var(--o-text3)' : 'var(--o-text2)' }}>{v.chiffre}</span>
         </div>
       </div>
     );
   }
-  // Standard 2×1 : les capteurs en GRILLE DE DEUX, une jauge par métrique —
-  // humidité au verdict, lumière, température, engrais (conductivité).
-  const jauge = (i, col, pct, titre) => (
-    <div title={titre} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-      <Fi i={i} size={11} color={col} />
-      <div style={{ flex: 1, height: 4, borderRadius: 4, background: 'var(--o-bd1)', overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: Math.max(0, Math.min(100, pct || 0)) + '%', background: col, borderRadius: 4, transition: 'width .3s' }} />
-      </div>
-    </div>
+  const filigrane = pl.img && PLANT_ART[pl.img] && (
+    <span aria-hidden="true" style={{ position: 'absolute', right: 6, bottom: -10, width: 120, height: 120, backgroundImage: `url("${PLANT_ART[pl.img]}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.14, pointerEvents: 'none' }} />
   );
-  // Le même nom que la compacte : ce que la carte affiche.
-  const ligne = verdict || sub;
   return (
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} role="button" tabIndex={0} aria-label={nomCarte(nom, humLue, ligne)} aria-haspopup="dialog"
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen && onOpen(); } }}
-      onClick={onOpen} style={{ ...RM_CARD, cursor: 'pointer', position: 'relative', overflow: 'hidden', border: LISERE,
-        ...(LAVIS ? { background: lavisCarte(rgb) } : null) }}>
+    <div className={'o-rmcard o-gabarit' + (mort ? ' o-panne' : '')} data-plante="" role="button" tabIndex={0} aria-label={label} aria-haspopup="dialog" onKeyDown={clavier}
+      onClick={onOpen} style={{ ...RM_CARD, cursor: 'pointer', position: 'relative', overflow: 'hidden', justifyContent: 'flex-start', border: LISERE, ...(lavis ? { background: lavis } : null) }}>
       {filigrane}
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        {portrait(34)}
-        {hum != null && <span style={{ fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: verdictCol || 'var(--o-text2)' }}>{Math.round(hum)}%</span>}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+        {portrait(38)}
+        {/* Sur la carte étroite, le sol en haut à droite (la grille commune) ; la feuille n'en montre qu'une écriture. */}
+        <ChiffreHaut v={v.sol == null ? '\u2014' : nombre(v.sol, 0)} u={v.sol == null ? null : '%'} couleur={v.sol == null ? 'var(--o-text3)' : 'var(--o-text)'} />
       </div>
-      {/* PAS DE MARGE SUR LE CORPS (09/10). Le parent est en
-        * `space-between` : le corps est deja colle en bas, la marge n'y
-        * ajoute rien — sauf quand le contenu remplit la carte, et la elle le
-        * pousse DEHORS. « Il y a un souci au niveau de l'organisation,
-        * arrange la carte volet que ce soit au meme niveau que l'Echo » :
-        * mesure, le corps du volet finissait 12 px sous sa zone quand celui
-        * du media tombait pile. */}
-      <div style={{ position: 'relative' }}>
-        <div style={RM_NAME}>{nom}</div>
-        <div style={{ ...RM_SUB, color: verdictCol || 'var(--o-text3)' }}>{ligne || '—'}</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px 14px', marginTop: 10 }}>
-          {hum != null && jauge('raindrops', verdictCol || 'var(--o-ok)', hum, tr('Humidité') + ' ' + Math.round(hum) + ' %')}
-          {lux != null && jauge('brightness', 'var(--o-warn)', lux / 10, tr('Luminosité') + ' ' + Math.round(lux) + ' lx')}
-          {temp != null && jauge('thermometer-half', 'var(--o-orange)', temp / 0.35, Math.round(deCelsius(temp, uniteT)) + ' °' + uniteT)}
-          {cond != null && jauge('leaf', 'var(--o-ok)', cond / 20, Math.round(cond) + ' µS/cm')}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 'var(--o-milieu-haut, 14px)' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="o-gab-nom" style={NOM_GROUPE}>{nom}</div>
+          <div className="o-gab-phrase" style={{ ...RM_SUB, color: encre, '--o-n': Math.max(1, v.phrase.length) }}>{v.phrase}</div>
         </div>
+        {/* Le chiffre de la carte large : le sol, et « SOL » dessous, en petites capitales. */}
+        <span aria-hidden="true" className="o-seul-large" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1, flexShrink: 0 }}>
+          <span style={{ fontSize: 25, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: v.sol == null ? 'var(--o-text3)' : 'var(--o-text)' }}>{v.chiffre}</span>
+          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-text3)', marginTop: 5 }}>{tr('Sol')}</span>
+        </span>
+      </div>
+      <div aria-hidden="true" className="o-seul-large" data-grille="" style={{ position: 'relative', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 14px', marginTop: 'auto', paddingTop: 8 }}>
+        {v.mesures.map(m => (
+          <span key={m.cle} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, fontSize: 12, fontWeight: 700, color: m.presse ? 'var(--o-warn)' : 'var(--o-text2)', whiteSpace: 'nowrap' }}>
+            <Fi i={m.glyphe} size={12} color={m.presse ? 'var(--o-warn)' : 'var(--o-text3)'} /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.valeur == null ? '\u2014' : m.valeur}</span>
+          </span>
+        ))}
       </div>
     </div>
   );
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
- * Quand un volet est-il ferme ?
- *
- * Pas toujours a zero. Celui d'une chambre bute a 1 % (retour du 27/09), et
- * Home Assistant le dit alors `open` : son `is_closed` compare la position a
- * zero, pas a « en bas ». Loggia, qui ne regardait QUE `pos === 0`, le
- * dessinait donc ouvert — lavis violet, icone violette, « Ouvert a 1 % » — sur
- * un volet visiblement ferme.
- *
- * Le seuil est REGLABLE parce qu'il appartient au materiel, pas a Loggia. Deux
- * pour cent par defaut : ce qui a ete mesure ici, sans rien decider pour une
- * installation qui bute juste. Il joue aux DEUX bouts — un volet qui plafonne
- * a 99 % est « Ouvert », pas « Ouvert a 99 % », c'est la meme butee a l'envers.
- *
- * L'etat de Home Assistant reste l'autorite quand il dit `closed` : Loggia le
- * contredisait, et c'etait le plus grave des deux.
- *
- * Le POURCENTAGE affiche, lui, reste le vrai. Le mot est un verdict, le chiffre
- * une mesure : mentir sur le chiffre ferait chercher la panne ailleurs.
- * ───────────────────────────────────────────────────────────────────────────── */
-const COVER_SEUIL_DEF = 2;
-function coverSeuil() {
-  const n = +cfgVal('loggia_coverseuil', COVER_SEUIL_DEF);
-  return (isFinite(n) && n >= 0 && n <= 20) ? Math.round(n) : COVER_SEUIL_DEF;
-}
-// `st` peut manquer (entite absente) : seule la position tranche alors.
-function coverFerme(st, pos) {
-  if (st && st.state === 'closed') return true;
-  if (st && st.state === 'open' && pos >= 100) return false;
-  return pos <= coverSeuil();
-}
-const coverOuvert = (pos) => pos >= 100 - coverSeuil();
+/* Quand un volet est-il fermé ? Le verdict — `coverFerme`, `coverOuvert` —
+ * vit dans voletecran.js depuis le chantier Volets : le seuil n'y est plus
+ * un réglage (V12, sa demande du 12/10), et la fiche du volet, chargée à la
+ * demande, le lit au même endroit que la carte. */
 
+/* Un geste de cover (`gestesCover`, outils.js) prêt à partir : `surEchec` dit
+ * qu'Home Assistant l'a refusé, après coup (`ordreEtCourse`, voletcourse.js). */
+const envoyerGeste = (hass, id, g) => (surEchec) => commander(hass, id, g.capacite, g.valeur, null, null, surEchec);
+
+/* L'ancienne carte d'un cover qui n'est pas un volet : garage, portail, velux,
+ * ouvrant sans classe (V3). Ses trois boutons suivent son `supported_features`
+ * (19/10) : Stop inerte sans STOP ; Monter et Descendre passent par la
+ * position s'il ne sait que se placer, par ses lames s'il ne sait que
+ * s'incliner ; sans SET_POSITION, ni glissière ni pourcentage — il ne serait
+ * qu'inventé. Muet (`enPanne` : `unknown` aussi), tout est inerte. */
 function RoomCoverCard({ id, hass, onOpen, titre = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
-  const realPos = a.current_position != null ? Math.round(a.current_position) : (st && st.state === 'open' ? 100 : 0);
+  const gestes = gestesCover(st);
+  const publiee = positionPubliee(st);
+  const realPos = publiee != null ? Math.max(0, Math.min(100, Math.round(publiee))) : (st && st.state === 'open' ? 100 : 0);
   const [ov, setOv] = useOptimiste(realPos);
   const pos = ov != null ? ov : realPos;
   const ferme = coverFerme(st, pos);
-  const mort = !st || st.state === 'unavailable';
+  const mort = enPanne(id, st);
   const nom = titre || a.friendly_name || id;
   const mouvement = st && (st.state === 'opening' || st.state === 'closing') ? st.state : null;
   // Le sous-titre dit l'état en mots (maquettes du 14/09) ; le pourcentage
   // reste en haut à droite, la glissière montre la position.
   const sub = mort ? tr('Indisponible') : mouvement === 'opening' ? tr('Ouverture…') : mouvement === 'closing' ? tr('Fermeture…') : ferme ? tr('Fermé') : coverOuvert(pos) ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });
-  const poser = (v) => { setOv(v); commander(hass, id, 'set_position', v); };
+  // Un refus de Home Assistant retire l'avance tout de suite (19/10).
+  const envoyer = (g, avance) => { if (mort || !g) return; if (avance != null) setOv(avance); commander(hass, id, g.capacite, g.valeur, null, null, () => setOv(null)); };
+  const poser = (v) => { if (gestes.placer) envoyer({ capacite: gestes.placer, valeur: v }, v); };
+  const bouton = (g) => ({ 'aria-disabled': !mort && g ? undefined : true, className: 'o-rmbtn', style: { ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 6px', ...(!mort && g ? null : RM_INERTE) } });
   /* La carte n'est plus un `role="button"` qui englobe ses commandes (lot 13
    * de l'audit du 03/10, ADR 0074). Ce rôle rendait la glissière et les trois
    * boutons présentationnels — un lecteur d'écran ne les voyait plus —, et son
@@ -2644,7 +3672,7 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
           {/* store qui descend dans le chip : hauteur = part fermée, suit la position en douceur */}
           <span aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: 0, height: (100 - pos) + '%', background: 'linear-gradient(180deg,rgba(var(--o-purple-rgb),.34),rgba(var(--o-purple-rgb),.14))', transition: REDUCE_MOTION ? 'none' : 'height .7s cubic-bezier(.22,.61,.36,1)', pointerEvents: 'none' }} />
           <GlypheCarte id={id} size={18}><Ico name={(a.device_class === 'garage' || a.device_class === 'gate') ? 'garage' : 'blinds'} size={18} /></GlypheCarte></span>
-        <span style={{ fontSize: 15, fontWeight: 800, color: ferme ? 'var(--o-text3)' : 'var(--o-text)' }}>{pos} %</span>
+        {(publiee != null || ov != null) && !mort && <span style={{ fontSize: 15, fontWeight: 800, color: ferme ? 'var(--o-text3)' : 'var(--o-text)' }}>{pos} %</span>}
       </div>
       {/* PAS DE MARGE SUR LE CORPS (09/10). Le parent est en
         * `space-between` : le corps est deja colle en bas, la marge n'y
@@ -2656,7 +3684,7 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
       <div>
         <div style={RM_NAME}>{nom}</div>
         <div style={{ ...RM_SUB, color: !ferme && !mort ? 'var(--o-purple)' : 'var(--o-text3)' }}>{sub}</div>
-        <RmJauge v={pos} couleur="var(--o-purple)" grade="linear-gradient(90deg,rgba(var(--o-purple-rgb),.75),var(--o-purple))" actif={!mort} label={tr('Position') + ' ' + nom} onCommit={poser} />
+        {gestes.placer && <RmJauge v={pos} couleur="var(--o-purple)" grade="linear-gradient(90deg,rgba(var(--o-purple-rgb),.75),var(--o-purple))" actif={!mort} label={tr('Position') + ' ' + nom} onCommit={poser} />}
         {/* Les mêmes trois gestes que la carte compacte : ouvrir, stop, fermer — la glissière règle le reste. */}
         {/* Les boutons SEULS sont positionnés (RM_BTN), pas la rangée : peints
           * après la surface, ils reçoivent leurs clics, et l'écart entre deux
@@ -2664,10 +3692,114 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
           * le mot de leur bulle et nomme le volet : « Ouvrir Volet salon » est
           * ce bouton-ci, plus jamais la carte (lot 13 de l'audit du 03/10). */}
         <div style={{ display: 'flex', gap: 8, marginTop: 9 }}>
-          <button aria-label={tr('Ouvrir') + ' ' + nom} title={tr('Ouvrir')} onClick={(e) => { e.stopPropagation(); setOv(100); commander(hass, id, 'open'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 6px' }}><Fi i="angle-up" size={14} /></button>
-          <button aria-label={tr('Stop') + ' ' + nom} title={tr('Stop')} onClick={(e) => { e.stopPropagation(); commander(hass, id, 'stop'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 6px' }}><Fi i="square" size={12} /></button>
-          <button aria-label={tr('Fermer') + ' ' + nom} title={tr('Fermer')} onClick={(e) => { e.stopPropagation(); setOv(0); commander(hass, id, 'close'); }} className="o-rmbtn" style={{ ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 6px' }}><Fi i="angle-down" size={14} /></button>
+          <button aria-label={tr('Ouvrir') + ' ' + nom} title={tr('Ouvrir')} onClick={(e) => { e.stopPropagation(); envoyer(gestes.monter, 100); }} {...bouton(gestes.monter)}><Fi i="angle-up" size={14} /></button>
+          <button aria-label={tr('Stop') + ' ' + nom} title={tr('Stop')} onClick={(e) => { e.stopPropagation(); envoyer(gestes.stop, null); }} {...bouton(gestes.stop)}><Fi i="square" size={12} /></button>
+          <button aria-label={tr('Fermer') + ' ' + nom} title={tr('Fermer')} onClick={(e) => { e.stopPropagation(); envoyer(gestes.descendre, 0); }} {...bouton(gestes.descendre)}><Fi i="angle-down" size={14} /></button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── La carte d'un VOLET (chantier Volets, § 3.1-3.2 ; sa maquette « Cartes
+ * volets », cadre 1a) ─────────────────────────────────────────────────────────
+ *
+ * Dans le cadre des cartes de la maison (`RM_CARD`, le liseré, le lavis, la
+ * surface qui ouvre la fiche, `o-panne` muet), à leurs tailles (184 ; 176 de
+ * large au téléphone) : la plaque en haut à gauche, un petit volet dessiné à
+ * droite qui suit la position ; 14 px plus bas le nom et une phrase qui dit ce
+ * qui va se passer (§ 4, voletecran.js), le pourcentage en grand à droite ; en
+ * bas Monter, Stop, Descendre — Stop s'allume pendant une course. Plus de
+ * glissière : la fiche a sa fenêtre. Seulement pour un VOLET (sa classe, V3) :
+ * le garage et le portail gardent `RoomCoverCard`.
+ *
+ * La position dessinée est celle de la course (voletcourse.js) : un geste la
+ * lance, Home Assistant la confirme — chez lui, Netatmo ne publie rien pendant
+ * une à trois minutes (§ 5). La surface dit la position, puis la phrase
+ * (« Volet salon, 60 %, Ferme à 20:54 ») ; chaque bouton nomme le volet, le
+ * mot de sa bulle d'abord (ADR 0074, 0147). Les boutons seuls sont
+ * positionnés (`RM_BTN`) : l'écart entre deux ouvre la fiche.
+ *
+ * Sur une carte étroite (le téléphone, sous 188 px de contenu), la grille commune
+ * (`o-gabarit`, index.css ; passe téléphone, T14) : le petit volet s'efface — un
+ * détail redondant —, le pourcentage monte en haut à droite (`ChiffreHaut`), le
+ * nom passe sur toute la largeur, deux lignes au plus, la phrase dessous, sur une
+ * ligne ; Monter, Stop et Descendre gardent leurs trois parts égales de 44 px, et
+ * le mot « Stop » s'efface (il vit dans le nom du bouton).
+ */
+const PETIT_VOLET = { position: 'relative', width: 28, height: 34, boxSizing: 'border-box', borderRadius: 6, border: '2px solid var(--o-text3)',
+  overflow: 'hidden', background: 'var(--o-sky)', flexShrink: 0, pointerEvents: 'none' };
+// Le tablier part du haut ; pas de transition CSS : la course le pilote déjà.
+const TABLIER = { position: 'absolute', left: 0, right: 0, top: 0,
+  background: 'repeating-linear-gradient(180deg,rgba(var(--o-purple-rgb),.95) 0 3px,rgba(var(--o-purple-rgb),.55) 3px 4px)' };
+// Monter, Stop, Descendre : 44 px de haut, arrondi 12, le gris doux, sans bordure (le `ChipButton` de sa maquette).
+const RM_VOLET_BTN = { ...RM_BTN, height: 44, padding: 0, borderRadius: 12, border: 'none', minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 };
+// Stop pendant une course : allumé, le bleu plein et le texte blanc.
+const RM_VOLET_STOP = { background: 'var(--o-accent-fond)', color: '#fff' };
+/* Le pourcentage d'une carte LARGE : en grand à droite du nom (25 px / 800, « % » en
+ * 15 px), à la première rangée, deuxième colonne de la grille du milieu (`RM_MILIEU`) —
+ * la place de la température d'un radiateur ; sa taille et son écart se lisent dans la
+ * feuille (`--o-chiffre-taille`, `--o-chiffre-ecart`), la valeur large pour repli. Une
+ * carte étroite l'écrit en haut (`ChiffreHaut`), et la feuille n'en montre qu'un
+ * (`o-seul-large`). Muet : « — ». La surface le dit déjà au lecteur d'écran. */
+function ChiffreVolet({ pos }) {
+  return (
+    <span aria-hidden="true" className="o-volet-chiffre o-seul-large"
+      style={{ gridColumn: 2, gridRow: 1, marginLeft: 'var(--o-chiffre-ecart, 10px)', display: 'flex', alignItems: 'baseline', gap: 3, fontWeight: 800, lineHeight: 1, whiteSpace: 'nowrap' }}>
+      <span style={{ fontSize: 'var(--o-chiffre-taille, 25px)', letterSpacing: '-.02em' }}>{pos == null ? '—' : pos}</span>
+      {pos != null && <span style={{ fontSize: 'calc(var(--o-chiffre-taille, 25px) * .6)' }}>%</span>}
+    </span>
+  );
+}
+function RoomVoletCard({ id, hass, onOpen, titre = null }) {
+  const st = hass && hass.states ? hass.states[id] : null;
+  const a = (st && st.attributes) || {};
+  const { etat } = useEtatVolets();
+  const v = voletDe(etat, id);
+  const course = useCourseVolet(id, st, v && v.manoeuvre);
+  const vue = vueVolet({ st, course, v, etat });
+  const { pos, enCourse } = vue;
+  const nom = titre || a.friendly_name || id;
+  const sub = vue.phrase;
+  const [fond, encre] = plaqueVolet(vue.allume);
+  /* Les gestes que le volet ACCEPTE (`vue.gestes`, son `supported_features`) : un ordre que le moteur d'actions refuse ne
+   * lance pas de course, et un refus de Home Assistant, plus tard, l'oublie (`ordreEtCourse`, 19/10). */
+  const agir = (g, cible) => { if (g) ordreEtCourse(id, cible, st, envoyerGeste(hass, id, g)); };
+  const arreter = () => { if (vue.peutArreter) ordreEtArret(id, st, envoyerGeste(hass, id, vue.gestes.stop)); };
+  return (
+    <div className={'o-rmcard o-gabarit' + (vue.muet ? ' o-panne' : '')} data-volet="" style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
+      // Ouvert : le lavis violet, d'autant plus fort que le volet laisse entrer le jour (sa maquette : 0,04 + 0,12 × p / 100).
+      ...(vue.allume && LAVIS ? { background: lavisCarte('var(--o-purple-rgb)', .04 + pos * .0012) } : null),
+      border: LISERE }}>
+      {onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(nom, pos == null ? null : pos + ' %', sub)} />}
+      {/* La ligne du haut : la plaque, et à droite le petit volet (carte large) ou le pourcentage (carte étroite) — la feuille n'en montre qu'un. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+        <span style={RM_ICO(fond, encre)}><GlypheCarte id={id} size={17} selon={(n) => iconeSelonEtat(n, vue)}><Fi i={vue.glyphe} size={17} /></GlypheCarte></span>
+        <span aria-hidden="true" className="o-volet-dessin o-seul-large" style={{ ...PETIT_VOLET, opacity: vue.muet ? .4 : 1 }}>
+          {pos != null && <span style={{ ...TABLIER, height: (100 - pos) + '%' }} />}
+        </span>
+        <ChiffreHaut v={pos == null ? '—' : pos} u={pos == null ? null : '%'} />
+      </div>
+      {/* La rangée du radiateur (`RM_MILIEU`) : le nom et la phrase à gauche, le pourcentage d'une carte large à droite. Sur une carte
+        * étroite il se tait : le nom et la phrase prennent toute la largeur (`o-gab-nom`, `o-gab-phrase`), et la longueur de la phrase
+        * (`--o-n`) règle sa taille, de 12 à 10,5 px. */}
+      <div style={RM_MILIEU}>
+        <div style={{ minWidth: 0 }}>
+          <div className="o-gab-nom" style={{ ...RM_NAME, fontSize: 15 }}>{nom}</div>
+          <div className="o-gab-phrase" style={{ ...RM_SUB, color: enCourse ? 'var(--o-purple)' : 'var(--o-text2)', '--o-n': Math.max(1, String(sub).length) }}>{sub}</div>
+        </div>
+        <ChiffreVolet pos={pos} />
+      </div>
+      {/* Monter et Descendre deviennent inertes à l'arrivée d'une course : `aria-disabled`, l'appui
+        * ignoré — `disabled` faisait tomber le focus sur la page (relecture des tâches 6 à 12, point 5). Stop aussi,
+        * muet ou sans le bit STOP (19/10). */}
+      <div style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 'var(--o-pied-haut, 14px)' }}>
+        <button aria-label={tr('Ouvrir') + ' ' + nom} title={tr('Ouvrir')} aria-disabled={vue.peutMonter ? undefined : true} onClick={(e) => { e.stopPropagation(); if (vue.peutMonter) agir(vue.gestes.monter, 100); }}
+          className="o-rmbtn" style={{ ...RM_VOLET_BTN, ...(vue.peutMonter ? null : RM_INERTE) }}><Fi i="angle-small-up" size={17} /></button>
+        <button aria-label={tr('Stop') + ' ' + nom} title={tr('Stop')} aria-disabled={vue.peutArreter ? undefined : true} onClick={(e) => { e.stopPropagation(); arreter(); }}
+          className="o-rmbtn" style={{ ...RM_VOLET_BTN, ...(enCourse && vue.peutArreter ? RM_VOLET_STOP : null), ...(vue.peutArreter ? null : RM_INERTE) }}><Fi i="square" size={12} />{enCourse && vue.peutArreter && <span className="o-volet-stop-mot o-seul-large">{tr('Stop')}</span>}</button>
+        <button aria-label={tr('Fermer') + ' ' + nom} title={tr('Fermer')} aria-disabled={vue.peutDescendre ? undefined : true} onClick={(e) => { e.stopPropagation(); if (vue.peutDescendre) agir(vue.gestes.descendre, 0); }}
+          className="o-rmbtn" style={{ ...RM_VOLET_BTN, ...(vue.peutDescendre ? null : RM_INERTE) }}><Fi i="angle-small-down" size={17} /></button>
       </div>
     </div>
   );
@@ -2687,6 +3819,98 @@ const RM_TMIN = 5, RM_TMAX = 30;
 // Un bouton ± sans consigne a regler garde sa place — la carte garde son
 // gabarit — mais s'efface et ne repond plus (audit du 03/10).
 const RM_INERTE = { opacity: .4, cursor: 'default' };
+/* ── Les cartes « 1a » du chauffage (maquette « Cartes chauffage », son choix
+ * du 11/10 ; chantier Chauffage, tâche 10 bis A) ─────────────────────────────
+ *
+ * Dans le cadre des cartes de la maison (`RM_CARD`, le liseré, le lavis, la
+ * surface, la bascule rose) : l'icône seule en haut à gauche, la bascule
+ * seule à droite ; 14 px plus bas le nom et l'état — une phrase —, et à
+ * droite la température de la pièce en grand ; en bas, − et + autour de la
+ * valeur et de son étiquette. Plus de pastille AUTO ni de barre du jour : la
+ * phrase et l'étiquette disent le planning, la fiche montre la journée.
+ *
+ * − et + : des carrés de 44 px, arrondis 12, `--o-s1`, sans bordure, le
+ * glyphe de 16 px (le `ChipButton` de la maquette). Sur une carte large, une
+ * largeur fixe de 44 px. Sur une carte étroite — deux colonnes au téléphone,
+ * la grille commune (passe téléphone, T9, T18) —, 44 px à partir de 142 px de
+ * contenu (le téléphone de 390 px dans Objets) ; en dessous, ils cèdent, jamais
+ * sous 28 px de large ni sous 44 de haut, et un mot de mode trop long leur
+ * prend de la place (`--o-pas`, `--o-mot`, index.css). Le texte se réduit
+ * aussi (retour du 12/10 : « réduire la taille du texte que ça tienne
+ * correctement sans écraser les boutons »). Ils gardent `RM_BTN` et sa
+ * position : peints après la surface, ils reçoivent leur clic. */
+const RM_PAS = { flex: '0 0 auto', width: 'var(--o-pas, 44px)', height: 44, padding: 0, borderRadius: 12, border: 'none', background: 'var(--o-s1)', display: 'flex', alignItems: 'center', justifyContent: 'center' };
+/* La valeur entre − et + et son étiquette : exactement la place qui reste
+ * entre les deux boutons — jamais sous eux ; un mot trop long y passe à la
+ * ligne. Jamais positionnée : un appui sur elle ouvre la fiche. */
+const RM_VALEUR = { flex: '1 1 0%', minWidth: 0, textAlign: 'center', lineHeight: 1.15 };
+// La valeur en 15 px / 800, précédée pour un module du point de son mode (8 px, 6 px d'écart).
+const RM_VALEUR_LIGNE = { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 15, fontWeight: 800 };
+const RM_POINT = (c) => ({ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: c });
+/* L'étiquette, 3 px sous la valeur : Mode, Planning, Manuel, Consigne — en
+ * petites capitales sur une carte large, en minuscules sur une carte étroite
+ * (passe téléphone, T9). Elle reste sous la valeur : à 360 px, « 20,9° » (la
+ * pièce) et « 20,0° » (la consigne) se retrouvaient côte à côte sans un mot
+ * pour les distinguer (relecture de la partie A) ; seul un mot de mode trop
+ * long l'efface (`motLong`, plus bas). Sa taille vient de la feuille
+ * (`o-gab-etiquette`, index.css, que pose `ValeurEtiquette`), d'après
+ * `--o-taille` — 10 px sur une carte large, 9 px et un espacement resserré
+ * au-delà de neuf lettres (« Harmonogram », « Programación ») — et `--o-n`,
+ * sa longueur : sur une carte étroite, elle rétrécit comme la valeur, de 10 à
+ * 8 px, et passe sur deux lignes, ENTRE deux mots, si elle ne tient toujours
+ * pas, jamais sous les boutons. Un mot ne se coupe jamais (revue du 14/10,
+ * R8 : « CONSIG / NE » à 320 px) : un seul mot trop long finit en « … ». */
+const RM_ETIQUETTE = (mot) => ({ fontWeight: 800, letterSpacing: mot.length > 9 ? '.04em' : '.08em', textTransform: 'uppercase', color: 'var(--o-text3)',
+  marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', '--o-taille': (mot.length > 9 ? 9 : 10) + 'px', '--o-n': Math.max(1, mot.length) });
+/* Un mot de mode de plus de 13 lettres passe sur deux lignes ou plus d'une
+ * carte étroite : la rangée de 44 px n'y loge plus son étiquette, qui s'efface
+ * (`data-long`, index.css) — l'état de la carte dit le reste. Mesuré à 320 px :
+ * « Frost protection » et « Vorstbeveiliging » (16 lettres) débordaient avec
+ * le seuil de 16 (relecture de la dernière passe). */
+const motLong = (mot) => mot.length > 13;
+/* La couleur de l'état sous le nom : l'ambre d'une fenêtre qui coupe,
+ * l'orange de la chauffe, le bleu du froid, le gris d'un chauffage éteint ou
+ * en panne, sinon le gris doux. Le rouge reste aux alertes. */
+const couleurEtatChauffage = ({ fenetre = false, chauffe = false, froid = false, eteint = false }) => (
+  fenetre ? 'var(--o-warn)' : chauffe ? 'var(--o-warn2)' : froid ? 'var(--o-cold)' : eteint ? 'var(--o-text3)' : 'var(--o-text2)');
+/* La plaque de l'icône : l'orange de la chauffe, le bleu du froid, le gris
+ * d'un chauffage éteint ou en panne ; un module, la teinte de son mode (son
+ * lavis à .16, son encre) ; sinon le neutre. La règle vit dans
+ * `chauffageecran.js` (`plaqueMode`) : l'en-tête de la fiche la lit aussi
+ * (tâche 10 bis B). */
+const plaqueChauffage = (o) => { const [fond, encre] = plaqueMode(o); return RM_ICO(fond, encre); };
+/* Le mot de l'étiquette sous la valeur (`etiquetteCarte`, chauffageecran.js). */
+const motEtiquette = (cle) => (cle === 'planning' ? tr('Planning') : cle === 'manuel' ? tr('Manuel') : cle === 'mode' ? tr('Mode') : tr('Consigne'));
+/* La température de la pièce, en grand à droite du nom — 25 px / 800, et un
+ * « ° » de 15 px un peu plus bas —, au format de la langue (« 20,9 ») ; au gris
+ * doux quand le chauffage est éteint. Sans mesure lisible, rien : jamais un
+ * chiffre inventé (ADR 0030). À la première rangée de la grille du milieu, à
+ * droite du nom, sur une carte large ; une carte étroite l'écrit en haut
+ * (`ChiffreHaut`, passe téléphone), et la feuille n'en montre qu'une. */
+function TemperaturePiece({ v, eteint }) {
+  if (v == null) return null;
+  return (
+    <div className="o-seul-large" style={{ gridColumn: 2, gridRow: 1, marginLeft: 'var(--o-piece-ecart, 10px)', display: 'flex', alignItems: 'flex-start', fontWeight: 800, lineHeight: 1, color: eteint ? 'var(--o-text2)' : 'var(--o-text)' }}>
+      <span style={{ fontSize: 'var(--o-piece-taille, 25px)', letterSpacing: '-.02em' }}>{nombre(v, 1)}</span><span style={{ fontSize: 'var(--o-piece-degre, 15px)', marginTop: 2 }}>°</span>
+    </div>
+  );
+}
+/* Le planning de chauffe ALLUMÉ, la carte d'un chauffage ne commande plus son
+ * appareil : − / + et la bascule posent une REPRISE EN MAIN jusqu'au prochain
+ * changement (plan 2 du chantier Chauffage, choix 8 ; spec § 5.4). Le moteur
+ * décide et commande ; sa réponse est l'état, qui remplace le cache
+ * (`commanderChauffage`). Refusée, l'avance de la carte se retire (`annuler`)
+ * et le refus se dit au toast global, le canal de toutes les cartes : par son
+ * code (`texteRefus`, refus.js — « Le planning de ce chauffage est éteint. »),
+ * une coupure comme une commande d'appareil perdue. `signaler` n'existe que
+ * pour les tests, comme celui d'`ecrireRegle` : le rejet non repris ferait
+ * échouer un test de Node. */
+function reprendreLaMain(hass, ch, quoi, annuler, signaler = (err) => { Promise.reject(err); }) {
+  return commanderChauffage(hass, { type: 'loggia/chauffage/main', chauffage: ch.cle, ...quoi, fin: 'prochain' }).catch((e) => {
+    annuler();
+    signaler(estRefus(e) ? e : Object.assign(new Error((e && e.message) || 'service'), { code: 'service_error' }));
+  });
+}
 function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
@@ -2706,68 +3930,137 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const reglable = target != null;
   const mode = st ? st.state : 'off';
   const off = mode === 'off';
-  const mort = !st || st.state === 'unavailable';
-  const heating = a.hvac_action === 'heating';
+  // Muet — `unknown` comme `unavailable`, comme le module, la fiche et le moteur (relecture de la dernière passe).
+  const mort = !st || estMuet(st.state);
   const cooling = a.hvac_action === 'cooling';
   const all = modesClimat(a, ['off', 'heat']);
+  /* Le planning de chauffe (plan 2 du chantier Chauffage, choix 8) : ALLUMÉ,
+   * la carte dit jusqu'à quand il décide et reprend la main par le moteur au
+   * lieu de commander l'appareil ; éteint, ou l'état du moteur pas encore lu (un Home
+   * Assistant pas redémarré), elle fait exactement ce qu'elle faisait. En
+   * « Observer sans agir » aussi : le moteur n'envoie alors AUCUN ordre, une
+   * reprise en main pas plus que le reste (spec § 5.5), et il n'est pas encore
+   * le chef (§ 11) — passés par lui, ses gestes n'arriveraient plus à
+   * l'appareil. */
+  const { etat } = useEtatChauffage();
+  const ch = chauffageDe(etat, id);
+  // Une pompe à chaleur qui refroidit : le moteur attend, la carte commande l'appareil (audit du 19/10).
+  const auPlanning = !!(ch && ch.planning && !etat.simulation && !refroidit(ch));
   // Bascule optimiste, comme la lampe : arrêt ↔ le mode de marche de l'entité.
   const [ovOn, setOvOn] = useOptimiste(etatSt);
   const marche = ovOn != null ? ovOn : !off;
   const modeMarche = ['heat', 'auto', 'heat_cool', 'cool'].find(m => all.indexOf(m) >= 0) || all.find(m => m !== 'off') || 'heat';
-  const basculer = () => { const nv = !marche; setOvOn(nv); commander(hass, id, 'set_hvac_mode', nv ? modeMarche : 'off'); };
+  // Au planning, une reprise en main : Confort pour allumer, Arrêt pour éteindre.
+  const basculer = () => { const nv = !marche; setOvOn(nv); if (auPlanning) reprendreLaMain(hass, ch, { mode: nv ? 'confort' : 'arret' }, () => setOvOn(null)); else commander(hass, id, 'set_hvac_mode', nv ? modeMarche : 'off'); };
   const nom = label || a.friendly_name || id;
   // Les bornes viennent de l'entite, pas d'une constante : la climatisation de
   // l'installation d'essai monte a 35, la ou le code plafonnait a 30. Le pas
   // aussi lui appartient. On affiche ce qui a ete envoye, pas ce qui a ete
   // demande — sinon la consigne affichee mentirait des qu'elle est bornee.
   // Sans consigne lisible, rien ne part : un « + » sur du vide n'est pas 20,5.
-  const setT = (d) => { if (!reglable) return; const v = commander(hass, id, 'set_temperature', target + d, 'temperature'); if (v != null) setOv(v); };
-  // Nom SOUS l'icône, état en sous-titre (maquettes du 14/09) : « Chauffe ·
-  // consigne 19,0 °C ». Le gros chiffre vit dans la fiche.
-  // La consigne, entre les deux boutons qui la bougent : « 19 °C », « 19,5 °C ».
-  const consigne = target != null ? decMax(Number(target), 1) + ' °' + uT : '—';
-  const sub = mort ? tr('Indisponible') : !marche ? tr('Éteint') : heating ? tr('Chauffe') : cooling ? tr('Refroidit') : tr('Au repos');
+  const setT = (d) => { if (!reglable) return; const v = commander(hass, id, 'set_temperature', consigneVoisine(target, d, a, uT) ?? target + d, 'temperature'); if (v != null) setOv(v); };
+  /* Au planning, la consigne visée part en reprise en main, en °C : le
+   * serveur ne parle qu'en Celsius (ADR 0128). Elle va d'un cran du pas qu'il
+   * appliquera (`consigneVoisine`) — à ± 0,5, « − » sur un appareil au degré,
+   * ou en °F, redevenait la même consigne —, dans les bornes de l'appareil,
+   * celles que `commander` appliquerait. Une consigne qui ne bouge pas (une
+   * borne) ne pose pas de reprise en main : le chauffage quitterait son
+   * planning pour rien. Un VTherm ne reçoit jamais de consigne (son
+   * préréglage passerait à « none », spec § 3.1 ; le serveur la refuse) :
+   * − / + y passent d'un cran de mode — à partir de celui qu'il REÇOIT
+   * (`applique`, relecture de la partie B, point c). */
+  const reprendreT = (d) => {
+    if (!reglable) return;
+    if (ch.famille === 'vtherm') { const m = modeVoisin(ch.modes, ch.applique || ch.mode, d); if (m) reprendreLaMain(hass, ch, { mode: m }, () => {}); return; }
+    const vise = consigneVoisine(target, d, a, uT);
+    const p = vise != null && actionsPlan(id, 'set_temperature', vise, actionCtx(hass));
+    if (!p || !p.ok || p.data.temperature === target) return;
+    setOv(p.data.temperature);
+    reprendreLaMain(hass, ch, { temperature: versCelsius(p.data.temperature, uT) }, () => setOv(null));
+  };
+  /* La carte « 1a » (maquette « Cartes chauffage », tâche 10 bis A). L'état,
+   * une phrase qui ne redit pas le bas de la carte (son choix du 12/10, « Ne
+   * pas répéter le bas ») : au planning, jusqu'à quand (`phrasePlanning`) —
+   * l'étiquette dit PLANNING ou MANUEL ; sinon ce que fait l'appareil —
+   * « Consigne atteinte » seulement MESURÉ (`consigneAtteinte` : la pièce
+   * lisible, et proche de la consigne, 0,2 °C ou 0,4 °F), « Au repos » sinon :
+   * un `idle` dans une pièce à 16° pour 20° n'a rien atteint. « Chauffe » suit
+   * LA règle des cartes et d'Objets (`enChauffe`). La consigne entre − et + :
+   * une décimale et « ° » (« 20,0° »), dans la police du texte ; « — » sans
+   * consigne lisible. */
+  const consigne = target != null ? nombre(Number(target), 1) + '°' : '—';
+  const chauffe = enChauffe({ famille: 'thermostat', muet: mort, marche, action: a.hvac_action });
+  const froid = !mort && marche && cooling;
+  const eteint = mort || !marche;
+  const fenetre = !mort && auPlanning && ch.source === 'fenetre';
+  const sub = mort ? tr('Indisponible')
+    : auPlanning ? phrasePlanning(ch, etat, Date.now())
+      : !marche ? tr('Éteint') : chauffe ? tr('Chauffe') : cooling ? tr('Refroidit')
+        : target != null && consigneAtteinte(a.current_temperature, target, mode, uT) ? tr('Consigne atteinte') : tr('Au repos');
+  /* L'étiquette sous la valeur dit QUI décide (`etiquetteCarte`, réserve de
+   * la carte prise à la tâche 10 bis B). Au planning, celle du fil pilote :
+   * PLANNING quand le planning décide — sa propre bande Arrêt comprise —,
+   * MANUEL repris en main — la bascule qui coupe comprise —, MODE fenêtre
+   * ouverte. À l'arrêt ou fenêtre ouverte, la valeur dit le mode que le
+   * moteur applique, « Arrêt », « Éco », comme celle d'un module : jamais un
+   * chiffre sous « MODE » — celui qu'il ENVOIE (`applique`, relecture de la
+   * partie B : l'Arrêt d'un thermostat sans `off` est son Hors-gel). Planning
+   * éteint, CONSIGNE, comme avant.
+   * « Consigne » et « Mode » sont déjà dits au lecteur d'écran devant la
+   * valeur (`o-vh`) : l'étiquette ne les répète pas ; PLANNING et MANUEL se
+   * lisent, l'état ne dit plus que « jusqu’à 22:30 ». */
+  const parMode = auPlanning && (eteint || fenetre);
+  const motDuMode = !parMode ? null : mort ? '—' : fenetre ? (motMode(ch.applique || ch.mode) || '—') : motMode('arret');
+  const cleEtiquette = etiquetteCarte({ consigne: true, auPlanning, source: auPlanning ? ch.source : null, eteint });
+  const etiquette = motEtiquette(cleEtiquette);
+  const etiquetteDite = cleEtiquette === 'planning' || cleEtiquette === 'manuel';
   /* Plus de `role="button"` autour de l'interrupteur et des − / + (lot 13 de
    * l'audit du 03/10, ADR 0074) : la fiche s'ouvre par la surface, nommée de
-   * ce que la carte affiche (« Thermostat salon, Chauffe »). Voir la carte du
-   * volet, juste au-dessus. */
+   * ce que la carte affiche (« Thermostat salon, jusqu’à 22:30 »).
+   * Voir la carte du volet, juste au-dessus. */
+  const piece = mesureLisible(a.current_temperature);
   return (
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
-      // Teinte d'état : la carte rougeoie pendant la chauffe, pas au simple mode.
-      ...(heating && LAVIS ? {
-        background: lavisCarte('var(--o-bad-rgb)'),
-      } : null),
+    <div className={'o-rmcard o-gabarit' + (mort ? ' o-panne' : '')} data-chauffage="" style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
+      // Teinte d'état : l'orange de la chauffe, le bleu du froid — jamais au simple mode.
+      ...((chauffe || froid) && LAVIS ? { background: lavisCarte(chauffe ? 'var(--o-warn2-rgb)' : 'var(--o-cold-rgb)') } : null),
       // Le liseré du réglage, comme lumière et volet (04/10).
       border: LISERE }}>
       {onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(nom, sub)} />}
-      {/* Allumé = ROUGE (retour d'essai) : l'ambre warn2 rendait jaune. */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO(marche && !mort ? 'rgba(var(--o-bad-rgb),.14)' : 'var(--o-s1)', marche && !mort ? 'var(--o-bad)' : 'var(--o-text3)')}><GlypheCarte id={id} size={17}><Fi i={heating ? 'flame' : 'thermometer-half'} size={17} /></GlypheCarte></span>
-        {!mort && <RmBascule on={marche} nom={nom} onToggle={basculer} />}
+      {/* La ligne du haut. Carte large : la plaque, la bascule. Carte étroite (passe téléphone, T13) : la plaque et la température de la
+        * pièce — la marche et l'arrêt passent dans la fiche. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <span style={plaqueChauffage({ chauffe, froid, eteint })}><GlypheCarte id={id} size={17}><Fi i="thermometer-half" size={17} /></GlypheCarte></span>
+        {!mort && <RmBascule className="o-seul-large" on={marche} nom={nom} onToggle={basculer} />}
+        {piece != null && <ChiffreHaut v={nombre(piece, 1)} degre lu couleur={eteint ? 'var(--o-text2)' : 'var(--o-text)'} />}
       </div>
-      {/* PAS DE MARGE SUR LE CORPS (09/10). Le parent est en
-        * `space-between` : le corps est deja colle en bas, la marge n'y
-        * ajoute rien — sauf quand le contenu remplit la carte, et la elle le
-        * pousse DEHORS. « Il y a un souci au niveau de l'organisation,
-        * arrange la carte volet que ce soit au meme niveau que l'Echo » :
-        * mesure, le corps du volet finissait 12 px sous sa zone quand celui
-        * du media tombait pile. */}
-      <div>
-        <div style={RM_NAME}>{nom}</div>
-        <div style={{ ...RM_SUB, color: (heating || cooling) && !mort ? 'var(--o-bad)' : 'var(--o-text3)' }}>{sub}</div>
-        {/* − et + SEULS sont positionnés (RM_BTN), pas leur rangée : la
-          * consigne et les écarts restent sous la surface, un appui sur « 19 °C »
-          * ouvre la fiche, comme avant (relecture du lot 13). − et + reçoivent
-          * leurs clics, et nomment le thermostat. La consigne se LIT : un
-          * `aria-label` sur un <span> sans rôle est interdit (ARIA 1.2) et,
-          * honoré ou non selon le lecteur, il cachait « 19 °C » sous
-          * « Consigne ». Le mot passe en texte masqué, le chiffre reste ce que
-          * l'on voit (lot 13 de l'audit du 03/10). */}
-        <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
-          <button aria-label={tr('Baisser la consigne') + ' ' + nom} disabled={!reglable} onClick={(e) => { e.stopPropagation(); setT(-0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px', ...(reglable ? null : RM_INERTE) }}>−</button>
-          <span style={{ flex: '0 0 auto', minWidth: 58, alignSelf: 'center', textAlign: 'center', fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', color: marche ? 'var(--o-text)' : 'var(--o-text2)' }}><span className="o-vh">{tr('Consigne') + ' '}</span>{consigne}</span>
-          <button aria-label={tr('Monter la consigne') + ' ' + nom} disabled={!reglable} onClick={(e) => { e.stopPropagation(); setT(0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px', ...(reglable ? null : RM_INERTE) }}>+</button>
+      <div style={RM_MILIEU}>
+        <div style={{ minWidth: 0 }}>
+          <div className="o-gab-nom" style={RM_NAME}>{nom}</div>
+          <div className="o-gab-phrase" style={{ ...RM_SUB, color: couleurEtatChauffage({ fenetre, chauffe, froid, eteint }), '--o-n': Math.max(1, String(sub).length) }}>{sub}</div>
         </div>
+        <TemperaturePiece v={piece} eteint={eteint} />
+      </div>
+      {/* LA RANGÉE DU BAS DESCEND PAR SA MARGE AUTO (la maquette). Une marge
+        * auto prend l'espace libre AVANT le `space-between` du cadre : sans
+        * espace libre elle vaut 0, et ne pousse rien dehors — la leçon du
+        * 09/10, quand une marge fixe poussait le corps du volet 12 px sous sa
+        * zone. Les 14 px de rembourrage de la maquette tiennent dans les
+        * 150 px de contenu de la carte, liseré ôté (38 + 14 + 38 + 14 + 44 =
+        * 148) ; sur une carte étroite, 10 et 9 px, le nom sur deux lignes et
+        * l'état dessous (38 + 10 + 32 + 2 + 15 + 9 + 44 = 150, index.css).
+        * − et + SEULS sont positionnés (RM_BTN), pas leur rangée : la
+        * consigne et les écarts restent sous la surface, un appui sur
+        * « 20,0° » ouvre la fiche, comme avant (relecture du lot 13). − et +
+        * reçoivent leurs clics, et nomment le thermostat. La consigne se LIT :
+        * un `aria-label` sur un <span> sans rôle est interdit (ARIA 1.2) ; le
+        * mot passe en texte masqué, le chiffre reste ce que l'on voit (lot 13
+        * de l'audit du 03/10) — et l'étiquette visible, qui le répète, se tait. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--o-pas-ecart, 8px)', marginTop: 'auto', paddingTop: 'var(--o-pied-haut, 14px)', '--o-mot': motLePlusLong(parMode ? motDuMode : consigne) }}>
+        <button aria-label={tr('Baisser la consigne') + ' ' + nom} disabled={!reglable} onClick={(e) => { e.stopPropagation(); if (auPlanning) reprendreT(-0.5); else setT(-0.5); }} className="o-rmbtn" style={{ ...RM_BTN, ...RM_PAS, ...(reglable ? null : RM_INERTE) }}><Fi i="minus-small" size={16} /></button>
+        {/* Le mot d'un mode s'écrit plein, comme celui d'un module ; la consigne d'un thermostat éteint, effacée. */}
+        <ValeurEtiquette valeur={parMode ? motDuMode : consigne} dit={parMode ? tr('Mode') : tr('Consigne')} etiquette={etiquette} lue={etiquetteDite}
+          long={parMode && motLong(motDuMode)} couleur={parMode || !eteint ? 'var(--o-text)' : 'var(--o-text3)'} />
+        <button aria-label={tr('Monter la consigne') + ' ' + nom} disabled={!reglable} onClick={(e) => { e.stopPropagation(); if (auPlanning) reprendreT(0.5); else setT(0.5); }} className="o-rmbtn" style={{ ...RM_BTN, ...RM_PAS, ...(reglable ? null : RM_INERTE) }}><Fi i="plus-small" size={16} /></button>
       </div>
     </div>
   );
@@ -2854,6 +4147,69 @@ function pilotFamille(option) {
   if (/confort|comfort|komfort/.test(s)) return 'confort';
   return null;
 }
+/* La VALEUR entre − et + — le mot d'un mode (plan 2 du chantier Chauffage),
+ * ou la consigne —, dans la police du texte, en 800 (cartes 1a,
+ * `RM_VALEUR_LIGNE`), sa taille choisie par la feuille (`o-gab-valeur`,
+ * index.css, que pose `ValeurEtiquette`) d'après deux mesures posées ici :
+ *  - `--o-taille`, celle d'une carte LARGE : les 15 px de la maquette, 12 ou
+ *    10 px pour un mot long ;
+ *  - `--o-n`, sa longueur : sur une carte ÉTROITE, la police se réduit,
+ *    entre 10 et 15 px, pour que le mot tienne sur UNE ligne entre les deux
+ *    boutons, qui lui cèdent de la place quand il est long — jamais sous
+ *    28 px (`--o-mot`, passe téléphone, T18).
+ * Un mot ne se coupe jamais (revue du 14/10, R8 : « Wyłączone » devenait
+ * « Wyłączon / e » à 360 px) : celui qui ne tient pas même à 10 px finit en
+ * « … », jamais par-dessus les boutons ; « Ochrona przed zamarzaniem », le
+ * Hors-gel polonais (nouveau, à faire relire à Seba882), passe à la ligne entre
+ * ses mots. La mise en page s'adapte au texte, jamais l'inverse. */
+const MOT_MODE = (mot) => ({ minWidth: 0, '--o-taille': (mot.length > 16 ? 10 : mot.length > 10 ? 12 : 15) + 'px', '--o-n': Math.max(1, mot.length),
+  lineHeight: mot.length > 10 ? 1.1 : 1.15, overflow: 'hidden', textOverflow: 'ellipsis' });
+/* La longueur du plus long mot d'une valeur (passe téléphone, T18) : sur une carte étroite, la place de la valeur s'élargit pour lui, et
+ * − et + lui cèdent (`--o-mot`, index.css) — « Frostschutz », « Wyłączone » ne finissent plus en « … » à 390 et 360 px. */
+const motLePlusLong = (mot) => String(mot).split(/\s+/).reduce((n, m) => Math.max(n, m.length), 0);
+/* La paire « valeur / étiquette » d'une carte (passe téléphone, § 2.2) : la consigne ou le mode entre − et + d'un chauffage, les kWh
+ * du jour à droite de la bascule d'une prise (`kwh` : à droite, de 13 à 11 px). La valeur dit d'abord, au lecteur d'écran, ce qu'elle
+ * est (`dit`, en texte masqué : « Consigne 22,0° ») ; l'étiquette visible ne le répète pas (`aria-hidden`), sauf quand elle dit QUI
+ * décide (`lue` : Planning, Manuel). Leurs tailles vivent dans la feuille (`o-gab-valeur`, `o-gab-etiquette`) : celles de la maquette
+ * sur une carte large ; sur une carte étroite, elles rétrécissent d'après la place qui reste et leur longueur, et l'étiquette passe en
+ * minuscules. Un mot ne se coupe jamais : il passe à la ligne entre deux mots, sinon il finit en « … ». `long` : un mot de mode trop
+ * long, qui efface l'étiquette d'une carte étroite (`data-long`). `point` : ce qui précède la valeur (le point d'un mode). Jamais
+ * positionnée : un appui sur elle ouvre la fiche. */
+function ValeurEtiquette({ valeur, dit = null, etiquette, lue = false, long = false, point = null, couleur = 'var(--o-text)', kwh = false }) {
+  return (
+    <div style={kwh ? { ...RM_VALEUR, textAlign: 'right' } : RM_VALEUR}>
+      <div style={{ ...RM_VALEUR_LIGNE, ...(kwh ? { justifyContent: 'flex-end' } : null), color: couleur }}>
+        {point}
+        <span className="o-gab-valeur" data-kwh={kwh ? '' : undefined} style={MOT_MODE(valeur)}>{dit != null && <span className="o-vh">{dit + ' '}</span>}{valeur}</span>
+      </div>
+      <div aria-hidden={lue ? undefined : 'true'} className="o-gab-etiquette" data-long={long ? '' : undefined} style={RM_ETIQUETTE(etiquette)}>{etiquette}</div>
+    </div>
+  );
+}
+/**
+ * Une zone de chauffage — un module fil pilote découvert, ou une zone
+ * décrite à la main — lue par UNE règle, celle de sa carte ET du compte
+ * « · n chauffent » d'Objets (relecture de la dernière passe) :
+ * `{ muet, watts, chauffe }`.
+ *  - muet : le `select` d'un module manque ou ne dit rien (`moduleMuet`) ; le
+ *    thermostat d'une zone décrite à la main manque, ou ne dit rien
+ *    (`estMuet` : `unavailable`, `unknown`) ;
+ *  - watts : la puissance d'un module (`wattsDe`), null sans capteur ;
+ *  - chauffe : LA règle `enChauffe` — un module, plus de 10 W mesurés ; une
+ *    zone décrite en marche, sa pièce sous sa consigne.
+ * `z` : son état lu (`readZone`). `marche` et `consigne` : ce que la carte
+ * affiche, son avance optimiste comprise ; à défaut, l'état lu.
+ */
+function chauffeDeZone(S, zone, z = readZone(S, zone), { marche = z.mode !== 'off', consigne = z.target != null ? z.target : null } = {}) {
+  // `muette`, pas `muet` : des tests du distributeur découpent App.jsx au premier « const muet = ».
+  if (zone.decouvert) {
+    const muette = moduleMuet(S && S[zone.modeEnt]);
+    const watts = zone.puissance && S ? wattsDe(S[zone.puissance]) : null;
+    return { muet: muette, watts, chauffe: enChauffe({ famille: 'module', muet: muette, watts }) };
+  }
+  const muette = !!(estClimate(zone) && (!S || !S[zone.haid] || estMuet(S[zone.haid].state)));
+  return { muet: muette, watts: null, chauffe: enChauffe({ famille: 'zone', muet: muette, marche, mesure: z.current, consigne }) };
+}
 function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
   const S = (hass && hass.states) || null;
   const z = readZone(S, zone);
@@ -2865,8 +4221,40 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
    * de consigne, rien a regler non plus : l'appel partait vers personne. */
   const target = ov != null ? ov : (z.target != null ? z.target : null);
   const reglable = target != null && !!zone.tempCible;
-  const off = z.mode === 'off';
-  const heating = !off && z.current != null && target != null && z.current < target;
+  /* Un MODULE fil pilote découvert (plan 2 du chantier Chauffage, choix 8)
+   * n'a pas de consigne : entre − et +, son MODE, que − / + font passer au
+   * mode voisin, du plus froid au plus chaud — Arrêt, Hors-gel, Éco,
+   * Confort −2, −1, Confort. Le moteur le dit : au planning, le mode qu'il
+   * applique (`applique` : un module sans Éco reçoit son Hors-gel ; sans ce
+   * champ, le mode voulu), et chaque geste est une reprise en main ; planning éteint, le
+   * mode que l'option du module représente, et l'ordre part au module,
+   * l'option telle qu'il l'écrit — en « Observer sans agir » aussi, le moteur
+   * n'envoyant rien (voir RoomClimateCard). Sans l'état du moteur, − / +
+   * restent inertes. Une zone décrite à la main ne fait pas interroger le
+   * moteur et ne lit pas son état : elle reste ce qu'elle était. */
+  const estModule = !!zone.decouvert;
+  const { etat } = useEtatChauffage(estModule);
+  const ch = estModule ? chauffageDe(etat, zone.modeEnt) : null;
+  const auPlanning = !!(ch && ch.planning && !etat.simulation);
+  const modeLu = !ch ? null : auPlanning ? ch.applique || ch.mode : modeDuModule(ch.options, z.modeBrut);
+  const [ovMode, setOvMode] = useOptimiste(modeLu);
+  const mode = ovMode != null ? ovMode : modeLu;
+  const off = mode ? mode === 'arret' : z.mode === 'off';
+  // Bascule : arrêt ↔ confort (ou le premier mode qui n'est pas l'arrêt),
+  // optimiste comme partout. Les autres modes vivent dans la fiche. Un module
+  // que le moteur connaît bascule par la même voie que − / +.
+  const [ovOn, setOvOn] = useOptimiste(z.mode);
+  const marche = ovOn != null ? ovOn : !off;
+  /* En panne, en chauffe : LA lecture de sa zone, celle du compte « · n
+   * chauffent » d'Objets (`chauffeDeZone`, relecture de la dernière passe).
+   * En panne, un MODULE muet — son `select` manque ou ne dit rien —, ou le
+   * thermostat d'une zone décrite à la main qui ne répond plus : la carte le
+   * dit comme celle d'un thermostat en panne, « Indisponible », le liseré de
+   * panne, sa bascule s'efface et − / + ne répondent plus. « Chauffe » : un
+   * module la MESURE — son capteur de puissance, plus de 10 W, même à
+   * l'Arrêt (`etatModule` dit le reste) ; une zone décrite à la main, en
+   * marche, sa pièce sous la consigne que la carte affiche. */
+  const { muet: mort, watts, chauffe } = chauffeDeZone(S, zone, z, { marche, consigne: target });
   const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
   // Bornes de repli en Celsius (RM_TMIN/RM_TMAX), reconverties vers l'unite reelle :
   // aucune entite ne borne un input_number, rien d'autre ne protege ce cadran.
@@ -2876,54 +4264,100 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
     if (estClimate(zone)) commander(hass, zone.haid, 'set_hvac_mode', m);
     else call('input_select', 'select_option', { entity_id: zone.modeEnt, option: m });
   };
-  // Bascule : arrêt ↔ confort (ou le premier mode qui n'est pas l'arrêt),
-  // optimiste comme partout. Les autres modes vivent dans la fiche.
-  const [ovOn, setOvOn] = useOptimiste(z.mode);
-  const marche = ovOn != null ? ovOn : !off;
+  /* Un mode au module : au planning, s'il le comprend (le moteur le dit) ;
+   * planning éteint, si son option existe — jamais à un module muet. Sinon le
+   * bouton reste inerte. L'avance se retire au refus du moteur ; l'ordre
+   * direct a le filet de `useOptimiste`, comme toute commande d'appareil. */
+  const ordonnable = (m) => !!(m && ch && !mort && (auPlanning ? Array.isArray(ch.modes) && ch.modes.indexOf(m) >= 0 : ch.options && ch.options[m]));
+  const ordonner = (m, annuler) => {
+    setOvMode(m);
+    if (auPlanning) reprendreLaMain(hass, ch, { mode: m }, () => { setOvMode(null); if (annuler) annuler(); });
+    else poserMode(ch.options[m]);
+  };
+  const moins = ch && modeVoisin(ch.modes, mode, -1), plus = ch && modeVoisin(ch.modes, mode, 1);
+  const baisse = estModule ? ordonnable(moins) : reglable, monte = estModule ? ordonnable(plus) : reglable;
   const modeArret = options.find(o => pilotFamille(o) === 'off') || 'off';
   const modeMarche = options.find(o => pilotFamille(o) === 'confort') || options.find(o => pilotFamille(o) !== 'off') || null;
-  const basculer = () => { const nv = !marche; setOvOn(nv); const m = nv ? modeMarche : modeArret; if (m) poserMode(m); };
+  const basculer = () => {
+    const nv = !marche; setOvOn(nv);
+    const cible = nv ? 'confort' : 'arret';
+    if (ordonnable(cible)) { ordonner(cible, () => setOvOn(null)); return; }
+    const m = nv ? modeMarche : modeArret; if (m) poserMode(m);
+  };
   const nom = titre || zone.name;
-  const mort = !!(estClimate(zone) && (!S || !S[zone.haid] || S[zone.haid].state === 'unavailable'));
-  // La consigne, entre les deux boutons qui la bougent : « 19 °C », « 19,5 °C ».
-  const consigne = target != null ? decMax(Number(target), 1) + ' °' + uT : '—';
-  const sub = !marche ? tr('Éteint') : heating ? tr('Chauffe') : tr('Au repos');
+  // La consigne d'une zone décrite, entre les deux boutons qui la bougent : « 19,0° », « 19,5° ».
+  const consigne = target != null ? nombre(Number(target), 1) + '°' : '—';
+  // Un module n'a pas de consigne : son mode, « Éco », « Confort −1 » — muet, « — ».
+  const motDuMode = (!mort && motMode(mode)) || '—';
+  const etatCarte = estModule ? etatModule(watts, marche ? mode : 'arret') : !marche ? 'eteint' : chauffe ? 'chauffe' : 'repos';
+  const eteint = mort || !marche;
+  const fenetre = !mort && auPlanning && ch.source === 'fenetre';
+  /* L'état, une phrase (cartes 1a). Au planning, jusqu'à quand
+   * (`phrasePlanning`) — sans redire l'étiquette ni la valeur (son choix du
+   * 12/10, « Ne pas répéter le bas »). Hors du planning, un module dit
+   * « Chauffe » quand il MESURE plus de 10 W (choix 8 : la mesure passe avant
+   * l'ordre, à l'Arrêt aussi), « Éteint » à l'Arrêt ; sinon ce qu'il en est
+   * du planning — « Sans planning » éteint (son étiquette dit déjà MANUEL,
+   * l'état ne le redit pas, tâche 10 bis B), « Observer sans agir » observé ;
+   * l'état du moteur pas encore lu, rien : la carte n'en sait rien (une
+   * espace insécable garde la ligne ; `nomCarte` ne la lit pas) — relecture
+   * de la partie B. Une zone décrite à la main garde ses mots. */
+  const sub = mort ? tr('Indisponible')
+    : !estModule ? (chauffe ? tr('Chauffe') : etatCarte === 'eteint' ? tr('Éteint') : tr('Au repos'))
+      : auPlanning ? phrasePlanning(ch, etat, Date.now())
+        : chauffe ? tr('Chauffe') : etatCarte === 'eteint' ? tr('Éteint')
+          : !ch ? ' ' : ch.planning === true && etat.simulation ? tr('Observer sans agir') : tr('Sans planning');
+  /* L'étiquette sous la valeur dit QUI décide (`etiquetteCarte`) : la
+   * consigne d'une zone décrite ; au planning, PLANNING — le planning, sa
+   * propre bande Arrêt comprise, et la maison —, MANUEL — une reprise en main,
+   * la bascule qui coupe comprise —, MODE — une fenêtre ouverte, dont la
+   * valeur dit l'Arrêt ou l'Éco qu'elle impose ; planning éteint, MODE à
+   * l'arrêt, MANUEL sinon. « Consigne » et « Mode » sont déjà dits au lecteur
+   * d'écran devant la valeur (`o-vh`) : l'étiquette ne les répète pas. */
+  const cleEtiquette = etiquetteCarte({ consigne: !estModule, auPlanning, source: auPlanning ? ch.source : null, eteint });
+  const etiquette = motEtiquette(cleEtiquette);
+  const etiquetteDite = cleEtiquette === 'planning' || cleEtiquette === 'manuel';
+  const piece = mesureLisible(z.current);
   return (
     /* Même structure que le thermostat (lot 13 de l'audit du 03/10, ADR
      * 0074) : la surface ouvre la fiche de la zone et dit ce que la carte
-     * affiche (« Chambre, Au repos ») ; l'interrupteur, déjà positionné, et les
-     * boutons − / + — eux seuls, pas leur rangée (relecture du lot 13) —
-     * passent au-dessus d'elle. La pastille AUTO et la consigne, du texte,
-     * restent dessous : un appui sur elles ouvre la fiche, comme avant. */
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
-      ...(heating && marche && LAVIS ? {
-        background: lavisCarte('var(--o-bad-rgb)'),
-      } : null),
+     * affiche (« Chambre, jusqu’à 22:30 ») ; l'interrupteur, déjà
+     * positionné, et les boutons − / + — eux seuls, pas leur rangée
+     * (relecture du lot 13) — passent au-dessus d'elle. La valeur et son
+     * étiquette, du texte, restent dessous : un appui sur elles ouvre la
+     * fiche, comme avant. */
+    <div className={'o-rmcard o-gabarit' + (mort ? ' o-panne' : '')} data-chauffage="" style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
+      // Teinte d'état : l'orange de la chauffe — mesurée, jamais au simple mode.
+      ...(chauffe && LAVIS ? { background: lavisCarte('var(--o-warn2-rgb)') } : null),
       border: LISERE }}>
       {onOpen && <Surface onClick={() => onOpen(zone.id)} label={nomCarte(nom, sub)} />}
-      {/* Climat = ROUGE, comme le thermostat : l'ambre rendait jaune. */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={RM_ICO(marche ? 'rgba(var(--o-bad-rgb),.14)' : 'var(--o-s1)', marche ? 'var(--o-bad)' : 'var(--o-text3)')}><GlypheCarte id={'zone:' + zone.id} size={17}><Fi i={heating && marche ? 'flame' : 'thermometer-half'} size={17} /></GlypheCarte></span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {z.auto && <span style={{ padding: '4px 8px', borderRadius: 9, fontSize: 10, fontWeight: 800, background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}>{tr('AUTO')}</span>}
-          {(modeMarche || off) && <RmBascule on={marche} nom={nom} onToggle={basculer} />}
-        </div>
+      {/* La ligne du haut. Carte large : la plaque, la bascule. Carte étroite (passe téléphone, T13) : la plaque et la température de la
+        * pièce — la marche et l'arrêt passent dans la fiche. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <span style={plaqueChauffage({ chauffe, eteint, mode: estModule ? mode : null })}><GlypheCarte id={'zone:' + zone.id} size={17}><Fi i="heat" size={17} /></GlypheCarte></span>
+        {!mort && (modeMarche || off) && <RmBascule className="o-seul-large" on={marche} nom={nom} onToggle={basculer} />}
+        {piece != null && <ChiffreHaut v={nombre(piece, 1)} degre lu couleur={eteint ? 'var(--o-text2)' : 'var(--o-text)'} />}
       </div>
-      {/* PAS DE MARGE SUR LE CORPS (09/10). Le parent est en
-        * `space-between` : le corps est deja colle en bas, la marge n'y
-        * ajoute rien — sauf quand le contenu remplit la carte, et la elle le
-        * pousse DEHORS. « Il y a un souci au niveau de l'organisation,
-        * arrange la carte volet que ce soit au meme niveau que l'Echo » :
-        * mesure, le corps du volet finissait 12 px sous sa zone quand celui
-        * du media tombait pile. */}
-      <div>
-        <div style={RM_NAME}>{nom}</div>
-        <div style={{ ...RM_SUB, color: heating && marche ? 'var(--o-bad)' : 'var(--o-text3)' }}>{sub}</div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
-          <button aria-label={tr('Baisser la consigne') + ' ' + nom} disabled={!reglable} onClick={(e) => { e.stopPropagation(); setT(-0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px', ...(reglable ? null : RM_INERTE) }}>−</button>
-          <span style={{ flex: '0 0 auto', minWidth: 58, alignSelf: 'center', textAlign: 'center', fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', color: marche ? 'var(--o-text)' : 'var(--o-text2)' }}><span className="o-vh">{tr('Consigne') + ' '}</span>{consigne}</span>
-          <button aria-label={tr('Monter la consigne') + ' ' + nom} disabled={!reglable} onClick={(e) => { e.stopPropagation(); setT(0.5); }} className="o-rmbtn" style={{ ...RM_BTN, fontSize: 15, padding: '7px 6px', ...(reglable ? null : RM_INERTE) }}>+</button>
+      <div style={RM_MILIEU}>
+        <div style={{ minWidth: 0 }}>
+          <div className="o-gab-nom" style={RM_NAME}>{nom}</div>
+          <div className="o-gab-phrase" style={{ ...RM_SUB, color: couleurEtatChauffage({ fenetre, chauffe, eteint }), '--o-n': Math.max(1, String(sub).length) }}>{sub}</div>
         </div>
+        <TemperaturePiece v={piece} eteint={eteint} />
+      </div>
+      {/* La rangée du bas, celle du thermostat (sa marge auto, ses boutons
+        * seuls positionnés). Un module nomme ses boutons et sa valeur par son
+        * MODE, précédé de son point : il n'a pas de consigne, et « Baisser la
+        * consigne » aurait menti. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--o-pas-ecart, 8px)', marginTop: 'auto', paddingTop: 'var(--o-pied-haut, 14px)', '--o-mot': motLePlusLong(estModule ? motDuMode : consigne) }}>
+        <button aria-label={(estModule ? tr('Mode plus froid') : tr('Baisser la consigne')) + ' ' + nom} disabled={!baisse} onClick={(e) => { e.stopPropagation(); if (estModule) ordonner(moins); else setT(-0.5); }} className="o-rmbtn" style={{ ...RM_BTN, ...RM_PAS, ...(baisse ? null : RM_INERTE) }}><Fi i="minus-small" size={16} /></button>
+        {/* Le point du mode ne s'écrit que pour la carte large : la plaque de l'icône porte déjà sa couleur. Un mot de plus de 13 lettres
+          * (« Frost protection », « Ochrona przed zamarzaniem ») tient sur deux lignes ou plus d'une carte étroite : son étiquette s'y efface
+          * (`motLong`, `data-long`), la rangée garde ses 44 px. */}
+        <ValeurEtiquette valeur={estModule ? motDuMode : consigne} dit={estModule ? tr('Mode') : tr('Consigne')} etiquette={etiquette} lue={etiquetteDite}
+          long={estModule && motLong(motDuMode)} couleur={estModule || !eteint ? 'var(--o-text)' : 'var(--o-text3)'}
+          point={estModule && !mort && motMode(mode) ? <span aria-hidden="true" className="o-chauffage-point o-seul-large" style={RM_POINT(couleurMode(mode))} /> : null} />
+        <button aria-label={(estModule ? tr('Mode plus chaud') : tr('Monter la consigne')) + ' ' + nom} disabled={!monte} onClick={(e) => { e.stopPropagation(); if (estModule) ordonner(plus); else setT(0.5); }} className="o-rmbtn" style={{ ...RM_BTN, ...RM_PAS, ...(monte ? null : RM_INERTE) }}><Fi i="plus-small" size={16} /></button>
       </div>
     </div>
   );
@@ -2999,25 +4433,6 @@ function RoomPilotSheet({ zone, hass, onClose }) {
       </>)}
     </BottomSheet>
   );
-}
-
-// Lecture d'un media_player (+ fusion compagnon Music Assistant), utilisable hors de la vue Médias.
-function mpRead1(S, id) {
-  const e = S && S[id]; if (!e) return { state: 'off', on: false, ctl: id };
-  const a = e.attributes || {}; const playing = e.state === 'playing';
-  let pos = a.media_position;
-  if (pos != null && playing && a.media_position_updated_at) { const dt = (Date.now() - Date.parse(a.media_position_updated_at)) / 1000; if (dt > 0) pos += dt; }
-  if (pos != null && a.media_duration) pos = Math.min(pos, a.media_duration);
-  return { state: e.state, on: e.state !== 'off' && e.state !== 'unavailable' && e.state != null && e.state !== 'standby', playing, title: a.media_title, artist: a.media_artist || a.media_album_artist, album: a.media_album_name, art: a.entity_picture_local || a.entity_picture, pos, dur: a.media_duration, vol: a.volume_level != null ? Math.round(a.volume_level * 100) : 0, hasVol: a.volume_level != null, muted: !!a.is_volume_muted, shuffle: !!a.shuffle, repeat: a.repeat || 'off', source: a.app_name || a.source, mtype: a.media_content_type, ctl: id };
-}
-function mpRead(S, id) {
-  const p = medPlayers().find(x => x.haid === id);
-  const nat = mpRead1(S, id);
-  if (!p || !p.ma) return nat;
-  const ma = mpRead1(S, p.ma);
-  const maActive = (ma.title || ma.art) && (ma.playing || (ma.state === 'paused' && !nat.playing));
-  if (!maActive) return nat;
-  return { ...nat, playing: ma.playing || nat.playing, on: true, title: ma.title || nat.title, artist: ma.artist || nat.artist, album: ma.album || nat.album, art: ma.art || nat.art, pos: ma.pos != null ? ma.pos : nat.pos, dur: ma.dur != null ? ma.dur : nat.dur, shuffle: ma.shuffle, repeat: ma.repeat, source: ma.source || nat.source || 'Music Assistant', ctl: p.ma };
 }
 
 // Détail média : lecteur complet (ambiance pochette, seek, contrôles, volume) — comme la vue Médias.
@@ -3145,702 +4560,332 @@ function FeuilleHistorique({ entrees, onRestaurer, onOublier, onClose }) {
   );
 }
 
-/* Les favoris de lecture se rangent PAR LECTEUR, et dans le navigateur de
- * celui qui regarde : un `media_content_id` est propre à l'intégration qui l'a
- * émis, et ce classement est une commodité personnelle — son absence ne casse
- * rien, comme pour les dernières applications lancées. */
-const CLE_FAVLECTURE = 'loggia_favlecture';
-function favorisLecture(cle) {
-  try {
-    const table = JSON.parse(localStorage.getItem(CLE_FAVLECTURE) || '{}');
-    const v = table && typeof table === 'object' ? table[cle] : null;
-    return Array.isArray(v) ? v.filter(x => x && typeof x.i === 'string' && typeof x.c === 'string') : [];
-  } catch { return []; }
-}
-function noterFavori(cle, entree) {
-  const suite = basculerFavori(favorisLecture(cle), entree);
-  try {
-    const brut = JSON.parse(localStorage.getItem(CLE_FAVLECTURE) || '{}');
-    const table = (brut && typeof brut === 'object' && !Array.isArray(brut)) ? brut : {};
-    if (suite.length) table[cle] = suite; else delete table[cle];
-    localStorage.setItem(CLE_FAVLECTURE, JSON.stringify(table));
-  } catch { /* stockage plein ou refusé : on perd le raccourci, pas la lecture */ }
-  return suite;
-}
-
-/**
- * La phrase pour un Echo.
- *
- * Une enceinte Alexa ne sait pas `browse_media` : « Parcourir » ne lui trouve
- * rien, et il n'y a donc rien à mettre en favori par ce chemin. Ce qu'elle sait
- * faire, c'est exécuter une phrase — celle qu'on lui dirait à voix haute.
- *
- * La phrase est CELLE DE L'UTILISATEUR, dans sa langue et avec ses mots : c'est
- * son Alexa qui l'écoute. Rien n'est traduit, complété, ni proposé d'office.
- */
-function PhraseAlexa({ id, cible, hass, onGarder }) {
-  const [texte, setTexte] = useState('');
-  const phrase = phraseAlexa(texte);
-  const envoyer = () => {
-    const appel = appelPourJouer(phrase, cible);
-    if (!appel || !hass || !hass.callService) return;
-    hass.callService(appel.domaine, appel.service, appel.data);
-    setTexte('');
-  };
-  const garder = () => { if (!phrase) return; noterFavori(id, phrase); setTexte(''); if (onGarder) onGarder(); };
-  const rond = (actif) => ({ width: 42, height: 42, flexShrink: 0, borderRadius: 12, border: 'none', cursor: actif ? 'pointer' : 'default',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: actif ? 1 : .45 });
-  return (
-    <div style={{ marginTop: 14 }}>
-      <label htmlFor={'o-alexa-' + id} style={{ display: 'block', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '0 2px 7px' }}>{tr('DIRE À ALEXA')}</label>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {/* `control-has-associated-label` ne suit pas `htmlFor` : l'étiquette
-          * est juste au-dessus et désigne le champ par son identifiant (05/10). */}
-        {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
-        <input id={'o-alexa-' + id} value={texte} onChange={(e) => setTexte(e.target.value)} spellCheck={false}
-          onKeyDown={(e) => { if (e.key === 'Enter') envoyer(); }}
-          placeholder={tr('mets ma playlist du soir')}
-          style={{ flex: 1, minWidth: 0, height: 42, padding: '0 12px', borderRadius: 12, background: 'var(--o-s1)',
-            border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }} />
-        <button onClick={garder} disabled={!phrase} title={tr('Garder en favori')} aria-label={tr('Garder en favori')}
-          style={{ ...rond(!!phrase), background: 'var(--o-s1)', color: 'var(--o-gold)' }}>
-          <Ico name="star" size={15} />
-        </button>
-        <button onClick={envoyer} disabled={!phrase} title={tr('Envoyer')} aria-label={tr('Envoyer')}
-          style={{ ...rond(!!phrase), background: 'var(--o-accent-fond)', color: '#fff' }}>
-          <Fi i="paper-plane" size={15} />
-        </button>
-      </div>
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '7px 2px 0' }}>
-        {tr('Ce que vous diriez après « Alexa ». Une enceinte Echo ne sait pas parcourir sa bibliothèque : la phrase est le seul chemin.')}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Les favoris de ce lecteur : une playlist en une touche.
- *
- * Rien quand il n'y en a pas. Une rangée vide qui dirait « mettez des
- * favoris » tiendrait la place d'une carte pour ne rien apprendre — l'étoile
- * du navigateur, elle, se voit au moment où elle sert.
- */
-function FavorisLecture({ id, hass }) {
-  const liste = favorisLecture(id);
-  if (!liste.length) return null;
-  const jouer = (f) => {
-    /* Une PHRASE part chez la sœur qui sait l'exécuter, pas chez l'entité de la
-     * carte : voir `cibleAlexa`. Un média, lui, se rejoue sur place. */
-    const vers = f.c === TYPE_PHRASE
-      ? (cibleAlexa(id, (hass && hass.states) || {}, LOGGIA_INDEX) || id)
-      : id;
-    const appel = appelPourJouer(f, vers);
-    if (!appel || !hass || !hass.callService) return;
-    hass.callService(appel.domaine, appel.service, appel.data);
-  };
-  return (
-    <div style={{ marginTop: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7, margin: '0 2px 8px' }}>
-        <Ico name="star" size={12} style={{ color: 'var(--o-gold)' }} />
-        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{tr('FAVORIS')}</span>
-      </div>
-      {/* Une rangée qui DÉFILE plutôt qu'une grille qui s'allonge : la fiche
-        * garde sa hauteur quel que soit le nombre de favoris. */}
-      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2, margin: '0 -4px', paddingLeft: 4, paddingRight: 4 }}>
-        {liste.map((f) => (
-          <button key={f.c + f.i} onClick={() => jouer(f)} title={f.t}
-            style={{ width: 96, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '10px 6px',
-              borderRadius: 14, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', cursor: 'pointer', fontFamily: 'inherit' }}>
-            {f.v
-              ? <span aria-hidden="true" style={{ width: 40, height: 40, borderRadius: 10, backgroundImage: 'url("' + f.v + '")', backgroundSize: 'cover', backgroundPosition: 'center' }} />
-              : <span aria-hidden="true" style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--o-s2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text1)' }}>
-                <Fi i={f.c === 'custom' ? 'comment' : (MEDIA_ICONES[f.c] || 'list')} size={15} /></span>}
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.t}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* Le navigateur de medias : ce que CE lecteur sait jouer.
- *
- * Home Assistant expose l'arbre par lecteur — un Chromecast propose les
- * sources partagees (radios, fichiers locaux), un Apple TV ses applications.
- * On ne devine donc rien : on demande au lecteur, et on affiche ce qu'il
- * repond. Un lecteur qui ne sait rien proposer le DIT, plutot que de montrer
- * une liste vide qu'on prendrait pour un chargement sans fin.
- *
- * Deux gestes seulement : ouvrir un dossier, lancer un media. Le reste — les
- * files d'attente, les melanges — appartient au lecteur, pas au tableau de
- * bord.
- */
-const MEDIA_ICONES = {
-  music: 'music-alt', album: 'album', artist: 'music', playlist: 'list',
-  podcast: 'podcast', tv_show: 'tv', movie: 'film', video: 'film',
-  image: 'picture', directory: 'folder', channel: 'radio', app: 'play',
-};
-
-function NavigateurMedias({ id, hass, onClose }) {
-  const nom = (((hass && hass.states && hass.states[id]) || {}).attributes || {}).friendly_name || id;
-  /* La pile : chaque niveau garde de quoi le redemander. Revenir en arriere
-   * relit plutot que de conserver l'arbre entier en memoire — un lecteur peut
-   * offrir des milliers de radios. */
-  const [pile, setPile] = useState([{ titre: nom, cid: undefined, ctype: undefined }]);
-  const [contenu, setContenu] = useState(null);
-  const [etat, setEtat] = useState('charge');   // charge | pret | vide | erreur
-  const [envoi, setEnvoi] = useState(null);
-  const [favoris, setFavoris] = useState(() => favorisLecture(id));
-
-  const niveau = pile[pile.length - 1];
-  useEffect(() => {
-    let mort = false;
-    setEtat('charge'); setContenu(null);
-    (async () => {
-      try {
-        if (!hass || !hass.callWS) { if (!mort) setEtat('erreur'); return; }
-        const r = await hass.callWS({
-          type: 'media_player/browse_media', entity_id: id,
-          ...(niveau.cid ? { media_content_id: niveau.cid, media_content_type: niveau.ctype } : {}),
-        });
-        if (mort) return;
-        const enfants = (r && r.children) || [];
-        setContenu(enfants);
-        setEtat(enfants.length ? 'pret' : 'vide');
-      } catch { if (!mort) setEtat('erreur'); }
-    })();
-    return () => { mort = true; };
-  }, [id, niveau.cid, niveau.ctype]);
-
-  const ouvrir = (c) => {
-    if (c.can_expand) { setPile(p => p.concat({ titre: c.title, cid: c.media_content_id, ctype: c.media_content_type })); return; }
-    if (!c.can_play) return;
-    setEnvoi(c.media_content_id);
-    /* Pas de `try/catch` : il n'attraperait rien. `callService` rend une
-     * promesse, et un refus la rejette plus tard, hors de portée d'un bloc
-     * synchrone. Le rejet remonte à l'écoute globale, qui affiche « Commande
-     * non exécutée » — c'est bien le lecteur qui dit s'il a refusé, mais par ce
-     * chemin-là, pas par un `catch` qui ne voit jamais rien passer. */
-    hass.callService('media_player', 'play_media', {
-      entity_id: id, media_content_id: c.media_content_id, media_content_type: c.media_content_type,
-    });
-    // Le retour visuel dure le temps qu'il faut pour que l'oeil le voie ; ce
-    // n'est pas une mesure du lancement, que Home Assistant ne raconte pas.
-    setTimeout(() => setEnvoi(v => (v === c.media_content_id ? null : v)), 1400);
-  };
-  const remonter = () => setPile(p => (p.length > 1 ? p.slice(0, -1) : p));
-
-  const btnRond = { width: 34, height: 34, borderRadius: '50%', border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
-  const message = { fontSize: 13, fontWeight: 600, color: 'var(--o-text1)', opacity: .82, padding: '22px 4px', textAlign: 'center' };
+/* La feuille d'un LECTEUR (passe téléphone, T16 : la borne du démarrage) : la
+ * coquille. Le contenu se charge à la demande (`fichemedia.jsx`) et n'importe
+ * jamais App.jsx : la coquille lui passe ce qui n'existe qu'ici (`BRIQUES_MEDIA` :
+ * la lecture d'un lecteur, l'épingle, le groupe segmenté).
+ * Comme `FicheLumiere`, elle GARDE la feuille et pose la frontière Suspense
+ * DEDANS : un morceau qui ne se charge pas (hors ligne, page périmée) se dit dans
+ * la feuille, par sa barrière (`Barriere`, ui.jsx) — et non à la place de la vue
+ * Objets entière (correction bis, point 1). Le repli tient la hauteur d'une fiche
+ * (260 px), comme celui des autres feuilles chargées à la demande. */
+/* La place (chantier Médias, § 10) : la phrase pour Alexa, les favoris, le navigateur et les applications vivent dans le morceau
+ * de la fiche (fichemedia.jsx, navigateurmedias.jsx) — ils y étaient seuls à servir. Il ne reste ici que ce qui n'existe qu'ici.
+ * La fiche de sa maquette (tâche 6 ; M12) : la coquille lui passe la VUE du lecteur — celle de sa carte (`useVueLecteur` : la lecture
+ * fusionnée du jumeau, les avances d'un geste, la teinte, la phrase, les ordres explicites, le `hass` vivant) —, le glyphe de sa carte
+ * (l'icône choisie devant), l'épingle, l'ouverture de la fiche universelle, et ses briques (`BRIQUES_MEDIA`, plus bas : la bascule, la
+ * barre, le groupe segmenté, le dégradé du volume). `mpRead`, la lecture d'avant, est parti (tâche 9) : la lecture d'un lecteur vit
+ * dans lecteur.js, pour la carte, la fiche, l'en-tête et l'Accueil. */
+/* ── La fiche météo (sa maquette « Cartes météo », cadre 1b, 20/10) ──
+ * La coquille garde la feuille et pose la frontière Suspense dedans ; le
+ * contenu (fichemeteo.jsx) reçoit le `hass` VIVANT de l'entité et du soleil,
+ * l'épingle, et l'ouverture de la fiche universelle (« L'appareil »), qui se
+ * pose par-dessus. Le widget du rail l'ouvre, par `dc.ouvrir`. */
+function FicheMeteo({ id, hass, onClose }) {
+  const H = hassQuiConnait(useHass([id, 'sun.sun']), hass, id);
+  const [fiche, setFiche] = useState(null);
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-          {pile.length > 1 && (
-            <button onClick={remonter} aria-label={tr('Revenir')} style={btnRond}>
-              <Fi i="angle-left" size={14} />
-            </button>
-          )}
-          <span style={{ flex: 1, minWidth: 0 }}>
-            <NomFeuille><span style={{ display: 'block', fontSize: 15, fontWeight: 800, letterSpacing: '-.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{niveau.titre}</span></NomFeuille>
-            {pile.length > 1 && <span style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--o-text1)', opacity: .82, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pile.slice(0, -1).map(x => x.titre).join(' · ')}</span>}
-          </span>
-          <CroixFeuille />
-        </div>
-
-        {etat === 'charge' && <div style={message}>{tr('Chargement…')}</div>}
-        {etat === 'erreur' && <div style={message}>{tr('Ce lecteur ne propose rien à parcourir.')}</div>}
-        {etat === 'vide' && <div style={message}>{tr('Dossier vide')}</div>}
-        {etat === 'pret' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '58vh', overflowY: 'auto', margin: '0 -4px', padding: '0 4px' }}>
-            {contenu.map((c, i) => {
-              const jouable = !c.can_expand && c.can_play;
-              const parti = envoi === c.media_content_id;
-              const utile = c.can_expand || c.can_play;
-              /* L'étoile ne peut pas vivre DANS la rangée : un bouton dans un
-                * bouton n'est pas du HTML valide, et le clavier n'en atteindrait
-                * qu'un seul. La rangée est donc une boîte, et les deux gestes y
-                * sont côte à côte. */
-              const gardable = entreeFavorite(c);
-              const garde = !!gardable && favoris.some(x => memeFavori(x, gardable));
-              return (
-                <div key={(c.media_content_id || '') + i}
-                  style={{ display: 'flex', alignItems: 'center', borderRadius: 13, overflow: 'hidden',
-                    background: parti ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s1)', transition: 'background .2s' }}>
-                <button onClick={() => ouvrir(c)} disabled={!utile}
-                  style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', minHeight: 52,
-                    border: 'none', background: 'transparent', color: 'var(--o-text1)',
-                    cursor: utile ? 'pointer' : 'default', textAlign: 'left', flex: 1, minWidth: 0,
-                    opacity: utile ? 1 : .55 }}>
-                  {/* La vignette quand elle existe : une pochette reconnait un
-                    * album plus vite que son titre. */}
-                  {c.thumbnail
-                    ? <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0, backgroundImage: `url("${c.thumbnail}")`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
-                    : <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0, background: 'rgba(255,255,255,.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Fi i={MEDIA_ICONES[c.media_class] || (c.can_expand ? 'folder' : 'music-alt')} size={14} />
-                    </span>}
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</span>
-                  {c.can_expand
-                    ? <Fi i="angle-right" size={13} style={{ opacity: .65, flexShrink: 0 }} />
-                    : jouable ? <Fi i="play" size={12} style={{ flexShrink: 0 }} /> : null}
-                </button>
-                {gardable && (
-                  <button onClick={() => setFavoris(noterFavori(id, gardable))} aria-pressed={garde}
-                    aria-label={garde ? tr('Retirer des favoris') : tr('Ajouter aux favoris')}
-                    title={garde ? tr('Retirer des favoris') : tr('Ajouter aux favoris')}
-                    style={{ width: 44, alignSelf: 'stretch', border: 'none', background: 'transparent', cursor: 'pointer',
-                      color: garde ? 'var(--o-gold)' : 'var(--o-text3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Ico name="star" size={14} />
-                  </button>
-                )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <Suspense fallback={<div style={{ minHeight: 260 }} />}>
+          <FicheMeteoContenu id={id} hass={H} onFiche={setFiche} epingle={<BoutonEpingle id={id} />} />
+        </Suspense>
+        {fiche && <FicheAppareil id={fiche} hass={H} onClose={() => setFiche(null)} />}
       </>)}
     </BottomSheet>
   );
 }
 
-/* LES APPLICATIONS D'UNE TÉLÉVISION CONNECTÉE (30/09).
- *
- * « Il faudrait que cela fonctionne aussi pour les autres supports de
- * streaming vidéo autre que l'Apple TV, comme Android TV. »
- *
- * Tout ce qui décide vit dans `applis.js`, qui est pur et testé : par où
- * lancer, sur quelle entité, et quoi souligner. Ici on ne fait que montrer.
- *
- * Les DERNIÈRES lancées passent devant — la grille tient huit tuiles, et une
- * télévision en propose parfois trente. Le reste attend derrière un chevron,
- * comme sur la maquette. Ce classement est une commodité de celui qui regarde,
- * il reste donc dans son navigateur et son absence ne casse rien.
- */
-const CLE_APPLIS = 'loggia_appsrecentes';
-const APPLIS_EN_TETE = 8;
-function applisRecentes(cle) {
-  try {
-    const t = JSON.parse(localStorage.getItem(CLE_APPLIS) || '{}');
-    const v = t && typeof t === 'object' ? t[cle] : null;
-    return Array.isArray(v) ? v.filter(x => typeof x === 'string').slice(0, APPLIS_EN_TETE) : [];
-  } catch { return []; }
-}
-function noterAppli(cle, nom) {
-  try {
-    const t = JSON.parse(localStorage.getItem(CLE_APPLIS) || '{}');
-    const table = (t && typeof t === 'object' && !Array.isArray(t)) ? t : {};
-    table[cle] = [nom, ...applisRecentes(cle).filter(x => x !== nom)].slice(0, APPLIS_EN_TETE);
-    localStorage.setItem(CLE_APPLIS, JSON.stringify(table));
-    return table[cle];
-  } catch { return applisRecentes(cle); }
-}
-/* Le badge d'une application : ses initiales. Aucune fonte n'a les logos, et
- * Home Assistant ne donne pas d'icône — seulement un nom. « Disney+ » devient
- * « D+ », « Prime Video » devient « PV », « Netflix » devient « N ». */
-function initialesAppli(nom) {
-  const mots = String(nom || '').trim().split(/\s+/).filter(Boolean);
-  if (!mots.length) return '?';
-  const un = mots[0];
-  if (mots.length === 1) return /[+\d]$/.test(un) ? (un.charAt(0) + un.slice(-1)).toUpperCase() : un.charAt(0).toUpperCase();
-  return (mots[0].charAt(0) + mots[1].charAt(0)).toUpperCase();
-}
-
-/* Le dessin d'une touche. Une flèche, un rond, un mot — jamais une icône
- * inventée : ce que la télécommande sait faire vient de sa table. */
-const DESSIN_TOUCHE = {
-  haut: 'angle-small-up', bas: 'angle-small-down', gauche: 'angle-small-left', droite: 'angle-small-right',
-  retour: 'arrow-left', accueil: 'home', menu: 'menu-burger', info: 'info',
-  lecture: 'play-pause', precedent: 'rewind', suivant: 'forward',
-  vol_moins: 'volume-down', vol_plus: 'volume-up', muet: 'volume-mute',
-};
-const NOMS_TOUCHES = () => ({
-  haut: tr('Haut'), bas: tr('Bas'), gauche: tr('Gauche'), droite: tr('Droite'), ok: tr('OK'),
-  retour: tr('Retour'), accueil: tr('Accueil'), menu: tr('Menu'), info: tr('Info'),
-  lecture: tr('Lecture ou pause'), precedent: tr('Reculer'), suivant: tr('Avancer'),
-  vol_moins: tr('Baisser le son'), vol_plus: tr('Monter le son'), muet: tr('Couper le son'),
-});
-
-function ApplisAppareil({ id, hass }) {
-  const S = (hass && hass.states) || {};
-  const choix = applisDe(id, S, LOGGIA_INDEX);
-  const integration = integrationDe(id, LOGGIA_INDEX);
-  const tele = telecommandePour(integration, telecommandeDe(id, S, LOGGIA_INDEX));
-  const [recentes, setRecentes] = useState(() => applisRecentes(id));
-  /* Ce qu'on vient de lancer, et ce que l'appareil annonçait à ce moment-là.
-   * `appliCourante` s'en sert pour départager : voir sa remarque. */
-  const [lancee, setLancee] = useState(null);
-  const [tout, setTout] = useState(false);
-  const [onglet, setOnglet] = useState('applis');
-  if (!choix && !tele) return null;
-  // Un appareil qui n'a QUE l'un des deux n'a pas besoin d'un segment.
-  const vue = (!choix && tele) ? 'tele' : (!tele ? 'applis' : onglet);
-
-  const lancer = (nom) => {
-    const appel = appelPourLancer(choix, nom);
-    if (!appel || !hass || !hass.callService) return;
-    hass.callService(appel.domaine, appel.service, appel.data);
-    setLancee({ nom, avant: choix.courante });
-    setRecentes(noterAppli(id, nom));
-  };
-  const toucher = (geste) => {
-    const appel = appelPourTouche(integration, geste, { telecommande: telecommandeDe(id, S, LOGGIA_INDEX), lecteur: id });
-    if (!appel || !hass || !hass.callService) return;
-    hass.callService(appel.domaine, appel.service, appel.data);
-  };
-  /* LA VEILLE ne passe pas par la table des touches : `media_player.turn_on`
-   * et `turn_off` s'écrivent pareil partout, et le lecteur annonce lui-même
-   * s'il les connaît — les bits 128 et 256. Rien à traduire par intégration,
-   * donc rien à se tromper. */
-  const bitsLecteur = Number(((S[id] || {}).attributes || {}).supported_features) || 0;
-  const saitVeille = !!(bitsLecteur & 128) || !!(bitsLecteur & 256);
-  const allume = !!(S[id] && S[id].state !== 'off' && S[id].state !== 'unavailable' && S[id].state !== 'standby');
-  const veiller = () => {
-    if (!saitVeille || !hass || !hass.callService) return;
-    hass.callService('media_player', allume ? 'turn_off' : 'turn_on', { entity_id: id });
-  };
-
-  // Les dernières lancées d'abord, puis le reste dans l'ordre de l'appareil.
-  const vues = new Set();
-  const ordre = [];
-  if (choix) {
-    for (const n of recentes) if (choix.liste.indexOf(n) >= 0 && !vues.has(n)) { vues.add(n); ordre.push(n); }
-    for (const n of choix.liste) if (!vues.has(n)) { vues.add(n); ordre.push(n); }
-  }
-  const devant = ordre.slice(0, APPLIS_EN_TETE);
-  const reste = ordre.slice(APPLIS_EN_TETE);
-
-  const enCours = appliCourante(choix, lancee);
-  const tuile = (nom) => {
-    const on = !!enCours && nom === enCours;
-    return (
-      <button key={nom} onClick={() => lancer(nom)} aria-pressed={!!on} title={nom}
-        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '10px 6px', borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit',
-          border: 'var(--o-bw,1px) solid ' + (on ? 'var(--o-accent)' : 'var(--o-bd2)'), background: on ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s1)' }}>
-        {/* Le LOGO quand on reconnaît la marque, les initiales sinon. Un nom
-          * inconnu ne reçoit pas un logo approchant : les initiales, elles, ne
-          * se trompent jamais de marque. */}
-        <span style={{ width: 34, height: 34, borderRadius: 10, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800,
-          background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)' }}>
-          {marqueDe(nom) ? <Ico name={marqueDe(nom)} size={19} /> : initialesAppli(nom)}</span>
-        <span style={{ fontSize: 11, fontWeight: 700, color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nom}</span>
-      </button>
-    );
-  };
-
-  const noms = NOMS_TOUCHES();
-  const sait = (g) => !!tele && tele.gestes.indexOf(g) >= 0;
-
+function FicheMedia({ id, hass, onClose }) {
+  const vue = useVueLecteur(hass, id);
+  const [fiche, setFiche] = useState(null);
   return (
-    <div style={{ marginTop: 16 }}>
-      {choix && tele && (
-        <div style={{ marginBottom: 12 }}>
-          <Segment grandir value={onglet} onChange={setOnglet} label={tr('Applications ou télécommande')}
-            options={[{ id: 'applis', label: tr('Applications') }, { id: 'tele', label: tr('Télécommande') }]} />
-        </div>
-      )}
+    <BottomSheet onClose={onClose}>
+      {() => (<>
+        <Suspense fallback={<div style={{ minHeight: 260 }} />}>
+          <FicheMediaContent id={id} vue={vue} briques={BRIQUES_MEDIA} onFiche={setFiche}
+            glyphe={<GlypheCarte id={id} size={18}><Fi i={glypheLecteur(vue.l)} size={18} /></GlypheCarte>} epingle={<BoutonEpingle id={id} />} />
+        </Suspense>
+        {fiche && <FicheAppareil id={fiche} hass={vue.hass} onClose={() => setFiche(null)} />}
+      </>)}
+    </BottomSheet>
+  );
+}
 
-      {vue === 'applis' && choix && (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, margin: '0 2px 8px' }}>
-            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{tr('APPLICATIONS')}</span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Lance l’app et allume la TV')}</span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>{devant.map(tuile)}</div>
-          {reste.length > 0 && (
-            <>
-              <button onClick={() => setTout(v => !v)} aria-expanded={tout}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', marginTop: 12, padding: '4px 2px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-                <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)' }}>{tr('TOUTES LES APPLICATIONS')}</span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>{ordre.length}</span>
-                <span style={{ flex: 1 }} />
-                <span style={{ display: 'inline-flex', color: 'var(--o-text3)', transition: 'transform .18s', transform: tout ? 'rotate(180deg)' : 'none' }}><Fi i="angle-small-down" size={14} /></span>
-              </button>
-              {tout && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8, marginTop: 4 }}>{reste.map(tuile)}</div>}
-            </>
-          )}
-        </>
-      )}
+/* ── La carte d'un LECTEUR (chantier Médias ; sa maquette « Cartes médias », cadre 1a ; M2 A, M5 à M8, M10, M11, M13 ; ADR 0207) ──
+ *
+ * La carte 1a aux tailles de la maison (184 ; 176 de large au téléphone ; compacte 88), dans le cadre des cartes de la maison
+ * (`RM_CARD`, le liseré, la surface qui ouvre la popup, `o-panne` muette) et, pour la première fois pour un lecteur, dans la
+ * grille commune de la carte étroite (`o-gabarit`, ADR 0202 — la tâche 5 écrit l'écriture étroite) :
+ *  - la ligne du haut : la plaque de 38 px — la pochette (`object-fit: cover`), sinon le glyphe `speaker` ou `screen`
+ *    (`device_class: tv`), le gris doux éteinte ou inactive ; à droite, la SOURCE (`app_name` seulement : « Netflix » — Home
+ *    Assistant ne dit pas quel service joue sur une Echo, et son attribut `source` n'est pas une source) et l'INTERRUPTEUR s'il
+ *    sert (M10 : les bits `TURN_ON` et `TURN_OFF`, et pas une Echo — « une Echo ne s'éteint pas ») — sauf bloquée par le mode
+ *    enfant : allumé, l'écran serait rééteint vingt secondes plus tard, la maison ne tend pas un bouton qu'elle défait ;
+ *  - 10 px plus bas, le nom (15 / 700, une ligne) et la PHRASE (M6, § 5 : `phraseLecteur`), dans son encre ;
+ *  - la PROGRESSION (3 px), en lecture ou en pause avec une durée : elle avance seule chaque seconde (`ProgressionLecteur`), sans
+ *    redessiner la carte ;
+ *  - le PIED (allumée seulement) : la puce lecture/pause (44 × 44, M11 ; ABSENTE s'il n'y a rien à reprendre — « Rien en lecture »
+ *    n'a pas de puce inerte, passe bis 2 du 17/10) et la zone du
+ *    volume — « Volume 30 % » (« Muet », en retrait), puis la barre de la maison (`RmJauge`, piste 24, `pan-y`) en accent ; coupé,
+ *    le remplissage disparaît et le repère est gris. Le budget : 38 + 10 + 18 + 2 + 15 + 8 + 3 + 8 + 44 = 146, la marge auto du pied
+ *    prend les 4 px qui restent (ADR 0179 : aucune marge fixe ne pousse le corps dehors).
+ *  - la COULEUR est celle de la pochette (M8) : en lecture, le lavis prend sa teinte dominante (pochette.js, mis en cache par titre
+ *    et artiste) de 0,20 en haut à 0,03 en bas, 0,08 en pause ; sans pochette, ou si le canvas est souillé, le rose de la maison.
+ *    La barre de volume, elle, est en accent (la maquette), pas dans la teinte.
+ * Les gestes (M13) : toucher la carte (la `Surface`) ouvre la popup ; la puce envoie `media_pause` si le lecteur joue, `media_play`
+ * sinon — jamais `media_play_pause` ; la barre envoie `volume_set` au relâcher, et `volume_mute {is_volume_muted: false}` d'abord si
+ * le son était coupé ; la bascule envoie `turn_on` ou `turn_off` selon l'état AFFICHÉ, jamais `toggle`. Le geste d'abord
+ * (`useOptimiste` : 6 s pour la lecture et la marche ; pour le volume, 5 s de réponse et un relevé du pont — 18/10). Précédent et suivant
+ * sont dans la popup (M2 A).
+ * Les états (M7) : en lecture, en pause, rien en lecture, éteinte (la plaque grise, pas de pied, la bascule en haut), indisponible
+ * (`o-panne`, la phrase rouge, ni bascule ni pied), une annonce en vol (M9 : « Annonce : « … » », six secondes).
+ */
 
-      {/* LE PAVÉ, d'après la maquette du 30/09 : un DISQUE, les flèches
-        * posées dessus sans cadre, et l'anneau du OK au milieu. Les quatre
-        * boutons du bas portent leur nom — « la télécommande c'est pas pareil,
-        * il manque le rond et les flèches n'ont pas de cadre ».
-        *
-        * Ce que cette télécommande ignore ne s'affiche pas : Samsung ne recule
-        * pas d'une piste, Roku n'a pas de menu, Apple TV n'a pas d'info. */}
-      {vue === 'tele' && tele && (
-        <>
-          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '0 2px 12px' }}>{tr('TÉLÉCOMMANDE')}</div>
-          <div style={{ position: 'relative', width: 218, height: 218, margin: '0 auto', borderRadius: '50%', background: 'var(--o-s1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {[['haut', { top: 10, left: '50%', transform: 'translateX(-50%)' }],
-              ['bas', { bottom: 10, left: '50%', transform: 'translateX(-50%)' }],
-              ['gauche', { left: 10, top: '50%', transform: 'translateY(-50%)' }],
-              ['droite', { right: 10, top: '50%', transform: 'translateY(-50%)' }]].map(([g, pos]) => (sait(g) ? (
-                <button key={g} onClick={() => toucher(g)} aria-label={noms[g]} title={noms[g]}
-                  style={{ position: 'absolute', ...pos, width: 46, height: 46, padding: 0, border: 'none', background: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Fi i={DESSIN_TOUCHE[g]} size={22} />
-                </button>
-              ) : null))}
-            {sait('ok') && (
-              <button onClick={() => toucher('ok')} aria-label={noms.ok}
-                style={{ width: 96, height: 96, borderRadius: '50%', border: 'none', background: 'var(--o-s2)', color: 'var(--o-text)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 15, fontWeight: 800 }}>{noms.ok}</button>
-            )}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8, marginTop: 16 }}>
-            {['retour', 'accueil', 'lecture'].filter(sait).map(g => (
-              <button key={g} onClick={() => toucher(g)} title={noms[g]}
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '10px 4px', borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit',
-                  border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)' }}>
-                <Fi i={DESSIN_TOUCHE[g]} size={17} />
-                {/* Le mot sous le bouton reste COURT — « Lecture », pas
-                  * « Lecture ou pause » : quatre boutons se partagent la
-                  * largeur. Le nom entier reste dans l'infobulle et pour les
-                  * lecteurs d'écran. */}
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)' }}>{g === 'lecture' ? tr('Lecture') : noms[g]}</span>
-              </button>
-            ))}
-            {saitVeille && (
-              <button onClick={veiller} title={tr('Veille')}
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '10px 4px', borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit',
-                  border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)' }}>
-                <Fi i="power" size={17} />
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)' }}>{tr('Veille')}</span>
-              </button>
-            )}
-          </div>
-        </>
-      )}
+/* Ce que la carte, la compacte, la popup et « En ce moment » lisent d'un lecteur, dans un `hass` VIVANT : la carte s'abonne à SON
+ * entité et à son JUMEAU (M14 : `useHass` — la vue qui la porte ne surveille pas toujours `media_player.`, et un geste se relit
+ * dans ce relevé-là) ; la lecture pure (`lireLecteur`), la phrase, les bits ; le geste d'abord ; l'annonce en vol (lecteuretat.js) ;
+ * la teinte de la pochette, lue une fois par titre et artiste (M8). Un identifiant qui est celui du JUMEAU (une vue personnelle qui
+ * épinglait la jumelle HACS, § 13) ouvre la même carte. Un lecteur que l'appariement ne connaît pas (la Bibliothèque des cartes)
+ * est lu seul. `actif` faux : rien ne s'abonne, et rien ne se rend. */
+function useVueLecteur(hass, id, label = null, actif = true) {
+  const lecteur = actif ? (medPlayers().find(p => p.haid === id || p.ma === id) || { haid: id, ma: null, alexa: false }) : null;
+  const vivant = useHass(lecteur ? [lecteur.haid, lecteur.ma].filter(Boolean) : []);
+  const H = hassQuiConnait(vivant, hass, lecteur ? lecteur.haid : id);
+  const S = (H && H.states) || {};
+  useAnnonces();
+  const l = lecteur ? lireLecteur(S, lecteur) : null;
+  const [ovMarche, poserMarche] = useOptimiste(l ? l.on : null);
+  const [ovLecture, poserLecture] = useOptimiste(l ? l.playing : null);
+  /* Le filet du volume et du muet (son retour du 18/10 : la barre « revient en arrière avant de se mettre là où je l'ai réglé ») : une
+   * Echo se règle par sa jumelle HACS, qui met 1,9 à 2,8 s à rapporter le volume (mesuré chez lui), et le pont ne le voit qu'au relevé
+   * suivant (`HASS_POLL_MS`). Quatre secondes ne couvraient pas les deux : la barre retombait sur l'ancien volume, puis sautait au
+   * nouveau. Cinq secondes de réponse et un relevé ; une réponse, quelle qu'elle soit (la maison qui ramène au plafond), le lève aussitôt. */
+  const filetVolume = 5000 + HASS_POLL_MS;
+  const [ovVol, poserVol] = useOptimiste(l ? l.vol : null, filetVolume);
+  /* Le son RENDU par le geste (passe bis 2 du 17/10) : tirer la barre d'un son coupé l'allume (`volume_mute` faux d'abord) ; la carte ne
+   * redit pas « Muet » entre le relâcher et la réponse de l'appareil. Et le volume SOUS LE DOIGT, tant que la barre est tenue (`RmJauge`,
+   * `onGlisse`) : le chiffre suit le doigt, comme la barre — l'ordre, lui, ne part qu'au relâcher. */
+  const [ovMuet, poserMuet] = useOptimiste(l ? l.muted : null, filetVolume);
+  const [glisse, poserGlisse] = useState(null);
+  /* Le mode enfant (chantier Mode enfant, E21) : ce que le serveur dit de CE lecteur — son profil, le plafond, le blocage, le budget
+   * d'écran —, lu une fois pour tout l'écran (enfantetat.js), et seulement si la maison a un profil : sans, rien ne s'abonne. */
+  const enfantActif = actif && !!lecteur && maisonAvecEnfant();
+  const { etat: etatEnfant } = useEtatEnfant(enfantActif);
+  // « Limité à 40 % » quatre secondes après un geste qui a buté sur le plafond (§ 6.1).
+  const [bute, poserBute] = useOptimiste(null, 4000);
+  const teinte = useTeintePochette(l && l.on && !l.indispo && l.art ? l.art : null, l ? cleTeinte(l) : null);
+  if (!l) return null;
+  const maintenant = Date.now();
+  const on = !l.indispo && (ovMarche != null ? ovMarche : l.on);
+  const playing = on && (ovLecture != null ? ovLecture : l.playing);
+  /* La garde (passe bis 3 du 17/10, point 1) : un lecteur qui n'est plus vivant — indisponible, éteint — n'a plus de doigt sur sa barre.
+   * La valeur glissée s'OUBLIE, même si la barre n'a pas pu le dire (elle le dit en partant, `RmJauge`) : revenue, l'Echo dit son volume
+   * et son muet, jamais celui d'un geste d'avant. Un état remis pendant le rendu : React rejoue ce composant avant d'afficher quoi que ce soit. */
+  if (glisse != null && !on) poserGlisse(null);
+  const doigt = on ? glisse : null;
+  // Sous le doigt (`doigt`), la valeur du geste ; sinon l'avance du geste (`ovVol`), puis ce que dit l'appareil. Le son est déjà rendu : le relâcher le rend.
+  const vol = l.hasVol ? (doigt != null ? doigt : ovVol != null ? ovVol : l.vol) : null;
+  const muted = doigt != null ? false : ovMuet != null ? ovMuet : !!l.muted;
+  const annonce = annonceDe(lecteur.haid, maintenant) || (lecteur.ma ? annonceDe(lecteur.ma, maintenant) : null);
+  const enfant = enfantActif ? lecteurEnfant(etatEnfant, lecteur.haid, lecteur.ma) : null;
+  // Le profil AGIT : allumé, et les limites ne sont pas levées (E14) ; levées ou désactivé, la carte montre le profil sans borne.
+  const limite = enfant && enfant.actif && !enfant.leve_jusqua ? enfant : null;
+  const plafond = limite && limite.plafond != null ? Math.max(0, Math.min(100, Math.round(limite.plafond))) : null;
+  // Le budget suit ce qui AGIT (passe bis du 17/10, point 11) : un profil désactivé, ou des limites levées, n'a ni pied du temps ni
+  // « Écoulé » — ni pastille ni panneau (§ 6.3) ; la carte redevient celle d'avant, le volume au pied.
+  const budget = limite ? budgetEcran(limite, etatEnfant, maintenant, on && !l.indispo) : null;
+  const appel = (ent, service, data) => commanderService(H, ent, 'media_player', service, { entity_id: ent, ...(data || {}) });
+  // Inactive (`idle`, `on` : le menu d'une appli), rien n'est en pause ni à reprendre — l'état prime sur un titre prêté par l'appli (§ 5).
+  const titre = l.idle ? null : titreLecteur(l);
+  return {
+    id: lecteur.haid, lecteur, l, hass: H, nom: nomLecteur(S, lecteur, label), piece: zoneDe(lecteur.haid),
+    on, playing, paused: on && !playing && !l.idle && !!(l.paused || titre), indispo: l.indispo, vol, muted, annonce,
+    phrase: phraseLecteur(l, { annonce, marche: ovMarche, lecture: ovLecture, maintenant, enfant: limite }),
+    cmd: commandesLecteur(l),
+    // « r,g,b » de la pochette ; la dernière teinte connue le temps de la lecture ; le rose de la maison sans pochette (M8).
+    teinte: teinte || TEINTE_REPLI,
+    /* Rien à reprendre : ni en lecture, ni en pause, ni un titre — la puce lecture/pause n'est PAS dessinée (M11 : rien d'inerte à
+     * l'écran ; passe bis 2 du 17/10) : c'est exactement quand la phrase dit « Rien en lecture » (`phraseLecteur`). Le volume reste. */
+    reprenable: !!(l.playing || l.paused || titre),
+    lecture: () => { poserLecture(!playing); appel(l.ctl, playing ? 'media_pause' : 'media_play'); },
+    marche: (allumer) => { poserMarche(!!allumer); appel(lecteur.haid, allumer ? 'turn_on' : 'turn_off'); },
+    /* Le volume ne dépasse pas le plafond du mode enfant (E7, E15) : un geste au-delà pose le plafond — jamais plus haut — et la
+     * carte dit « Limité à 40 % » quatre secondes. */
+    volume: (v) => {
+      let n = Math.round(v);
+      if (plafond != null && n > plafond) { poserBute(true); n = plafond; }
+      poserVol(n);
+      if (l.muted) { poserMuet(false); appel(l.volId, 'volume_mute', { is_volume_muted: false }); }
+      appel(l.volId, 'volume_set', { volume_level: n / 100 });
+    },
+    muet: (coupe) => { poserMuet(!!coupe); appel(l.volId, 'volume_mute', { is_volume_muted: !!coupe }); },
+    // Le volume sous le doigt (`RmJauge`, `onGlisse`) : la valeur du geste, `null` quand le doigt s'en va.
+    suivre: poserGlisse,
+    precedent: () => appel(l.ctl, 'media_previous_track'),
+    suivant: () => appel(l.ctl, 'media_next_track'),
+    chercher: (secondes) => appel(l.ctl, 'media_seek', { seek_position: Math.round(secondes) }),
+    aleatoire: (actif) => appel(l.ctl, 'shuffle_set', { shuffle: !!actif }),
+    repeter: (mode) => appel(l.ctl, 'repeat_set', { repeat: mode }),
+    // Pour la popup : l'avance d'un geste fait là-bas.
+    avancerLecture: poserLecture, avancerMarche: poserMarche,
+    /* Le mode enfant (E15 à E17) : ce que le serveur dit du lecteur (null sans profil) ; ce qui AGIT (`limite`) ; le plafond du moment ;
+     * le blocage (`coucher`, `temps`, null) ; le budget d'écran ; la butée des quatre secondes ; la pastille, et sa variante levée. */
+    enfant, limite, plafond, bloque: limite ? limite.bloque || null : null, budget, bute: !!bute && doigt == null, reprise: enfant ? enfant.reprise || null : null,
+    pastille: !!enfant && (!!enfant.actif || !!enfant.leve_jusqua), levee: !!(enfant && enfant.leve_jusqua),
+  };
+}
+
+/* La progression d'une carte (§ 6.1) : 3 px, le rempli en `--o-text2`. Elle seule bat la seconde en lecture (`useSeconde`) : la
+ * position publiée (`media_position_updated_at`) avance d'autant, sans redessiner la carte entière. À la carte LARGE seule
+ * (`o-seul-large`) : le § 6.2 ne la liste pas sur la carte étroite, et son budget de 150 px (ADR 0202) ne la loge pas sous un nom
+ * de deux lignes — à 360 et 320 px le pied tombait à 178 sur 184 (passe bis, 17/10). */
+function ProgressionLecteur({ l, playing }) {
+  useSeconde(playing);
+  const pos = posLecteur(l, Date.now());
+  const pct = l.dur ? Math.min(100, Math.max(0, (pos || 0) / l.dur * 100)) : 0;
+  return (
+    <div className="o-seul-large" aria-hidden="true" data-progression="" style={{ position: 'relative', height: 3, marginTop: 8, borderRadius: 2, background: 'var(--o-s1)', overflow: 'hidden', flexShrink: 0 }}>
+      <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: pct + '%', borderRadius: 2, background: 'var(--o-text2)' }} />
     </div>
   );
 }
 
-function RoomMediaSheet({ id, hass, onClose }) {
-  const [parcourir, setParcourir] = useState(false);
-  // Ce que l'etoile vient d'ecrire : la rangee des favoris se remonte dessus.
-  const [revFavoris, setRevFavoris] = useState(0);
-  const S = (hass && hass.states) || null;
-  const np = mpRead(S, id);
-  /* Même définition que RoomMediaCard (05/10). Mort, le lecteur disait « Rien
-   * en lecture », volume 0 %, et ses neuf commandes partaient dans le vide. Le
-   * liseré va sur la pochette, la tuile de l'appareil — comme l'image de
-   * CamSheet. */
-  const mort = !S || !S[id] || S[id].state === 'unavailable';
-  const [, tick] = useState(0);
-  useEffect(() => { if (!np.playing) return; const iv = setInterval(() => tick(n => n + 1), 1000); return () => clearInterval(iv); }, [np.playing]);
-  const [artErr, setArtErr] = useState(null);
-  useEffect(() => { if (!artErr) return; const t = setTimeout(() => setArtErr(null), 8000); return () => clearTimeout(t); }, [artErr]);
-  /* Mort, pas de pochette (05/10) : le liseré impose `overflow: visible` à la
-   * tuile, l'image y perdrait ses coins arrondis — et le fond flouté parlerait
-   * d'un morceau que le lecteur ne joue plus. */
-  const artOk = !mort && np.art && np.art !== artErr;
-  const [acc, setAcc] = useState(null);
-  useEffect(() => { let alive = true; if (!artOk) { setAcc(null); return; } extractNpAccent(np.art).then(v => { if (alive) setAcc(v); }); return () => { alive = false; }; }, [np.art, artOk]);
-  const accR = acc ? acc.join(',') : null;
-  const A = accR ? `rgb(${accR})` : 'var(--o-accent)';
-  const AA = (al) => accR ? `rgba(${accR},${al})` : `rgba(var(--o-accent-rgb),${al})`;
-  const ALight = acc ? `rgb(${acc.map(v => Math.round(v + (255 - v) * .28)).join(',')})` : 'var(--o-accent-soft)';
-  const onArt = !!artOk;
-  const tMain = onArt ? '#fff' : 'var(--o-text)', tSub = onArt ? 'rgba(255,255,255,.75)' : 'var(--o-text2)', tDim = onArt ? 'rgba(255,255,255,.55)' : 'var(--o-text3)';
-  const [volOv, setVolOv] = useOptimiste(np.vol);
-  const vol = volOv != null ? volOv : np.vol;
-  const [seekOv, setSeekOv] = useState(null);
-  const seekT = useRef(null);
-  useEffect(() => () => clearTimeout(seekT.current), []);
-  const showPos = seekOv != null ? seekOv : np.pos;
-  /* Chercher dans le morceau : au pointeur (la barre) comme au clavier (les
-   * fleches, ADR 0068). `v` est en pour cent de la duree. */
-  const chercher = (v) => {
-    const secs = v / 100 * np.dur;
-    setSeekOv(secs);
-    commander(hass, np.ctl, 'seek', Math.round(secs));
-    clearTimeout(seekT.current);
-    seekT.current = setTimeout(() => setSeekOv(null), 3000);
-  };
-  const pct = (showPos != null && np.dur) ? Math.min(100, showPos / np.dur * 100) : 0;
-  const fmtT = (s) => { if (s == null || isNaN(s)) return '0:00'; const m = Math.floor(s / 60), ss = Math.floor(s % 60); return m + ':' + (ss < 10 ? '0' : '') + ss; };
-  const glass = (size, rad) => ({ width: size, height: size, borderRadius: rad, flexShrink: 0, border: onArt ? '1px solid rgba(255,255,255,.14)' : 'var(--o-bw,1px) solid var(--o-bd1)', cursor: 'pointer', color: onArt ? '#fff' : 'var(--o-text)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: onArt ? 'linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,.06))' : 'var(--o-s1)', backdropFilter: 'blur(14px) saturate(1.38)', WebkitBackdropFilter: 'blur(14px) saturate(1.38)', boxShadow: '0 12px 26px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.08)', position: 'relative' });
-  const bar = (dragEnd, cur, dataAttr) => (e) => {
-    e.preventDefault(); e.stopPropagation();
-    const el = e.currentTarget, fill = el.querySelector('[' + dataAttr + ']'), r = el.getBoundingClientRect();
-    const calc = x => Math.max(0, Math.min(100, (x - r.left) / r.width * 100));
-    let v = calc(e.clientX);
-    const paint = () => { if (fill) { fill.style.transition = 'none'; fill.style.width = v + '%'; } };
-    paint(); el.classList.add('o-sliding'); try { el.setPointerCapture(e.pointerId); } catch {}
-    el.onpointermove = ev => { v = calc(ev.clientX); paint(); };
-    const end = () => { el.classList.remove('o-sliding'); el.onpointermove = null; el.onpointerup = null; el.onpointercancel = null; if (fill) fill.style.transition = ''; };
-    el.onpointerup = () => { end(); dragEnd(v); };
-    el.onpointercancel = () => { end(); if (fill) fill.style.width = cur + '%'; };
-  };
+/* La puce de sa maquette (`ChipButton`) sur la carte : 44 × 44, arrondi 12, le gris doux, sans bordure, positionnée (`RM_BTN` : peinte
+ * après la surface, elle reçoit son clic). Elle n'est dessinée que s'il y a quelque chose à reprendre (`v.reprenable`) : « Rien en
+ * lecture » n'a pas de puce inerte (M11 ; passe bis 2 du 17/10), la zone du volume reste seule au pied.
+ * `o-puce-lecteur` : la vue Pièce au téléphone serre les `o-rmbtn` (index.css) ; ces puces gardent leur rembourrage et leur corps. */
+const RM_MEDIA_PUCE = { ...RM_BTN, flex: 'none', width: 44, height: 44, padding: 0, borderRadius: 12, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' };
+const CLASSE_PUCE_LECTEUR = 'o-rmbtn o-puce-lecteur';
+function PuceLecture({ v }) {
   return (
-    <>
-    <BottomSheet onClose={onClose}>
-      {() => (<>
-        {/* Jusqu'au BORD de la feuille, et au même arrondi qu'elle (26, pas
-          * 20) — « les bandeaux en haut et en bas, c'est pas terrible » (30/09).
-          * Il restait 17 px de fond sombre au-dessus de la pochette : la
-          * poignée (25 px de haut, 2 de marge) plus les 10 px de la feuille,
-          * dont le panneau n'en reprenait que 10. D'où -27. */}
-        <div style={{ position: 'relative', margin: '-27px -22px 0', borderRadius: '26px 26px 0 0', overflow: 'hidden' }}>
-          {onArt && <>
-            <img src={np.art} alt="" aria-hidden onError={() => setArtErr(np.art)} style={{ position: 'absolute', inset: -30, width: 'calc(100% + 60px)', height: 'calc(100% + 60px)', objectFit: 'cover', filter: 'blur(30px) saturate(1.08)', transform: 'scale(1.08)', opacity: .9 }} />
-            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(9,12,19,.2), rgba(9,12,19,.8) 45%, rgba(9,12,19,.95))' }} />
-            <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 85%, ${AA(.22)}, transparent 36%)`, mixBlendMode: 'screen' }} />
-          </>}
-          <div style={{ position: 'relative', padding: '30px 22px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-              <NomFeuille><span style={{ flex: 1, fontSize: 12, fontWeight: 800, color: tSub, letterSpacing: '.03em' }}>{(medPlayers().find(p => p.haid === id) || {}).name || (((S && S[id]) || {}).attributes || {}).friendly_name || id}</span></NomFeuille>
-              <BoutonEpingle id={id} />
-              {np.source && <span style={{ padding: '3px 10px', borderRadius: 999, background: 'rgba(255,255,255,.94)', color: '#15181f', fontSize: 11, fontWeight: 800 }}>{np.source}</span>}
-              <CroixFeuille style={onArt ? { background: 'rgba(255,255,255,.16)', color: tMain } : null} />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div className={mort ? 'o-panne' : undefined} style={{ position: 'relative', width: 96, height: 96, flexShrink: 0, borderRadius: 18, overflow: 'hidden', background: 'linear-gradient(135deg,var(--o-purple),var(--o-accent) 65%,var(--o-ok))', boxShadow: '0 14px 32px rgba(0,0,0,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {/* `onError` n'est pas une interaction : c'est le repli quand la pochette
-                  * ne charge pas. La regle vise les clics poses sur un element inerte. */}
-                {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
-                {artOk && <img src={np.art} alt="" onError={() => setArtErr(np.art)} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
-                {!artOk && <Fi i={/^(video|tvshow|movie|episode|channel)$/.test(np.mtype || '') ? 'tv-music' : 'music'} size={30} color="rgba(255,255,255,.92)" />}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 19, fontWeight: 800, color: mort ? 'var(--o-text3)' : tMain, lineHeight: 1.25, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{mort ? tr('Indisponible') : np.title || (np.playing ? tr('En lecture') : np.on ? tr('En pause') : tr('Rien en lecture'))}</div>
-                <div style={{ fontSize: 13, color: tSub, fontWeight: 600, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[np.artist, np.album].filter(Boolean).join(' · ') || '—'}</div>
-              </div>
-            </div>
-            {/* progression — et tout ce qui commande le lecteur, absent s'il est mort */}
-            {!mort && <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: tDim, minWidth: 32 }}>{fmtT(showPos)}</span>
-              {/* Un curseur pour le clavier aussi (ADR 0068), par l'aide de la
-                * barre de volume : ← → par 5 %, Début / Fin — et la valeur lue
-                * en temps, pas en pour cent. */}
-              <div onPointerDown={np.dur ? bar(chercher, pct, 'data-sk') : undefined}
-                {...(np.dur ? kbSlider(tr('Position dans le morceau'), pct, chercher) : {})} aria-valuetext={np.dur ? fmtT(showPos) : undefined}
-                style={{ flex: 1, padding: '10px 0', cursor: np.dur ? 'pointer' : 'default', touchAction: 'none' }}>
-                <div style={{ height: 8, borderRadius: 999, background: onArt ? 'rgba(255,255,255,.18)' : 'var(--o-bd1)', overflow: 'hidden' }}><div data-sk style={{ height: '100%', width: pct + '%', background: `linear-gradient(90deg, ${A}, ${ALight})`, borderRadius: 999, transition: 'width .5s linear' }} /></div>
-              </div>
-              <span style={{ fontSize: 12, fontWeight: 700, color: tDim, minWidth: 32, textAlign: 'right' }}>{fmtT(np.dur)}</span>
-            </div>
-            {/* contrôles */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 4 }}>
-              <button aria-label={tr('Aléatoire')} onClick={() => commander(hass, np.ctl, 'set_shuffle', !np.shuffle)} title={tr('Aléatoire')} style={{ ...glass(40, 14), color: np.shuffle ? (acc ? ALight : 'var(--o-accent-soft)') : (onArt ? '#fff' : 'var(--o-text1)') }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" /></svg></button>
-              <button aria-label={tr('Piste précédente')} onClick={() => commander(hass, np.ctl, 'previous_track')} style={glass(50, 17)}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 20L9 12l10-8zM7 4v16H5V4z" /></svg></button>
-              <button aria-label={np.playing ? tr('Pause') : tr('Lire')} onClick={() => commander(hass, np.ctl, 'play_pause')} style={{ ...glass(76, '50%'), background: onArt ? 'linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.07))' : 'var(--o-s1)' }}>
-                {np.playing && <span aria-hidden style={{ position: 'absolute', inset: -6, borderRadius: 'inherit', border: '1px solid rgba(255,255,255,.22)', animation: 'np-pulse 2.4s ease-out infinite', pointerEvents: 'none' }} />}
-                {np.playing ? <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg> : <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 3 }}><path d="M7 5l12 7-12 7z" /></svg>}
-              </button>
-              <button aria-label={tr('Piste suivante')} onClick={() => commander(hass, np.ctl, 'next_track')} style={glass(50, 17)}><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M5 4l10 8-10 8zM17 4h2v16h-2z" /></svg></button>
-              <button onClick={() => { const o = ['off', 'all', 'one'], i = o.indexOf(np.repeat); commander(hass, np.ctl, 'set_repeat', o[(i + 1) % 3]); }} title={tr('Répéter')} style={{ ...glass(40, 14), color: np.repeat !== 'off' ? (acc ? ALight : 'var(--o-accent-soft)') : (onArt ? '#fff' : 'var(--o-text1)') }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 2l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3" /></svg>{np.repeat === 'one' && <span style={{ position: 'absolute', top: 3, right: 6, fontSize: 10, fontWeight: 800 }}>1</span>}</button>
-            </div>
-            {/* volume */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
-              <span style={{ fontSize: 12, fontWeight: 800, color: tSub, minWidth: 38 }}>{vol}%</span>
-              <div onPointerDown={bar((v) => { setVolOv(Math.round(v)); commander(hass, id, 'set_volume', v / 100); }, vol, 'data-vol')} {...kbSlider(tr('Volume'), vol, (nv) => { setVolOv(Math.round(nv)); commander(hass, id, 'set_volume', nv / 100); })} style={{ flex: 1, padding: '11px 0', cursor: 'pointer', touchAction: 'none' }}>
-                <div style={{ position: 'relative', height: 8, borderRadius: 999, background: onArt ? 'rgba(255,255,255,.18)' : 'var(--o-bd1)' }}>
-                  <div data-vol style={{ position: 'absolute', inset: '0 auto 0 0', width: vol + '%', background: `linear-gradient(90deg, ${A}, ${ALight})`, borderRadius: 999, transition: 'width .1s' }} />
-                  <span style={{ position: 'absolute', top: '50%', left: `calc(${vol}% - 7px)`, transform: 'translateY(-50%)', width: 14, height: 14, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 6px rgba(0,0,0,.4)', transition: 'left .1s' }} />
-                </div>
-              </div>
-              <button onClick={() => commander(hass, id, 'mute', !np.muted)} title={tr('Couper le son')} style={{ ...glass(38, 13), ...(np.muted ? { background: 'rgba(239,68,68,.3)', border: '1px solid rgba(239,68,68,.5)', color: '#fff' } : {}) }}><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M11 5L6 9H2v6h4l5 4z" />{np.muted ? <path d="M22 9l-6 6M16 9l6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" /> : <path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />}</svg></button>
-            </div>
-            <ApplisAppareil id={id} hass={hass} />
-            {/* L'entite de la carte n'est pas toujours celle qui sait parler :
-              * voir `cibleAlexa`. On montre le champ des qu'une sœur existe. */}
-            {!!cibleAlexa(id, S || {}, LOGGIA_INDEX) && (
-              <PhraseAlexa id={id} cible={cibleAlexa(id, S || {}, LOGGIA_INDEX)} hass={hass}
-                onGarder={() => setRevFavoris(n => n + 1)} />
-            )}
-            <FavorisLecture key={'fav' + parcourir + '-' + revFavoris} id={id} hass={hass} />
-            {/* Parcourir : un lecteur ne sert a rien tant qu'on ne peut lui
-              * donner que ce que quelqu'un d'autre a lance. */}
-            <button onClick={() => setParcourir(true)}
-              style={{ marginTop: 14, width: '100%', minHeight: 46, borderRadius: 14, border: 'var(--o-bw,1px) solid var(--o-bd2)',
-                background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center',
-                justifyContent: 'center', gap: 9, fontSize: 13, fontWeight: 700 }}>
-              <Fi i="folder" size={14} />{tr('Parcourir')}
-            </button>
-            </>}
-          </div>
-        </div>
-      </>)}
-    </BottomSheet>
-    {/* Monte APRES la feuille du lecteur : plus loin dans le DOM, donc
-      * au-dessus, sans z-index a inventer. */}
-    {parcourir && <NavigateurMedias id={id} hass={hass} onClose={() => setParcourir(false)} />}
-    </>
+    <button type="button" aria-label={(v.playing ? tr('Mettre en pause') : tr('Lire')) + ' ' + v.nom} title={v.playing ? tr('Mettre en pause') : tr('Lire')}
+      onClick={(e) => { e.stopPropagation(); v.lecture(); }} className={CLASSE_PUCE_LECTEUR} style={RM_MEDIA_PUCE}>
+      <Fi i={v.playing ? 'pause' : 'play'} size={14} />
+    </button>
   );
 }
+// Le remplissage de la barre de volume (§ 6.1) : de l'accent éclairci à l'accent ; coupé, rien, et le repère gris.
+const GRADE_VOLUME = 'linear-gradient(90deg,color-mix(in oklab, var(--o-accent) 55%, #fff),var(--o-accent))';
+// Ce que la fiche d'un lecteur (fichemedia.jsx, à la demande) reçoit d'ici : la bascule, la barre, le groupe segmenté et le dégradé du volume (M12).
+const BRIQUES_MEDIA = { RmBascule, RmJauge, Segment, gradeVolume: GRADE_VOLUME };
 
-// Média compact (maquette) : icône, play/pause, titre, volume.
+/* ── Le mode enfant sur la carte (chantier Mode enfant, E15 à E17 ; § 6.1, § 6.2) ──────────────────────────────────────────────── */
+/* La pastille, le glyphe du haut, le pied du temps et la puce « Revient à » vivent dans carteenfant.jsx, à la demande (passe bis du
+ * 17/10, point 14). Reste ici ce que la carte dit AVANT que ce module n'arrive : le mot du reste d'un budget d'écran (§ 6.1) —
+ * « 35 min restantes », « Écoulé », « Reprise à 07:30 » (au coucher) —, que la surface de la carte lit au lecteur d'écran et que le
+ * pied du temps reçoit tout fait. */
+const resteTexte = (budget, bloque, reprise) => (bloque === 'coucher' ? tr('Reprise à {h}', { h: reprise || '—' })
+  : bloque === 'temps' || !budget.reste_s ? tr('Écoulé') : tr('{t} restantes', { t: dureeTexte(budget.reste_s / 60) }));
+
 function RoomMediaCard({ id, hass, onOpen, label = null }) {
-  const S = (hass && hass.states) || null;
-  const np = mpRead(S, id); // fusion compagnon Music Assistant (titre/pochette) comme la vue Médias
-  const a = (S && S[id] && S[id].attributes) || {};
-  const call = (svc, data, ent) => commanderService(hass, ent || id, 'media_player', svc, { entity_id: ent || id, ...(data || {}) });
-  const sub = [np.artist, np.album].filter(Boolean).join(' · ');
-  const vol = np.hasVol ? np.vol : null;
-  const mort = !S || !S[id] || S[id].state === 'unavailable';
-  const nom = label || a.friendly_name || id;
-  // Bascule d'alimentation en haut à droite (maquettes du 14/09) : lecture
-  // et pause vivent dans les boutons du bas, avec piste précédente / suivante.
-  const [ovOn, setOvOn] = useOptimiste(np.on);
-  const marche = ovOn != null ? ovOn : !!np.on;
-  const basculer = () => { const nv = !marche; setOvOn(nv); call(nv ? 'turn_on' : 'turn_off'); };
-  const [ovVol, setOvVol] = useOptimiste(vol);
-  const volAff = ovVol != null ? ovVol : vol;
-  const poserVol = (v) => { setOvVol(v); call('volume_set', { volume_level: v / 100 }, np.ctl); };
-  const texte = mort ? tr('Indisponible') : np.title ? (np.title + (sub ? ' · ' + sub : '')) : (marche ? (np.playing ? tr('Lecture') : tr('En pause')) : tr('Éteint'));
-  // Des icones, pas des « » en texte : trop petits a l'ecran (retour user du
-  // 14/09) — et 15 px, pas 18 : « trop gros » (meme jour).
-  const btn = { ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '7px 6px', lineHeight: 1 };
+  const v = useVueLecteur(hass, id, label);
+  const l = v.l;
+  // Une pochette qui ne charge pas (`onError`) : le glyphe reprend sa place, jusqu'à la pochette suivante.
+  const [artKo, setArtKo] = useState(null);
+  const pochette = v.on && !v.indispo && l.art && l.art !== artKo ? l.art : null;
+  const joue = v.on && !v.indispo && (v.playing || v.paused);
+  /* Le mode enfant (chantier Mode enfant, E15, E16 ; § 6.1) : bloqué — le coucher, le temps écoulé —, la plaque est grise avec la lune
+   * ou le sablier, sans lavis ; un écran à budget porte au pied le TEMPS (même éteint) à la place du volume, qui reste dans la popup. */
+  const bloque = v.bloque;
+  const temps = v.budget;
+  // La plaque : la pochette, sinon le glyphe sur la teinte en lecture ou en pause ; le gris doux éteinte, inactive ou bloquée, le gris éteint muette.
+  const [fond, encre] = v.indispo || bloque ? ['var(--o-s1)', 'var(--o-text3)'] : joue ? ['rgba(' + v.teinte + ',.18)', 'var(--o-text1)'] : v.on ? ['var(--o-s1)', 'var(--o-text1)'] : ['var(--o-s1)', 'var(--o-text3)'];
+  // Le lavis (M8) : de 0,20 à 0,03 en lecture, 0,08 en pause, rien autrement — ni bloquée.
+  const lavis = bloque ? null : v.playing ? [.2, .03] : joue ? [.08, .03] : null;
+  // La puce lecture/pause : le lecteur sait lire ou mettre en pause (M11) ET il y a quelque chose à reprendre — « Rien en lecture » n'en a pas.
+  const puce = v.cmd.lecture && v.reprenable;
+  const piedEtroit = v.on && !v.indispo && (puce || v.vol != null);
+  const pied = temps ? !v.indispo : piedEtroit;
+  // Les mots du pied : « Volume 30 % » ; sous profil « Volume 30 % · max 40 % », et « Limité à 40 % » quatre secondes après un geste qui a buté.
+  const texteVolume = v.vol == null ? null : v.bute && v.plafond != null ? tr('Limité à {m}', { m: pourcentTexte(v.plafond) })
+    : v.plafond != null && !v.muted ? tr('Volume {n} · max {m}', { n: pourcentTexte(v.vol), m: pourcentTexte(v.plafond) }) : volumeTexte(v.vol, v.muted);
+  const texteTemps = temps ? resteTexte(temps, bloque, v.reprise) : null;
+  const motPastille = v.pastille && !v.indispo ? (v.levee ? tr('Limites levées') : tr('Mode enfant')) : null;
   return (
-    /* La carte n'est plus un `role="button"` qui englobe ses commandes (lot 13
-     * de l'audit du 03/10, ADR 0074). Un rôle bouton rend sa descendance
-     * présentationnelle : la bascule, le volume et les trois boutons de
-     * lecture disparaissaient d'un lecteur d'écran (`nested-interactive`).
-     * « Ouvrir » passe par la `Surface`, frère des commandes, qui porte ce que
-     * la carte AFFICHE — « Enceinte salon, En pause » — et non plus « Ouvrir
-     * Enceinte salon », qui taisait l'état (WCAG 2.5.3). `position: relative`
-     * pour qu'elle couvre la carte ; rien ne bouge à l'œil. */
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
-      // Teinte d'état : un lecteur EN LECTURE lave sa surface de rose, comme la
-      // lumière de son or — l'activité se voit avant de lire le titre.
-      ...(np.playing && LAVIS ? {
-        background: lavisCarte((a) => hx(RM_ROSE, a)),
-      } : null),
-      border: LISERE }}>
-      {/* Le nom est `texte`, la ligne d'état affichée sous le nom : la même variable. */}
-      {onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(nom, texte)} />}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={{ ...RM_ICO(marche ? hx(RM_ROSE, .18) : 'var(--o-s1)', marche ? RM_ROSE : 'var(--o-text3)'), overflow: 'hidden' }}>
-          {/* `onError` n'est pas une interaction : c'est le repli quand la pochette
-            * ne charge pas. La regle vise les clics poses sur un element inerte. */}
-          {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
-          {np.art ? <img src={np.art} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 14 }} onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <GlypheCarte id={id} size={17}><Fi i={a.device_class === 'tv' ? 'screen' : 'tv-music'} size={17} /></GlypheCarte>}
+    /* La carte n'est pas un bouton (ADR 0074) : la surface, premier enfant, dit ce que la carte affiche — le nom, la phrase, le
+     * volume — et les commandes, positionnées, passent au-dessus d'elle. */
+    <div className={'o-rmcard o-gabarit' + (v.indispo ? ' o-panne' : '')} data-lecteur=""
+      style={{ ...RM_CARD, position: 'relative', textAlign: 'left', width: '100%', cursor: onOpen ? 'pointer' : 'default', overflow: 'hidden', justifyContent: 'flex-start',
+        background: lavis && LAVIS ? lavisCarte(v.teinte, lavis[0], lavis[1]) : SURF_CARTE, border: LISERE }}>
+      {onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(v.nom, v.phrase.texte, pied ? (temps ? texteTemps : v.vol != null ? texteVolume : null) : null, motPastille)} />}
+      {/* La ligne du haut : la plaque ; à droite, la source (M10) — ou la pastille « Mode enfant » à sa place (E15) — et la bascule si elle
+        * sert (M10) — la carte large seule. Bloquée par le mode enfant (le coucher, le temps écoulé), elle ne s'offre PLUS (passe bis 2 du
+        * 17/10) : allumé par cette bascule, l'écran serait rééteint vingt secondes plus tard — un bouton tendu que la maison défait. La
+        * phrase dit pourquoi, le pied dit quand il revient ; le parent qui veut l'écran lève les limites (la popup). */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <span style={{ ...RM_ICO(fond, encre), overflow: 'hidden', marginRight: 'auto' }}>
+          {/* `onError` n'est pas une interaction : c'est le repli quand la pochette ne charge pas. */}
+          {bloque ? <Fi i={bloque === 'coucher' ? 'moon' : 'hourglass-end'} size={17} /> : pochette ? (
+            /* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- voir le commentaire ci-dessus */
+            <img src={pochette} alt="" onError={() => setArtKo(l.art)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          ) : <GlypheCarte id={id} size={17}><Fi i={glypheLecteur(l)} size={17} /></GlypheCarte>}
         </span>
-        {!mort && <RmBascule on={marche} nom={nom} onToggle={basculer} />}
+        {/* Les aides du mode enfant arrivent à la demande (carteenfant.jsx, `CarteEnfant quoi=…`) : leur repli ne dessine rien — la plaque
+          * de 38 px tient déjà la hauteur de la ligne, la carte garde ses 184 px, rien ne saute. */}
+        {motPastille ? <Suspense fallback={null}><CarteEnfant quoi="pastille" className="o-seul-large" levee={v.levee} /></Suspense>
+          : v.on && !v.indispo && l.app && <span className="o-seul-large" data-source="" style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', lineHeight: '26px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 104 }}>{l.app}</span>}
+        {!v.indispo && v.cmd.marche && !bloque && <RmBascule className="o-seul-large" on={v.on} nom={v.nom} onToggle={() => v.marche(!v.on)} />}
+        {/* Le chiffre de la carte ÉTROITE (§ 6.2, la grille commune) : le volume, « 30 » et « % » ; « Muet » quand le son est coupé ; rien
+          * éteinte ou indisponible. Caché au lecteur d'écran : la barre le dit. Sous profil (E16) : le temps qui reste sur un écran à
+          * budget (« 35 min », « 1 h 25 »), la lune ou le sablier quand il est bloqué. */}
+        {!v.indispo && bloque ? <Suspense fallback={null}><CarteEnfant quoi="glyphe" i={bloque === 'coucher' ? 'moon' : 'hourglass-end'} em={emChiffre('00')} /></Suspense>
+          : !v.indispo && temps ? (temps.reste_s != null && temps.reste_s >= 3600 ? <ChiffreHaut v={dureeTexte(temps.reste_s / 60)} /> : <ChiffreHaut v={Math.round((temps.reste_s || 0) / 60)} u="min" />)
+          : v.on && !v.indispo && v.vol != null && (v.muted ? <ChiffreHaut v={tr('Muet')} /> : <ChiffreHaut v={v.vol} u="%" />)}
       </div>
-      <div>
-        <div style={RM_NAME}>{nom}</div>
-        <div style={{ ...RM_SUB, color: marche && np.title ? RM_ROSE : 'var(--o-text3)' }}>{texte}</div>
-        {vol != null && <RmJauge v={volAff} couleur={RM_ROSE} actif={!mort} label={tr('Volume') + ' ' + nom} onCommit={poserVol} />}
-        {/* Les boutons SEULS sont positionnés (`btn` hérite de RM_BTN), pas la
-          * rangée : peints après la surface, ils reçoivent leurs clics, et
-          * l'écart entre deux ouvre la fiche (relecture du lot 13). Leur nom dit
-          * l'appareil : trois lecteurs sur Objets, c'étaient trois « Piste
-          * suivante » qu'une synthèse vocale ne distinguait pas. « Lire » et non
-          * « Lecture » : c'est un geste, et « Lecture » est l'ÉTAT écrit sur la
-          * carte (« Playing » en anglais). Lot 13 de l'audit du 03/10. */}
-        <div style={{ display: 'flex', gap: 8, marginTop: vol != null ? 9 : 11 }}>
-          <button aria-label={tr('Piste précédente') + ' ' + nom} title={tr('Piste précédente')} onClick={(e) => { e.stopPropagation(); call('media_previous_track', null, np.ctl); }} className="o-rmbtn" style={btn}><Fi i="angle-double-left" size={15} /></button>
-          <button aria-label={(np.playing ? tr('Mettre en pause') : tr('Lire')) + ' ' + nom} title={np.playing ? tr('Mettre en pause') : tr('Lire')} onClick={(e) => { e.stopPropagation(); call('media_play_pause', null, np.ctl); }} className="o-rmbtn" style={btn}><Fi i={np.playing ? 'pause' : 'play'} size={14} /></button>
-          <button aria-label={tr('Piste suivante') + ' ' + nom} title={tr('Piste suivante')} onClick={(e) => { e.stopPropagation(); call('media_next_track', null, np.ctl); }} className="o-rmbtn" style={btn}><Fi i="angle-double-right" size={15} /></button>
+      <div style={{ marginTop: 'var(--o-milieu-haut, 10px)', minWidth: 0 }}>
+        <div className="o-gab-nom" style={{ ...RM_NAME, fontSize: 15 }}>{v.nom}</div>
+        <div className="o-gab-phrase" style={{ ...RM_SUB, color: v.phrase.encre, '--o-n': Math.max(1, v.phrase.texte.length) }}>{v.phrase.texte}</div>
+      </div>
+      {joue && !!l.dur && <ProgressionLecteur l={l} playing={v.playing} />}
+      {/* La ligne de commandes de la carte ÉTROITE (§ 6.2 ; ADR 0202), 44 px collés au pied : allumée, la puce lecture/pause (s'il y a
+        * quelque chose à reprendre) et la barre (piste 24 dans une zone de 44, `pan-y`) — « Rien en lecture » : la barre seule, la ligne
+        * tient ses 44 px ; éteinte, UNE puce « Allumer » (`turn_on`) — la bascule et la source sont à la carte
+        * large seule (M10, comme le chauffage étroit, T9) ; rien d'autre. Au téléphone, la plaque n'est PAS un interrupteur (M13) :
+        * rien ne se déclenche en touchant la carte hors de cette ligne. */}
+      {/* Bloquée et éteinte (E16) : pas d'« Allumer » — la maison déferait le `turn_on` vingt secondes plus tard ; « Revient à 07:30 »,
+        * inerte, à sa place. La barre, elle, porte le plafond (hachurée). */}
+      {!v.indispo && (v.on ? piedEtroit : (bloque || v.cmd.marche)) && (
+        <div className="o-seul-etroit" data-commandes="" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto', paddingTop: 'var(--o-pied-haut, 9px)', minHeight: 'calc(var(--o-pied-haut, 9px) + 44px)' }}>
+          {v.on ? (<>
+            {puce && <PuceLecture v={v} />}
+            {v.vol != null && (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {/* `etatVolume` : « Muet », « max 40 % » sous un plafond, pour le lecteur d'écran (passe bis du 17/10, point 9). */}
+                <RmJauge v={v.vol} couleur={v.muted ? 'var(--o-text3)' : 'var(--o-accent)'} grade={v.muted ? 'transparent' : GRADE_VOLUME} eteinte={false} zone={44} marge={0} plafond={v.plafond}
+                  etat={etatVolume(v.muted, v.plafond)} label={tr('Volume') + ' ' + v.nom} onCommit={v.volume} onGlisse={v.suivre} />
+              </div>
+            )}
+          </>) : bloque ? (
+            <Suspense fallback={null}><CarteEnfant quoi="revient" bloque={bloque} reprise={v.reprise} style={RM_MEDIA_PUCE} /></Suspense>
+          ) : (
+            <button type="button" className={CLASSE_PUCE_LECTEUR} aria-label={tr('Allumer') + ' ' + v.nom} title={tr('Allumer')} onClick={(e) => { e.stopPropagation(); v.marche(true); }}
+              style={{ ...RM_MEDIA_PUCE, width: 'auto', padding: '0 14px', gap: 8, fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, whiteSpace: 'nowrap' }}>
+              <Fi i="power" size={13} /><span>{tr('Allumer')}</span>
+            </button>
+          )}
         </div>
-      </div>
+      )}
+      {/* Le pied d'une carte large, allumée : la puce lecture/pause (s'il y a quelque chose à reprendre) et la zone du volume (44 px),
+        * collées au pied par la marge auto. Un écran à budget (E15) : le TEMPS à la place du volume, même éteint ; la barre reçoit le
+        * plafond (hachurée), et le mot du volume dit le plafond. */}
+      {pied && (
+        <div className="o-seul-large" style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginTop: 'auto', paddingTop: 'var(--o-pied-haut, 8px)' }}>
+          {v.on && puce && <PuceLecture v={v} />}
+          {temps ? <Suspense fallback={null}><CarteEnfant quoi="pied" budget={temps} bloque={bloque} texte={texteTemps} /></Suspense>
+            : v.vol != null && (
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div data-volume="" style={{ fontSize: 11.5, fontWeight: 800, lineHeight: '14px', color: v.muted ? 'var(--o-text2)' : v.bute && v.plafond != null ? 'var(--o-accent-soft)' : v.plafond != null ? 'var(--o-text2)' : 'var(--o-accent-soft)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{texteVolume}</div>
+              <RmJauge v={v.vol} couleur={v.muted ? 'var(--o-text3)' : 'var(--o-accent)'} grade={v.muted ? 'transparent' : GRADE_VOLUME} eteinte={false} marge={6} plafond={v.plafond}
+                etat={etatVolume(v.muted, v.plafond)} label={tr('Volume') + ' ' + v.nom} onCommit={v.volume} onGlisse={v.suivre} />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-// Détail volet : visuel + rail + boutons, mode auto global, et programmation nocturne (chambre uniquement).
 /* ── Le squelette des fiches (maquettes du 14/09) ─────────────────────────
  *
  * Un titre en italique, une ligne d'etat dessous, la croix a droite (la
@@ -3918,91 +4963,41 @@ const heureDe = (iso) => {
 const zoneDe = (id) => { const z = ((LOGGIA_INDEX && LOGGIA_INDEX.areaList) || []).find(a => (a.entities || []).indexOf(id) >= 0); return z ? z.name : null; };
 const pileDe = (S, id) => { const sid = pickSibling(LOGGIA_INDEX, S, id, { domain: 'sensor', deviceClass: 'battery' }); const n = sid && S[sid] ? parseFloat(S[sid].state) : NaN; return isNaN(n) ? null : Math.round(n); };
 const RangeeDernier = ({ st }) => <FicheRangee titre={tr('Dernier changement')} desc={tr('Depuis le journal de Home Assistant')} droite={<FicheValeur couleur="var(--o-text2)">{heureDe(st && st.last_changed)}</FicheValeur>} />;
-const RangeePile = ({ n }) => (n == null ? null : <FicheRangee titre={tr('Pile')} desc={tr('Capteur sans fil')} droite={<FicheValeur couleur={n < 20 ? 'var(--o-bad)' : n < 50 ? 'var(--o-warn)' : 'var(--o-ok)'}>{n} %</FicheValeur>} />);
+// La rangée Pile d'une fiche : la règle de la maison (chantier Capteurs, C32).
+const RangeePile = ({ n }) => (n == null ? null : <FicheRangee titre={tr('Pile')} desc={tr('Capteur sans fil')} droite={<FicheValeur couleur={couleurPile(n, 'var(--o-text)')}>{n} %</FicheValeur>} />);
 
-/* ── Le minuteur d'extinction, tenu par Home Assistant (21/09) ─────────────
- * « Pourquoi Loggia doit rester ouvert, c'est absurde, et je n'ai pas le
- * décompte. » Il vivait dans l'onglet — un `setTimeout` : fermer l'écran
- * l'annulait sans rien dire, un autre appareil ne le voyait pas, et la ligne
- * se contentait d'un « dans 30 min » arrondi, relu toutes les 15 s. Il vit
- * maintenant dans le composant (`minuteurs.py`) : il part même quand aucun
- * écran n'est ouvert. L'écran LIT l'heure de fin et compte à la seconde,
- * calé sur l'heure du serveur (`src/minuteur.js`).
- *
- * Sans réponse du composant — trop ancien, pas encore redémarré —, pas de
- * rangée : un minuteur qui mourrait avec l'onglet ne se propose plus. */
-/* `mort` (05/10) : l'appareil ne répond plus. « +30 min » programmerait
- * l'extinction d'une entité morte — il part ; un minuteur DÉJÀ posé reste
- * affiché avec sa croix, pour qu'on puisse l'annuler. Rien en cours : pas de
- * rangée. */
-function RangeeMinuteur({ hass, id, mort = false }) {
-  const { etat, setEtat } = useEtatServeur(hass, 'loggia/minuteurs/etat', 15000, '');
-  const [decalage, setDecalage] = useState(0);
-  const [erreur, setErreur] = useState('');
-  useEffect(() => { if (etat) setDecalage(decalageServeur(etat, Date.now())); }, [etat]);
-  const reste = resteMinuteur(etat, id, Date.now(), decalage);
-  useSeconde(reste != null);
-  if (!etat) return null;
-  if (mort && reste == null) return null;
-  const agir = (msg) => hass.callWS(msg)
-    .then(r => { setEtat(r); setErreur(''); })
-    .catch(e => setErreur((e && e.code === 'unauthorized') ? tr('Ce compte ne pilote pas cet appareil.') : tr('Le minuteur n’a pas pu être enregistré.')));
-  const m = etat.minuteurs && etat.minuteurs[id];
-  const fin = reste != null && m ? new Date(Number(m.fin) * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }) : null;
-  return (
-    <FicheRangee titre={tr('Minuteur')}
-      desc={erreur || (fin ? tr('Extinction à {h}', { h: fin }) : tr('Aucun minuteur en cours'))}
-      droite={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {/* Le décompte, à la seconde, en chiffres qui ne dansent pas. */}
-        {reste != null && <span aria-live="off" aria-label={tr('Temps restant')}><FicheValeur>{decompte(reste)}</FicheValeur></span>}
-        {!mort && <FicheBouton icone="clock" onClick={() => agir({ type: 'loggia/minuteurs/poser', entity_id: id, minutes: 30 })}>{tr('+{n} min', { n: 30 })}</FicheBouton>}
-        {reste != null ? <FicheBouton title={tr('Annuler le minuteur')} onClick={() => agir({ type: 'loggia/minuteurs/annuler', entity_id: id })}><Fi i="cross-small" size={12} /></FicheBouton> : null}
-      </div>} />
-  );
-}
-
-// Fiche volet (maquettes du 14/09) : position, trois puces, et la regle du
-// planning branchee sur Regles › Volets. L'ancienne grille « MODE AUTOMATIQUE »
-// (les options de l'input_select) disait la meme chose que la bascule, en trois
-// boutons : retiree le 14/09.
+// La feuille d'un ouvrant qui n'est PAS un volet (maquettes du 14/09) : sa
+// position, ses puces, Stop — ce que son `supported_features` permet. Un volet
+// a sa fiche à onglets (`FicheVolet`, chantier Volets).
 function RoomCoverSheet({ id, hass, onClose }) {
   const S = (hass && hass.states) || null;
   const st = S ? S[id] : null;
   const a = (st && st.attributes) || {};
-  const realPos = a.current_position != null ? Math.round(a.current_position) : (st && st.state === 'open' ? 100 : 0);
+  const gestes = gestesCover(st);
+  const publiee = positionPubliee(st);
+  const realPos = publiee != null ? Math.max(0, Math.min(100, Math.round(publiee))) : (st && st.state === 'open' ? 100 : 0);
   const [ov, setOv] = useOptimiste(realPos);
   const pos = ov != null ? ov : realPos;
   const ferme = coverFerme(st, pos);
   /* Même définition que RoomCoverCard (05/10). Morte, la fiche disait
    * « Fermé », allumait la puce « Fermé » (sans position, `realPos` vaut 0)
-   * et laissait la jauge, les puces et Stop partir vers une entité morte. */
-  const mort = !st || st.state === 'unavailable';
-  const call = (d, s2, data) => commanderService(hass, (data || {}).entity_id, d, s2, data || {});
-  const cov = (svc, data) => call('cover', svc, { entity_id: id, ...(data || {}) });
-  const poser = (v) => { setOv(v); cov('set_cover_position', { position: v }); };
+   * et laissait la jauge, les puces et Stop partir vers une entité morte.
+   * `unknown` aussi (`enPanne`, 19/10). Ses commandes suivent son
+   * `supported_features`, comme la carte : sans SET_POSITION, ni jauge ni
+   * « Mi-course ». Un refus de Home Assistant retire l'avance. */
+  const mort = enPanne(id, st);
+  const envoyer = (g, avance) => { if (mort || !g) return; if (avance != null) setOv(avance); commander(hass, id, g.capacite, g.valeur, null, null, () => setOv(null)); };
+  const poser = (v) => { if (gestes.placer) envoyer({ capacite: gestes.placer, valeur: v }, v); };
   const nom = a.friendly_name || id;
   const zone = zoneDe(id);
   const etatTxt = ferme ? tr('Fermé') : coverOuvert(pos) ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });
-  // La regle du planning (Regles › Volets) : ce volet suit-il le soleil ?
-  const { etat: volets } = useEtatServeur(hass, 'loggia/volets/etat', 15000, '');
-  const plan = volets && volets.config && volets.config.planning;
-  const reglage = plan && plan.volets && plan.volets[id];
-  const suit = !!(plan && plan.actif && !(reglage && reglage.exclu));
-  const prochaine = (sens) => {
-    const p = volets && volets.prochains && volets.prochains[sens];
-    if (!p) return null;
-    const k = Object.keys(p).sort((x, y) => Number(x) - Number(y))[0];
-    return k != null && !/^erreur/.test(String(p[k])) ? heureDe(p[k]) : null;
-  };
-  const basculerPlan = () => {
-    if (!hass || typeof hass.callWS !== 'function' || !plan) return;
-    const patch = !plan.actif ? { planning: { actif: true } }
-      : (reglage && reglage.exclu) ? { planning: { volets: Object.fromEntries(Object.entries(plan.volets || {}).filter(([k]) => k !== id)) } }
-        : { planning: { volets: { ...(plan.volets || {}), [id]: { exclu: true } } } };
-    // Un refus (compte non administrateur) remonte à l'écoute globale.
-    hass.callWS({ type: 'loggia/volets/config', patch });
-  };
-  const chips = [{ id: 'ferme', nom: tr('Fermé') }, { id: 'mi', nom: tr('Mi-course') }, { id: 'ouvert', nom: tr('Ouvert') }];
+  /* Cette fiche n'est plus que celle des ouvrants qui ne sont PAS des volets
+   * (V3) : garage, portail, velux, ouvrant sans classe. Le planning ne les
+   * pilote pas (ADR 0137) : la rangée « Auto lever / coucher · Suit le
+   * soleil » était fausse, elle est partie (sa décision du 19/10). Un ouvrant
+   * SANS classe dit pourquoi Loggia le laisse : c'est là qu'on le cherche. */
+  const sansClasse = !!st && !a.device_class;
+  const chips = [gestes.descendre && { id: 'ferme', nom: tr('Fermé') }, gestes.placer && { id: 'mi', nom: tr('Mi-course') }, gestes.monter && { id: 'ouvert', nom: tr('Ouvert') }].filter(Boolean);
   // La puce choisie suit le meme verdict : sinon « Ferme » restait creuse sur
   // un volet ferme a 1 %, et aucune des trois n'etait allumee.
   const chip = ferme ? 'ferme' : coverOuvert(pos) ? 'ouvert' : pos === 50 ? 'mi' : null;
@@ -4011,18 +5006,19 @@ function RoomCoverSheet({ id, hass, onClose }) {
       {() => (<>
         <FicheEntete titre={nom} sous={[zone, mort ? tr('Indisponible') : etatTxt].filter(Boolean).join(' · ')} id={id} />
         {!mort && <>
+        {gestes.placer && <>
         <FicheLibelle droite={<span style={{ fontSize: 18, fontWeight: 800, color: pos ? 'var(--o-purple)' : 'var(--o-text3)' }}>{pos} %</span>}>{tr('POSITION')}</FicheLibelle>
         <RmJauge v={pos} couleur="var(--o-purple)" grade="linear-gradient(90deg,rgba(var(--o-purple-rgb),.75),var(--o-purple))" label={tr('Position') + ' ' + nom} onCommit={poser} marge={0} />
-        <div style={{ marginTop: 12 }}>
-          <FichePuces options={chips} valeur={chip} onChoix={(c) => { if (c === 'ferme') { setOv(0); cov('close_cover'); } else if (c === 'ouvert') { setOv(100); cov('open_cover'); } else poser(50); }} />
-        </div>
+        </>}
+        {chips.length > 0 && <div style={{ marginTop: 12 }}>
+          <FichePuces options={chips} valeur={chip} onChoix={(c) => { if (c === 'ferme') envoyer(gestes.descendre, 0); else if (c === 'ouvert') envoyer(gestes.monter, 100); else poser(50); }} />
+        </div>}
         </>}
         <div style={{ marginTop: 14 }}>
-          {plan && <FicheRangee premiere titre={tr('Auto lever / coucher')}
-            desc={suit ? tr('Suit le soleil : ouverture à {a}, fermeture à {b}.', { a: prochaine('ouverture') || '—', b: prochaine('fermeture') || '—' }) : tr('Ne suit ni le lever ni le coucher du soleil.')}
-            droite={<RmBascule on={suit} nom={tr('Auto lever / coucher')} onToggle={basculerPlan} />} />}
-          <FicheRangee premiere={!plan} panne={mort} titre={tr('Position')} desc={tr('Course mesurée par le moteur')} droite={mort ? <FicheIndispo /> : <FicheValeur couleur="var(--o-purple)">{a.current_position != null ? Math.round(a.current_position) + ' %' : etatTxt}</FicheValeur>} />
-          {!mort && <FicheRangee titre={tr('Stop')} desc={tr('Arrête le moteur là où il est')} droite={<FicheBouton icone="square" onClick={() => cov('stop_cover')}>{tr('Stop')}</FicheBouton>} />}
+          {sansClasse && <FicheRangee premiere titre={tr('Pas piloté par Loggia')}
+            desc={tr('Il n’a pas de classe dans Home Assistant. Donnez-lui la classe Volet ou Store pour qu’il suive le planning.')} />}
+          <FicheRangee premiere={!sansClasse} panne={mort} titre={tr('Position')} desc={tr('Course mesurée par le moteur')} droite={mort ? <FicheIndispo /> : <FicheValeur couleur="var(--o-purple)">{publiee != null ? realPos + ' %' : etatTxt}</FicheValeur>} />
+          {!mort && gestes.stop && <FicheRangee titre={tr('Stop')} desc={tr('Arrête le moteur là où il est')} droite={<FicheBouton icone="square" onClick={() => envoyer(gestes.stop, null)}>{tr('Stop')}</FicheBouton>} />}
           <RangeeDernier st={st} />
         </div>
       </>)}
@@ -4060,7 +5056,7 @@ function RoomClimateSheet({ id, hass, onClose }) {
   const basculer = () => { const nv = !marche; setOvOn(nv); commander(hass, id, 'set_hvac_mode', nv ? modeMarche : 'off'); };
   // Les bornes viennent de l'entite, pas d'une constante ; on affiche ce qui
   // a ete envoye, pas ce qui a ete demande. Sans consigne lisible, rien ne part.
-  const setT = (d) => { if (!reglable) return; const v = commander(hass, id, 'set_temperature', target + d, 'temperature'); if (v != null) setOv(v); };
+  const setT = (d) => { if (!reglable) return; const v = commander(hass, id, 'set_temperature', consigneVoisine(target, d, a, uT) ?? target + d, 'temperature'); if (v != null) setOv(v); };
   const fmt = (t) => dec(Number(t), 1) + ' °' + uT;
   const nom = a.friendly_name || id;
   const zone = zoneDe(id);
@@ -4101,7 +5097,7 @@ function RoomClimateSheet({ id, hass, onClose }) {
           <FicheRangee premiere titre={tr('Chauffe')} desc={tr('Coupe la zone sans toucher à la consigne')}
             droite={mort ? <FicheValeur couleur="var(--o-text3)">{tr('Indisponible')}</FicheValeur> : <RmBascule on={marche} nom={nom} onToggle={basculer} />} />
           {cur != null && <FicheRangee titre={tr('Température mesurée')} desc={tr('Relevée par le thermostat')} droite={<FicheValeur>{fmt(cur)}</FicheValeur>} />}
-          {zone && <FicheRangee titre={tr('Fenêtre ouverte')} desc={ouverts.length ? ouverts.join(', ') : tr('Rien d’ouvert dans la pièce')} droite={<FicheValeur couleur={ouverts.length ? 'var(--o-bad)' : 'var(--o-ok)'}>{ouverts.length ? tr('oui') : tr('non')}</FicheValeur>} />}
+          {zone && <FicheRangee titre={tr('Fenêtre ouverte')} desc={ouverts.length ? ouverts.join(', ') : tr('Rien d’ouvert dans la pièce')} droite={<FicheValeur couleur={ouverts.length ? 'var(--o-warn)' : 'var(--o-ok)'}>{ouverts.length ? tr('oui') : tr('non')}</FicheValeur>} />}
           <RangeeDernier st={st} />
         </div>
         <FicheLibelle>{tr('TEMPÉRATURE · 24 H')}</FicheLibelle>
@@ -4111,133 +5107,42 @@ function RoomClimateSheet({ id, hass, onClose }) {
   );
 }
 
-// Fiche lumiere (maquettes du 14/09) : la glissiere, Blancs / Couleurs, et
-// les rangees — allumee, minuteur, dernier changement.
-function RoomLightSheet({ light, hass, onClose }) {
-  const st = hass && hass.states ? hass.states[light.id] : null;
-  const a = (st && st.attributes) || {};
-  const realOn = st ? st.state === 'on' : light.on;
-  /* Même définition que RoomLightCard (05/10). La fiche, ouverte puis
-   * l'ampoule partie (ou par une pastille), disait « Éteinte » — « Allumée »
-   * même, entité retirée, d'après l'instantané de l'ouverture — et laissait
-   * l'interrupteur, la jauge et les palettes commander une entité morte. */
-  const mort = !st || st.state === 'unavailable';
-  const realBri = a.brightness != null ? Math.round(a.brightness / 255 * 100) : light.bri;
-  const [ovOn, setOvOn] = useOptimiste(realOn);
-  const [ovBri, setOvBri] = useOptimiste(realBri);
-  const on = ovOn != null ? ovOn : realOn;
-  const bri = ovBri != null ? ovBri : realBri;
-  const color = a.rgb_color ? versHex(a.rgb_color) : light.color;
-  const acc = (light.rgb && color) ? color : 'var(--o-lampe)';
-  const toggle = () => { const v = !on; setOvOn(v); commander(hass, light.id, v ? 'turn_on' : 'turn_off'); };
-  const poser = (v) => { setOvBri(v); setOvOn(v > 0); if (v > 0) commander(hass, light.id, 'set_brightness', v); else commander(hass, light.id, 'turn_off'); };
-  const [onglet, setOnglet] = useState(light.ct ? 'blancs' : 'couleurs');
-  const shown = on ? bri : 0;
-  const nom = light.name || light.id;
-  const teinteTxt = a.color_mode === 'color_temp' ? tr('blanc') : (light.rgb && color) ? tr('teinte personnalisée') : '';
-  const sous = mort ? tr('Indisponible') : [on ? tr('Allumée') : tr('Éteinte'), on ? shown + ' %' : null, on ? teinteTxt : null].filter(Boolean).join(' · ');
-  // La palette porte des variables CSS : on lit leur valeur avant de l'envoyer.
-  const hexDe = (c) => { if (c.indexOf('var(') === 0) { try { const v = getComputedStyle(document.documentElement).getPropertyValue(c.slice(4, -1)).trim(); if (v[0] === '#') return v; } catch { /* rien */ } return null; } return c; };
-  const poserCouleur = (c) => { const h = hexDe(c); if (!h) return; const n = parseInt(h.slice(1), 16); commander(hass, light.id, 'set_color', [(n >> 16) & 255, (n >> 8) & 255, n & 255]); };
-  const swatch = (bg, sel, onClick, label) => <button key={label} aria-label={label} title={label} onClick={onClick} style={{ height: 34, borderRadius: 10, cursor: 'pointer', background: bg, border: sel ? '2px solid #fff' : '2px solid transparent', boxShadow: sel ? `0 0 0 2px ${bg}` : 'inset 0 0 0 1px rgba(0,0,0,.18)', padding: 0 }} />;
-  const blancs = light.ct && (onglet === 'blancs' || !light.rgb);
+/* La fiche d'une LUMIÈRE (chantier Lumières, § 3.5 ; L8) : la coquille. Une
+ * feuille sans onglets, sa hauteur suit son contenu. La fiche se charge à la
+ * demande (`fichelumiere.jsx`) et n'importe jamais App.jsx : la coquille lui
+ * passe la VUE de la lampe — celle de sa carte (`useVueLumiere` : le geste
+ * d'abord, la teinte, la phrase, les ordres, le `hass` vivant) —, sa pièce,
+ * l'épingle, le glyphe de sa carte, la bascule et la barre de la maison, et
+ * l'ouverture de la fiche universelle de l'appareil. */
+function FicheLumiere({ id, hass, onClose }) {
+  const vue = useVueLumiere(hass, id);
+  const [fiche, setFiche] = useState(null);
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
-        <FicheEntete titre={nom} sous={sous} id={light.id} />
-        {light.dimmable !== false && !mort && (<>
-          <FicheLibelle droite={<span style={{ fontSize: 18, fontWeight: 800, color: on ? 'var(--o-warn)' : 'var(--o-text3)' }}>{shown} %</span>}>{tr('LUMINOSITÉ')}</FicheLibelle>
-          <RmJauge v={shown} couleur={acc} grade={(light.rgb && color) ? color : 'linear-gradient(90deg,var(--o-lampe),var(--o-lampe-b))'} label={tr('Luminosité') + ' ' + nom} onCommit={poser} marge={0} />
-        </>)}
-        {(light.ct || light.rgb) && !mort && (
-          <div style={{ marginTop: 16 }}>
-            {light.ct && light.rgb && <FichePuces options={[{ id: 'blancs', nom: tr('Blancs') }, { id: 'couleurs', nom: tr('Couleurs') }]} valeur={onglet} onChoix={setOnglet} />}
-            {/* Les deux palettes partagent la même case : la fiche garde la
-              * hauteur de la plus grande d'un onglet à l'autre, sans hauteur
-              * fixe (retour du 19/09 : deux lampes, deux hauteurs de fiche). */}
-            <div style={{ display: 'grid', marginTop: 10 }}>
-              {light.ct && (
-                <div aria-hidden={!blancs} style={{ gridArea: '1 / 1', display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, alignContent: 'start', visibility: blancs ? 'visible' : 'hidden' }}>
-                  {WHITE_TEMPS().map(([n, k, c]) => swatch(c, a.color_mode === 'color_temp' && Math.abs((a.color_temp_kelvin || 0) - k) < 150, () => commander(hass, light.id, 'set_color_temp', k), n + ' · ' + k + ' K'))}
-                </div>
-              )}
-              {light.rgb && (
-                <div aria-hidden={!!blancs} style={{ gridArea: '1 / 1', display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, alignContent: 'start', visibility: blancs ? 'hidden' : 'visible' }}>
-                  {LIGHT_PALETTE.map(c => swatch(c, !!color && !!hexDe(c) && hexDe(c).toLowerCase() === String(color).toLowerCase(), () => poserCouleur(c), tr('Couleur') + ' ' + c))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-        <div style={{ marginTop: 14 }}>
-          <FicheRangee premiere panne={mort} titre={tr('Allumée')} desc={tr('Bascule immédiate, réconciliée au prochain état')} droite={mort ? <FicheIndispo /> : <RmBascule on={on} nom={nom} onToggle={toggle} />} />
-          <RangeeMinuteur hass={hass} id={light.id} mort={mort} />
-          <RangeeDernier st={st} />
-        </div>
+        <Suspense fallback={<div style={{ minHeight: 260 }} />}>
+          <FicheLumiereContent id={id} vue={vue} piece={zoneDe(id)} onFiche={setFiche} bascule={RmBascule} jauge={RmJauge}
+            glyphe={<GlypheCarte id={id} size={18}><Fi i="bulb" size={18} /></GlypheCarte>} epingle={<BoutonEpingle id={id} />} />
+        </Suspense>
+        {fiche && <FicheAppareil id={fiche} hass={vue.hass} onClose={() => setFiche(null)} />}
       </>)}
     </BottomSheet>
   );
 }
 
-// Fiche prise (maquettes du 14/09) : alimentee, puissance, energie, minuteur.
+/* La feuille d'un switch qui n'est PAS une prise (chantier Prises, P1) : la coquille. Une prise ouvre sa fiche (`FichePrise`) ;
+ * ici arrivent le poêle, un radiateur, un relais. Le contenu — alimenté, le minuteur, le dernier changement — se charge à la
+ * demande (`ficheswitch.jsx`, audit des prises, 19/10) et n'importe jamais App.jsx : la coquille garde la feuille et la frontière
+ * Suspense, et lui passe les briques des fiches d'ici (`BRIQUES_SWITCH`). */
+const BRIQUES_SWITCH = { FicheEntete, FicheRangee, FicheValeur, FicheBouton, FicheIndispo, RmBascule, RangeeDernier, useSeconde, zoneDe };
 function RoomSwitchSheet({ id, hass, onClose }) {
-  const S = (hass && hass.states) || {};
-  const st = S[id] || null;
-  const a = (st && st.attributes) || {};
-  const realOn = !!st && st.state === 'on';
-  // Même définition que sa carte (RoomGenericCard, CvCard) : `enPanne` (05/10).
-  const mort = enPanne(id, st);
-  const [ov, setOv] = useOptimiste(realOn);
-  const on = ov != null ? ov : realOn;
-  const basculer = () => { const nv = !on; setOv(nv); commanderService(hass, id, 'homeassistant', nv ? 'turn_on' : 'turn_off', { entity_id: id }); };
-  const nom = a.friendly_name || id;
-  const zone = zoneDe(id);
-  // Puissance et energie vivent dans des capteurs SŒURS de la prise.
-  const capteur = (dc) => { const sid = pickSibling(LOGGIA_INDEX, S, id, { domain: 'sensor', deviceClass: dc }); const n = sid && S[sid] ? parseFloat(S[sid].state) : NaN; return isNaN(n) ? null : { n, u: (S[sid].attributes || {}).unit_of_measurement || '' }; };
-  const puissance = capteur('power');
-  const energie = capteur('energy');
-  const fmt = (c) => decMax(Math.round(c.n * 10) / 10, 1) + (c.u ? ' ' + c.u : '');
   return (
     <BottomSheet onClose={onClose}>
-      {() => (<>
-        <FicheEntete titre={nom} sous={[zone, mort ? tr('Indisponible') : on ? tr('Allumée') : tr('Éteinte'), puissance ? fmt(puissance) : null].filter(Boolean).join(' · ')} id={id} />
-        <div style={{ marginTop: 14 }}>
-          <FicheRangee premiere panne={mort} titre={tr('Alimentée')} desc={tr('Coupe la prise, pas l’appareil derrière')} droite={mort ? <FicheIndispo /> : <RmBascule on={on} nom={nom} onToggle={basculer} />} />
-          {puissance && <FicheRangee titre={tr('Puissance instantanée')} desc={tr('Mesurée par la prise')} droite={<FicheValeur couleur="var(--o-accent-soft)">{fmt(puissance)}</FicheValeur>} />}
-          {energie && <FicheRangee titre={tr('Énergie')} desc={tr('Compteur de l’appareil')} droite={<FicheValeur>{fmt(energie)}</FicheValeur>} />}
-          <RangeeMinuteur hass={hass} id={id} mort={mort} />
-          <RangeeDernier st={st} />
-        </div>
-      </>)}
-    </BottomSheet>
-  );
-}
-
-// Fiche capteur binaire (maquettes du 14/09) : releve, piece, pile.
-function RoomBinarySheet({ id, hass, onClose }) {
-  const S = (hass && hass.states) || {};
-  const st = S[id] || null;
-  const a = (st && st.attributes) || {};
-  const nom = a.friendly_name || id;
-  const zone = zoneDe(id);
-  const e = BIN_ETATS()[a.device_class] || null;
-  const on = !!st && st.state === 'on';
-  /* `enPanne`, comme sa carte (05/10) : un capteur `unknown` y est
-   * « Indisponible », la fiche disait « Fermée » ou « RAS ». */
-  const mort = enPanne(id, st);
-  const releve = mort ? tr('Indisponible') : e ? (on ? e[0] : e[1]) : (on ? tr('Détecté') : tr('RAS'));
-  const danger = on && !!(e && e[2]);
-  return (
-    <BottomSheet onClose={onClose}>
-      {() => (<>
-        <FicheEntete titre={nom} sous={[zone, releve].filter(Boolean).join(' · ')} id={id} />
-        <div style={{ marginTop: 14 }}>
-          <FicheRangee premiere panne={mort} titre={tr('Relevé')} desc={tr('Dernière valeur reçue')} droite={mort ? <FicheIndispo /> : <FicheValeur couleur={danger ? 'var(--o-bad)' : 'var(--o-text)'}>{releve}</FicheValeur>} />
-          {zone && <FicheRangee titre={tr('Pièce')} desc={tr('Zone déclarée dans Home Assistant')} droite={<FicheValeur couleur="var(--o-text2)">{zone}</FicheValeur>} />}
-          <RangeePile n={pileDe(S, id)} />
-          <RangeeDernier st={st} />
-        </div>
-      </>)}
+      {() => (
+        <Suspense fallback={<div style={{ minHeight: 180 }} />}>
+          <FicheSwitchContent id={id} hass={hass} briques={BRIQUES_SWITCH} />
+        </Suspense>
+      )}
     </BottomSheet>
   );
 }
@@ -4280,7 +5185,7 @@ function RoomNav({ room, onNav, hass }) {
   const wrapRef = useRef(null);
   const S = (hass && hass.states) || {};
   // Meme habillage que les cartes de l'accueil. Cette barre exigeait une
-  // egalite EXACTE avec la table des pieces : « Chambre Liam » n'y figurant
+  // egalite EXACTE avec la table des pieces : « Chambre Lino » n'y figurant
   // pas, elle retombait sur une maison, la ou la carte montrait un lit. La
   // meme piece portait deux icones selon l'endroit.
   const zones = (LOGGIA_INDEX && LOGGIA_INDEX.areaList) || [];
@@ -4363,14 +5268,17 @@ function useLayoutEditor(cfgKey, scope, derived) {
    * 18/09, voir disposition.js) : `layout` est l'agencement tel que CE format
    * le voit, et `write` range chaque cle a sa place. */
   const format = formatEcran(useCoarse(), useWide(1180));
-  const layout = vueFormat(layoutOf(cfgKey, scope), format);
-  const ids = useMemo(() => applyLayout(vueFormat(layoutOf(cfgKey, scope), format), derived), [cfgKey, scope, sig, rev, format]);
+  /* Un écran qui range SA mise en page passe devant son format (ADR 0222) :
+   * appareil → type d'écran → ordinateur, réglage par réglage. */
+  const appareil = appareilPropre();
+  const layout = vueFormat(layoutOf(cfgKey, scope), format, appareil);
+  const ids = useMemo(() => applyLayout(vueFormat(layoutOf(cfgKey, scope), format, appareil), derived), [cfgKey, scope, sig, rev, format, appareil]);
   const edits = (layout.removed || []).length + (layout.added || []).length
     + ((layout.order || []).length ? 1 : 0) + Object.keys(layout.labels || {}).length
     + (layout.larges || []).length + (layout.compacts || []).length;
 
   const vide = (a) => (a && a.length) ? a : null;
-  const write = (patch) => { setLayout(cfgKey, scope, patchFormat(layoutOf(cfgKey, scope), format, patch)); setRev(v => v + 1); };
+  const write = (patch) => { setLayout(cfgKey, scope, patchFormat(layoutOf(cfgKey, scope), format, patch, appareil)); setRev(v => v + 1); };
 
   // Retirer : on inscrit dans `removed`. Un element ajoute a la main quitte
   // simplement `added` — inutile de le retenir deux fois.
@@ -4379,8 +5287,11 @@ function useLayoutEditor(cfgKey, scope, derived) {
     write({
       added: vide((layout.added || []).filter(x => x !== id)),
       removed: etaitAjoute ? vide(layout.removed) : vide([...(layout.removed || []).filter(x => x !== id), id]),
-      order: vide((layout.order || []).filter(x => x !== id)),
+      // L'ordre n'est nettoyé que s'il est À CE FORMAT (ADR 0221) : celui de
+      // l'ordinateur, réécrit ici, figerait le téléphone sur une copie.
+      ...(possede(layoutOf(cfgKey, scope), format, 'order', appareil) ? { order: vide((layout.order || []).filter(x => x !== id)) } : {}),
     });
+    refleterCarte(cfgKey, id, false);
   };
 
   // Ajouter, ou retirer si deja present : la feuille de selection est une bascule.
@@ -4392,6 +5303,7 @@ function useLayoutEditor(cfgKey, scope, derived) {
     write(etaitRetire
       ? { removed: vide((layout.removed || []).filter(x => x !== id)) }
       : { added: vide([...(layout.added || []), id]) });
+    refleterCarte(cfgKey, id, true);
   };
 
   // Deplacer au clavier. On enregistre l'ordre COMPLET : un ordre partiel se
@@ -4434,12 +5346,23 @@ function useLayoutEditor(cfgKey, scope, derived) {
     const base = (layout.order || []).length ? layout.order : ids;
     const tout = layoutOf(cfgKey, scope);
     const partout = echangerPartout(tout, id, cible);
-    setLayout(cfgKey, scope, { ...partout, ...patchFormat({ ...tout, ...partout }, format, { added: vide(added), removed: vide(removed), order: vide(base.map(x => (x === id ? cible : x))), labels: patchLabels }) });
+    // Un ordre hérité de l'ordinateur a déjà changé partout : le recopier ici
+    // couperait ce format de l'ordinateur (ADR 0221).
+    const ordre = possede(tout, format, 'order', appareil) ? { order: vide(base.map(x => (x === id ? cible : x))) } : {};
+    setLayout(cfgKey, scope, { ...partout, ...patchFormat({ ...tout, ...partout }, format, { added: vide(added), removed: vide(removed), ...ordre, labels: patchLabels }, appareil) });
     setRev(v => v + 1);
   };
   const rename = (id, nom) => replace(id, id, nom);
 
-  const reset = () => write({ removed: null, added: null, order: null, labels: null, larges: null, compacts: null, types: null });
+  /* « Toutes les cartes » : la liste automatique revient partout ; sur une
+   * tablette ou un téléphone, l'ordre et les tailles reviennent à ceux de
+   * l'ordinateur — la part s'en va, au lieu d'y écrire des vides qui ne
+   * suivraient plus jamais rien (ADR 0221). */
+  const reset = () => {
+    if (format === 'pc' && !appareil) { write({ removed: null, added: null, order: null, labels: null, larges: null, compacts: null, types: null }); return; }
+    setLayout(cfgKey, scope, { removed: null, added: null, labels: null, types: null, ...sansPart(layoutOf(cfgKey, scope), format, appareil) });
+    setRev(v => v + 1);
+  };
   const labelOf = (id) => labelIn(layout, id);
   /* Largeur d'une carte : double = deux emplacements côte à côte, sur toutes
    * les vues à grille. Rangée dans le layout, comme l'ordre et les libellés. */
@@ -4579,7 +5502,8 @@ function useLayoutEditor(cfgKey, scope, derived) {
 const DOMAINES_EDITION = () => [
   { id: 'lumiere', label: tr('Lumière'), fi: 'bulb', rgb: '255,204,68' },
   { id: 'volet', label: tr('Volet'), fi: 'blinds', rgb: 'var(--o-purple-rgb)' },
-  { id: 'chauffage', label: tr('Chauffage'), fi: 'flame', rgb: 'var(--o-bad-rgb)' },
+  // Le chauffage : l'orange de ses cartes (maquette « Cartes chauffage », 11/10) — le rouge reste aux alertes.
+  { id: 'chauffage', label: tr('Chauffage'), fi: 'flame', rgb: 'var(--o-warn2-rgb)' },
   { id: 'prise', label: tr('Prise'), prise: true, rgb: 'var(--o-accent-rgb)' },
   { id: 'multimedia', label: tr('Multimédia'), fi: 'tv-music', rgb: 'var(--o-rose-rgb)' },
   { id: 'capteur', label: tr('Capteur'), fi: 'sensor', rgb: '255,204,68' },
@@ -4631,6 +5555,27 @@ function deplacerDansPiece(hass, id, vers) {
     change = true;
   });
   if (change) cfgSet({ [ROOM_LAYOUT_KEY]: Object.keys(all).length ? all : null });
+}
+/* UNE CARTE, DEUX VUES (20/10, refletcarte.js) : retirer ou remettre un appareil
+ * dans Objets le fait aussi dans sa pièce, et inversement — « c'est logique ». */
+function refleterCarte(cfgKey, id, present) {
+  if (cfgKey !== OBJ_LAYOUT_KEY && cfgKey !== ROOM_LAYOUT_KEY) return;
+  const hass = getHass();
+  const r = refletCarte({
+    source: cfgKey === OBJ_LAYOUT_KEY ? 'objets' : 'piece', id, present,
+    pieces: cfgKey === OBJ_LAYOUT_KEY
+      ? piecesDeLaMaison().map(p => ({ nom: p, derive: roomEntitiesBrutes(hass, p).indexOf(id) >= 0, L: layoutOf(ROOM_LAYOUT_KEY, p) }))
+      : [],
+    objets: layoutOf(OBJ_LAYOUT_KEY, 'objets'),
+  });
+  if (!r) return;
+  const poser = (cle, parts) => {
+    const all = { ...layoutsOf(cle) };
+    Object.entries(parts).forEach(([s, L]) => { if (Object.keys(L).length) all[s] = L; else delete all[s]; });
+    cfgSet({ [cle]: Object.keys(all).length ? all : null });
+  };
+  if (r.pieces) poser(ROOM_LAYOUT_KEY, r.pieces);
+  if (r.objets) poser(OBJ_LAYOUT_KEY, { objets: r.objets });
 }
 /* Une prise declaree lumiere prend la carte et le filtre des lampes : la
  * liste `loggia_switchlights`, celle que Parametres ecrit. */
@@ -4940,14 +5885,16 @@ function ChoixIcone({ valeur, onChoisir, suggerees }) {
  * un rail creusé dans lequel la pastille choisie glisse, et le bleu plein
  * (`--o-accent-fond`) y ressort. Même fond pour tous les groupes de Loggia —
  * ils portaient trois gris différents avant le thème v2. */
-function Segment({ value, options, onChange, grandir = false, label = null }) {
+/* `compact` (20/10) : les icones seules, le mot en aria-label et en title —
+ * au telephone, « Cartes / Plan » partage sa ligne avec les etages. */
+function Segment({ value, options, onChange, grandir = false, label = null, compact = false }) {
   return (
     <div role="group" aria-label={label || undefined}
       style={{ display: grandir ? 'flex' : 'inline-flex', width: grandir ? '100%' : undefined, boxSizing: 'border-box', padding: 3, gap: 3, borderRadius: 12, background: 'var(--o-well)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
       {options.map(o => { const on = o.id === value; return (
-        <button key={String(o.id)} aria-pressed={on} onClick={() => { if (!on) onChange(o.id); }}
-          style={{ flex: grandir ? 1 : undefined, height: grandir ? 38 : 30, padding: '0 14px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: grandir ? 13 : 12.5, fontWeight: 700, background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-          {o.ico ? <Fi i={o.ico} size={13} /> : null}{o.label}</button>
+        <button key={String(o.id)} aria-pressed={on} aria-label={compact ? o.label : undefined} title={compact ? o.label : undefined} onClick={() => { if (!on) onChange(o.id); }}
+          style={{ flex: grandir ? 1 : undefined, height: grandir ? 38 : 30, padding: compact ? '0 11px' : '0 14px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: grandir ? 13 : 12.5, fontWeight: 700, background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          {o.ico ? <Ico name={o.ico} size={compact ? 15 : 13} /> : null}{compact ? null : o.label}</button>
       ); })}
     </div>
   );
@@ -5180,7 +6127,7 @@ function BandeauEdition({ ed = null, onAjouter = null, toutes = null, ajouterLab
   /* Le geste, dit la ou on en a besoin (retour 22/09) : au doigt on maintient
    * puis on glisse, au clavier on prend le focus puis les fleches (ADR 0068). */
   const tactile = useCoarse();
-  const geste = tactile ? tr('Au doigt : maintiens une carte, puis glisse-la.') : tr('Au clavier : Tab jusqu’à une carte, puis les flèches.');
+  const geste = tactile ? tr('Au doigt : maintenez une carte, puis glissez-la.') : tr('Au clavier : Tab jusqu’à une carte, puis les flèches.');
   const btn = (accent) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', flexShrink: 0, background: accent ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: accent ? '#fff' : 'var(--o-text1)', border: accent ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)' });
   const peutTout = !!toutes || !!(ed && ed.edits > 0);
   const montreTout = !!toutes || !!ed;
@@ -5191,9 +6138,9 @@ function BandeauEdition({ ed = null, onAjouter = null, toutes = null, ajouterLab
    * l'agencement, et ne bouge pas. */
   const ouvrirEnt = onEnt && !compteOrdinaire(ctx.hass) ? onEnt : null;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, flexWrap: 'wrap', background: 'rgba(var(--o-accent-rgb),.12)', border: '1px dashed rgba(var(--o-accent-rgb),.45)' }}>
+    <div className="o-bandeau-edition" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, flexWrap: 'wrap', background: 'rgba(var(--o-accent-rgb),.12)', border: '1px dashed rgba(var(--o-accent-rgb),.45)' }}>
       <Fi i="pencil" size={14} color="var(--o-accent-soft)" />
-      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1, minWidth: 200 }}>{texte || tr('Mode édition : attrape une carte pour la déplacer où tu veux, ou ajoute, renomme et retire une carte.')} <span style={{ color: 'var(--o-text3)' }}>{geste}</span></span>
+      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: 1, minWidth: 200 }}>{texte || tr('Mode édition : attrapez une carte pour la déplacer où vous voulez, ou ajoutez, renommez et retirez une carte.')} <span style={{ color: 'var(--o-text3)' }}>{geste}</span></span>
       {onAjouter && <button onClick={onAjouter} style={btn(true)}><Fi i="plus" size={12} />{ajouterLabel || tr('Ajouter une carte')}</button>}
       {extra}
       {ouvrirEnt && <button onClick={ouvrirEnt} style={btn(false)}><Fi i="list" size={12} />{entLabel || tr('Entités de la vue')}</button>}
@@ -5308,7 +6255,7 @@ function EditableCard({ ed, id, nom, onEdit, plat = false, hass = null, taille =
   const lavis = lavisCarte(info.rgb);
   const icone = (px) => (info.prise ? <PlugIcon size={px} /> : info.ico ? <Ico name={info.ico} size={px} /> : <Fi i={info.fi} size={px} />);
   const sousTitre = sous || (info.label + ' · ' + identifiantEdition(brut));
-  const titre = tr('Attrape pour déplacer · clique pour modifier (flèches ← →)');
+  const titre = tr('Attrapez pour déplacer · cliquez pour modifier (flèches ← →)');
   /* La surface d'une carte (lot 13) : son nom est ce que la carte affiche,
    * puis le geste — « Plafonnier, Lumière · plafonnier, Modifier ou
    * déplacer » : le nom visible en tête (WCAG 2.5.3), là où la racine disait
@@ -5451,24 +6398,22 @@ function ComposeurCartes({ hass, dc = null, present = [], onToggle, onClose, pie
   const nbEntites = Object.keys(S).length;
   const domainesSig = domaines.join('|');
   // Les appareils : chaque entite avec ses filtres (le vocabulaire d'Objets) et sa piece.
-  const appareils = useMemo(() => Object.keys(S).filter(domaineOk).sort().map(id => {
-    const dom = id.slice(0, id.indexOf('.'));
-    const classe = ((S[id] && S[id].attributes) || {}).device_class || '';
-    return { id, nom: nomEnt(id), piece: pieceDe(id), filtres: filtresObjet({ domaine: dom, estLumiere: cvEstLumiere(id), classe }) };
-  }), [nbEntites, domainesSig]);
+  const appareils = useMemo(() => Object.keys(S).filter(domaineOk).sort().map(id => ({ id, nom: nomEnt(id), piece: pieceDe(id), filtres: filtresEntite(S, id) })), [nbEntites, domainesSig]);
   // Les cartes de Loggia disponibles chez toi : le distributeur (configure),
   // chaque plante, chaque zone fil pilote (un thermostat est une entite, il
   // vit chez les appareils). La piece courante d'abord.
   const cartes = useMemo(() => {
     if (!composites) return [];
     const out = [];
-    if (distributeurConfigure()) out.push({ cle: 'obj:feeder', nom: tr('Distributeur de croquettes'), sous: dc ? dc.distributeur().sous : tr('Distributeur'), fi: 'paw', rgb: 'var(--o-orange-rgb)', piece: null });
-    plantsCfg().forEach(p => {
+    if (distributeurConfigure()) out.push({ cle: 'obj:feeder', nom: tr('Distributeur de croquettes'), sous: dc ? dc.distributeur().phrase.texte : tr('Distributeur'), fi: 'paw', rgb: 'var(--o-piece-ambre-rgb)', piece: null });
+    // Les plantes, découvertes ou configurées (C29) : la liste d'Objets.
+    plantesDeLaMaison(S).forEach(p => {
       const pl = dc ? dc.plante(p.base) : null;
-      const v = pl ? verdictCartePlante(pl) : null;
-      out.push({ cle: 'plant:' + p.base, nom: p.name || p.base, sous: [pl && pl.room, v && v.texte].filter(Boolean).join(' · ') || tr('Plante'), fi: 'seedling', rgb: v ? v.rgb : 'var(--o-ok-rgb)', piece: pl ? pl.room : null });
+      const v = pl ? vuePlante(pl, { quand: heureDe, deCelsius }) : null;
+      out.push({ cle: 'plant:' + p.base, nom: p.nom, sous: [pl && pl.room, v && v.phrase].filter(Boolean).join(' · ') || tr('Plante'), fi: 'leaf',
+        rgb: v && v.ton === 'bad' ? 'var(--o-bad-rgb)' : v && v.ton === 'warn' ? 'var(--o-warn-rgb)' : 'var(--o-ok-rgb)', piece: pl ? pl.room : null });
     });
-    climateZones(S).filter(z => !estClimate(z)).forEach(z => out.push({ cle: 'zone:' + z.id, nom: z.name || z.room || z.id, sous: tr('Zone de chauffage') + (z.room ? ' · ' + z.room : ''), fi: 'flame', rgb: 'var(--o-bad-rgb)', piece: z.room || null }));
+    climateZones(S).filter(z => !estClimate(z)).forEach(z => out.push({ cle: 'zone:' + z.id, nom: z.name || z.room || z.id, sous: tr('Zone de chauffage') + (z.room ? ' · ' + z.room : ''), fi: 'flame', rgb: 'var(--o-warn2-rgb)', piece: z.room || null }));
     if (piece) out.sort((a, b) => (rmNorm(b.piece || '') === rmNorm(piece) ? 1 : 0) - (rmNorm(a.piece || '') === rmNorm(piece) ? 1 : 0));
     return out;
   }, [composites, nbEntites, piece]);
@@ -5507,7 +6452,7 @@ function ComposeurCartes({ hass, dc = null, present = [], onToggle, onClose, pie
             <span style={{ flex: 1 }} />
             <CroixFeuille />
           </div>
-          <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 12 }}>{tr('Coche pour ajouter, décoche pour retirer. Tout s’applique tout de suite.')}</div>
+          <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 12 }}>{tr('Cochez pour ajouter, décochez pour retirer. Tout s’applique tout de suite.')}</div>
 
           <input aria-label={tr('Rechercher une carte, un appareil, une pièce…')} value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr('Rechercher une carte, un appareil, une pièce…')}
             style={{ width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600 }} />
@@ -5561,7 +6506,8 @@ function ComposeurCartes({ hass, dc = null, present = [], onToggle, onClose, pie
 function nomDeCle(S, k) {
   const s = String(k || '');
   if (s === 'obj:feeder') return tr('Distributeur');
-  if (s.indexOf('plant:') === 0) { const p = plantsCfg().find(x => x.base === s.slice(6)); return (p && (p.name || p.base)) || s.slice(6); }
+  if (s.indexOf('plant:') === 0) { const p = plantesDeLaMaison(S).find(x => x.base === s.slice(6)); return (p && p.nom) || s.slice(6); }
+  if (s.indexOf('groupe:') === 0) return NOMS_GROUPES()[s.slice(7)] || s.slice(7);
   if (s.indexOf('zone:') === 0) { const z = climateZones(S || {}).find(x => x.id === s.slice(5)); return z ? (z.name || z.room || z.id) : s.slice(5); }
   return cvName(S && S[s], s);
 }
@@ -5616,11 +6562,28 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
     return () => { debrancher(); viderAttente(); clearTimeout(filetRef.current); };
   }, []);
   const poserOpt = (v) => { setOpt(v); clearTimeout(filetRef.current); filetRef.current = setTimeout(() => setOpt(null), 4000); };
+  /* La ligne d'un switch épinglé — la sortie 2 d'une multiprise, dans la fiche de l'appareil ou sur sa carte (`Epingles`) — passe
+   * par la même garde que partout (relecture finale, F3) : une prise allumée et gardée ne se coupe pas d'un appui. Pas de place
+   * pour deux boutons sur une ligne, ni de fiche à ouvrir d'ici : deux appuis, comme la compacte sans fiche — le premier pose la
+   * question à la place du nom, le second coupe ; Échap, 6 secondes, ou une prise coupée entre-temps la défont. Ordre explicite
+   * (`turn_on`, `turn_off`, d'après l'état affiché) : un `toggle` inverse l'état RÉEL. */
+  const allume = opt != null ? opt === 'on' : (!!st && st.state === 'on');
+  const gs = useGardeSwitch(hass && hass.states, id, dom === 'switch');
+  const [demande, setDemande] = useDemandeCoupure(allume);
+  const enDemande = gs.garde && allume && demande;
   let controle = null, wrap = false;
-  if (dom === 'switch' || dom === 'input_boolean' || dom === 'siren') {
-    const on = opt != null ? opt === 'on' : (!!st && st.state === 'on');
-    const basculer = () => { poserOpt(on ? 'off' : 'on'); call('homeassistant', 'toggle'); };
-    controle = <span role="switch" aria-checked={on} tabIndex={0} aria-label={label} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); basculer(); } }} onClick={basculer} style={{ width: 42, height: 24, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .3s cubic-bezier(.34,1.56,.64,1)' }} /></span>;
+  if ((dom === 'switch' || dom === 'input_boolean' || dom === 'siren') && enPanne(id, st)) {
+    // Muet — `unavailable` OU `unknown` (`enPanne`, la règle des cartes ; audit du 19/10, point 3) : il se lit, il ne se commande pas.
+    controle = <FicheIndispo />;
+  } else if (dom === 'switch' || dom === 'input_boolean' || dom === 'siren') {
+    const on = allume;
+    const basculer = () => {
+      const geste = appuiBascule({ on, garde: gs.garde, enDemande });
+      if (geste === 'demander') { setDemande(true); return; }
+      setDemande(false);
+      poserOpt(on ? 'off' : 'on'); call('homeassistant', on ? 'turn_off' : 'turn_on');
+    };
+    controle = <span role="switch" aria-checked={on} tabIndex={0} aria-label={enDemande ? tr('Couper') + ' ' + label : label} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); basculer(); } }} onClick={basculer} style={{ width: 42, height: 24, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .3s cubic-bezier(.34,1.56,.64,1)' }} /></span>;
   } else if (dom === 'number' || dom === 'input_number') {
     const v = opt != null ? +opt : (st ? parseFloat(st.state) : NaN);
     const pas = a.step != null ? +a.step : 1;
@@ -5702,14 +6665,14 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
     const rel = texteDate(st);
     const bat = a.device_class === 'battery' && !isNaN(n);
     controle = (
-      <span style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: bat ? (n < 20 ? 'var(--o-bad)' : n < 50 ? 'var(--o-warn)' : 'var(--o-ok)') : 'var(--o-text)' }}>
+      <span style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: bat ? couleurPile(n, 'var(--o-text)') : 'var(--o-text)' }}>
         {mort ? '—' : rel || (isNaN(n) ? String(brut) : decMax(n, 2))}{!rel && a.unit_of_measurement ? ' ' + a.unit_of_measurement : ''}
       </span>
     );
   }
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', opacity: mort ? .5 : 1, flexWrap: wrap ? 'wrap' : 'nowrap' }}>
-      <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+      <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{enDemande ? tr('Couper la prise ?') : label}</span>
       {controle}
       {surEpingle && (
         <button onClick={() => surEpingle(id)} title={epingle ? tr('Désépingler') : tr('Épingler sur la carte')} aria-pressed={epingle}
@@ -5822,33 +6785,30 @@ function CadranGradue({ pct, valeur, unite, couleur, taille = 126, traits = 60 }
   );
 }
 
+/* Les mots des commandes d'un robot dans la fiche universelle (« L'appareil ») : les siens, plus longs que ceux des puces de la carte ;
+ * « Pause », « Reprendre » et « Localiser » sont déjà les mots des puces (`commandesRobot`). */
+const MOTS_FICHE_ROBOT = { demarrer: (d) => (d === 'vacuum' ? tr('Démarrer le nettoyage') : tr('Lancer la tonte')), base: () => tr('Renvoyer au dock') };
+/* La fiche universelle d'un robot (« L'appareil », dans les réglages de sa popup). Ses gestes passent par la VUE de la carte
+ * (`useVueRobot` ; passe bis 2 du 18/10, point B) : le geste partagé, « Démarrer » par le serveur et sa garde, ses refus — deux appuis
+ * rapprochés y relançaient le robot, et plus aucun service de départ ne part d'ici en direct. « Stop » et « Localiser » restent les
+ * siens. La batterie se lit comme ailleurs (`batterieRobot` : de 0 à 100, vide = inconnue), et un robot muet ne la montre pas. */
 function FicheMachineHero({ id, hass }) {
-  const st = hass && hass.states ? hass.states[id] : null;
+  const vr = useVueRobot(hass, id);
+  const st = vr.st;
   const a = (st && st.attributes) || {};
-  const dom = String(id).split('.')[0];
+  const dom = vr.domaine;
   const s = st ? st.state : null;
-  const mort = !st || s === 'unavailable';
+  const mort = vr.panne;
   const en = dom === 'vacuum' ? s === 'cleaning' : s === 'mowing';
-  const call = (svc) => commanderService(hass, id, dom, svc, { entity_id: id });
   const f = a.supported_features || 0;
-  const bat = (() => {
-    if (a.battery_level != null) return a.battery_level;
-    const S = (hass && hass.states) || {};
-    const sid = pickSibling(LOGGIA_INDEX, S, id, { domain: 'sensor', deviceClass: 'battery' });
-    const n = sid && S[sid] ? parseFloat(S[sid].state) : NaN;
-    return isNaN(n) ? null : n;
-  })();
+  const bat = mort ? null : vr.batterie;
   const etat = ({ docked: tr('Sur la base'), cleaning: tr('Nettoyage'), mowing: tr('Tonte'), returning: tr('Retour à la base'), paused: tr('En pause'), idle: tr('Inactif'), error: tr('Erreur') })[s] || (s == null ? '—' : String(s));
-  const btns = [];
-  if (dom === 'vacuum') {
-    if (en ? (f & 4) : (f & 8192)) btns.push([en ? 'pause' : 'play', en ? 'pause' : 'start', en ? tr('Pause') : tr('Démarrer le nettoyage')]);
-    if ((f & 8) && (s === 'cleaning' || s === 'returning' || s === 'paused')) btns.push(['stop', 'stop', tr('Stop')]);
-    if (f & 16) btns.push(['home', 'return_to_base', tr('Renvoyer au dock')]);
-    if (f & 512) btns.push(['marker', 'locate', tr('Localiser')]);
-  } else {
-    if (en ? (f & 2) : (f & 1)) btns.push([en ? 'pause' : 'play', en ? 'pause' : 'start_mowing', en ? tr('Pause') : tr('Lancer la tonte')]);
-    if (f & 4) btns.push(['home', 'dock', tr('Renvoyer au dock')]);
+  // Les puces de la carte, chacune son geste (`agir`) ; un geste en vol garde la sienne, choisie, et ne fait rien.
+  const btns = vr.cmd.map(p => ({ cle: p.cle, gi: p.glyphe, lbl: MOTS_FICHE_ROBOT[p.cle] ? MOTS_FICHE_ROBOT[p.cle](dom) : p.mot, agir: p.agir, enVol: !!p.enVol, choisie: !!p.choisie }));
+  if (dom === 'vacuum' && (f & 8) && (s === 'cleaning' || s === 'returning' || s === 'paused')) {
+    btns.splice(Math.min(1, btns.length), 0, { cle: 'stop', gi: 'stop', lbl: tr('Stop'), agir: () => { commanderService(vr.hass, id, dom, 'stop', { entity_id: id }); apresCommandeRobot(); } });
   }
+  if (dom === 'vacuum' && (f & 512) && !btns.some(b => b.cle === 'localiser')) btns.push({ cle: 'localiser', gi: 'marker', lbl: tr('Localiser'), agir: () => localiserRobot(vr.hass, id, dom) });
   /* La couleur dit l'etat, pas le niveau : un robot qui travaille est vert
    * meme a 30 %, une batterie a plat est rouge meme sur la base. */
   const colDial = mort ? 'var(--o-text3)'
@@ -5876,10 +6836,13 @@ function FicheMachineHero({ id, hass }) {
       </div>
       {btns.length > 0 && !mort && (
         <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'center' }}>
-          {btns.map(([gi, svc, lbl], bi) => (
-            <button key={svc} title={lbl} aria-label={lbl} onClick={() => call(svc)}
-              style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, border: bi === 0 ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)', background: bi === 0 ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: bi === 0 ? '#fff' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i={gi} size={15} /></button>
-          ))}
+          {btns.map((b, bi) => {
+            const plein = bi === 0 || b.choisie;
+            return (
+              <button key={b.cle} type="button" title={b.lbl} aria-label={b.lbl} aria-disabled={b.enVol ? 'true' : undefined} onClick={() => b.agir()}
+                style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, border: plein ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)', background: plein ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: plein ? '#fff' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i={b.gi} size={15} /></button>
+            );
+          })}
         </div>
       )}
       {/* La vitesse en rangee, pas en menu : quatre crans qui se COMPARENT —
@@ -5924,6 +6887,16 @@ function FicheRobot({ id, hass, onClose }) {
   const domaine = String(id).split('.')[0];
   const hassLive = useHass([id, ...siblingsOf(LOGGIA_INDEX, id)]);
   const H = hassLive || hass;
+  /* La VUE de la carte (chantier IoT, I15) : la phase et l'avance d'un geste, la phrase, les puces, la batterie, « Il bipe », le
+   * carnet du serveur — relu toutes les 15 s tant que la fiche est ouverte. La plaque et « {pièce} · robot aspirateur » viennent
+   * d'ici aussi : la carte et la fiche se ressemblent. */
+  const vue = useVueRobot(H, id, null, true, { rapide: true });
+  const [fond, encre] = plaqueRobot(vue);
+  const plaque = { fond, encre, glyphe: <GlypheCarte id={id} size={18}><Ico name={domaine === 'vacuum' ? 'vacuum' : 'mower'} size={18} /></GlypheCarte> };
+  // « Salon · robot aspirateur » ; sans zone, le genre seul, une majuscule devant — « Robot aspirateur », comme « Distributeur » (passe bis du 18/10, point 17).
+  const genre = domaine === 'lawn_mower' ? tr('robot tondeuse') : tr('robot aspirateur');
+  const zone = zoneDe(id);
+  const sousNom = zone ? zone + ' · ' + genre : genre.charAt(0).toLocaleUpperCase(locale()) + genre.slice(1);
   // La fiche universelle (Stop, Localiser, toutes les entites) s'ouvre
   // par-dessus, depuis les reglages du robot.
   const [fiche, setFiche] = useState(null);
@@ -5931,7 +6904,7 @@ function FicheRobot({ id, hass, onClose }) {
     <BottomSheet onClose={onClose} onglets>
       {() => (<>
         <Suspense fallback={<div style={{ minHeight: 260 }} />}>
-          <FicheRobotContent hass={H} idRobot={id} domaine={domaine} onFiche={setFiche} epingle={<BoutonEpingle id={id} />} />
+          <FicheRobotContent hass={H} idRobot={id} domaine={domaine} vue={vue} plaque={plaque} sousNom={sousNom} onFiche={setFiche} epingle={<BoutonEpingle id={id} />} />
         </Suspense>
         {fiche && <FicheAppareil id={fiche} hass={H} onClose={() => setFiche(null)} />}
       </>)}
@@ -6144,31 +7117,82 @@ function Courbe24({ points, couleur = 'var(--o-accent)', unite = '' }) {
   );
 }
 
-/* Fiche d'un capteur : la valeur en grand et sa journée. */
-function SensorSheet({ id, hass, onClose }) {
-  const st = hass && hass.states ? hass.states[id] : null;
-  const a = (st && st.attributes) || {};
-  const points = useHistorique24(hass, id);
-  const n = st ? parseFloat(st.state) : NaN;
-  const unite = a.unit_of_measurement || '';
-  /* `enPanne`, comme CvBigSensor qui l'ouvre (05/10) : la fiche écrivait
-   * « unavailable » ou « unknown » en 44 px, en anglais, à côté de l'unité. */
-  const mort = enPanne(id, st);
+/* Les fiches d'un CAPTEUR (chantier Capteurs, plan 1 ; C12), chargées à la
+ * demande (`fichecapteur.jsx`). Elles n'importent jamais App.jsx : les
+ * coquilles leur passent les briques des fiches d'ici (`BRIQUES_CAPTEUR`) —
+ * les mots d'un capteur binaire par une fonction, appelés au rendu dans la
+ * langue du moment.
+ *
+ * La fiche d'une MESURE (§ 4) : la coquille porte la feuille — sans onglets, sa
+ * hauteur suit son contenu — et passe à la fiche la VUE de sa carte
+ * (`useVueMesure` : le `hass` vivant, la zone, la phrase, le chiffre, la barre),
+ * sa pièce, l'épingle, le glyphe de sa carte et l'ouverture de la fiche
+ * universelle de l'appareil. Tout capteur qui n'est pas daté l'ouvre (`ouvrir`).
+ * La fiche d'un capteur binaire a la même coquille (correction bis, point 3) : la
+ * feuille ici, la frontière Suspense dedans — un morceau introuvable se dit dans la
+ * feuille, jamais à la place de la vue Objets ; le repli tient 260 px. */
+// Ce que les deux fiches lisent d'ici : l'histoire de 24 h d'une mesure, les mots d'un binaire, sa pile, les entités de son appareil.
+/* `jugement` : ce que le réglage « Ne pas juger cette mesure » lit (D5) — possible (une famille de la table, dans une pièce du dedans),
+ * réservé à qui configure la maison, et l'état en vigueur (la devinette, ou la correction). */
+const BRIQUES_CAPTEUR = { useHistorique24, soeursDe, etatsBinaires: () => BIN_ETATS(), pileDe,
+  jugement: (H, id, cle) => ({ possible: !!cle && !dehorsDe(cle, id) && !horsPiece(cle, id), reglable: !compteOrdinaire(H), nonJugee: nonJugee((H && H.states) || {}, id, cle) }) };
+function FicheCapteur({ id, hass, onClose }) {
+  const vue = useVueMesure(hass, id);
+  const [fiche, setFiche] = useState(null);
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <NomFeuille><span style={{ flex: 1, fontSize: 19, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cvName(st, id)}</span></NomFeuille>
-          <BoutonEpingle id={id} />
-          <CroixFeuille />
-        </div>
-        <div className={mort ? 'o-panne' : undefined} style={{ textAlign: 'center', margin: '16px 0 18px', ...(mort ? FICHE_BLOC : null) }}>
-          <span style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums', color: mort ? 'var(--o-text3)' : undefined }}>{mort ? '—' : isNaN(n) ? (st ? st.state : '—') : decMax(n, 1)}</span>
-          {unite && !mort && <span style={{ fontSize: 19, fontWeight: 700, color: 'var(--o-text2)', marginLeft: 6 }}>{unite}</span>}
-          {mort && <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text3)', marginTop: 4 }}>{tr('Indisponible')}</div>}
-        </div>
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '0 0 9px' }}>{tr('DERNIÈRES 24 H')}</div>
-        <Courbe24 points={points} unite={unite} />
+        <Suspense fallback={<div style={{ minHeight: 260 }} />}>
+          <FicheCapteurContent id={id} vue={vue} piece={zoneDe(id)} onFiche={setFiche} briques={BRIQUES_CAPTEUR}
+            glyphe={<GlypheCarte id={id} size={18}><Ico name={cvIcoEntite('sensor', id, vue.st, vue.nom)} size={18} /></GlypheCarte>} epingle={<BoutonEpingle id={id} />} />
+        </Suspense>
+        {fiche && <FicheAppareil id={fiche} hass={vue.hass} onClose={() => setFiche(null)} />}
+      </>)}
+    </BottomSheet>
+  );
+}
+/* La coquille d'un capteur binaire (C26, § 5.2) : le `hass` VIVANT de son capteur, sa pièce et sa famille, l'épingle, le glyphe de
+ * sa carte, et L'appareil — la fiche universelle, par-dessus. */
+function FicheBinaire({ id, hass, onClose }) {
+  const H = hassQuiConnait(useHass([id]), hass, id);
+  const st = (H && H.states && H.states[id]) || null;
+  const classe = ((st && st.attributes) || {}).device_class;
+  const [fiche, setFiche] = useState(null);
+  return (
+    <BottomSheet onClose={onClose}>
+      {() => (<>
+        <Suspense fallback={<div style={{ minHeight: 260 }} />}>
+          <FicheBinaireContent id={id} hass={H} briques={BRIQUES_CAPTEUR} piece={zoneDe(id)} famille={FAMILLES_BINAIRES()[classe] || null} onFiche={setFiche}
+            glyphe={<GlypheCarte id={id} size={18}><Ico name={cvIcoEntite('binary_sensor', id, st, cvName(st, id))} size={18} /></GlypheCarte>} epingle={<BoutonEpingle id={id} />} />
+        </Suspense>
+        {fiche && <FicheAppareil id={fiche} hass={H} onClose={() => setFiche(null)} />}
+      </>)}
+    </BottomSheet>
+  );
+}
+/* La popup d'un groupe (C27) : une feuille sans onglets, à la hauteur de son contenu ; le contenu se charge à la demande, DANS
+ * la feuille (le patron de `FicheMedia`). La coquille lui passe le `hass` vivant de ses membres et du soleil, leurs noms et
+ * leurs pièces, et les briques d'ici ; une rangée ouvre la fiche de son binaire, par-dessus. */
+const BRIQUES_GROUPE = { etatsBinaires: () => BIN_ETATS(), pileDe, soeursDe, Dessin: IlluOuvrant };
+function FicheGroupe({ groupe, hass, onClose }) {
+  // Piles (C32) : la liste de piles.js, et une rangée ouvre la fiche de l'APPAREIL ; un groupe de binaires, la fiche de son binaire.
+  const piles = groupe === 'piles';
+  const membres = piles ? pilesDeLaMaisonCarte((hass && hass.states) || {}).map(p => p.id) : membresDeLaMaison((hass && hass.states) || {})[groupe] || [];
+  const H = hassQuiConnait(useHass([...membres, 'sun.sun']), hass, membres[0]);
+  const S = (H && H.states) || {};
+  const ctx = ctxCapteurs();
+  // Présence : le JOURNAL sur 24 h, la source de sa carte (M19) — à 00:30, l'historique depuis minuit ne disait plus la même chose.
+  const derniers = useDerniersEvenements(H, groupe === 'presence' ? membres : [], reduireDerniers);
+  const [membre, setMembre] = useState(null);
+  return (
+    <BottomSheet onClose={onClose}>
+      {() => (<>
+        <Suspense fallback={<div style={{ minHeight: 260 }} />}>
+          <FicheGroupeContent groupe={groupe} nom={NOMS_GROUPES()[groupe]} ids={membres} hass={H} noms={nomsMembres(membres, S, ctx)} pieces={new Map(membres.map(id => [id, ctx.piece(id)]))}
+            briques={BRIQUES_GROUPE} onMembre={setMembre} piles={piles ? pilesDeLaMaisonCarte(S) : null} derniers={derniers} ctx={ctx} />
+        </Suspense>
+        {/* Un monoxyde en ppm (ADR 0251) est une MESURE : sa fiche est celle d'une mesure. */}
+        {membre && (piles ? <FicheAppareil id={membre} hass={H} onClose={() => setMembre(null)} /> : membre.indexOf('sensor.') === 0 ? <FicheCapteur id={membre} hass={H} onClose={() => setMembre(null)} /> : <FicheBinaire id={membre} hass={H} onClose={() => setMembre(null)} />)}
       </>)}
     </BottomSheet>
   );
@@ -6181,6 +7205,7 @@ function useDomainCards(hass, { onNav = null } = {}) {
   const [pilotPop, setPilotPop] = useState(null);
   const [coverPop, setCoverPop] = useState(null);
   const [mediaPop, setMediaPop] = useState(null);
+  const [meteoPop, setMeteoPop] = useState(null);
   const [sensPop, setSensPop] = useState(null);
   const [appPop, setAppPop] = useState(null);
   const [calPop, setCalPop] = useState(null);
@@ -6189,6 +7214,7 @@ function useDomainCards(hass, { onNav = null } = {}) {
   const [lockPop, setLockPop] = useState(null);
   const [binPop, setBinPop] = useState(null);
   const [robotPop, setRobotPop] = useState(null);
+  const [groupePop, setGroupePop] = useState(null);
   // La fiche du domaine, depuis n'importe quelle carte — la compacte ouvre la
   // même popup que la riche. Tout ce qui n'a pas de fiche dédiée reçoit la
   // FICHE APPAREIL UNIVERSELLE : l'appareil entier, rendu par le registre.
@@ -6198,24 +7224,25 @@ function useDomainCards(hass, { onNav = null } = {}) {
     // commande, il a un mois.
     if (d === 'calendar') { setCalPop(id); return; }
     if (d === 'camera') { setCamPop(id); return; }
-    const st = S[id]; const a = (st && st.attributes) || {};
-    if (d === 'light') {
-      const modes = a.supported_color_modes || [];
-      const rgb = modes.some(m => ['hs', 'xy', 'rgb', 'rgbw', 'rgbww'].indexOf(m) >= 0);
-      const ct = modes.indexOf('color_temp') >= 0;
-      const dimmable = rgb || ct || modes.indexOf('brightness') >= 0 || a.brightness != null;
-      if (!dimmable) { setAppPop(id); return; } // rien à régler sur la lampe : l'appareil, alors
-      const color = a.rgb_color ? versHex(a.rgb_color) : null;
-      setLightPop({ id, name: a.friendly_name || id, on: !!st && st.state === 'on', bri: a.brightness != null ? Math.round(a.brightness / 255 * 100) : 100, color, rgb, ct, dimmable, lc: st && st.last_changed });
-    } else if (d === 'climate') setClimPop(id);
+    const st = S[id];
+    /* Une lumière — un `light.*` de la maison, ou un switch déclaré lumière (L11) — ouvre SA fiche, même tout ou
+     * rien : le minuteur, le journal du jour et l'appareil y sont (chantier Lumières, § 3.5). */
+    if (d === 'light' || (d === 'switch' && cvEstLumiere(id))) setLightPop(id);
+    else if (d === 'climate') setClimPop(id);
     else if (d === 'cover') setCoverPop(id);
     else if (d === 'media_player') setMediaPop(id);
+    // Le widget météo ouvre SA fiche (sa maquette, 20/10) : la phrase, les heures, la semaine, la vigilance ; « L'appareil » y mène à la fiche universelle.
+    else if (d === 'weather') setMeteoPop(id);
     // Un capteur DATÉ n'a pas de courbe à montrer (05/10, suite « dates
     // partout ») : sa fiche 24 h écrivait l'année en 44 px au-dessus d'une
     // courbe d'années. Il ouvre son APPAREIL, comme une lampe sans réglage —
     // sa fiche le met en tête, en tuile qui dit sa date.
     else if (d === 'sensor' && texteDate(st) == null) setSensPop(id);
-    else if (d === 'switch' && !cvEstLumiere(id)) setPrisePop(id);
+    /* Une prise ouvre sa fiche, qui demande avant de couper ; un autre switch, sa feuille d'avant, dont la bascule ne demande
+     * rien. Un switch que l'index ne classe pas encore — le NAS, les premières secondes — suit la règle commune (F2, `gardeDeSwitch`) :
+     * si l'état des prises le nomme, ou n'a pas encore répondu, c'est la fiche. Le choix se fait ICI, à l'ouverture, et tient :
+     * la feuille ne change pas sous les doigts quand la réponse arrive. */
+    else if (d === 'switch' && !cvEstLumiere(id)) setPrisePop({ id, fiche: gardeDeSwitch(lireEtatPrises(), id, { reconnue: priseDe(S, id).prise, indexLu: indexLu() }) });
     else if (d === 'lock') setLockPop(id);
     else if (d === 'binary_sensor') setBinPop(id);
     // Un robot a sa fiche a lui (ADR 0042) : accueil, zones, planning,
@@ -6228,74 +7255,11 @@ function useDomainCards(hass, { onNav = null } = {}) {
   // du 15/09), avec leurs fiches. Objets ne fait plus que les demander. ──
   const [feederPop, setFeederPop] = useState(false);
   const [plantPop, setPlantPop] = useState(null);
-  const numDe = (id, d = null) => { const e = id && S[id]; if (!e) return d; const n = parseFloat(e.state); return isNaN(n) ? d : n; };
-  const appel = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
-  /* Le distributeur (ADR 0155, 05/10) : ce que la carte montre, lu sur
-   * l'APPAREIL désigné (`lireDistributeur`, distributeur.js). « Distribuer »
-   * prend la commande de CET appareil — plus le premier `select.*feed` de la
-   * maison, plus un script deviné à son nom : un aquarium à côté, et c'est lui
-   * qu'on nourrissait. Une commande qui ÉCRIT une quantité part pour UNE
-   * portion (un pas de l'entité), comme avant ; la fiche, elle, en règle le
-   * nombre. Muette (commande `unavailable`, appareil hors ligne), elle
-   * disparaît : on ne dessine pas un bouton qui ne ferait rien.
-   * Le prochain repas vient du SERVEUR (`loggia/distributeurs/etat`, lu dans
-   * le cache que la carte tient ouvert) : programme de l'appareil,
-   * automatisations qui le commandent, planning de Loggia — l'ancienne liste
-   * de Paramètres n'est plus un planning. Une heure qu'on ne peut pas déduire
-   * ne s'affiche pas.
-   * `mort` (ADR 0048) : le réservoir muet, OU la commande muette, OU l'appareil
-   * hors ligne — chez l'utilisateur, le réservoir est une aide qui ne tombe
-   * jamais : son distributeur débranché n'aurait jamais eu de liseré. */
-  const muet = (id) => !!id && (!S[id] || S[id].state === 'unavailable');
-  const distributeur = () => {
-    const croq = croqHaids();
-    const lu = lireDistributeur(LOGGIA_INDEX, S, loggiaEnt('feeder', null));
-    const niveau = niveauDuBac(S, croq.reservoir, croqMax(S));
-    const pct = niveau.pct;
-    const etatSrv = lireEtatDistributeur().etat;
-    const capteur = lu.prochainCapteur && S[lu.prochainCapteur] ? S[lu.prochainCapteur].state : null;
-    // L'état VIVANT d'une automatisation reconnue, sinon celui de la réponse.
-    const allumee = (a) => (S[a.entity_id] ? S[a.entity_id].state === 'on' : a.etat === 'on');
-    const pr = prochainRepas(etatSrv, Date.now(), { capteur, allumee });
-    const ration = pr ? { time: pr.heure } : null;
-    const vis = lu.commande && !(lu.enLigne.mort && (lu.enLigne.raison === 'commande' || lu.enLigne.raison === 'connectivite'));
-    const envoi = vis ? envoiDistribuer(lu.commande, 1) : null;
-    const feed = envoi ? () => appel(envoi.domaine, envoi.service, envoi.data) : null;
-    const conf = loggiaEnt('feeder', null) || {};
-    const ficheId = (typeof conf.haid === 'string' && conf.haid) || (lu.commande && lu.commande.entity_id) || (lu.portion && lu.portion.entity_id) || null;
-    /* Le dernier repas : le compteur désigné, sinon ce que l'appareil en dit (ou
-     * la dernière automatisation reconnue). Un compteur du JOUR à zéro n'a rien
-     * distribué aujourd'hui (05/10, contradicteur) : sa remise à zéro de minuit
-     * affichait « dernier repas 00:00 » jusqu'au premier repas. Un compteur
-     * qui ne dit RIEN non plus (05/10) : `unavailable`, `unknown` donnent
-     * `null`, qui passait le `!== 0` — l'heure où l'appareil était tombé
-     * devenait « dernier repas » sur la carte, quand la fiche disait 07:30. */
-    const dernier = (() => {
-      const e = croq.distribuees && S[croq.distribuees];
-      const n = numDe(croq.distribuees, null);
-      if (e && e.last_changed && n != null && n !== 0) return heureDe(e.last_changed);
-      const dr = dernierRepas(lu, S, etatSrv);
-      return dr ? heureDe(new Date(dr.t).toISOString()) : null;
-    })();
-    const onRempli = (croq.reservoir && String(croq.reservoir).indexOf('input_number.') === 0 && !muet(croq.reservoir)) ? () => appel('input_number', 'set_value', { entity_id: croq.reservoir, value: croqMax(S) }) : null;
-    /* Une anomalie ACTIVE passe en tête, sous le mot de la fiche (05/10,
-     * relecture « écran ») : un Petlibro n'a pas de réservoir en %, rien ne
-     * passait au rouge, et « Bac presque vide » ne se lisait qu'en ouvrant la
-     * fiche. « Distribuer » reste : un bac presque vide distribue encore. */
-    const alerte = lu.alerte ? lu.alerte.mot : null;
-    const sous = [alerte, pct == null ? null : tr('Réservoir {p} %', { p: pct }), dernier ? tr('dernier repas {h}', { h: dernier }) : (ration ? tr('prochaine ration {h}', { h: ration.time }) : null)].filter(Boolean).join(' · ');
-    return { pct, ration, feed, ficheId, grammes: niveau.grammes, dernier, onRempli, sous, alerte, mort: lu.enLigne.mort };
-  };
-  // Les plantes : leurs capteurs, reconnus a leur classe, et leur verdict.
-  const plante = (base) => {
-    const p = plantsCfg().find(x => x.base === base); if (!p) return null;
-    const tempId = plantCapteur(S, p.base, 'temperature');
-    // `temp` est TOUJOURS en Celsius ici, comme pour confort.js/systeme.js : les seuils
-    // de verdictsPlante (objets.js) raisonnent en Celsius. `uniteTemp` ne sert qu'a
-    // reconvertir le chiffre affiche (gauge, fiche) vers l'unite reelle du capteur.
-    const uT = uniteTemp(tempId && S[tempId] ? S[tempId].attributes : null, hass);
-    return { base, name: p.name || p.base, mort: muet(plantCapteur(S, p.base, 'moisture')), img: p.img || null, room: plantPiece(S, p.base, p.room), hum: numDe(plantCapteur(S, p.base, 'moisture')), cond: numDe(plantCapteur(S, p.base, 'conductivity', 'µS/cm')), lux: numDe(plantCapteur(S, p.base, 'illuminance', 'lx')), temp: versCelsius(numDe(tempId), uT), uniteTemp: uT, bat: numDe(plantCapteur(S, p.base, 'battery', '%')) };
-  };
+  /* Le distributeur (ADR 0155 ; étape 2 du chantier IoT, 19/10) : ce que sa carte montre, lu sur l'APPAREIL désigné et la réponse
+   * du serveur (`carteDistributeur`, distributeur.js) — la carte, sa compacte et la bibliothèque du composeur le lisent pareil. */
+  const distributeur = () => carteDistributeur({ index: LOGGIA_INDEX, states: S, cfg: loggiaEnt('feeder', null), etat: lireEtatDistributeur().etat });
+  // Les plantes : découvertes ou configurées (C29) — la lecture que tout partage (`lirePlante`).
+  const plante = (base) => lirePlante(hass, base);
   const nom = (k) => nomDeCle(S, k);
   /* Toute cle rend sa carte : une entite, une zone (`zone:`), le distributeur
    * (`obj:feeder`), une plante (`plant:`) — dans n'importe quelle vue.
@@ -6306,46 +7270,69 @@ function useDomainCards(hass, { onNav = null } = {}) {
       const z = zone || climateZones(S).find(x => x.id === k.slice(5));
       return z ? <RoomPilotCard zone={z} hass={hass} onOpen={setPilotPop} titre={label} /> : null;
     }
-    if (k === 'obj:feeder') return <CarteDistributeur chip={chip} lire={distributeur} nom={label || tr('Distributeur')} onOpen={() => setFeederPop(true)} />;
+    if (k === 'obj:feeder') return <CarteDistributeur chip={chip} hass={hass} nom={label || tr('Distributeur')} onOpen={() => setFeederPop(true)} />;
+    // Un groupe de capteurs (chantier Capteurs, étape 2 ; C20) : Ouvertures, Sécurité, Présence.
+    if (k === 'groupe:piles') return <RoomPilesCard hass={hass} onOpen={() => setGroupePop('piles')} label={label} chip={chip} />;
+    if (k.indexOf('groupe:') === 0) return <RoomGroupeCard groupe={k.slice(7)} hass={hass} onOpen={() => setGroupePop(k.slice(7))} label={label} chip={chip} />;
     if (k.indexOf('plant:') === 0) {
       const pl = plante(k.slice(6));
       if (!pl) return null;
-      const v = verdictCartePlante(pl);
-      return <RoomPlantCard chip={chip} mort={pl.mort} nom={label || pl.name} sub={pl.room} hum={pl.hum} verdict={v.texte} verdictCol={v.couleur} rgb={v.rgb} lux={pl.lux} cond={pl.cond} temp={pl.temp} uniteTemp={pl.uniteTemp} img={pl.img} onOpen={() => setPlantPop(pl)} />;
+      return <RoomPlantCard chip={chip} pl={pl} nom={label || pl.name} onOpen={() => setPlantPop(pl)} />;
     }
+    // La vigilance météo (chantier Capteurs, C28) : sa carte, large ou compacte, avant la carte générique d'un binaire.
+    if (estVigilance(k, S[k], LOGGIA_INDEX && LOGGIA_INDEX.entityMeta ? LOGGIA_INDEX.entityMeta.get(k) : null)) return <RoomVigilanceCard id={id} hass={hass} onOpen={ouvrir} label={label} chip={chip} />;
     if (chip) return <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} dense />;
     const d = k.split('.')[0];
     // Une prise qui n'est pas une lumiere n'est plus une carte lumiere : elle
     // rejoint les autres appareils, au gabarit, avec sa puissance.
     const lumiere = d === 'light' || (d === 'switch' && cvEstLumiere(id));
-    return lumiere ? <RoomLightCard id={id} hass={hass} onOpen={setLightPop} label={label} onFiche={ouvrir} />
-      : d === 'cover' ? <RoomCoverCard id={id} hass={hass} onOpen={setCoverPop} titre={label} />
+    return lumiere ? <RoomLightCard id={id} hass={hass} onOpen={ouvrir} label={label} />
+      : d === 'cover' ? (estVolet(S[k]) ? <RoomVoletCard id={id} hass={hass} onOpen={setCoverPop} titre={label} /> : <RoomCoverCard id={id} hass={hass} onOpen={setCoverPop} titre={label} />)
         : d === 'climate' ? <RoomClimateCard id={id} hass={hass} onOpen={setClimPop} label={label} />
           : d === 'media_player' ? <RoomMediaCard id={id} hass={hass} onOpen={setMediaPop} label={label} />
-            : (d === 'vacuum' || d === 'lawn_mower') ? <RoomMachineCard id={id} hass={hass} onOpen={ouvrir} label={label} />
+            : (d === 'vacuum' || d === 'lawn_mower') ? <RoomRobotCard id={id} hass={hass} onOpen={ouvrir} label={label} />
+              // Une mesure de la table a sa carte (chantier Capteurs, C6) : la pièce n'en gagne aucune, la carte d'avant change.
+              : (d === 'sensor' && estMesure(S[k])) ? <RoomMesureCard id={id} hass={hass} onOpen={ouvrir} label={label} />
+              : (d === 'switch' && priseDe(S, k).prise) ? <RoomPriseCard id={id} hass={hass} onOpen={ouvrir} titre={label} />
               : ROOM_GENERIQUES.indexOf(d) >= 0 ? <RoomGenericCard id={id} hass={hass} onOpen={ouvrir} label={label} />
                 : <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} />;
   };
   const sheets = (
     <>
-      {lightPop && <RoomLightSheet light={lightPop} hass={hass} onClose={() => setLightPop(null)} />}
-      {climPop && <RoomClimateSheet id={climPop} hass={hass} onClose={() => setClimPop(null)} />}
-      {pilotPop && (() => { const z = climateZones(S).find(x => x.id === pilotPop); return z ? <RoomPilotSheet zone={z} hass={hass} onClose={() => setPilotPop(null)} /> : null; })()}
-      {coverPop && <RoomCoverSheet id={coverPop} hass={hass} onClose={() => setCoverPop(null)} />}
-      {mediaPop && <RoomMediaSheet id={mediaPop} hass={hass} onClose={() => setMediaPop(null)} />}
-      {sensPop && <SensorSheet id={sensPop} hass={hass} onClose={() => setSensPop(null)} />}
+      {lightPop && <FicheLumiere id={lightPop} hass={hass} onClose={() => setLightPop(null)} />}
+      {/* Un thermostat, ou un module fil pilote découvert, que l'état du
+        * planning de chauffe connaît ouvre SA fiche à onglets, planning
+        * allumé ou non (plan 2, choix 10) ; sinon l'ancienne feuille, telle
+        * quelle — une zone décrite à la main aussi. */}
+      {climPop && <FeuilleChauffage entite={climPop} hass={hass} onClose={() => setClimPop(null)}
+        ancienne={<RoomClimateSheet id={climPop} hass={hass} onClose={() => setClimPop(null)} />} />}
+      {pilotPop && (() => {
+        const z = climateZones(S).find(x => x.id === pilotPop);
+        if (!z) return null;
+        const ancienne = <RoomPilotSheet zone={z} hass={hass} onClose={() => setPilotPop(null)} />;
+        return z.decouvert ? <FeuilleChauffage entite={z.modeEnt} hass={hass} onClose={() => setPilotPop(null)} ancienne={ancienne} /> : ancienne;
+      })()}
+      {/* Un VOLET ouvre sa fiche à onglets (chantier Volets, § 3.5) ; le garage et le portail, leur feuille d'avant (V3). */}
+      {coverPop && (estVolet(S[coverPop]) ? <FicheVolet id={coverPop} hass={hass} onClose={() => setCoverPop(null)} />
+        : <RoomCoverSheet id={coverPop} hass={hass} onClose={() => setCoverPop(null)} />)}
+      {mediaPop && <FicheMedia id={mediaPop} hass={hass} onClose={() => setMediaPop(null)} />}
+      {meteoPop && <FicheMeteo id={meteoPop} hass={hass} onClose={() => setMeteoPop(null)} />}
+      {sensPop && <FicheCapteur id={sensPop} hass={hass} onClose={() => setSensPop(null)} />}
       {appPop && <FicheAppareil id={appPop} hass={hass} onClose={() => setAppPop(null)} />}
       {calPop && <FeuilleCalendrier hass={hass} onClose={() => setCalPop(null)} />}
       {camPop && <CamSheet haid={camPop} nom={cvName(S[camPop], camPop)} hass={hass} onClose={() => setCamPop(null)} onNav={onNav} />}
-      {prisePop && <RoomSwitchSheet id={prisePop} hass={hass} onClose={() => setPrisePop(null)} />}
+      {/* Une PRISE (P1) ouvre sa fiche (chantier Prises, § 3.5), comme un switch que l'index ne classe pas encore et que l'état des prises garde (F2) ; un autre switch, sa feuille d'avant. */}
+      {prisePop && (priseDe(S, prisePop.id).prise || prisePop.fiche ? <FichePrise id={prisePop.id} hass={hass} onClose={() => setPrisePop(null)} />
+        : <RoomSwitchSheet id={prisePop.id} hass={hass} onClose={() => setPrisePop(null)} />)}
       {lockPop && <RoomLockSheet id={lockPop} hass={hass} onClose={() => setLockPop(null)} />}
-      {binPop && <RoomBinarySheet id={binPop} hass={hass} onClose={() => setBinPop(null)} />}
+      {binPop && <FicheBinaire id={binPop} hass={hass} onClose={() => setBinPop(null)} />}
       {robotPop && <FicheRobot id={robotPop} hass={hass} onClose={() => setRobotPop(null)} />}
       {feederPop && <FicheDistributeur hass={hass} onClose={() => setFeederPop(false)} />}
-      {plantPop && <FichePlante pl={plantPop} onClose={() => setPlantPop(null)} />}
+      {plantPop && <FichePlante pl={plantPop} hass={hass} onClose={() => setPlantPop(null)} />}
+      {groupePop && <FicheGroupe groupe={groupePop} hass={hass} onClose={() => setGroupePop(null)} />}
     </>
   );
-  const fermer = () => { setLightPop(null); setClimPop(null); setPilotPop(null); setCoverPop(null); setMediaPop(null); setSensPop(null); setAppPop(null); setCamPop(null); setPrisePop(null); setLockPop(null); setBinPop(null); setRobotPop(null); setFeederPop(false); setPlantPop(null); };
+  const fermer = () => { setLightPop(null); setClimPop(null); setPilotPop(null); setCoverPop(null); setMediaPop(null); setSensPop(null); setAppPop(null); setCamPop(null); setPrisePop(null); setLockPop(null); setBinPop(null); setRobotPop(null); setGroupePop(null); setFeederPop(false); setPlantPop(null); };
   /* La COMPACTE d'une entite : une rangee — icone, nom, etat, le controle —
    * qui ouvre la meme fiche que la riche. Une zone fil pilote n'en a pas. */
   const compact = (id, label = null) => card(id, label, null, true);
@@ -6361,25 +7348,22 @@ function useDomainCards(hass, { onNav = null } = {}) {
  * d'etre raconte. Idee reprise de GlassHome. */
 
 function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
-  const [hidden, setHidden] = useState(roomHidden);
   const [addSheet, setAddSheet] = useState(false);
   // Carte dont la fiche est ouverte, ou null.
   const [cardEdit, setCardEdit] = useState(null);
 
   // Ce que la decouverte propose pour cette piece, avant agencement.
-  const hiddenSig = hidden.join('|');
-  const derived = useMemo(
-    () => roomEntitiesBrutes(hass, room).filter(id => hidden.indexOf(id) < 0),
-    [hass, room, hiddenSig]
-  );
+  const derived = useMemo(() => roomEntitiesBrutes(hass, room), [hass, room]);
   // Meme editeur que la vue Objets : retrait, ajout, ordre, intertitres.
   const ed = useLayoutEditor(ROOM_LAYOUT_KEY, room, derived);
   const ents = ed.ids;
   const addSection = () => ed.toggle('sect:' + Date.now().toString(36));
 
   const S0 = (hass && hass.states) || {};
+  // Une zone par son préfixe : celle d'un module fil pilote porte l'entity_id
+  // de son select, point compris (`zone:select.…`).
   const origineDe = (k) => k.indexOf('sect:') === 0 ? tr('Section')
-    : (k.indexOf(':') > 0 && k.indexOf('.') < 0) ? nomDeCle(S0, k)
+    : (k.indexOf('zone:') === 0 || (k.indexOf(':') > 0 && k.indexOf('.') < 0)) ? nomDeCle(S0, k)
       : ((S0[k] && S0[k].attributes && S0[k].attributes.friendly_name) || k);
   const nomDe = (k) => ed.labelOf(k) || origineDe(k);
 
@@ -6395,10 +7379,8 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
   const [comfort, setComfort] = useState(false);
   const dc = useDomainCards(hass, { onNav });
   useEffect(() => { setComfort(false); dc.fermer(); }, [room]);
-  // `loggia_roomhidden` n'est plus écrit — le retrait passe par l'agencement de
-  // la pièce. On continue de le LIRE : une configuration antérieure garde ses
-  // cartes masquées, et « Tout réafficher » sert à s'en débarrasser.
-  const unhideAll = () => { try { localStorage.removeItem('loggia_roomhidden'); } catch {} setHidden([]); };
+  /* `loggia_roomhidden` ne se lit plus (audit du 19/10, lot 4) : plus rien ne l'écrivait depuis que le retrait passe par l'agencement
+   * de la pièce, et il ne vivait que sur un appareil. « Tout réafficher » remet l'agencement, rien d'autre. */
   const live = piece && piece.live;
   const onOpenComfort = () => setComfort(true);
   /* LA BARRE DE CONFORT (ADR 0039) remplace les réglages rapides — luminosité
@@ -6407,8 +7389,8 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
    * une pastille par mesure que la pièce possède. Le bruit se trouve dans la
    * zone Home Assistant de la pièce ; sans aucune mesure, pas de barre. */
   const S = (hass && hass.states) || {};
-  const dom = (id) => id.slice(0, id.indexOf('.'));
-  const lightIds = ents.filter(id => dom(id) === 'light');
+  // Les lumières de la maison parmi celles de la pièce (L11, ADR 0261) : un switch déclaré lumière compte, comme sur la tuile de l'Accueil.
+  const lightIds = lumieresDe(S, { ...ctxLumieres(), ids: ents });
   const lightsOn = lightIds.filter(id => S[id] && S[id].state === 'on');
   const bruitId = capteurBruitPiece(S, room);
   // Même règle que la fiche de confort : la pastille de la barre suit l'unité réelle du capteur.
@@ -6418,7 +7400,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
       <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-        {edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} toutes={() => { ed.reset(); unhideAll(); }} />}
+        {edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} toutes={() => ed.reset()} />}
         {/* Le titre d'une pièce se pose à la MEME hauteur que la salutation de
           * l'Accueil (01/10). Mesuré sur l'installation : la salutation tombe à
           * +40 px du haut du contenu — 26 px de marge, plus les 14 px que la
@@ -6438,12 +7420,8 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
           <div style={{ minWidth: 0, flexShrink: 0 }}>
             <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{room}</h1>
             <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>
-              {lightsOn.length
-                ? (lightsOn.length > 1
-                  ? tr('{n} lampes allumées', { n: lightsOn.length })
-                  : tr('{n} lampe allumée', { n: lightsOn.length }))
-                : tr('Tout est éteint')}
-              {live && live.temp != null ? ' · ' + dec(live.temp, 1) + ' °' + uniteTPiece : ''}
+              {lightsOn.length ? trN(lightsOn.length, '{n} lampe allumée', '{n} lampes allumées') : tr('Tout est éteint')}
+              {live && live.temp != null ? ' · ' + dec(live.temp, 1) + ' ' + signeTemp(uniteTPiece) : ''}
               {/* « HR » est l'abréviation FRANÇAISE de l'humidité relative — RH, rF,
                 * UR ailleurs : elle se traduit avec son nombre (audit du 03/10). */}
               {live && live.hum != null ? ' · ' + tr('{n} % HR', { n: Math.round(live.hum) }) : ''}
@@ -6925,82 +7903,50 @@ function ChoixCamDispo({ valeur, format, onChoisir }) {
 
 /* ════════════ VUE OBJETS — hub des appareils connectés (réf. « Objets connectés ») ════════════ */
 // Illustrations filigrane des appareils médias (même style flat que PLANT_ART, ancrées à droite).
-const VIEW_ART = {
-  solar: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='100' cy='172' rx='52' ry='7' fill='%23101828' opacity='0.6'/%3E%3Cg transform='rotate(-10 100 110)'%3E%3Crect x='30' y='70' width='140' height='84' rx='8' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Cg fill='%23253750'%3E%3Crect x='40' y='80' width='28' height='30' rx='3'/%3E%3Crect x='72' y='80' width='28' height='30' rx='3'/%3E%3Crect x='104' y='80' width='28' height='30' rx='3'/%3E%3Crect x='136' y='80' width='24' height='30' rx='3'/%3E%3Crect x='40' y='114' width='28' height='30' rx='3'/%3E%3Crect x='72' y='114' width='28' height='30' rx='3'/%3E%3Crect x='104' y='114' width='28' height='30' rx='3'/%3E%3Crect x='136' y='114' width='24' height='30' rx='3'/%3E%3C/g%3E%3Crect x='104' y='80' width='28' height='30' rx='3' fill='%23ffd166' opacity='0.35'/%3E%3C/g%3E%3Crect x='92' y='152' width='10' height='24' fill='%232c3b54'/%3E%3Ccircle cx='160' cy='42' r='13' fill='%23ffd166' opacity='0.85'/%3E%3Cg stroke='%23ffd166' stroke-width='3' stroke-linecap='round' opacity='0.7'%3E%3Cline x1='160' y1='18' x2='160' y2='26'/%3E%3Cline x1='182' y1='42' x2='190' y2='42'/%3E%3Cline x1='176' y1='26' x2='181' y2='21'/%3E%3Cline x1='176' y1='58' x2='181' y2='63'/%3E%3C/g%3E%3C/svg%3E",
-  pylon: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cg stroke='%233a4a63' stroke-width='5' stroke-linecap='round' fill='none'%3E%3Cline x1='72' y1='182' x2='94' y2='44'/%3E%3Cline x1='128' y1='182' x2='106' y2='44'/%3E%3Cline x1='80' y1='132' x2='120' y2='132'/%3E%3Cline x1='80' y1='132' x2='116' y2='96'/%3E%3Cline x1='120' y1='132' x2='84' y2='96'/%3E%3Cline x1='84' y1='96' x2='116' y2='96'/%3E%3Cline x1='94' y1='44' x2='106' y2='44'/%3E%3C/g%3E%3Crect x='46' y='62' width='108' height='9' rx='4' fill='%23232f42' stroke='%233a4a63' stroke-width='3'/%3E%3Crect x='62' y='94' width='76' height='8' rx='4' fill='%23232f42' stroke='%233a4a63' stroke-width='3'/%3E%3Cg fill='%2334d399'%3E%3Ccircle cx='52' cy='76' r='4'/%3E%3Ccircle cx='148' cy='76' r='4'/%3E%3Ccircle cx='68' cy='106' r='4'/%3E%3Ccircle cx='132' cy='106' r='4'/%3E%3C/g%3E%3Cg stroke='%2334d399' stroke-width='2.5' fill='none' opacity='0.5'%3E%3Cpath d='M6 96 Q30 108 52 80'/%3E%3Cpath d='M148 80 Q170 108 194 96'/%3E%3C/g%3E%3C/svg%3E",
-  meter: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='100' cy='168' rx='46' ry='7' fill='%23101828' opacity='0.6'/%3E%3Crect x='56' y='44' width='88' height='112' rx='12' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Crect x='68' y='58' width='64' height='26' rx='5' fill='%23101828'/%3E%3Cpath d='M72 74 L84 66 L94 76 L106 62 L118 70 L128 64' stroke='%2360a5fa' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='100' cy='120' r='19' fill='%23243349' stroke='%233a4a63' stroke-width='3'/%3E%3Cline x1='100' y1='120' x2='111' y2='108' stroke='%2360a5fa' stroke-width='4' stroke-linecap='round'/%3E%3Ccircle cx='100' cy='120' r='3.5' fill='%2360a5fa'/%3E%3Cpath d='M100 156 L100 184' stroke='%233a4a63' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E",
-  piggy: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='100' cy='172' rx='56' ry='7' fill='%23101828' opacity='0.6'/%3E%3Cellipse cx='98' cy='120' rx='58' ry='42' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Cellipse cx='152' cy='118' rx='13' ry='11' fill='%23243349' stroke='%233a4a63' stroke-width='3'/%3E%3Ccircle cx='149' cy='115' r='2.5' fill='%23101828'/%3E%3Ccircle cx='156' cy='115' r='2.5' fill='%23101828'/%3E%3Cpath d='M64 88 L54 72 L76 78 Z' fill='%23232f42' stroke='%233a4a63' stroke-width='3'/%3E%3Ccircle cx='78' cy='108' r='4' fill='%23101828'/%3E%3Crect x='66' y='154' width='12' height='16' rx='4' fill='%232c3b54'/%3E%3Crect x='118' y='154' width='12' height='16' rx='4' fill='%232c3b54'/%3E%3Crect x='84' y='80' width='30' height='7' rx='3.5' fill='%23101828'/%3E%3Ccircle cx='99' cy='46' r='15' fill='%23243349' stroke='%23a78bfa' stroke-width='3'/%3E%3Cpath d='M104 39 A9 9 0 1 0 104 53 M88 43 L99 43 M88 49 L99 49' stroke='%23a78bfa' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E",
-  leafart: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M100 38 C152 66 160 128 100 170 C40 128 48 66 100 38 Z' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Cpath d='M100 54 L100 168' stroke='%2334d399' stroke-width='3' stroke-linecap='round' opacity='0.8'/%3E%3Cg stroke='%2334d399' stroke-width='2.5' stroke-linecap='round' fill='none' opacity='0.55'%3E%3Cpath d='M100 78 L74 96'/%3E%3Cpath d='M100 78 L126 96'/%3E%3Cpath d='M100 106 L70 126'/%3E%3Cpath d='M100 106 L130 126'/%3E%3Cpath d='M100 134 L78 150'/%3E%3Cpath d='M100 134 L122 150'/%3E%3C/g%3E%3C/svg%3E",
-  pc: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='100' cy='170' rx='58' ry='7' fill='%23101828' opacity='0.6'/%3E%3Crect x='140' y='48' width='34' height='116' rx='6' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Cline x1='148' y1='60' x2='166' y2='60' stroke='%233a4a63' stroke-width='3'/%3E%3Cline x1='148' y1='70' x2='166' y2='70' stroke='%233a4a63' stroke-width='3'/%3E%3Crect x='146' y='84' width='4' height='64' rx='2' fill='%2354c8f0' opacity='0.8'/%3E%3Ccircle cx='164' cy='152' r='3' fill='%2354c8f0'/%3E%3Crect x='26' y='58' width='104' height='68' rx='7' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Crect x='34' y='66' width='88' height='52' rx='3' fill='%23101828'/%3E%3Cpath d='M42 108 L58 88 L72 100 L88 78 L104 94 L114 86' stroke='%2354c8f0' stroke-width='3' fill='none' stroke-linecap='round' opacity='0.85'/%3E%3Crect x='68' y='126' width='20' height='10' fill='%232c3b54'/%3E%3Crect x='54' y='136' width='48' height='7' rx='3.5' fill='%232c3b54'/%3E%3C/svg%3E",
-  nas: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='100' cy='168' rx='48' ry='7' fill='%23101828' opacity='0.6'/%3E%3Crect x='54' y='46' width='92' height='116' rx='10' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Crect x='64' y='60' width='72' height='22' rx='4' fill='%23101828'/%3E%3Cline x1='120' y1='66' x2='120' y2='76' stroke='%233a4a63' stroke-width='3'/%3E%3Crect x='64' y='88' width='72' height='22' rx='4' fill='%23101828'/%3E%3Cline x1='120' y1='94' x2='120' y2='104' stroke='%233a4a63' stroke-width='3'/%3E%3Ccircle cx='72' cy='128' r='3.5' fill='%23a78bfa'/%3E%3Ccircle cx='84' cy='128' r='3.5' fill='%23a78bfa' opacity='0.5'/%3E%3Crect x='64' y='140' width='40' height='6' rx='3' fill='%232c3b54'/%3E%3C/svg%3E",
-  radiator: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='100' cy='170' rx='56' ry='7' fill='%23101828' opacity='0.6'/%3E%3Cg fill='%23232f42' stroke='%233a4a63' stroke-width='3.5'%3E%3Crect x='44' y='76' width='17' height='84' rx='8'/%3E%3Crect x='67' y='76' width='17' height='84' rx='8'/%3E%3Crect x='90' y='76' width='17' height='84' rx='8'/%3E%3Crect x='113' y='76' width='17' height='84' rx='8'/%3E%3Crect x='136' y='76' width='17' height='84' rx='8'/%3E%3C/g%3E%3Crect x='40' y='88' width='118' height='7' rx='3.5' fill='%232c3b54'/%3E%3Ccircle cx='160' cy='72' r='7' fill='%23243349' stroke='%23ff8a4c' stroke-width='3'/%3E%3Cg stroke='%23ff8a4c' stroke-width='3' fill='none' stroke-linecap='round' opacity='0.6'%3E%3Cpath d='M70 58 Q74 48 70 38'/%3E%3Cpath d='M100 58 Q104 48 100 38'/%3E%3Cpath d='M130 58 Q134 48 130 38'/%3E%3C/g%3E%3C/svg%3E",
-  dishwasher: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='100' cy='170' rx='54' ry='7' fill='%23101828' opacity='0.6'/%3E%3Crect x='50' y='42' width='100' height='124' rx='10' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Crect x='50' y='42' width='100' height='24' rx='10' fill='%23243349'/%3E%3Ccircle cx='66' cy='54' r='4' fill='%233a4a63'/%3E%3Ccircle cx='80' cy='54' r='4' fill='%233a4a63'/%3E%3Crect x='118' y='50' width='22' height='8' rx='4' fill='%236ea8ff' opacity='0.7'/%3E%3Ccircle cx='100' cy='120' r='30' fill='%23101828' stroke='%233a4a63' stroke-width='4'/%3E%3Ccircle cx='100' cy='120' r='18' fill='%236ea8ff' opacity='0.25'/%3E%3Cpath d='M88 116 Q100 132 112 116' stroke='%236ea8ff' stroke-width='3' fill='none' stroke-linecap='round' opacity='0.8'/%3E%3C/svg%3E",
-  camera: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M168 30 L168 64' stroke='%233a4a63' stroke-width='8' stroke-linecap='round'/%3E%3Cpath d='M168 62 L140 78' stroke='%233a4a63' stroke-width='7' stroke-linecap='round'/%3E%3Cg transform='rotate(-12 100 100)'%3E%3Crect x='44' y='78' width='104' height='46' rx='16' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Ccircle cx='66' cy='101' r='16' fill='%23101828' stroke='%234f8cff' stroke-width='3'/%3E%3Ccircle cx='66' cy='101' r='6' fill='%234f8cff' opacity='0.85'/%3E%3Ccircle cx='134' cy='90' r='3' fill='%23f87171'/%3E%3C/g%3E%3Cg stroke='%234f8cff' stroke-width='2.5' fill='none' opacity='0.45'%3E%3Cpath d='M38 130 Q30 142 34 158'/%3E%3Cpath d='M52 138 Q46 148 49 160'/%3E%3C/g%3E%3C/svg%3E",
-  motion: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='54' y='58' width='88' height='88' rx='18' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Ccircle cx='98' cy='102' r='25' fill='%23101828' stroke='%233a4a63' stroke-width='3'/%3E%3Ccircle cx='98' cy='102' r='9' fill='%23a78bfa' opacity='0.8'/%3E%3Cg stroke='%23a78bfa' stroke-width='3' fill='none' stroke-linecap='round'%3E%3Cpath d='M138 62 A56 56 0 0 1 154 96' opacity='0.7'/%3E%3Cpath d='M150 46 A76 76 0 0 1 172 92' opacity='0.45'/%3E%3Cpath d='M162 30 A96 96 0 0 1 190 88' opacity='0.25'/%3E%3C/g%3E%3Ccircle cx='98' cy='160' r='3.5' fill='%23a78bfa' opacity='0.6'/%3E%3C/svg%3E",
-  shield: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M100 34 L156 56 L156 102 C156 140 132 162 100 174 C68 162 44 140 44 102 L44 56 Z' fill='%23232f42' stroke='%233a4a63' stroke-width='5'/%3E%3Cpath d='M100 34 L100 174' stroke='%232c3b54' stroke-width='2'/%3E%3Cpath d='M74 104 L93 123 L128 84' stroke='%2334d399' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round' opacity='0.85'/%3E%3C/svg%3E",
-  people: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='100' cy='172' rx='58' ry='7' fill='%23101828' opacity='0.6'/%3E%3Ccircle cx='72' cy='82' r='19' fill='%23243349'/%3E%3Cpath d='M42 158 C42 124 54 108 72 108 C90 108 102 124 102 158 Z' fill='%23243349'/%3E%3Ccircle cx='126' cy='90' r='22' fill='%23232f42' stroke='%23ff8a4c' stroke-width='3'/%3E%3Cpath d='M92 168 C92 130 106 112 126 112 C146 112 160 130 160 168 Z' fill='%23232f42' stroke='%23ff8a4c' stroke-width='3'/%3E%3C/svg%3E",
-};
-const VIEW_ART_SYS = {
-  cpuart: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cg stroke='%233a4a63' stroke-width='4' stroke-linecap='round'%3E%3Cline x1='62' y1='36' x2='62' y2='54'/%3E%3Cline x1='88' y1='36' x2='88' y2='54'/%3E%3Cline x1='114' y1='36' x2='114' y2='54'/%3E%3Cline x1='140' y1='36' x2='140' y2='54'/%3E%3Cline x1='62' y1='146' x2='62' y2='164'/%3E%3Cline x1='88' y1='146' x2='88' y2='164'/%3E%3Cline x1='114' y1='146' x2='114' y2='164'/%3E%3Cline x1='140' y1='146' x2='140' y2='164'/%3E%3Cline x1='36' y1='68' x2='54' y2='68'/%3E%3Cline x1='36' y1='94' x2='54' y2='94'/%3E%3Cline x1='36' y1='120' x2='54' y2='120'/%3E%3Cline x1='146' y1='68' x2='164' y2='68'/%3E%3Cline x1='146' y1='94' x2='164' y2='94'/%3E%3Cline x1='146' y1='120' x2='164' y2='120'/%3E%3C/g%3E%3Crect x='54' y='54' width='94' height='92' rx='12' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Crect x='76' y='76' width='50' height='48' rx='7' fill='%23101828' stroke='%234f8cff' stroke-width='3'/%3E%3Ccircle cx='101' cy='100' r='7' fill='%234f8cff' opacity='0.8'/%3E%3C/svg%3E",
-  ramart: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cg transform='rotate(-8 100 100)'%3E%3Crect x='26' y='74' width='148' height='46' rx='7' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Cg fill='%23243349'%3E%3Crect x='36' y='84' width='20' height='18' rx='3'/%3E%3Crect x='62' y='84' width='20' height='18' rx='3'/%3E%3Crect x='88' y='84' width='20' height='18' rx='3'/%3E%3Crect x='114' y='84' width='20' height='18' rx='3'/%3E%3Crect x='140' y='84' width='20' height='18' rx='3'/%3E%3C/g%3E%3Crect x='88' y='84' width='20' height='18' rx='3' fill='%23ffb347' opacity='0.4'/%3E%3Cg fill='%233a4a63'%3E%3Crect x='34' y='114' width='9' height='8'/%3E%3Crect x='49' y='114' width='9' height='8'/%3E%3Crect x='64' y='114' width='9' height='8'/%3E%3Crect x='79' y='114' width='9' height='8'/%3E%3Crect x='94' y='114' width='9' height='8'/%3E%3Crect x='109' y='114' width='9' height='8'/%3E%3Crect x='124' y='114' width='9' height='8'/%3E%3Crect x='139' y='114' width='9' height='8'/%3E%3Crect x='154' y='114' width='9' height='8'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E",
-  diskart: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='100' cy='168' rx='52' ry='7' fill='%23101828' opacity='0.6'/%3E%3Crect x='42' y='44' width='116' height='118' rx='10' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Ccircle cx='92' cy='96' r='34' fill='%23101828' stroke='%233a4a63' stroke-width='3'/%3E%3Ccircle cx='92' cy='96' r='20' fill='none' stroke='%232c3b54' stroke-width='2'/%3E%3Ccircle cx='92' cy='96' r='6' fill='%2334d399' opacity='0.8'/%3E%3Cpath d='M118 128 L138 100 L146 104 L128 132 Z' fill='%23243349' stroke='%233a4a63' stroke-width='2.5'/%3E%3Ccircle cx='142' cy='60' r='4' fill='%2334d399' opacity='0.7'/%3E%3C/svg%3E",
-  serverart: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='100' cy='170' rx='56' ry='7' fill='%23101828' opacity='0.6'/%3E%3Crect x='44' y='52' width='112' height='50' rx='9' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Crect x='44' y='110' width='112' height='50' rx='9' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Cg fill='%23101828'%3E%3Crect x='56' y='66' width='52' height='9' rx='4'/%3E%3Crect x='56' y='81' width='52' height='9' rx='4'/%3E%3Crect x='56' y='124' width='52' height='9' rx='4'/%3E%3Crect x='56' y='139' width='52' height='9' rx='4'/%3E%3C/g%3E%3Ccircle cx='134' cy='77' r='4' fill='%2334d399'/%3E%3Ccircle cx='146' cy='77' r='4' fill='%2334d399' opacity='0.45'/%3E%3Ccircle cx='134' cy='135' r='4' fill='%2334d399'/%3E%3Ccircle cx='146' cy='135' r='4' fill='%23f87171' opacity='0.7'/%3E%3C/svg%3E",
-  routerart: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='100' cy='166' rx='58' ry='7' fill='%23101828' opacity='0.6'/%3E%3Cpath d='M64 96 L64 52' stroke='%233a4a63' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M136 96 L136 52' stroke='%233a4a63' stroke-width='6' stroke-linecap='round'/%3E%3Ccircle cx='64' cy='48' r='5' fill='%23243349' stroke='%233a4a63' stroke-width='2'/%3E%3Ccircle cx='136' cy='48' r='5' fill='%23243349' stroke='%233a4a63' stroke-width='2'/%3E%3Crect x='38' y='104' width='124' height='44' rx='12' fill='%23232f42' stroke='%233a4a63' stroke-width='4'/%3E%3Ccircle cx='60' cy='126' r='4.5' fill='%2354c8f0'/%3E%3Ccircle cx='78' cy='126' r='4.5' fill='%2354c8f0' opacity='0.5'/%3E%3Ccircle cx='96' cy='126' r='4.5' fill='%2334d399' opacity='0.7'/%3E%3Cg stroke='%2354c8f0' stroke-width='3' fill='none' stroke-linecap='round'%3E%3Cpath d='M86 40 A22 22 0 0 1 114 40' opacity='0.55'/%3E%3Cpath d='M79 28 A34 34 0 0 1 121 28' opacity='0.3'/%3E%3C/g%3E%3C/svg%3E",
-};
-Object.assign(VIEW_ART, VIEW_ART_SYS);
-const DEVICE_ART = {
-  appletv: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='28' y='42' width='144' height='88' rx='9' fill='%231c2636' stroke='%233a4a63' stroke-width='4'/%3E%3Crect x='37' y='51' width='126' height='70' rx='4' fill='%23243349'/%3E%3Cpath d='M91 71 L116 86 L91 101 Z' fill='%2354c8f0' opacity='0.85'/%3E%3Crect x='90' y='130' width='20' height='8' rx='3' fill='%233a4a63'/%3E%3Crect x='62' y='138' width='76' height='6' rx='3' fill='%233a4a63'/%3E%3Crect x='70' y='156' width='60' height='15' rx='6' fill='%232a3850'/%3E%3Ccircle cx='122' cy='163' r='3' fill='%2354c8f0' opacity='0.8'/%3E%3Crect x='146' y='150' width='11' height='32' rx='5' fill='%232a3850'/%3E%3Ccircle cx='151.5' cy='158' r='2.5' fill='%233a4a63'/%3E%3C/svg%3E",
-  echo: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='100' cy='168' rx='44' ry='7' fill='%23101828' opacity='0.6'/%3E%3Crect x='63' y='52' width='74' height='114' rx='18' fill='%23232f42'/%3E%3Cellipse cx='100' cy='56' rx='37' ry='11' fill='%232c3b54'/%3E%3Cellipse cx='100' cy='56' rx='37' ry='11' fill='none' stroke='%2322d3ee' stroke-width='3.5' opacity='0.85'/%3E%3Crect x='72' y='80' width='56' height='4' rx='2' fill='%2331415c' opacity='0.9'/%3E%3Crect x='72' y='92' width='56' height='4' rx='2' fill='%2331415c'/%3E%3Crect x='72' y='104' width='56' height='4' rx='2' fill='%2331415c'/%3E%3Crect x='72' y='116' width='56' height='4' rx='2' fill='%2331415c'/%3E%3Crect x='72' y='128' width='56' height='4' rx='2' fill='%2331415c'/%3E%3Crect x='72' y='140' width='56' height='4' rx='2' fill='%2331415c'/%3E%3C/svg%3E",
-  vacuum: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='100' cy='100' r='72' fill='%23232f42' stroke='%235a6b8f' stroke-width='6'/%3E%3Ccircle cx='100' cy='100' r='50' fill='%232a3852' stroke='%23455878' stroke-width='3'/%3E%3Ccircle cx='100' cy='74' r='14' fill='%23101828' stroke='%235a6b8f' stroke-width='4'/%3E%3Ccircle cx='100' cy='74' r='5' fill='%2334d399'/%3E%3Cpath d='M38 132 A 72 72 0 0 0 162 132' fill='none' stroke='%235a6b8f' stroke-width='6' opacity='0.9'/%3E%3Cpath d='M72 118 A 40 40 0 0 0 128 118' fill='none' stroke='%23455878' stroke-width='4' opacity='0.9'/%3E%3Ccircle cx='100' cy='100' r='7' fill='%23455878'/%3E%3C/svg%3E",
-  mower: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M24 172 L32 146 L40 172 Z' fill='%2334d399' opacity='0.7'/%3E%3Cpath d='M166 172 L174 144 L182 172 Z' fill='%2334d399' opacity='0.55'/%3E%3Crect x='36' y='74' width='128' height='62' rx='26' fill='%23232f42' stroke='%235a6b8f' stroke-width='6'/%3E%3Cellipse cx='86' cy='76' rx='46' ry='15' fill='%23324263' stroke='%23455878' stroke-width='3'/%3E%3Ccircle cx='64' cy='140' r='23' fill='%23101828' stroke='%235a6b8f' stroke-width='6'/%3E%3Ccircle cx='64' cy='140' r='9' fill='%232f3f5c'/%3E%3Ccircle cx='142' cy='146' r='16' fill='%23101828' stroke='%235a6b8f' stroke-width='5'/%3E%3Ccircle cx='142' cy='146' r='6' fill='%232f3f5c'/%3E%3Ccircle cx='148' cy='94' r='6' fill='%23a3e635'/%3E%3C/svg%3E",
-  feeder: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='58' y='28' width='84' height='124' rx='19' fill='%23232f42' stroke='%235a6b8f' stroke-width='6'/%3E%3Crect x='72' y='44' width='56' height='58' rx='11' fill='%23101828' stroke='%23455878' stroke-width='3'/%3E%3Cg fill='%23ffce73'%3E%3Ccircle cx='84' cy='92' r='5.5'/%3E%3Ccircle cx='98' cy='88' r='5.5'/%3E%3Ccircle cx='113' cy='93' r='5.5'/%3E%3Ccircle cx='90' cy='79' r='5.5'/%3E%3Ccircle cx='106' cy='76' r='5.5'/%3E%3C/g%3E%3Ccircle cx='100' cy='124' r='8' fill='%232f3f5c' stroke='%235a6b8f' stroke-width='3.5'/%3E%3Cpath d='M124 150 q 34 0 34 16 q 0 12 -28 12 L 114 178 Z' fill='%232a3852' stroke='%235a6b8f' stroke-width='5'/%3E%3Cg fill='%23ffce73'%3E%3Ccircle cx='140' cy='163' r='4'/%3E%3Ccircle cx='150' cy='167' r='4'/%3E%3C/g%3E%3C/svg%3E",
-};
-/* Les mots des verdicts d'une plante, et leur couleur — dits au rendu. */
-const MOTS_PLANTE = () => ({
-  hum: { sec: [tr('Sous le seuil : la plante a soif'), 'var(--o-warn2)'], ok: [tr('Humidité correcte'), 'var(--o-ok)'], humide: [tr('Sol très humide'), 'var(--o-cold)'] },
-  temp: { froid: [tr('Trop froid pour la plupart des plantes'), 'var(--o-cold)'], ok: [tr('Dans la plage tenable'), 'var(--o-ok)'], chaud: [tr('Trop chaud'), 'var(--o-warn2)'] },
-  lux: { faible: [tr('Sous le minimum : la plante s’étiole'), 'var(--o-warn2)'], ok: [tr('Lumière suffisante'), 'var(--o-ok)'], plein: [tr('Plein soleil'), 'var(--o-warn)'] },
-  cond: { peu: [tr('Peu d’engrais dans le pot'), 'var(--o-warn2)'], ok: [tr('Ce qui reste d’engrais dans le pot'), 'var(--o-ok)'], trop: [tr('Trop d’engrais'), 'var(--o-warn2)'] },
-  presse: { arroser: tr('à arroser'), lumiere: tr('lumière faible'), temperature: tr('température hors plage') },
-});
-/* Ce que la carte d'une plante dit sous son nom : ce qui presse, sinon le sol. */
-function verdictCartePlante(pl) {
-  const v = verdictsPlante(pl);
-  const M = MOTS_PLANTE();
-  const presse = v.presse.map(p => M.presse[p]).join(', ');
-  const texte = presse ? presse.charAt(0).toUpperCase() + presse.slice(1) : (v.hum ? M.hum[v.hum][0] : tr('Mesure absente'));
-  const couleur = v.presse.length ? 'var(--o-warn2)' : v.hum === 'humide' ? 'var(--o-cold)' : v.hum ? 'var(--o-ok)' : 'var(--o-text3)';
-  const rgb = v.presse.length ? 'var(--o-orange-rgb)' : v.hum === 'humide' ? '34,211,238' : 'var(--o-ok-rgb)';
-  return { texte, couleur, rgb };
+/* Les dessins de la vue Énergie, des postes et de la fiche d’un robot (chantier Capteurs, étapes 2 et 3, C34 : la réserve) :
+ * des fichiers de public/dessins, recopiés à côté de la page comme les polices — le démarrage n’en garde que l’adresse. En
+ * adresses data:, ils pesaient plus de 18 Ko au démarrage. */
+const adresseDessin = (nom) => './dessins/' + nom + '.svg';
+const DEVICE_ART = Object.fromEntries(['appletv', 'echo', 'vacuum', 'mower', 'feeder'].map(n => [n, adresseDessin(n)]));
+/* Ce que la carte, la compacte, la fiche et la section Plantes et piles lisent d'une plante (chantier Capteurs, C29 à C31) : ses
+ * capteurs — ceux de son appareil, sinon ceux de sa base —, ses mesures, sa pile, et si son capteur de sol se tait (`mort`, et depuis
+ * quand). `temp` est TOUJOURS en Celsius ici, comme pour confort.js/systeme.js : les seuils de verdictsPlante (objets.js) raisonnent en
+ * Celsius ; `uniteTemp` ne sert qu'à réécrire le chiffre dans l'unité réelle du capteur. */
+function lirePlante(hass, base) {
+  const S = (hass && hass.states) || {};
+  const p = plantesDeLaMaison(S).find(x => x.base === base);
+  if (!p) return null;
+  const c = capteursPlante(S, p);
+  const numDe = (id) => { const e = id && S[id]; if (!e) return null; const n = parseFloat(e.state); return isNaN(n) ? null : n; };
+  const muet = (id) => !!id && (!S[id] || S[id].state === 'unavailable' || S[id].state === 'unknown');
+  const uT = uniteTemp(c.temp && S[c.temp] ? S[c.temp].attributes : null, hass);
+  /* La lumière du JOUR (audit du 19/10, M6 ; relectures du lot 3) : le maximum que la plante de Home Assistant tient (`max_brightness`,
+   * un vrai nombre — `null` n'est pas 0), sinon le lux du moment, le soleil à 20° au moins (`elevation`) : à l'aube comme à 18 h en
+   * octobre, 150 lx ne disent rien de la journée. Sans élévation, la lumière ne presse pas. */
+  const lux = numDe(c.lux);
+  const maxJour = S[base] && S[base].attributes ? lireNombre(S[base].attributes.max_brightness) : null;
+  const sun = S['sun.sun'];
+  const soleil = !!sun && lireNombre((sun.attributes || {}).elevation) >= 20;
+  return { base, name: p.nom, mort: muet(c.hum), muetDepuis: muet(c.hum) && S[c.hum] ? (Date.parse(S[c.hum].last_changed) || null) : null, img: p.img,
+    room: p.piece || (p.capteurs ? null : plantPiece(S, p.base, null)), hum: numDe(c.hum), cond: numDe(c.cond), lux, luxJour: maxJour != null ? maxJour : soleil ? lux : null,
+    temp: versCelsius(numDe(c.temp), uT), uniteTemp: uT, bat: numDe(c.bat), ids: c };
 }
 
-/* Fiche d'une plante (maquettes du 14/09) : chaque mesure avec son mot, la
- * pile du capteur. Pas de seuil d'alerte ni de rappel d'arrosage dans la
- * fiche : ce qui previent vit dans les veilles du composant (un capteur
- * DESIGNE dans Regles > Veilles > Consommables, ADR 0006), et on ne dessine
- * pas ici une bascule qui ne ferait rien. */
-function FichePlante({ pl, onClose }) {
-  const v = verdictsPlante(pl);
-  const M = MOTS_PLANTE();
-  const mot = (cle) => (v[cle] && M[cle][v[cle]]) || [tr('Mesure absente'), 'var(--o-text3)'];
-  const presse = v.presse.map(p => M.presse[p]).join(', ');
-  const sous = [pl.room, pl.hum != null ? tr('Sol {n} %', { n: Math.round(pl.hum) }) : null, presse || null].filter(Boolean).join(' · ');
-  const fmt = (x, u, d = 0) => x == null ? '—' : (d ? dec(Number(x), d) : String(Math.round(x))) + u;
-  const ligne = (premiere, titre, cle, valeur, panne = false) => { const [desc, couleur] = mot(cle); return <FicheRangee premiere={premiere} panne={panne} titre={titre} desc={desc} droite={<FicheValeur couleur={couleur}>{valeur}</FicheValeur>} />; };
-  const pile = couleurPile(pl.bat);
+/* La fiche d'une plante (chantier Capteurs, étape 3 ; C31) : la coquille garde la feuille — sans onglets, à la hauteur de son contenu —
+ * et pose la frontière Suspense DEDANS (le patron de `FicheMedia`) ; le contenu (ficheplante.jsx), à la demande, lit la plante dans le
+ * `hass` VIVANT de ses capteurs ; L'appareil ouvre la fiche universelle par-dessus. Pas d'épingle : une plante n'est pas une entité. */
+function FichePlante({ pl, hass, onClose }) {
+  const ids = Object.values(pl.ids || {}).filter(Boolean);
+  const H = hassQuiConnait(useHass(ids), hass, ids[0]);
+  const vive = lirePlante(H, pl.base) || pl;
+  const [fiche, setFiche] = useState(null);
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
-        <FicheEntete titre={pl.name} sous={sous} />
-        <div style={{ marginTop: 4 }}>
-          {/* Le capteur d'humidité muet fait la carte en panne (`pl.mort`) : sa
-            * ligne porte le liseré, « Mesure absente » et « — » disent le reste (05/10). */}
-          {ligne(true, tr('Humidité du sol'), 'hum', fmt(pl.hum, ' %'), !!pl.mort)}
-          {ligne(false, tr('Température'), 'temp', fmt(deCelsius(pl.temp, pl.uniteTemp || 'C'), ' °' + (pl.uniteTemp || 'C'), 1))}
-          {ligne(false, tr('Lumière reçue'), 'lux', fmt(pl.lux, ' lx'))}
-          {ligne(false, tr('Conductivité'), 'cond', fmt(pl.cond, ' µS/cm'))}
-          <FicheRangee titre={tr('Pile du capteur')} desc={tr('Ce qu’il reste dans le boîtier')} droite={<FicheValeur couleur={pile}>{fmt(pl.bat, ' %')}</FicheValeur>} />
-        </div>
+        <Suspense fallback={<div style={{ minHeight: 260 }} />}>
+          <FichePlanteContent pl={vive} hass={H} onFiche={setFiche} />
+        </Suspense>
+        {fiche && <FicheAppareil id={fiche} hass={H} onClose={() => setFiche(null)} />}
       </>)}
     </BottomSheet>
   );
@@ -7025,19 +7971,27 @@ function distributeurConfigure() {
   return !!trouverDistributeur(LOGGIA_INDEX);
 }
 
-/* La carte du distributeur : `RoomFeederCard` telle quelle, plus l'abonnement
- * au cache de l'état serveur (distributeuretat.js) tant qu'elle est montée —
- * c'est lui qui donne son prochain repas, relu toutes les 60 s, et rien ne
- * l'interroge quand aucune carte n'est à l'écran. */
-function CarteDistributeur({ chip, lire, nom, onOpen }) {
-  useEtatDistributeur(distributeurConfigure());
-  const d = lire();
-  return <RoomFeederCard chip={chip} mort={d.mort} nom={nom} pct={d.pct} sub={d.sous} onFeed={d.feed} onRempli={d.onRempli} onOpen={onOpen} />;
+/* Ce que la carte du distributeur et sa compacte lisent (étape 2 du chantier IoT, 19/10) : sa vue (`carteDistributeur`), sur le
+ * `hass` de la vue, que le poll suit (`croqKeys`) ; l'abonnement au cache de l'état serveur (distributeuretat.js) tant qu'elle est
+ * montée — c'est lui qui donne son prochain repas et sa réserve, relu toutes les 60 s, et rien ne l'interroge quand aucune carte
+ * n'est à l'écran ; « Distribuer », le geste partagé (`lancerDistribution`) : un appui pendant le verrou — d'ici ou d'ailleurs — ne
+ * part pas, et le verrou tient jusqu'à la réponse de Home Assistant. */
+function useVueDistributeur(hass, nom) {
+  const { etat } = useEtatDistributeur(distributeurConfigure());
+  const enVol = useDistribution();
+  const c = carteDistributeur({ index: LOGGIA_INDEX, states: (hass && hass.states) || {}, cfg: loggiaEnt('feeder', null), etat });
+  return { ...c, nom, enVol, distribuer: () => { lancerDistribution(hass, c.envoi); } };
+}
+/* La carte du distributeur, large ou compacte (`chip`), sur sa vue. */
+function CarteDistributeur({ chip, hass, nom, onOpen }) {
+  return <RoomFeederCard v={useVueDistributeur(hass, nom)} chip={chip} onOpen={onOpen} />;
 }
 
 /* La fiche du distributeur — une feuille à onglets comme celle du robot
- * (ADR 0155, 05/10) : Accueil, Planning, Historique, Entretien, et la roue
- * Réglages. Le contenu (fichedistributeur.jsx) se charge à la demande, DANS une
+ * (ADR 0155, 05/10) : Accueil, Repas, Historique, Entretien s'il y a des
+ * consommables (étape 2 du chantier IoT, 19/10), et la roue Réglages. L'en-tête
+ * prend la plaque de la carte et « {pièce} · distributeur » (I21).
+ * Le contenu (fichedistributeur.jsx) se charge à la demande, DANS une
  * frontière Suspense ; ici ne reste que la coquille, sur le patron de
  * `FicheRobot` :
  *  - la réponse du serveur, demandée AVEC le détail tant que la fiche est
@@ -7060,12 +8014,176 @@ function FicheDistributeur({ hass, onClose }) {
   const H = hassLive || hass;
   const [fiche, setFiche] = useState(null);
   const ficheId = (conf && typeof conf.haid === 'string' && conf.haid) || (lu.commande && lu.commande.entity_id) || (lu.portion && lu.portion.entity_id) || null;
+  /* La plaque de sa carte et « {pièce} · distributeur » (étape 2 du chantier IoT, I21) : la zone de son entité principale ; sans zone,
+   * « Distributeur ». Grise quand l'appareil ne répond plus, comme sur la carte. */
+  const zone = ficheId && LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function' ? LOGGIA_INDEX.areaNameOf(ficheId) : null;
+  const [fond, encre] = lu.enLigne.mort && lu.enLigne.raison !== 'reservoir' ? ['var(--o-s1)', 'var(--o-text3)'] : PLAQUE_DISTRIBUTEUR;
   return (
     <BottomSheet onClose={onClose} onglets>
       {() => (<>
         <Suspense fallback={<div style={{ minHeight: 260 }} />}>
           <FicheDistributeurContent hass={H} etat={etat} erreur={erreur} cfg={conf} onFiche={setFiche} onEtat={poserEtatDistributeur}
-            epingle={ficheId ? <BoutonEpingle id={ficheId} /> : null} />
+            epingle={ficheId ? <BoutonEpingle id={ficheId} /> : null} plaque={{ fond, encre, icone: 'paw' }} sousNom={zone ? zone + ' · ' + tr('distributeur') : tr('Distributeur')} />
+        </Suspense>
+        {fiche && <FicheAppareil id={fiche} hass={H} onClose={() => setFiche(null)} />}
+      </>)}
+    </BottomSheet>
+  );
+}
+
+/* La sonde de la pièce d'un chauffage, `{ id, attribut }` : celle que ses
+ * fiches d'avant lisaient. Un thermostat se mesure lui-même
+ * (`current_temperature`, comme `RoomClimateSheet`) ; un module fil pilote par
+ * le capteur que la découverte lui a trouvé — son voisin, sinon celui de sa
+ * pièce (`resolveClimate`, spec § 3.2). null sans rien de lisible : la fiche
+ * ne montre alors ni température ni courbe. */
+function sondeDuChauffage(S, entite) {
+  const st = S[entite];
+  const mesure = st && st.attributes ? st.attributes.current_temperature : null;
+  if (String(entite).indexOf('climate.') === 0 && mesure != null && String(mesure).trim() !== '' && Number.isFinite(Number(mesure))) {
+    return { id: entite, attribut: 'current_temperature' };
+  }
+  const z = climateZones(S).find(x => x && (x.modeEnt === entite || x.haid === entite));
+  return z && z.tempSensor ? { id: z.tempSensor, attribut: null } : null;
+}
+/* La zone d'un module fil pilote découvert, celle de sa carte : son capteur
+ * de puissance, que lit sa carte (`chauffeDeZone`) — la plaque de l'en-tête
+ * de sa fiche chauffe comme la sienne (tâche 10 bis B) —, et l'identifiant
+ * de sa carte, sous lequel on lui a choisi une icône. null sans module. */
+function zoneDuChauffage(S, entite) {
+  return climateZones(S).find(x => x && x.decouvert && x.modeEnt === entite) || null;
+}
+// La pièce d'un chauffage, celle de Home Assistant : « Bureau · fil pilote » sous le nom de sa fiche.
+const pieceDuChauffage = (id) => (LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function' && LOGGIA_INDEX.areaNameOf(id)) || null;
+
+/* La fiche d'un chauffage (plan 2 du chantier Chauffage, tâche 8 ; choix 10
+ * et 13) — une feuille à onglets comme celles du robot et du distributeur :
+ * Accueil, Planning, Historique. Le contenu (fichechauffage.jsx) se charge à
+ * la demande, DANS une frontière Suspense ; ici ne reste que la coquille :
+ *  - l'état du moteur, relu toutes les 15 s tant que la fiche est ouverte
+ *    (`rapide`), dans le cache que partagent les cartes ;
+ *  - un abonnement à l'appareil et à la sonde de sa pièce : la vue derrière
+ *    ne les surveille pas forcément ;
+ *  - l'épingle de l'entité, et la sonde de la pièce — la fiche dessine
+ *    elle-même la courbe de son Historique (tâche 10 bis D, cadre 3d) : la
+ *    coquille ne lit plus l'historique 24 h, et le contenu, chargé à la
+ *    demande, n'importe jamais App.jsx ;
+ *  - le mot d'un mode `hvac` (`motModeClimat`), pour un appareil qui sait
+ *    refroidir (tâche 10) : celui de la fiche d'avant, sans en recopier la
+ *    table — les clés « Froid » et « Sec » n'ont qu'un appel chacune
+ *    (tests/froid_sec_deux_sens.test.mjs) ;
+ *  - la fiche universelle de l'appareil, par-dessus : sa consommation,
+ *    l'interrupteur d'un module, toutes ses entités ;
+ *  - pour l'en-tête (tâche 10 bis B), la pièce et le capteur de puissance
+ *    d'un module : sa plaque chauffe comme celle de sa carte ; et l'icône
+ *    choisie pour sa carte (`GlypheCarte`, le même identifiant : `zone:` et
+ *    l'id de la zone d'un module, l'entité d'un thermostat — relecture de la
+ *    partie B) ;
+ *  - ouverte par sa CLÉ (`cle` : « En ce moment », tâche 12), l'entité vient
+ *    de l'état — nulle pour un chauffage INTROUVABLE dans Home Assistant : ni
+ *    sonde, ni module, ni épingle, et rien ne se lit dans `hass.states`. Sa
+ *    fiche est le seul chemin vers « Supprimer son planning » : elle s'ouvre
+ *    sur son Planning, où est ce geste. Par sa clé, elle se ferme d'elle-même
+ *    quand le chauffage quitte l'état — son planning supprimé — au lieu de
+ *    rester vide (`FermerSeule`). Ouverte par son entité (une carte), rien
+ *    ne change. */
+function FermerSeule({ fermer }) {
+  // Rien à dessiner : la feuille se ferme — son animation, puis `onClose`.
+  useEffect(() => { fermer(); }, [fermer]);
+  return null;
+}
+function FicheChauffage({ entite: demandee = null, cle = null, hass, onClose }) {
+  const { etat } = useEtatChauffage(true, { rapide: true });
+  const ch = cle ? chauffageParCle(etat, cle) : chauffageDe(etat, demandee);
+  // Par sa clé, l'entité vient de l'état : nulle pour un chauffage introuvable.
+  const entite = demandee || (ch && ch.entite) || null;
+  const S = (hass && hass.states) || {};
+  const sonde = entite ? sondeDuChauffage(S, entite) : null;
+  const zone = entite ? zoneDuChauffage(S, entite) : null;
+  const puissance = (zone && zone.puissance) || null;
+  const idCarte = zone ? 'zone:' + zone.id : entite;
+  const hassLive = useHass([entite, sonde ? sonde.id : '', puissance || '']);
+  const H = hassLive || hass;
+  const [fiche, setFiche] = useState(null);
+  return (
+    <BottomSheet onClose={onClose} onglets>
+      {(fermer) => (<>
+        {ch ? (
+          <Suspense fallback={<div style={{ minHeight: 260 }} />}>
+            <FicheChauffageContent hass={H} ch={ch} etat={etat} sonde={sonde} onFiche={setFiche} motHvac={motModeClimat}
+              piece={pieceDuChauffage(entite)} puissance={puissance}
+              glyphe={(defaut) => <GlypheCarte id={idCarte} size={18}>{defaut}</GlypheCarte>}
+              epingle={entite ? <BoutonEpingle id={entite} /> : null} ongletDepart={entite ? undefined : 'planning'} />
+          </Suspense>
+        ) : cle && etat ? <FermerSeule fermer={fermer} /> : (
+          /* Le chauffage a quitté l'état le temps d'une réponse : la feuille
+           * garde son nom et sa croix. */
+          <TitreFeuille style={{ fontSize: 17, fontWeight: 800 }}>{entite ? cvName(H && H.states ? H.states[entite] : null, entite) : tr('Chauffage')}</TitreFeuille>
+        )}
+        {fiche && <FicheAppareil id={fiche} hass={H} onClose={() => setFiche(null)} />}
+      </>)}
+    </BottomSheet>
+  );
+}
+
+/* La feuille que la fabrique ouvre pour un chauffage : SA fiche dès que l'état
+ * du planning de chauffe le connaît — planning allumé ou non (choix 10) —,
+ * sinon `ancienne`, telle quelle. L'abonnement tient le cache à jour même
+ * ouverte depuis une compacte, qui ne le lit pas : un état arrivé après
+ * l'ouverture remplace l'ancienne feuille par la fiche. */
+function FeuilleChauffage({ entite, hass, onClose, ancienne }) {
+  const { etat } = useEtatChauffage();
+  return chauffageDe(etat, entite) ? <FicheChauffage entite={entite} hass={hass} onClose={onClose} /> : ancienne;
+}
+
+/* La fiche d'un VOLET (chantier Volets, § 3.5 à 3.8) — une feuille à onglets
+ * comme celle du chauffage : Accueil, Planning, Historique. Le contenu
+ * (fichevolet.jsx) se charge à la demande ; ici ne reste que la coquille :
+ *  - l'état des volets, relu toutes les 15 s tant qu'elle est ouverte
+ *    (`rapide`), dans le cache que partagent les cartes, et son `erreur` ;
+ *  - un abonnement au volet et à la porte devant lui : la vue derrière ne les
+ *    surveille pas forcément ;
+ *  - l'épingle, l'icône choisie pour sa carte (`GlypheCarte`), sa pièce ;
+ *  - la fiche universelle de l'appareil, par-dessus.
+ * Chargée à la demande, la fiche n'importe jamais App.jsx. */
+function FicheVolet({ id, hass, onClose }) {
+  // `erreur` : le serveur muet — le Planning le dit au lieu d'attendre (19/10).
+  const { etat, erreur } = useEtatVolets(true, { rapide: true });
+  const v = voletDe(etat, id);
+  const porte = (v && v.porte && v.porte.entite) || '';
+  const hassLive = useHass([id, porte]);
+  const H = hassLive || hass;
+  const [fiche, setFiche] = useState(null);
+  return (
+    <BottomSheet onClose={onClose} onglets>
+      {() => (<>
+        <Suspense fallback={<div style={{ minHeight: 260 }} />}>
+          <FicheVoletContent hass={H} id={id} etat={etat} erreur={erreur} piece={zoneDe(id)} onFiche={setFiche}
+            glyphe={(defaut, vue) => <GlypheCarte id={id} size={18} selon={vue ? (n) => iconeSelonEtat(n, vue) : null}>{defaut}</GlypheCarte>} epingle={<BoutonEpingle id={id} />} />
+        </Suspense>
+        {fiche && <FicheAppareil id={fiche} hass={H} onClose={() => setFiche(null)} />}
+      </>)}
+    </BottomSheet>
+  );
+}
+
+/* La fiche d'une PRISE (chantier Prises, § 3.5) : une feuille SANS onglets — sa
+ * hauteur suit son contenu. La coquille passe à la fiche, chargée à la demande,
+ * ce que le démarrage sait déjà : la règle (`priseDe` : ses capteurs, suivis en
+ * direct), sa pièce, l'épingle, l'icône choisie pour sa carte — le dessin de
+ * prise de Loggia pour une prise ordinaire —, la bascule de la maison ; et elle
+ * ouvre la fiche universelle de l'appareil. */
+function FichePrise({ id, hass, onClose }) {
+  const prise = priseDe((hass && hass.states) || {}, id);
+  const hassLive = useHass([id, prise.puissance, prise.energie].filter(Boolean));
+  const H = hassLive || hass;
+  const [fiche, setFiche] = useState(null);
+  return (
+    <BottomSheet onClose={onClose}>
+      {() => (<>
+        <Suspense fallback={<div style={{ minHeight: 260 }} />}>
+          <FichePriseContent hass={H} id={id} prise={prise} piece={zoneDe(id)} onFiche={setFiche} bascule={RmBascule}
+            glyphe={(defaut) => <GlypheCarte id={id} size={18}>{defaut || <PlugIcon size={18} />}</GlypheCarte>} epingle={<BoutonEpingle id={id} />} />
         </Suspense>
         {fiche && <FicheAppareil id={fiche} hass={H} onClose={() => setFiche(null)} />}
       </>)}
@@ -7129,26 +8247,47 @@ function objetsDeLaMaison(hass, ajoutes = [], epinglesDehors = null) {
     out.push({
       cle, id: o.id || null, type, zone: o.zone || null, domaine, piece,
       nom: o.nom || (st && st.attributes && st.attributes.friendly_name) || o.id || cle,
-      filtres: filtresObjet({ domaine, type, estLumiere: !!o.estLumiere, epingle: !!(o.id && epingles.has(o.id)), classe: (st && st.attributes && st.attributes.device_class) || '' }),
+      filtres: filtresObjet({ domaine, type, estLumiere: !!o.estLumiere, estPrise: !!(o.id && domaine === 'switch' && !o.estLumiere && priseDe(S, o.id).prise),
+        epingle: !!(o.id && epingles.has(o.id)), classe: (st && st.attributes && st.attributes.device_class) || '' }),
       actif: type === 'entite' ? objetActif({ domaine, etat, attributs: (st && st.attributes) || {} }) : !!o.actif,
       absent: type === 'entite' ? enPanne(o.id, st) : false, // une scène jamais lancée n'est pas absente (05/10)
+      // Le nom de sa carte dans Objets, quand il n'est pas celui de Home Assistant : une mesure y porte celui de sa pièce (C13).
+      nomCarte: o.nomCarte || null,
+      // La vigilance météo (C28) : sa section est Dehors, et la section la juge (`jugerObjet`).
+      vigilance: !!o.vigilance,
+      // Un groupe de capteurs (C20) : ses membres, ceux qui détectent, ceux qui ne répondent plus — ses chiffres dans Objets.
+      membres: o.membres || null, actifsMembres: o.actifsMembres || 0, muetsMembres: o.muetsMembres || 0,
+      // Une plante (C29) : ses capteurs — l'enveloppe des sections s'y abonne.
+      capteurs: o.capteurs || null,
     });
   };
   // 1) chauffage : les zones, poele ou fil pilote — leurs entites de service sont prises.
+  /* Une zone est active quand elle chauffe. Un module fil pilote découvert le
+   * MESURE — plus de 10 W, comme sa carte (plan 2 du chantier Chauffage,
+   * tâche 7) ; sans capteur de puissance, quand son ordre n'est pas l'Arrêt.
+   * La règle des zones décrites à la main, `state === 'on'`, ne voyait jamais
+   * un `select`. */
+  const zoneActive = (z) => (!z.decouvert ? !!(S[z.haid] && S[z.haid].state === 'on')
+    : z.puissance ? etatModule(wattsDe(S[z.puissance]), null) === 'chauffe'
+      : !enPanne(z.haid, S[z.haid]) && pilotFamille(S[z.haid].state) !== 'off');
   climateZones(S).forEach(z => {
     if (estClimate(z) && z.haid && S[z.haid]) entree(z.haid, { id: z.haid, domaine: 'climate', piece: z.room || null });
-    else if (S[z.haid] || S[z.tempCible]) entree('zone:' + z.id, { type: 'zone', zone: z, domaine: 'climate', nom: z.name || z.room || z.id, piece: z.room || null, actif: !!(S[z.haid] && S[z.haid].state === 'on') });
+    else if (S[z.haid] || S[z.tempCible]) entree('zone:' + z.id, { type: 'zone', zone: z, domaine: 'climate', nom: z.name || z.room || z.id, piece: z.room || null, actif: zoneActive(z) });
     ['haid', 'tempCible', 'modeEnt', 'autoEnt'].forEach(k => { if (typeof z[k] === 'string') pris.add(z[k]); });
   });
   // 2) lumieres decouvertes : leur piece vient de la configuration des pieces.
   try { discoverLights(hass).forEach(l => { if (l && l.id && S[l.id]) entree(l.id, { id: l.id, nom: l.name, piece: l.room || null, estLumiere: true }); }); } catch { /* decouverte pas prete */ }
   // 3) volets et lecteurs configures : leur nom vient de la configuration.
   voletCovers(S).forEach(c => { if (c && c.haid && S[c.haid]) entree(c.haid, { id: c.haid, nom: c.name }); });
-  medPlayers().forEach(p => { if (p && p.haid && S[p.haid]) entree(p.haid, { id: p.haid, nom: p.name }); });
+  /* Un appareil, une carte (chantier Médias, M1 B, M14) : la carte d'un lecteur est celle de son entité principale ; sa jumelle
+   * (`ma`) est prise avec lui — elle ne fait pas de seconde carte. */
+  medPlayers().forEach(p => { if (p && p.haid && S[p.haid]) entree(p.haid, { id: p.haid, nom: p.name }); if (p && p.ma) pris.add(p.ma); });
   // 4) le reste du registre, une carte par appareil — un appareil deja
   //    represente (sa lumiere, son volet, son lecteur) ne revient pas.
   const parAppareil = new Set();
   out.forEach(o => { const a = o.id ? meta(o.id).deviceId : null; if (a) parAppareil.add(a); });
+  // L'appareil de la jumelle d'un lecteur (M14) est représenté par la carte de celui-ci : ses autres entités ne reviennent pas.
+  medPlayers().forEach(p => { const a = p && p.ma ? meta(p.ma).deviceId : null; if (a) parAppareil.add(a); });
   /* Le distributeur a SA carte (étape 5) : une fois son appareil connu, ses
    * entités ne font pas une seconde carte — un capteur, un verrou, une
    * anomalie de l'appareil (ADR 0155, 05/10). Ses entités désignées non plus. */
@@ -7158,31 +8297,209 @@ function objetsDeLaMaison(hass, ajoutes = [], epinglesDehors = null) {
   const feeder = distributeurConfigure() ? lireDistributeur(LOGGIA_INDEX, S, loggiaEnt('feeder', null)) : null;
   const duDistributeur = new Set(feeder ? feeder.soeurs.map(x => x.id) : []);
   if (feeder && feeder.appareil) parAppareil.add(feeder.appareil);
-  // Les capteurs d'une plante sont a la plante : ils ne font pas une carte de plus.
-  const basesPlantes = plantsCfg().map(p => String(p.base));
-  const dUnePlante = (id) => basesPlantes.some(b => id === b || id.indexOf(b + '_') === 0);
+  // Les capteurs d'une plante sont a la plante : ils ne font pas une carte de plus — ceux de sa base, et ceux de son appareil (C29).
+  const plantes = plantesDeLaMaison(S);
+  const basesPlantes = plantes.map(p => String(p.base));
+  const capteursPlantes = new Set(plantes.flatMap(p => (p.capteurs ? Object.values(p.capteurs).filter(Boolean) : [])));
+  const dUnePlante = (id) => capteursPlantes.has(id) || basesPlantes.some(b => id === b || id.indexOf(b + '_') === 0);
+  /* Les groupes de capteurs binaires (chantier Capteurs, C20, C21) : leurs membres — la classe, un appareil physique, hors catégorie
+   * (groupes.js) —, lus une fois ; un sabotage (`tamper`) porté par l'appareil d'un membre se dit sur la ligne de sa porte, pas sur une carte. */
+  const membres = membresDeLaMaison(S);
+  const membreDUnGroupe = new Set(GROUPES.flatMap(g => membres[g]));
+  /* Les MESURES (chantier Capteurs, C6, C7, C14, C16) : une carte par mesure, pas par appareil — le capteur d'une chambre
+   * porte le CO₂, le bruit, la température et l'humidité. Une mesure de la table qui n'est ni la sonde d'un thermostat
+   * (son appareil porte un `climate`), ni celle d'une plante (son appareil mesure une conductivité) ; les réglages et
+   * les diagnostics sont écartés plus bas. Elle entre si elle appartient à un appareil PHYSIQUE — ni absent, ni un
+   * service comme la météo (`entry_type: service`, que l'index garde) —, dans une pièce de Loggia comme ailleurs (C16,
+   * 16/10) : C14 ne l'exigeait que hors des pièces, et la prévision de Météo-France et l'« Humidité extérieure »
+   * calculée entraient sous Dehors, posées dans sa pièce « Extérieur ». Le bandeau de confort d'une pièce, lui, lit
+   * toujours une sonde calculée. C17 (16/10) : dans une zone que Loggia ne compte pas parmi ses pièces, elle n'entre pas
+   * (`pieceLoggiaDe` : null) — les vingt-cinq sondes de cartes mères de sa zone « network », sa passerelle de « technique » ;
+   * sans zone, elle entre, neutre — son frigo. Qui veut les voir déclare la zone comme pièce de Loggia. */
+  /* La sonde d'un thermostat : sa TEMPÉRATURE et son HUMIDITÉ seulement (audit du 19/10) — le CO₂ ou les COV d'un Ecobee ont leur carte. */
+  const sonde = (id) => soeursDe(id).some(e => (e.indexOf('climate.') === 0 && ['temperature', 'humidity'].indexOf((S[id].attributes || {}).device_class) >= 0)
+    || (e.indexOf('sensor.') === 0 && !!S[e] && (S[e].attributes || {}).device_class === 'conductivity'));
+  const physique = (id) => { const a = meta(id).deviceId; const dm = a && LOGGIA_INDEX && LOGGIA_INDEX.deviceMeta ? LOGGIA_INDEX.deviceMeta.get(a) : null; return !!dm && dm.entryType !== 'service'; };
+  const mesures = [];
   const candidats = [];
   Object.keys(S).forEach(id => {
     if (pris.has(id) || duDistributeur.has(id) || dUnePlante(id)) return;
     const d = cvDomain(id); const rang = OBJ_DOMAINES.indexOf(d); if (rang < 0) return;
+    /* Les lecteurs sont ceux de `medPlayers()` (resolve.js : M1 B) — une entité `media_player` qui n'en est pas n'a pas de carte :
+     * ni la jumelle d'une Echo, ni Spotify (un appareil de service), ni le haut-parleur d'une sonnette (Sécurité le garde par sa caméra). */
+    if (d === 'media_player') return;
     const m = meta(id); if (m.hidden || m.disabled || m.category) return;
+    // Un `light.*` que la découverte n'a pas retenu — un groupe dont les membres ont chacun leur carte (ADR 0261) — n'en a pas ici non plus.
+    if (d === 'light') return;
+    // L'interrupteur d'un module fil pilote : l'appareil est sa zone (étape 1).
+    if (d === 'switch' && interrupteurDeModule(LOGGIA_INDEX, id)) return;
+    /* Le pont de Zigbee2MQTT vit dans Paramètres › Interrupteurs, une sirène
+     * dans Sécurité (chantier Prises, P1) : la note en pied du filtre Prises le dit. */
+    if (d === 'switch' && ecartDe(S, id)) return;
     const dc = (S[id].attributes || {}).device_class || '';
     if (d === 'binary_sensor' && ROOM_BIN_CLASSES.indexOf(dc) < 0) return;
+    /* Un binaire d'une famille de groupe qui ne peut pas y entrer ne fait pas de carte (C20, C21) : sans appareil — ses « Besoin
+     * Eau » de modèle, une porte écrite à la main —, sur un service, ou la vigilance météo, qui a sa carte dans Dehors (C28). */
+    // La vigilance météo garde sa carte, dans Dehors (C28, § 19.5) : MeteoAlarm, ou le capteur d'alerte de Météo-France — sans appareil physique (l'exception à C16).
+    if (estVigilance(id, S[id], m)) { candidats.push({ id, rang, appareil: m.deviceId || null, vigilance: true }); return; }
+    /* Un binaire d'une famille de groupe ne fait plus de carte (C20), qu'il entre dans son groupe ou non — ses « Besoin Eau » de modèle,
+     * une porte écrite à la main, un service n'y entrent pas (C21), et n'ont pas de carte non plus. Les groupes le remplacent (étape 5). */
+    if (d === 'binary_sensor' && groupeDeClasse(dc)) return;
+    if (d === 'binary_sensor' && dc === 'tamper' && soeursDe(id).some(e => membreDUnGroupe.has(e))) return;
+    if (d === 'sensor' && estMesure(S[id])) { const p = physique(id) && !sonde(id) ? pieceLoggiaDe(id) : null; if (p != null) mesures.push([id, p]); return; }
     if (d === 'sensor' && ROOM_SENSOR_CLASSES.indexOf(dc) < 0) return;
+    /* C16 et C17 pour TOUS les capteurs (audit du 19/10, M8) : un appareil physique, et pas dans une zone que Loggia ne compte pas — un
+     * indice de qualité d'air d'un service, la pression de la zone « network » n'entrent plus. */
+    if ((d === 'sensor' || d === 'binary_sensor') && (!physique(id) || pieceLoggiaDe(id) == null)) return;
     candidats.push({ id, rang, appareil: m.deviceId || null });
   });
-  candidats.sort((x, y) => x.rang - y.rang || comparerTextes(x.id, y.id)).forEach(c => {
-    if (c.appareil) { if (parAppareil.has(c.appareil)) return; parAppareil.add(c.appareil); }
-    entree(c.id, { id: c.id, estLumiere: c.id.indexOf('switch.') === 0 && cvEstLumiere(c.id) });
+  /* Une carte par appareil : la première de ses classes (`rangClasse`, M9), jamais l'ordre alphabétique. La vigilance météo ne cède
+   * jamais sa place, et ne prend celle de personne (M12) : une sœur de son appareil Météo-France ne la fait plus disparaître. */
+  candidats.sort((x, y) => x.rang - y.rang || rangClasse(x.id, S) - rangClasse(y.id, S) || comparerTextes(x.id, y.id)).forEach(c => {
+    if (c.appareil && !c.vigilance) { if (parAppareil.has(c.appareil)) return; parAppareil.add(c.appareil); }
+    entree(c.id, { id: c.id, estLumiere: c.id.indexOf('switch.') === 0 && cvEstLumiere(c.id), vigilance: !!c.vigilance });
   });
+  /* Le nom d'une mesure dans Objets (C13) : celui de sa pièce de Loggia (C17) — sa famille, écrite sous le chiffre, dit le
+   * reste —, sauf quand deux mesures de la même famille partagent la pièce, ou qu'elle n'en a pas : alors son nom de Home
+   * Assistant. */
+  const familleDe = (id) => cleMesure((S[id].attributes || {}).device_class, (S[id].attributes || {}).unit_of_measurement);
+  const cleNom = ([id, p]) => rmNorm(p) + '|' + familleDe(id);
+  const memes = new Map();
+  // Une mesure qu'on ne juge pas (un frigo, D5) garde son nom de Home Assistant : la pièce n'est pas son air.
+  mesures.forEach(m => { if (nonJugee(S, m[0], familleDe(m[0]))) m[1] = ''; });
+  mesures.forEach(m => { if (m[1]) memes.set(cleNom(m), (memes.get(cleNom(m)) || 0) + 1); });
+  mesures.sort((x, y) => comparerTextes(x[0], y[0])).forEach(m => entree(m[0], { id: m[0], nomCarte: m[1] && memes.get(cleNom(m)) === 1 ? m[1] : null }));
   // 5) le distributeur et les plantes : la configuration les nomme. « Actif »
   //    au sens d'objets.js — il FAIT quelque chose : une distribution en cours
   //    (le capteur de l'appareil), plus « il reste un repas aujourd'hui ».
   if (feeder) entree('obj:feeder', { type: 'feeder', domaine: 'feeder', nom: tr('Distributeur'), actif: !!feeder.distribue });
-  plantsCfg().forEach(p => entree('plant:' + p.base, { type: 'plant', domaine: 'plant', nom: p.name || p.base, piece: plantPiece(S, p.base, p.room) || null }));
+  // Les plantes (C29) : découvertes ou configurées ; la pièce d'une base sans appareil, celle de ses capteurs.
+  plantes.forEach(p => entree('plant:' + p.base, { type: 'plant', domaine: 'plant', nom: p.nom, piece: p.piece || (p.capteurs ? null : plantPiece(S, p.base, null)) || null,
+    capteurs: Object.values(capteursPlante(S, p)).filter(Boolean) }));
+  // Les groupes (C20) : Ouvertures, Sécurité, Présence, chacun présent s'il a un membre ; un groupe compte ses membres dans les chiffres d'Objets.
+  GROUPES.forEach(g => { if (membres[g].length) entree('groupe:' + g, { type: 'groupe', domaine: 'groupe', nom: NOMS_GROUPES()[g], membres: membres[g],
+    actifsMembres: membres[g].filter(id => sonneMembre(S, id)).length, muetsMembres: membres[g].filter(id => muetDeGroupe(S[id])).length }); });
+  // Les piles (C32) : une carte pour toutes, dans Plantes et piles ; une pile n'est jamais « active », une muette compte parmi les absentes.
+  const piles = pilesDeLaMaisonCarte(S);
+  if (piles.length) entree('groupe:piles', { type: 'groupe', domaine: 'groupe', nom: NOMS_GROUPES().piles, membres: piles.map(p => p.id), actifsMembres: 0, muetsMembres: piles.filter(p => p.muette).length });
   // 6) ce que l'editeur a ajoute a la main : une entite hors des regles ci-dessus.
   (ajoutes || []).forEach(id => { if (S[id]) entree(id, { id, estLumiere: id.indexOf('switch.') === 0 && cvEstLumiere(id) }); });
   return out;
+}
+
+/* Ce qui chauffe parmi des objets d'Objets — l'en-tête du filtre Chauffage,
+ * « 5 appareils · 2 chauffent » (maquette « Cartes chauffage », 11/10) —,
+ * par LA règle de leurs cartes (`enChauffe`, relecture de la partie A), et
+ * non par l'« actif » d'Objets : un module sans capteur de puissance, en Éco,
+ * est actif, mais sa carte ne dit pas qu'il chauffe ; un thermostat éteint
+ * qui garde un `hvac_action` à `heating` non plus. Une zone se lit par l'aide
+ * de sa carte (`chauffeDeZone`), la zone décrite à la main comprise. */
+function chauffentParmi(objets, S) {
+  return objets.filter(o => {
+    if (o.type === 'zone' && o.zone) return chauffeDeZone(S, o.zone).chauffe;
+    // Un thermostat : la même panne que sur sa carte (`estMuet` : `unavailable`, `unknown`), la même marche.
+    const st = o.id && cvDomain(o.id) === 'climate' ? S[o.id] : null;
+    return !!st && enChauffe({ famille: 'thermostat', muet: estMuet(st.state), marche: st.state !== 'off', action: (st.attributes || {}).hvac_action });
+  }).length;
+}
+
+/* Les zones qui chauffent, pour « En ce moment » sur l'Accueil (plan 2 du
+ * chantier Chauffage, tâche 12) : chacune lue comme Objets la lit — un
+ * thermostat par l'entité de sa carte, une zone par sa carte — par LA règle
+ * des cartes (`chauffentParmi`) : un module à plus de 10 W mesurés, un
+ * thermostat qui chauffe vraiment, jamais le froid d'un climatiseur. Moins
+ * celles dont le planning de chauffe est ALLUMÉ, hors « Observer sans agir »
+ * (`auPlanning` des cartes) : elles ont leurs propres lignes (`lignesMoment`),
+ * et rien quand tout suit le planning (choix 15). */
+function zonesQuiChauffent(S, etat) {
+  return climateZones(S).filter(z => {
+    const ch = chauffageDe(etat, z.haid) || chauffageDe(etat, z.modeEnt);
+    if (ch && ch.planning && !etat.simulation) return false;
+    return chauffentParmi([estClimate(z) && z.haid && S[z.haid] ? { id: z.haid } : { type: 'zone', zone: z }], S) > 0;
+  });
+}
+
+/* L'en-tête d'Objets › Prises avec un `hass` VIVANT (relecture finale, A2). Le
+ * module de l'en-tête, chargé à la demande, ne peut pas importer `useHass` d'ici ;
+ * ce petit composant, lui, s'abonne aux bascules et aux capteurs de puissance des
+ * prises VISIBLES — ceux-ci en clés bruyantes, à 10 W près — et lui rend le
+ * relevé du moment : « 150 W en ce moment » vit, sans que l'écran entier ne se
+ * redessine (ADR 0119). `prises` : `[{ id, puissance }]`, comme `comptePrises`. */
+function EntetePrisesVive({ hass, titre, prises }) {
+  const { cles, bruyantes } = clesDesPrises(prises);
+  const vivant = useHass(cles, bruyantes);
+  return <EntetePrises hass={vivant || hass} titre={titre} prises={prises} />;
+}
+
+/* L'en-tête d'Objets › Lumières avec un `hass` VIVANT (chantier Lumières, § 3.4),
+ * sur le modèle de celui des prises : le module, chargé à la demande, ne peut pas
+ * importer `useHass` d'ici ; ce petit composant s'abonne aux lampes VISIBLES, et
+ * le compte comme « Tout éteindre » suivent chacune d'elles sans que l'écran
+ * entier ne se redessine. `ids` : les lampes visibles sous le filtre. */
+function EnteteLumieresVive({ hass, titre, ids }) {
+  const vivant = useHass(ids);
+  return <EnteteLumieres hass={vivant || hass} titre={titre} ids={ids} />;
+}
+
+/* L'en-tête d'Objets › Multimédia avec un `hass` VIVANT (chantier Médias, M15), sur le modèle de celui des lumières : il s'abonne
+ * aux lecteurs visibles ET à leurs jumeaux (M14) — c'est la jumelle HACS qui dit qu'une Echo joue. */
+function EnteteMediasVive({ hass, titre, ids }) {
+  const lecteurs = medPlayers();
+  const vivant = useHass(ids.flatMap(id => { const p = lecteurs.find(x => x.haid === id); return p && p.ma ? [id, p.ma] : [id]; }));
+  return <EnteteMedias hass={vivant || hass} titre={titre} ids={ids} />;
+}
+
+/* L'en-tête d'Objets › IoT avec un `hass` VIVANT (chantier IoT, I14), sur le modèle de celui des médias : il s'abonne aux entités
+ * visibles — un robot qui part, un ventilateur qu'on allume changent « en marche » sans que l'écran entier ne se redessine.
+ * `objets` : `[{ id, domaine }]`, ceux que le filtre montre — le distributeur, sans entité, compte dans le total. */
+function EnteteIotVive({ hass, titre, objets }) {
+  const vivant = useHass(objets.filter(o => o.id).map(o => o.id));
+  return <EnteteIot hass={vivant || hass} titre={titre} objets={objets} />;
+}
+
+/* Objets › Capteurs en sections avec un `hass` VIVANT (correction bis du chantier Capteurs, point 1), sur le modèle de
+ * l'en-tête des prises : la vue ne surveille pas `sensor.`, et « Air · 3 à regarder » comme « 4 à regarder » restaient ceux
+ * de son dernier rendu quand une mesure changeait. Ce petit composant ne s'abonne qu'aux mesures que la table JUGE
+ * (`mesureJugee`) : elles seules changent ce qui est à regarder. À chaque relevé, il ne redessine que le DÉCOMPTE — l'en-tête
+ * et l'état de chaque section — : les grilles des sections sont mémoïsées dans le module (`GrilleSection`), et chaque carte
+ * garde son propre abonnement. Un CO₂ qui change ne redessine que SA carte (correction bis 2, point 2 : 23 cartes avant,
+ * mesuré dans la démo). Le module, chargé à la demande, ne peut pas importer `useHass` d'ici. */
+function SectionsCapteursVive({ hass, titre, objets, cellule }) {
+  const S = (hass && hass.states) || {};
+  /* Et à ce que les sections jugent sans la table (chantier Capteurs, étapes 2 et 3) : la vigilance météo, les membres des groupes —
+   * sauf ceux de Présence, qu'elle ne juge pas (toujours neutre, § 19.1) : abonnée à eux, chaque mouvement d'une caméra redessinait
+   * les en-têtes pour rien (passe bis du 17/10, point 5). Le seuil des piles est celui de la racine (`useSeuilPile`, § 19.8). */
+  const vivant = useHass([...objets.filter(o => o.id && ((o.domaine === 'sensor' && mesureJugee(S, o.id)) || o.vigilance)).map(o => o.id),
+    ...objets.filter(o => o.type === 'groupe' && o.cle !== 'groupe:presence').flatMap(o => o.membres || []), ...objets.filter(o => o.type === 'plant').flatMap(o => o.capteurs || [])]);
+  return <SectionsCapteurs hass={vivant || hass} titre={titre} objets={objets} cellule={cellule} dehors={estDehors} lire={vueMesure} juger={jugerObjet} />;
+}
+/* Ce qu'une section d'Objets › Capteurs sait dire d'une carte qui n'est pas une mesure (chantier Capteurs, étapes 2 et 3 ; § 6.1) :
+ * 'regarder', 'bonne', 'neutre' ou null — `undefined` pour une mesure, que la table juge (capteurssections.jsx). La vigilance
+ * météo (C28, § 19.5) : active (jaune ou plus) ou muette, à regarder ; au calme, NEUTRE (décision D3 du 19/10) — ni bonne, ni
+ * « Rien à signaler » : Dehors au calme ne dit rien. */
+function jugerObjet(hass, o) {
+  const S = (hass && hass.states) || {};
+  if (o.vigilance) return vueVigilance(S, o.id).regarder ? 'regarder' : 'neutre';
+  // Piles (C32, C33) : à regarder dès qu'une pile est à changer ou muette ; sinon jugée bonne — au seuil en vigueur (attention.js).
+  if (o.cle === 'groupe:piles') return vuePiles(pilesDeLaMaisonCarte(S)).regarder ? 'regarder' : 'bonne';
+  /* Un groupe (C25, précisé au § 19.1) : « à regarder » compte ce qui demande un geste ou signale une panne — un ouvrant ou un détecteur
+   * muet, un détecteur qui sonne — jamais une porte qu'on a ouverte ; Présence ne juge pas, comme une pression (neutre). */
+  if (o.type === 'groupe') {
+    const g = String(o.cle).slice(7);
+    if (g === 'presence') return 'neutre';
+    const ids = o.membres || [];
+    const noms = nomsMembres(ids, S, ctxCapteurs());
+    const v = g === 'securite' ? vueSecurite(ids, S, noms) : vueOuvertures(ids, S, noms, heureDe);
+    return v.regarder ? 'regarder' : 'bonne';
+  }
+  /* Une plante (C33) : à regarder si elle presse ou si elle se tait ; jugée bonne sinon ; sans mesure du sol, la section ne sait pas. */
+  if (o.type === 'plant') {
+    const pl = lirePlante(hass, String(o.cle).slice(6));
+    if (!pl) return null;
+    const v = vuePlante(pl);
+    return v.regarder ? 'regarder' : v.jugee ? 'bonne' : null;
+  }
+  return undefined;
 }
 
 function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) {
@@ -7230,6 +8547,25 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
   const actuel = filtres.some(f => f.id === choix) ? choix : 'tous';
   // L'ordre est celui de l'editeur : le propose (piece par piece), ou celui choisi a la main.
   const visibles = objets.filter(o => actuel === 'tous' || o.filtres.indexOf(actuel) >= 0);
+  // Sous le filtre Chauffage, l'en-tête dit aussi ce qui chauffe (maquette du 11/10).
+  const chauffent = actuel === 'chauffage' ? chauffentParmi(visibles, S) : 0;
+  // Sous le filtre Volets, l'en-tête compte les VOLETS et les commande (chantier Volets, § 3.4).
+  const idsVolets = actuel === 'volets' ? visibles.filter(o => o.id && estVolet(S[o.id])).map(o => o.id) : [];
+  // Sous le filtre Prises, l'en-tête compte les PRISES visibles et somme leur puissance ; la note en pied nomme les switch écartés (chantier Prises, § 3.4).
+  const prisesVues = actuel === 'prises' ? visibles.filter(o => o.id && String(o.id).indexOf('switch.') === 0).map(o => ({ id: o.id, ...priseDe(S, o.id) })).filter(p => p.prise) : [];
+  // Sous le filtre Lumières, l'en-tête compte les lampes VISIBLES et n'éteint qu'elles (chantier Lumières, § 3.4).
+  const idsLumieres = actuel === 'lumieres' ? visibles.filter(o => o.id).map(o => o.id) : [];
+  const idsMedias = actuel === 'multimedia' ? visibles.filter(o => o.id).map(o => o.id) : [];
+  const objetsIot = actuel === 'iot' ? visibles.map(o => ({ id: o.id, domaine: o.domaine })) : [];
+  const ecartes = actuel === 'prises' ? switchsEcartes(S) : [];
+  /* La barre « Maison » du planning de chauffe (plan 2 du chantier Chauffage,
+   * tâche 11 ; spec § 9.1) : sous le filtre Chauffage, entre son titre et ses
+   * cartes, quand elle sert — un planning allumé, ou la maison hors Planning
+   * (`barreMaisonUtile`, relecture finale du 12/10). L'état ne se lit que sous
+   * ce filtre ; la barre se charge à la demande, et son repli a sa hauteur
+   * (59 px) : rien ne saute. */
+  const { etat: etatCh } = useEtatChauffage(actuel === 'chauffage');
+  const barreMaison = actuel === 'chauffage' && barreMaisonUtile(etatCh);
   const stats = useMemo(() => statsObjets(objets), [objets]);
   const [addSheet, setAddSheet] = useState(false);
   const [cardEdit, setCardEdit] = useState(null);
@@ -7241,9 +8577,16 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
   const carte = (o) => {
     const compacte = ed.estCompact(o.cle);
     if (o.type === 'zone') return dc.card(null, nomDe(o), o.zone);
-    const cle = (o.type === 'feeder' || o.type === 'plant') ? o.cle : o.id;
-    return compacte ? dc.compact(cle, ed.labelOf(o.cle) || null) : dc.card(cle, ed.labelOf(o.cle) || null);
+    // Une carte composée — le distributeur, une plante, un groupe de capteurs (C20) — se nomme par sa clé ; une entité, par son identifiant.
+    const cle = (o.type === 'feeder' || o.type === 'plant' || o.type === 'groupe') ? o.cle : o.id;
+    /* Un nom posé à la main l'emporte toujours ; sinon, la carte d'une mesure porte celui de sa pièce (C13) — sa famille
+     * est écrite sous son chiffre. La compacte ne l'écrit pas : elle garde son nom de Home Assistant. */
+    return compacte ? dc.compact(cle, ed.labelOf(o.cle) || null) : dc.card(cle, ed.labelOf(o.cle) || o.nomCarte || null);
   };
+  // La cellule d'une carte, dans la grille ou dans une section de Capteurs : sa largeur et sa compacité, celles de l'éditeur.
+  const cellule = (o) => <div key={o.cle} className={((ed.estLarge(o.cle) ? 'o-cvw2 ' : '') + (ed.estCompact(o.cle) ? 'o-cvrow1' : '')) || undefined}>{carte(o)}</div>;
+  // Sous le filtre Capteurs, hors édition, la grille se range en sections (chantier Capteurs, § 5) ; l'édition garde la grille, qu'elle range.
+  const enSections = actuel === 'capteurs' && !edit;
   const titreFiltre = (OBJ_FILTRES().find(f => f.id === actuel) || {}).label || tr('Tous');
   const tuile = { padding: '18px 20px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' };
   return (
@@ -7287,7 +8630,8 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
             * ligne — le nombre s'efface avec le mot, et `aria-label` le dit à
             * toutes les tailles. */}
           {filtres.map(f => { const on = f.id === actuel;
-            const n = f.id === 'tous' ? objets.length : objets.filter(o => o.filtres.indexOf(f.id) >= 0).length;
+            // Un groupe de capteurs compte ses membres (chantier Capteurs, C20) : le compte ne baisse pas.
+            const n = compteObjets(objets, f.id);
             return (
             <button key={f.id} className="o-objfiltre" onClick={() => setChoix(f.id)} aria-pressed={on} aria-label={f.label + ' · ' + trN(n, '{n} appareil', '{n} appareils')} title={f.label} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, flexShrink: 0, whiteSpace: 'nowrap', padding: '8px 13px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>
               {f.prise ? <PlugIcon size={13} /> : f.ico ? <Ico name={f.ico} size={14} /> : <Fi i={f.fi} size={13} />}<span className="o-objfiltre-mot">{f.label}</span>
@@ -7300,18 +8644,80 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
               <span className="o-objfiltre-nb" aria-hidden="true" style={{ fontWeight: 800, color: on ? 'inherit' : 'var(--o-text3)' }}>{n}</span>
             </button>); })}
         </div>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-          <h2 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 400, color: 'var(--o-text2)' }}>{titreFiltre}</h2>
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{trN(visibles.length, '{n} appareil', '{n} appareils')}</span>
-        </div>
-        {(visibles.length || edit)
+        {actuel === 'volets' ? (
+          /* Le repli a la hauteur de l'en-tête (40 px) et son titre : rien ne saute. */
+          <Suspense fallback={<div style={{ minHeight: 40, display: 'flex', alignItems: 'center' }}><h2 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 400, color: 'var(--o-text2)' }}>{titreFiltre}</h2></div>}>
+            <EnteteVolets hass={hass} titre={titreFiltre} ids={idsVolets} />
+          </Suspense>
+        ) : actuel === 'prises' ? (
+          /* Le repli : le titre, dans la même rangée que l'en-tête, et un compte VIDE
+           * aux mêmes classes et à la même police — la même hauteur à toute
+           * largeur : rien ne saute quand le compte arrive (relecture finale, A8). */
+          <Suspense fallback={<div className="o-prises-entete"><h2 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 400, color: 'var(--o-text2)' }}>{titreFiltre}</h2><span className="o-prises-compte" aria-hidden="true" style={{ fontSize: 12, fontWeight: 600 }}>{'\u00a0'}</span></div>}>
+            <EntetePrisesVive hass={hass} titre={titreFiltre} prises={prisesVues} />
+          </Suspense>
+        ) : actuel === 'lumieres' ? (
+          /* L'en-tête des lumières (chantier Lumières, § 3.4). Son repli : la rangée, le titre et un compte VIDE, aux
+           * mêmes classes — 40 px, la hauteur de la puce : rien ne saute quand l'en-tête arrive. */
+          <Suspense fallback={<div className="o-lumieres-entete"><h2 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 400, color: 'var(--o-text2)' }}>{titreFiltre}</h2><span className="o-lumieres-compte" aria-hidden="true" style={{ fontSize: 12, fontWeight: 600 }}>{'\u00a0'}</span></div>}>
+            <EnteteLumieresVive hass={hass} titre={titreFiltre} ids={idsLumieres} />
+          </Suspense>
+        ) : actuel === 'multimedia' ? (
+          /* L'en-tête des médias (chantier Médias, M15) : le compte, sans puce — la maquette n'en a pas. Son repli : la rangée, le
+           * titre et un compte VIDE, aux mêmes classes — 40 px : rien ne saute quand le compte arrive. Une barrière LOCALE :
+           * introuvable, le module rend la place au titre seul, et la vue garde ses cartes. */
+          <Barriere repli={<div className="o-medias-entete"><h2 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 400, color: 'var(--o-text2)' }}>{titreFiltre}</h2></div>}>
+            <Suspense fallback={<div className="o-medias-entete"><h2 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 400, color: 'var(--o-text2)' }}>{titreFiltre}</h2><span className="o-medias-compte" aria-hidden="true" style={{ fontSize: 12, fontWeight: 600 }}>{'\u00a0'}</span></div>}>
+              <EnteteMediasVive hass={hass} titre={titreFiltre} ids={idsMedias} />
+            </Suspense>
+          </Barriere>
+        ) : actuel === 'iot' ? (
+          /* L'en-tête de l'IoT (chantier IoT, I14) : le compte de sa maquette, rien à droite. Son repli : la rangée, le titre et un
+           * compte VIDE, aux mêmes classes — 40 px : rien ne saute quand le compte arrive. Une barrière LOCALE : introuvable, le
+           * module rend la place au titre seul, et la vue garde ses cartes. */
+          <Barriere repli={<div className="o-iot-entete"><h2 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 400, color: 'var(--o-text2)' }}>{titreFiltre}</h2></div>}>
+            <Suspense fallback={<div className="o-iot-entete"><h2 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 400, color: 'var(--o-text2)' }}>{titreFiltre}</h2><span className="o-iot-compte" aria-hidden="true" style={{ fontSize: 12, fontWeight: 600 }}>{'\u00a0'}</span></div>}>
+              <EnteteIotVive hass={hass} titre={titreFiltre} objets={objetsIot} />
+            </Suspense>
+          </Barriere>
+        ) : enSections ? (
+          /* L'en-tête et les sections de Capteurs viennent du même module, chargé à la demande. Son repli : le titre et un
+           * compte VIDE, à la même police — rien ne saute quand il arrive. Une barrière LOCALE (correction bis, point 4) :
+           * introuvable, le module rend la place à la grille ordinaire — la vue garde ses puces, et « Réessayer » ne retombait
+           * plus sur le filtre gardé en `sessionStorage`. */
+          <Barriere repli={<>
+            {/* « cartes », comme l'en-tête de son module (capteurssections.jsx) : un groupe tient plusieurs appareils (audit du 19/10, lot 4). */}
+            <div className="o-objets-entete"><h2 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 400, color: 'var(--o-text2)' }}>{titreFiltre}</h2><span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{trN(visibles.length, '{n} carte', '{n} cartes')}</span></div>
+            <div className="grid-objets grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', columnGap: 16, rowGap: 8 }}>{visibles.map(cellule)}</div>
+          </>}>
+            <Suspense fallback={<div className="o-objets-entete"><h2 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 400, color: 'var(--o-text2)' }}>{titreFiltre}</h2><span style={{ fontSize: 12, fontWeight: 600 }}>{'\u00a0'}</span></div>}>
+              <SectionsCapteursVive hass={hass} titre={titreFiltre} objets={visibles} cellule={cellule} />
+            </Suspense>
+          </Barriere>
+        ) : (
+          /* La rangée commune de 40 px (19/10) : le titre de Tous, de Chauffage… au niveau de celui des Lumières. */
+          <div className="o-objets-entete">
+            <h2 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 400, color: 'var(--o-text2)' }}>{titreFiltre}</h2>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{trN(visibles.length, '{n} appareil', '{n} appareils')}{chauffent ? ' · ' + trN(chauffent, '{n} chauffe', '{n} chauffent') : null}</span>
+          </div>
+        )}
+        {barreMaison && <Suspense fallback={<div style={{ minHeight: 59 }} />}><BarreMaison hass={hass} etat={etatCh} /></Suspense>}
+        {enSections ? null : (visibles.length || edit)
           ? <div ref={ed.gridRef} className="grid-objets grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', columnGap: 16, rowGap: 8 }}>
               {visibles.map(o => (edit
                 ? <EditableCard key={o.cle} ed={ed} id={o.cle} nom={nomDe(o)} onEdit={setCardEdit} hass={hass} />
-                : <div key={o.cle} className={((ed.estLarge(o.cle) ? 'o-cvw2 ' : '') + (ed.estCompact(o.cle) ? 'o-cvrow1' : '')) || undefined}>{carte(o)}</div>))}
+                : cellule(o)))}
               {edit && <CarteAjout onClick={() => setAddSheet(true)} />}
             </div>
           : <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Rien dans ce filtre.')}</div>}
+        {/* La note en pied du filtre Prises (chantier Prises, § 3.4) : ce qui
+          * n'y est plus, et où le trouver — avec les noms réels. À 16 px du
+          * bas de la grille (l'écart de la page en donne 18), un filet au-dessus. */}
+        {actuel === 'prises' && ecartes.length > 0 && (
+          <div data-ecartes="" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: -2, paddingTop: 14, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>
+            <Fi i="triangle-warning" size={12} /><span>{noteEcartes(ecartes)}</span>
+          </div>
+        )}
         {/* dc.card sans dc.sheets = fiches muettes (piege vecu). */}
         {dc.sheets}
         {addSheet && <ComposeurCartes dc={dc} hass={hass} present={ed.ids} onToggle={ed.toggle}
@@ -7386,7 +8792,7 @@ const barBtn = (actif) => ({ padding: '5px 11px', borderRadius: 10, border: acti
  *
  * Cette fonction vit au niveau du module parce que DEUX vues en ont besoin —
  * les cartes de l'accueil et la barre de navigation entre pieces. Chacune
- * avait sa propre regle : la carte reconnaissait « Chambre Liam » par le mot
+ * avait sa propre regle : la carte reconnaissait « Chambre Lino » par le mot
  * « chambre », la barre exigeait une egalite exacte et retombait sur une
  * maison. La meme piece portait donc deux icones selon l'endroit.
  */
@@ -7601,104 +9007,11 @@ function CartePieceEdition({ p, compacte, onModifier, onSupprimer, onTaille, reg
   );
 }
 
-/* « Ajouter une piece » / « Modifier la piece » (maquette du 15/09) : le nom,
- * l'icone (grille), la teinte (puces), « Tuile compacte », puis les entites
- * de la carte — temperature, humidite, CO2, lumieres, les memes champs que
- * Parametres › Entites — « si besoin » (retour user du 15/09). Enregistrer
- * passe par `lotPiece` ; la taille et l'ordre de l'accueil sont a
- * l'appelant, qui tient la grille et l'envoie dans le meme lot. */
-function FichePiece({ nom = '', hass, compacte: compacteInit = false, onEnregistrer, onSupprimer, onClose }) {
-  const existante = !!nom;
-  const pieces = normRooms(cfgVal('loggia_rooms', null));
-  const cfg = existante ? (pieces.find(r => r.room === nom) || null) : null;
-  const h = (cfg && cfg.haid) || {};
-  const actuel = existante ? habillagePiece(nom, null) : null;
-  const [val, setVal] = useState(nom);
-  const [icone, setIcone] = useState(actuel ? actuel.glyphe : 'home');
-  const [teinte, setTeinte] = useState(actuel ? actuel.teinte : 'accent');
-  // La grille d'icones, par pages de dix : on ouvre sur celle de l'icone choisie.
-  const [compacte, setCompacte] = useState(!!compacteInit);
-  const [temp, setTemp] = useState(h.temp || '');
-  const [hum, setHum] = useState(h.humidity || '');
-  const [co2, setCo2] = useState(h.co2 || '');
-  const [lumieres, setLumieres] = useState(Array.isArray(h.lights) ? h.lights.join(', ') : '');
-  const S = (hass && hass.states) || {};
-  const capteurs = (classe) => Object.keys(S).filter(id => id.indexOf('sensor.') === 0 && S[id] && S[id].attributes && S[id].attributes.device_class === classe).sort();
-  const propre = val.trim();
-  const doublon = !!propre && propre !== nom && pieces.some(r => r.room === propre);
-  const valide = !!propre && !doublon;
-  const valider = (close) => {
-    if (!valide) return;
-    onEnregistrer(existante ? nom : null, {
-      room: propre, icon: icone, teinte,
-      haid: { temp: temp.trim() || null, humidity: hum.trim() || null, co2: co2.trim() || null, lights: lumieres.split(',').map(s => s.trim()).filter(Boolean) },
-    }, compacte);
-    close();
-  };
-  const t = TEINTES_PIECE.find(x => x.id === teinte) || TEINTES_PIECE[0];
-  // Sans `outline: none` (23/09, plan M7) : posé en style en ligne, il battait
-  // la règle `:focus-visible` de la feuille et le champ focalisé ne se voyait
-  // plus au clavier. L'anneau d'accent revient, ici comme ailleurs.
-  const champ = { width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600 };
-  const mono = { ...champ, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 12.5 };
-  const etiquette = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '14px 2px 7px' };
-  const note = { fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' };
-  const puce = (on, x) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(' + x.rgb + ',.5)' : 'var(--o-bd2)'), background: on ? 'rgba(' + x.rgb + ',.14)' : 'var(--o-s1)', color: on ? x.col : 'var(--o-text1)' });
-  const entites = [['o-piece-temp', tr('Température'), temp, setTemp, 'temperature'], ['o-piece-hum', tr('Humidité'), hum, setHum, 'humidity'], ['o-piece-co2', tr('CO₂'), co2, setCo2, 'carbon_dioxide']];
-
-  return (
-    <BottomSheet onClose={onClose}>
-      {close => (
-        <div style={{ padding: '0 0 8px' }}>
-          <TitreFeuille style={{ fontSize: 15, fontWeight: 800 }}>{existante ? tr('Modifier la pièce') : tr('Ajouter une pièce')}</TitreFeuille>
-          <div style={{ ...note, marginTop: 4 }}>{tr('La pièce apparaîtra sur l’accueil et dans le sélecteur de pièces.')}</div>
-
-          <label htmlFor="o-piece-nom" style={etiquette}>{tr('NOM')}</label>
-          {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
-          <input id="o-piece-nom" value={val} onChange={(e) => setVal(e.target.value)} placeholder={tr('Salon, Cuisine, Chambre…')}
-            onKeyDown={(e) => { if (e.key === 'Enter') valider(close); }} style={champ} autoFocus />
-          {doublon && <div style={{ ...note, color: 'var(--o-bad)' }}>{tr('Une pièce porte déjà ce nom.')}</div>}
-
-          <ChoixIcone valeur={icone} onChoisir={setIcone} suggerees={ICONES_PIECE} />
-
-          <div style={etiquette}>{tr('TEINTE')}</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {TEINTES_PIECE.map(x => { const on = x.id === teinte; return (
-              <button key={x.id} aria-pressed={on} onClick={() => setTeinte(x.id)} style={puce(on, x)}>
-                <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: 5, background: x.col, display: 'inline-block' }} />{tr(x.label)}
-              </button>
-            ); })}
-          </div>
-
-          <div style={{ marginTop: 8 }}>
-            <FicheRangee premiere titre={tr('Tuile compacte')} desc={tr('Une rangée sur l’accueil au lieu de deux.')}
-              droite={<RmBascule on={compacte} nom={tr('Tuile compacte')} onToggle={() => setCompacte(v => !v)} couleur={t.col} />} />
-          </div>
-
-          <div style={{ ...etiquette, marginTop: 4 }}>{tr('ENTITÉS')}</div>
-          <div style={{ ...note, margin: '0 2px 8px' }}>{tr('Les capteurs de la carte. Vide : ceux de la zone Home Assistant du même nom.')}</div>
-          {entites.map(([id, lbl, v, set, classe]) => (
-            <div key={id} style={{ marginBottom: 8 }}>
-              <label htmlFor={id} style={{ ...etiquette, margin: '0 2px 5px', letterSpacing: 0, fontSize: 12 }}>{lbl}</label>
-              <ChampSuggere id={id} label={lbl} value={v} onChange={set} placeholder="sensor.…" style={mono}
-                suggestions={capteurs(classe).map(x => ({ id: x, label: S[x].attributes.friendly_name || x, sub: x }))} />
-            </div>
-          ))}
-          <label htmlFor="o-piece-lum" style={{ ...etiquette, margin: '0 2px 5px', letterSpacing: 0, fontSize: 12 }}>{tr('Lumières')}</label>
-          {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
-          <input id="o-piece-lum" value={lumieres} onChange={(e) => setLumieres(e.target.value)} placeholder="light.…, light.…" spellCheck={false} style={mono} />
-          <div style={note}>{tr('Vide : toutes les lumières de la pièce. Une liste ne vaut que pour le bouton de la carte.')}</div>
-
-          <div style={{ display: 'flex', gap: 8, marginTop: 20, alignItems: 'center' }}>
-            {existante && <button onClick={() => { onSupprimer(nom); close(); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)' }}><Fi i="cross-small" size={12} />{tr('Supprimer')}</button>}
-            <span style={{ flex: 1 }} />
-            <button onClick={() => valider(close)} disabled={!valide} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 16px', borderRadius: 14, border: 'none', cursor: valide ? 'pointer' : 'default', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#fff', opacity: valide ? 1 : .45 }}><Fi i="plus" size={12} />{tr('Enregistrer')}</button>
-          </div>
-        </div>
-      )}
-    </BottomSheet>
-  );
-}
+/* « Ajouter une piece » / « Modifier la piece » : sa fiche est chargée à la demande (`fichepiece.jsx`, audit du 19/10) — ouverte
+ * en édition, par qui configure la maison, elle n'a rien à faire au démarrage. Elle n'importe jamais App.jsx : l'Accueil lui passe
+ * l'habillage des pièces et les briques des fiches d'ici (`BRIQUES_PIECE`). */
+const FichePiece = lazyRecharge(() => import('./fichepiece.jsx'));
+const BRIQUES_PIECE = { habillagePiece, TEINTES_PIECE, ICONES_PIECE, ChoixIcone, FicheRangee, RmBascule };
 
 /* ── Agenda de l'accueil ──────────────────────────────────────────────────────
  * Les prochains evenements de TOUS les `calendar.*`, fusionnes. Zero
@@ -7942,6 +9255,8 @@ const ACC_MAIN = ['favoris', 'scenes', 'pieces', 'cameras'];
  * a rien ». */
 const ACC_RAIL = ['attention', 'heure', 'meteo', 'co2', 'moment', 'rappels', 'agenda'];
 const ACC_AJOUTEES_DEFAUT = ['heure', 'co2'];
+// Le même défaut pour le report des gestes de l'admin à tous les profils (contenupartage.js, 20/10).
+poserDefautsAccueil(ACC_AJOUTEES_DEFAUT);
 /* L'agenda n'est plus masque par defaut : il REMPLACE le calendrier, qui
  * lui s'affichait. Le masquer reviendrait a retirer une carte que tout le
  * monde avait.
@@ -8026,7 +9341,7 @@ function FavorisAccueil({ hass, edit = false }) {
            * consacrer un bloc encadre de 91 px, en pleine zone noble, a dire
            * qu'il n'y a rien. L'invitation tient sur la ligne du titre : on
            * garde la decouvrabilite, on rend la place. */
-          : (!edit && <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Épingle un appareil depuis sa fiche')}</span>)}
+          : (!edit && <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Épinglez un appareil depuis sa fiche')}</span>)}
       </div>
       {vide && !edit
         ? null
@@ -8132,38 +9447,7 @@ function poserFantome(el, x0, y0) {
   };
 }
 
-/* LA LIGNE D'ETAT de la securite (ADR 0028) : une tuile par famille presente
- * — portes, fenetres, mouvement, cameras —, le meme dessin sur l'Accueil et
- * dans la vue Securite (ADR 0033). `onTuile(t)` recoit la tuile cliquee :
- * l'Accueil mene a la vue, la vue defile jusqu'a la section. */
-function TuilesSecurite({ tuiles, onTuile = null }) {
-  if (!tuiles || !tuiles.length) return null;
-  return (
-    <div className="grid-sec-etat" style={{ display: 'grid', gridTemplateColumns: 'repeat(' + tuiles.length + ', minmax(0, 1fr))', gap: 8, marginTop: 10 }}>
-      {tuiles.map(t => {
-        const col = t.alerte ? 'var(--o-warn)' : t.actif ? 'var(--o-accent-soft)' : 'var(--o-text)';
-        const fond = t.alerte ? 'rgba(var(--o-warn-rgb),.16)' : t.actif ? 'rgba(var(--o-accent-rgb),.16)' : 'var(--o-s2)';
-        return (
-          /* Son nom est ce qu'elle affiche, par `nomCarte` comme toute carte
-           * (lot 13 de l'audit du 03/10) : « Portes, 3/4 fermées ». Le point
-           * médian collé en dur faisait une règle à part, et « Mouvement ·
-           * Aucun mouvement » finissait sur une espace — au repos, le libellé
-           * est vide. Aucune commande dedans : elle reste un bouton. */
-          <button key={t.cle} type="button" className="sec-tuile" onClick={() => onTuile && onTuile(t)} aria-label={nomCarte(t.nom, t.valeur + ' ' + t.libelle)}
-            style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 12, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text)', textAlign: 'left', minWidth: 0 }}>
-            <span className="sec-ico" style={{ ...RM_ICO(fond, col), width: 30, height: 30, borderRadius: 10 }}><Fi i={t.icone} size={14} /></span>
-            <span style={{ minWidth: 0 }}>
-              <span className="sec-nom" style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.nom}</span>
-              <span className="sec-val" style={{ display: 'block', fontSize: 13, fontWeight: 800, color: col, whiteSpace: 'nowrap' }}>{t.valeur} <span className="sec-lib" style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text2)' }}>{t.libelle}</span></span>
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weatherMode = null, weatherRaw = null, wxFx = true, weatherTemp = null, weatherLabel = null, accueil = null, userName = 'Administrateur', onOpenRoom, onNav = null }) {
+function Dashboard({ planActif = true, editMode = false, onEnt, onToggleEdit, sante = null, weatherMode = null, weatherRaw = null, wxFx = true, weatherTemp = null, weatherLabel = null, accueil = null, userName = 'Administrateur', onOpenRoom, onNav = null, cyclesPrises = null }) {
   const [override, setOverride] = useState(null);
   // L'agenda du rail (ADR 0032) : d'aujourd'hui minuit a sept jours, TOUS les
   // evenements — la bande des jours compte chacun d'eux, la liste ne montre
@@ -8311,23 +9595,23 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
   /* L'etage regarde, ou null pour « Tous ». En memoire seulement : c'est un
    * filtre de consultation, pas un reglage — on le rouvre a plat. */
   const [etageChoisi, setEtageChoisi] = useState(null);
-  const vuePieces = vuePiecesDe(vuePiecesCfg, formatGrille);
+  /* L'option « Plan 3D de la maison » (Apparence → Affichage, 20/10) :
+   * coupee, le choix enregistre ne compte plus et les pieces restent en
+   * cartes — il revient tel quel quand on la rallume. */
+  const vuePieces = planActif ? vuePiecesDe(vuePiecesCfg, formatGrille) : 'cartes';
   const setVuePieces = (id) => {
     const n = poserVuePieces(vuePiecesCfg, formatGrille, id);
     setVuePiecesCfg(n);
     cfgSet({ loggia_vuepieces: n });
   };
-  const grillePropre = formatGrille !== 'pc' && !!(accL.formats || {})[formatGrille];
-  const grille = grillePropre ? accL.formats[formatGrille] : accL;
+  /* Un écran qui range SA mise en page a aussi sa grille (ADR 0222). */
+  const appareilAcc = appareilPropre();
+  const grillePropre = appareilAcc ? !!(accL.appareils || {})[appareilAcc] : (formatGrille !== 'pc' && !!(accL.formats || {})[formatGrille]);
+  /* Clé par clé (ADR 0221) : ce que ce format a rangé l'emporte, le reste suit
+   * l'ordinateur. Retailler une tuile au téléphone ne fige plus ses sections. */
+  const grille = grilleDuFormat(accL, formatGrille, appareilAcc);
   // `avec` suit la grille dans le meme envoi (voir `saveAccL`).
-  const saveGrille = (g, avec) => {
-    if (formatGrille === 'pc') { saveAccL({ ...accL, ...g }, avec); return; }
-    // `grille` vaut l'agencement complet tant qu'aucune surcharge n'existe :
-    // le recopier tel quel logerait un `formats` dans un format. On ne garde
-    // que ce qu'une grille contient.
-    const { formats: _ignore, ...base } = grille;
-    saveAccL({ ...accL, formats: { ...(accL.formats || {}), [formatGrille]: { ...base, ...g } } }, avec);
-  };
+  const saveGrille = (g, avec) => saveAccL(poserGrille(accL, formatGrille, g, appareilAcc), avec);
   /* COMBIEN DE VIGNETTES DE CAMERA PAR LIGNE (20/09) : le meme raisonnement que la grille
    * — par type d'ecran, dans la maison (`loggia_camdispo`), pas dans le
    * navigateur. La vue Securite lit la meme cle : deux endroits, un reglage. */
@@ -8341,6 +9625,8 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
    * la grille de bureau. Recopiee, elle cesserait de suivre au premier
    * changement suivant. */
   const suivrePc = () => {
+    // Un appareil nommé revient d'abord à son type d'écran.
+    if (appareilAcc) { saveAccL({ ...accL, ...sansPart(accL, formatGrille, appareilAcc) }); return; }
     const f = { ...(accL.formats || {}) };
     delete f[formatGrille];
     saveAccL({ ...accL, formats: f });
@@ -8455,12 +9741,22 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
   const secTimer = useRef(null);
   const secDebut = useRef(null);
   const secFantome = useRef(null);
+  /* À la souris, l'appui RETENU en attendant cinq pixels de mouvement (19/10) :
+   * saisie dès l'appui, un clic qui manquait le ⤢ d'une carte de quelques
+   * pixels emportait le panneau entier — « la fenêtre Pièces prend le dessus ».
+   * Le seuil est celui d'Appareils (`useLayoutEditor`). */
+  const secSouris = useRef(null);
   const debutSec = (e, zone, id) => {
     if (!editMode) return;
     /* `:not(.o-surface)` (lot 13 de l'audit du 03/10) : la surface de la
      * section EST la section — l'appui sur elle la saisit, comme avant sur la
      * section elle-même. Les autres boutons gardent leur clic. */
     if (e.target.closest && e.target.closest('button:not(.o-surface), [role="switch"], input')) return;
+    /* La grille des cartes appartient aux CARTES (19/10) : les 8 px entre deux
+     * cartes, une case vide, « Ajouter une pièce » saisissaient la section au
+     * lieu de laisser la main aux cartes. Le panneau se prend par son en-tête
+     * et son cadre. */
+    if (e.target.closest && e.target.closest('[data-cartes]')) return;
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
     const hote = e.currentTarget;
     if (e.pointerType === 'touch') {
@@ -8475,31 +9771,45 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
       return;
     }
     e.preventDefault();
-    secFantome.current = poserFantome(hote, e.clientX, e.clientY);
-    setSecDrag({ zone, id, ordre: ordreDe(zone) });
+    secSouris.current = { hote, x: e.clientX, y: e.clientY, zone, id };
   };
   const mouvSec = (e) => {
-    if (!secDrag && secDebut.current) {
+    let d = secDrag;
+    const s = secSouris.current;
+    if (!d && s) {
+      // En deçà du seuil, l'intention est de cliquer, pas de déplacer.
+      if (Math.abs(e.clientX - s.x) < 5 && Math.abs(e.clientY - s.y) < 5) return;
+      secSouris.current = null;
+      secFantome.current = poserFantome(s.hote, s.x, s.y);
+      // La cible se lit DÈS ce mouvement : un geste vif n'en envoie parfois qu'un avant le lâcher.
+      d = { zone: s.zone, id: s.id, ordre: ordreDe(s.zone) };
+    }
+    if (!d && secDebut.current) {
       if (Math.abs(e.clientX - secDebut.current.x) > 10 || Math.abs(e.clientY - secDebut.current.y) > 10) {
         clearTimeout(secTimer.current); secDebut.current = null;
       }
       return;
     }
-    if (!secDrag) return;
+    if (!d) return;
     if (secFantome.current) secFantome.current.suivre(e.clientX, e.clientY);
     const sous = document.elementFromPoint(e.clientX, e.clientY);
     const cible = sous && sous.closest ? sous.closest('[data-sec]') : null;
-    if (!cible) return;
-    const idCible = cible.getAttribute('data-sec');
-    if (idCible === secDrag.id || cible.getAttribute('data-zone') !== secDrag.zone) return;
-    const a = [...secDrag.ordre];
-    const de = a.indexOf(secDrag.id), vers = a.indexOf(idCible);
-    if (de < 0 || vers < 0) return;
-    a.splice(de, 1); a.splice(vers, 0, secDrag.id);
-    setSecDrag({ ...secDrag, ordre: a });
+    const idCible = cible ? cible.getAttribute('data-sec') : null;
+    /* Depuis l'ordre ENREGISTRÉ, qui ne bouge pas pendant le geste (19/10) :
+     * rejoué sur l'ordre déjà échangé, chaque mouvement au-dessus de la même
+     * section défaisait le précédent, et le lâcher tombait selon la parité. */
+    const a = [...ordreDe(d.zone)];
+    const de = a.indexOf(d.id), vers = idCible ? a.indexOf(idCible) : -1;
+    if (!cible || idCible === d.id || cible.getAttribute('data-zone') !== d.zone || de < 0 || vers < 0) {
+      if (d !== secDrag) setSecDrag(d);
+      return;
+    }
+    a.splice(de, 1); a.splice(vers, 0, d.id);
+    setSecDrag({ ...d, ordre: a });
   };
   const finSec = () => {
     clearTimeout(secTimer.current); secDebut.current = null;
+    secSouris.current = null;
     if (secFantome.current) { secFantome.current.lever(); secFantome.current = null; }
     if (secDrag) saveGrille({ [secDrag.zone]: secDrag.ordre });
     setSecDrag(null);
@@ -8593,7 +9903,9 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
   const pieceTimer = useRef(null);
   const pieceDebut = useRef(null);
   const pieceFantome = useRef(null);
-  const ordrePieces = (noms) => { const sauve = (grille.piecesOrdre || []).filter(n => noms.indexOf(n) >= 0); return [...sauve, ...noms.filter(n => sauve.indexOf(n) < 0)]; };
+  // À la souris, l'appui retenu jusqu'à cinq pixels (19/10) — voir `secSouris`.
+  const pieceSouris = useRef(null);
+  const ordrePieces =(noms) => { const sauve = (grille.piecesOrdre || []).filter(n => noms.indexOf(n) >= 0); return [...sauve, ...noms.filter(n => sauve.indexOf(n) < 0)]; };
   const debutPiece = (e, id, noms) => {
     if (!editMode) return;
     // La surface de la tuile EST la tuile (lot 13) : son appui la saisit.
@@ -8613,29 +9925,38 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
       return;
     }
     e.preventDefault();
-    pieceFantome.current = poserFantome(hote, e.clientX, e.clientY);
-    setPieceDrag({ id, noms, c: 0, r: 0 });
+    pieceSouris.current = { hote, x: e.clientX, y: e.clientY, id, noms };
   };
   const mouvPiece = (e) => {
-    if (!pieceDrag && pieceDebut.current) {
+    let d = pieceDrag;
+    const s = pieceSouris.current;
+    if (!d && s) {
+      // En deçà du seuil, l'intention est de cliquer, pas de déplacer.
+      if (Math.abs(e.clientX - s.x) < 5 && Math.abs(e.clientY - s.y) < 5) return;
+      pieceSouris.current = null;
+      pieceFantome.current = poserFantome(s.hote, s.x, s.y);
+      // La case se vise DÈS ce mouvement : un geste vif n'en envoie parfois qu'un avant le lâcher.
+      d = { id: s.id, noms: s.noms, c: 0, r: 0 };
+    }
+    if (!d && pieceDebut.current) {
       if (Math.abs(e.clientX - pieceDebut.current.x) > 10 || Math.abs(e.clientY - pieceDebut.current.y) > 10) {
         clearTimeout(pieceTimer.current); pieceDebut.current = null;
       }
       return;
     }
-    if (!pieceDrag) return;
+    if (!d) return;
     if (pieceFantome.current) pieceFantome.current.suivre(e.clientX, e.clientY);
     /* On vise une CELLULE, et rien ne bouge sous le doigt : la grille reste
      * telle quelle, seule la case visée s'allume. L'échange, s'il y en a un,
      * se fait au lâcher. */
     const el = piecesGrille.current;
-    if (!el) return;
-    const { c, r } = cellulePointee(e.clientX, e.clientY, el.getBoundingClientRect(), piecesCols);
-    if (pieceDrag.c === c && pieceDrag.r === r) return;
-    setPieceDrag({ ...pieceDrag, c, r });
+    const { c, r } = el ? cellulePointee(e.clientX, e.clientY, el.getBoundingClientRect(), piecesCols) : d;
+    if (d === pieceDrag && d.c === c && d.r === r) return;
+    setPieceDrag({ ...d, c, r });
   };
   const finPiece = () => {
     clearTimeout(pieceTimer.current); pieceDebut.current = null;
+    pieceSouris.current = null;
     if (pieceFantome.current) { pieceFantome.current.lever(); pieceFantome.current = null; }
     if (pieceDrag && pieceDrag.c) {
       const noms = pieceDrag.noms;
@@ -8677,9 +9998,12 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
   const retirerPiece = (nom) => {
     saveGrille(grilleSansPiece(grille, nom), lotSansPiece(nom));
   };
+  /** Une section de l'Accueil est-elle masquée ? Une option du rail l'est tant
+   *  qu'on ne l'a pas ajoutée, une section tant qu'on ne l'a pas remise. */
+  const sectionMasquee = (id) => (estOption(id) ? (grille.ajoutees || []).indexOf(id) < 0 : (grille.caches || []).map(s => ACC_RENOMME[s] || s).indexOf(id) >= 0);
   /** Enveloppe d'une section : drag + masque en édition, rien sinon. */
   const Sec = (zone, id, contenu) => {
-    const cache = estOption(id) ? (grille.ajoutees || []).indexOf(id) < 0 : (grille.caches || []).map(s => ACC_RENOMME[s] || s).indexOf(id) >= 0;
+    const cache = sectionMasquee(id);
     if (cache && !editMode) return null;
     const saisie = secDrag && secDrag.id === id;
     return (
@@ -8762,9 +10086,23 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     return () => { vivant = false; };
   }, []);
   const cond3d = (editMode && override) ? (WX3D_FROM_MODE[override] || 'partlycloudy')
-    : (weatherRaw && WX_PRESETS[weatherRaw] ? weatherRaw : (WX3D_FROM_MODE[weatherMode] || 'partlycloudy'));
-  const [wxHour, setWxHour] = useState(wxHourEq);
-  useEffect(() => { const iv = setInterval(() => setWxHour(wxHourEq()), 60000); return () => clearInterval(iv); }, []);
+    : (weatherRaw && CIEL_HA[weatherRaw] ? weatherRaw : (WX3D_FROM_MODE[weatherMode] || 'partlycloudy'));
+  /* L'heure du ciel, et ce qu'il en fait (handoff « Loggia themes redesign »).
+   * Le ciel suit l'horloge entre le VRAI lever et le VRAI coucher. Comme dans
+   * la maquette, « nuit claire » de jour force la nuit et « ensoleillé » de
+   * nuit force le jour (une valeur choisie à la main en édition) — aux mêmes
+   * places dans l'arc que ses 22 h 30 et 14 h d'un 9 octobre. Ciel sombre
+   * (nuit, orage, averse, grêle) : en thème clair, le texte posé dessus passe
+   * au blanc. */
+  const [soleil, setSoleil] = useState(cielSoleil);
+  const [heureCiel, setHeureCiel] = useState(heureLocale);
+  useEffect(() => { const iv = setInterval(() => { setSoleil(cielSoleil()); setHeureCiel(heureLocale()); }, 60000); return () => clearInterval(iv); }, []);
+  const lev = soleil.lever ?? 8.1, cou = soleil.coucher ?? 19.35;
+  const deJour = heureCiel >= lev && heureCiel <= cou;
+  const heureForcee = cond3d === 'clear-night' && deJour ? (cou + 3.15) % 24
+    : cond3d === 'sunny' && !deJour ? lev + (14 - 8.1) / (19.35 - 8.1) * (cou - lev) : null;
+  const arcCiel = ((heureForcee ?? heureCiel) - lev) / (cou - lev);
+  const cielSombre = (arcCiel >= 0 && arcCiel <= 1 ? Math.sin(Math.PI * arcCiel) * 0.62 : -0.1) < 0.07 || CIEL_SOMBRES.includes(cond3d);
   const modes = [['sun', '☀️', tr('Soleil')], ['partly', '⛅', tr('Éclaircies')], ['clouds', '☁️', tr('Nuageux')], ['wind', '🌬️', tr('Vent')], ['rain', '🌧️', tr('Pluie')], ['snow', '❄️', tr('Neige')], ['storm', '⛈️', tr('Orage')], ['night', '🌙', tr('Nuit')]];
   const a = accueil; // données live (null → démo)
   // Les pièces affichées sont CELLES DE LA CONFIGURATION.
@@ -8774,7 +10112,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
   // l'accueil restait vide chez qui ne reprend pas ces noms-là. `PIECES` ne
   // fournit plus qu'un habillage : icône, couleur, teinte de fond. Un nom
   // inconnu reçoit un habillage neutre plutôt que d'être ignoré.
-  // Reconnaissance par mots, quand le nom ne tombe pas juste. « Chambre Liam »,
+  // Reconnaissance par mots, quand le nom ne tombe pas juste. « Chambre Lino »,
   // « Ma cuisine », « Bathroom » doivent garder leur icône : n'exiger qu'une
   // égalité exacte rendait toute pièce nommée librement anonyme. Même
   // vocabulaire que `LIGHT_ROOM`, qui range déjà les luminaires ainsi — la
@@ -8792,7 +10130,8 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     const out = { ...p };
     out.temp = r.temp != null ? dec(r.temp, 1) + '°' : '—';
     out.hum = r.hum != null ? Math.round(r.hum) + '%' : '—';
-    if (r.co2 != null) { const s = co2Style(r.co2); out.badge = Math.round(r.co2) + ' ppm'; out.bc = s.bc; out.bbg = s.bbg; }
+    const z = zoneCo2(r.co2);
+    if (r.co2 != null) { out.badge = nombre(r.co2, 0) + '\u00a0ppm'; out.bc = z && !z.bon ? z.c : 'var(--o-text2)'; out.bbg = z && !z.bon ? 'rgba(' + z.rgb + ',.14)' : 'var(--o-s1)'; }
     else out.badge = null;
     out.live = r; // valeurs brutes + entity ids → popup confort
     return out;
@@ -8863,11 +10202,15 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     S: etatsAcc, cams: camsInfo,
     // `haid` : le capteur CO2 de la piece, pour qu'une veille sur ce meme
     // capteur ne redise pas le point de la piece.
-    pieces: (a && a.rooms) ? a.rooms.map(r => ({ nom: r.name, co2: r.co2, haid: r.co2Id || null })) : [],
+    pieces: (a && a.rooms) ? a.rooms.map(r => ({ nom: r.name, co2: r.co2, haid: r.co2Id || null, seuil: r.co2Seuil })) : [],
     sante, veilles: veillesEtat, fenetres: fenetresEtat,
     plantes: plantsCfg().map(p => p.base).filter(Boolean),
+    // Un `moisture` calculé n'est pas une fuite (ADR 0022, 16/10) : la plateforme, lue dans l'index ; un groupe, une entité masquée n'y comptent pas (M14).
+    plateforme: plateformeDe, masque: masqueDe,
   });
   const couleurAcc = points.length ? couleurNiveau(niveauMax(points)).col : 'var(--o-ok)';
+  /* La ligne sous le prénom suit la section « À surveiller » (ticket #34). */
+  const attentionLigne = points.length > 0 && !sectionMasquee('attention');
   /* TUILES CLIQUABLES (ADR 0030) : chaque chiffre de la banniere mene la ou
    * l'on agit — l'energie, la piece la plus chargee en CO2, la securite, les
    * lumieres, les medias, et « En ce moment » pour les appareils actifs (le
@@ -8976,16 +10319,16 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
       const meta = (a && a.index && a.index.entityMeta) || null;
       const lampes = new Set(switchLights());
       const out = { ...vide };
+      /* Les lecteurs (chantier Médias, M16) : ceux de la maison (M1 B — ni la jumelle d'une Echo, ni Spotify, ni la sonnette), lus
+       * avec leur jumeau (M14) ; un lecteur indisponible ne compte pas, comme un appareil muet. */
+      const lecteurs = compteLecteurs(S, medPlayers());
+      out.medias = lecteurs.enLecture; out.mediasTotal = lecteurs.vivants;
       for (const id in S) {
         const e = S[id];
         if (!e || e.state === 'unavailable' || e.state === 'unknown') continue;
         const p = id.indexOf('.');
         const dom = p > 0 ? id.slice(0, p) : '';
-        if (dom === 'media_player') {
-          out.mediasTotal++;
-          if (e.state === 'playing') out.medias++;
-          continue;
-        }
+        if (dom === 'media_player') continue;
         const test = APPAREIL_ACTIF[dom];
         if (!test || lampes.has(id)) continue;
         const m = meta ? meta.get(id) : null;
@@ -8997,11 +10340,9 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     } catch { return vide; }
   }, [dashHass, a]);
   // lumières par pièce (compteur + interrupteur des cartes compactes) — une seule passe par render.
-  // On ignore les entités dont le NOM AFFICHÉ commence/contient « Ampoule » (membres individuels
-  // des luminaires) : seul le nom compte, pas l'entity_id (ex. le lampadaire peut avoir un id
-  // type light.ampoule_* mais un nom « Lampadaire » → il doit rester compté et piloté).
   // Signature etroite : on ne recalcule que si un luminaire a REELLEMENT change
-  // d'etat, pas a chaque nouvelle reference de `hass`.
+  // d'etat, pas a chaque nouvelle reference de `hass`. Les switch déclarés
+  // lumière la signent aussi (ADR 0261) : sans eux, la tuile ne se rafraîchissait pas.
   const lightsSig = useMemo(() => {
     const S = (dashHass && dashHass.states) || null;
     if (!S) return '';
@@ -9012,8 +10353,15 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
         out += id + e.state + ((e.attributes && e.attributes.brightness) || '') + '|';
       }
     }
+    for (const id of switchLights()) { const e = S[id]; if (e) out += id + e.state + '|'; }
     return out;
   }, [dashHass]);
+  /* Les veilleuses de la règle Nuit (L2, ADR 0261), relues chaque minute : la tuile d'une pièce ne les allume ni ne les
+   * éteint, et son état ne les compte pas — une veilleuse seule allumée, la tuile est éteinte. Tant qu'elles ne sont pas
+   * lues (null), on ne sait pas quoi épargner : l'interrupteur de la tuile reste dessiné mais inerte, et un appui ne commande
+   * rien (audit du 19/10, B15 — comme « Tout éteindre », `veilleusesLues` ; le module Nuit absent lève l'attente). */
+  const { etat: nuitEtat, codeErr: nuitCode } = useEtatServeur(dashHass, 'loggia/nuit/etat', 60000);
+  const veilleuses = veilleusesLues(nuitEtat, nuitCode);
   const indexA = a && a.index;
   const roomLightMap = useMemo(() => {
     if (!dashHass) return null;
@@ -9042,8 +10390,6 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     }
     return roomLightMap[rmNorm(name)] || [];
   };
-  // L'INTERRUPTEUR de la carte ne pilote QUE le(s) plafonnier(s) de la pièce (règle user).
-  // Le compteur « X lampes allumées », lui, compte tous les luminaires non-« Ampoule ».
   /**
    * Une entite designee a la main, mise a la forme d'une lumiere.
    *
@@ -9075,27 +10421,47 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
    * colonne « Lampes du bouton » : allumer la piece entiere n'est pas toujours
    * ce qu'on veut d'un appui rapide. Le COMPTAGE, lui, continue de porter sur
    * toutes les lumieres — « 4 lampes allumees » doit rester vrai.
+   *
+   * Les veilleuses de la règle Nuit, et les groupes qui en contiennent une, en
+   * sont retirées (L2, ADR 0261) : ni allumées ni éteintes par la tuile, et son
+   * état ne les lit pas. Une pièce qui n'a QUE sa veilleuse rend `[]` — pas de
+   * bouton, et la tuile est éteinte (`PieceCard`).
    */
   const roomMainsOf = (name) => {
     const toutes = roomLightsOf(name);
     const r = a && a.rooms && a.rooms.find(x => (x.name || x.room) === name);
     const choisies = (r && r.lights) || [];
+    const S = (dashHass && dashHass.states) || {};
+    const sansVeilleuses = (liste) => (liste ? liste.filter(l => !estEpargnee(l.id, S, veilleuses)) : liste);
     // Les entites designees passent AVANT : une piece peut n'avoir aucune
     // lumiere decouverte et pourtant en commander une. C'est le cas de
     // l'exterieur, dont l'applique est un `switch` sans zone — le seul chemin
     // qui l'atteigne est celui que l'utilisateur a indique lui-meme.
-    if (!choisies.length) return toutes;
+    if (!choisies.length) return sansVeilleuses(toutes);
     const parId = new Map((toutes || []).map(l => [l.id, l]));
     const retenues = choisies.map(id => parId.get(id) || entiteBrute(id)).filter(Boolean);
     // Un choix qui ne correspond a rien (entite renommee, retiree) ne doit pas
     // faire disparaitre le bouton : on retombe sur la piece entiere.
-    return retenues.length ? retenues : toutes;
+    return sansVeilleuses(retenues.length ? retenues : toutes);
   };
+  /* Le bouton lumières d'une pièce ne coupe pas, d'un appui, un switch GARDÉ qu'on y aurait désigné — une prise protégée,
+   * ou dont la protection n'est pas lue (`gardeDeSwitch`, la règle de tous les chemins ; audit du 19/10, point 4) : il reste
+   * allumé, les autres lampes s'éteignent. Le sens du bouton se décide sur les AUTRES : sinon le NAS allumé le tiendrait
+   * sur « éteindre », et le bouton ne ferait plus rien. Pas de question ici : sa carte, sa fiche demandent. */
   const toggleRoomLights = (name) => {
+    // Les veilleuses pas encore lues : on ne sait pas quoi épargner, rien ne part (B15).
+    if (veilleuses == null) return;
     const ms = roomMainsOf(name);
     if (!ms || !ms.length || !dashHass || !dashHass.callService) return;
-    const svc = ms.some(l => l.on) ? 'turn_off' : 'turn_on';
-    commanderService(dashHass, ms.map(l => l.id), 'homeassistant', svc, { entity_id: ms.map(l => l.id) });
+    const S = dashHass.states || {};
+    // L'état des prises, que l'application suit tant que la maison est là (point 2) : pas de cache que personne ne relirait.
+    const lecture = lireEtatPrises();
+    const gardee = (l) => String(l.id).indexOf('switch.') === 0 && !cvEstLumiere(l.id) && gardeDeSwitch(lecture, l.id, { reconnue: priseDe(S, l.id).prise, indexLu: indexLu() });
+    const libres = ms.filter(l => !gardee(l));
+    const svc = (libres.length ? libres : ms).some(l => l.on) ? 'turn_off' : 'turn_on';
+    const ids = (svc === 'turn_off' ? libres : ms).map(l => l.id);
+    if (!ids.length) return;
+    commanderService(dashHass, ids, 'homeassistant', svc, { entity_id: ids });
   };
   // ── Volets et clim par pièce : les minis des tuiles ──────────────────────
   // Agir sans ouvrir la pièce. Double chemin de rattachement, comme les
@@ -9109,7 +10475,8 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
     if (!S) return null;
     const m = {};
     try {
-      const covs = voletCovers(S).filter(c => c.haid && S[c.haid]);
+      // Le bouton de la pièce ne commande que ses VOLETS (audit du 19/10) : pas le portail de l'Entrée.
+      const covs = voletsCommandables(S).filter(c => S[c.haid]);
       const zones = climateZones(S).filter(z => estClimate(z) && z.haid && S[z.haid]);
       for (const nom of noms) {
         const target = rmNorm(nom);
@@ -9160,23 +10527,45 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
 
   /* EN CE MOMENT (maquette du 15/09, reduit a l'ESSENTIEL le 16/09 — ADR
    * 0035 : « je m'en fiche des prises ») : un lecteur en lecture, un
-   * aspirateur ou une tondeuse au travail, le lave-vaisselle en cours, les
-   * zones qui chauffent, un volet EN MOUVEMENT. Ni prise, ni ventilateur, ni
-   * volet a mi-course. Calcule ici, avant le rendu : la banniere en porte le
-   * compte. Huit lignes au plus, le reste est dans Objets. */
+   * aspirateur ou une tondeuse au travail, le lave-vaisselle en cours, le
+   * planning de chauffe quand il sort de l'ordinaire, les zones qui
+   * chauffent, un volet EN MOUVEMENT. Ni prise, ni ventilateur, ni volet a
+   * mi-course. Calcule ici, avant le rendu : la banniere en porte le compte.
+   * Huit lignes au plus, le reste est dans Objets. */
   const S0 = (dashHass && dashHass.states) || {};
+  /* `cyclesPrises` : les cycles d'électroménager que le serveur suit (P3 ; audit du 19/10, point 2), lus par App — la
+   * définition de la carte et de la fiche, plus les seuils de l'Accueil (« > 100 W »), qui disaient « en cours » un séchage
+   * que le serveur tenait pour fini, ou l'inverse. Tant que le module des prises ne répond pas, ou qu'il ne suit aucune
+   * prise d'électroménager (`null`), l'ancien chemin reste : le capteur de Paramètres › Notifications. */
   const aEnt = (id) => !!(dashHass && dashHass.states && dashHass.states[id]);
   const commande = (id, dom, svc, data) => commanderService(dashHass, id, dom, svc, { entity_id: id, ...(data || {}) });
+  /* Le planning de chauffe (plan 2 du chantier Chauffage, tâche 12 ; choix
+   * 15) : l'état du moteur, relu toutes les 60 s tant que l'Accueil est
+   * monté ; ses lignes (`lignesMoment`) ne disent que l'inhabituel. Un
+   * chauffage ouvre SA fiche, par sa clé — un chauffage introuvable n'a pas
+   * d'entité ; la maison mène à Objets › Chauffage, le filtre posé. */
+  const { etat: etatCh } = useEtatChauffage();
+  const [ficheCh, setFicheCh] = useState(null);
+  /* Les robots au travail (chantier IoT, I34) : leur ligne écrit la phrase de leur carte, avec les pièces que le carnet du serveur
+   * sait (robotsetat.js) — l'état ne se lit que tant qu'un robot travaille. */
+  const robotAuTravail = Object.keys(S0).some(id => (id.indexOf('vacuum.') === 0 || id.indexOf('lawn_mower.') === 0)
+    && APPAREIL_ACTIF[id.slice(0, id.indexOf('.'))](S0[id] && S0[id].state));
+  const { etat: etatRobots } = useEtatRobots(robotAuTravail);
+  /* Les volets qui bougent À L'ÉCRAN (19/10) : chez lui, Home Assistant ne dit jamais `opening` / `closing` — la ligne ne voyait
+   * pas le volet que sa carte disait « En fermeture ». Le sens de leur course jouée (voletcourse.js), relu à chaque changement. */
+  const coversMoment = voletCovers(S0);
+  const sensJoue = useSensCourses(coversMoment.map(c => c.haid), S0);
   const momentRows = [];
   try {
+    /* Un lecteur en lecture (chantier Médias, M16) : lu avec son jumeau (M14), sa ligne est la phrase de sa carte (M6), et
+     * « Mettre en pause » envoie `media_pause` à l'entité qui commande — jamais `media_play_pause` (M13). */
     medPlayers().forEach(m => {
-      const id = m.haid; if (!S0[id]) return;
-      const np = mpRead(S0, id); if (!np.playing) return;
-      momentRows.push(<LigneMoment key={id} icone="music-alt" rgb="var(--o-rose-rgb)" nom={m.name} sous={[np.title, np.artist].filter(Boolean).join(' · ') || tr('Lecture')}
-        onOpen={() => dc.ouvrir(id)} fiche action={tr('Mettre en pause')} actionIcone="pause" onAction={() => commande(id, 'media_player', 'media_play_pause')} />);
+      const id = m.haid; if (!S0[id] && !(m.ma && S0[m.ma])) return;
+      const l = lireLecteur(S0, m); if (l.indispo || !l.playing) return;
+      momentRows.push(<LigneMoment key={id} icone="music-alt" rgb="var(--o-rose-rgb)" nom={nomLecteur(S0, m)} sous={phraseLecteur(l).texte}
+        onOpen={() => dc.ouvrir(id)} fiche action={tr('Mettre en pause')} actionIcone="pause" onAction={() => commande(l.ctl, 'media_player', 'media_pause')} />);
     });
     const meta = (a && a.index && a.index.entityMeta) || null;
-    const ETIQ = { vacuum: { cleaning: tr('Nettoyage'), returning: tr('Retour à la base') }, lawn_mower: { mowing: tr('Tonte'), returning: tr('Retour à la base') } };
     Object.keys(S0).forEach(id => {
       const e = S0[id]; if (!e) return;
       const dom = id.slice(0, id.indexOf('.'));
@@ -9185,22 +10574,35 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
       const test = APPAREIL_ACTIF[dom]; if (!test || !test(e.state)) return;
       const mt = meta ? meta.get(id) : null; if (mt && (mt.category || mt.hidden)) return;
       const nom = (e.attributes || {}).friendly_name || id;
-      const sous = (ETIQ[dom] && ETIQ[dom][e.state]) || tr('En marche');
+      // La phrase de sa carte (I34) : « Nettoie · Salon, Cuisine », « Tonte en cours », « Retour à la base ».
+      const c = vueCarnetRobot(etatRobots, id, Date.now());
+      const sous = phraseRobot({ domaine: dom, phase: phaseRobot(dom, e.state), erreur: c.erreur, pieces: c.pieces, tout: c.tout, libelle: c.libelle }).texte;
       const geste = dom === 'vacuum' ? [tr('Renvoyer au dock'), 'home', () => commande(id, 'vacuum', 'return_to_base')]
         : [tr('Renvoyer au dock'), 'home', () => commande(id, 'lawn_mower', 'dock')];
       momentRows.push(<LigneMoment key={id} icone={dom === 'vacuum' ? 'vacuum' : 'mower'} rgb="var(--o-accent-rgb)" nom={nom} sous={sous} onOpen={() => dc.ouvrir(id)} fiche action={geste[0]} actionIcone={geste[1]} onAction={geste[2]} />);
     });
-    if (mLv && mLv.active && (!a || aEnt(notifIds().dishwasher))) momentRows.push(<LigneMoment key="lv" icone="dishwasher" rgb="var(--o-accent-rgb)" nom={mLv.label} sous={[mLv.phase, mLv.valueText].filter(Boolean).join(' · ')} onOpen={onNav ? () => onNav('objets') : null} />);
-    const chauffe = climateZones(S0).filter(z => estClimate(z) && z.haid && S0[z.haid] && ['heating', 'cooling'].indexOf((S0[z.haid].attributes || {}).hvac_action) >= 0);
-    if (chauffe.length) momentRows.push(<LigneMoment key="clim" icone="flame" rgb="var(--o-bad-rgb)" nom={trN(chauffe.length, '{n} zone chauffe', '{n} zones chauffent')} sous={chauffe.map(z => z.name).join(' · ')} onOpen={onNav ? () => onNav('climat') : null} />);
-    voletCovers(S0).forEach(c => {
-      const e = S0[c.haid]; if (!e) return;
-      // Un volet EN MOUVEMENT seulement : a mi-course, il ne se passe rien.
-      const bouge = e.state === 'opening' || e.state === 'closing';
-      if (!bouge) return;
-      momentRows.push(<LigneMoment key={c.haid} icone="blinds" rgb="167,139,250" nom={c.name || (e.attributes || {}).friendly_name || c.haid}
-        sous={e.state === 'opening' ? tr('Ouverture…') : tr('Fermeture…')}
-        onOpen={() => dc.ouvrir(c.haid)} fiche action={tr('Stop')} actionIcone="stop" onAction={() => commande(c.haid, 'cover', 'stop_cover')} />);
+    if (cyclesPrises) cyclesPrises.forEach(c => {
+      const tp = TYPES_PRISE[c.type] || TYPES_PRISE.prise;
+      const min = (Date.now() - Date.parse(c.debut)) / 60000;
+      momentRows.push(<LigneMoment key={'cycle:' + c.id} icone={tp.ico} rgb={tp.rgb} nom={nomDuCycle(c, cyclesPrises, S0)}
+        sous={[tr('Cycle en cours'), isFinite(min) ? dureePrise(min) : null].filter(Boolean).join(' · ')} onOpen={() => dc.ouvrir(c.id)} fiche />);
+    });
+    else if (mLv && mLv.active && (!a || aEnt(notifIds().dishwasher))) momentRows.push(<LigneMoment key="lv" icone="dishwasher" rgb="var(--o-accent-rgb)" nom={mLv.label} sous={[mLv.phase, mLv.valueText].filter(Boolean).join(' · ')} onOpen={onNav ? () => onNav('objets') : null} />);
+    lignesMoment(etatCh, uniteTemp(null, dashHass), { admin: !ordinaire }).forEach(l => momentRows.push(<LigneMoment key={l.cle} icone={l.icone} rgb={l.rgb} nom={l.nom} sous={l.sous}
+      onOpen={l.chauffage ? () => setFicheCh(l.chauffage) : onNav ? () => onNav('climat') : null} fiche={!!l.chauffage} />));
+    // Les zones qui chauffent VRAIMENT, sans celles que le planning de chauffe commande (`zonesQuiChauffent`).
+    const chauffe = zonesQuiChauffent(S0, etatCh);
+    if (chauffe.length) momentRows.push(<LigneMoment key="clim" icone="flame" rgb="var(--o-warn2-rgb)" nom={trN(chauffe.length, '{n} zone chauffe', '{n} zones chauffent')} sous={chauffe.map(z => z.name).join(' · ')} onOpen={onNav ? () => onNav('climat') : null} />);
+    coversMoment.forEach(c => {
+      const e = S0[c.haid]; if (!e || enPanne(c.haid, e)) return;
+      // Un volet EN MOUVEMENT seulement — que Home Assistant le dise ou que sa course se joue : à mi-course, il ne se passe rien.
+      const sens = e.state === 'opening' ? 'ouverture' : e.state === 'closing' ? 'fermeture' : sensJoue[c.haid] || null;
+      if (!sens) return;
+      // Stop s'il le sait (`gestesCover`) : l'ordre, et la course figée là où elle est — qu'un refus oublie (19/10).
+      const stop = gestesCover(e).stop;
+      momentRows.push(<LigneMoment key={c.haid} icone="blinds" rgb="var(--o-purple-rgb)" nom={c.name || (e.attributes || {}).friendly_name || c.haid}
+        sous={sens === 'ouverture' ? tr('Ouverture…') : tr('Fermeture…')} fiche onOpen={() => dc.ouvrir(c.haid)}
+        {...(stop ? { action: tr('Stop'), actionIcone: 'stop', onAction: () => ordreEtArret(c.haid, e, envoyerGeste(dashHass, c.haid, stop)) } : null)} />);
     });
   } catch {}
   const nEnCours = momentRows.length;
@@ -9228,22 +10630,25 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
         * anglais disait « Alarm : Armed ». « {a} : {b} » s'écrit « {a}: {b} »
         * dans leurs catalogues. */}
       <div className="o-vh" role="status">{alarmeTuile ? tr('{a} : {b}', { a: tr('Alarme'), b: alarmeTuile.texte }) : ''}</div>
-      <div className="o-vh" role="status">{points.length ? tr('{a} : {b}', { a: tr('À surveiller'), b: resumeAttention(points) }) : ''}</div>
+      <div className="o-vh" role="status">{attentionLigne ? tr('{a} : {b}', { a: tr('À surveiller'), b: resumeAttention(points) }) : ''}</div>
       {/* Le fond météo attend que le tableau de bord soit peint.
         *
         * `WeatherGL` est chargé à la demande — mais il était monté dès le
         * premier rendu, ce qui déclenchait aussitôt son import : 448 ko de
-        * Three.js, 113 ko une fois compressés, en concurrence avec le contenu
-        * que l'on est venu lire. La paresse ne servait donc à rien ici : elle
-        * décalait le téléchargement de quelques millisecondes, pas d'une
-        * peinture.
+        * Three.js à l'époque (le ciel du handoff du 17/10 s'en passe), en
+        * concurrence avec le contenu que l'on est venu lire. La paresse ne
+        * servait donc à rien ici : elle décalait le téléchargement de quelques
+        * millisecondes, pas d'une peinture.
         *
         * `onPaintReady` attend deux images puis rend la main — le même signal
         * dont les jauges se servent pour ne pas s'animer avant d'être vues. Le
-        * décor arrive après le contenu, ce qui est sa place. */}
-      {!REDUCE_MOTION && wxFx && fondPret && (
-        <div className="o-wx3d" aria-hidden="true">
-          <Suspense fallback={null}><WeatherGL condition={cond3d} hourEq={wxHour} /></Suspense>
+        * décor arrive après le contenu, ce qui est sa place.
+        *
+        * Mouvement réduit : le ciel reste, immobile (le handoff : « l'image
+        * reste, le temps s'arrête ») — c'est lui qui s'en charge. */}
+      {wxFx && fondPret && (
+        <div className={'o-wx3d' + (cielSombre ? ' o-wx3d-sombre' : '')} aria-hidden="true">
+          <Suspense fallback={null}><WeatherGL condition={cond3d} heure={heureForcee} lever={soleil.lever} coucher={soleil.coucher} sombre={cielSombre} /></Suspense>
           <div className="o-wx3d-veil" />
         </div>)}
       <div className="loggia-content" style={{ position: 'relative', zIndex: 1, padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -9263,7 +10668,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
               * celui de tous les ecrans. */}
             <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.04em', padding: '5px 10px', borderRadius: 999,
               background: 'rgba(var(--o-accent-rgb),.16)', color: 'var(--o-text1)', whiteSpace: 'nowrap' }}>
-              {formatGrille === 'pc' ? tr('ORDINATEUR') : formatGrille === 'tablette' ? tr('TABLETTE') : tr('TÉLÉPHONE')}
+              {appareilAcc ? String(ficheAppareil().nom || '').toUpperCase() : formatGrille === 'pc' ? tr('ORDINATEUR') : formatGrille === 'tablette' ? tr('TABLETTE') : tr('TÉLÉPHONE')}
             </span>
             {grillePropre && (
               <button onClick={suivrePc} style={editBtn(false)} title={tr('Cet écran retrouve l’agencement de l’ordinateur.')}>
@@ -9282,7 +10687,10 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
           * page. « Remonte Pieces au meme niveau que les autres vues, et fais
           * de meme pour l accueil. » Le bas garde le sien. */}
         <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--o-radius,18px)', padding: '0 8px 14px' }}>
-          {REDUCE_MOTION && <WeatherFx weather={wx} />}
+          {/* Le décor SVG remplaçait le ciel quand le mouvement est réduit. Le ciel
+            * du 17/10 s'en charge lui-même (une image fixe) : le décor ne reste
+            * que là où le ciel n'est pas monté — effets météo coupés. */}
+          {REDUCE_MOTION && !wxFx && <WeatherFx weather={wx} />}
           {editMode && (
           <div style={{ position: 'absolute', bottom: 14, right: 18, display: 'flex', gap: 4, zIndex: 3 }}>
             {modes.map(([id, emoji, title]) => (
@@ -9319,13 +10727,18 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                   })}
                 </div>
               </div>
+              {/* Ticket #34, sa réponse « B » (18/10) : sous le prénom, les points
+                * à surveiller ne paraissent que s'il y en a ET que la section
+                * « À surveiller » n'est pas masquée. Jamais de « Tout va bien » :
+                * il avait déjà refusé un « Tout va bien » permanent sur l'Accueil,
+                * et masquer la carte ne masquait qu'elle. */}
               {/* Le resume est un ITEM a lui seul, pas un noeud texte nu.
                 * Nu, il devenait un item flex anonyme : trop long, il basculait
                 * en entier sous la pastille au lieu de s'enrouler a cote
                 * d'elle — un flex ne coupe pas un item, il le renvoie a la
                 * ligne. La pastille s'aligne donc sur la PREMIERE ligne, et le
                 * texte garde sa colonne. */}
-              <span className="o-greet-facts" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}><span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 5, background: couleurAcc, boxShadow: '0 0 8px ' + couleurAcc, animation: animationNiveau(niveauMax(points)) }} /><span style={{ flex: 1, minWidth: 0 }}>{[points.length ? resumeAttention(points) : tr('Tout va bien'), ...faits.txt].join(' · ')}{a && a.inTemp != null ? ` · ${dec(a.inTemp, 1)} °${a.inTempUnite}` : ''}</span></span>
+              <span className="o-greet-facts" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}>{attentionLigne && <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 5, background: couleurAcc, boxShadow: '0 0 8px ' + couleurAcc, animation: animationNiveau(niveauMax(points)) }} />}<span style={{ flex: 1, minWidth: 0 }}>{[...(attentionLigne ? [resumeAttention(points)] : []), ...faits.txt].join(' · ')}{a && a.inTemp != null ? ` · ${dec(a.inTemp, 1)} °${a.inTempUnite}` : ''}</span></span>
           </div>
           {(() => {
             /* Une metrique a zero ne dit rien : « 0 / 4 ouvrants ouverts »
@@ -9357,14 +10770,14 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
               * `fmt`) ; un squelette n'a pas de texte, il ne dit rien. */
             const vus = {
               al: alarmeTuile ? [alarmeTuile.texte, tr('ALARME')] : [],
-              ex: a && a.metricExport ? [a.metricExport.sign + fmtWatts(a.metricExport.raw), a.metricExport.label] : [tr('EXPORT RÉSEAU')],
-              air: [a && a.maxCo2 != null ? String(Math.round(a.maxCo2)) + ' ppm' : null, tr('QUALITÉ AIR') + ' · ' + (a && a.maxCo2 != null ? airLabel(a.maxCo2) : tr('BON'))],
-              ouv: [ouvStat.ouverts + ' / ' + ouvStat.total, ouvStat.ouverts > 1 ? tr('OUVRANTS OUVERTS') : tr('OUVRANT OUVERT')],
-              lum: a ? [a.lightsOn + ' / ' + a.lightsTotal + ' ' + tr('prés.'), a.lightsOn > 1 ? tr('LUMIÈRES ALLUMÉES') : tr('LUMIÈRE ALLUMÉE')] : [],
-              med: [actifsStat.medias + ' / ' + actifsStat.mediasTotal, actifsStat.medias > 1 ? tr('MÉDIAS EN LECTURE') : tr('MÉDIA EN LECTURE')],
+              ex: [a && a.metricConso ? fmtWatts(a.metricConso.raw) : null, tr('Conso maison')],
+              air: [a && a.maxCo2 != null ? String(Math.round(a.maxCo2)) + ' ppm' : null, tr('QUALITÉ AIR') + (a && a.maxCo2 != null ? ' · ' + motCo2(a.maxCo2) : '')],
+              ouv: [ouvStat.ouverts + ' / ' + ouvStat.total, trN(ouvStat.ouverts, 'OUVRANT OUVERT', 'OUVRANTS OUVERTS')],
+              lum: a ? [a.lightsOn + ' / ' + a.lightsTotal + ' ' + tr('prés.'), trN(a.lightsOn, 'LUMIÈRE ALLUMÉE', 'LUMIÈRES ALLUMÉES')] : [],
+              med: [actifsStat.medias + ' / ' + actifsStat.mediasTotal, trN(actifsStat.medias, 'MÉDIA EN LECTURE', 'MÉDIAS EN LECTURE')],
               app: [String(nEnCours), tr('EN CE MOMENT')],
             };
-            /* Lu, un libellé tout en capitales (« EXPORT RÉSEAU », la clé même
+            /* Lu, un libellé tout en capitales (« QUALITÉ AIR », la clé même
               * du dessin) passe en casse de phrase : une synthèse vocale épelle
               * volontiers un mot court en capitales (« B-O-N »). La valeur
               * (« ↑ 460 W », « 2 / 6 prés. ») ne bouge pas. */
@@ -9379,30 +10792,30 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                 <Fi i={alarmeTuile.icone} color={alarmeTuile.couleur} size={17} />
                 <div><div style={{ fontSize: 15, fontWeight: 800, color: alarmeTuile.couleur, lineHeight: 1.1 }}>{alarmeTuile.texte}</div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{tr('ALARME')}</div></div>
               </button>);
-            if (!a || a.metricExport) cases.push(
+            if (!a || a.metricConso) cases.push(
               <button type="button" key="ex" className="o-tuile-hero" onClick={clics.ex} aria-label={libelles.ex} style={tuile({ display: 'flex', alignItems: 'center', gap: 8 })}>
-                <Ico name="bolt" color="var(--o-ok)" size={17} />
-                <div><div style={{ fontSize: 15, fontWeight: 800, color: a && a.metricExport ? a.metricExport.color : 'var(--o-ok)', lineHeight: 1.1 }}>{a && a.metricExport ? <Num v={a.metricExport.raw} prefix={a.metricExport.sign} fmt={fmtWatts} /> : <Skel w={64} h={16} />}</div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{a && a.metricExport ? a.metricExport.label : tr('EXPORT RÉSEAU')}</div></div>
+                <Ico name="bolt" color="var(--o-accent)" size={17} />
+                <div><div style={{ fontSize: 15, fontWeight: 800, color: a && a.metricConso ? a.metricConso.color : 'var(--o-accent-soft)', lineHeight: 1.1 }}>{a && a.metricConso ? <Num v={a.metricConso.raw} fmt={fmtWatts} /> : <Skel w={64} h={16} />}</div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)', textTransform: 'uppercase' }}>{tr('Conso maison')}</div></div>
               </button>);
             if (!a || a.maxCo2 != null) cases.push(
               <button type="button" key="air" className="o-tuile-hero" onClick={clics.air} aria-label={libelles.air} style={tuile({ display: 'flex', alignItems: 'center', gap: 8 })}>
                 <Ico name="wind" color="var(--o-accent)" size={17} />
-                <div><div style={{ fontSize: 15, fontWeight: 800, color: 'var(--o-accent-soft)', lineHeight: 1.1 }}>{a ? (a.maxCo2 != null ? <Num v={a.maxCo2} /> : '—') : <Skel w={40} h={16} />}<span style={{ fontSize: 11, color: 'var(--o-text2)' }}> ppm</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{tr('QUALITÉ AIR')} · {a && a.maxCo2 != null ? airLabel(a.maxCo2) : tr('BON')}</div></div>
+                <div><div style={{ fontSize: 15, fontWeight: 800, color: a && zoneCo2(a.maxCo2) && !zoneCo2(a.maxCo2).bon ? zoneCo2(a.maxCo2).c : 'var(--o-accent-soft)', lineHeight: 1.1 }}>{a ? (a.maxCo2 != null ? <Num v={a.maxCo2} /> : '—') : <Skel w={40} h={16} />}<span style={{ fontSize: 11, color: 'var(--o-text2)' }}> ppm</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{tr('QUALITÉ AIR')}{a && a.maxCo2 != null ? ' · ' + motCo2(a.maxCo2) : ''}</div></div>
               </button>);
             /* Les OUVRANTS ont pris la place de la température (retour
               * 01/09) : la chaleur de la maison se lit sur chaque tuile pièce,
               * une fenêtre restée ouverte ne se lit nulle part. */
             if (ouvStat.ouverts > 0) cases.push(
               <button type="button" key="ouv" className="o-tuile-hero" onClick={clics.ouv} aria-label={libelles.ouv} style={tuile({ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 })}>
-                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--o-purple)' }}><Num v={ouvStat.ouverts} /> <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {ouvStat.total}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{ouvStat.ouverts > 1 ? tr('OUVRANTS OUVERTS') : tr('OUVRANT OUVERT')}</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--o-purple)' }}><Num v={ouvStat.ouverts} /> <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {ouvStat.total}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{trN(ouvStat.ouverts, 'OUVRANT OUVERT', 'OUVRANTS OUVERTS')}</div>
               </button>);
             if (a && a.lightsOn > 0) cases.push(
               <button type="button" key="lum" className="o-tuile-hero" onClick={clics.lum} aria-label={libelles.lum} style={tuile({ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 })}>
-                <div style={{ fontSize: 15, fontWeight: 800 }}><Num v={a.lightsOn} /> <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {a.lightsTotal} {tr('prés.')}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{a.lightsOn > 1 ? tr('LUMIÈRES ALLUMÉES') : tr('LUMIÈRE ALLUMÉE')}</div>
+                <div style={{ fontSize: 15, fontWeight: 800 }}><Num v={a.lightsOn} /> <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {a.lightsTotal} {tr('prés.')}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{trN(a.lightsOn, 'LUMIÈRE ALLUMÉE', 'LUMIÈRES ALLUMÉES')}</div>
               </button>);
             if (actifsStat.medias > 0) cases.push(
               <button type="button" key="med" className="o-tuile-hero" onClick={clics.med} aria-label={libelles.med} style={tuile({ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 })}>
-                <div style={{ fontSize: 15, fontWeight: 800 }}><Num v={actifsStat.medias} /> <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {actifsStat.mediasTotal}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{actifsStat.medias > 1 ? tr('MÉDIAS EN LECTURE') : tr('MÉDIA EN LECTURE')}</div>
+                <div style={{ fontSize: 15, fontWeight: 800 }}><Num v={actifsStat.medias} /> <span style={{ fontSize: 11, color: 'var(--o-text2)', fontWeight: 600 }}>/ {actifsStat.mediasTotal}</span></div><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', color: 'var(--o-text2)' }}>{trN(actifsStat.medias, 'MÉDIA EN LECTURE', 'MÉDIAS EN LECTURE')}</div>
               </button>);
             /* Ce qui tourne VRAIMENT (ADR 0035) : le meme compte que le panneau
               * « En ce moment » — plus les prises. */
@@ -9440,22 +10853,31 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             ? inner.filter(p => piecesDeLEtage(LOGGIA_INDEX, [p.name], etageChoisi).length)
             : inner;
           /* Les puces d'etage tiennent dans l'en-tete sur grand ecran. Au
-            * TELEPHONE elles le faisaient deborder : titre tronque, compte
-            * disparu, « Cartes / Plan » coupe. Deux rangees alors, comme la
-            * barre des ambiances — rien a faire glisser. */
+            * TELEPHONE (25/10, « je te demande qu'ils soient alignes avec
+            * Pieces ») : UNE ligne — chaque etage par son nom court (−1, 0, 1),
+            * le nom entier en title, le compte s'efface, « Cartes / Plan » en
+            * icones seules. */
           const etagesPuces = infosEtages.utile ? (
-            <div style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 12, background: 'var(--o-well)', flexShrink: 0, minWidth: 0, overflow: 'hidden' }}>
-              {[{ id: null, nom: tr('Tous') }, ...infosEtages.etages].map(e => {
+            <div style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 12, background: 'var(--o-well)', flexShrink: etroitPieces ? 1 : 0, minWidth: 0, overflow: 'hidden' }}>
+              {[{ id: null, nom: tr('Tous'), court: tr('Tous') }, ...infosEtages.etages].map(e => {
                 const on = etageChoisi === e.id;
                 return (
-                  <button key={e.id || 'tous'} type="button" onClick={() => setEtageChoisi(e.id)} aria-pressed={on}
-                    style={{ height: 30, padding: etroitPieces ? '0 10px' : '0 12px', borderRadius: 10, border: 'none', cursor: 'pointer', font: 'inherit', fontSize: 12, fontWeight: 700,
+                  <button key={e.id || 'tous'} type="button" onClick={() => setEtageChoisi(e.id)} aria-pressed={on} aria-label={e.nom} title={e.nom}
+                    style={{ height: 30, padding: etroitPieces ? '0 9px' : '0 12px', borderRadius: 10, border: 'none', cursor: 'pointer', font: 'inherit', fontSize: 12, fontWeight: 700,
                       whiteSpace: 'nowrap', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', flex: etroitPieces ? '0 1 auto' : '0 0 auto',
-                      background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text1)' }}>{e.nom}</button>
+                      background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text1)' }}>{etroitPieces ? e.court : e.nom}</button>
                 );
               })}
             </div>
           ) : null;
+          /* « Cartes / Plan » (20/10) : l'icone du plan est un plan au sol, pas
+           * une maison de plus. Au telephone, quand il y a des etages, le
+           * segment passe en icones seules sur la ligne du titre. */
+          const serre = etroitPieces && !!etagesPuces;
+          const segmentPlan = (compact) => (
+            <Segment value={vuePieces} onChange={setVuePieces} label={tr('Affichage des pièces')} compact={compact}
+              options={[{ id: 'cartes', label: tr('Cartes'), ico: 'apps' }, { id: 'plan', label: tr('Plan'), ico: 'floor-plan' }]} />
+          );
           const piecesHeader = (
             /* Plus d'air sous CET en-tete que sous les autres (30/09) : le
                segment le rend plus haut, et la premiere carte venait presque
@@ -9463,14 +10885,12 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             <div style={{ marginBottom: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                 <h2 style={sectionTitle}>{tr('Pièces')}</h2>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>{tr('{n} pièces', { n: piecesVues.length })}</span>
-                  {!etroitPieces && etagesPuces}
-                  <Segment value={vuePieces} onChange={setVuePieces} label={tr('Affichage des pièces')}
-                    options={[{ id: 'cartes', label: tr('Cartes'), ico: 'apps' }, { id: 'plan', label: tr('Plan'), ico: 'home' }]} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: serre ? 6 : 10, minWidth: 0 }}>
+                  {!serre && <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>{tr('{n} pièces', { n: piecesVues.length })}</span>}
+                  {etagesPuces}
+                  {planActif && segmentPlan(serre)}
                 </div>
               </div>
-              {etroitPieces && etagesPuces && <div style={{ marginTop: 10 }}>{etagesPuces}</div>}
             </div>
           );
           /* OÙ chaque carte se pose (23/09) : une cellule, colonne et rangée,
@@ -9502,7 +10922,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             /* La mosaique de la tablette compte les colonnes : sans les fixer
               * a trois, `auto-fill` en donnerait quatre ou cinq et les grandes
               * tuiles tomberaient n'importe ou. */
-            <div ref={poserGrillePieces} className="grid-chips" style={{ display: 'grid', gridTemplateColumns: 'repeat(' + piecesCols + ',minmax(0,1fr))', gap: 8 }}>
+            <div ref={poserGrillePieces} data-cartes="1" className="grid-chips" style={{ display: 'grid', gridTemplateColumns: 'repeat(' + piecesCols + ',minmax(0,1fr))', gap: 8 }}>
               {ordrePieces(piecesVues.map(p => p.name)).map(n => piecesVues.find(p => p.name === n)).filter(Boolean).map((p, i) => {
                 /* Un choix explicite (bouton de taille en edition) prime sur
                   * tout : il vaut pour l'appareil qui l'a fait comme pour les
@@ -9555,7 +10975,7 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
                         onTaille={() => saveGrille({ tailles: { ...(grille.tailles || {}), [p.name]: t === 'c' ? 's' : 'c' } })} reglable={!ordinaire} />
                     ) : (
                       <div style={{ height: '100%' }}>
-                        <PieceCard p={p} idx={i} compact chip={t === 'c'} lights={roomLightsOf(p.name)} mains={roomMainsOf(p.name)} onToggleLights={() => toggleRoomLights(p.name)} covers={roomCoversInfo(p.name)} clim={roomClimInfo(p.name)} ambiance={ambianceDe(p.name)} onOpen={() => onOpenRoom && onOpenRoom(p.name)} />
+                        <PieceCard p={p} idx={i} compact chip={t === 'c'} lights={roomLightsOf(p.name)} mains={roomMainsOf(p.name)} attente={veilleuses == null} onToggleLights={() => toggleRoomLights(p.name)} covers={roomCoversInfo(p.name)} clim={roomClimInfo(p.name)} ambiance={ambianceDe(p.name)} onOpen={() => onOpenRoom && onOpenRoom(p.name)} />
                       </div>
                     )}
                   </div>
@@ -9692,14 +11112,19 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
             // d'outils) : la section reste donc vivante en mode édition.
             favoris: <FavorisAccueil hass={dashHass} edit={editMode} />,
             scenes: <ScenariosAccueil hass={dashHass} edit={editMode} onNav={onNav} />,
-            /* Le plan n'est pas dessine : on garde sa place et on l'annonce.
-             * Pas de faux plan, pas de carte grisee — juste la phrase. */
+            /* Le plan 3D (chantier Plan 3D) : le modèle importé par un
+             * administrateur, celui de l'étage choisi. Toucher une pièce ouvre
+             * la pièce comme sa carte ; une lampe ou un volet, sa fiche. */
             pieces: <>{piecesHeader}{vuePieces === 'plan' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 220, padding: 24, borderRadius: 16, background: 'var(--o-s1)', border: '1px dashed var(--o-bd2)', textAlign: 'center' }}>
-                <span style={{ display: 'inline-flex', color: 'var(--o-text3)' }}><Fi i="home" size={26} /></span>
-                <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--o-text1)' }}>{tr('Le plan de la maison arrive prochainement.')}</span>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text3)', maxWidth: 360 }}>{tr('En attendant, « Cartes » montre les mêmes pièces.')}</span>
-              </div>
+              <Barriere ou="vue">
+                <Suspense fallback={<div style={{ minHeight: etroitPieces ? 320 : 420 }} />}>
+                  <PlanPieces hass={dashHass} pieces={piecesVues} etage={infosEtages.utile ? etageChoisi : null}
+                    etages={infosEtages.utile ? infosEtages.etages : []}
+                    zones={((LOGGIA_INDEX && LOGGIA_INDEX.areaList) || []).map(z => ({ id: z.id, name: z.name }))}
+                    edition={editMode} admin={!ordinaire} etroit={etroitPieces}
+                    onPiece={(n) => { if (onOpenRoom) onOpenRoom(n); }} onEntite={(id) => dc.ouvrir(id)} />
+                </Suspense>
+              </Barriere>
             ) : piecesGrid}</>,
             cameras: cams.length > 0 ? <>{camsHeader}{camsGrid}</> : null,
           };
@@ -9766,16 +11191,18 @@ function Dashboard({ editMode = false, onEnt, onToggleEdit, sante = null, weathe
       })()}
       {/* Fiches des cartes du catalogue (héros « En ce moment »). */}
       {dc.sheets}
+      {/* La fiche d'un chauffage d'« En ce moment », ouverte par sa clé (tâche 12 du chantier Chauffage). */}
+      {ficheCh && <FicheChauffage cle={ficheCh} hass={dashHass} onClose={() => setFicheCh(null)} />}
       {histoOuvert && <FeuilleHistorique entrees={histo} onRestaurer={restaurer} onOublier={oublierHisto} onClose={() => setHistoOuvert(false)} />}
       {agendaOuvert && (
         /* `large` decide de la MAQUETTE : deux colonnes sur ordinateur (1b),
          * une feuille sur telephone (2b). Quatre maquettes avaient ete
          * fournies ; un premier essai n'avait repris que le mobile. */
-        <FeuilleAgenda hass={accueil && accueil.hass} evenements={agenda || []} jourChoisi={jourChoisi}
+        <Suspense fallback={null}><FeuilleAgenda hass={accueil && accueil.hass} evenements={agenda || []} jourChoisi={jourChoisi}
           onChoisirJour={setJourChoisi} onClose={() => { setAgendaOuvert(false); setPlageDemandee(null); }}
-          large={wide} onPlage={setPlageDemandee} />
+          large={wide} onPlage={setPlageDemandee} /></Suspense>
       )}
-      {pieceSheet && <FichePiece key={pieceSheet.nom} nom={pieceSheet.nom} compacte={pieceSheet.compacte} hass={dashHass} onEnregistrer={enregistrerPieceIci} onSupprimer={retirerPiece} onClose={() => setPieceSheet(null)} />}
+      {pieceSheet && <Suspense fallback={null}><FichePiece key={pieceSheet.nom} nom={pieceSheet.nom} compacte={pieceSheet.compacte} hass={dashHass} onEnregistrer={enregistrerPieceIci} onSupprimer={retirerPiece} onClose={() => setPieceSheet(null)} briques={BRIQUES_PIECE} /></Suspense>}
     </main>
   );
 }
@@ -9802,10 +11229,11 @@ const LIGHT_ROOM = (id) => {
   if (/bureau/.test(s)) return 'Bureau';
   if (/sdb|salle_de_bain|_bain/.test(s)) return 'Salle de bain';
   if (/exter|jardin|facade|terrasse|balcon/.test(s)) return 'Extérieur';
-  return 'Autres';
+  return tr('Autres');
 };
-const switchLights = () => { const c = loggiaEnt('switchLights', null); return (Array.isArray(c) && c.length) ? c : switchLightsCfg(); };
-// Découvre les vraies lumières HA (light.*), groupées par pièce. Exclut LED réseau/caméra (UniFi…). Ajoute les interrupteurs choisis (on/off).
+/* `switchLights` (les switch déclarés lumière) et `ctxLumieres` vivent dans state.js, à côté du réglage (ADR 0261). */
+// Découvre les lumières de la maison (L11, `lumieresDe`), groupées par pièce : les `light.*` sans catégorie, ni cachés ni
+// désactivés, les groupes dédoublonnés, et les interrupteurs déclarés lumière (on/off).
 function discoverLights(hass, index) {
   const S = hass.states;
   // La PIECE d'une lumiere est celle que Home Assistant lui donne. Le nom ne
@@ -9816,7 +11244,11 @@ function discoverLights(hass, index) {
     const zone = index && index.areaNameOf ? index.areaNameOf(id) : null;
     return zone || LIGHT_ROOM(id);
   };
-  const lights = Object.keys(S).filter(e => e.indexOf('light.') === 0 && !/^light\.(u6|g6|unifi|udm|usw|uap)/.test(e)).map(id => {
+  /* UNE définition (ADR 0261) : la LED d'une borne Wi-Fi (`config`) n'est pas une lumière de la maison, quel que soit
+   * son nom — aucun motif de nom ne la cherche. Avant que l'index ne dise les catégories, tout `light.*` compte. */
+  const meta = (index && index.entityMeta) || (LOGGIA_INDEX && LOGGIA_INDEX.entityMeta) || null;
+  const ids = lumieresDe(S, { meta, switchsLumiere: switchLights() });
+  const lights = ids.filter(id => id.indexOf('light.') === 0).map(id => {
     const st = S[id], at = st.attributes || {};
     const on = st.state === 'on';
     const modes = at.supported_color_modes || [];
@@ -9828,13 +11260,15 @@ function discoverLights(hass, index) {
     const color = rgb ? versHex(rgb) : null;
     return { id, domain: 'light', name: at.friendly_name || id.replace('light.', '').replace(/_/g, ' '), room: pieceDe(id), on, bri, dimmable, rgb: rgbCap, ct, color, lc: st.last_changed };
   });
-  const switches = switchLights().filter(id => S[id]).map(id => {
+  const switches = ids.filter(id => id.indexOf('switch.') === 0).map(id => {
     const st = S[id], at = st.attributes || {}, on = st.state === 'on';
     return { id, domain: 'switch', name: at.friendly_name || id.replace('switch.', '').replace(/_/g, ' '), room: pieceDe(id), on, bri: on ? 100 : 0, dimmable: false, rgb: false, ct: false, color: null, lc: st.last_changed };
   });
   return [...lights, ...switches];
 }
-// Type de luminaire d'après le nom/id → icône différenciée.
+/* Type de luminaire d'après le nom/id — il ne sert plus qu'à RANGER les lampes d'une pièce (`LT_ORDER`, plus haut).
+ * Toute lumière porte la même ampoule (`<Fi i="bulb" />`, sa demande du 14/10), un nom n'y change plus rien :
+ * seule une icône choisie à la main l'emporte (`GlypheCarte`). */
 function lightType(l) {
   const s = ((l.name || '') + ' ' + (l.id || '')).toLowerCase();
   if (/veilleuse|night/.test(s)) return 'veilleuse';
@@ -9842,122 +11276,14 @@ function lightType(l) {
   if (/plafonnier|plafond|ceiling|interrupteur|spot|downlight|dome/.test(s)) return 'plafonnier';
   return 'ampoule';
 }
-// Clés CUSTOM_SVG si fournies (l-plafonnier…), sinon nom Flaticon valide en fallback.
-const LIGHT_TYPE_ICON = { plafonnier: 'light-switch-on', ampoule: 'bulb', lampadaire: 'bulb', veilleuse: 'moon' };
-// Icônes par type de luminaire (style UICon rempli, repeint via currentColor).
-const LIGHT_ICONS = {
-  ampoule: ['M12 2.5a6.5 6.5 0 0 0-4 11.6c.5.4.9 1 1 1.6.1.5.5.8 1 .8h2c.5 0 .9-.3 1-.8.1-.6.5-1.2 1-1.6A6.5 6.5 0 0 0 12 2.5z', 'M9.5 18.3h5a.8.8 0 0 1 0 1.6h-5a.8.8 0 0 1 0-1.6z', 'M10.3 21h3.4a.75.75 0 0 1 0 1.5h-3.4a.75.75 0 0 1 0-1.5z'],
-  plafonnier: ['M8 2.6h8a1 1 0 0 1 0 2H8a1 1 0 0 1 0-2z', 'M11.2 4.6h1.6v2.4h-1.6z', 'M5 13.5c0-3.9 3.1-6.7 7-6.7s7 2.8 7 6.7c0 .4-.3.7-.7.7H5.7c-.4 0-.7-.3-.7-.7z', 'M10 15.2h4c0 1.1-.9 2-2 2s-2-.9-2-2z'],
-  lampadaire: ['M9 3h6c.7 0 1.2.6 1 1.3l-1.2 4c-.13.42-.5.7-.95.7H10.15c-.45 0-.82-.28-.95-.7l-1.2-4C7.8 3.6 8.3 3 9 3z', 'M11.4 9.5h1.2l-.25 9h-.7z', 'M8.5 18.3h7a1 1 0 0 1 0 2h-7a1 1 0 0 1 0-2z'],
-  veilleuse: ['M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z'],
-};
-const LightIcon = ({ type, color = 'currentColor', size = 24 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
-    {(LIGHT_ICONS[type] || LIGHT_ICONS.ampoule).map((d, i) => <path key={i} d={d} />)}
-  </svg>
-);
-// Palette popup (design "Light Cards Styles" — 8 teintes, blanc inclus).
-const LIGHT_PALETTE = ['var(--o-lampe)', 'var(--o-orange)', '#f472b6', 'var(--o-purple)', 'var(--o-accent)', 'var(--o-cyan)', 'var(--o-ok)', '#ffffff'];
-/* Une FONCTION, pas une table.
- *
- * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
- * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
- * langue. Appelee au rendu, elle se dit dans la langue du moment.
- *
- * Des noms de BLANCS (audit du 03/10) : le 6 500 K lisait la clé du mode
- * de climatisation (« Kühlen · 6500 K » en allemand), et les trois autres
- * n'étaient pas traduits du tout — « Bougie · 2200 K » au milieu d'une fiche
- * anglaise, pour un lecteur d'écran. */
-const WHITE_TEMPS = () => [[tr('Bougie'), 2200, '#ffb46b'], [tr('Blanc chaud'), 2700, '#ffd9a0'], [tr('Blanc neutre'), 4000, '#fff1dd'], [tr('Blanc froid'), 6500, '#eaf2ff']];
 
 /* La vue Lumieres a disparu le 14/09/2026 : la vue Objets, filtre « Lumieres »,
  * dessine les memes lampes aux cartes de la piece. La route `lumieres` y mene. */
 
-/* ════════════ VUE SCÈNES — bibliothèque de scènes colorées ════════════ */
-// Catalogue de scènes Hue, relevé sur une installation type. Chaque scène :
-// 5 RGB + luminosité + uuid (thumbnail).
-const HUE_SCENES = {
-  classics: { label: 'Classiques', scenes: [
-    { name: 'Rest', uuid: 'e03267e7-9914-4f47-97fe-63c0bd317fe7', colors: [[215,134,30],[215,134,30],[215,134,30],[215,134,30],[215,134,30]], brightness: 35 },
-    { name: 'Relax', uuid: 'e71b2ef3-1b15-4c4b-b036-4b3d6efe58f8', colors: [[243,179,80],[243,179,80],[243,179,80],[243,179,80],[243,179,80]], brightness: 56 },
-    { name: 'Read', uuid: '035b6ecf-414e-4781-abc7-3911556097cb', colors: [[255,242,149],[255,242,149],[255,242,149],[255,242,149],[255,242,149]], brightness: 100 },
-    { name: 'Concentrate', uuid: '0cbec4e8-d064-4457-986a-fe6078a63f39', colors: [[255,252,208],[255,252,208],[255,252,208],[255,252,208],[255,252,208]], brightness: 100 },
-    { name: 'Energize', uuid: '0eeacfc5-2d81-4035-a23d-4a9bc02af965', colors: [[249,255,255],[249,255,255],[249,255,255],[249,255,255],[249,255,255]], brightness: 100 },
-    { name: 'Cool bright', uuid: '6d10a807-7330-46d1-b093-c15520ba72c0', colors: [[255,251,198],[255,251,198],[255,251,198],[255,251,198],[255,251,198]], brightness: 100 },
-    { name: 'Bright', uuid: '84ebc26c-9d61-4d25-830c-41ea66f1c325', colors: [[255,240,138],[255,240,138],[255,240,138],[255,240,138],[255,240,138]], brightness: 100 },
-    { name: 'Dimmed', uuid: '8f55e62a-e5f8-456a-9e8b-61f314bd4e99', colors: [[175,140,78],[175,140,78],[175,140,78],[175,140,78],[175,140,78]], brightness: 30 },
-    { name: 'Nightlight', uuid: 'b6f58e22-677f-4670-8677-3dea4ac60383', colors: [[21,8,0],[21,8,0],[21,8,0],[21,8,0],[21,8,0]], brightness: 0 },
-  ] },
-  cosy: { label: 'Cosy', scenes: [
-    { name: 'Rolling hills', uuid: '49c61bae-d3ec-4df2-89a4-65235705f3a1', colors: [[251,139,50],[230,156,68],[240,149,55],[219,163,96],[224,160,82]], brightness: 45 },
-    { name: 'Warm embrace', uuid: '73b2c0b3-b4c5-4307-8873-eb231c83e996', colors: [[254,114,93],[231,138,66],[251,119,77],[239,130,66],[220,147,67]], brightness: 40 },
-    { name: 'Dreamy dusk', uuid: 'a127f9ef-0371-48dc-bc79-852e2e5b2cc3', colors: [[242,163,83],[255,150,83],[255,147,184],[255,134,158],[255,134,109]], brightness: 50 },
-    { name: 'Honolulu', uuid: '23ab68cc-3a82-4762-b9db-f0d1a483281d', colors: [[255,67,82],[252,113,91],[229,137,46],[197,158,71],[240,126,68]], brightness: 39 },
-    { name: 'Savanna sunset', uuid: 'ea580cb0-149e-48e6-a729-2a500edfb924', colors: [[213,199,111],[255,147,75],[255,115,43],[255,171,91],[235,189,82]], brightness: 58 },
-    { name: 'Golden pond', uuid: '89c16361-391d-4346-b6d8-ac1eaf4de3dc', colors: [[251,196,45],[255,178,39],[255,173,37],[243,201,68],[249,197,63]], brightness: 64 },
-    { name: 'Ruby glow', uuid: '454176dd-7d24-43de-86c4-ee73f8febbec', colors: [[199,155,164],[255,99,142],[230,134,154],[215,145,160],[246,119,151]], brightness: 40 },
-    { name: 'Tropical twilight', uuid: 'ffbf7ff8-dc4a-4c56-b157-7a59113be7b7', colors: [[213,156,199],[221,157,111],[254,132,63],[222,116,255],[225,136,255]], brightness: 44 },
-  ] },
-  party: { label: tr('Ambiance fête'), scenes: [
-    { name: 'Miami', uuid: 'd0b4b2d2-570f-4325-9475-098e3e0501f0', colors: [[69,255,255],[255,166,123],[255,188,104],[163,235,255],[255,129,189]], brightness: 75 },
-    { name: 'Cancun', uuid: 'c321d848-51a8-4d09-9ad0-5e6b44bc7f2c', colors: [[255,212,60],[255,86,147],[255,109,16],[255,139,190],[255,164,32]], brightness: 79 },
-    { name: 'Rio', uuid: '94fc428e-2855-4f67-877e-3d1e1dd95b7d', colors: [[255,223,81],[255,148,180],[255,117,191],[255,150,255],[255,187,102]], brightness: 79 },
-    { name: 'Chinatown', uuid: '7581da02-1688-4128-9bb9-b635f3b89999', colors: [[255,168,36],[255,57,60],[255,141,117],[255,66,89],[255,88,98]], brightness: 60 },
-    { name: 'Ibiza', uuid: 'eaa0d424-ac66-4247-8342-06d2b128ac31', colors: [[255,134,57],[239,162,64],[255,147,57],[199,185,79],[214,178,61]], brightness: 49 },
-    { name: 'Osaka', uuid: '5768805d-27c1-442e-b069-d20443485201', colors: [[243,110,18],[255,65,142],[201,146,51],[254,93,92],[229,117,164]], brightness: 36 },
-    { name: 'Tokyo', uuid: 'de7eda64-84bf-4ed6-a4fa-76e0ebdd1968', colors: [[244,153,32],[203,14,255],[79,192,255],[255,49,143],[255,36,255]], brightness: 47 },
-    { name: 'Motown', uuid: '7dded6f8-a2aa-4726-b391-21e9a0f76eee', colors: [[72,210,255],[136,143,255],[163,0,255],[52,220,243],[85,202,255]], brightness: 53 },
-    { name: 'Fairfax', uuid: 'abfc5768-5c2c-4d61-bd03-2b64660e813f', colors: [[255,58,56],[134,220,255],[255,115,103],[68,231,255],[255,166,161]], brightness: 62 },
-  ] },
-  romance: { label: 'Romantique', scenes: [
-    { name: 'Ruby romance', uuid: '68d97db1-eb52-4c03-8afc-eed5df30c417', colors: [[255,49,88],[249,140,94],[255,86,113],[255,124,85],[248,140,125]], brightness: 45 },
-    { name: 'City of love', uuid: '1fde4a1b-2ace-4b3a-a517-f9660fc84536', colors: [[151,0,255],[70,194,255],[108,159,255],[255,135,48],[226,159,42]], brightness: 45 },
-    { name: 'Sunset allure', uuid: '68e8b68e-8237-48a6-bf5f-f62258dd2ff3', colors: [[185,149,255],[255,120,73],[201,146,255],[240,136,70],[226,148,61]], brightness: 41 },
-    { name: 'Lovebirds', uuid: 'f1f5f209-ffcb-4734-8567-0819a2885214', colors: [[230,137,64],[233,135,27],[212,150,62],[208,153,67],[208,154,33]], brightness: 39 },
-    { name: 'Smitten', uuid: 'a65a2815-52fb-4748-8e02-b607f96f70ea', colors: [[255,154,180],[255,153,128],[255,148,143],[255,160,115],[255,163,90]], brightness: 60 },
-    { name: 'Glitz and glam', uuid: '2bf0e527-62ac-4203-b8a1-de06b0913fde', colors: [[255,67,243],[255,143,52],[255,134,231],[255,141,188],[253,155,57]], brightness: 50 },
-    { name: 'Promise', uuid: '0b8dcd68-9ad0-4722-b23f-5fddb24204ef', colors: [[122,200,255],[255,141,137],[220,159,255],[162,200,141],[241,162,126]], brightness: 50 },
-  ] },
-  halloween: { label: 'Halloween', scenes: [
-    { name: 'Trick or treat', uuid: '8a363ceb-f4c2-4c7f-9cd3-a71a6181b471', colors: [[255,129,77],[136,147,255],[180,149,255],[255,79,255],[255,135,255]], brightness: 55 },
-    { name: 'Glowing grins', uuid: '938da1ed-edbc-4cf0-b9ab-bdc3d7d0659f', colors: [[255,57,76],[237,157,61],[255,139,32],[255,108,55],[131,204,49]], brightness: 47 },
-    { name: 'Spellbound', uuid: '0d2a6c4f-9c71-4279-950c-05f3f84b6dbd', colors: [[240,165,19],[91,216,113],[236,30,255],[194,152,255],[134,209,72]], brightness: 50 },
-    { name: 'Hocus pocus', uuid: '00b65abf-df21-4f15-a379-c1742fb786fb', colors: [[225,21,255],[255,48,137],[235,153,32],[17,212,116],[255,49,0]], brightness: 45 },
-    { name: 'Toil and trouble', uuid: '074338f3-f7f3-4402-9f30-46ac70e5a0e6', colors: [[255,49,5],[255,119,30],[245,144,48],[224,20,255],[221,122,255]], brightness: 44 },
-    { name: 'Witching hour', uuid: '2ad04284-2f0a-40d9-b2a9-6b929a475fa1', colors: [[247,142,106],[255,128,68],[255,89,23],[152,0,255],[121,172,255]], brightness: 45 },
-    { name: 'Pandemonium', uuid: '0cbcc8ed-5474-471c-b3c1-45b4acc555b1', colors: [[190,0,255],[216,161,255],[250,55,255],[206,91,255],[205,154,255]], brightness: 50 },
-    { name: 'Phantom', uuid: 'd824598f-0c09-4e67-beb2-972a8d5813e2', colors: [[117,185,192],[229,138,95],[52,191,235],[73,180,255],[206,152,137]], brightness: 40 },
-  ] },
-  /* Guillemets DOUBLES, et la cle au catalogue. Le libelle passe par `tr()`
-   * a l'affichage (`HUE_CATS()`), mais l'argument est une VARIABLE : le filet
-   * i18n, qui ne lit que des litteraux, ne pouvait pas le reclamer. Il
-   * sortait donc en francais dans les six autres langues. */
-  winter: { label: "Fêtes d'hiver", scenes: [
-    { name: 'Snow sparkle', uuid: '6a794ffd-3564-493d-a9ad-a1abcec8b81c', colors: [[32,197,168],[143,151,255],[143,0,255],[228,139,63],[255,104,26]], brightness: 39 },
-    { name: 'Under the tree', uuid: '85b8bc42-c564-4661-b058-f4e5792a6a6c', colors: [[255,57,32],[59,198,125],[9,202,63],[205,157,42],[230,138,95]], brightness: 40 },
-    { name: 'Nutcracker', uuid: '33c32d2a-e5ad-4b26-8e6f-07090b4c6487', colors: [[59,189,255],[186,166,74],[217,149,34],[106,148,255],[74,196,139]], brightness: 40 },
-    { name: 'Jolly', uuid: '77d10893-7b6f-4586-a77b-694b2b78fd3a', colors: [[203,157,63],[255,108,85],[59,198,125],[76,177,255],[255,99,186]], brightness: 40 },
-    { name: 'Golden star', uuid: 'a5a12d6a-430d-4324-9078-cf7a74538b52', colors: [[255,49,39],[209,172,60],[246,147,32],[219,166,53],[255,102,74]], brightness: 46 },
-    { name: 'Silent night', uuid: '4760abd5-e5a6-425a-be32-8f37f6e2acfd', colors: [[205,149,95],[204,148,126],[217,141,92],[226,134,86],[206,147,109]], brightness: 38 },
-    { name: 'Color burst', uuid: 'e24e9183-747e-4d4e-a950-a746c6291c90', colors: [[232,32,255],[255,39,72],[222,102,80],[133,124,255],[161,148,44]], brightness: 30 },
-    { name: 'Crystalline', uuid: '713a3f4d-2fc9-4d5e-80a5-a20a25815197', colors: [[186,140,148],[188,141,119],[103,162,253],[83,163,255],[182,139,189]], brightness: 33 },
-    { name: 'Rosy sparkle', uuid: 'cf50bd49-16b1-47fd-a020-b83072595f37', colors: [[218,140,105],[205,147,132],[231,127,131],[236,118,176],[230,116,235]], brightness: 38 },
-    { name: 'Festive fun', uuid: '667e4f15-4abf-4c56-8ef4-74fe1df422b8', colors: [[103,132,255],[181,26,255],[254,91,67],[200,16,255],[241,108,65]], brightness: 35 },
-  ] },
-  misc: { label: 'Divers', scenes: [
-    { name: 'SECAM', uuid: 'dbffbd71-7f65-428a-9ac7-0db51057d31a', colors: [[244,0,255],[255,0,27],[255,0,255],[73,221,0],[88,213,208]], brightness: 50 },
-    { name: 'CGA', uuid: '9565033d-f2ea-4821-bfba-7dd9b35be20a', colors: [[43,217,211],[255,0,255],[255,0,255],[255,0,255],[255,0,255]], brightness: 50 },
-    { name: 'Light Cycles', uuid: '97648e18-758a-4382-99a4-8b657f4bb098', colors: [[255,136,11],[109,207,235],[109,207,235],[109,207,235],[109,207,235]], brightness: 50 },
-    { name: 'Valetudo', uuid: '4bc4f958-b4af-46cf-8e67-636161e714f5', colors: [[94,181,255],[0,219,213],[111,215,47],[255,94,40],[214,181,51]], brightness: 50 },
-  ] },
-};
-const HUE_SCENE_IMG_BASE = '/local/hue_scenes/';
-
-// Appliquer une scène colorée demande un script capable de recevoir plusieurs
-// couleurs : rien de standard dans Home Assistant. Il est donc désigné dans la
-// configuration, et à défaut on n'applique que la luminosité — un geste partiel
-// vaut mieux qu'un bouton qui ne fait rien.
-const scriptSvc = (id) => (typeof id === 'string' && id.indexOf('script.') === 0) ? id.slice(7) : null;
+/* La bibliothèque des ambiances Hue (`HUE_SCENES`), son nuancier et la
+ * section des Scènes (`ScenesContent`) vivent dans `scenes.jsx`, chargé à la
+ * demande depuis le 11/10 (voir son en-tête) ; `dimmableLights` vit dans
+ * state.js. */
 
 // Tondeuse : le domaine `lawn_mower` suffit ; la configuration tranche s'il y
 // en a plusieurs. Ses capteurs sont ceux du même appareil.
@@ -9982,206 +11308,6 @@ function mowerSensor(S, kind) {
 function mowerKeys() {
   const S = (getHass() || {}).states || {};
   return [mowerId(S), mowerSensor(S, 'battery'), mowerSensor(S, 'charging'), mowerSensor(S, 'progress')].filter(Boolean);
-}
-
-/* Une FONCTION, pas une table.
- *
- * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
- * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
- * langue. Appelee au rendu, elle se dit dans la langue du moment. */
-const HUE_ROOMS = () => [
-  { id: 'Séjour', label: tr('Séjour'), icon: 'couch' }, { id: 'Chambre', label: tr('Chambre'), icon: 'bed' },
-  { id: 'Chambre enfant', label: tr('Enfant'), icon: 'teddy-bear' }, { id: 'Toute la maison', label: tr('Tout'), icon: 'home' },
-];
-const HUE_CATS = () => Object.entries(HUE_SCENES).map(([id, c]) => ({ id, label: tr(c.label) }));
-// Le nuancier des ambiances Hue garde son nom (ScenesContent n'est pas
-// retouché) ; le calcul est versHex de contraste.js (lot 15 de l'audit du 03/10).
-const rgbHex = versHex;
-// Lumières réglables en luminosité : le choix de l'utilisateur s'il en a fait
-// un, sinon toutes celles que Home Assistant déclare variables.
-function dimmableLights(hass) {
-  const cfg = loggiaEnt('hue', null);
-  const S = (hass && hass.states) || null;
-  if (Array.isArray(cfg) && cfg.length) return S ? cfg.filter(id => S[id]) : cfg;
-  if (!S) return [];
-  return Object.keys(S).filter(id => {
-    if (id.indexOf('light.') !== 0) return false;
-    const m = (S[id].attributes && S[id].attributes.supported_color_modes) || [];
-    return m.some(x => x !== 'onoff');
-  });
-}
-// Aperçu façon app Hue : 5 dégradés radiaux sur fond sombre (fallback si le JPEG manque).
-const sceneGradient = (colors) => {
-  const pos = ['20% 25%', '78% 22%', '50% 65%', '18% 80%', '85% 78%'];
-  const layers = colors.slice(0, 5).map(([r, g, b], i) => `radial-gradient(circle at ${pos[i] || pos[i % 5]}, rgb(${r},${g},${b}) 0%, rgba(${r},${g},${b},0) 55%)`);
-  return [...layers, 'linear-gradient(135deg,#1a1f2e,#0d1018)'].join(', ');
-};
-/* Le vrai JPEG de Hue par-dessus, le degrade RGB en dessous — jamais de carte
- * grise vide. Mais ces images sont FACULTATIVES : il faut les deposer soi-meme
- * dans `www/hue_scenes/`, et presque personne ne le fait. Tant que la carte les
- * demandait sans rien savoir, la vue Scenarios tirait neuf requetes en 404 a
- * CHAQUE affichage, sur la demo en ligne comme sur toute installation sans ce
- * dossier : la console se remplissait, et rien ne le disait (23/09, plan M6).
- *
- * On demande donc l'image UNE fois par ambiance et par session, hors du rendu,
- * et on ne la pose qu'une fois qu'elle a repondu. Une absence se retient : la
- * seconde visite ne redemande rien. */
-const HUE_IMG = new Map();
-const sceneBackground = (scene, avecImage) => {
-  const g = sceneGradient(scene.colors);
-  return (scene.uuid && avecImage)
-    ? `url('${HUE_SCENE_IMG_BASE}${scene.uuid}.jpeg') center/cover no-repeat, ${g}`
-    : g;
-};
-const sceneByName = (name) => { for (const c of Object.values(HUE_SCENES)) { const s = c.scenes.find(x => x.name === name); if (s) return s; } return null; };
-
-function ScenesContent({ hass }) {
-  const S = (hass && hass.states) || null;
-  const haActive = (S && S[hueScripts().active] && S[hueScripts().active].state) || '';
-  const haRoom = (S && S[hueScripts().room] && S[hueScripts().room].state) || tr('Toute la maison');
-  // état optimiste : maj instantanée au clic (sinon ça "rame" en attendant le poll HA ~2s)
-  const [room, setRoomState] = useState(haRoom);
-  const [sel, setSel] = useState(haActive);
-  useEffect(() => { setRoomState(haRoom); }, [haRoom]);
-  useEffect(() => { setSel(haActive); }, [haActive]);
-  const selCat = (Object.entries(HUE_SCENES).find(([, c]) => c.scenes.some(s => s.name === sel)) || [])[0] || null;
-  const [cat, setCat] = useState(selCat || 'classics');
-  useEffect(() => { if (selCat) setCat(selCat); }, [selCat]);
-
-  const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
-  // Applique une scène : le script configuré s'il existe, sinon la luminosité
-  // seule sur les lampes variables.
-  const applyScene = (data) => {
-    const svc = scriptSvc(hueScripts().apply);
-    if (svc) { call('script', svc, data); return; }
-    const ids = dimmableLights(hass);
-    if (ids.length && data.brightness_pct != null) call('light', 'turn_on', { entity_id: ids, brightness_pct: data.brightness_pct });
-  };
-  const pickScene = (sc) => { setSel(sc.name); applyScene({ scene_name: sc.name, color1: sc.colors[0], color2: sc.colors[1], color3: sc.colors[2], color4: sc.colors[3], color5: sc.colors[4], brightness_pct: sc.brightness }); };
-  const pickRoom = (r) => { setRoomState(r); const id = hueScripts().room; if (id) call('input_select', 'select_option', { entity_id: id, option: r }); };
-  // Deux gestes sans équivalent standard : on garde le script quand il existe,
-  // sinon on éteint simplement les lampes concernées.
-  const runOrLights = (key, svcFallback) => {
-    const svc = scriptSvc(hueScripts()[key]);
-    if (svc) { call('script', svc, {}); return; }
-    const ids = dimmableLights(hass);
-    if (ids.length) call('light', svcFallback, { entity_id: ids });
-  };
-  const warmWhite = () => { setSel(''); runOrLights('off', 'turn_off'); };
-  const allOff = () => { setSel(''); runOrLights('allOff', 'turn_off'); };
-
-  const scenes = HUE_SCENES[cat] ? HUE_SCENES[cat].scenes : [];
-  /* Les images de la collection affichee, demandees une seule fois. `cat` suffit
-   * comme dependance : `scenes` est recalcule a chaque rendu et bouclerait. */
-  const [, redessinerImages] = useState(0);
-  useEffect(() => {
-    const inconnues = scenes.map(x => x.uuid).filter(u => u && !HUE_IMG.has(u));
-    if (!inconnues.length) return undefined;
-    let vivant = true;
-    let reste = inconnues.length;
-    inconnues.forEach(u => {
-      const img = new Image();
-      const fini = (ok) => {
-        HUE_IMG.set(u, ok);
-        reste -= 1;
-        if (vivant && reste === 0) redessinerImages(v => v + 1);
-      };
-      img.onload = () => fini(true);
-      img.onerror = () => fini(false);
-      img.src = HUE_SCENE_IMG_BASE + u + '.jpeg';
-    });
-    return () => { vivant = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cat]);
-  const selScene = sel ? sceneByName(sel) : null;
-  const lit = !!selScene;
-  const selColor = selScene ? rgbHex(selScene.colors[0]) : '#5f6c87';
-
-  // Luminosité appliquée avec la scène (le script accepte brightness_pct)
-  const [briOv, setBriOv] = useState(null);
-  const briOfScene = selScene && selScene.brightness != null ? selScene.brightness : 60;
-  const bri = briOv != null ? briOv : briOfScene;
-  const setBri = (nv) => {
-    const v = Math.max(5, Math.min(100, nv));
-    setBriOv(v);
-    if (selScene) applyScene({ scene_name: selScene.name, color1: selScene.colors[0], color2: selScene.colors[1], color3: selScene.colors[2], color4: selScene.colors[3], color5: selScene.colors[4], brightness_pct: v });
-    else { const ids = dimmableLights(hass); if (ids.length) call('light', 'turn_on', { entity_id: ids, brightness_pct: v }); }
-  };
-  const totalScenes = Object.values(HUE_SCENES).reduce((n, c) => n + c.scenes.length, 0);
-  const miniBtn = (on) => ({ padding: '5px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text2)' });
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginTop: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
-        <div style={{ minWidth: 0 }}>
-          <h2 style={sectionTitle}>{tr('Ambiances lumineuses')}</h2>
-          <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{tr('Bibliothèque Hue · {c} collections · {s} scènes', { c: HUE_CATS().length, s: totalScenes })}</div>
-        </div>
-        <span style={{ flex: 1 }} />
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: lit ? 'rgba(var(--o-accent-rgb),.14)' : 'var(--o-s2)', color: lit ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: lit ? selColor : 'var(--o-text3)' }} />{lit ? sel.toUpperCase() : tr('AUCUNE ACTIVE')}</span>
-      </div>
-
-      {/* réglages rapides : direct, pièce, collection, luminosité */}
-      <div className="o-bar o-bar-scenes" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-        <QuickBox label={tr('Direct')} className="o-qb-direct">
-          <div style={{ display: 'flex', gap: 4 }}>
-            <button onClick={warmWhite} aria-label={tr('Blanc chaud')} style={miniBtn(false)}><span className="o-qb-ico" aria-hidden="true"><Fi i="bulb" size={15} color="var(--o-lampe)" /></span><span className="o-qb-txt">{tr('Blanc chaud')}</span></button>
-            <button onClick={allOff} aria-label={tr('Éteindre')} style={miniBtn(false)}><span className="o-qb-ico" aria-hidden="true"><Fi i="power" size={15} /></span><span className="o-qb-txt">{tr('Éteindre')}</span></button>
-          </div>
-        </QuickBox>
-        <QuickBox label={tr('Pièce')} className="o-qb-piece">
-          <div style={{ display: 'flex', gap: 4 }}>
-            {HUE_ROOMS().map(r => <button key={r.id} onClick={() => pickRoom(r.id)} style={miniBtn(room === r.id)}>{r.label}</button>)}
-          </div>
-        </QuickBox>
-        <QuickBox label={tr('Collection')} className="o-qb-collection">
-          <ListeChoix value={cat} options={HUE_CATS()} onChange={setCat} label={tr('Collection de scènes')} />
-        </QuickBox>
-        <QuickBox label={tr('Luminosité')} className="o-qb-lumi">
-          {/* Le rôle « curseur » vit sur la VALEUR, plus sur la rangée (lot 13
-            * de l'audit du 03/10) : posé sur le conteneur, il enfermait − et +,
-            * et un curseur ne contient pas de bouton (`nested-interactive`) —
-            * les deux disparaissaient d'un lecteur d'écran. Au clavier : Tab
-            * jusqu'à « 60 % », puis les flèches, Page préc. / suiv., Début /
-            * Fin ; − et + gardent leur clic et disent ce qu'ils règlent
-            * (« Monter » se lisait « Move up » en anglais, le mot du mode
-            * édition). La valeur reste un `span` enfant direct de la rangée :
-            * `.o-qb-lumi > div > span` (index.css) la tient au téléphone. */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button onClick={() => setBri(bri - 5)} aria-label={tr('Baisser la luminosité')} style={{ width: 24, height: 24, borderRadius: 11, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>−</button>
-            <span {...kbSlider(tr('Luminosité des scènes'), bri, setBri, { min: 5, max: 100, step: 5 })} style={{ minWidth: 44, textAlign: 'center', fontSize: 12, fontWeight: 800, color: 'var(--o-warn)' }}>{bri} %</span>
-            <button onClick={() => setBri(bri + 5)} aria-label={tr('Monter la luminosité')} style={{ width: 24, height: 24, borderRadius: 11, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 13, fontWeight: 600 }}>+</button>
-          </div>
-        </QuickBox>
-        <span style={{ flex: 1 }} />
-      </div>
-
-      {/* carte Appliquer une scène */}
-
-      {/* grille des scènes de la collection : l'IMAGE Hue reste la vignette */}
-      <div style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{(HUE_CATS().find(c => c.id === cat) || {}).label}</div>
-      <div className="grid-scenecards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(178px,1fr))', gap: 16 }}>
-        {scenes.map(sc => {
-          const on = sel === sc.name;
-          return (
-            <button aria-label={tr('Appliquer {nom}', { nom: sc.name })} key={sc.name} onClick={() => pickScene(sc)} title={tr('Appliquer {nom}', { nom: sc.name })} style={{ position: 'relative', textAlign: 'left', padding: 0, overflow: 'hidden', cursor: 'pointer', borderRadius: 18, background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(var(--o-accent-rgb),.55)' : 'var(--o-bd2)'), boxShadow: on ? '0 0 0 1px rgba(var(--o-accent-rgb),.3)' : 'none', transition: 'border-color .2s, box-shadow .2s' }}>
-              <span aria-hidden="true" style={{ display: 'block', height: 96, background: sceneBackground(sc, HUE_IMG.get(sc.uuid) === true) }} />
-              <span style={{ display: 'block', padding: '11px 13px 12px' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: on ? 'var(--o-accent-soft)' : 'var(--o-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sc.name}</span>
-                  {on && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-accent-fond)', flexShrink: 0 }} />}
-                </span>
-                <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{tr('Luminosité {n} %', { n: sc.brightness })}</span>
-                <span style={{ display: 'flex', gap: 4, marginTop: 9 }}>
-                  {sc.colors.slice(0, 5).map((c, ci) => <span key={ci} style={{ flex: 1, height: 4, borderRadius: 4, background: rgbHex(c) }} />)}
-                </span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 /* La vue Scénarios (ADR 0027) : les scénarios de Loggia et les siens en
@@ -10212,7 +11338,7 @@ function ScenariosView({ hass, edit = false }) {
       <Header />
       <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
         {edit && <BandeauEdition onAjouter={() => setFiche('nouveau')} ajouterLabel={tr('Ajouter un scénario')}
-          texte={tr('Mode édition : avance, recule ou modifie un scénario, ou ajoutes-en un.')} />}
+          texte={tr('Mode édition : avancez, reculez ou modifiez un scénario, ou ajoutez-en un.')} />}
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ minWidth: 0 }}>
             <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Scénarios')}</h1>
@@ -10244,171 +11370,67 @@ function ScenariosView({ hass, edit = false }) {
             </button>
           )}
         </div>
-        <ScenesContent hass={hass} />
+        {/* La bibliothèque Hue arrive à la première ouverture (scenes.jsx,
+          * 11/10) : le repli tient sa place, pour que rien ne saute — 534 px,
+          * la section mesurée dans la démo à 1440 px de large, là où elle
+          * s'affiche dès l'ouverture. Plus étroite, elle est plus haute (766 à
+          * 768 px, 1 149 à 375) mais elle ferme la vue : rien au-dessus ne
+          * bouge, seule la page s'allonge. */}
+        <Suspense fallback={<div style={{ marginTop: 8, minHeight: 534 }} />}>
+          <ScenesContent hass={hass} />
+        </Suspense>
       </div>
-      {fiche && <FicheScenario key={fiche === 'nouveau' ? 'nouveau' : fiche.id} scenario={fiche === 'nouveau' ? null : fiche} pieces={pieces} liens={liens} onEnregistrer={sc.enregistrer} onClose={() => setFiche(null)} />}
+      {fiche && <Suspense fallback={null}><FicheScenario key={fiche === 'nouveau' ? 'nouveau' : fiche.id} scenario={fiche === 'nouveau' ? null : fiche} pieces={pieces} liens={liens} onEnregistrer={sc.enregistrer} onClose={() => setFiche(null)} briques={BRIQUES_SCENARIO} /></Suspense>}
     </main>
   );
 }
 
-/* La fiche d'un scénario : nom, icône (quarante, par pages de dix), teinte,
- * nature — composé par Loggia, ou lié à une scène ou un script de Home
- * Assistant —, les actions (famille, geste, portée, pièce, valeur, moment),
- * sur l'Accueil ou non, masqué ou non ; « Remettre d'origine » pour un
- * scénario de Loggia qu'on a touché, « Supprimer » pour un des siens. */
-function FicheScenario({ scenario = null, pieces = [], liens = [], onEnregistrer, onClose }) {
-  const existant = !!scenario;
-  const [s, setS] = useState(() => scenario ? { ...scenario, nom: scenario.nom || '', actions: (scenario.actions || []).map(a => ({ ...a })) } : scenarioVide());
-  const maj = (patch) => setS(v => ({ ...v, ...patch }));
-  const [nature, setNature] = useState(scenario && scenario.lien ? 'lie' : 'compose');
-  const [err, setErr] = useState('');
-  const [attente, setAttente] = useState(false);
-  const t = teinteScenario(s);
-  const nomIntegre = existant && scenario.integre ? NOMS_INTEGRES()[scenario.id] : '';
-  const valide = existant ? true : !!(s.nom || '').trim();
-  // Sans `outline: none` (23/09, plan M7) : posé en style en ligne, il battait
-  // la règle `:focus-visible` de la feuille et le champ focalisé ne se voyait
-  // plus au clavier. L'anneau d'accent revient, ici comme ailleurs.
-  const champ = { width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600 };
-  const etiquette = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '14px 2px 7px' };
-  const note = { fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', margin: '6px 2px 0' };
-  const puce = (on, x) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'rgba(' + x.rgb + ',.5)' : 'var(--o-bd2)'), background: on ? 'rgba(' + x.rgb + ',.14)' : 'var(--o-s1)', color: on ? x.col : 'var(--o-text1)' });
-  const secondaire = { padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' };
-  const majAction = (i, patch) => setS(v => ({ ...v, actions: v.actions.map((a, k) => k === i ? { ...a, ...patch } : a) }));
-  const retirerAction = (i) => setS(v => ({ ...v, actions: v.actions.filter((_, k) => k !== i) }));
-  const ajouterAction = (famille) => setS(v => ({ ...v, actions: [...v.actions, actionVide(famille)] }));
-  const envoyer = async (close, patch) => {
-    setAttente(true); setErr('');
-    try { await onEnregistrer(patch); close(); }
-    /* Un refus du composant se dit par son code, dans la langue de l'écran :
-     * « trop de scenarios (24 au plus) » s'affichait tel quel, en français
-     * sans accents, dans les sept langues (audit du 03/10). Ce qui n'est pas
-     * un refus garde son texte, déjà traduit — « Home Assistant n'est pas
-     * joignable ». */
-    catch (e) { setErr(estRefus(e) ? raisonEchec(e) : ((e && e.message) || tr('Enregistrement impossible.'))); setAttente(false); }
-  };
-  const valider = (close) => {
-    if (!valide || attente) return;
-    const doc = versEnregistrement({ ...s, lien: nature === 'lie' ? s.lien : null });
-    if (nature === 'lie' && !doc.lien) { setErr(tr('Choisis une scène ou un script.')); return; }
-    envoyer(close, { enregistrer: doc });
-  };
-  const optionsLiens = [{ id: '', label: tr('— choisir —') }, ...liens.map(l => ({ id: l.haid, label: l.nom, sub: l.haid }))];
-  const optionsPieces = [{ id: '', label: tr('Pièce de la TV ou de l’enceinte') }, ...pieces.map(p => ({ id: p, label: p }))];
-  const famillesNoms = NOMS_FAMILLES(), gestesNoms = NOMS_GESTES(), porteesNoms = NOMS_PORTEES(), conditionsNoms = NOMS_CONDITIONS();
-  return (
-    <BottomSheet onClose={onClose}>
-      {close => (
-        <div style={{ padding: '0 0 8px' }}>
-          <TitreFeuille style={{ fontSize: 15, fontWeight: 800 }}>{existant ? tr('Modifier le scénario') : tr('Ajouter un scénario')}</TitreFeuille>
-          <div style={{ ...note, marginTop: 4 }}>{existant && scenario.integre ? tr('Un scénario de Loggia : modifie-le, ou remets-le d’origine.') : tr('Compose-le à partir de ce que la maison possède, ou lie une scène ou un script.')}</div>
-
-          <label htmlFor="o-scn-nom" style={etiquette}>{tr('NOM')}</label>
-          {/* eslint-disable-next-line jsx-a11y/control-has-associated-label */}
-          <input id="o-scn-nom" value={s.nom} onChange={(e) => maj({ nom: e.target.value })} placeholder={nomIntegre || tr('Apéro, Sieste, Devoirs…')}
-            onKeyDown={(e) => { if (e.key === 'Enter') valider(close); }} style={champ} autoFocus={!existant} />
-
-          {/* Un scenario garde son icone cote serveur : pas de trait/plein ici,
-            * mais la bibliotheque entiere au lieu des quarante d'avant. */}
-          <ChoixIcone valeur={s.icone} onChoisir={(ic) => maj({ icone: ic })} suggerees={ICONES_SCENARIO} />
-
-          <div style={etiquette}>{tr('TEINTE')}</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {TEINTES_SCENARIO.map(x => { const on = x.id === s.teinte; return (
-              <button key={x.id} aria-pressed={on} onClick={() => maj({ teinte: x.id })} style={puce(on, x)}>
-                <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: 5, background: x.col, display: 'inline-block' }} />{tr(x.label)}
-              </button>
-            ); })}
-          </div>
-
-          <div style={etiquette}>{tr('NATURE')}</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button aria-pressed={nature === 'compose'} onClick={() => setNature('compose')} style={puce(nature === 'compose', t)}>{tr('Composé par Loggia')}</button>
-            <button aria-pressed={nature === 'lie'} onClick={() => setNature('lie')} style={puce(nature === 'lie', t)}>{tr('Lié à Home Assistant')}</button>
-          </div>
-          {nature === 'lie' ? (
-            <div style={{ marginTop: 10 }}>
-              <ListeChoix value={s.lien || ''} options={optionsLiens} onChange={(v) => maj({ lien: v || null })} label={tr('Scène ou script')} />
-              {existant && scenario.suggestion && !s.lien && <div style={{ marginTop: 8 }}><button onClick={() => maj({ lien: scenario.suggestion })} style={puce(false, t)}><Fi i="sparkles" size={12} />{tr('Suggestion : {x}', { x: scenario.suggestion })}</button></div>}
-              <div style={note}>{tr('Loggia lance cette scène ou ce script, et rien d’autre.')}</div>
-            </div>
-          ) : (
-            <>
-              <div style={etiquette}>{tr('ACTIONS')}</div>
-              {s.actions.length === 0 && <div style={{ ...note, margin: '0 2px 8px' }}>{tr('Aucune action : ajoute une famille ci-dessous.')}</div>}
-              {s.actions.map((a, i) => (
-                <div key={i} style={{ padding: '10px 12px', borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', marginBottom: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Fi i={ICONES_FAMILLES[a.famille] || 'bulb'} size={14} color={t.col} />
-                    <span style={{ flex: 1, fontSize: 13, fontWeight: 800 }}>{famillesNoms[a.famille] || a.famille}</span>
-                    <button onClick={() => retirerAction(i)} title={tr('Retirer')} aria-label={tr('Retirer') + ' ' + (famillesNoms[a.famille] || a.famille)} style={{ ...boutonEdition(true), ...BOUTON_PETIT, width: 28, height: 28 }}><Fi i="cross-small" size={12} /></button>
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                    {(GESTES_SCN[a.famille] || []).map(g => <button key={g} aria-pressed={a.geste === g} onClick={() => majAction(i, { geste: g })} style={puce(a.geste === g, t)}>{(gestesNoms[a.famille] || {})[g] || g}</button>)}
-                  </div>
-                  {a.famille !== 'alarme' && (
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8, alignItems: 'center' }}>
-                      {PORTEES_SCN.map(p => <button key={p} aria-pressed={(a.portee || 'maison') === p} onClick={() => majAction(i, { portee: p })} style={puce((a.portee || 'maison') === p, t)}>{porteesNoms[p]}</button>)}
-                      {a.portee === 'piece' && <ListeChoix value={a.piece || ''} options={optionsPieces} onChange={(v) => majAction(i, { piece: v || null })} label={tr('Pièce')} />}
-                    </div>
-                  )}
-                  {((a.famille === 'lumieres' && a.geste === 'allumer') || a.famille === 'chauffage') && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{a.famille === 'lumieres' ? tr('Luminosité') : tr('Consigne')}</span>
-                      <input type="number" aria-label={a.famille === 'lumieres' ? tr('Luminosité') : tr('Consigne')} min={a.famille === 'lumieres' ? 1 : 5} max={a.famille === 'lumieres' ? 100 : 30} step={a.famille === 'lumieres' ? 5 : 0.5}
-                        value={a.valeur != null ? a.valeur : (a.famille === 'lumieres' ? 100 : (a.geste === 'eco' ? 17 : 20))}
-                        onChange={(e) => majAction(i, { valeur: e.target.value === '' ? null : Number(e.target.value) })} style={{ ...champ, width: 90 }} />
-                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{a.famille === 'lumieres' ? '%' : '°C'}</span>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                    {['toujours', 'nuit', 'jour'].map(c => { const on = (a.si || 'toujours') === c; return <button key={c} aria-pressed={on} onClick={() => majAction(i, { si: c === 'toujours' ? null : c })} style={puce(on, t)}>{conditionsNoms[c]}</button>; })}
-                    {a.famille === 'lumieres' && a.geste === 'eteindre' && <button aria-pressed={!!a.sauf_veilleuses} onClick={() => majAction(i, { sauf_veilleuses: !a.sauf_veilleuses })} style={puce(!!a.sauf_veilleuses, t)}>{tr('Sauf les veilleuses')}</button>}
-                  </div>
-                </div>
-              ))}
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                {FAMILLES_SCN.map(f => <button key={f} onClick={() => ajouterAction(f)} style={puce(false, t)}><Fi i="plus" size={11} />{famillesNoms[f]}</button>)}
-              </div>
-              <div style={note}>{tr('Résolu au lancement : une lampe ajoutée demain sera prise. Jamais de désarmement ni de déverrouillage.')}</div>
-            </>
-          )}
-
-          <div style={{ marginTop: 8 }}>
-            <FicheRangee premiere titre={tr('Sur l’Accueil')} desc={tr('Dans la rangée des scénarios de l’accueil et de la veille.')}
-              droite={<RmBascule on={s.accueil !== false} nom={tr('Sur l’Accueil')} onToggle={() => maj({ accueil: s.accueil === false })} couleur={t.col} />} />
-            {existant && <FicheRangee titre={tr('Masqué')} desc={tr('Gardé, mais plus montré nulle part.')}
-              droite={<RmBascule on={!!s.masque} nom={tr('Masqué')} onToggle={() => maj({ masque: !s.masque })} couleur={t.col} />} />}
-          </div>
-          {err && <div style={{ ...note, color: 'var(--o-bad)' }}>{err}</div>}
-
-          <div style={{ display: 'flex', gap: 8, marginTop: 20, alignItems: 'center', flexWrap: 'wrap' }}>
-            {existant && scenario.integre && scenario.modifie && <button onClick={() => envoyer(close, { reinitialiser: scenario.id })} style={secondaire}>{tr('Remettre d’origine')}</button>}
-            {existant && !scenario.integre && <button onClick={() => envoyer(close, { supprimer: scenario.id })} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)' }}><Fi i="cross-small" size={12} />{tr('Supprimer')}</button>}
-            <span style={{ flex: 1 }} />
-            <button onClick={() => valider(close)} disabled={!valide || attente} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 16px', borderRadius: 14, border: 'none', cursor: valide && !attente ? 'pointer' : 'default', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#fff', opacity: valide && !attente ? 1 : .45 }}><Fi i="plus" size={12} />{tr('Enregistrer')}</button>
-          </div>
-        </div>
-      )}
-    </BottomSheet>
-  );
-}
+/* La fiche d'un scénario est chargée à la demande (`fichescenario.jsx`, contre-relecture du lot 3 des capteurs) : elle s'ouvre pour
+ * composer un scénario, rien au démarrage. Elle n'importe jamais App.jsx : la vue lui passe les briques des fiches d'ici. */
+const FicheScenario = lazyRecharge(() => import('./fichescenario.jsx'));
+const BRIQUES_SCENARIO = { ChoixIcone, FicheRangee, RmBascule, boutonEdition, BOUTON_PETIT };
 
 // Plage du dial Nest (labels 10°/20°/30°) + palette d'arc fixe (rouge → magenta → violet)
 
-const climateKeys = () => climateZones(null).flatMap(z => [z.haid, z.tempCible, z.modeEnt, z.autoEnt, z.tempSensor].filter(Boolean));
+/* Les clés d'une zone : ce qu'elle commande, la puissance d'un module découvert
+ * (« Chauffe » se lit sur elle) et, sauf `mesures` à faux, son thermomètre —
+ * la vue Objets ne suit que ce qu'elle commande. */
+const climateKeys = (mesures = true) => climateZones(null).flatMap(z => [z.haid, z.tempCible, z.modeEnt, z.autoEnt, z.puissance, mesures ? z.tempSensor : null].filter(Boolean));
 // Zones de chauffage : configuration de l'utilisateur (elle seule sait décrire
-// un radiateur fil pilote), sinon les thermostats trouvés par la découverte.
+// un radiateur sur des aides), complétée des modules fil pilote découverts ;
+// sans elle, les thermostats et les modules trouvés par la découverte.
 /** Une piece est-elle dehors ?
  *
  * Home Assistant ne le dit nulle part : ni les zones ni les appareils ne portent
  * cette notion. Le nom est le seul indice, et il etait compare au seul mot
  * « Exterieur » — chez un anglophone, son jardin entrait dans la moyenne des
  * temperatures interieures. Le motif couvre les langues de Loggia et les mots
- * les plus courants. */
+ * les plus courants.
+ * Les SEPT langues, sans accents (chantier Capteurs, C15 : dehors, la table ne
+ * juge que le vent et les particules) : « Tuin », « Giardino », « Jardín »,
+ * « Ogród », « Terrace », « Taras », « Buiten » ou « Na zewnątrz » passaient pour
+ * des pièces — le vocabulaire de `PARENTE`, et les mots du dehors des langues
+ * qui n'en avaient pas. */
+/* Élargie le 19/10 (audit, M15 ; décision D5 — deviner d'abord) : la cour, le potager, la piscine, l'allée, le porche, le carport, dans
+ * les sept langues (« Backyard », « Hof », « Oprit », « Cortile », « Huerto », « Podwórko »…). Un mot COURT ne vaut qu'entier : « cour »
+ * n'est pas « couloir ». Un jardin d'hiver, une véranda, une piscine couverte se chauffent : ils restent dedans. Le réglage « Pièce du
+ * dehors » de la fiche d'une pièce l'emporte toujours (`dehors`, `loggia_rooms`). « Couvert » ne rentre que la piscine : une terrasse,
+ * un balcon couverts restent dehors (relecture du lot 3). */
+const DEHORS_MOTS = /exterieur|exterior|outdoor|outside|au[sß]en|draus|jardin|garden|garten|tuin|giardino|ogrod|terras|terrac|terraz|taras|balcon|balkon|patio|esterno|buiten|zewnatrz|dehors|yard|porch|driveway|carport|potager|pelouse|lawn|einfahrt|oprit|cortile|vialetto|huerto|piscin|podwor|podjazd|innenhof|hinterhof/;
+const DEHORS_ENTIERS = /(^|[^a-z])(cour|deck|pool|hof|orto|allee|porche|portico)([^a-z]|$)/;
+const DEDANS_MOTS = /hiver|winter|inverno|invierno|zimow|veranda|piscin\S* couvert|indoor|innenraum|binnen|interno|interior|cote jardin|vue jardin/;
+const DEHORS_CHOISIS = new WeakMap();
 function estDehors(nom) {
-  return /ext[eé]rieur|exterior|outdoor|outside|au[sß]en|jardin|garden|garten|terrasse|terraza|balcon|balkon|patio/i
-    .test(String(nom || ''));
+  const brut = cfgVal('loggia_rooms', null);
+  let choix = brut && typeof brut === 'object' ? DEHORS_CHOISIS.get(brut) : null;
+  if (brut && typeof brut === 'object' && !choix) {
+    choix = new Map((Array.isArray(brut) ? brut : []).filter(r => r && typeof r === 'object' && typeof r.dehors === 'boolean' && r.room).map(r => [rmNorm(r.room), r.dehors]));
+    DEHORS_CHOISIS.set(brut, choix);
+  }
+  const k = rmNorm(nom);
+  if (choix && choix.has(k)) return choix.get(k);
+  const t = sansAccents(nom);
+  return (DEHORS_MOTS.test(t) || DEHORS_ENTIERS.test(t)) && !DEDANS_MOTS.test(t);
 }
 
 /** Le capteur d'une plante, reconnu a sa CLASSE plutot qu'a son nom.
@@ -10477,6 +11499,41 @@ function plantPiece(S, base, saisie) {
   return null;
 }
 
+/* Ce que l'index sait d'une entité, pour les groupes et les plantes (chantier Capteurs, étapes 2 et 3 ; groupes.js, plantes.js) :
+ * son registre ; si son appareil est PHYSIQUE — un appareil du registre qui n'est pas un service (C14) ; ses sœurs ; sa pièce
+ * de Loggia (C17 : '' hors d'une pièce de Loggia) ; le nom de son appareil. */
+/* Une entité masquée ou désactivée (l'index) : l'Accueil ne la compte pas, comme Objets (audit du 19/10, M14). */
+const masqueDe = (id) => { const m = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && LOGGIA_INDEX.entityMeta.get(id); return !!m && (m.hidden || m.disabled); };
+function ctxCapteurs() {
+  const em = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta, dm = LOGGIA_INDEX && LOGGIA_INDEX.deviceMeta;
+  return {
+    meta: (id) => (em && em.get(id)) || {},
+    physique: (d) => { const x = d && dm ? dm.get(d) : null; return !!x && x.entryType !== 'service'; },
+    soeurs: soeursDe,
+    piece: (id) => pieceLoggiaDe(id) || '',
+    appareil: (id) => { const m = em && em.get(id); return (m && m.device) || null; },
+  };
+}
+/* Les plantes de la maison (C29) : celles qui se découvrent, complétées par `loggia_plants`, puis les bases configurées sans
+ * appareil connu — une liste, que lisent Objets, la fabrique, le composeur, `nomDeCle` et les clés suivies. Lue une fois par relevé
+ * de la maison, par index, par configuration et par langue, comme les membres des groupes et les piles (`MEMBRES_LUS`, `PILES_LUES`) :
+ * `plantKeys()` la demandait à chaque rendu de l'App, de chaque carte de plante et de `jugerObjet`, et triait tout `S` à chaque fois
+ * (passe bis du 17/10, point 6). */
+let PLANTES_LUES = null;
+function plantesDeLaMaison(S) {
+  // `plantsCfg()` rend un tableau neuf à chaque appel : c'est son CONTENU (quelques lignes) qui fait la clé, pas son identité.
+  const cfg = plantsCfg(), cle = JSON.stringify(cfg) + '|' + locale();
+  if (!PLANTES_LUES || PLANTES_LUES.S !== S || PLANTES_LUES.ix !== LOGGIA_INDEX || PLANTES_LUES.cle !== cle) {
+    PLANTES_LUES = { S, ix: LOGGIA_INDEX, cle, p: plantesMaison(S || {}, ctxCapteurs(), cfg, comparerTextes) };
+  }
+  return PLANTES_LUES.p;
+}
+/** Les capteurs d'une plante : ceux de son appareil, sinon ceux de sa base (une plante configurée sans appareil connu). */
+function capteursPlante(S, p) {
+  return p.capteurs || { hum: plantCapteur(S, p.base, 'moisture'), cond: plantCapteur(S, p.base, 'conductivity', 'µS/cm'), lux: plantCapteur(S, p.base, 'illuminance', 'lx'),
+    temp: plantCapteur(S, p.base, 'temperature'), bat: plantCapteur(S, p.base, 'battery', '%') };
+}
+
 function climateZones(S) {
   /* Trois sources, dans cet ordre.
    *
@@ -10484,11 +11541,16 @@ function climateZones(S) {
    * doit primer, sinon une saisie resterait sans effet, masquee par une
    * configuration plus ancienne. `loggia_entities.climate` est justement cette
    * configuration heritee, gardee tant que personne n'a touche a l'ecran.
-   * La decouverte ferme la marche : elle ne trouve que les `climate.*`. */
+   * La decouverte ferme la marche : les `climate.*` et les modules fil pilote.
+   *
+   * Une saisie ne masque plus les modules (plan 2 du chantier Chauffage,
+   * choix 3) : ceux qu'elle ne decrit pas la completent. La resolution les
+   * range apres `loggia_climate` ; on les reprend ici apres la saisie lue,
+   * l'heritee comprise, que la resolution ne connait pas. */
   const saisi = cfgVal('loggia_climate', null);
   const c = (Array.isArray(saisi) && saisi.length) ? saisi : loggiaEnt('climate', null);
-  if (Array.isArray(c) && c.length) return c.filter(z => z && z.haid && (!S || S[z.haid]));
   const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.climate;
+  if (Array.isArray(c) && c.length) return c.concat(modulesHorsSaisie(c, r && r.list)).filter(z => z && z.haid && (!S || S[z.haid]));
   if (r && r.available) return r.list;
   return [];
 }
@@ -10525,12 +11587,11 @@ const readZone = (S, z) => {
  * mene ; la vue Volets, elle, reste. */
 
 /* ════════════ VUE VOLETS (reproduction fidèle de "Loggia Volets.dc.html") ════════════ */
-/* Les modes d'automatisme des volets sont LUS SUR L'ENTITE, comme ceux du
- * chauffage. Ils etaient ecrits en dur — « Manuel », « Auto lever/coucher »,
- * « Fermeture nuit » — soit les options de l'`input_select` d'une installation.
- * Ils ne servent plus qu'a la barre de la vue Volets, tels quels : la fiche
- * d'un volet porte la bascule « Auto lever / coucher » de la regle, qui dit la
- * meme chose sans grille de trois boutons. */
+/* Les modes d'automatisme d'une INSTALLATION (son `input_select`) sont LUS SUR
+ * L'ENTITE, comme ceux du chauffage : ils etaient ecrits en dur. Ils ne servent
+ * qu'a la barre de la vue Volets, tant que le planning de Loggia dort ; allume,
+ * la barre montre les modes de Loggia, que la fiche d'un volet choisit aussi
+ * (Planning › Mode de la maison). */
 function voletModes(S) {
   const id = voletMode();
   const st = S && id && S[id];
@@ -10549,324 +11610,32 @@ function voletCovers(S) {
   if (r && r.available) return r.list.map(x => ({ id: x.id, name: x.name, haid: x.id }));
   return [];
 }
+/* Ceux qu'un ordre GROUPÉ commande (V3, audit du 19/10) : des volets, par leur
+ * classe — le miroir de `est_volet` au serveur. `voletCovers` prend tout le
+ * domaine : un garage, un portail, un velux, un groupe sans classe y gardent
+ * leur carte, mais « Ouvrir » ne les ouvre pas. */
+function voletsCommandables(S) {
+  return S ? voletCovers(S).filter(c => c && c.haid && estVolet(S[c.haid])) : [];
+}
 // Aides propres à une installation (mode d'automatisme, planning des nuits).
 // Absentes ⇒ la vue n'affiche pas les réglages correspondants.
 
-/* `embarque` : rendu comme SECTION de la vue Climatisation — un intertitre
- * « Volets » à la façon des sections de la vue Appareils, la barre d'actions
- * et les cartes ; ni grand titre, ni carte de synthèse (le confort n'a qu'une
- * vue, elle a déjà les siens). */
-function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
-  const S = (hass && hass.states) || null;
-  const derivedCovers = voletCovers(S).map(c => { const e = S && S[c.haid]; const a = e && e.attributes; const pos = a && a.current_position; return { ...c, pos: pos != null ? pos : (e && e.state === 'open' ? 100 : e && e.state === 'closed' ? 0 : 50) }; });
-  const csig = derivedCovers.map(c => c.id + ':' + c.pos).join('|');
-  /* « Tout ouvrir / tout fermer » et le mode de l'installation passent par le
-   * filet commun (lot 15 de l'audit du 03/10) : recopiés dans un état local,
-   * ils ne se recalaient que si HA bougeait — un refus laissait « tous
-   * fermés » et le mode choisi allumé jusqu'au changement de page. */
-  const [ovPos, poserPos] = useOptimiste(csig);
-  const covers = ovPos != null ? derivedCovers.map(c => ({ ...c, pos: ovPos })) : derivedCovers;
-  // Meme raison qu'au volet isole : aucun mode invente.
-  const haMode = (S && S[voletMode()] && S[voletMode()].state) || null;
-  const [ovModeHa, setModeLocal] = useOptimiste(haMode);
-  const mode = ovModeHa != null ? ovModeHa : haMode;
-  /* Le mode que LOGGIA tient, quand c'est lui qui fait le planning. Tant que
-   * la regle dort, on continue d'afficher l'`input_select` de l'installation :
-   * c'est lui qui commande, et le remplacer par des boutons sans effet serait
-   * mentir sur qui pilote. */
-  const [modeLoggia, setModeLoggia] = useState(null);
-  /* Le mode DEMANDÉ, le temps de la réponse (audit du 03/10). Le choix
-   * s'écrivait droit dans `modeLoggia`, et le `catch` d'un refus recopiait
-   * l'état sur lui-même : le bouton restait allumé jusqu'au sondage suivant —
-   * quinze secondes —, puis revenait seul, sans un mot, pendant que les volets
-   * se fermaient le soir selon l'ancien mode. Il passe donc par le filet
-   * commun, qui expire, et qu'un échec efface tout de suite. */
-  const [ovMode, poserMode] = useOptimiste(modeLoggia);
-  const modeAffiche = ovMode != null ? ovMode : modeLoggia;
-  const connecte = !!hass;
-  useEffect(() => {
-    if (!hass || typeof hass.callWS !== 'function') return undefined;
-    let vivant = true;
-    const lire = () => hass.callWS({ type: 'loggia/volets/etat' })
-      .then(r => {
-        const p = (r && r.config && r.config.planning) || null;
-        if (vivant) setModeLoggia(p && p.actif ? (p.mode || 'auto') : null);
-      })
-      .catch(() => { if (vivant) setModeLoggia(null); });
-    lire();
-    const t = setInterval(lire, 15000);
-    return () => { vivant = false; clearInterval(t); };
-  }, [connecte]);
-  const MODES_LOGGIA = () => [
-    { id: 'auto', label: tr('Auto lever/coucher') },
-    { id: 'nuit', label: tr('Fermeture nuit') },
-    { id: 'manuel', label: tr('Manuel') },
-  ];
-  /* Un refus — `loggia/volets/config` est réservé aux administrateurs de Home
-   * Assistant — remonte au toast global en NOMMANT la clé où le composant
-   * range ces règles (ADR 0046, 0125), et l'ancien mode revient sous le
-   * doigt. Rien n'est masqué : un compte ordinaire voit la barre, et apprend
-   * pourquoi son choix n'a pas pris.
-   *
-   * Le succès se lit dans la RÉPONSE : attendre le sondage ferait revenir
-   * l'ancien bouton quand le filet expire (6 s), jusqu'à la relecture
-   * suivante (15 s). */
-  const pickModeLoggia = (m) => {
-    poserMode(m);
-    ecrireRegle(hass, 'loggia/volets/config', { planning: { mode: m } }, { cle: 'loggia_volets', annuler: () => poserMode(null) })
-      .then((r) => {
-        const p = r && r.config && r.config.planning;
-        if (p) setModeLoggia(p.actif ? (p.mode || 'auto') : null);
-      });
-  };
-
-  // Agencement : la découverte propose, l'utilisateur dispose.
-  const nbEntites = Object.keys(S).length;
-  const derivedX = useMemo(() => {
-    const dejaLa = voletCovers(S).map(c => c.haid).filter(Boolean);
-    return [...dejaLa, ...Object.keys(S).filter(k => k.indexOf('cover.') === 0 && dejaLa.indexOf(k) < 0).sort()];
-  }, [nbEntites, csig]);
-  const ed = useLayoutEditor('loggia_coverlayout', 'volets', derivedX);
-  // La feuille du volet porte la programmation nocturne — la vue n'a pas a la
-  // repeter en pleine largeur. Mais elle ne vaut que pour les chambres : le
-  // Sejour n'a que le mode automatique.
-  const dc = useDomainCards(hass);
-  const [cardEdit, setCardEdit] = useState(null);
-  const [addSheet, setAddSheet] = useState(false);
-  const origineDe = (k) => {
-    if (k.indexOf('sect:') === 0) return k.slice(5) || tr('Section');
-    const st = hass && hass.states && hass.states[k];
-    return (st && st.attributes && st.attributes.friendly_name) || k;
-  };
-  const nomDe = (k) => ed.labelOf(k) || origineDe(k);
-  const addSection = () => ed.toggle('sect:' + Date.now().toString(36));
-  const blocs = [];
-  ed.ids.forEach(k => {
-    if (k.indexOf('sect:') === 0) blocs.push({ titre: k, cartes: [] });
-    else {
-      if (!blocs.length) blocs.push({ titre: null, cartes: [] });
-      blocs[blocs.length - 1].cartes.push(k);
-    }
-  });
-
-  const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
-  const allOpen = () => { poserPos(100); call('cover', 'open_cover', { entity_id: voletCovers(S).map(c => c.haid) }); };
-  const allClose = () => { poserPos(0); call('cover', 'close_cover', { entity_id: voletCovers(S).map(c => c.haid) }); };
-  const pickMode = (m) => { setModeLocal(m); call('input_select', 'select_option', { entity_id: voletMode(), option: m }); };
-
-  // Le mode tel qu'il se DIT : son libellé dans la liste, ou rien. Un état que
-  // la liste ne connaît pas (`unavailable`, `unknown`) n'est pas un mode.
-  const nomDuMode = (voletModes(S).find(m => m.id === mode) || {}).label || null;
-
-  // « n ouverts » : le meme verdict que les cartes, sinon un volet qui bute a
-  // 1 % se comptait comme ouvert dans le resume de la vue.
-  const openCount = covers.filter(c => !coverFerme(S && S[c.haid], c.pos)).length;
-
-  return (
-    <div className="loggia-content" style={{ padding: embarque ? '0 28px 40px' : '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} ajouterLabel={tr('Ajouter un volet')} onEnt={onEnt} />}
-      {embarque
-        /* L'intertitre de la vue Appareils : icône + titre serif — et les
-         * chips de MODE à droite, seule commande qui n'a pas de carte. */
-        ? <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>
-              <Fi i="blinds" size={16} color="var(--o-purple)" />{tr('Volets')}
-            </span>
-            <span style={{ flex: 1 }} />
-            {voletModes(S).length > 0 && voletMode() && voletModes(S).map(m => (
-              <button key={m.id} onClick={() => pickMode(m.id)} style={barBtn(mode === m.id)}>{m.label}</button>
-            ))}
-          </div>
-        : <ViewHead titre={tr('Volets')}
-            /* Le NOM du mode, jamais l'état brut. Une installation dont
-             * l'entité de mode est indisponible affichait « 2 volets ·
-             * unavailable » — un mot de Home Assistant, en anglais, dans une
-             * ligne qui se lit (vu chez l'utilisateur le 26/09). */
-            sous={trN(covers.length, '{n} volet', '{n} volets') + (nomDuMode ? ' · ' + String(nomDuMode).toLowerCase() : '')}
-            badge={openCount ? trN(openCount, '{n} ouvert', '{n} ouverts') : tr('tous fermés')}
-            rgb={openCount ? 'var(--o-ok-rgb)' : 'var(--o-text3-rgb)'} />}
-
-      {!embarque && <ViewBar>
-        <BarGroup label={tr('Volets')}>
-          <button onClick={allOpen} style={barBtn(false)}>{tr('Ouvrir')}</button>
-          <button onClick={() => { const ids = voletCovers(S).map(c => c.haid).filter(Boolean); if (ids.length) call('cover', 'stop_cover', { entity_id: ids }); }} style={barBtn(false)}>{tr('Stop')}</button>
-          <button onClick={allClose} style={barBtn(false)}>{tr('Fermer')}</button>
-        </BarGroup>
-        {modeLoggia !== null ? (
-          <BarGroup label={tr('Mode')}>
-            {MODES_LOGGIA().map(m => <button key={m.id} onClick={() => pickModeLoggia(m.id)} style={barBtn(modeAffiche === m.id)}>{m.label}</button>)}
-          </BarGroup>
-        ) : (voletModes(S).length > 0 && voletMode() && (
-          <BarGroup label={tr('Mode')}>
-            {voletModes(S).map(m => <button key={m.id} onClick={() => pickMode(m.id)} style={barBtn(mode === m.id)}>{m.label}</button>)}
-          </BarGroup>
-        ))}
-      </ViewBar>}
-
-      {!embarque && (edit || ed.ids.length > 0) && (
-        <div style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Volet par volet')}</div>
-      )}
-      <div ref={ed.gridRef} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {blocs.map((bloc, bi) => {
-          if (!edit && bloc.titre && !bloc.cartes.length) return null;
-          return (
-            <div key={bloc.titre || 'b' + bi} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {bloc.titre && (edit
-                ? <EditableCard plat ed={ed} id={bloc.titre} nom={nomDe(bloc.titre)} onEdit={setCardEdit}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '9px 12px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)' }}>{String(nomDe(bloc.titre)).toUpperCase()}</span>
-                      <span style={{ height: 1, flex: 1, background: 'var(--o-bd3)' }} />
-                    </div>
-                  </EditableCard>
-                : <div style={{ display: 'flex', alignItems: 'center', gap: 16, margin: '4px 0 0' }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)' }}>{String(nomDe(bloc.titre)).toUpperCase()}</span>
-                    <span style={{ height: 1, flex: 1, background: 'var(--o-bd3)' }} />
-                  </div>)}
-              <div className="grid-roomdev grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(232px,1fr))', columnGap: 16, rowGap: 8 }}>
-                {bloc.cartes.map(k => {
-                  const compacte = ed.estCompact(k);
-                  const carte = compacte ? dc.compact(k, ed.labelOf(k)) : dc.card(k, ed.labelOf(k));
-                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={(ed.estLarge(k) ? 'o-cvw2 ' : '') + (compacte ? 'o-cvrow1' : '')}>{carte}</Anim>;
-                  return <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit} hass={hass}>{carte}</EditableCard>;
-                })}
-                {edit && bi === blocs.length - 1 && <CarteAjout onClick={() => setAddSheet(true)} label={tr('Ajouter un volet')} />}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {dc.sheets}
-      {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={nomDe(cardEdit)} origine={origineDe(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
-      {addSheet && <ComposeurCartes hass={hass} present={ed.ids} onToggle={ed.toggle} entete={tr('Ajouter un volet')} composites={false}
-        pied={<button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button>}
-        domaines={['cover']} onClose={() => setAddSheet(false)} />}
-    </div>
-  );
-}
+/* La vue « modes et planning » se charge à la demande (19/10 : elle faisait
+ * dépasser au démarrage sa borne de poids) — src/views/voletsplan.jsx. Ses
+ * dépendances internes lui sont posées au chargement, sous les mêmes noms. */
+const VoletsContent = lazyRecharge(() => import('./views/voletsplan.jsx').then(m => {
+  m.poserKit({ BandeauEdition, BarGroup, CardEditSheet, CarteAjout, ComposeurCartes, EditableCard, ViewBar, ViewHead, barBtn, envoyerGeste, useDomainCards, useLayoutEditor, voletCovers, voletModes, voletsCommandables });
+  return { default: m.VoletsContent };
+}));
 
 function VoletsView({ hass, edit = false, onEnt }) {
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
-      <VoletsContent hass={hass} edit={edit} onEnt={onEnt} />
+      <Suspense fallback={<div className="loggia-content" style={{ padding: '26px 28px 56px' }} />}>
+        <VoletsContent hass={hass} edit={edit} onEnt={onEnt} />
+      </Suspense>
     </main>
-  );
-}
-
-/* ── Schéma maison + flux d'énergie animé (porté de Loggia V1) ── */
-// Flèche directionnelle colorée (rendue dans <defs>, posée au bout du câble via markerStart/End)
-const FluxArrow = ({ id, color }) => (
-  <marker id={id} viewBox="0 0 12 12" refX="7" refY="6" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse" markerUnits="userSpaceOnUse" overflow="visible">
-    <path d="M2.5 2.5 L9 6 L2.5 9.5" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-  </marker>
-);
-
-/* Câble de flux (réf vidéo) : conduit gris + câble énergisé tamisé + charge lumineuse qui circule + flèche au bout */
-const FlowCable = ({ d, color, power, reverse, arrow }) => {
-  if (!(power > 5)) return null;
-  const dur = Math.max(0.7, 3 - Math.min(power, 5000) / 1900);
-  return (
-    <g>
-      {/* conduit gris (statique) */}
-      <path d={d} fill="none" stroke="rgba(223,230,247,.16)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-      {/* câble énergisé, tamisé (cable toujours "allumé") */}
-      <path d={d} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: .34, filter: `drop-shadow(0 0 4px ${color})` }} />
-      {/* charge qui circule + flèche directionnelle (départ si import, arrivée sinon) */}
-      <path d={d} fill="none" stroke={color} strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="30 90"
-        markerStart={arrow && reverse ? `url(#${arrow})` : undefined}
-        markerEnd={arrow && !reverse ? `url(#${arrow})` : undefined}
-        style={{ filter: `drop-shadow(0 0 6px ${color}) drop-shadow(0 0 2px ${color})`, animation: `loggia-energy-flow ${dur}s linear infinite${reverse ? ' reverse' : ''}`, willChange: 'stroke-dashoffset' }} />
-    </g>
-  );
-};
-
-/**
- * Pastille du schema maison.
- *
- * Celles de l'arc solaire vivent dans un repere 600x250, celui-ci fait 960x720 :
- * a conteneur egal, une meme cote y parait ~2,6 fois plus petite. Le facteur
- * remet les deux familles a la meme taille apparente.
- */
-const CHIP_K = 2.6;
-const HouseChip = ({ x, y, color, txt, glyph }) => {
-  const k = CHIP_K, w = (22 + txt.length * 6.4 + 12) * k;
-  return (
-    <g transform={`translate(${x - w / 2} ${y - 11 * k})`}>
-      <rect width={w} height={22 * k} rx={11 * k} fill="rgba(8,13,22,.9)" stroke={color} strokeWidth={1.6 * k} />
-      <g transform={`translate(${13 * k} ${11 * k}) scale(${k})`}>{glyph}</g>
-      <text x={(w + 22 * k) / 2 - k} y={15 * k} textAnchor="middle" fontSize={11 * k} fontWeight="800" fill="#eaf0fb" fontFamily="var(--o-font)">{txt}</text>
-    </g>
-  );
-};
-// Traces en ligne comme CHIP_ICONS : la police UICons ne s'insere pas dans un <svg>.
-const CHIP_BAT = (c) => (
-  <g>
-    <rect x="-5.5" y="-3.4" width="10" height="6.8" rx="1.8" fill="none" stroke={c} strokeWidth="1.3" />
-    <path d="M 5.4 -1.4 L 7 -1.4 L 7 1.4 L 5.4 1.4" fill="none" stroke={c} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M 0.8 -2.2 L -1.6 0.2 L 0.2 0.2 L -0.8 2.2 L 1.6 -0.2 L -0.2 -0.2 Z" fill={c} />
-  </g>
-);
-const CHIP_CAR = (c) => (
-  <g>
-    <path d="M -6 1 L -6 -0.6 L -4.3 -3.2 L 4.3 -3.2 L 6 -0.6 L 6 1 Z" fill={c} />
-    <circle cx="-3.4" cy="2.4" r="1.5" fill={c} />
-    <circle cx="3.4" cy="2.4" r="1.5" fill={c} />
-  </g>
-);
-
-function EnergyHouseSchema({ solarW = 47, homeW = 907, surplusW = 954, evW = 0, evBranche = false, batW = 0, batSoc = null, batPresente = false, solarPresente = true, format = 'pc' }) {
-  const netGridW = surplusW > 0 ? -surplusW : (homeW - solarW);
-  const gridImporting = netGridW > 0, gridFlowW = Math.abs(netGridW);
-  // Palette calquée sur la vidéo de réf : solaire=jaune, maison=rose, réseau=violet.
-  const C = { solar: 'var(--o-flux-solaire)', home: 'var(--o-flux-maison)', grid: 'var(--o-flux-reseau)', ev: 'var(--o-flux-ve)', bat: 'var(--o-flux-batterie)' };
-  // Une batterie se charge ET se decharge. Le trace va de la batterie vers le
-  // montant : direct = decharge, inverse = charge.
-  const batCharge = batW > 0, batFlowW = Math.abs(batW || 0);
-  // Pas de signe moins — le user l'a rejete sur l'import reseau, une fleche dit
-  // le sens sans laisser croire a une valeur negative.
-  // Arrondi AVANT l'unité (05/10) : 999,6 W donnait « 1000 W ».
-  const fmtChipW = (v) => (Math.round(v) >= 1000 ? dec(v / 1000, 1) + ' kW' : Math.round(v) + ' W');
-  const batTxt = (() => {
-    const bouts = [];
-    if (batSoc != null) bouts.push(batSoc + ' %');
-    if (batW != null) bouts.push(batFlowW > 5 ? (batCharge ? '↓ ' : '↑ ') + fmtChipW(batFlowW) : '0 W');
-    return bouts.length ? bouts.join(' · ') : '—';
-  })();
-  const layer = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none', userSelect: 'none' };
-  /* PAS DE `width` (08/10) : donner la largeur à côté de la hauteur et du
-   * rapport fait ignorer le rapport, et la maison sortait étirée à 664 × 340
-   * au lieu de 453 × 340. La hauteur et le rapport suffisent.
-   *
-   * Et `left: 0`, non plus le centre : le cadre commence désormais au bord
-   * gauche du dessin, puisque rien ne dépasse de ce côté. Tant que la scène
-   * tient son rapport — c'est le rôle du plafond de largeur, dans index.css —
-   * la maison déduite de sa hauteur remplit exactement la part du cadre
-   * qu'elle occupe dans le repère. */
-  return (
-    <div className="o-en-house" style={{ position: 'absolute', top: 0, left: 0, height: '100%', aspectRatio: '960 / 720' }}>
-      <img src={energyHomeImg} alt="" draggable={false} style={layer} />
-      {solarPresente && <img src={energySolarImg} alt="" draggable={false} style={layer} />}
-      {evBranche && <img src={energyEvImg} alt="" draggable={false} style={layer} />}
-      {batPresente && <img src={energyBatImg} alt="" draggable={false} style={layer} />}
-      <svg viewBox="0 0 960 720" preserveAspectRatio="xMidYMid meet" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
-        <defs>
-          <FluxArrow id="flux-solar" color={C.solar} />
-          <FluxArrow id="flux-home" color={C.home} />
-          <FluxArrow id="flux-grid" color={C.grid} />
-          <FluxArrow id="flux-ev" color={C.ev} />
-          <FluxArrow id="flux-bat" color={C.bat} />
-        </defs>
-        {solarW > 5 && <FlowCable color={C.solar} power={solarW} arrow="flux-solar" d="M 623 270 L 653 280 L 653 440" />}
-        {(homeW > 2 || solarW > 5) && <FlowCable color={C.home} power={Math.max(homeW, 350)} arrow="flux-home" d="M 670 453 L 702 447 L 695 440" />}
-        {gridFlowW > 5 && <FlowCable color={C.grid} power={gridFlowW} reverse={gridImporting} arrow="flux-grid" d="M 655 475 L 655 535 L 745 570 L 920 540" />}
-        {evBranche && evW > 5 && <FlowCable color={C.ev} power={evW} arrow="flux-ev" d="M 648 477 L 648 532 L 643 538 L 520 560 L 510 560 L 373 508 L 373 462" />}
-        {batPresente && <FlowCable color={C.bat} power={batFlowW} reverse={batCharge} arrow="flux-bat" d="M 610 464 L 641 458" />}
-        {batPresente && <HouseChip x={585} y={410} color={C.bat} txt={batTxt} glyph={CHIP_BAT(C.bat)} />}
-        {/* La voiture se pose sur le garage : c'est elle qui part en premier
-          * quand la place manque (02/10). */}
-        {evBranche && format !== 'tablette' && <HouseChip x={300} y={410} color={C.ev} txt={evW != null ? fmtChipW(evW) : '—'} glyph={CHIP_CAR(C.ev)} />}
-      </svg>
-    </div>
   );
 }
 
@@ -10919,623 +11688,20 @@ function sunInfo(date = new Date()) {
 }
 // Scène type Helios au-dessus du schéma maison : grand arc du jour (segment parcouru brillant),
 // soleil à l'heure réelle + chip irradiance, chips solaire/réseau/maison/appareils, lever/coucher.
-// Heure « solaire équivalente » pour le fond météo GLSL : 6-18 = lever→coucher réels (NOAA), nuit mappée 18→30.
-function wxHourEq() {
-  try {
-    const si = sunInfo(); const d = new Date(); const nowH = d.getHours() + d.getMinutes() / 60;
-    if (si.day) return 6 + 12 * si.t;
-    const nightLen = Math.max(0.1, (24 - si.sunset) + si.sunrise);
-    const tn = nowH >= si.sunset ? (nowH - si.sunset) / nightLen : (nowH + 24 - si.sunset) / nightLen;
-    return (18 + 12 * Math.min(1, Math.max(0, tn))) % 24;
-  } catch { const d = new Date(); return d.getHours() + d.getMinutes() / 60; }
+// Le lever et le coucher réels (NOAA) pour le ciel de l'Accueil, en heures locales ; sans position
+// déclarée, null — le ciel garde alors ceux du handoff (9 octobre).
+function cielSoleil() {
+  try { const si = sunInfo(); if (si) return { lever: Math.round(si.sunrise * 100) / 100, coucher: Math.round(si.sunset * 100) / 100 }; } catch { /* pas de position */ }
+  return { lever: null, coucher: null };
 }
-/* LES PASTILLES POSEES SUR LA MAISON — l'arc du soleil n'est plus (08/10).
- *
- * « Retire la trajectoire du soleil aussi. » Ce composant s'appelait `SunArc`
- * et dessinait une courbe du lever au coucher, le rond du soleil a l'heure
- * reelle, et deux reperes d'horaires. Tout cela encerclait la maison et lui
- * prenait les deux tiers du cadre.
- *
- * Ce qui reste a de la valeur : les quatre pastilles qui disent, POSEES SUR LE
- * DESSIN, ce que chaque partie fait a l'instant. Elles gardent leurs places.
- *
- * Deux conditions, deux questions differentes : `solarPresente` dit s'il Y A
- * du solaire chez l'utilisateur, `format` dit quel ECRAN regarde. Les pastilles
- * ne retrecissent pas — a six sur un telephone elles se marchent dessus :
- * « pc mets-les toutes, tablette enleve garage, et mobile enleve panneau ». */
-function PastillesEnergie({ solarW = 0, gridW = 0, exportW = 0, homeW = 0, appW = null, solarPresente = true, format = 'pc' }) {
-  const [, tick] = useState(0);
-  useEffect(() => { const iv = setInterval(() => tick(n => n + 1), 60000); return () => clearInterval(iv); }, []);
-  /* SANS POSITION DECLAREE, LES PASTILLES RESTENT (08/10). Le composant
-   * rendait `null` des que Home Assistant n'avait pas de latitude : sans arc a
-   * dessiner, ce renvoi emportait aussi la consommation de la maison et le
-   * sens du reseau, qui n'ont rien a voir avec le soleil. Seule l'irradiance
-   * depend du jour. */
-  const s = sunInfo();
-  const day = !!(s && s.day);
-  const irr = day ? Math.max(0, Math.round(1090 * Math.pow(Math.max(0, Math.sin(s.elevation * RAD)), 1.15))) : 0; // irradiance ciel clair estimée
-  // Arrondi AVANT l'unité (05/10) : 994,6 W s'écrivait « 995 W », et 995 « 1,0 kW ».
-  const fmtKW = (w) => Math.abs(Math.round(w)) >= 995 ? dec(w / 1000, 1) + ' kW' : Math.round(w) + ' W';
-  return (
-    <svg viewBox={`${SCENE.x0} 0 ${SCENE.w} ${SCENE.h}`} preserveAspectRatio="xMidYMid meet" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
-      {/* L'IRRADIANCE A UNE PLACE FIXE. Elle suivait le soleil le long de
-        * l'arc, avec tout un calcul pour eviter les trois pastilles fixes
-        * (02/10, « le capteur du soleil se superpose »). Sans arc il n'y a
-        * plus rien a suivre : elle se pose au-dessus du toit, a gauche du
-        * badge de production, et ne peut plus rencontrer personne. */}
-      {day && <Chip icon="sun" x={250} y={48} color="var(--o-gold)" txt={irr + ' W/m²'} />}
-      {solarPresente && format !== 'mobile' && <Chip icon="panel" x={352} y={78} color="#ffa63c" txt={fmtKW(solarW)} live={solarW > 5} />}
-      {/* La maison et le pylône ne disent que ce qui se lit (audit du 03/10).
-        * Sans compteur, l'appel passe `null` et la pastille s'efface — comme
-        * celle des panneaux sans capteur de production. Elles affichaient
-        * « 0 W » et « ↓ 0 W » juste au-dessus des chiffres qui, eux, disaient
-        * « — » (ADR 0030). */}
-      {homeW != null && <Chip icon="house" x={352} y={200} color="var(--o-cyan)" txt={fmtKW(homeW)} />}
-      {/* AU BOUT DU CABLE (08/10). Elle etait posee a 478, vingt-six unites
-        * apres l'endroit ou le cable du reseau s'arrete (452) : du temps de
-        * l'arc, ce vide a droite etait occupe par la courbe. Elle elargissait
-        * le cadre d'autant, et donc retrecissait la maison. */}
-      {gridW != null && <Chip icon="pylon" x={CHIP_RESEAU_X} y={168} color="var(--o-purple)" txt={(exportW > 5 ? '↑ ' : '↓ ') + fmtKW(exportW > 5 ? exportW : gridW)} live={(exportW > 5 ? exportW : gridW) > 5} />}
-    </svg>
-  );
-}
-
-const EN_LAYOUT_KEY = 'loggia_enlayout';
-
-function EnergieContent({ hass, edit = false, onEnt }) {
-  /* Le format decide du nombre de pastilles sur la maison : toutes sur
-   * l'ordinateur, sans la voiture sur tablette, sans le panneau au telephone.
-   * Meme calcul que partout ailleurs — la souris fait l'ordinateur, le doigt
-   * la tablette au-dela de 1180 px. */
-  const formatEn = formatEcran(useCoarse(), useWide(1180));
-  const S = (hass && hass.states) || null;
-  const num = (id, def = 0) => { const e = S && S[id]; if (!e || e.state == null || e.state === 'unknown' || e.state === 'unavailable') return def; const n = parseFloat(e.state); return isNaN(n) ? def : n; };
-  const avail = (id) => { const e = S && S[id]; return !!(e && e.state != null && e.state !== 'unknown' && e.state !== 'unavailable' && !isNaN(parseFloat(e.state))); };
-  /* Une puissance se lit en WATTS, une énergie en kWh, quelle que soit l'unité
-   * du capteur (audit du 03/10). Un compteur P1/DSMR publie 2,75 kW : `num` le
-   * rendait tel quel, le schéma disait « 3 W », les seuils « > 5 W » ne se
-   * franchissaient jamais et le solaire ne paraissait jamais actif. `num` reste
-   * pour ce qui n'a pas d'unité à ramener : les taux (%) et la devise. */
-  const numW = (id, def = 0) => { const w = avail(id) ? wattsDe(S[id]) : null; return w == null ? def : w; };
-  const numKwh = (id, def = 0) => { const k = avail(id) ? kwhDe(S[id]) : null; return k == null ? def : k; };
-  // Package énergie v3 prioritaire, repli sur les capteurs bruts si absent
-  const EN = enHaids();
-  // Vehicule electrique : sa puissance de charge suffit a tout piloter — le
-  // calque du garage, le flux le long du cable, et la valeur affichee.
-  // Ce qui decide de l'affichage, c'est que le ROLE soit renseigne — pas que sa
-  // valeur soit lisible a l'instant. Une borne de recharge repasse a
-  // `unavailable` des qu'on debranche : lier les deux faisait disparaitre le
-  // calque, le cable et la pastille d'un bloc, par intermittence.
-  const evBranche = !!EN.evNow;
-  const evW = avail(EN.evNow) ? Math.max(0, Math.round(numW(EN.evNow))) : null;
-  /* LA BATTERIE, DANS LES DEUX SENS (07/10). `batNow` suppose un capteur
-   * SIGNE — positif en charge, negatif en decharge —, et beaucoup d'onduleurs
-   * en publient un. Mais le tableau de bord Energie nomme souvent les deux
-   * sens separement (`power_config`), et deux capteurs toujours positifs ne
-   * disent rien a eux seuls : la puissance de la batterie est leur DIFFERENCE.
-   * Le capteur signe reste prioritaire quand il existe. */
-  const batPresente = !!(EN.batNow || EN.batSoc || EN.batChargeNow || EN.batDechargeNow);
-  const batW = (() => {
-    if (avail(EN.batNow)) return Math.round(numW(EN.batNow));
-    const c = avail(EN.batChargeNow) ? Math.max(0, numW(EN.batChargeNow)) : null;
-    const d = avail(EN.batDechargeNow) ? Math.max(0, numW(EN.batDechargeNow)) : null;
-    if (c == null && d == null) return null;
-    return Math.round((c || 0) - (d || 0));
-  })();
-  const batSoc = avail(EN.batSoc) ? Math.round(num(EN.batSoc)) : null;
-
-  // Postes de consommation : la liste proposee, puis l'agencement.
-  const postes = enDevices((hass && hass.states) || null);
-  const derived = postes.map(d => 'dev:' + d.power).filter(k => k !== 'dev:undefined');
-  const ed = useLayoutEditor(EN_LAYOUT_KEY, 'energie', derived);
-  const [enAdd, setEnAdd] = useState(false);
-  const [cardEdit, setCardEdit] = useState(null);
-  // Les piles et batteries de la maison (19/09) : leurs cartes a cinq barres,
-  // apres les postes — la plus basse d'abord (piles.js).
-  const dc = useDomainCards(hass);
-  const piles = pilesMaison(S, (id) => (LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && LOGGIA_INDEX.entityMeta.get(id)) || {});
-  // Un poste ajoute a la main n'a qu'une entite : on lui donne l'habillage par
-  // defaut, l'important etant sa puissance.
-  const posteDe = (k) => {
-    const id = k.indexOf('dev:') === 0 ? k.slice(4) : k;
-    const connu = postes.find(d => d.power === id);
-    const st = (hass && hass.states && hass.states[id]) || null;
-    const base = connu || {
-      name: (st && st.attributes && st.attributes.friendly_name) || id,
-      power: id, kwh: null, art: null, icon: 'bolt', c: 'var(--o-accent-soft)',
-    };
-    return { ...base, name: ed.labelOf(k) || base.name };
-  };
-  const posteOrigine = (k) => {
-    const id = k.indexOf('dev:') === 0 ? k.slice(4) : k;
-    const connu = postes.find(d => d.power === id);
-    if (connu) return connu.name;
-    const st = (hass && hass.states && hass.states[id]) || null;
-    return (st && st.attributes && st.attributes.friendly_name) || id;
-  };
-  const solarAvail = avail(EN.solarNow) || avail(EN.solarOutput);
-  const consoAvail = avail(EN.gridNow) || avail(EN.consoNow);
-  const surplusAvail = avail(EN.injectionNow) || avail(EN.surplusNow);
-  // consoNow = flux NET du compteur (négatif = export) — source unique du temps réel
-  // réseau (cf. CONTEXTE de packages/energie.yaml). On dérive import/export du net BRUT en priorité :
-  // aucune dépendance à la fraîcheur des templates du package.
-  const solarW = Math.round(avail(EN.solarNow) ? numW(EN.solarNow) : numW(EN.solarOutput));
-  const netRaw = avail(EN.consoNow) ? Math.round(numW(EN.consoNow)) : null;
-  const gridDrawW = netRaw != null ? Math.max(0, netRaw) : Math.round(avail(EN.gridNow) ? numW(EN.gridNow) : 0);
-  const surplusW = netRaw != null ? Math.max(0, -netRaw) : Math.round(avail(EN.injectionNow) ? numW(EN.injectionNow) : Math.max(0, numW(EN.surplusNow)));
-  const consoW = avail(EN.consoMaison) ? Math.round(numW(EN.consoMaison)) : Math.max(0, gridDrawW + solarW - surplusW);
-  const exporting = surplusW > 5;
-  const importW = Math.max(0, gridDrawW);
-  const gridNetW = exporting ? surplusW : importW;
-  /* Le TOUR de relecture : toutes les cinq minutes, l'historique et les
-   * statistiques se relisent. Rien quand la page est cachee, le tour manque au
-   * retour (releve.js) ; quitter la vue coupe le minuteur. Sans lui, sur une
-   * tablette ouverte au mur, « les douze derniers mois » s'arretaient au jour
-   * de l'arrivee sur la page. */
-  const [tourEn, setTourEn] = useState(0);
-  useEffect(() => armerReleve(() => setTourEn(x => x + 1), 5 * 60000), []);
-
-  /* LE TOTAL DU JOUR, SUR N'IMPORTE QUEL COMPTEUR (audit du 07/10).
-   *
-   * Le tableau de bord Energie de Home Assistant ne designe pas des compteurs
-   * journaliers : il designe l'INDEX du compteur, qui ne fait que monter. Lu
-   * tel quel, il annoncait « 12 450 kWh aujourd'hui » chez quiconque n'avait
-   * jamais rempli la fiche Entites a la main — c'est-a-dire chez presque tout
-   * le monde sauf l'installation qui a servi a ecrire la vue.
-   *
-   * Un compteur qui s'est remis a zero cette nuit le DIT (`last_reset`) : son
-   * etat est alors le total du jour, et rien n'est demande. Les autres sont des
-   * index, et leur journee se lit dans les statistiques — une seule requete
-   * pour tous (`jourstat.js`). Quand ni l'un ni l'autre ne repond, on ne rend
-   * rien : un tiret vaut mieux qu'un index pris pour une journee.
-   */
-  const CPT_JOUR = [EN.consoJour, EN.consoJourHc, EN.consoJourHp, EN.consoReseauToday,
-    EN.consoHcToday, EN.consoHpToday, EN.prodJour, EN.injectionJour, EN.coutJour, EN.revenuJour];
-  const cumulatifs = CPT_JOUR.filter(id => id && S && S[id] && !compteurDuJour(S[id]));
-  const totauxJour = useTotauxJour(hass, cumulatifs, tourEn);
-  /* `kwh` ramene en kilowattheures ce qui est une energie ; une somme d'argent
-   * garde son unite. L'etat brut passe par `numKwh`, qui convertit deja. */
-  const valJour = (id, kwh) => {
-    if (!id || !S || !S[id]) return null;
-    if (compteurDuJour(S[id])) return avail(id) ? (kwh ? numKwh(id, null) : num(id, null)) : null;
-    const v = totauxJour[id];
-    if (v == null || !isFinite(v)) return null;
-    const u = (S[id].attributes && S[id].attributes.unit_of_measurement) || '';
-    return kwh ? v * facteurKwh(u) : v;
-  };
-  const kwhJour = (id) => valJour(id, true);
-  const euroJour = (id) => valJour(id, false);
-
-  // Bilans / coûts du package
-  const prodJour = kwhJour(EN.prodJour);
-  const autosuff = avail(EN.autosuffJour) ? Math.round(num(EN.autosuffJour)) : null;
-  const tauxAutoconso = avail(EN.tauxAutoconso) ? Math.round(num(EN.tauxAutoconso)) : null;
-  /* Le COUT du jour (05/10). `resolveEnergy` le resolvait depuis le tableau
-   * de bord Energie de Home Assistant (`stat_cost`) et personne ne le lisait :
-   * on allait le chercher, on le rangeait dans l'index, et il mourait la.
-   *
-   * Home Assistant le CALCULE lui-meme, avec les heures creuses et les tarifs
-   * multiples : on reprend son chiffre, on n'en refait pas un a partir d'un
-   * prix du kWh. Sans tarif declare, `stat_cost` n'existe pas et rien ne
-   * s'affiche — ni zero, ni tiret. */
-  const coutJour = euroJour(EN.coutJour);
-  /* Ce que l'injection RAPPORTE, quand Home Assistant le tient
-   * (`stat_compensation`). Meme lecture que le cout : un cumul, pas une
-   * journee — `euroJour` s'en charge. */
-  const revenuJour = euroJour(EN.revenuJour);
-  // La devise suit l'entite, puis l'installation — jamais suppose en euros.
-  const uniteDe = (id) => (id && S[id] && S[id].attributes && S[id].attributes.unit_of_measurement) || null;
-  const deviseJour = uniteDe(EN.coutJour) || uniteDe(EN.ecoJour)
-    || (hass && hass.config && hass.config.currency) || '€';
-  /* Le total du jour n'existe que si un compteur se lit (audit du 03/10).
-   * `num()` rend 0 pour une entité muette : heures creuses + heures pleines
-   * valaient 0 kWh avec un Linky indisponible, `totalToday` n'était jamais
-   * nul, et le garde-fou de l'autosuffisance ne jouait pas. `numKwh(id, null)`
-   * dit « illisible » ; `consoJourKwh` (bilan.js) choisit le compteur et rend
-   * null quand aucun ne répond. */
-  const hcToday = EN.consoJourHc ? kwhJour(EN.consoJourHc) : kwhJour(EN.consoHcToday);
-  const hpToday = EN.consoJourHp ? kwhJour(EN.consoJourHp) : kwhJour(EN.consoHpToday);
-  /* Configuré mais muet n'est pas « non configuré » (relecture du 03/10). */
-  const hcMuet = !!(EN.consoJourHc || EN.consoHcToday) && hcToday == null;
-  const hpMuet = !!(EN.consoJourHp || EN.consoHpToday) && hpToday == null;
-  const totalToday = consoJourKwh({ jour: kwhJour(EN.consoJour), hc: hcToday, hp: hpToday, reseau: kwhJour(EN.consoReseauToday), hcMuet, hpMuet });
-
-  const [onglEn, setOnglEn] = useState('vue');       // vue | piles
-  const [pilesFiltre, setPilesFiltre] = useState('toutes');
-  /* A surveiller : une pile faible, ou une qui ne repond plus. Le seuil est
-   * celui des cartes (piles.js) : rien de neuf a regler. Le badge de l'onglet
-   * et le filtre comptent la MEME chose — deux comptes differents sur le meme
-   * ecran mentiraient. */
-  const pilesSurveiller = piles.filter(p => p.niveau == null || p.niveau <= 35).length;
-  const pilesVues = pilesFiltre === 'surveiller' ? piles.filter(p => p.niveau == null || p.niveau <= 35) : piles;
-
-  /* Autosuffisance : la part de la consommation couverte par le solaire. Le
-   * capteur du package si l'installation en publie un, sinon les kWh du jour —
-   * ce que produit la maison MOINS ce qu'elle renvoie au reseau, rapporte a
-   * tout ce qu'elle a consomme. */
-  const injJour = kwhJour(EN.injectionJour);
-  const injectionMuette = !!EN.injectionJour && injJour == null;
-  /* Sans production OU sans consommation lisible, pas de taux (audit du
-   * 03/10) : `autosuffisance` (bilan.js) rend null — jamais « 100 % » sur un
-   * compteur muet. */
-  const autoPct = autosuff != null ? autosuff : (tauxAutoconso != null ? tauxAutoconso : autosuffisance(prodJour, totalToday, injJour, injectionMuette));
-
-  /* Part bas-carbone : Electricity Maps (ou CO2 Signal) publie le pourcentage
-   * d'energies FOSSILES du reseau. Le solaire de la maison est bas-carbone par
-   * construction ; on pondere donc les deux sources par leurs kWh du jour.
-   * Sans cette integration, pas de tuile — on ne devine pas un mix. */
-  const fossilePct = (() => {
-    if (!S) return null;
-    const id = Object.keys(S).find(k => k.indexOf('sensor.') === 0 && /fossil/i.test(k)
-      && S[k].attributes && S[k].attributes.unit_of_measurement === '%');
-    if (!id) return null;
-    const v = parseFloat(S[id].state);
-    return isNaN(v) ? null : v;
-  })();
-  const basCarbonePct = (() => {
-    if (fossilePct == null || totalToday == null || injectionMuette) return null;
-    const solaireConsomme = prodJour != null ? Math.max(0, prodJour - (injJour || 0)) : 0;
-    const conso = totalToday + solaireConsomme;
-    if (conso <= 0) return null;
-    return Math.round((totalToday * (100 - fossilePct) / 100 + solaireConsomme) / conso * 100);
-  })();
-  const solarActive = solarW > 5;
-  const fmtW = fmtWatts;
-  /* L'en-tete ne dit que ce qui se lit (audit du 03/10). Il etait bati sur
-   * `consoW`, `solarW` et `gridNetW`, que `num()` met a 0 quand l'entite se
-   * tait : « Consommation 0 W » au-dessus de chiffres qui, eux, disaient
-   * « — ». Il suit les MEMES conditions que ces chiffres, et sans rien de
-   * lisible il n'y a ni ligne ni pastille : ce que rien ne mesure ne s'affirme
-   * pas (ADR 0030). */
-  const consoLue = consoAvail || avail(EN.consoMaison);
-  const reseauLu = surplusAvail || consoAvail;
-  /* Les deux SENS du reseau ne se lisent pas aux memes capteurs (relecture du
-   * 03/10). Un capteur de surplus seul mesure l'export, pas l'achat : la nuit,
-   * sans surplus, l'en-tete ecrivait « reseau 0 W » alors que rien n'avait
-   * mesure l'achat. */
-  const sensLu = exporting ? reseauLu : consoAvail;
-  const ligneEnTete = resumeEnergie({
-    conso: consoLue ? consoW : null,
-    solaire: solarAvail ? solarW : null,
-    reseau: sensLu ? gridNetW : null,
-  });
-
-  /* ── L'APERÇU, sur le modèle de la maquette ───────────────────────────────
-   *
-   * Un disque qui se remplit comme un verre, cerclé des parts de chaque source,
-   * et à sa droite les chiffres du jour. L'onglet « Maison » bascule sur le
-   * SCHÉMA DE LOGGIA — ses flux à lui, pas les maisons dessinées de la
-   * maquette : « pour la maison par contre garde les flux d'energie actuel ».
-   */
-  const [faceApercu, setFaceApercu] = useState('apercu');            // apercu | maison
-
-  /* Le MIX du moment : d'où vient ce que la maison consomme à l'instant.
-   * Le solaire ne compte que pour ce qui est consommé sur place — ce qui part
-   * au réseau n'alimente rien ici. */
-  const solaireUtile = Math.max(0, Math.min(solarW, consoW + Math.max(0, evW || 0)));
-  const batterieSortie = batW != null ? Math.max(0, -batW) : 0;
-  const totalMix = solaireUtile + batterieSortie + importW;
-  const mix = totalMix > 0 ? [
-    { label: tr('Solaire'), couleur: 'var(--o-gold)', pct: Math.round(solaireUtile / totalMix * 100) },
-    batPresente && { label: tr('Batterie'), couleur: 'var(--o-purple)', pct: Math.round(batterieSortie / totalMix * 100) },
-    { label: tr('Réseau'), couleur: 'var(--o-accent)', pct: Math.round(importW / totalMix * 100) },
-  ].filter(Boolean) : [];
-  // La part qui ne vient PAS du réseau : c'est le niveau du liquide.
-  const partPropre = totalMix > 0 ? Math.round((solaireUtile + batterieSortie) / totalMix * 100) : 0;
-  const couleurAnneau = importW === 0 && totalMix > 0 ? 'var(--o-ok)' : solarActive ? 'var(--o-gold)' : 'var(--o-accent)';
-
-  /* Les SOURCES en direct, sous le disque. Une source absente de l'installation
-   * n'a pas de jeton : on ne montre pas une batterie à qui n'en a pas. */
-  const jetons = [
-    solarAvail && { icone: 'sun', couleur: 'var(--o-gold)', v: fmtW(solarW), label: tr('Solaire') },
-    batPresente && { icone: 'battery-full', couleur: 'var(--o-purple)', v: batW != null ? fmtW(Math.abs(batW)) : (batSoc != null ? batSoc + ' %' : '—'), label: (batW > 0 ? tr('Charge') : batW < 0 ? tr('Décharge') : tr('En veille')) + (batSoc != null ? ' · ' + batSoc + ' %' : '') },
-    reseauLu && { icone: 'bolt', couleur: exporting ? 'var(--o-ok)' : 'var(--o-accent-soft)', v: fmtW(gridNetW), label: exporting ? tr('Vente réseau') : tr('Achat réseau') },
-    evBranche && { icone: 'car-side', couleur: 'var(--o-ok)', v: evW != null ? fmtW(evW) : '—', label: tr('Véhicule') },
-  ].filter(Boolean);
-
-  /* La phrase du haut de carte : ce qui alimente la maison en ce moment. */
-  const titreApercu = solarActive ? tr('Production solaire active')
-    : (batW != null && batW < 0) ? tr('La batterie prend le relais')
-      : tr('Alimentée par le réseau');
-
-  /* Les quatre chiffres de la colonne droite. Chacun n'apparaît que s'il se
-   * lit — une maison sans panneaux n'a pas de « Production du jour » à zéro. */
-  /* LE TELEPHONE REORGANISE, il ne retrecit pas (maquette mobile du 07/10).
-   * Sur la LARGEUR et non sur le type d'appareil : les regles CSS de la vue
-   * basculent au meme endroit, et un navigateur de bureau retreci doit lire la
-   * meme page qu'un telephone. */
-  const etroit = !useWide(760);
-
-  const statsJour = [
-    prodJour != null && { l: tr('Production du jour'), v: dec(prodJour, 1), u: 'kWh' },
-    autoPct != null && { l: tr('Autosuffisance'), v: String(autoPct), u: '%' },
-    totalToday != null && { l: tr('Réseau importé'), v: dec(totalToday, 1), u: 'kWh' },
-    injJour != null && { l: tr('Réseau exporté'), v: dec(injJour, 1), u: 'kWh' },
-  ].filter(Boolean);
-
-  /* Les tuiles de mesure, sous l'historique. Le gaz et l'eau viennent du
-   * tableau de bord Énergie quand la maison en déclare — sinon ils n'existent
-   * pas, et on ne les invente pas. */
-  const mesures = [
-    autoPct != null && { caption: tr('Autosuffisance'), value: String(autoPct), unit: '%', icon: 'leaf', tone: 'var(--o-ok)', pct: autoPct },
-    basCarbonePct != null && { caption: tr('Électricité bas-carbone'), value: String(basCarbonePct), unit: '%', icon: 'bolt', tone: 'var(--o-cyan)', pct: basCarbonePct },
-    avail(EN.gasJour) && { caption: tr('Gaz'), value: dec(numKwh(EN.gasJour), 1), unit: uniteDe(EN.gasJour) || 'kWh', icon: 'flame', tone: 'var(--o-orange)', pct: null },
-    avail(EN.waterJour) && { caption: tr('Eau'), value: dec(num(EN.waterJour), 0), unit: uniteDe(EN.waterJour) || 'L', icon: 'raindrops', tone: 'var(--o-cold)', pct: null },
-  ].filter(Boolean);
-
-  /* La CONSOMMATION DU JOUR et ses quatre chiffres : a droite de l'anneau sur
-   * un grand ecran, dans leur propre carte au telephone. Meme contenu, deux
-   * places — c'est ce que fait la maquette. */
-  const colonneDuJour = (
-    <>
-      <div style={etroit ? { display: 'flex', alignItems: 'flex-end', gap: 10 } : undefined}>
-        <div style={etroit ? { flex: 1, minWidth: 0 } : undefined}>
-          <div style={{ fontSize: etroit ? 12.5 : 13, fontWeight: etroit ? 700 : 600, color: 'var(--o-text2)' }}>{tr('Consommation du jour')}</div>
-          <div style={{ marginTop: 6, fontSize: etroit ? 28 : 34, fontWeight: 800, letterSpacing: '-.01em', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-            {totalToday != null ? <Num v={totalToday} d={1} /> : '—'}<span style={{ fontSize: etroit ? 12 : 14, fontWeight: 700, color: 'var(--o-text2)', marginLeft: etroit ? 4 : 5 }}>kWh</span>
-          </div>
-        </div>
-        {coutJour != null && (etroit
-          ? <div style={{ textAlign: 'right', lineHeight: 1.3 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}><Num v={coutJour} d={2} suffix={' ' + deviseJour} /></div>
-            <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>{tr('Coût du jour')}</div>
-          </div>
-          : <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
-            <span style={{ width: 34, height: 34, flexShrink: 0, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}><Fi i="euro" size={15} /></span>
-            <span style={{ minWidth: 0, lineHeight: 1.3 }}>
-              <span style={{ display: 'block', fontSize: 15, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}><Num v={coutJour} d={2} suffix={' ' + deviseJour} /></span>
-              <span style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Coût du jour')}</span>
-            </span>
-          </div>)}
-      </div>
-      {!etroit && statsJour.length > 0 && <div style={{ height: 1, width: 110, background: 'var(--o-bd2)' }} />}
-      {/* Au telephone les quatre chiffres sont ENCADRES : sans cadre, ils se
-        * confondent avec le grand nombre juste au-dessus. */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: etroit ? 8 : '18px 20px', marginTop: etroit ? 14 : 0 }}>
-        {statsJour.map(s => (
-          <div key={s.l} style={etroit
-            ? { minWidth: 0, padding: '10px 12px', background: 'var(--o-well)', border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: 14 }
-            : { minWidth: 0 }}>
-            <div style={{ fontSize: etroit ? 11 : 12.5, fontWeight: 600, color: 'var(--o-text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.l}</div>
-            <div style={{ marginTop: etroit ? 4 : 5, fontSize: etroit ? 18 : 22, fontWeight: 800, letterSpacing: '-.01em', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{s.v}<span style={{ fontSize: etroit ? 11 : 12, fontWeight: 700, color: 'var(--o-text2)', marginLeft: etroit ? 3 : 4 }}>{s.u}</span></div>
-          </div>
-        ))}
-      </div>
-    </>
-  );
-
-  /* La pastille du reseau : a droite du titre au telephone, au bout de la barre
-   * d'onglets au large. Deux places, un seul dessin. */
-  const pastilleReseau = reseauLu ? (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, padding: '5px 11px', borderRadius: 999, fontSize: etroit ? 10.5 : 11, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', background: exporting ? 'rgba(var(--o-ok-rgb),.13)' : 'rgba(var(--o-accent-rgb),.13)', color: exporting ? 'var(--o-ok)' : 'var(--o-accent-soft)' }}>
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />{(exporting ? tr('Surplus') : tr('Import')) + ' ' + fmtW(gridNetW)}
-    </span>
-  ) : null;
-
-  // Le total des postes suivis, en en-tête de leur grille.
-  const totalPostes = ed.ids.reduce((a, k) => a + (avail(posteDe(k).power) ? Math.round(numW(posteDe(k).power)) : 0), 0);
-
-  return (
-    <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {edit && <BandeauEdition ed={ed} onAjouter={() => setEnAdd(true)} ajouterLabel={tr('Ajouter un poste')} onEnt={onEnt} entLabel={tr('Entités du schéma')} />}
-
-      <div className="o-en-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
-        <div style={{ flex: etroit ? '1 1 100%' : '1 1 320px', minWidth: 0, display: etroit ? 'flex' : 'block', alignItems: 'flex-end', gap: 10 }}>
-          <h1 className="o-en-titre" style={{ flex: etroit ? 1 : undefined, minWidth: 0, margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 36, fontWeight: 500, lineHeight: 1.1 }}>{tr('L’énergie')}</h1>
-          {!etroit && ligneEnTete && <div style={{ fontSize: 13.5, color: 'var(--o-text2)', fontWeight: 600, marginTop: 6, textWrap: 'pretty' }}>{ligneEnTete}</div>}
-          {etroit && pastilleReseau}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          {/* Les piles ont leur onglet (06/10) : elles étaient en bas d'une page
-            * qui s'allonge, et personne ne descend jusque-là pour voir qu'une
-            * télécommande est à plat. Le badge dit combien sont à surveiller. */}
-          {piles.length > 0 && (
-            <div className="o-en-onglets" style={{ display: 'inline-flex', gap: 4, padding: 3, borderRadius: 12, background: 'var(--o-well)', border: 'var(--o-bw,1px) solid var(--o-bd2)', flexShrink: 0 }}>
-              {[['vue', tr('Vue d’ensemble'), 0], ['piles', tr('Piles et batteries'), pilesSurveiller]].map(([id, lb, badge]) => (
-                <button key={id} onClick={() => setOnglEn(id)} aria-pressed={onglEn === id}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 30, padding: '0 13px', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', background: onglEn === id ? 'var(--o-accent-fond)' : 'transparent', color: onglEn === id ? '#fff' : 'var(--o-text2)' }}>
-                  {lb}
-                  {badge > 0 && <span style={{ minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, fontWeight: 800, background: onglEn === id ? 'rgba(255,255,255,.22)' : 'rgba(var(--o-bad-rgb),.16)', color: onglEn === id ? '#fff' : 'var(--o-bad)' }}>{badge}</span>}
-                </button>
-              ))}
-            </div>
-          )}
-          {!etroit && pastilleReseau}
-        </div>
-      </div>
-
-      {onglEn === 'vue' && (<>
-      {/* Pas d'`Anim` sur les GRANDES sections : elle enveloppe son enfant
-        * dans un div, qui devient le vrai enfant flex — une carte posee la se
-        * reduit a son contenu au lieu de prendre la largeur (07/10). Les cartes
-        * de postes et de piles, elles, la gardent : la, c'est le geste commun. */}
-      {/* L'APERÇU et LE TARIF, côte à côte. */}
-      <div className="grid-ehero" style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'stretch' }}>
-        <div style={{ flex: '2 1 620px', minWidth: 0, display: 'flex' }}><section style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', borderRadius: 'var(--o-radius,18px)', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: 'var(--o-shadow)', padding: '22px 24px 24px' }}>
-          <div className="o-en-cartehead" style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
-            <div className="o-en-cartetitre" style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--o-text2)' }}>{tr('Aperçu')}</div>
-              <div style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 500, marginTop: 2 }}>{titreApercu}</div>
-            </div>
-            <div className="o-en-onglets" style={{ display: 'inline-flex', gap: 2, padding: 3, borderRadius: 12, background: 'var(--o-well)', border: 'var(--o-bw,1px) solid var(--o-bd2)', flexShrink: 0 }}>
-              {[['apercu', tr('Synthèse'), 'chart-pie-alt'], ['maison', tr('Maison'), 'home']].map(([id, lb, ic]) => (
-                <button key={id} onClick={() => setFaceApercu(id)} aria-pressed={faceApercu === id}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 30, padding: '0 13px', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', background: faceApercu === id ? 'var(--o-accent-fond)' : 'transparent', color: faceApercu === id ? '#fff' : 'var(--o-text2)' }}>
-                  <Fi i={ic} size={12} />{lb}
-                </button>
-              ))}
-            </div>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, padding: '4px 10px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: solarActive ? 'rgba(var(--o-gold-rgb),.13)' : 'var(--o-s2)', color: solarActive ? 'var(--o-gold)' : 'var(--o-text3)' }}><Fi i="sun" size={11} />{solarActive ? tr('Solaire actif') : tr('Solaire inactif')}</span>
-          </div>
-
-          {/* Les deux faces de l'aperçu occupent la MÊME place : la synthèse
-            * reste en flux (elle donne sa hauteur), le schéma se pose dessus.
-            * Bascule sans que la carte change de taille. */}
-          <div style={{ position: 'relative', marginTop: 20 }}>
-            <div style={{ display: (etroit && faceApercu === 'maison') ? 'none' : 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 28, visibility: faceApercu === 'maison' ? 'hidden' : 'visible' }}>
-              <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 26, padding: '14px 0 4px' }}>
-                <AnneauEnergie classe="o-en-anneau" pct={partPropre} couleur={couleurAnneau} mix={mix} taille={216}>
-                  <span style={{ position: 'relative', fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-text)', textShadow: '0 1px 3px rgba(0,0,0,.35)' }}>{tr('Consommation')}</span>
-                  <div style={{ position: 'relative', textShadow: '0 1px 4px rgba(0,0,0,.3)', fontSize: 42, fontWeight: 800, letterSpacing: '-.01em', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                    {consoLue ? <Num v={consoW} fmt={fmtW} /> : '—'}
-                  </div>
-                  <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 800, color: 'var(--o-text)', textShadow: '0 1px 3px rgba(0,0,0,.35)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-ok)' }} />{tr('En direct')}</span>
-                </AnneauEnergie>
-                {jetons.length > 0 && (
-                  <div className="o-en-jetons" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-                    {jetons.map(j => (
-                      <div key={j.label} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px 6px 6px', borderRadius: 12, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-                        <span style={{ width: 28, height: 28, flexShrink: 0, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', background: hx(j.couleur, 0.15), color: j.couleur }}><Fi i={j.icone} size={13} /></span>
-                        <span style={{ lineHeight: 1.2 }}>
-                          <span style={{ display: 'block', fontSize: 13.5, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{j.v}</span>
-                          <span style={{ display: 'block', fontSize: 10.5, fontWeight: 600, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{j.label}</span>
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {!etroit && (
-                <div className="o-en-col" style={{ flex: '1 1 300px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 20, paddingLeft: 28, borderLeft: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-                  {colonneDuJour}
-                </div>
-              )}
-            </div>
-            {/* LE SCHÉMA DE LA MAISON : celui de Loggia, ses flux à lui. */}
-            {faceApercu === 'maison' && (
-              <div className="o-en-well" style={etroit
-                ? { position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 14, overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 30%,var(--o-well0),var(--o-well2))', border: 'var(--o-bw,1px) solid var(--o-bd3)', padding: 10 }
-                : { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 14, overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 30%,var(--o-well0),var(--o-well2))', border: 'var(--o-bw,1px) solid var(--o-bd3)', padding: 10 }}>
-                {/* Le rapport part aussi en variable : la feuille de style en
-                  * tire le plafond de LARGEUR, pour que la scène ne rompe
-                  * jamais son rapport — c'est ce qui garde les pastilles
-                  * posées sur le dessin. */}
-                <div className="o-en-scene" style={{ position: 'relative', width: '100%', aspectRatio: SCENE_RATIO, margin: '0 auto', '--o-scene-ratio': SCENE_RATIO }}>
-                  <EnergyHouseSchema solarW={solarW} homeW={consoW} surplusW={surplusW} evW={evW} evBranche={evBranche} batW={batW} batSoc={batSoc} batPresente={batPresente} solarPresente={solarAvail} format={formatEn} />
-                  <PastillesEnergie solarW={solarW} gridW={consoAvail || exporting ? importW : null} exportW={surplusW} homeW={consoLue ? consoW : null} appW={null} solarPresente={solarAvail} format={formatEn} />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Les bilans se calculent des STATISTIQUES quand la maison n'a pas
-            * de compteurs mois et annee a elle : ils arrivent donc du module
-            * a la demande, avec le tarif et l'historique. Au telephone ils
-            * suivent la consommation du jour, dans sa carte. */}
-          {!etroit && (
-            <Suspense fallback={null}>
-              <BilansEnergie hass={hass} EN={EN} tour={tourEn} devise={deviseJour} etroit={etroit} />
-            </Suspense>
-          )}
-        </section></div>
-
-        {/* LA CONSOMMATION DU JOUR a sa propre carte au telephone : dans
-          * l'apercu, elle passerait sous l'anneau sans rien pour l'en separer. */}
-        {etroit && (
-          <section style={{ background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', borderRadius: 'var(--o-radius,18px)', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: 'var(--o-shadow)', padding: 14 }}>
-            {colonneDuJour}
-            <Suspense fallback={null}>
-              <BilansEnergie hass={hass} EN={EN} tour={tourEn} devise={deviseJour} etroit={etroit} />
-            </Suspense>
-          </section>
-        )}
-        <div style={{ flex: '1 1 300px', minWidth: 0, display: 'flex' }}><div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
-          <Suspense fallback={<div style={{ flex: 1, minHeight: 320 }} />}>
-            <CarteTarif hass={hass} EN={EN} tour={tourEn} devise={deviseJour} etroit={etroit} prixHa={enPrix()} venteHa={enVente()} coutJour={coutJour} revenuJour={revenuJour} />
-          </Suspense>
-        </div></div>
-      </div>
-
-      {/* L'HISTORIQUE, pleine largeur. */}
-      <Suspense fallback={<div style={{ minHeight: 360 }} />}>
-        <SectionHistorique hass={hass} EN={EN} tour={tourEn} devise={deviseJour} etroit={etroit} />
-      </Suspense>
-
-      {mesures.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,150px),1fr))', gap: 16 }}>
-          {mesures.map(m => <MetricTile key={m.caption} caption={m.caption} value={m.value} unit={m.unit} icon={m.icon} tone={m.tone} pct={m.pct} />)}
-        </div>
-      )}
-
-      {/* LES POSTES. Un titre sans rien dessous ne s'affiche pas (ADR 0030) :
-        * une maison dont le tableau de bord Énergie ne suit aucun appareil
-        * voyait « Postes de consommation » seul au milieu de la page. En
-        * ÉDITION il reste — c'est là qu'on ajoute le premier. */}
-      {(ed.ids.length > 0 || edit) && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 16 }}>
-            <div style={{ flex: 1, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 500, color: 'var(--o-text2)' }}>{tr('Postes de consommation')}</div>
-            {ed.ids.length > 0 && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>{tr('{v} suivis en direct', { v: fmtW(totalPostes) })}</div>}
-          </div>
-          <div ref={ed.gridRef} className="grid-edevices" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 14 }}>
-            {ed.ids.map((k) => { const d = posteDe(k); const di = ed.ids.indexOf(k); const w = Math.round(numW(d.power)); const kwh = avail(d.kwh) ? numKwh(d.kwh) : null; const on = w > 5;
-              const carte = (
-              /* Le gabarit de la maquette : l'illustration ou l'icône en grand,
-               * très pâle, dans le coin ; le nom et les chiffres poussés en bas
-               * de carte. */
-              <div style={{ position: 'relative', overflow: 'hidden', minHeight: 130, boxSizing: 'border-box', padding: 16, background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', borderRadius: 'var(--o-radius,18px)', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: 'var(--o-shadow)', display: 'flex', flexDirection: 'column' }}>
-                {d.art && VIEW_ART[d.art]
-                  ? <div aria-hidden="true" style={{ position: 'absolute', right: 6, bottom: -6, width: 92, height: 92, backgroundImage: `url("${VIEW_ART[d.art]}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.16, pointerEvents: 'none' }} />
-                  : <span aria-hidden="true" style={{ position: 'absolute', right: 14, bottom: 10, lineHeight: 1, color: 'var(--o-text)', opacity: 0.06, pointerEvents: 'none' }}><Fi i={d.icon} size={56} /></span>}
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                  <span style={{ width: 34, height: 34, borderRadius: 10, background: hx(d.c, 0.15), display: 'flex', alignItems: 'center', justifyContent: 'center', color: d.c }}><GlypheCarte id={d.power} size={15}><Fi i={d.icon} size={15} color={d.c} /></GlypheCarte></span>
-                  <span style={{ width: 7, height: 7, marginTop: 4, borderRadius: '50%', background: on ? 'var(--o-ok)' : 'var(--o-text3)' }} />
-                </div>
-                <div style={{ position: 'relative', marginTop: 'auto', paddingTop: 16, fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name}</div>
-                <div style={{ position: 'relative', marginTop: 4, fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{avail(d.power) ? <Num v={w} fmt={fmtW} /> : '—'}</div>
-                <div style={{ position: 'relative', marginTop: 3, fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{kwh != null ? tr('{n} kWh jour', { n: dec(kwh, 2) }) : '—'}</div>
-              </div>);
-              if (!edit) return <Anim key={k} i={di} base={160} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
-              return <EditableCard key={k} ed={ed} id={k} nom={d.name} onEdit={setCardEdit} hass={hass} taille={false}>{carte}</EditableCard>;
-            })}
-            {edit && <CarteAjout onClick={() => setEnAdd(true)} label={tr('Ajouter un poste')} />}
-          </div>
-        </div>
-      )}
-      {enAdd && <ComposeurCartes hass={hass} entete={tr('Ajouter un poste')} domaines={['sensor']} composites={false} present={ed.ids.map(k => k.indexOf('dev:') === 0 ? k.slice(4) : k)} onToggle={(id) => ed.toggle('dev:' + id)} onClose={() => setEnAdd(false)} />}
-      {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={posteDe(cardEdit).name} origine={posteOrigine(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
-
-      {/* LE CALENDRIER, du même module à la demande que l'historique. */}
-      <Suspense fallback={<div style={{ minHeight: 280 }} />}>
-        <EnergieCalendrier hass={hass} EN={EN} tour={tourEn} devise={deviseJour} etroit={etroit} />
-      </Suspense>
-      </>)}
-
-      {/* LES PILES, dans leur onglet, au gabarit de la maquette. */}
-      {onglEn === 'piles' && piles.length > 0 && (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-            <div style={{ flex: '1 1 200px', minWidth: 0 }}>
-              <div style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 500, color: 'var(--o-text2)' }}>{tr('Piles et batteries')}</div>
-              <div style={{ marginTop: 4, fontSize: 12.5, fontWeight: 600, color: 'var(--o-text3)' }}>{trN(piles.length, '{n} capteur', '{n} capteurs')}</div>
-            </div>
-            {pilesSurveiller > 0 && (
-              <div style={{ display: 'inline-flex', gap: 2, padding: 3, borderRadius: 12, background: 'var(--o-well)', border: 'var(--o-bw,1px) solid var(--o-bd2)', flexShrink: 0 }}>
-                {[['toutes', tr('Toutes'), piles.length], ['surveiller', tr('À surveiller'), pilesSurveiller]].map(([id, lb, n]) => (
-                  <button key={id} onClick={() => setPilesFiltre(id)} aria-pressed={pilesFiltre === id}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 30, padding: '0 13px', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', background: pilesFiltre === id ? 'var(--o-accent-fond)' : 'transparent', color: pilesFiltre === id ? '#fff' : 'var(--o-text2)' }}>
-                    {lb}<span style={{ minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, fontWeight: 800, background: pilesFiltre === id ? 'rgba(255,255,255,.22)' : 'var(--o-s1)', color: pilesFiltre === id ? '#fff' : 'var(--o-text2)' }}>{n}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="o-piles grid-objets grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', columnGap: 16, rowGap: 8 }}>
-            {pilesVues.map((p, i) => <Anim key={p.id} i={i} base={200}>{dc.card(p.id)}</Anim>)}
-          </div>
-        </>
-      )}
-      {dc.sheets}
-
-    </div>
-  );
-}
-
+function heureLocale() { const d = new Date(); return d.getHours() + d.getMinutes() / 60; }
 function EnergieView({ hass, edit = false, onEnt }) {
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
-      <EnergieContent hass={hass} edit={edit} onEnt={onEnt} />
+      <Suspense fallback={<div className="loggia-content" style={{ padding: '26px 28px 56px' }} />}>
+        <EnergieContent hass={hass} edit={edit} onEnt={onEnt} />
+      </Suspense>
     </main>
   );
 }
@@ -11597,7 +11763,7 @@ function ViewEmpty({ vid, reason, onNav }) {
                   bloquée ne monte pas son bandeau — on nomme donc celles dont la
                   fiche peut la débloquer : l'Accueil (énergie), Objets
                   (distributeur). */}
-              {' '}{tr('Ajoute les appareils concernés dans Home Assistant, ou désigne les entités à utiliser : sur l’Accueil ou dans Objets, en mode édition, bouton « Entités de la vue ». La vue réapparaîtra d’elle-même.')}
+              {' '}{tr('Ajoutez les appareils concernés dans Home Assistant, ou désignez les entités à utiliser : sur l’Accueil ou dans Objets, en mode édition, bouton « Entités de la vue ». La vue réapparaîtra d’elle-même.')}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -11610,24 +11776,16 @@ function ViewEmpty({ vid, reason, onNav }) {
   );
 }
 
-/* La capacite du reservoir etait ecrite ici : 1 500 g, celle d'un distributeur
- * precis. Un modele de 3 kg aurait affiche « 100 % » a moitie plein.
- *
- * L'aide qui porte le niveau declare son propre maximum — c'est elle qui sait. */
-const CROQ_MAX_DEFAUT = 1500;
-function croqMax(S) {
-  const id = croqHaids().reservoir;
-  const e = S && id && S[id];
-  const m = e && e.attributes && Number(e.attributes.max);
-  return (m > 0) ? m : CROQ_MAX_DEFAUT;
-}
 /* Ce que la carte du distributeur lit, pour le poll des vues (ADR 0155, 05/10) :
  * les entités désignées (réservoir, portion, compteur, commande, script), puis
  * celles de l'appareil qui changent la carte — sa commande (« Distribuer »,
  * le liseré), sa connectivité, « en cours » (Objets.actif), ses compteurs et
  * son capteur du dernier repas (le dernier repas), son capteur du prochain (la
- * prochaine ration). Les automatisations n'y entrent PAS : la fiche les
- * surveille elle-même, l'Accueil n'a pas à les sonder.
+ * prochaine ration) ; et (étape 2 du chantier IoT, 19/10) ses anomalies — la
+ * phrase passe à l'ambre — et sa portion, avec son poids — « Distribuer 12 g ».
+ * Les automatisations n'y entrent PAS : la fiche les surveille elle-même,
+ * l'Accueil n'a pas à les sonder. La capacité du bac est celle que l'aide
+ * déclare (`carteDistributeur`), à défaut 1 500 g.
  * La connectivité se reconnaît par la règle d'`enLigne` (TABLES), pas une
  * copie : la clé `online` d'une intégration en majuscules lui échappait, et le
  * liseré n'arrivait qu'au tic suivant d'une autre entité (contradicteur, 05/10). */
@@ -11638,48 +11796,13 @@ const croqKeys = () => {
   if (!distributeurConfigure()) return base.filter(x => typeof x === 'string' && x !== '');
   const lu = lireDistributeur(LOGGIA_INDEX, (getHass() || {}).states || {}, conf);
   const connectivite = lu.soeurs.filter(x => x.domaine === 'binary_sensor' && (x.classe === 'connectivity' || TABLES_DISTRIBUTEUR.CLES_CONNECTIVITE.indexOf(String(x.cle || '').toLowerCase()) >= 0)).map(x => x.id);
-  return [...base, lu.commande && lu.commande.entity_id, lu.enCours, lu.prochainCapteur, lu.historique.dernier, ...lu.historique.compteurs, ...connectivite]
+  return [...base, lu.commande && lu.commande.entity_id, lu.enCours, lu.prochainCapteur, lu.historique.dernier, ...lu.historique.compteurs, ...connectivite,
+    ...lu.anomalies.map(x => x.entity_id), lu.portion && lu.portion.entity_id, lu.poidsPortion && lu.poidsPortion.entity_id]
     .filter((x, i, t) => typeof x === 'string' && x !== '' && t.indexOf(x) === i);
 };
 
 /* ════════════ VUE MÉDIAS (reproduction fidèle de "Loggia Médias.dc.html") ════════════ */
 // Vrais media_player (Apple TV + Echos Alexa + Soundbar).
-// ── Accent dynamique tiré de la pochette (algo de la carte HOMEii Flow : canvas 40×40,
-//    moyenne pondérée par saturation + lumière recentrée .4-.58, saturation min .48) ──
-const NP_ACCENT_CACHE = new Map();
-function npRgbToHsl([r, g, b]) { r /= 255; g /= 255; b /= 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b); let h = 0, s = 0; const l = (mx + mn) / 2; if (mx !== mn) { const d = mx - mn; s = l > .5 ? d / (2 - mx - mn) : d / (mx + mn); h = mx === r ? ((g - b) / d + (g < b ? 6 : 0)) : mx === g ? ((b - r) / d + 2) : ((r - g) / d + 4); h /= 6; } return [h, s, l]; }
-function npHslToRgb([h, s, l]) { if (s === 0) { const v = Math.round(l * 255); return [v, v, v]; } const q = l < .5 ? l * (1 + s) : l + s - l * s; const p = 2 * l - q; const f = t => { if (t < 0) t += 1; if (t > 1) t -= 1; if (t < 1 / 6) return p + (q - p) * 6 * t; if (t < 1 / 2) return q; if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6; return p; }; return [f(h + 1 / 3), f(h), f(h - 1 / 3)].map(v => Math.round(v * 255)); }
-function extractNpAccent(url) {
-  if (NP_ACCENT_CACHE.has(url)) return Promise.resolve(NP_ACCENT_CACHE.get(url));
-  const p = new Promise(resolve => {
-    try {
-      const img = new Image(); img.crossOrigin = 'anonymous'; img.decoding = 'async';
-      img.onload = () => {
-        try {
-          const c = document.createElement('canvas'); c.width = c.height = 40;
-          const ctx = c.getContext('2d', { willReadFrequently: true });
-          ctx.drawImage(img, 0, 0, 40, 40);
-          const { data } = ctx.getImageData(0, 0, 40, 40);
-          let acc = [0, 0, 0], w = 0;
-          for (let i = 0; i < data.length; i += 16) {
-            const a = (data[i + 3] || 0) / 255; if (a < .08) continue;
-            const rgb = [data[i], data[i + 1], data[i + 2]];
-            const [h, s, l] = npRgbToHsl(rgb);
-            const bl = 1 - Math.abs(l - .52);
-            const wt = a * (.2 + s * 1.9 + bl * .85);
-            const tuned = npHslToRgb([h, Math.max(s, .48), Math.min(Math.max(l, .4), .58)]);
-            acc = acc.map((e, j) => e + tuned[j] * wt); w += wt;
-          }
-          resolve(w ? acc.map(e => Math.max(0, Math.min(255, Math.round(e / w)))) : null);
-        } catch { resolve(null); } // canvas tainted (CORS) → pas d'accent, fallback thème
-      };
-      img.onerror = () => resolve(null);
-      img.src = url;
-    } catch { resolve(null); }
-  });
-  NP_ACCENT_CACHE.set(url, p); p.then(v => NP_ACCENT_CACHE.set(url, v));
-  return p;
-}
 
 const medKeys = () => medPlayers().flatMap(p => [p.haid, p.ma]).filter(Boolean);
 
@@ -11696,236 +11819,13 @@ const secBaseKeys = () => {
     ...(Array.isArray(cams) ? cams.filter(c => c && typeof c === 'object').flatMap(c => [c.haid, c.motion, c.person, c.vehicle, c.sonnette, c.colis]) : []),
     ...gens.map(x => x.haid)].filter(Boolean);
 };
-// Les etats qui valent « quelque chose se passe » : ceux d'un binary_sensor,
-// plus `home` pour une personne. Partages entre la lecture du direct et le
-// comptage de l'historique, qui doivent s'accorder.
-const ACTIFS = ['on', 'true', 'True', 'detected', 'Detected', 'home'];
-
-
-function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
-  const S = (hass && hass.states) || {};
-  const isOn = id => { const s = id && S[id]; return !!(s && ACTIFS.indexOf(s.state) >= 0); };
-  // ── Sources : configuration utilisateur d'abord, découverte ensuite ──
-  const { resolved } = useLoggia();
-  const alarmCfg = useEntities('alarm', null);
-  const rAlarm = (resolved && resolved.alarm && resolved.alarm.available) ? resolved.alarm : null;
-  const rCams = (resolved && resolved.cameras && resolved.cameras.available) ? resolved.cameras.list : [];
-  // Le choix FRAIS de l'utilisateur (Paramètres → Entités, `loggia_alarm`)
-  // prime sur l'héritage `loggia_entities.alarm` : l'ancien ordre gardait la
-  // vieille entité (UniFi Protect…) après un changement de panneau (Alarmo),
-  // et les commandes partaient vers le mauvais système.
-  const alarmId = (secAlarm() && S[secAlarm()]) ? secAlarm() : (alarmCfg && S[alarmCfg]) ? alarmCfg : (rAlarm ? rAlarm.main : null);
-  // Une seule source : la résolution, qui prend déjà la liste de l'utilisateur
-  // quand il en a une, et la complète par les détecteurs du même appareil.
-  const camList = rCams.map(c => ({
-    haid: c.haid || c.id, label: c.label || c.name,
-    motion: c.motion, person: c.person, vehicle: c.vehicle, sonnette: c.sonnette, colis: c.colis,
-    preset: c.preset,
-  })).filter(c => c && c.haid);
-  // Le dernier declenchement de chaque detecteur, par le journal (ADR 0031).
-  const derniersCams = useDerniersEvenements(hass, camList.flatMap(c => detecteursDe(c).map(d => d.id)), reduireDerniers);
-  /* LE MEME LANGAGE QUE L'ACCUEIL (ADR 0033) : les comptes et la ligne d'etat
-   * de la carte Securite, les points « A surveiller » qui touchent a la
-   * securite (les etats et les cameras — pas le CO2 ni les piles, qui ont
-   * leur place ailleurs), et les fiches des ouvrants. Une tuile de la ligne
-   * d'etat defile jusqu'a sa section. */
-  const dc = useDomainCards(hass, { onNav });
-  // Les cameras comptees comme sur l'Accueil : la liste de l'utilisateur
-  // (`loggia_cameras`, une camera sans entite y compte comme hors ligne),
-  // sinon celles de la resolution — memes chiffres des deux cotes.
-  const camsCfg = (() => { try { const c = cfgVal('loggia_cameras', null); const l = Array.isArray(c) ? c.filter(x => x && typeof x === 'object') : []; return l.length ? l : null; } catch { return null; } })();
-  const camsInfoSec = (camsCfg || camList).map(c => ({ nom: c.name || c.label, online: S[c.haid] ? S[c.haid].state !== 'unavailable' : c.online !== false }));
-  const comptesSecVue = comptesSecurite(S, camsInfoSec);
-  const tuilesSecVue = tuilesSecurite(comptesSecVue);
-  const pointsSec = pointsAttention({ S, cams: camsInfoSec });
-  const defiler = (cle) => {
-    const el = document.getElementById(cle === 'cameras' ? 'sec-cameras' : cle === 'mouvement' ? 'sec-journal' : 'sec-ouvrants');
-    // Un saut net, pas un glissement : le glissement est ignore par certains
-    // navigateurs integres, et la section se cale sous l'en-tete fixe.
-    if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' });
-  };
-  // Même source que l'accueil : une personne ne peut pas exister ici et pas là.
-  const secPeople = peopleList().filter(p => p && p.haid);
-  // ── Alarme : l'état du panneau, tel quel. Les gestes (armer, code,
-  // décompte) vivent dans la carte Alarme, la même que le catalogue (ADR 0034).
-  const alarmRaw = (alarmId && S[alarmId]) ? S[alarmId].state : null;
-  const alarm = alarmRaw == null ? 'unknown'
-    : (alarmRaw === 'armed_away' || alarmRaw === 'armed_vacation') ? 'away'
-      : alarmRaw === 'armed_home' ? 'home'
-        : alarmRaw === 'armed_night' ? 'night'
-          : alarmRaw === 'triggered' ? 'triggered' : 'off';
-  const arming = alarmRaw === 'arming' || alarmRaw === 'pending';
-  const triggered = alarm === 'triggered';
-
-  // ── Caméras : live + détections ──
-  const cams = camList.map((c, ci) => {
-    const s = S[c.haid];
-    const online = s ? (s.state !== 'unavailable' && s.state !== 'unknown') : false;
-    // La detection en cours, sinon le dernier declenchement du journal, sinon
-    // rien : la meme sous-ligne que la tuile de l'Accueil (ADR 0031).
-    const ev = evenementCamera(c, S, derniersCams);
-    const active = !!(ev && ev.enCours);
-    const preset = CAMERAS()[(c.preset != null ? c.preset : ci) % CAMERAS().length];
-    return {
-      haid: c.haid, hass, online, label: c.label || '', active, evenement: ev,
-      tag: online ? 'LIVE · ' + String(c.label || '').toUpperCase() : tr('HORS LIGNE'),
-      grad: preset.grad, glow: preset.glow,
-      sub: sousCamera(online, ev),
-    };
-  });
-  const anyMotion = cams.some(c => c.online && c.active);
-  /* Combien par ligne (20/09) : la cle de la maison, lue par type d'ecran —
-   * exactement celle de l'Accueil, pour que les deux vues se ressemblent. */
-  const formatCam = formatEcran(useCoarse(), useWide(1180));
-  const [camDispo, setCamDispo] = useState(() => cfgVal('loggia_camdispo', null));
-  const poserCam = (id) => {
-    const n = poserCamDispo(camDispo, formatCam, id);
-    setCamDispo(n);
-    cfgSet({ loggia_camdispo: n });
-  };
-
-  // ── Présence ──
-  const people = secPeople.map(p => ({ name: p.name, home: isOn(p.haid) }));
-
-  // ── État global ──
-  const unknownState = alarm === 'unknown';
-  const heroTitle = unknownState ? tr('État inconnu') : triggered ? tr('Alarme déclenchée') : anyMotion ? tr('Mouvement détecté') : tr('Tout est calme');
-  const statusCol = unknownState ? 'var(--o-text3-rgb)' : triggered ? 'var(--o-bad-rgb)' : alarm !== 'off' ? 'var(--o-warn-rgb)' : 'var(--o-ok-rgb)';
-
-  const cs = a => `rgb(${a})`;
-  const ca = (a, al) => `rgba(${a},${al})`;
-  // Décompte d'armement : le temps qui reste pour sortir, battu à la seconde.
-  const cptAlarme = armCompte(alarmId ? S[alarmId] : null);
-  useSeconde(!!cptAlarme);
-  const armMot = cptAlarme ? tr('activation dans {n} s', { n: cptAlarme.reste }) : tr('activation en cours');
-  const alarmWord = arming ? armMot : triggered ? tr('déclenchée') : alarm === 'unknown' ? tr('état inconnu')
-    : alarm === 'away' ? tr('armée · absent') : alarm === 'home' ? tr('armée · présent') : alarm === 'night' ? tr('armée · nuit') : tr('désarmée');
-  /* TROIS CARTES a la place du bandeau (ADR 0034) : l'alarme — la carte
-   * « Alarme (seule) » du catalogue, avec son message —, les sirenes de la
-   * maison, et qui est la. Chacune n'existe que si son entite existe. */
-  // Le domaine `siren`, un interrupteur nomme sirene, ou celle que l'utilisateur
-  // a choisie (`loggia_entities.sirene`) — beaucoup de sirenes Zigbee
-  // n'arrivent qu'en `switch` (retour user du 16/09 : « je n'ai pas la carte
-  // sirene »).
-  const sireneChoisie = loggiaEnt('sirene', null);
-  const sirenes = [...(sireneChoisie && S[sireneChoisie] ? [sireneChoisie] : []), ...Object.keys(S).filter(id => id !== sireneChoisie && S[id] && estSirene(id, S[id]))];
-  const msgAlarme = messageAlarme(alarmId ? S[alarmId] : null, comptesSecVue, S);
-  /* MODE EDITION, le meme que les autres vues (ADR 0036) : la decouverte
-   * propose — l'alarme, les sirenes, la presence, puis les ouvrants sous leur
-   * titre (les ouverts d'abord) —, l'utilisateur dispose : ordre, retrait,
-   * nom, largeur, ajout, titres. L'agencement vit dans `loggia_seclayout`,
-   * perimetre `securite`. */
-  const ouvrantsIds = [...ouvrantsDe(S)].sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0)).map(o => o.id);
-  const derivesSec = [...(alarmId ? [alarmId] : []), ...sirenes, ...(people.length ? ['carte:presence'] : []), ...(ouvrantsIds.length ? ['sect:ouvrants', ...ouvrantsIds] : [])];
-  const ed = useLayoutEditor('loggia_seclayout', 'securite', derivesSec);
-  const [cardEdit, setCardEdit] = useState(null);
-  const [addSheet, setAddSheet] = useState(false);
-  const origineDe = (k) => {
-    if (k === 'sect:ouvrants') return tr('Ouvrants');
-    if (k.indexOf('sect:') === 0) return k.slice(5) || tr('Section');
-    if (k === 'carte:presence') return tr('Présence');
-    return (S[k] && S[k].attributes && S[k].attributes.friendly_name) || k;
-  };
-  const nomDe = (k) => ed.labelOf(k) || origineDe(k);
-  const addSection = () => ed.toggle('sect:' + Date.now().toString(36));
-  const blocs = [];
-  ed.ids.forEach(k => {
-    if (k.indexOf('sect:') === 0) blocs.push({ titre: k, cartes: [] });
-    else { if (!blocs.length) blocs.push({ titre: null, cartes: [] }); blocs[blocs.length - 1].cartes.push(k); }
-  });
-  // La carte d'une cle : l'alarme et la sirene ont la leur, la presence aussi,
-  // un ouvrant prend la carte illustree des pieces, le reste passe par la fabrique.
-  const carteSec = (k) => {
-    if (k.indexOf('alarm_control_panel.') === 0) return <CvAlarm id={k} hass={hass} sans message={k === alarmId ? msgAlarme : null} label={ed.labelOf(k)} />;
-    if (k === 'carte:presence') return <CvPresence hass={hass} />;
-    if (S[k] && estSirene(k, S[k])) return <CvSirene id={k} hass={hass} label={ed.labelOf(k)} />;
-    if (k.indexOf('binary_sensor.') === 0) return <RoomGenericCard id={k} hass={hass} onOpen={dc.ouvrir} label={ed.labelOf(k)} />;
-    return dc.card(k, ed.labelOf(k));
-  };
-
-  return (
-    <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} onEnt={onEnt} />}
-      <div className="o-obj-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
-        <div style={{ minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Sécurité')}</h1>
-          {/* L'etat en une seconde, les mots de la carte Securite de l'Accueil (ADR 0033). */}
-          <div style={{ fontSize: 13, fontWeight: 600, marginTop: 5, color: comptesSecVue.ok ? 'var(--o-ok)' : 'var(--o-warn)' }}>{tr('Alarme')} {alarmWord} · {resumeSecurite(comptesSecVue)}</div>
-        </div>
-        <span style={{ flex: 1 }} />
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: ca(statusCol, .14), color: cs(statusCol) }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: cs(statusCol), animation: triggered ? 'pulse 1.2s infinite' : 'none' }} />{heroTitle.toUpperCase()}</span>
-      </div>
-      {/* La ligne d'etat de l'Accueil, tuile par tuile ; chacune defile jusqu'a sa section. */}
-      {tuilesSecVue.length > 0 && <div style={{ marginTop: -14 }}><TuilesSecurite tuiles={tuilesSecVue} onTuile={(t) => defiler(t.cle)} /></div>}
-
-      {/* « A surveiller », comme sur l'Accueil : seulement quand il y a un
-        * point, et seulement ceux de la securite (ADR 0033). Un point qui
-        * mene ici reste ici. */}
-      {pointsSec.length > 0 && <CarteAttention points={pointsSec} onNav={(v) => { if (v !== 'securite' && onNav) onNav(v); }} />}
-
-      {/* LES CARTES, editables comme dans les autres vues (ADR 0036) : l'alarme
-        * (la carte du catalogue, avec son message), les sirenes, la presence,
-        * puis les ouvrants un par un — la carte des pieces, la porte ou la
-        * fenetre dessinee en fond. En edition : glisser, retirer, renommer,
-        * elargir, ajouter une carte ou un titre. Le bandeau est en tete de
-        * la vue, comme partout (17/09). */}
-      <div ref={ed.gridRef} id={ed.ids.indexOf('sect:ouvrants') < 0 ? 'sec-ouvrants' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {blocs.map((bloc, bi) => {
-          if (!edit && bloc.titre && !bloc.cartes.length) return null;
-          const titre = bloc.titre ? (
-            <div id={bloc.titre === 'sect:ouvrants' ? 'sec-ouvrants' : undefined} style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{nomDe(bloc.titre)}</div>
-          ) : null;
-          // UNE grille pour toute la vue, celle des objets : 225 px, deux colonnes au
-          // telephone et sur tablette, rangees de 184 px. L'alarme, la sirene et la
-          // presence avaient la leur (250 px, une colonne de 362 px au telephone) :
-          // « trop large », elles ne respectaient pas les dimensions (retour du 17/09).
-          return (
-            <div key={bloc.titre || 'b' + bi} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {bloc.titre && (edit ? <EditableCard plat ed={ed} id={bloc.titre} nom={nomDe(bloc.titre)} onEdit={setCardEdit}>{titre}</EditableCard> : titre)}
-              <div className="grid-objets" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gridAutoRows: 'minmax(184px, auto)', gap: 16, alignItems: 'stretch' }}>
-                {bloc.cartes.map(k => edit
-                  ? <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit} hass={hass} taille={false} />
-                  : <Anim key={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}><div style={{ height: '100%', minHeight: 184 }}>{carteSec(k)}</div></Anim>)}
-                {edit && bi === blocs.length - 1 && <CarteAjout onClick={() => setAddSheet(true)} />}
-              </div>
-            </div>
-          );
-        })}
-        {edit && !blocs.length && <CarteAjout onClick={() => setAddSheet(true)} />}
-      </div>
-
-      <div id="sec-cameras" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Caméras en direct')}</span>
-        <span style={{ flex: 1 }} />
-        {/* Le meme reglage que l'Accueil, la meme cle : disposer ici dispose
-          * partout, pour ce type d'ecran (20/09). */}
-        {cams.length > 1 && <ChoixCamDispo valeur={camDispo} format={formatCam} onChoisir={poserCam} />}
-      </div>
-      <div className={'grid-sec-cams' + (camSerre(colonnesCam(camDispo, formatCam), formatCam) ? ' o-cams-serre' : '')} style={{ display: 'grid', gridTemplateColumns: `repeat(${colonnesCam(camDispo, formatCam)},minmax(0,1fr))`, gap: 16 }}>
-        {cams.map((c, i) => <Anim key={c.haid || c.id} i={i} base={140}><CameraTile c={c} /></Anim>)}
-      </div>
-
-      {/* Le journal de ce qui touche à la sécurité : ouvrants, mouvements,
-        * alarme et caméras — la carte des pièces, restreinte à ces entités. */}
-      <div id="sec-journal">
-        <RoomActivityCard hass={hass} max={12} titre={tr('Journal de la sécurité')} sous={tr('Ouvrants, mouvements et alarme — 24 h, en direct')}
-          ids={[...ouvrantsDe(S).map(o => o.id), ...(alarmId ? [alarmId] : []), ...camList.map(c => c.haid).filter(Boolean), ...camList.flatMap(c => detecteursDe(c).map(d => d.id)), ...people.map(p => p.haid).filter(Boolean)]} />
-      </div>
-      {/* Les fiches des ouvrants : sans elles, une carte cliquee resterait muette. */}
-      {dc.sheets}
-      {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={nomDe(cardEdit)} origine={origineDe(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
-      {addSheet && <ComposeurCartes hass={hass} dc={dc} present={ed.ids} onToggle={ed.toggle} entete={tr('Ajouter une carte')} composites={false}
-        pied={<button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button>}
-        domaines={['binary_sensor', 'lock', 'siren', 'switch', 'alarm_control_panel', 'sensor', 'camera']} onClose={() => setAddSheet(false)} />}
-    </div>
-  );
-}
-
 function SecuriteView({ hass, edit = false, onEnt, onNav = null }) {
   return (
     <main className="loggia-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Header />
-      <SecuriteContent hass={hass} edit={edit} onEnt={onEnt} onNav={onNav} />
+      <Suspense fallback={<div className="loggia-content" style={{ padding: '26px 28px 56px' }} />}>
+        <SecuriteContent hass={hass} edit={edit} onEnt={onEnt} onNav={onNav} />
+      </Suspense>
     </main>
   );
 }
@@ -12027,10 +11927,12 @@ function cvIcoEntite(dom, id, st, name) {
   const a = (st && st.attributes) || {};
   const dc = a.device_class || '';
   const s = st ? st.state : null;
-  if (dom === 'light') return LIGHT_TYPE_ICON[lightType({ id, name })] || 'bulb';
+  // Toute lumière porte la même ampoule, quel que soit son nom (sa demande du 14/10) ; le choix de l'utilisateur est déjà passé devant.
+  if (dom === 'light') return 'bulb';
   if (dom === 'climate') return a.hvac_action === 'heating' ? 'flame' : a.hvac_action === 'cooling' ? 'snowflake' : 'thermometer-half';
-  if (dom === 'sensor') return ({ temperature: 'thermometer-half', humidity: 'humidity', carbon_dioxide: 'smog', pm25: 'smog', pm10: 'smog', aqi: 'smog', power: 'bolt', energy: 'bolt', voltage: 'bolt', current: 'bolt', illuminance: 'brightness', battery: 'battery-half', pressure: 'dashboard', gas: 'flame', moisture: 'raindrops' })[dc] || 'chart-line-up';
-  if (dom === 'binary_sensor') return dc === 'door' ? (s === 'on' ? 'door-open' : 'door-closed') : ({ window: 'window-alt', garage_door: 'garage', motion: 'radar', occupancy: 'radar', presence: 'radar', smoke: 'smoke', moisture: 'raindrops', gas: 'flame' })[dc] || 'radar';
+  // Une mesure de la table prend le glyphe de sa FAMILLE (correction bis du chantier Capteurs, point 9) : le bruit, le vent et les COV portaient le générique.
+  if (dom === 'sensor') return iconeMesure(cleMesure(dc, a.unit_of_measurement)) || ({ pm10: 'smog', pm1: 'smog', aqi: 'smog', nitrogen_dioxide: 'smog', ozone: 'smog', volatile_organic_compounds: 'smog', volatile_organic_compounds_parts: 'smog', power: 'bolt', atmospheric_pressure: 'dashboard', energy: 'bolt', voltage: 'bolt', current: 'bolt', battery: 'battery-half', pressure: 'dashboard', gas: 'flame', moisture: 'raindrops' })[dc] || 'chart-line-up';
+  if (dom === 'binary_sensor') return dc === 'door' ? (s === 'on' ? 'door-open' : 'door-closed') : ({ window: 'window-alt', garage_door: 'garage', motion: 'radar', occupancy: 'radar', presence: 'radar', smoke: 'smoke', moisture: 'raindrops', gas: 'flame', carbon_monoxide: 'flame' })[dc] || 'radar';
   if (dom === 'cover') return (dc === 'garage' || dc === 'gate') ? 'garage' : dc === 'window' ? 'window-alt' : 'blinds';
   if (dom === 'media_player') return dc === 'tv' ? 'screen' : 'tv-music';
   if (dom === 'valve') return 'water';
@@ -12056,22 +11958,85 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   const poseT = (v) => { setOvT(v); clearTimeout(ovTRef.current); ovTRef.current = setTimeout(() => setOvT(null), 4000); };
   const dom = cvDomain(id);
   const name = label || cvName(st, id);
-  const ico = dom === 'switch' ? (iconeChoisie(id) || (cvEstLumiere(id) ? 'bulb' : null)) : cvIcoEntite(dom, id, st, name); // null = prise, SVG maison
+  /* Une PRISE (P1 ; chantier Prises, § 3.3) : la compacte garde sa disposition
+   * et prend de sa carte la phrase (§ 4), la puissance et le glyphe de son
+   * appareil. Protégée et allumée, sa bascule ouvre la fiche : une compacte n'a
+   * pas la place de demander (P5). `vp` vaut null pour tout le reste, et rien
+   * ne s'abonne ; ni courbe ni kWh ici, rien ne se lit du jour. */
+  const vp = useVuePrise(hass, id, label, dom === 'switch' && !cvEstLumiere(id) && priseDe(hass && hass.states, id).prise, { jour: false });
+  /* Une LUMIÈRE compacte (chantier Lumières, § 3.3) : elle garde sa disposition et prend de sa carte la phrase (§ 4),
+   * le pourcentage — à partir de 140 px de contenu, comme la puissance d'une prise — et la teinte de la vraie lumière
+   * (L6), sur la pastille et le lavis. Pas de barre ; un appui ouvre la fiche, la bascule allume ou éteint (L3).
+   * `vl` vaut null pour tout le reste — la standard comprise —, et rien ne s'abonne. */
+  const vl = useVueLumiere(hass, id, label, dense && cvEstLumiere(id));
+  /* Une MESURE compacte (chantier Capteurs, § 3) : elle garde sa disposition et prend de sa carte la phrase, le chiffre — en
+   * haut à droite, à la place d'une commande qu'elle n'a pas — et, hors du bon, la teinte de sa zone sur la pastille et le
+   * lavis ; bonne, le neutre (C5). Pas de barre. `vm` vaut null pour tout le reste — la standard comprise —, et rien ne s'abonne. */
+  const vm = useVueMesure(hass, id, label, dense && dom === 'sensor' && estMesure(st));
+  /* Un LECTEUR (chantier Médias, M17) : la compacte garde sa disposition et prend de sa carte la phrase (M6), la pochette dans la
+   * plaque et la teinte (M8) ; sa seule commande reste lecture/pause, explicite (M13 : `media_pause` si le lecteur joue, `media_play`
+   * sinon, sur la jumelle qui commande). La standard prend la même vue. `vd` vaut null pour tout le reste, et rien ne s'abonne. */
+  const vd = useVueLecteur(hass, id, label, dom === 'media_player');
+  /* Un ROBOT (chantier IoT, I12) : la compacte garde sa disposition et prend de sa carte la phrase (I7), la batterie à droite, la
+   * teinte de la plaque au travail (I8) et, pour mini-commande, la première puce de la carte. `vr` vaut null pour tout le reste, et
+   * rien ne s'abonne. */
+  const vr = useVueRobot(hass, id, label, dom === 'vacuum' || dom === 'lawn_mower');
+  const vdJoue = !!vd && vd.on && !vd.indispo && (vd.playing || vd.paused);
+  // Dehors, rien n'est une alerte (C15, révisé le 16/10) : le mot de la zone, sans teinte.
+  const tm = vm && vm.zone && !vm.zone.bon && !vm.dehors ? vm.zone : null;
+  /* Un switch que l'index ne classe pas ENCORE (le chargement : le NAS s'affiche en switch ordinaire) suit la même règle que
+   * les prises (F2, `gardeDeSwitch`) : allumé et gardé, il ouvre la fiche, ou demande sur place. Un switch ordinaire, l'index lu,
+   * n'a rien à demander et ne s'abonne à rien ; `vp` a déjà sa garde. */
+  const gs = useGardeSwitch(hass && hass.states, id, !vp);
+  const ico = dom === 'switch' ? (iconeChoisie(id) || (cvEstLumiere(id) ? 'bulb' : null)) || (vp ? vp.tp.ico : null) : cvIcoEntite(dom, id, st, name); // null = prise, SVG maison
   const s = st ? st.state : null;
   const a = (st && st.attributes) || {};
-  // Une scène jamais lancée (`unknown`) n'est pas en panne : `enPanne` (05/10).
-  const dead = enPanne(id, st);
+  /* La luminosité d'une lumière STANDARD (la compacte passe par sa vue) : le geste d'abord, 4 s — l'écho Zigbee rejoue
+   * l'ancienne valeur (ADR 0261) ; le curseur et le sous-titre la lisent. */
+  const [ovBri, poserBri] = useOptimiste(dom === 'light' ? luminosite(a) : null, 4000);
+  /* Une scène jamais lancée (`unknown`) n'est pas en panne : `enPanne` (05/10). Une LUMIÈRE compacte lit sa panne dans SA vue,
+   * celle de sa phrase et de sa bascule : le `hass` du parent peut être en retard d'un tic (relecture des tâches 6 à 9, point 13). */
+  const dead = vl ? vl.muette : vm ? vm.muette : vd ? vd.indispo : vr ? vr.panne : enPanne(id, st);
+  /* Un VOLET (sa classe, V3) : la compacte garde sa disposition et ses ▲ ▼, et
+   * ne prend de sa carte que la phrase d'état (§ 4) et la position de sa
+   * course (§ 5) — chantier Volets, § 3.3. `volet` faux : rien ne s'abonne. */
+  const volet = dom === 'cover' && estVolet(st);
+  const { etat: etatVolets } = useEtatVolets(volet);
+  const vVolet = volet ? voletDe(etatVolets, id) : null;
+  const course = useCourseVolet(volet ? id : null, st, vVolet && vVolet.manoeuvre);
+  const vue = volet ? vueVolet({ st, course, v: vVolet, etat: etatVolets }) : null;
+  /* Un geste de cover (19/10) : ce qu'il accepte ; un VOLET lance sa course (Stop la fige), qu'un refus de Home Assistant oublie. */
+  const gestesCv = dom === 'cover' ? gestesCover(st) : null;
+  const bougerCover = (g, cible) => {
+    if (!g) return;
+    const envoi = envoyerGeste(hass, id, g);
+    if (!vue) envoi();
+    else if (cible == null) ordreEtArret(id, st, envoi);
+    else ordreEtCourse(id, cible, st, envoi);
+  };
   // Alarme en cours d'armement : le temps restant, battu à la seconde.
   const cptAlarme = dom === 'alarm_control_panel' ? armCompte(st) : null;
   useSeconde(!!cptAlarme);
-  const on = !dead && (dom === 'cover' ? (s === 'open' || s === 'opening') : dom === 'lock' ? s === 'unlocked' : dom === 'media_player' ? s === 'playing' : dom === 'climate' ? s !== 'off' : dom === 'vacuum' ? (s === 'cleaning' || s === 'returning') : dom === 'lawn_mower' ? (s === 'mowing' || s === 'returning') : dom === 'valve' ? s === 'open' : s === 'on');
-  // Chaque domaine garde sa teinte des vues intégrées : lumière = sa couleur RGB ou l'or,
-  // climat = le rouge de la vue Climatisation — l'accent bleu pour le reste.
-  const rgbHex = dom === 'light' && a.rgb_color ? versHex(a.rgb_color) : null;
-  // Climat = ROUGE (retour d'essai 31/08) : l'ambre warn2 rendait jaune.
-  const teinte = cvEstLumiere(id) ? (rgbHex || 'var(--o-lampe)') : dom === 'climate' ? 'var(--o-bad)' : dom === 'cover' ? 'var(--o-purple)' : null;
+  const on = vl ? vl.on : vp ? vp.on : vr ? vr.travail : !dead && (vue ? vue.allume : dom === 'cover' ? coverActif(st) : dom === 'lock' ? s === 'unlocked' : vd ? vd.playing : dom === 'climate' ? s !== 'off' : dom === 'valve' ? s === 'open' : s === 'on');
+  // Sans fiche à ouvrir (la compacte de l'appareil, dans SA fiche), elle demande sur place : deux appuis (A4). Coupée entre-temps, la question tombe (F4).
+  const [demande, setDemande] = useDemandeCoupure(on);
+  const enDemande = vp ? vp.on && demande : gs.garde && on && demande;
+  // Chaque domaine garde sa teinte des vues intégrées : lumière = la teinte de la VRAIE lumière, la règle de sa carte
+  // (`teinteDeCarte` : un blanc par la table, plafonné à 4 000 K en thème clair, une couleur par son `rgb_color`), sinon l'or ;
+  // climat = celle de ses cartes — l'accent bleu pour le reste.
+  const teinteVraie = dom === 'light' && on ? teinteDeCarte(a, null, estClair()) : null;
+  const rgbHex = teinteVraie ? versHex(teinteVraie) : null;
+  /* Climat : l'orange de la chauffe, le bleu d'un appareil qui refroidit
+   * (`teinteClimat`) — les couleurs de sa maquette « Cartes chauffage »,
+   * choisies le 11/10 : le rouge reste aux alertes. Il avait remplacé l'ambre
+   * le 31/08 (« rendait jaune ») ; la maquette l'a rendue au chauffage. */
+  const teinte = cvEstLumiere(id) ? (rgbHex || 'var(--o-lampe)') : dom === 'climate' ? teinteClimat(st) : dom === 'cover' ? 'var(--o-purple)' : null;
   const teinteLu = rgbHex ? lisibleSurLavis(rgbHex, estClair(), .28) : teinte;
-  const teinteTxt = rgbHex || (cvEstLumiere(id) ? 'var(--o-warn)' : dom === 'climate' ? 'var(--o-bad)' : dom === 'cover' ? 'var(--o-purple)' : 'var(--o-accent-soft)');
+  const teinteTxt = rgbHex || (cvEstLumiere(id) ? 'var(--o-warn)' : dom === 'climate' ? teinteClimat(st) : dom === 'cover' ? 'var(--o-purple)' : 'var(--o-accent-soft)');
+  /* Une clim qui sèche ou ventile ne prend AUCUNE teinte (`teinteClimat` :
+   * null ; relecture de la dernière passe) — ni l'orange, ni le bleu, ni
+   * l'accent des autres domaines : allumée, elle reste neutre, sans lavis. */
+  const neutre = on && dom === 'climate' && !teinte;
   const togglable = ['light', 'switch', 'input_boolean', 'fan', 'humidifier', 'siren'].indexOf(dom) >= 0;
   // Presque tout s'ouvre : les domaines à fiche dédiée, et tout appareil du
   // registre via la fiche universelle. Seuls les capteurs texte restent muets.
@@ -12085,19 +12050,26 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   // L'icône du geste, montrée À LA PLACE du mot sur une carte étroite (05/10).
   const icoRun = { button: 'cursor-finger', input_button: 'cursor-finger' }[dom] || 'play';
   let stateTxt;
-  if (dead) stateTxt = tr('Indisponible');
-  else if (dom === 'light') stateTxt = on ? (tr('Allumé') + (a.brightness ? ' · ' + Math.round(a.brightness / 255 * 100) + '%' : '')) : tr('Éteint');
+  if (vl) stateTxt = vl.phrase.texte;
+  else if (vm) stateTxt = vm.phrase;
+  else if (vd) stateTxt = vd.phrase.texte;
+  else if (vr) stateTxt = vr.phrase.texte;
+  else if (vp) stateTxt = enDemande ? tr('Couper la prise ?') : vp.phrase;
+  else if (enDemande) stateTxt = tr('Couper la prise ?');
+  else if (dead) stateTxt = tr('Indisponible');
+  // Une lumière, le vocabulaire de sa carte (§ 4, ADR 0261) : « Allumée depuis 18:05 · 45 % », « Éteinte » ; le pourcentage au plancher de 1 %.
+  else if (cvEstLumiere(id)) { const pct = ovBri != null ? ovBri : luminosite(a); stateTxt = phraseLumiere({ st }).texte + (on && dom === 'light' && pct != null ? ' · ' + pct + '\u00a0%' : ''); }
   else if (togglable) stateTxt = on ? tr('Allumé') : tr('Éteint');
   else if (dom === 'climate') stateTxt = (a.current_temperature != null ? decMax(a.current_temperature, 1) + '°' : '—') + (a.temperature != null ? ' → ' + decMax(a.temperature, 1) + '°' : '') + (s !== 'off' ? '' : ' · ' + tr('Éteint'));
-  else if (dom === 'cover') stateTxt = s === 'opening' ? tr('Ouverture…') : s === 'closing' ? tr('Fermeture…') : on ? (tr('Ouvert') + (a.current_position != null && a.current_position < 100 ? ' · ' + a.current_position + '%' : '')) : tr('Fermé');
+  else if (vue) stateTxt = vue.phrase;
+  // Le verdict de V12 aux deux bouts, et un entier (19/10) : plus de « Ouvert · 98% » ni de « 1.5% ».
+  else if (dom === 'cover') stateTxt = s === 'opening' ? tr('Ouverture…') : s === 'closing' ? tr('Fermeture…') : on ? (tr('Ouvert') + (positionPubliee(st) != null && !coverOuvert(positionPubliee(st)) ? ' · ' + Math.round(positionPubliee(st)) + '%' : '')) : tr('Fermé');
   // Serrure : les sept états de HA, avec les mots de sa fiche — la pastille
   // ouverte d'une serrure `jammed` s'écrivait « jammed », brut et en anglais
   // dans toutes les langues (contre-relecture du lot 16, 05/10).
   else if (dom === 'lock') stateTxt = ({ locked: tr('Verrouillée'), unlocked: tr('Déverrouillée'), locking: tr('Verrouillage…'), unlocking: tr('Déverrouillage…'), jammed: tr('Bloquée'), open: tr('Ouverte'), opening: tr('Ouverture…') })[s] || String(s);
   else if (dom === 'alarm_control_panel') stateTxt = s === 'disarmed' ? tr('Désarmée') : s === 'triggered' ? tr('ALERTE') : (s === 'arming' || s === 'pending') ? (cptAlarme ? tr('Activation dans {n} s', { n: cptAlarme.reste }) : tr('Activation en cours…')) : s === 'armed_home' ? tr('Maison') : s === 'armed_night' ? tr('Nuit') : tr('Armée');
-  else if (dom === 'media_player') stateTxt = s === 'playing' ? (a.media_title || tr('Lecture')) : s === 'paused' ? tr('En pause') : s === 'off' ? tr('Éteint') : tr('Inactif');
   else if (dom === 'binary_sensor') stateTxt = s === 'on' ? tr('Détecté') : tr('RAS');
-  else if (dom === 'vacuum' || dom === 'lawn_mower') stateTxt = ({ docked: tr('Sur la base'), cleaning: tr('Nettoyage'), mowing: tr('Tonte'), returning: tr('Retour à la base'), paused: tr('En pause'), idle: tr('Inactif'), error: tr('Erreur') })[s] || String(s);
   else if (dom === 'valve') stateTxt = s === 'open' ? tr('Ouvert') : s === 'closed' ? tr('Fermé') : String(s);
   else if (dom === 'person') stateTxt = s === 'home' ? tr('Présent') : tr('Absent');
   else if (dom === 'sensor' && dateTxt != null) stateTxt = dateTxt;
@@ -12106,6 +12078,27 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   // jamais tiré (`unknown`, plus en panne), il dit « — », pas « unknown » (05/10).
   else if (runnable || dom === 'event' || /^\d{4}-\d\d-\d\dT/.test(String(s))) stateTxt = relTime(s) || '—';
   else stateTxt = String(s);
+  /* La bascule : une prise passe par sa vue (le geste d'abord) ; allumée et
+   * gardée — protégée, ou protection inconnue — elle ouvre sa fiche, qui demande
+   * (P5) ; sans fiche à ouvrir, elle demande sur place, et le second appui coupe.
+   * Une bascule ne reste jamais sans effet (`appuiBascule`, A4). Un switch que
+   * l'index ne classe pas encore suit la même règle (F2) ; tout autre appareil
+   * garde le geste d'abord. */
+  const basculerCompacte = () => {
+    // Une lumière : `turn_on` / `turn_off` d'après l'état affiché, le geste d'abord (sa vue).
+    if (vl) { vl.commander(!vl.on); return; }
+    if (!vp) {
+      const geste = appuiBascule({ on, garde: gs.garde, ouvrable: !!onOpen, enDemande });
+      if (geste === 'fiche') onOpen(id);
+      else if (geste === 'demander') setDemande(true);
+      else { setDemande(false); call('homeassistant', on ? 'turn_off' : 'turn_on'); }
+      return;
+    }
+    const geste = appuiBascule({ on: vp.on, garde: vp.garde, ouvrable: !!onOpen, enDemande });
+    if (geste === 'fiche') onOpen(id);
+    else if (geste === 'demander') setDemande(true);
+    else { setDemande(false); vp.commander(!vp.on); }
+  };
   /* Le sous-titre AFFICHÉ, une seule variable pour l'œil et pour le nom de la
    * carte (lot 13 de l'audit du 03/10). Compacte climat : la consigne vit
    * entre les boutons — le sous-titre ne garde que la température relevée. */
@@ -12123,19 +12116,35 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
      * rangée, elle, ne l'est plus : un clic sur l'icône, le nom, l'état ou la
      * consigne ouvre la fiche, comme avant. */
     <div className={'o-piece' + (dense ? ' o-cvdense' : '') + (dead ? ' o-panne' : '') + ' o-cvcarte'}
-      style={{ position: 'relative', background: on ? lavisCarte((a) => hx(teinte || 'var(--o-accent)', a)) : SURF_CARTE, border: LISERE, borderRadius: 'var(--o-radius,18px)', padding: dense ? '12px 14px' : 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, cursor: ouvrable ? 'pointer' : 'default', transition: 'all .25s', ...(dense ? { height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center' } : {}) }}>
-      {ouvrable && <Surface onClick={() => onOpen(id)} label={nomCarte(name, sousTitre)} />}
+      style={{ position: 'relative', background: vl ? (vl.on && LAVIS ? lavisCarte(vl.couleurs.rgb, lavisLumiere(vl.bri).haut, lavisLumiere(vl.bri).bas) : SURF_CARTE) : vm ? (tm && LAVIS ? lavisCarte(tm.rgb, tm.i === vm.barre.zones.length - 1 ? .16 : .1, .03) : SURF_CARTE) : vp ? (vp.vive ? lavisCarte(vp.tp.rgb, .16) : SURF_CARTE) : vd ? (vdJoue && LAVIS ? lavisCarte(vd.teinte, vd.playing ? .16 : .08, .03) : SURF_CARTE) : vr ? (vr.travail && LAVIS ? lavisCarte(vr.teinte[0], .14, .03) : SURF_CARTE) : on && !neutre ? lavisCarte((a) => hx(teinte || 'var(--o-accent)', a)) : SURF_CARTE, border: LISERE, borderRadius: 'var(--o-radius,18px)', padding: dense ? '12px 14px' : 16, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', opacity: dead ? .55 : 1, cursor: ouvrable ? 'pointer' : 'default', transition: 'all .25s', ...(dense ? { height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center' } : {}) }}>
+      {ouvrable && <Surface onClick={() => onOpen(id)} label={vr ? nomCarte(name, sousTitre, vr.panne || vr.batterie == null ? null : tr('batterie {p} %', { p: vr.batterie })) : nomCarte(name, vm && vm.chiffre != null ? vm.chiffre + (vm.unite ? ' ' + vm.unite : '') : null, sousTitre)} />}
       <div className="o-cvrow" style={{ display: 'flex', alignItems: 'center' }}>
-        <span className="o-cvpastille" style={{ background: on ? (teinte ? hx(teinte, .16) : 'rgba(var(--o-accent-rgb),.16)') : 'var(--o-s1)', color: on ? (teinteLu || 'var(--o-accent-soft)') : 'var(--o-text3)' }}>{/* `Ico` et non `Fi` : une icone CHOISIE peut etre un dessin, que `Fi`
+        <span className="o-cvpastille" style={{ background: vl ? (on ? 'rgba(' + vl.couleurs.rgb + ',.22)' : 'var(--o-s1)') : vm ? (tm ? 'rgba(' + tm.rgb + ',.16)' : 'var(--o-s1)') : vp ? (on ? 'rgba(' + vp.tp.rgb + ',.16)' : 'var(--o-s1)') : vd ? (vdJoue ? 'rgba(' + vd.teinte + ',.16)' : 'var(--o-s1)') : vr ? (vr.travail ? 'rgba(' + vr.teinte[0] + ',.18)' : 'var(--o-s1)') : on && !neutre ? (teinte ? hx(teinte, .16) : 'rgba(var(--o-accent-rgb),.16)') : 'var(--o-s1)',
+          color: vl ? (on ? vl.encre : 'var(--o-text3)') : vm ? (tm ? tm.c : vm.muette ? 'var(--o-text3)' : 'var(--o-text1)') : vp ? (on ? vp.tp.col : 'var(--o-text3)') : vd ? (vd.indispo || !vd.on ? 'var(--o-text3)' : 'var(--o-text1)') : vr ? (vr.panne ? 'var(--o-text3)' : vr.travail ? vr.teinte[1] : 'var(--o-text1)') : neutre ? 'var(--o-text1)' : on ? (teinteLu || 'var(--o-accent-soft)') : 'var(--o-text3)',
+          ...(vdJoue && vd.l.art ? { overflow: 'hidden' } : null) }}>{/* `Ico` et non `Fi` : une icone CHOISIE peut etre un dessin, que `Fi`
                   * aurait cherche dans la police et rendu vide. */}
-          {ico ? <Ico name={ico} size={dense ? 15 : 17} /> : <PlugIcon size={dense ? 15 : 17} />}</span>
+          {/* La pochette d'un lecteur dans la plaque (M17), sinon son glyphe. */}
+          {vdJoue && vd.l.art ? <img src={vd.l.art} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+            : ico ? <Ico name={vue ? iconeSelonEtat(ico, vue) : ico} size={dense ? 15 : 17} /> : <PlugIcon size={dense ? 15 : 17} />}</span>
         <div className="o-cvtxt">
           <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: on ? (teinte ? teinteTxt : 'var(--o-accent-soft)') : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: 12, fontWeight: enDemande ? 700 : 600, color: vl ? (vl.phrase.panne ? 'var(--o-bad)' : 'var(--o-text2)') : vm ? (vm.muette ? 'var(--o-bad)' : tm ? tm.c : 'var(--o-text2)') : vp ? (vp.muet ? 'var(--o-bad)' : enDemande ? 'var(--o-text1)' : 'var(--o-text2)') : vd ? vd.phrase.encre : vr ? vr.phrase.encre : enDemande ? 'var(--o-text1)' : neutre ? 'var(--o-text2)' : on ? (teinte ? teinteTxt : 'var(--o-accent-soft)') : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {sousTitre}
           </div>
+          {/* La question d'une prise s'annonce (audit du 19/10, point 13). Toujours montée, vide (ADR 0107) : une région qui
+            * apparaît déjà remplie ne dit rien. Après la phrase : la phrase reste le deuxième enfant. */}
+          <span className="o-vh" aria-live="polite">{enDemande ? tr('Couper la prise ?') : ''}</span>
         </div>
-        {togglable && !dead && <span role="switch" aria-checked={on} tabIndex={0} aria-label={on ? tr('Éteindre {nom}', { nom: name }) : tr('Allumer {nom}', { nom: name })} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('homeassistant', on ? 'turn_off' : 'turn_on'); } }} onClick={(e) => { e.stopPropagation(); call('homeassistant', on ? 'turn_off' : 'turn_on'); }} style={{ width: 44, height: 25, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
+        {/* La puissance d'une prise allumée et vivante, 12 px / 800, comme la pile d'un robot ; elle cède sur une
+          * compacte étroite (index.css). Hors de la surface, un lecteur d'écran la lit après elle, quand elle se voit. */}
+        {/* Le pourcentage d'une lumière allumée et variable, de même : il cède sur une compacte étroite (index.css). */}
+        {/* Le chiffre d'une mesure, 13 px / 800 : il a la place d'une commande, il ne cède pas. */}
+        {vm && vm.chiffre != null && <span className="o-cvmesure" style={{ fontSize: 13, fontWeight: 800, flexShrink: 0, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: 'var(--o-text)' }}>{vm.chiffre + (vm.unite ? '\u00a0' + vm.unite : '')}</span>}
+        {/* Un lecteur sous profil (chantier Mode enfant, E17) : la pastille en petit, le glyphe seul ; la phrase du blocage vient de sa vue. */}
+        {vd && vd.pastille && !vd.indispo && <Suspense fallback={null}><CarteEnfant quoi="pastille" petite levee={vd.levee} /></Suspense>}
+        {vl && vl.on && vl.bri != null && <span className="o-cvpourcent" style={{ fontSize: 12, fontWeight: 800, flexShrink: 0, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: 'var(--o-text2)' }}>{vl.bri + '\u00a0%'}</span>}
+        {vp && vp.watts != null && !dead && <span className="o-cvpuissance" style={{ fontSize: 12, fontWeight: 800, flexShrink: 0, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: 'var(--o-text2)' }}>{fmtWatts(vp.watts)}</span>}
+        {togglable && !dead && <span role="switch" aria-checked={on} tabIndex={0} aria-label={enDemande ? tr('Couper') + ' ' + name : on ? tr('Éteindre {nom}', { nom: name }) : tr('Allumer {nom}', { nom: name })} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); basculerCompacte(); } }} onClick={(e) => { e.stopPropagation(); basculerCompacte(); }} style={{ width: 44, height: 25, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} /></span>}
         {/* Chaque commande dit son geste PUIS l'appareil (lot 13 de l'audit
           * du 03/10) : hors de la carte-bouton, « Activer » ou « Pause » seuls
           * ne disaient plus de quoi. Positionnée, elle passe sur la surface.
@@ -12167,16 +12176,18 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
             }} style={{ position: 'relative', borderRadius: 10, background: bg, border: 'none', color: col, fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}><span className="o-cvact-ico"><Ico name={dormante ? (ICONES_ARMEMENT[svcArm] || ICONES_ARMEMENT.alarm_arm_away) : ICONES_ARMEMENT.alarm_disarm} size={14} /></span><span className="o-cvact-mot">{dormante ? tr('Armer') : tr('Désarmer')}</span></button>
           );
         })()}
-        {/* Batterie des machines dans l'en-tête, comme la carte de référence. */}
-        {(dom === 'vacuum' || dom === 'lawn_mower') && !dead && a.battery_level != null && (
-          <span style={{ fontSize: 12, fontWeight: 800, flexShrink: 0, fontVariantNumeric: 'tabular-nums', color: a.battery_level < 20 ? 'var(--o-bad)' : a.battery_level < 50 ? 'var(--o-warn)' : 'var(--o-text2)' }}>{Math.round(a.battery_level)}%</span>
+        {/* La batterie d'un robot (I12), 12 px / 800 : l'attribut, sinon la sœur (sa vue), à la règle des piles (`couleurPile`). */}
+        {vr && !vr.panne && vr.batterie != null && (
+          <span style={{ fontSize: 12, fontWeight: 800, flexShrink: 0, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: couleurPile(vr.batterie, 'var(--o-text2)') }}>{pourcentTexte(vr.batterie)}</span>
         )}
         {/* Compacte : le contrôle PRIMAIRE du domaine reste sur la ligne —
           * discret, pour laisser le nom respirer. */}
         {dense && !dead && (() => {
           // Pilules rectangulaires sans filet, le dessin de la maquette —
-          // le même pour tous les minis de la compacte.
-          const mini = { position: 'relative', width: 38, height: 26, borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, padding: 0 };
+          // le même pour tous les minis de la compacte. Les ▲ ▼ d'un volet
+          // prennent leur largeur de la feuille (`--o-mini-volet`, index.css) :
+          // 38 px, 32 sur une compacte étroite (relecture du 13/10).
+          const mini = { position: 'relative', width: dom === 'cover' ? 'var(--o-mini-volet, 38px)' : 38, height: 26, borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, padding: 0 };
           const miniAccent = { ...mini, background: 'var(--o-accent-fond)', color: '#fff' };
           // Climat : la consigne ENTRE les deux boutons, comme la maquette.
           if (dom === 'climate') {
@@ -12200,42 +12211,61 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
               </span>
             );
           }
+          /* Un volet lance sa course (§ 5) : la compacte, la carte et la fiche la dessinent ensemble. Les ▲ ▼ suivent ce que
+           * le cover accepte (`gestesCover`, 19/10) : inertes s'il ne sait pas, jamais un toast de refus. */
           if (dom === 'cover') return (<>
-            <button style={mini} aria-label={tr('Ouvrir') + ' ' + name} onClick={(e) => { e.stopPropagation(); call('cover', 'open_cover'); }}><Fi i="angle-up" size={13} /></button>
-            <button style={mini} aria-label={tr('Fermer') + ' ' + name} onClick={(e) => { e.stopPropagation(); call('cover', 'close_cover'); }}><Fi i="angle-down" size={13} /></button>
+            <button style={{ ...mini, ...(gestesCv.monter ? null : RM_INERTE) }} aria-disabled={gestesCv.monter ? undefined : true} aria-label={tr('Ouvrir') + ' ' + name} onClick={(e) => { e.stopPropagation(); bougerCover(gestesCv.monter, 100); }}><Fi i="angle-up" size={13} /></button>
+            <button style={{ ...mini, ...(gestesCv.descendre ? null : RM_INERTE) }} aria-disabled={gestesCv.descendre ? undefined : true} aria-label={tr('Fermer') + ' ' + name} onClick={(e) => { e.stopPropagation(); bougerCover(gestesCv.descendre, 0); }}><Fi i="angle-down" size={13} /></button>
           </>);
-          if (dom === 'vacuum' || dom === 'lawn_mower') {
-            const geste = on ? tr('Renvoyer au dock') : (dom === 'vacuum' ? tr('Démarrer le nettoyage') : tr('Lancer la tonte'));
+          /* Un robot (I12) : la PREMIÈRE puce de sa carte — Démarrer, Pause, Reprendre —, jamais la base ; en erreur, la base seule :
+           * rien ici. Le geste est celui de la carte (sa vue), « Démarrer » par le serveur. Un geste en vol garde sa puce, quelle
+           * qu'elle soit : « Base » posée pendant le vol d'un départ ne laisse plus la compacte sans rien (passe bis 2 du 18/10,
+           * point H) — choisie, elle ne fait rien. */
+          if (vr) {
+            const p = vr.cmd.find(x => x.enVol) || vr.cmd[0];
+            if (!p || (!p.enVol && ['demarrer', 'pause', 'reprendre'].indexOf(p.cle) < 0)) return null;
+            // Un geste en vol (passe bis du 18/10, point 1) : la mini-commande reste sur lui et ne fait rien — jamais l'inverse.
             return (
-              <button style={miniAccent} title={geste} aria-label={geste + ' ' + name} onClick={(e) => { e.stopPropagation(); call(dom, on ? (dom === 'vacuum' ? 'return_to_base' : 'dock') : (dom === 'vacuum' ? 'start' : 'start_mowing')); }}><Fi i={on ? 'home' : 'play'} size={12} /></button>
+              <button style={miniAccent} title={p.mot} aria-label={p.mot + ' ' + name} aria-disabled={p.enVol ? 'true' : undefined} onClick={(e) => { e.stopPropagation(); p.agir(); }}><Fi i={p.glyphe} size={12} /></button>
             );
           }
-          if (dom === 'media_player' && s !== 'off') return (
+          if (vd) {
             /* « Lire », le geste : « Lecture » est l'ÉTAT écrit sur la carte
              * (« Playing » en anglais) — relecture du lot 13, comme la carte
              * lecteur. Sans texte visible, rien ne change à l'écran ; le bouton
-             * standard, lui, garde le mot qu'il affiche. */
-            <button style={miniAccent} aria-label={(s === 'playing' ? tr('Pause') : tr('Lire')) + ' ' + name} onClick={(e) => { e.stopPropagation(); commander(hass, id, 'play_pause'); }}><Fi i={s === 'playing' ? 'pause' : 'play'} size={12} /></button>
-          );
+             * standard, lui, garde le mot qu'il affiche. Le service est explicite
+             * (chantier Médias, M13), sur la jumelle qui commande ; absent s'il
+             * n'y a rien à reprendre (« Rien en lecture » : rien d'inerte, M11 ;
+             * passe bis 2 du 17/10), si le lecteur ne sait ni lire ni mettre en
+             * pause (M11), ou s'il est éteint. */
+            if (!vd.on || !vd.cmd.lecture || !vd.reprenable) return null;
+            return (
+              <button style={miniAccent} aria-label={(vd.playing ? tr('Pause') : tr('Lire')) + ' ' + name} onClick={(e) => { e.stopPropagation(); vd.lecture(); }}><Fi i={vd.playing ? 'pause' : 'play'} size={12} /></button>
+            );
+          }
           return null;
         })()}
       </div>
-      {/* Standard lumière : la luminosité en dessous — commit au relâcher. */}
-      {!dense && dom === 'light' && !dead && (a.brightness != null || (a.supported_color_modes || []).indexOf('brightness') >= 0) && (
-        <div className="o-cvrange" role="presentation" style={{ position: 'relative', marginTop: 14, display: 'flex', alignItems: 'center', gap: 10 }} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-          <Fi i="bulb" size={13} color="var(--o-text3)" />
-          {/* Le curseur s'appelait « {n} % de luminosité » avec un `n` VIDE :
-            * le nom lu était donc « % de luminosité », et rien ne disait de
-            * quelle lampe. Un curseur se nomme par ce qu'il COMMANDE — sa
-            * valeur, elle, est déjà dite par le curseur lui-même. Même formule
-            * que les jauges des cartes de pièce. */}
-          <input type="range" min="1" max="100" key={on ? Math.round((a.brightness || 0) / 255 * 100) : 0}
-            defaultValue={on ? Math.round((a.brightness || 0) / 255 * 100) : 0} aria-label={tr('Luminosité') + ' ' + name}
-            onPointerUp={(e) => call('light', 'turn_on', { brightness_pct: +e.target.value })}
-            onKeyUp={(e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') call('light', 'turn_on', { brightness_pct: +e.target.value }); }}
-            style={{ flex: 1, minWidth: 0 }} />
-        </div>
-      )}
+      {/* Standard lumière : la luminosité en dessous — commit au relâcher. Une lampe VARIABLE (`capacitesLumiere`, pas
+        * seulement le mot `brightness`) ; le curseur se recale sur la valeur montrée (`key`), le geste d'abord (`ovBri`)
+        * tenant 4 s pour qu'un écho ne le fasse pas remonter ; `pan-y` laisse défiler la page au doigt (ADR 0261). */}
+      {!dense && dom === 'light' && !dead && capacitesLumiere(id, a).variable && (() => {
+        const lue = on ? luminosite(a) : null;
+        const pct = ovBri != null ? ovBri : (lue != null ? lue : 0);
+        const regler = (v) => { poserBri(v); call('light', 'turn_on', { brightness_pct: v }); };
+        return (
+          <div className="o-cvrange" role="presentation" style={{ position: 'relative', marginTop: 14, display: 'flex', alignItems: 'center', gap: 10 }} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+            <Fi i="bulb" size={13} color="var(--o-text3)" />
+            {/* Un curseur se nomme par ce qu'il COMMANDE — sa valeur, elle, est déjà dite par le curseur lui-même. Même formule
+              * que les jauges des cartes de pièce. */}
+            <input type="range" min="1" max="100" key={pct}
+              defaultValue={pct} aria-label={tr('Luminosité') + ' ' + name}
+              onPointerUp={(e) => regler(+e.target.value)}
+              onKeyUp={(e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') regler(+e.target.value); }}
+              style={{ flex: 1, minWidth: 0, touchAction: 'pan-y' }} />
+          </div>
+        );
+      })()}
       {!dense && dom === 'climate' && !dead && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
           <button aria-label={'− ' + name} onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature - .5); }} style={{ position: 'relative', flex: 1, padding: 8, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>−</button>
@@ -12247,50 +12277,18 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           {/* Trois flèches nues : sans nom, un lecteur d'écran n'annonçait que
             * « bouton » trois fois de suite (plan M7). */}
-          {[['open_cover', 'angle-up', tr('Ouvrir')], ['stop_cover', 'square', tr('Stop')], ['close_cover', 'angle-down', tr('Fermer')]].map(([svc, gi, nom]) => (
-            <button key={svc} aria-label={nom + ' ' + name} title={nom} onClick={(e) => { e.stopPropagation(); call('cover', svc); }} style={{ position: 'relative', flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={gi} size={14} /></button>
+          {/* Ce que le cover accepte (`gestesCover`, 19/10) ; un volet lance sa course, Stop la fige — et un refus l'oublie. */}
+          {[['monter', 'angle-up', tr('Ouvrir'), 100], ['stop', 'square', tr('Stop'), null], ['descendre', 'angle-down', tr('Fermer'), 0]].map(([cle, gi, nom, cible]) => (
+            <button key={cle} aria-label={nom + ' ' + name} title={nom} aria-disabled={gestesCv[cle] ? undefined : true} onClick={(e) => { e.stopPropagation(); bougerCover(gestesCv[cle], cible); }} style={{ position: 'relative', flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', ...(gestesCv[cle] ? null : RM_INERTE) }}><Fi i={gi} size={14} /></button>
           ))}
         </div>
       )}
-      {!dense && dom === 'media_player' && !dead && s !== 'off' && (
+      {/* La standard d'un lecteur : le même geste, explicite (M13), absent s'il n'y a rien à reprendre (M11 ; passe bis 2). */}
+      {!dense && vd && vd.on && !vd.indispo && vd.cmd.lecture && vd.reprenable && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <button aria-label={(s === 'playing' ? tr('Pause') : tr('Lecture')) + ' ' + name} onClick={(e) => { e.stopPropagation(); commander(hass, id, 'play_pause'); }} style={{ position: 'relative', flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontWeight: 700, fontSize: 12 }}><Fi i={s === 'playing' ? 'pause' : 'play'} size={13} />{s === 'playing' ? tr('Pause') : tr('Lecture')}</button>
+          <button aria-label={(vd.playing ? tr('Pause') : tr('Lecture')) + ' ' + name} onClick={(e) => { e.stopPropagation(); vd.lecture(); }} style={{ position: 'relative', flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontWeight: 700, fontSize: 12 }}><Fi i={vd.playing ? 'pause' : 'play'} size={13} />{vd.playing ? tr('Pause') : tr('Lecture')}</button>
         </div>
       )}
-      {/* Machines : les MÊMES contrôles que la fiche native Home Assistant,
-        * dérivés de supported_features — aucun script, aucune configuration. */}
-      {!dense && (dom === 'vacuum' || dom === 'lawn_mower') && !dead && (() => {
-        const f = a.supported_features || 0;
-        const btns = [];
-        if (dom === 'vacuum') {
-          const enCours = s === 'cleaning';
-          if (enCours ? (f & 4) : (f & 8192)) btns.push([enCours ? 'pause' : 'play', enCours ? 'pause' : 'start', enCours ? tr('Pause') : tr('Démarrer le nettoyage')]);
-          if ((f & 8) && (s === 'cleaning' || s === 'returning' || s === 'paused')) btns.push(['stop', 'stop', tr('Stop')]);
-          if (f & 16) btns.push(['home', 'return_to_base', tr('Renvoyer au dock')]);
-          if (f & 512) btns.push(['marker', 'locate', tr('Localiser')]);
-        } else {
-          const enCours = s === 'mowing';
-          if (enCours ? (f & 2) : (f & 1)) btns.push([enCours ? 'pause' : 'play', enCours ? 'pause' : 'start_mowing', enCours ? tr('Pause') : tr('Lancer la tonte')]);
-          if (f & 4) btns.push(['home', 'dock', tr('Renvoyer au dock')]);
-        }
-        // Boutons RONDS alignés à gauche, comme la carte de référence — le
-        // premier (l'action principale) porte l'accent ; la vitesse
-        // d'aspiration ferme la rangée, discrète, à droite.
-        return btns.length > 0 && (
-          <div style={{ display: 'flex', gap: 10, marginTop: 12, alignItems: 'center' }}>
-            {btns.map(([gi, svc, lbl], bi) => (
-              <button key={svc} title={lbl} aria-label={lbl + ' ' + name} onClick={(e) => { e.stopPropagation(); call(dom, svc); }}
-                style={{ position: 'relative', width: 40, height: 40, borderRadius: '50%', flexShrink: 0, border: bi === 0 ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)', background: bi === 0 ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: bi === 0 ? '#fff' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Fi i={gi} size={14} /></button>
-            ))}
-            {dom === 'vacuum' && Array.isArray(a.fan_speed_list) && a.fan_speed_list.length > 1 && (
-              <div style={{ marginLeft: 'auto' }}>
-                <MenuDeroulant icone="wind" etiquette={tr('Vitesse')} valeur={a.fan_speed} options={a.fan_speed_list}
-                  rendre={(v) => FAN_FR()[v] || v} surChoix={(v) => call('vacuum', 'set_fan_speed', { fan_speed: v })} />
-              </div>
-            )}
-          </div>
-        );
-      })()}
       {!dense && dom === 'valve' && !dead && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button aria-label={(on ? tr('Fermer') : tr('Ouvrir')) + ' ' + name} onClick={(e) => { e.stopPropagation(); call('valve', on ? 'close_valve' : 'open_valve'); }} style={{ position: 'relative', flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>{on ? tr('Fermer') : tr('Ouvrir')}</button>
@@ -12315,7 +12313,7 @@ const CV_CADRE = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-su
 /* Un switch n'est une lumière que s'il est déclaré interrupteur-lumière ;
  * sinon c'est une prise ou un appareil : icône prise, teinte accent — pas l'or. */
 const cvEstLumiere = (id) => String(id).indexOf('light.') === 0 || (String(id).indexOf('switch.') === 0 && switchLights().indexOf(id) >= 0);
-// La fonte UICons n'a pas de prise : SVG maison, comme BulbIcon.
+// La fonte UICons n'a pas de prise : SVG maison.
 const PlugIcon = ({ size = 19 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M9 2v6M15 2v6" />
@@ -12423,8 +12421,9 @@ function CvGauge({ id, hass, onOpen = null }) {
   const min = a.min != null ? +a.min : (a.min_temp != null ? +a.min_temp : 0);
   const max = a.max != null ? +a.max : (a.max_temp != null ? +a.max_temp : (a.unit_of_measurement === '%' ? 100 : 100));
   const pct = mort ? 0 : Math.max(0, Math.min(1, (n - min) / (max - min || 1)));
-  const basse = a.device_class === 'battery' && n < 20;
-  const col = basse ? 'var(--o-bad)' : 'var(--o-accent)';
+  // Une pile : la règle de la maison (chantier Capteurs, C32).
+  const niveau = a.device_class === 'battery' ? niveauPile(n) : null;
+  const col = niveau ? couleurNiveau(niveau).col : 'var(--o-accent)';
   // Arc de 240° : de 150° à 390°, rayon 44, épaisseur 9.
   const arc = (p) => {
     const a0 = (150 * Math.PI) / 180, a1 = ((150 + 240 * p) * Math.PI) / 180;
@@ -12461,22 +12460,43 @@ function CvGauge({ id, hass, onOpen = null }) {
  * murale, où viser un petit toggle est une corvée. */
 function CvBigToggle({ id, hass }) {
   const st = hass && hass.states ? hass.states[id] : null;
-  const on = !!st && st.state === 'on';
-  const mort = !st || st.state === 'unavailable';
+  // Muet — `unavailable` OU `unknown` — : la règle des cartes (`enPanne` ; audit du 19/10, point 3), il ne se commande pas.
+  const mort = enPanne(id, st);
+  const on = !mort && st.state === 'on';
   // L'or est réservé aux lumières ; une prise ou un appareil s'allume à l'accent, icône prise.
   const lum = cvEstLumiere(id);
   const rgbTok = lum ? 'var(--o-gold-rgb)' : 'var(--o-accent-rgb)';
   const txtCol = lum ? 'var(--o-warn)' : 'var(--o-accent-soft)';
-  const toggle = () => commander(hass, id, 'toggle');
+  /* Posé sur une PRISE protégée — ou dont la protection n'est pas encore lue —,
+   * il ne la coupe pas d'un appui (P5, relecture finale A4) : le premier appui
+   * pose la demande, la carte dit « Couper la prise ? » et son bouton « Couper
+   * {nom} » ; le second coupe ; Échap ou 6 secondes la défont, comme une prise
+   * coupée entre-temps (F4). Pas de bouton dans le bouton : c'est lui qui reçoit
+   * le second appui. Un switch que l'index ne classe pas encore suit la même règle
+   * (F2). Et l'ordre est explicite — `turn_on`, `turn_off`, d'après l'état affiché
+   * (F5) : un `toggle` inverse l'état RÉEL, et coupait sans question une prise
+   * protégée rallumée deux secondes avant l'appui. */
+  const gs = useGardeSwitch(hass && hass.states, id);
+  const [demande, setDemande] = useDemandeCoupure(on);
+  const enDemande = gs.garde && on && demande;
+  const nom = cvName(st, id);
+  const toggle = () => {
+    const geste = appuiBascule({ on, garde: gs.garde, enDemande });
+    if (geste === 'demander') { setDemande(true); return; }
+    setDemande(false);
+    commander(hass, id, on ? 'turn_off' : 'turn_on');
+  };
   return (
-    <button className={'o-piece' + (mort ? ' o-panne' : '')} onClick={toggle} disabled={mort}
+    <button className={'o-piece' + (mort ? ' o-panne' : '')} onClick={toggle} disabled={mort} aria-label={enDemande ? tr('Couper') + ' ' + nom : undefined}
       style={{ ...CV_CADRE, height: '100%', minHeight: 150, width: '100%', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: mort ? 'default' : 'pointer', opacity: mort ? .55 : 1, transition: 'all .25s',
         ...(on ? { background: lavisCarte(rgbTok) } : {}) }}>
       <span style={{ width: 52, height: 52, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? `rgba(${rgbTok},.2)` : 'var(--o-s1)', color: on ? txtCol : 'var(--o-text3)', boxShadow: on ? `0 0 22px rgba(${rgbTok},.4)` : 'none', transition: 'all .25s', flexShrink: 0 }}>
         {String(id).indexOf('switch.') === 0 && !lum ? <PlugIcon size={23} /> : <Fi i="power" size={23} />}
       </span>
-      <span style={{ fontSize: 14, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{cvName(st, id)}</span>
-      <span style={{ fontSize: 12, fontWeight: 700, color: on ? txtCol : 'var(--o-text3)' }}>{mort ? tr('Indisponible') : on ? tr('Allumé') : tr('Éteint')}</span>
+      <span style={{ fontSize: 14, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{nom}</span>
+      <span style={{ fontSize: 12, fontWeight: 700, color: enDemande ? 'var(--o-text1)' : on ? txtCol : 'var(--o-text3)' }}>{mort ? tr('Indisponible') : enDemande ? tr('Couper la prise ?') : on ? tr('Allumé') : tr('Éteint')}</span>
+      {/* La question s'annonce (point 13) ; le bouton porte alors le nom « Couper … ». */}
+      <span className="o-vh" aria-live="polite">{enDemande ? tr('Couper la prise ?') : ''}</span>
     </button>
   );
 }
@@ -12546,7 +12566,7 @@ function chipTexte(id, st) {
   if (date != null) return date;
   const a = st.attributes || {};
   const s = st.state;
-  if (d === 'light' || d === 'switch' || d === 'input_boolean' || d === 'fan') return a.brightness != null && s === 'on' ? Math.round(a.brightness / 255 * 100) + ' %' : '';
+  if (d === 'light' || d === 'switch' || d === 'input_boolean' || d === 'fan') return s === 'on' && luminosite(a) != null ? luminosite(a) + ' %' : '';
   if (d === 'climate') return a.current_temperature != null ? decMax(a.current_temperature, 1) + '°' : (a.temperature != null ? decMax(a.temperature, 1) + '°' : '');
   if (d === 'cover') return a.current_position != null ? a.current_position + ' %' : (s === 'open' ? tr('Ouvert') : tr('Fermé'));
   if (d === 'media_player') return s === 'playing' ? (a.media_title || tr('Lecture')) : '';
@@ -12591,7 +12611,9 @@ function chipVif(id, st) {
   if (!st) return false;
   const d = String(id).split('.')[0];
   const s = st.state;
-  if (d === 'cover' || d === 'valve') return s === 'open' || s === 'opening';
+  // Un volet, le verdict des cartes (V12) : celui qui bute à 1 % est fermé.
+  if (d === 'cover') return coverActif(st);
+  if (d === 'valve') return s === 'open' || s === 'opening';
   if (d === 'climate') return s !== 'off';
   if (d === 'media_player') return s === 'playing';
   if (d === 'lock') return s === 'unlocked';
@@ -12610,11 +12632,14 @@ function CvChip({ id, hass, dc = null }) {
   const S = (hass && hass.states) || {};
   const st = S[id];
   const d = String(id).split('.')[0];
-  const vif = chipVif(id, st);
-  const col = d === 'cover' ? 'var(--o-purple)' : d === 'climate' ? 'var(--o-bad)'
-    : (d === 'light' || d === 'switch') ? 'var(--o-warn)'
+  // Un climat prend la teinte de ses cartes (`teinteClimat`) ; seule l'alarme déclenchée reste rouge. L'or n'est qu'aux
+  // lumières (`cvEstLumiere`) : une prise s'allume à l'accent (ADR 0261).
+  const col = d === 'cover' ? 'var(--o-purple)' : d === 'climate' ? teinteClimat(st)
+    : cvEstLumiere(id) ? 'var(--o-warn)'
       : d === 'alarm_control_panel' ? (st && st.state === 'triggered' ? 'var(--o-bad)' : st && st.state === 'disarmed' ? 'var(--o-ok)' : 'var(--o-warn2)')
         : 'var(--o-accent-soft)';
+  // Sans teinte — une clim qui sèche ou ventile —, la puce reste neutre.
+  const vif = chipVif(id, st) && !!col;
   const val = chipTexte(id, st);
   const nom = cvName(st, id);
   return (
@@ -12650,12 +12675,13 @@ function CvChips({ x = null, hass, dc = null, demo = null }) {
     if (demo) return demo;
     return ids.map(id => {
       const st = S[id];
-      const vif = chipVif(id, st);
       const d = String(id).split('.')[0];
-      const col = d === 'cover' ? 'var(--o-purple)' : d === 'climate' ? 'var(--o-bad)'
-        : (d === 'light' || d === 'switch') ? 'var(--o-warn)'
+      const col = d === 'cover' ? 'var(--o-purple)' : d === 'climate' ? teinteClimat(st)
+        : cvEstLumiere(id) ? 'var(--o-warn)'
           : d === 'alarm_control_panel' ? (st.state === 'triggered' ? 'var(--o-bad)' : st.state === 'disarmed' ? 'var(--o-ok)' : 'var(--o-warn2)')
             : 'var(--o-accent-soft)';
+      // Sans teinte — une clim qui sèche ou ventile —, la pastille reste neutre.
+      const vif = chipVif(id, st) && !!col;
       return { id, ic: cvIcoEntite(d, id, st, cvName(st, id)) || 'bolt', txt: chipTexte(id, st), col, vif };
     });
   }, [hass, demo, idsSig]);
@@ -12751,7 +12777,7 @@ function CvActivite({ hass, demoEvents = null }) {
       {events.slice(0, 4).map((e, i) => (
         <div key={(e.when || 0) + '|' + i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
           <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: pastille(e.entity_id) }} />
-          <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.message || (nomDe(e.entity_id) + ' ' + etatJournal(e.entity_id, e.state, S).toLowerCase())}{e.n > 1 ? ' ·×' + e.n : ''}</span>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.message || (nomDe(e.entity_id) + ' ' + etatJournal(e.entity_id, e.state, S, events.findIndex(x => x.entity_id === e.entity_id) === i).toLowerCase())}{e.n > 1 ? ' ·×' + e.n : ''}</span>
           <span style={{ fontSize: 11, fontWeight: 600, flexShrink: 0, color: 'var(--o-text3)' }}>{heure(e.when)}</span>
         </div>
       ))}
@@ -13050,7 +13076,7 @@ function CvJournal({ id, hass }) {
       {events.length === 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '10px 0' }}>{tr('Rien à raconter')}</div>}
       {events.slice(0, 3).map((e, i) => (
         <div key={(e.when || 0) + '|' + i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-          <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: 'var(--o-text1)' }}>{e.state != null ? etatJournal(id, e.state, S) : (e.message || '')}{e.n > 1 ? ' ·×' + e.n : ''}</span>
+          <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: 'var(--o-text1)' }}>{e.state != null ? etatJournal(id, e.state, S, i === 0) : (e.message || '')}{e.n > 1 ? ' ·×' + e.n : ''}</span>
           <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', flexShrink: 0, whiteSpace: 'nowrap' }}>{heureJournal(e.when)}</span>
         </div>
       ))}
@@ -13140,7 +13166,7 @@ function CvHistory({ id, hass, demoPoints = null, onOpen = null }) {
 /* ── Cartes AGRÉGATS (sans entité d'ancrage, comme l'horloge) ────────────────
  * Elles lisent la maison entière : découverte par device_class ou
  * configuration existante — zéro YAML, sources injectables pour la biblio. */
-const OUVRANT_DCS = ['door', 'window', 'garage_door', 'opening', 'gate'];
+const OUVRANT_DCS = CLASSES_OUVRANT;
 /* Les entites que la BANNIERE et la carte Securite comptent, une par une
  * plutot que par domaine.
  *
@@ -13331,7 +13357,7 @@ function CvOuvrants({ hass }) {
   const S = (hass && hass.states) || {};
   const os = ouvrantsDe(S);
   const ouverts = os.filter(o => o.on).length;
-  const icoDe = (dc) => dc === 'window' ? 'window-alt' : (dc === 'garage_door' || dc === 'gate') ? 'garage' : 'door-closed';
+  const icoDe = (dc) => dc === 'window' ? 'window-alt' : dc === 'garage_door' ? 'garage' : 'door-closed';
   // Les ouverts d'abord : c'est eux qu'on cherche.
   const tri = [...os].sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0));
   return (
@@ -13451,297 +13477,22 @@ function ApplianceCard({ nom, etat, pct, restant, fin, conso, chip = false }) {
   );
 }
 
-/* Le calendrier en grand : le mois entier, et le choix des agendas.
- *
- * La carte du rail dit la semaine ; elle ne peut pas dire le mois sans
- * devenir illisible. Le clic ouvre donc ce que la carte resume, avec la
- * meme grammaire — anneau sur les jours qui portent un rendez-vous, pastille
- * sur aujourd'hui — pour qu'on reconnaisse la semaine qu'on vient de voir.
- *
- * Le jour choisi montre ses evenements dessous. Un mois sans cela ne serait
- * qu'un almanach : on saurait QUE quelque chose arrive, jamais quoi.
- */
-/* Créer un rendez-vous depuis le dashboard.
- *
- * Home Assistant sait le faire par `calendar.create_event`, mais seulement pour
- * les agendas qui le déclarent : un calendrier en lecture seule — un flux
- * d'anniversaires, un abonnement iCal — n'a pas le bit `CREATE_EVENT`. La liste
- * `cals` est donc filtrée par la capacité, en amont : mieux vaut ne pas montrer
- * le bouton que d'ouvrir un formulaire qui finira refusé.
- *
- * Le service prend la date par DEUX paires exclusives. Avec une heure,
- * `start_date_time` et `end_date_time` ; pour une journée entière, `start_date`
- * et `end_date`, cette dernière EXCLUSIVE — un rendez-vous d'un seul jour finit
- * le lendemain. C'est la convention iCalendar, et l'oublier fabrique un
- * événement de durée nulle que rien n'affiche.
- */
-
+/* La feuille du Calendrier — le mois entier, et le choix des agendas (la carte
+ * du rail l'ouvre) : la coquille. Le contenu se charge à la demande
+ * (`feuillecalendrier.jsx`, audit des lumières, 19/10 : la borne du démarrage)
+ * et n'importe jamais App.jsx : la coquille lui passe `useAgenda`, qui n'existe
+ * qu'ici. Comme `FicheLumiere`, elle GARDE la feuille et pose la frontière
+ * Suspense DEDANS : un morceau qui ne se charge pas se dit dans la feuille, par
+ * sa barrière (`Barriere`, ui.jsx). Le repli tient la hauteur d'une fiche
+ * (260 px), comme celui des autres feuilles chargées à la demande. */
 function FeuilleCalendrier({ hass, onClose }) {
-  const S = (hass && hass.states) || {};
-  const nbEntites = Object.keys(S).length;
-  const tousCals = useMemo(() => Object.keys(S).filter(k => k.indexOf('calendar.') === 0).sort(), [nbEntites]);
-  /* Les agendas retenus. Rien de choisi = tous : une maison qui n'a jamais
-   * ouvert ce reglage doit voir son calendrier, pas un mois vide. */
-  const [choisis, setChoisis] = useState(() => {
-    const c = cfgVal('loggia_agendas', null);
-    return Array.isArray(c) && c.length ? c.filter(x => typeof x === 'string') : null;
-  });
-  const [reglages, setReglages] = useState(false);
-  const [nouveau, setNouveau] = useState(false);
-  /* Incremente apres une creation : le sondage de l'agenda relit aussitot,
-   * au lieu d'attendre son quart d'heure. */
-  const [tick, setTick] = useState(0);
-  const [edition, setEdition] = useState(null);
-  /* L'uid du rendez-vous dont on demande confirmation avant d'effacer. Un
-   * seul a la fois : deux confirmations ouvertes, c'est un clic de trop au
-   * mauvais endroit. */
-  const [confirme, setConfirme] = useState(null);
-  const [errListe, setErrListe] = useState(null);
-  const choisisSig = choisis ? choisis.join('|') : '';
-  const calsSig = tousCals.join('|');
-  const actifs = useMemo(() => {
-    const l = (choisis || tousCals).filter(k => tousCals.indexOf(k) >= 0);
-    return l.length ? l : tousCals;
-  }, [choisisSig, calsSig]);
-
-  const auj = new Date(); auj.setHours(0, 0, 0, 0);
-  const [ancre, setAncre] = useState(() => new Date(auj.getFullYear(), auj.getMonth(), 1));
-  const [choisi, setChoisi] = useState(() => new Date(auj));
-
-  /* La grille commence au LUNDI qui precede le 1er et tient six semaines :
-   * un mois qui commence un dimanche en occupe six, et une grille qui change
-   * de hauteur d'un mois a l'autre fait sauter tout ce qui est dessous. */
-  const ancreMs = ancre.getTime();
-  const debutGrille = useMemo(() => {
-    const d = new Date(ancre); d.setDate(1 - ((ancre.getDay() + 6) % 7)); d.setHours(0, 0, 0, 0); return d;
-  }, [ancreMs]);
-  const debutMs = debutGrille.getTime();
-  // Compté sur le calendrier (agenda.js, `jourPlus`) : six semaines de 24 h
-  // finissaient à 23 h la veille dès que la grille passait l'heure d'hiver.
-  const finGrille = useMemo(() => jourPlus(new Date(debutMs), 42), [debutMs]);
-  const finMs = finGrille.getTime();
-  const plage = useMemo(() => ({ debut: debutGrille, fin: finGrille }), [debutMs, finMs]);
-  const events = useAgenda(hass, actifs, plage, tick);
-  /* Les agendas qui acceptent qu'on y ecrive. Un flux d'anniversaires ou un
-   * abonnement iCal n'a pas le bit `CREATE_EVENT` : sans ce filtre, le bouton
-   * s'afficherait pour ouvrir un formulaire condamne d'avance. Calcule a
-   * chaque rendu — il y a une poignee d'agendas, pas un millier. */
-  const calsEcrivables = tousCals.filter(k => peut(hass, k, 'creer_evenement'));
-  /* Le CHOIX des agendas reste aux administrateurs (03/10). Il ecrit
-   * `loggia_agendas` — quels calendriers la maison montre : de la
-   * configuration, pas de l'agencement — que `store.py` refuse a un compte
-   * Home Assistant ordinaire. Lui proposer les cases, c'etait lui servir un
-   * refus a chaque clic, et un choix qui revenait au rechargement : le geste
-   * se masque. La LECTURE reste a tous, il voit les agendas retenus
-   * (`actifs`). Seul un `false` explicite masque, comme dans la vue
-   * Systeme : sans compte connu, le serveur tranchera. Le critere est celui
-   * de tous les gestes masques (`compteOrdinaire`, state.js). */
-  const ordinaire = compteOrdinaire(hass);
-
-  /* Supprimer.
-   *
-   * `portee` vaut '' pour la seule occurrence — le defaut de Home Assistant —
-   * ou 'THISANDFUTURE' pour celle-ci et les suivantes. `recurrence_id` ne part
-   * que s'il existe : sur un rendez-vous unique il n'y en a pas, et l'envoyer
-   * vide ferait echouer la commande. */
-  const supprimer = async (e, portee) => {
-    const options = {};
-    if (e.recurrence_id) {
-      options.recurrence_id = e.recurrence_id;
-      if (portee) options.recurrence_range = portee;
-    }
-    const p = actionsPlan(e._cal, 'supprimer_evenement', e.uid, actionCtx(hass), options);
-    if (!p.ok) { setErrListe(p.reason || tr('Home Assistant a refusé.')); return; }
-    const r = await runPlan(hass, p);
-    if (!r || !r.ok) { setErrListe((r && r.reason) ? String(r.reason) : tr('Home Assistant a refusé.')); return; }
-    setConfirme(null); setErrListe(null); setTick(t => t + 1);
-  };
-
-  const dateDe = (e) => new Date(e.start.dateTime || (e.start.date + 'T00:00:00'));
-  const parJour = useMemo(() => {
-    const m = new Map();
-    for (const e of events) { const k = cleJour(dateDe(e)); if (!m.has(k)) m.set(k, []); m.get(k).push(e); }
-    return m;
-  }, [events]);
-
-  const jours = useMemo(() => Array.from({ length: 42 }, (_, i) => jourPlus(new Date(debutMs), i)), [debutMs]);
-  const duJour = parJour.get(cleJour(choisi)) || [];
-  const moisAns = ancre.toLocaleDateString(locale(), { month: 'long', year: 'numeric' });
-  const bougerMois = (n) => {
-    const d = new Date(ancre.getFullYear(), ancre.getMonth() + n, 1);
-    setAncre(d);
-    // Le jour choisi suit le mois, sinon la liste du bas parlerait d'un jour
-    // qui n'est plus a l'ecran.
-    setChoisi(d.getFullYear() === auj.getFullYear() && d.getMonth() === auj.getMonth() ? new Date(auj) : d);
-  };
-  const basculer = (k) => {
-    const base = choisis || tousCals;
-    const suiv = base.indexOf(k) >= 0 ? base.filter(x => x !== k) : base.concat(k);
-    // Tout decocher reviendrait a un mois vide sans rien dire : on garde au
-    // moins celui qu'on vient de toucher.
-    const val = suiv.length ? suiv : [k];
-    setChoisis(val);
-    cfgSet({ loggia_agendas: val.length === tousCals.length ? null : val });
-  };
-  const heureDe = (e) => e.start.dateTime
-    ? dateDe(e).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })
-    : tr('journée');
-  const nomCal = (id) => ((S[id] || {}).attributes || {}).friendly_name || id.replace('calendar.', '');
-
-  const btnRond = { width: 34, height: 34, borderRadius: '50%', border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
   return (
     <BottomSheet onClose={onClose}>
-      {() => (<>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-        <NomFeuille><span style={{ flex: 1, fontSize: 17, fontWeight: 800, textTransform: 'capitalize', letterSpacing: '-.01em' }}>{moisAns}</span></NomFeuille>
-        <button onClick={() => bougerMois(-1)} aria-label={tr('Mois précédent')} style={btnRond}><Fi i="angle-left" size={14} /></button>
-        <button onClick={() => bougerMois(1)} aria-label={tr('Mois suivant')} style={btnRond}><Fi i="angle-right" size={14} /></button>
-        {calsEcrivables.length > 0 && (
-          <button onClick={() => { setNouveau(v => !v); setReglages(false); }} aria-label={tr('Nouvel événement')} aria-pressed={nouveau}
-            style={{ ...btnRond, background: nouveau ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: nouveau ? '#fff' : 'var(--o-text1)' }}><Fi i="plus" size={14} /></button>
-        )}
-        {!ordinaire && tousCals.length > 1 && (
-          <button onClick={() => { setReglages(v => !v); setNouveau(false); }} aria-label={tr('Choisir les agendas')} aria-pressed={reglages}
-            style={{ ...btnRond, background: reglages ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: reglages ? '#fff' : 'var(--o-text1)' }}><Fi i="settings-sliders" size={14} /></button>
-        )}
-        <CroixFeuille />
-      </div>
-
-      {nouveau && calsEcrivables.length > 0 && (
-        <NouvelEvenement hass={hass} cals={calsEcrivables} jour={choisi}
-          onClose={() => setNouveau(false)}
-          onFait={() => { setNouveau(false); setTick(t => t + 1); }} />
+      {() => (
+        <Suspense fallback={<div style={{ minHeight: 260 }} />}>
+          <FeuilleCalendrierContent hass={hass} useAgenda={useAgenda} />
+        </Suspense>
       )}
-
-      {edition && (
-        <NouvelEvenement hass={hass} cals={calsEcrivables} jour={choisi} evenement={edition}
-          onClose={() => setEdition(null)}
-          onFait={() => { setEdition(null); setTick(t => t + 1); }} />
-      )}
-
-      {reglages && !ordinaire && (
-        <div style={{ marginBottom: 14, padding: 12, borderRadius: 16, background: 'var(--o-s1)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text1)', opacity: .78 }}>{tr('AGENDAS AFFICHÉS')}</div>
-          {tousCals.map(k => {
-            const on = actifs.indexOf(k) >= 0;
-            return (
-              <button key={k} onClick={() => basculer(k)} aria-pressed={on}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', minHeight: 44, borderRadius: 12, cursor: 'pointer',
-                  border: 'var(--o-bw,1px) solid var(--o-bd2)', background: on ? 'rgba(var(--o-accent-rgb),.12)' : 'transparent', color: 'var(--o-text1)', textAlign: 'left' }}>
-                <span style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: on ? 'var(--o-accent-fond)' : 'transparent', border: on ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-                  {on && <Fi i="check" size={11} color="#fff" />}
-                </span>
-                <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nomCal(k)}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', rowGap: 5, textAlign: 'center' }}>
-        {jours.slice(0, 7).map((d, i) => <span key={'e' + i} style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.04em', color: 'var(--o-text1)', opacity: .78, paddingBottom: 4 }}>{d.toLocaleDateString(locale(), { weekday: 'narrow' })}</span>)}
-        {jours.map((d, i) => {
-          const cJour = d.getTime() === auj.getTime();
-          const sel = d.getTime() === new Date(choisi).setHours(0, 0, 0, 0);
-          const horsMois = d.getMonth() !== ancre.getMonth();
-          const n = (parJour.get(cleJour(d)) || []).length;
-          return (
-            <button key={'j' + i} onClick={() => setChoisi(new Date(d))} aria-pressed={sel}
-              aria-label={d.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }) + (n ? ' · ' + n : '')}
-              style={{ position: 'relative', width: 36, height: 36, justifySelf: 'center', border: 'none', background: 'transparent',
-                cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {n > 0 && !cJour && <span aria-hidden="true" style={{ position: 'absolute', inset: 4, borderRadius: '50%', border: (n > 1 ? 2 : 1.5) + 'px solid var(--o-accent-soft)', opacity: horsMois ? .35 : 1 }} />}
-              {cJour && <span aria-hidden="true" style={{ position: 'absolute', inset: 4, borderRadius: '50%', background: 'var(--o-accent-fond)' }} />}
-              {/* Le jour choisi n'est pas forcement aujourd'hui : il lui faut sa
-                * propre marque, sinon on perdrait de vue ce que la liste du bas
-                * est en train de raconter. */}
-              {sel && !cJour && <span aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'var(--o-s1)' }} />}
-              {sel && cJour && <span aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '2px solid var(--o-accent-soft)' }} />}
-              <span style={{ position: 'relative', fontSize: 13, fontWeight: cJour || sel ? 800 : n > 0 ? 700 : 600,
-                color: cJour ? '#fff' : 'var(--o-text1)', opacity: cJour ? 1 : horsMois ? .78 : n > 0 ? 1 : .9 }}>{d.getDate()}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div style={{ marginTop: 16, borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', paddingTop: 13 }}>
-        <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text1)', opacity: .78, marginBottom: 9, textTransform: 'uppercase' }}>
-          {choisi.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' })}
-        </div>
-        {duJour.length === 0
-          ? <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text1)', opacity: .62, paddingBottom: 4 }}>{tr('Rien de prévu')}</div>
-          : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {duJour.map((e, i) => {
-                /* Un agenda peut savoir creer sans savoir modifier : les trois
-                 * bits sont independants. On demande donc les deux separement,
-                 * et l'`uid` en plus — sans lui, aucune des deux commandes ne
-                 * sait de quel rendez-vous on parle. */
-                const modifiable = !!(e._cal && e.uid && peut(hass, e._cal, 'modifier_evenement'));
-                const supprimable = !!(e._cal && e.uid && peut(hass, e._cal, 'supprimer_evenement'));
-                const aConfirmer = confirme === e.uid;
-                const btnLigne = {
-                  width: 32, height: 32, borderRadius: 10, border: 'none', background: 'var(--o-s2)',
-                  color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                };
-                const btnTexte = (fort) => ({
-                  padding: '8px 12px', minHeight: 36, borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700,
-                  border: fort ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)',
-                  background: fort ? 'rgba(var(--o-bad-rgb),.16)' : 'transparent',
-                  color: fort ? 'var(--o-bad)' : 'var(--o-text1)',
-                });
-                return (
-                  <div key={e.uid || i} style={{ padding: '10px 12px', borderRadius: 13, background: 'var(--o-s1)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-                      <span style={{ width: 3, alignSelf: 'stretch', minHeight: 26, borderRadius: 2, background: 'var(--o-accent-soft)', flexShrink: 0 }} />
-                      <span style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ display: 'block', fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.summary}</span>
-                        {tousCals.length > 1 && e._cal && <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--o-text1)', opacity: .6, marginTop: 1 }}>{nomCal(e._cal)}</span>}
-                      </span>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--o-text1)', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{heureDe(e)}</span>
-                      {modifiable && (
-                        <button onClick={() => { setEdition(e); setNouveau(false); setConfirme(null); }}
-                          aria-label={tr('Modifier') + ' · ' + e.summary} style={btnLigne}><Fi i="pencil" size={12} /></button>
-                      )}
-                      {supprimable && (
-                        <button onClick={() => { setConfirme(aConfirmer ? null : e.uid); setErrListe(null); }}
-                          aria-label={tr('Supprimer') + ' · ' + e.summary} aria-expanded={aConfirmer}
-                          style={{ ...btnLigne, background: aConfirmer ? 'rgba(var(--o-bad-rgb),.16)' : 'var(--o-s2)', color: aConfirmer ? 'var(--o-bad)' : 'var(--o-text1)' }}><Fi i="trash" size={12} /></button>
-                      )}
-                    </div>
-
-                    {/* Supprimer est irreversible : on demande, et le bouton
-                      * dangereux ne se pose pas la ou etait le bouton innocent.
-                      * Un rendez-vous qui se repete ouvre un choix de plus —
-                      * sans lui, on ne saurait pas si l'on efface une occurrence
-                      * ou toute la serie, et le defaut silencieux de Home
-                      * Assistant est « celle-ci seulement ». */}
-                    {aConfirmer && (
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
-                        <span style={{ flex: '1 1 100%', fontSize: 12, fontWeight: 600, color: 'var(--o-text1)', opacity: .8 }}>
-                          {e.recurrence_id ? tr('Ce rendez-vous se répète. Que supprimer ?') : tr('Supprimer ce rendez-vous ?')}
-                        </span>
-                        <button onClick={() => supprimer(e, '')} style={btnTexte(true)}>
-                          {e.recurrence_id ? tr('Cette fois') : tr('Supprimer')}
-                        </button>
-                        {e.recurrence_id && (
-                          <button onClick={() => supprimer(e, 'THISANDFUTURE')} style={btnTexte(true)}>{tr('Celle-ci et les suivantes')}</button>
-                        )}
-                        <button onClick={() => setConfirme(null)} style={btnTexte(false)}>{tr('Annuler')}</button>
-                      </div>
-                    )}
-                    {aConfirmer && errListe && (
-                      <div role="alert" style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-bad)', marginTop: 8 }}>{errListe}</div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-      </div>
-      </>)}
     </BottomSheet>
   );
 }
@@ -13942,7 +13693,9 @@ function biblioStates() {
     'light.biblio_simple': s('on', { friendly_name: tr('Plafonnier couloir'), supported_color_modes: ['onoff'] }),
     'switch.biblio_prise': s('on', { friendly_name: tr('Prise cafetière') }),
     'climate.biblio': s('heat', { friendly_name: tr('Thermostat séjour'), current_temperature: 20.6, temperature: 21.5, hvac_action: 'heating', hvac_modes: ['off', 'heat', 'cool', 'auto'], preset_modes: ['eco', 'comfort', 'away'], preset_mode: 'comfort', min_temp: 7, max_temp: 30, target_temp_step: .5 }),
-    'cover.biblio': s('open', { friendly_name: tr('Volet chambre'), current_position: 65, supported_features: 15 }),
+    // Un VOLET (sa classe, V3) : la carte des volets ; le garage garde l'ancienne carte — sans position, ni glissière ni pourcentage (19/10).
+    'cover.biblio': s('open', { friendly_name: tr('Volet chambre'), current_position: 65, supported_features: 15, device_class: 'shutter' }),
+    'cover.biblio_garage': s('closed', { friendly_name: tr('Garage'), supported_features: 11, device_class: 'garage' }),
     'media_player.biblio': s('playing', { friendly_name: tr('Enceinte bureau'), media_title: 'Clair de Lune', media_artist: 'Debussy', media_album_name: 'Suite bergamasque', volume_level: .4, supported_features: 20925, entity_picture: BIBLIO_ART }),
     'vacuum.biblio': s('docked', { friendly_name: tr('Aspirateur'), battery_level: 87, supported_features: 4 | 8 | 16 | 512 | 8192, fan_speed: 'standard', fan_speed_list: ['quiet', 'standard', 'turbo'] }),
     'lawn_mower.biblio': s('docked', { friendly_name: tr('Tondeuse'), battery_level: 64, supported_features: 1 | 2 | 4 }),
@@ -14002,11 +13755,13 @@ const SCN_BIBLIO = () => ({
   // `dernier` se compte en SECONDES, comme le serveur le donne.
   dernier: Math.round(Date.now() / 1000) - 95 * 60,
   actions: [
-    { famille: 'lumieres', geste: 'niveau', valeur: 20, portee: 'piece', piece: tr('Séjour') },
+    { famille: 'lumieres', geste: 'allumer', valeur: 20, portee: 'piece', piece: tr('Séjour') },
     { famille: 'volets', geste: 'fermer', portee: 'vie' },
     { famille: 'medias', geste: 'tv' },
   ],
 });
+// La plante d'exemple de la Bibliothèque : la forme de `lirePlante`, un sol qui demande de l'eau.
+const PLANTE_BIBLIO = { mort: false, muetDepuis: null, img: 'dracaena', hum: 14, lux: 820, temp: 22, cond: 640, uniteTemp: 'C' };
 function BiblioView() {
   // hass figé au montage : les cartes optimistes bougent toutes seules,
   // aucune confirmation ne viendra (et n'a pas à venir) d'un vrai serveur.
@@ -14058,6 +13813,7 @@ function BiblioView() {
       <Rangee>
         <Item l={tr('Compacte')} h={88}><CvCard id="cover.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Standard')}>{dc.card('cover.biblio')}</Item>
+        <Item l={tr('Garage')}>{dc.card('cover.biblio_garage')}</Item>
       </Rangee>
 
       <Titre i="tv-music" c="var(--o-purple)" t={tr('Médias')} />
@@ -14072,10 +13828,11 @@ function BiblioView() {
         <Item l={tr('Aspirateur (compacte)')} h={88}><CvCard id="vacuum.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
         <Item l={tr('Tondeuse')}>{dc.card('lawn_mower.biblio')}</Item>
         <Item l={tr('Tondeuse (compacte)')} h={88}><CvCard id="lawn_mower.biblio" hass={hb} onOpen={dc.ouvrir} dense /></Item>
-        <Item l={tr('Distributeur')}><RoomFeederCard nom={tr('Croquettes')} sub={tr('Réservoir aux trois quarts')} pct={74} prochaine="18:00 · 18 g" onFeed={() => {}} onOpen={() => {}} /></Item>
-        <Item l={tr('Distributeur (compacte)')} h={88}><RoomFeederCard chip nom={tr('Croquettes')} pct={74} prochaine="18:00 · 18 g" onFeed={() => {}} onOpen={() => {}} /></Item>
-        <Item l={tr('Plante (standard)')}><RoomPlantCard nom="Monstera" sub={tr('Salon, près de la fenêtre')} hum={38} verdict={tr('À arroser bientôt')} verdictCol="var(--o-warn)" lux={820} cond={640} temp={22} img="dracaena" onOpen={() => {}} /></Item>
-        <Item l={tr('Plante (compacte)')} h={88}><RoomPlantCard chip nom="Monstera" hum={38} verdict={tr('À arroser bientôt')} verdictCol="var(--o-warn)" img="dracaena" onOpen={() => {}} /></Item>
+        <Item l={tr('Distributeur')}><RoomFeederCard v={biblioDistributeur()} onOpen={() => {}} /></Item>
+        <Item l={tr('Distributeur (compacte)')} h={88}><RoomFeederCard chip v={biblioDistributeur()} onOpen={() => {}} /></Item>
+        {/* La plante a une seule source, `pl` (C30) : les props d'avant faisaient tomber toute la vue (audit du 19/10, H1). */}
+        <Item l={tr('Plante (standard)')}><RoomPlantCard pl={PLANTE_BIBLIO} nom="Monstera" onOpen={() => {}} /></Item>
+        <Item l={tr('Plante (compacte)')} h={88}><RoomPlantCard chip pl={PLANTE_BIBLIO} nom="Monstera" onOpen={() => {}} /></Item>
       </Rangee>
 
       <Titre i="stats" c="var(--o-ok)" t={tr('Capteurs et chiffres')} />
@@ -14323,7 +14080,7 @@ function ChipsEditSheet({ x, hass, onClose, onSave }) {
           <CroixFeuille />
         </div>
         {ids.length === 0
-          ? <div style={{ padding: '12px 14px', borderRadius: 14, background: 'var(--o-s2)', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginBottom: 14 }}>{tr('Choisis les pastilles de la rangée : sans elles, la carte reste vide.')}</div>
+          ? <div style={{ padding: '12px 14px', borderRadius: 14, background: 'var(--o-s2)', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginBottom: 14 }}>{tr('Choisissez les pastilles de la rangée : sans elles, la carte reste vide.')}</div>
           : <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
               {ids.map((id, i) => (
                 <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10, background: 'var(--o-s2)' }}>
@@ -14397,7 +14154,7 @@ function CarteAjoutSheet({ hass, onClose, onPose, remplace = null }) {
           {!remplace && <div style={{ display: 'flex', gap: 6, padding: 4, borderRadius: 14, background: 'var(--o-s2)', marginBottom: 14 }}>{tab('entite', tr('Par entité'))}{tab('carte', tr('Par carte'))}</div>}
           {onglet === 'entite' ? (<>
             <EntPicker hass={hass} exclude={[]} onPick={(id) => setPick(id)} autoFocus />
-            <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 10 }}>{tr('Choisis une entité : les cartes qu’elle accepte s’affichent ensuite.')}</div>
+            <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 10 }}>{tr('Choisissez une entité : les cartes qu’elle accepte s’affichent ensuite.')}</div>
           </>) : (<>
             {/* La bibliothèque : chaque carte se voit avant d'être posée. */}
             <div style={grille}>
@@ -14622,7 +14379,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
       <Header />
       <div className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
         {edit && <BandeauEdition onAjouter={() => setAdding(true)}
-          texte={tr('Mode édition : attrape une carte pour la déplacer, clique-la pour la régler, ou ajoutes-en une.')} />}
+          texte={tr('Mode édition : attrapez une carte pour la déplacer, cliquez-la pour la régler, ou ajoutez-en une.')} />}
         <div>
           {edit && renaming
             ? <div style={{ display: 'flex', gap: 10, alignItems: 'center', maxWidth: 420 }}>
@@ -14675,7 +14432,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
             </button>
           )}
         </div>
-        {!edit && !cv.ents.length && <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Vue vide — active le crayon (en haut) pour ajouter des cartes.')}</div>}
+        {!edit && !cv.ents.length && <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 13, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Vue vide — activez le crayon (en haut) pour ajouter des cartes.')}</div>}
         {fiche && (
           <FicheCarte x={de(cvKey(fiche)) || fiche} nom={nomCarte(de(cvKey(fiche)) || fiche)} sous={sousCarte(de(cvKey(fiche)) || fiche)}
             onTaille={basculerH} onLargeur={basculerW}
@@ -14736,14 +14493,18 @@ function useHass(keys, noisyKeys) {
   const keysSig = keys.join(',');
   const noisySig = noisyKeys ? noisyKeys.join(',') : '';
   useEffect(() => {
-    const noisy = noisyKeys && noisyKeys.length ? {} : null;
-    if (noisy) for (const k of noisyKeys) noisy[k] = 1;
     /* Seules les chaînes non vides sont des clés (05/10, suite du point 10b) :
      * un nombre, un objet ou `null` venu d'une configuration abîmée (import
      * retouché, ancienne version) levait ici, dans un effet — React démontait
      * alors TOUT l'écran, Paramètres compris, d'où l'on répare. Une garde ici
      * plutôt qu'une par source : les clés viennent d'une trentaine de lecteurs. */
     const cles = keys.filter(k => typeof k === 'string' && k !== '');
+    /* Aucune clé à suivre — la compacte d'un appareil qui n'est pas une prise,
+     * une fiche sans capteur — : ni relevé immédiat, ni intervalle de 2 s pour
+     * rien (relecture finale, A2). Une clé qui arrive plus tard relance l'effet. */
+    if (!cles.length) return undefined;
+    const noisy = noisyKeys && noisyKeys.length ? {} : null;
+    if (noisy) for (const k of noisyKeys) noisy[k] = 1;
     const prefixes = cles.filter(k => k.charAt(k.length - 1) === '.'); // clés-préfixes (ex: 'automation.')
     const plain = cles.filter(k => k.charAt(k.length - 1) !== '.');
     let prev = '';
@@ -14778,15 +14539,16 @@ function useHass(keys, noisyKeys) {
     const iv = setInterval(tick, HASS_POLL_MS);
     return () => clearInterval(iv);
   }, [keysSig, noisySig]);
-  return ref.current;
+  /* Sans clé, aucun tic ne tient `ref` à jour : le relevé du moment, lu au rendu
+   * — un appelant qui peut passer une liste vide garde un `hass` frais. */
+  return keys.some(k => typeof k === 'string' && k !== '') ? ref.current : getHass();
 }
 
 /* ════════════ Config entités (localStorage V1, partagé même origine) ════════════
    localStorage primaire ; IDs réels connus en fallback si la clé est absente/vide. */
-const PLANT_ART = {
-  schefflera: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M75 170 L80 145 L120 145 L125 170 Z' fill='%238B6914' opacity='0.8'/%3E%3Crect x='72' y='140' width='56' height='8' rx='3' fill='%23A0782C' opacity='0.8'/%3E%3Cpath d='M100 140 Q98 120 100 100 Q102 80 98 60' stroke='%232D5016' stroke-width='4' fill='none' stroke-linecap='round'/%3E%3Cpath d='M100 110 Q85 100 70 95' stroke='%232D5016' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3Cpath d='M100 110 Q115 98 135 95' stroke='%232D5016' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3Cpath d='M100 90 Q80 75 60 68' stroke='%232D5016' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3Cpath d='M100 90 Q120 73 145 68' stroke='%232D5016' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3Cpath d='M98 70 Q78 55 55 42' stroke='%232D5016' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M98 70 Q118 52 140 42' stroke='%232D5016' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cellipse cx='58' cy='90' rx='18' ry='8' transform='rotate(-35 58 90)' fill='%23228B22'/%3E%3Cellipse cx='50' cy='95' rx='16' ry='7' transform='rotate(-55 50 95)' fill='%231E7A1E'/%3E%3Cellipse cx='65' cy='85' rx='15' ry='7' transform='rotate(-15 65 85)' fill='%2326A326'/%3E%3Cellipse cx='48' cy='88' rx='14' ry='6' transform='rotate(-70 48 88)' fill='%231B6B1B'/%3E%3Cellipse cx='62' cy='98' rx='13' ry='6' transform='rotate(-25 62 98)' fill='%232EBD2E'/%3E%3Cellipse cx='142' cy='90' rx='18' ry='8' transform='rotate(35 142 90)' fill='%23228B22'/%3E%3Cellipse cx='150' cy='95' rx='16' ry='7' transform='rotate(55 150 95)' fill='%231E7A1E'/%3E%3Cellipse cx='135' cy='85' rx='15' ry='7' transform='rotate(15 135 85)' fill='%2326A326'/%3E%3Cellipse cx='152' cy='88' rx='14' ry='6' transform='rotate(70 152 88)' fill='%231B6B1B'/%3E%3Cellipse cx='138' cy='98' rx='13' ry='6' transform='rotate(25 138 98)' fill='%232EBD2E'/%3E%3Cellipse cx='48' cy='63' rx='17' ry='7' transform='rotate(-40 48 63)' fill='%23228B22'/%3E%3Cellipse cx='40' cy='68' rx='15' ry='6' transform='rotate(-60 40 68)' fill='%231E7A1E'/%3E%3Cellipse cx='55' cy='58' rx='14' ry='6' transform='rotate(-20 55 58)' fill='%232EBD2E'/%3E%3Cellipse cx='38' cy='60' rx='13' ry='5' transform='rotate(-75 38 60)' fill='%231B6B1B'/%3E%3Cellipse cx='152' cy='63' rx='17' ry='7' transform='rotate(40 152 63)' fill='%23228B22'/%3E%3Cellipse cx='160' cy='68' rx='15' ry='6' transform='rotate(60 160 68)' fill='%231E7A1E'/%3E%3Cellipse cx='145' cy='58' rx='14' ry='6' transform='rotate(20 145 58)' fill='%232EBD2E'/%3E%3Cellipse cx='162' cy='60' rx='13' ry='5' transform='rotate(75 162 60)' fill='%231B6B1B'/%3E%3Cellipse cx='43' cy='37' rx='16' ry='7' transform='rotate(-45 43 37)' fill='%23228B22'/%3E%3Cellipse cx='36' cy='42' rx='14' ry='6' transform='rotate(-65 36 42)' fill='%231E7A1E'/%3E%3Cellipse cx='50' cy='32' rx='13' ry='5' transform='rotate(-25 50 32)' fill='%232EBD2E'/%3E%3Cellipse cx='147' cy='37' rx='16' ry='7' transform='rotate(45 147 37)' fill='%23228B22'/%3E%3Cellipse cx='154' cy='42' rx='14' ry='6' transform='rotate(65 154 42)' fill='%231E7A1E'/%3E%3Cellipse cx='140' cy='32' rx='13' ry='5' transform='rotate(25 140 32)' fill='%232EBD2E'/%3E%3Cellipse cx='90' cy='50' rx='15' ry='7' transform='rotate(-30 90 50)' fill='%2326A326'/%3E%3Cellipse cx='108' cy='50' rx='15' ry='7' transform='rotate(30 108 50)' fill='%2326A326'/%3E%3Cellipse cx='98' cy='45' rx='12' ry='6' transform='rotate(-5 98 45)' fill='%232EBD2E'/%3E%3C/svg%3E",
-  dracaena: "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M75 185 L80 155 L120 155 L125 185 Z' fill='%238B6914' opacity='0.8'/%3E%3Crect x='72' y='150' width='56' height='8' rx='3' fill='%23A0782C' opacity='0.8'/%3E%3Cpath d='M100 150 Q97 130 95 110 Q93 90 96 70 Q98 50 100 35' stroke='%235C3A1E' stroke-width='5' fill='none' stroke-linecap='round'/%3E%3Cpath d='M97 100 Q88 85 82 65 Q80 55 82 45' stroke='%235C3A1E' stroke-width='3.5' fill='none' stroke-linecap='round'/%3E%3Cellipse cx='98' cy='120' rx='4' ry='1.5' fill='%234A2E16' opacity='0.5'/%3E%3Cellipse cx='96' cy='105' rx='3.5' ry='1.5' fill='%234A2E16' opacity='0.5'/%3E%3Cellipse cx='95' cy='88' rx='3' ry='1.2' fill='%234A2E16' opacity='0.4'/%3E%3Cpath d='M100 35 Q105 15 110 5' stroke='%231B8C1B' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M100 35 Q95 12 88 3' stroke='%23228B22' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M100 35 Q108 18 118 10' stroke='%2326A326' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3Cpath d='M100 35 Q90 15 80 8' stroke='%231E7A1E' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3Cpath d='M100 38 Q115 32 135 35 Q150 38 162 45' stroke='%23228B22' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M100 36 Q118 28 140 28 Q155 30 168 38' stroke='%231E7A1E' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3Cpath d='M100 40 Q112 38 130 42 Q145 48 155 55' stroke='%232EBD2E' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3Cpath d='M100 37 Q120 25 148 22 Q160 24 172 32' stroke='%231B6B1B' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3Cpath d='M100 38 Q85 32 65 35 Q50 38 38 45' stroke='%23228B22' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M100 36 Q82 28 60 28 Q45 30 32 38' stroke='%231E7A1E' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3Cpath d='M100 40 Q88 38 70 42 Q55 48 45 55' stroke='%232EBD2E' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3Cpath d='M100 37 Q80 25 52 22 Q40 24 28 32' stroke='%231B6B1B' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3Cpath d='M82 45 Q75 28 65 18' stroke='%23228B22' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3Cpath d='M82 45 Q88 30 92 18' stroke='%231E7A1E' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3Cpath d='M82 45 Q70 35 55 32 Q42 33 30 40' stroke='%2326A326' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3Cpath d='M82 45 Q68 38 50 38 Q38 40 25 48' stroke='%231B6B1B' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3Cpath d='M82 45 Q90 35 100 30 Q112 28 125 32' stroke='%232EBD2E' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3Cpath d='M82 47 Q72 42 58 45 Q48 50 40 58' stroke='%231E7A1E' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3Cpath d='M100 35 Q105 15 110 5' stroke='%238B1A1A' stroke-width='0.5' fill='none' opacity='0.3'/%3E%3Cpath d='M100 38 Q115 32 135 35 Q150 38 162 45' stroke='%238B1A1A' stroke-width='0.5' fill='none' opacity='0.3'/%3E%3Cpath d='M100 38 Q85 32 65 35 Q50 38 38 45' stroke='%238B1A1A' stroke-width='0.5' fill='none' opacity='0.3'/%3E%3C/svg%3E",
-};
+/* Les dessins des plantes (chantier Capteurs, étapes 2 et 3, C34) : deux fichiers de public/plantes, recopiés à côté de la page
+ * comme les polices — la carte n’en garde que l’adresse. En adresses data:, ils pesaient 6 778 octets au démarrage. */
+const PLANT_ART = { schefflera: './plantes/schefflera.svg', dracaena: './plantes/dracaena.svg' };
 // Les capteurs de plante (humidité, conductivité, luminosité) n'ont pas de
 // regroupement standard : sans configuration, il n'y a rien à montrer.
 /* Les entites a suivre : celles que `plantCapteur` retiendra, pas une liste de
@@ -14794,13 +14556,8 @@ const PLANT_ART = {
 const plantKeys = () => {
   const S = (getHass() || {}).states || null;
   if (!S) return [];
-  return plantsCfg().flatMap(p => [
-    plantCapteur(S, p.base, 'moisture'),
-    plantCapteur(S, p.base, 'conductivity', 'µS/cm'),
-    plantCapteur(S, p.base, 'illuminance', 'lx'),
-    plantCapteur(S, p.base, 'temperature'),
-    plantCapteur(S, p.base, 'battery', '%'),
-  ].filter(Boolean));
+  // Les plantes découvertes comme les configurées (C29) : les capteurs de leur appareil, sinon ceux de leur base.
+  return plantesDeLaMaison(S).flatMap(p => Object.values(capteursPlante(S, p)).filter(Boolean));
 };
 // Configurable (Paramètres → Entités) : {name, haid} → la photo vient de
 // la personne Home Assistant correspondante.
@@ -14871,27 +14628,19 @@ const matchHaUser = (haUser, list) => {
   }
   return -1;
 };
-/* Le palier de qualite d'air de la banniere et du badge d'une piece, sur les
- * bornes de la table de confort (confort.js, captures du 19/09) : 0 bon
- * (< 1150 ppm : excellent ou bon), 1 moyen (< 1400), 2 eleve. Le mot sort
- * TRADUIT, l'appelant ne le repasse pas par `tr` ; il dit une qualite
- * (« POOR », « MALA »), pas le niveau du CO2 (05/10, comme confort.js). */
-function airPalier(co2) { return co2 == null || co2 < 1150 ? 0 : co2 < 1400 ? 1 : 2; }
-function airLabel(co2) { return [tr('BON'), tr('MOYEN'), tr('ÉLEVÉ')][airPalier(co2)]; }
-/* Le badge CO₂ d'une pièce : discret tant que l'air est bon ou moyen, ambre
- * au palier « élevé » — le même palier que le point d'attention et le défaut
- * de la veille du serveur. Une seconde échelle (600 / 900) contredisait la première. */
-function co2Style(co2) { return airPalier(co2) === 2 ? { bc: 'var(--o-warn)', bbg: 'rgba(var(--o-warn-rgb),.14)' } : { bc: 'var(--o-text2)', bbg: 'var(--o-s1)' }; }
-/* La couleur d'une pile suit son niveau (attention.js) : rien de visible tant
- * qu'elle tient, ambre à 20 %, rouge à 5 %. */
-const couleurPile = (pct) => { const n = niveauPile(pct); if (n) return couleurNiveau(n).col; return pct == null ? 'var(--o-text3)' : 'var(--o-text2)'; };
+/* Le CO₂ de la bannière et du badge d'une pièce : LA table (confort.js, `zoneMesure('co2')` ; audit du 19/10, M16). Trois paliers
+ * à part (`airPalier`) contredisaient ses cinq, et « QUALITÉ AIR · ÉLEVÉ » se lisait « bonne qualité ». Le mot de la zone, sa
+ * couleur hors du bon ; discret dans le bon. */
+const zoneCo2 = (co2) => (co2 == null ? null : zoneMesure('co2', co2));
+const motCo2 = (co2) => { const z = zoneCo2(co2); return z ? z.t.toLocaleUpperCase(locale()) : ''; };
 // Dérive les données live de l'Accueil depuis hass + config. null si pas de hass (→ démo).
 // `resolved` vient de la resolution (App) : cette fonction n'a pas de hooks,
 // on lui passe donc ce qu'elle ne peut pas aller chercher elle-meme.
 function deriveAccueil(hass, cfg, resolved) {
   if (!hass || !hass.states) return null;
   const S = hass.states;
-  const num = (id, d = null) => { const s = id && S[id]; if (!s || s.state == null || s.state === 'unknown' || s.state === 'unavailable') return d; const n = parseFloat(s.state); return isNaN(n) ? d : n; };
+  // Lu strictement (audit du 19/10) : « 1,659 » ppm ne vaut plus 1.
+  const num = (id, d = null) => { const n = id && S[id] ? lireNombre(S[id].state) : null; return n == null ? d : n; };
   const fmtW = fmtWatts;
   const E = cfg.energy || {};
   // ⚠️ E.consoNow = flux NET du compteur : positif = import, négatif = export.
@@ -14900,14 +14649,20 @@ function deriveAccueil(hass, cfg, resolved) {
    * 03/10) : un compteur P1/DSMR en kW donnait « ↓ 1 W » au bandeau, et les
    * seuils « > 5 W » ci-dessous ne se franchissaient jamais. */
   const numW = (id) => (id && S[id] ? wattsDe(S[id]) : null);
-  const solarW = numW(E.solarOutput), netW = numW(E.consoNow), surplusRaw = numW(E.surplusNow);
-  const exp = (surplusRaw != null && surplusRaw > 5) ? surplusRaw : (netW != null ? Math.max(0, -netW) : null);
+  /* Les deux noms de chaque rôle (25/10) : la fiche Énergie écrit `gridNow`,
+   * `injectionNow`, `solarNow`, `consoMaison` — l'Accueil ne lisait que
+   * `consoNow`, et la tuile restait absente chez qui avait rempli la fiche.
+   * Même lecture que la vue Énergie : le net signé d'abord, sinon le soutirage
+   * et l'injection séparés ; la maison, son capteur s'il existe. */
+  const ou = (a, b) => { const v = numW(a); return v != null ? v : numW(b); };
+  const solarW = ou(E.solarNow, E.solarOutput), netW = numW(E.consoNow), surplusRaw = ou(E.surplusNow, E.injectionNow);
+  const exp = (surplusRaw != null && surplusRaw > 5) ? surplusRaw : (netW != null ? Math.max(0, -netW) : surplusRaw);
   const exporting = exp != null && exp > 5;
-  const importW = netW != null ? Math.max(0, netW) : null;
+  const importW = netW != null ? Math.max(0, netW) : numW(E.gridNow);
   const gridVal = exporting ? exp : importW;
-  // Conso maison estimée = net + prod connue (sera exacte quand l'onduleur toit sera intégré)
-  const consoW = (netW != null) ? Math.max(0, netW + (solarW || 0)) : null;
-  const rooms = (cfg.rooms || []).map(r => ({ name: r.room, area: r.area || null, icon: r.icon || null, lights: (r.haid && r.haid.lights) || [], temp: num(r.haid && r.haid.temp), hum: num(r.haid && r.haid.humidity), co2: num(r.haid && r.haid.co2), tempId: r.haid && r.haid.temp, humId: r.haid && r.haid.humidity, co2Id: r.haid && r.haid.co2, co2Seuil: num(r.haid && r.haid.co2seuil) }));
+  const maisonW = numW(E.consoMaison);
+  const consoW = maisonW != null ? Math.max(0, maisonW) : (importW != null ? Math.max(0, importW + (solarW || 0) - (exp || 0)) : null);
+  const rooms = (cfg.rooms || []).map(r => ({ name: r.room, area: r.area || null, icon: r.icon || null, lights: (r.haid && r.haid.lights) || [], temp: num(r.haid && r.haid.temp), hum: num(r.haid && r.haid.humidity), co2: num(r.haid && r.haid.co2), tempId: r.haid && r.haid.temp, humId: r.haid && r.haid.humidity, co2Id: r.haid && r.haid.co2, co2Seuil: r.haid && Number(r.haid.co2seuil) > 0 ? Math.round(Number(r.haid.co2seuil)) : null }));
   const indoor = rooms.filter(r => !estDehors(r.name));
   const avg = arr => { const x = arr.filter(v => v != null); return x.length ? x.reduce((s, v) => s + v, 0) / x.length : null; };
   /* La température intérieure (salutation de l'Accueil, écran de veille) :
@@ -14921,8 +14676,9 @@ function deriveAccueil(hass, cfg, resolved) {
   const inHum = avg(indoor.map(r => r.hum));
   const co2vals = rooms.map(r => r.co2).filter(v => v != null);
   const maxCo2 = co2vals.length ? Math.max(...co2vals) : null;
+  // Sans lumières choisies, celles de la maison (L11) : le compte d'Objets › Lumières — la LED d'une borne Wi-Fi n'en est pas une.
   let lightIds = (cfg.lights || []).map(l => l.haid).filter(Boolean);
-  if (!lightIds.length) lightIds = Object.keys(S).filter(e => e.indexOf('light.') === 0);
+  if (!lightIds.length) lightIds = lumieresDe(S, ctxLumieres());
   const lightsOn = lightIds.filter(id => S[id] && S[id].state === 'on').length;
   const people = peopleList().map(p => ({ name: p.name, img: p.img, home: !!(S[p.haid] && S[p.haid].state === 'home') }));
   const cams = (cfg.cams || []).map(c => ({ name: c.name, haid: c.haid, online: (S[c.haid] ? S[c.haid].state !== 'unavailable' : c.online !== false) }));
@@ -14958,7 +14714,8 @@ function deriveAccueil(hass, cfg, resolved) {
     else if (vacOnBase || /station|base|accueil|charge/.test(low)) { if (bat != null && bat < 100) { phase = tr('En charge'); color = 'var(--o-warn)'; anim = 'charge'; } else { phase = tr('Sur base'); color = 'var(--o-ok)'; } }
     else { phase = vacEtat || tr('Inactif'); color = 'var(--o-text3)'; }
     const batColor = couleurPile(bat);
-    machines.wallE = { label: (rVac && rVac.name) || tr('Aspirateur'), iconKey: 'vacuum', phase, color, active: (vacCleaning && !paused) || returning, anim, spin, valueIcon: charging ? 'battery-charging' : 'battery', valueText: bat != null ? Math.round(bat) + '%' : '—', bar: bat, barColor: batColor };
+    // Les clés d'une machine disent sa nature, plus le surnom d'un appareil (chantier IoT, passe bis 2 du 18/10, point L).
+    machines.aspirateur = { label: (rVac && rVac.name) || tr('Aspirateur'), iconKey: 'vacuum', phase, color, active: (vacCleaning && !paused) || returning, anim, spin, valueIcon: charging ? 'battery-charging' : 'battery', valueText: bat != null ? Math.round(bat) + '%' : '—', bar: bat, barColor: batColor };
   }
   { const mid = mowerId(S); const lm = mid ? S[mid] : null; const st = lm ? lm.state : 'unknown';
     const bat = num(mowerSensor(S, 'battery'), null);
@@ -14972,7 +14729,7 @@ function deriveAccueil(hass, cfg, resolved) {
     else if (st === 'error') { phase = tr('Erreur'); color = 'var(--o-bad)'; }
     else { phase = tr('Inactif'); color = 'var(--o-text3)'; }
     const mowing = st === 'mowing'; const batColor = couleurPile(bat);
-    machines.luba = { label: (lm && lm.attributes && lm.attributes.friendly_name) || tr('Tondeuse'), iconKey: 'mower', phase, color, active: st === 'mowing' || st === 'returning', anim, spin, valueIcon: chg ? 'battery-charging' : 'battery', valueText: Math.round(bat) + '%', bar: mowing ? prog : bat, barColor: mowing ? color : batColor, extra: mowing ? (tr('Tonte') + ' ' + Math.round(prog) + '%') : null };
+    machines.tondeuse = { label: (lm && lm.attributes && lm.attributes.friendly_name) || tr('Tondeuse'), iconKey: 'mower', phase, color, active: st === 'mowing' || st === 'returning', anim, spin, valueIcon: chg ? 'battery-charging' : 'battery', valueText: Math.round(bat) + '%', bar: mowing ? prog : bat, barColor: mowing ? color : batColor, extra: mowing ? (tr('Tonte') + ' ' + Math.round(prog) + '%') : null };
   }
   // Les seuils de phase (100, 200, 500, 1500) sont des watts : la prise du
   // lave-vaisselle se lit par `numW`, comme les flux (audit du 03/10).
@@ -15000,8 +14757,7 @@ function deriveAccueil(hass, cfg, resolved) {
     const ts = (idt && idt.attributes && idt.attributes.timestamp) ? idt.attributes.timestamp : 0;
     const elapsedMin = minutesDepuisHeure(ts);
     const departSu = elapsedMin != null && elapsedMin <= 1440;
-    const fmtT = (mn) => { const h = Math.floor(mn / 60), mm = mn % 60; return (h > 0 ? h + 'h' : '') + (mm < 10 && h > 0 ? '0' : '') + mm + 'min'; };
-    machines.lv = { label: tr('Lave-vaisselle'), iconKey: 'dishwasher', phase, color, active, anim, spin, valueIcon: 'timer', valueText: active ? (departSu ? fmtT(elapsedMin) : tr('En cours')) : '--:--', bar: null, barColor: color, extra: active ? (Math.round(power) + 'W') : null };
+    machines.lv = { label: tr('Lave-vaisselle'), iconKey: 'dishwasher', phase, color, active, anim, spin, valueIcon: 'timer', valueText: active ? (departSu ? dureePrise(elapsedMin) : tr('En cours')) : '--:--', bar: null, barColor: color, extra: active ? (Math.round(power) + 'W') : null };
   }
   { const pbE = S[notifIds().bins];
     if (pbE) {
@@ -15027,13 +14783,12 @@ function deriveAccueil(hass, cfg, resolved) {
   }));
   return {
     flux: { solar: fmtW(solarW), home: fmtW(consoW), grid: (exporting ? '↑ ' : '↓ ') + fmtW(gridVal), exporting },
-    /* La tuile réseau de la bannière n'existe que si un compteur se lit
-     * (audit du 03/10, ADR 0030). L'objet était TOUJOURS là, et le `|| 0` de
-     * `raw` passait sous le « — » de `Num` : une maison sans compteur voyait
-     * « ↓ 0 W IMPORT RÉSEAU » en permanence. `null` retire la tuile — la
-     * bannière teste déjà `a.metricExport`. `autoPct` est parti avec : il
-     * valait 100 % ou 0 % sans compteur, et personne ne le lisait. */
-    metricExport: gridVal == null ? null : { sign: exporting ? '↑ ' : '↓ ', val: fmtW(gridVal), raw: gridVal, label: exporting ? tr('EXPORT RÉSEAU') : tr('IMPORT RÉSEAU'), color: exporting ? 'var(--o-ok)' : 'var(--o-warn)' },
+    /* La tuile de la bannière n'existe que si un compteur se lit (audit du
+     * 03/10, ADR 0030) : `null` la retire, jamais de « 0 W » inventé. Elle dit
+     * ce que la MAISON consomme en ce moment (25/10, « savoir combien je
+     * consomme ») — en vert quand le soleil couvre tout et que le surplus
+     * repart au réseau. */
+    metricConso: consoW == null ? null : { raw: consoW, color: exporting ? 'var(--o-ok)' : 'var(--o-accent-soft)' },
     rooms, inTemp, inTempUnite, inHum, maxCo2, lightsOn, lightsTotal: lightIds.length,
     people, cams, hass,
     vacLabel, vacBattery, alarmArmed, camOnline, camTotal, sunsetHM, machines, plants,
@@ -15369,7 +15124,15 @@ function MobileNav({ view, onNav, onMenu, menuOuvert = false, onAssistant = null
 }
 
 // Notifications dynamiques dérivées de l'état HA réel (avec temps relatif via last_changed).
-function deriveNotifs(hass) {
+/** Le nom d'un cycle en cours (audit du 19/10, point 2) : l'appareil — « Lave-vaisselle » —, ou le nom de la prise quand
+ *  deux appareils du même type tournent ensemble. */
+function nomDuCycle(c, cycles, S) {
+  return cycles.filter(x => x.type === c.type).length > 1 ? cvName(S[c.id], c.id) : NOMS_PRISE()[c.type];
+}
+
+/* `cycles` : les cycles d'électroménager que le serveur suit (`cyclesElectromenager`, prisesetat.js) — `null`, l'ancien
+ * chemin : le capteur de puissance du lave-vaisselle de Paramètres › Notifications, au-dessus de 100 W. */
+function deriveNotifs(hass, cycles = null) {
   const S = hass && hass.states; if (!S) return [];
   const out = [];
   const stOf = (id) => (S[id] && S[id].state) || null;
@@ -15387,19 +15150,14 @@ function deriveNotifs(hass) {
    * — `moisture` sur un binaire veut dire fuite d'eau, MAIS les plantes de la
    *   vue Plantes publient des binaires `<base>_besoin_eau` de cette classe :
    *   une dracaena assoiffée n'est pas un dégât des eaux. Tout binaire dont
-   *   l'id commence par la base d'une plante configurée est écarté.
+   *   l'id commence par la base d'une plante configurée est écarté — et tout
+   *   `moisture` qu'un modèle ou un groupe calcule (`fuiteCalculee`, la
+   *   plateforme de l'index ; ADR 0022, 16/10), comme chez le serveur.
    * — `safety` sert aussi à MeteoAlarm, qui reste `on` des jours entiers en
    *   vigilance jaune. Ce n'est pas un danger domestique : il devient une
    *   notification de vigilance à part, ambre, portant l'événement réel
    *   (« Vigilance jaune orages ») — rouge seulement en Severe/Extreme. */
-  const SURETE = {
-    smoke: ['Fumée', 'Fumée détectée'],
-    carbon_monoxide: ['Monoxyde de carbone', 'CO détecté'],
-    gas: ['Gaz', 'Gaz détecté'],
-    moisture: ["Fuite d'eau", 'Fuite détectée'],
-    safety: ['Sécurité', 'Alerte de sécurité'],
-    tamper: ['Sabotage', 'Boîtier ouvert ou déplacé'],
-  };
+  // Les mots : LA table de sûreté (`motsSurete`, attention.js) — celle des points de l'Accueil et des fiches (audit du 19/10, lot 4).
   const basesPlantes = plantsCfg().map(p => p.base).filter(Boolean);
   const estPlante = (id) => basesPlantes.some(b => id.indexOf(b) === 0 && (id.length === b.length || id.charAt(b.length) === '_'));
   const surete = [];
@@ -15407,7 +15165,7 @@ function deriveNotifs(hass) {
     if (id.indexOf('binary_sensor.') !== 0) continue;
     const e = S[id]; if (!e || e.state !== 'on') continue;
     const a = e.attributes || {};
-    const duo = SURETE[a.device_class];
+    const duo = motsSurete(a.device_class);
     if (!duo) continue;
     const nom = a.friendly_name || id;
     if (a.device_class === 'safety' && (a.awareness_level != null || /meteoalarm/i.test(id) || /meteoalarm/i.test(a.attribution || ''))) {
@@ -15415,7 +15173,7 @@ function deriveNotifs(hass) {
       out.push({ k: 'meteo:' + id + ':' + (a.event || a.headline || ''), c: grave ? 'var(--o-bad)' : 'var(--o-warn)', t: tr('Vigilance météo'), m: a.event || a.headline || tr('Alerte météo en cours') });
       continue;
     }
-    if (a.device_class === 'moisture' && estPlante(id)) continue;
+    if (a.device_class === 'moisture' && (estPlante(id) || fuiteCalculee(plateformeDe(id)))) continue;
     surete.push({ k: 'surete:' + id, c: 'var(--o-bad)', t: tr(duo[0]), m: tr(duo[1]) + ' · ' + nom });
   }
   out.unshift(...surete.slice(0, 4)); // les dangers d'abord, avant même l'alarme
@@ -15432,7 +15190,9 @@ function deriveNotifs(hass) {
   const sur = net != null ? Math.max(0, -net) : wattsOf(EH.injectionNow || EH.surplusNow);
   if (sur != null && sur > 100) out.push({ k: 'energie:surplus', c: 'var(--o-accent-soft)', t: tr('Énergie'), m: tr('Surplus solaire — export réseau') });
   const lv = wattsOf(notifIds().dishwasher);
-  if (lv != null && lv > 100) out.push({ k: 'lv:cycle', c: 'var(--o-accent)', t: tr('Lave-vaisselle'), m: tr('Cycle en cours') });
+  // Un cycle par entrée, et par départ : le suivant entre à neuf dans le journal des notifications.
+  if (cycles) cycles.forEach(c => out.push({ k: 'cycle:' + c.id + ':' + c.debut, c: 'var(--o-accent)', t: nomDuCycle(c, cycles, S), m: tr('Cycle en cours') }));
+  else if (lv != null && lv > 100) out.push({ k: 'lv:cycle', c: 'var(--o-accent)', t: tr('Lave-vaisselle'), m: tr('Cycle en cours') });
   const bins = stOf(notifIds().bins);
   if (bins && bins !== 'unknown' && bins !== 'unavailable') out.push({ k: 'poubelles:' + bins, c: 'var(--o-warn)', t: tr('Poubelles'), m: tr('Prochain ramassage : {d}', { d: bins }) });
 
@@ -15459,14 +15219,13 @@ function deriveNotifs(hass) {
     const a = e.attributes || {};
     if (a.device_class !== 'battery') continue;
     const n = parseFloat(e.state);
-    if (isNaN(n) || n > SEUIL_PILE) continue;
+    // Le seuil de la maison (attention.js) : celui de la veille des piles (chantier Capteurs, C32, § 19.8).
+    if (isNaN(n) || !niveauPile(n)) continue;
     out.push({ k: 'pile:' + id, c: 'var(--o-warn)', t: tr('Pile faible'), m: (a.friendly_name || id) + ' · ' + Math.round(n) + ' %' });
   }
   return out;
 }
 
-/** En dessous, la pile se change bientôt. Au-dessus, elle vit sa vie. */
-const SEUIL_PILE = 20;
 
 /** Depuis quand elle est là. Le journal porte l'heure d'ARRIVÉE : c'est elle
  *  qui compte, pas le dernier soubresaut de l'entité. */
@@ -15622,6 +15381,7 @@ export default function App() {
     [discovery.ready, discovery.caps, cfgVues, sigEntites]
   );
   setLoggiaState({ resolved: loggiaRuntime.resolved || null });
+  poserCompteursMaison(loggiaRuntime.energyPrefs || null);
   /* Ce que le serveur tient, pour l'empreinte du carnet (audit du 03/10).
    * Une reference et non `serverCfg` : `saveCfg` est fige au premier rendu,
    * il ne verrait que `{}`. `null` tant que le composant n'a pas repondu —
@@ -15727,9 +15487,14 @@ export default function App() {
     local();
     return Promise.resolve(true);
   }, []);
+  /* Ce qu'un module du COMPOSANT vient d'ecrire et rend (`cfgRecue`,
+   * state.js) : la configuration du mode enfant que rend `loggia/enfant/config`
+   * (18/10). Posee dans l'etat telle quelle, sans `config/set` ni carnet :
+   * c'est le serveur qui vient de l'ecrire. */
+  const recuCfg = useCallback((cle, valeur) => setServerCfg(c => ({ ...c, [cle]: valeur })), []);
   // Confié APRÈS sa déclaration : plus haut, `saveCfg` serait encore en zone
   // morte temporelle et le rendu entier échouerait.
-  setLoggiaState({ save: saveCfg });
+  setLoggiaState({ save: saveCfg, recu: recuCfg });
   useEffect(() => {
     try {
       window.loggiaDiscovery = {
@@ -16136,7 +15901,7 @@ export default function App() {
     secAlarm(), 'alarm_control_panel.', 'lock.', 'person.',
     ...cfgKeys('alarm'), ...cfgKeys('cameras'), ...cfgKeys('people'),
     'lawn_mower.', notifIds().dishwasher, notifIds().bins, cfg.energy.surplusNow].filter(Boolean);
-  const lightKeys = [...Object.values(hueScripts()), ...dimmableLights(getHass()), ...switchLights(), 'switch.', ...cfgKeys('hue'), ...(cfg.lights || []).map(l => l.haid)].filter(Boolean);
+  const lightKeys = [...Object.values(hueScripts()), ...dimmableLights(getHass()), ...switchLights(), ...cfgKeys('hue'), ...(cfg.lights || []).map(l => l.haid)].filter(Boolean);
   const accueilKeys = [...enKeys(), ...vacKeys, ...croqKeys(), ...plantKeys(), 'light.', ...switchLights(),
     ...mowerKeys(), notifIds().dishwasherStart,
     // « En ce moment » (v3.24) : ce qui tourne, et ses gestes.
@@ -16164,14 +15929,20 @@ export default function App() {
      * ne bougent que si quelqu'un agit : aucun bavardage. `sensor.` et
      * `binary_sensor.` restent DEHORS — ils jitterent en permanence et
      * redessineraient tout l'ecran toutes les deux secondes, alors qu'une
-     * mesure en retard ne ment pas, contrairement a une bascule. */
+     * mesure en retard ne ment pas, contrairement a une bascule.
+     *
+     * Les zones de chauffage : ce qu'elles commandent — le `select` d'un
+     * module fil pilote n'a pas de prefixe ici — et la puissance d'un module,
+     * cle bruyante (plan 2 du chantier Chauffage, tache 5). */
     objets: [...vacKeys, 'lawn_mower.', ...mowerKeys(), ...croqKeys(), ...medKeys(), ...plantKeys(),
       'light.', 'switch.', 'cover.', 'climate.', 'media_player.', 'fan.', 'lock.',
-      'humidifier.', 'valve.', 'siren.', 'water_heater.', 'input_boolean.'],
+      'humidifier.', 'valve.', 'siren.', 'water_heater.', 'input_boolean.', ...climateKeys(false)],
     securite: [...secBaseKeys(), 'camera.', 'siren.', 'switch.', ...secKeys, ...(cfg.cams || []).map(c => c.haid)],
     // `update.` : le panneau Versions lit les entités de mise à jour en direct (ADR 0037).
     systeme: [...sysKeys(), ...cfgKeys('system'), 'update.'],
-    parametres: ['automation.', 'update.'], // clés-préfixes : automations + mises à jour (onglets admin)
+    // clés-préfixes : automations + mises à jour (onglets admin) ; `switch.` pour l'appairage Zigbee
+    // d'Interrupteurs (chantier Prises, § 9) — une bascule qui ne suivrait pas son pont.
+    parametres: ['automation.', 'update.', 'switch.'],
   };
   const activeCv = view.indexOf('cv:') === 0 ? customViews.find(c => 'cv:' + c.id === view) : null;
   /* Une route `room:` ou `cv:` peut designer ce qui n'existe plus : une piece
@@ -16234,9 +16005,20 @@ export default function App() {
   })();
   const noisyKeys = [cfg.energy.consoNow, cfg.energy.surplusNow, cfg.energy.solarOutput,
     ...noisyDiscovered,
+    // La puissance d'un module fil pilote, que la Pièce et Objets suivent.
+    ...climateZones(null).map(z => z.puissance),
+    // Pas celle des prises : une clé bruyante ne compte que SURVEILLÉE, et ni Objets ni les pièces ne le font de `sensor.`. La carte, la compacte et l'en-tête d'Objets › Prises s'abonnent à la leur (`useVuePrise`, `EntetePrisesVive`, A2).
     ...(() => { const E = enHaids(); return [E.consoMaison, E.gridNow, E.solarNow, E.injectionNow, E.appTotal]; })(),
     ...enDevices(null).map(d => d.power)].filter(Boolean);
   const hass = useHass(haKeys, noisyKeys);
+  /* Le seuil de la veille des piles (§ 19.8), relu ICI avec les veilles du serveur, une fois pour tout l'écran : la carte Piles, la
+   * section Plantes et piles, la popup, « En ce moment » et les points d'attention jugent la même pile de la même façon, quelle que
+   * soit la vue ouverte en premier (passe bis du 17/10, point 2). */
+  const seuilPile = useSeuilPile(hass);
+  /* L'état des prises, suivi tant que la maison est là (audit du 19/10, point 2) : les notifications disent les cycles que le
+   * serveur suit, sur toutes les vues — un cache que personne ne relirait garderait un cycle fini « en cours ». Le magasin ne
+   * republie qu'un changement (point 6) : ce sondage de 60 s ne redessine rien quand rien ne bouge. */
+  const lecturePrises = useLecturePrises(!!hass);
   // Vue courante devenue impossible a remplir (appareil retire, configuration
   // importee d'une autre installation, lien direct) : on explique au lieu
   // d'afficher des tirets. Vues personnalisees et pieces ne passent pas par la.
@@ -16347,9 +16129,14 @@ export default function App() {
   }, [view, activeRoom, hass, cfg, loggiaRuntime.resolved, loggiaRuntime.index]);
   /* Ce que l'instant présent justifie. À lui seul, ce n'est pas une
    * notification : c'est un état. Le journal en fait un événement. */
+  /* `deriveNotifs` juge les piles au seuil retenu par `attention.js` : le mémo se refait aussi quand ce seuil change, sans attendre
+   * le prochain relevé (relecture de la passe bis du 17/10). */
+  // Les cycles que le serveur suit, pour les notifications et « En ce moment » (point 2) : `null`, l'ancien chemin.
+  const cyclesPrises = useMemo(() => cyclesElectromenager(lecturePrises.etat, (id) => !!priseDe((hass && hass.states) || {}, id).puissance),
+    [hass, lecturePrises.etat]);
   const vivantes = useMemo(() => {
-    try { return deriveNotifs(hass); } catch (e) { console.error('deriveNotifs', e); return []; }
-  }, [hass]);
+    try { return deriveNotifs(hass, cyclesPrises); } catch (e) { console.error('deriveNotifs', e); return []; }
+  }, [hass, seuilPile, cyclesPrises]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   /* LES NOTIFICATIONS PERSISTANTES DE HOME ASSISTANT (01/10).
    *
@@ -16423,7 +16210,8 @@ export default function App() {
   // (thème/mode/suivi HA lus paresseusement à l'initialisation des states —
   //  les relire ici arrivait après leur première réécriture.)
   const [look, setLook] = useState(readLook);
-  const onLook = (patch) => setLook(l => { const n = { ...l, ...patch }; cfgSet({ loggia_look: n }); return n; });
+  // L'apparence suit le profil, ou cet écran s'il a la sienne (ADR 0223).
+  const onLook = (patch) => setLook(l => { const n = { ...l, ...patch }; if (!SAFE_NOLOOK) poserApparence({ look: n }); return n; });
   useEffect(() => {
     // « Auto » : le clair/foncé suit l'APPAREIL (prefers-color-scheme) — et le
     // suit en direct quand l'OS bascule au coucher du soleil.
@@ -16476,9 +16264,11 @@ export default function App() {
     }, 2000);
     return () => clearTimeout(t);
   }, []);
-  const onMode = (m) => { setThemeMode(m); setHaTheme(''); };
-  const onPickTheme = (id) => { setLoggiaTheme(id); setHaTheme(''); };
-  const onFollowHa = () => setHaTheme(h => h === 'FOLLOW' ? '' : 'FOLLOW');
+  /* Un GESTE écrit l'apparence (ADR 0223) ; le démarrage, jamais — sinon le
+   * premier écran allumé imposerait son thème à tous ceux du profil. */
+  const onMode = (m) => { setThemeMode(m); setHaTheme(''); if (!SAFE_NOLOOK) poserApparence({ mode: m, ha: '' }); };
+  const onPickTheme = (id) => { setLoggiaTheme(id); setHaTheme(''); if (!SAFE_NOLOOK) poserApparence({ theme: id, ha: '' }); };
+  const onFollowHa = () => { const n = haTheme === 'FOLLOW' ? '' : 'FOLLOW'; setHaTheme(n); if (!SAFE_NOLOOK) poserApparence({ ha: n }); };
   const toggle = () => { setHaTheme(''); setThemeMode(m => m === 'light' ? 'dark' : 'light'); }; // bouton flottant = bascule clair/foncé Loggia
   const [navOpen, setNavOpen] = useState(() => { try { return (typeof window !== 'undefined' ? window.innerWidth : 1000) > 820; } catch { return true; } });
   /* Interface TACTILE — téléphone ET tablette, portrait comme paysage : la
@@ -16636,6 +16426,76 @@ export default function App() {
   // les profils restaient prisonniers de l'appareil qui les avait crees.
   const persistUsers = (a) => { try { cfgSet({ loggia_users: a }); } catch {} setUsers(a); };
   const [userIdx, setUserIdx] = useState(() => { try { const v = parseInt(cfgVal('loggia_active_user', null), 10); return (v >= 0 && v < users.length) ? v : 0; } catch { return 0; } });
+  /* Le profil appartient a l'ECRAN (ADR 0220). Ce que l'ecran affiche est la
+   * seule source : `profilActif()` le rend, et les enfants, rendus apres ce
+   * corps, lisent la part du profil dont ils voient le prenom. */
+  setLoggiaState({ profil: String(userIdx) });
+  /* Quand le composant repond, la fiche de CET appareil fait foi une fois — elle
+   * le retrouve au rechargement, ou que l'ordinateur en soit. Ensuite, c'est
+   * l'ecran qui l'ecrit, et elle ne suit plus aucun autre ecran. */
+  const profilRepris = useRef(false);
+  /** Le profil relié au compte Home Assistant connecté, ou -1. Un profil Admin
+   *  ne se prend que si le compte est administrateur (ADR 0080). Calculé au
+   *  rendu : les effets en dépendent par sa VALEUR, pas par une fonction. */
+  const profilDuCompte = (() => {
+    const i = matchHaUser(hass && hass.user, users);
+    if (i < 0) return -1;
+    return (!haAdmin && String(users[i].role || '').toLowerCase() === 'admin') ? -1 : i;
+  })();
+  /* Un écran SANS fiche, alors que la maison connaît des appareils nommés de
+   * son type : son cache a été vidé, ou il passe par une autre adresse. On lui
+   * demande une fois s'il est l'un d'eux, avant de lui créer une fiche
+   * (ADR 0222). */
+  const formatApp = formatEcran(useCoarse(), useWide(1180));
+  const [questionAppareil, setQuestionAppareil] = useState(null);
+  useEffect(() => {
+    if (!serverOk || !users.length || questionAppareil) return;
+    if (!profilRepris.current) {
+      profilRepris.current = true;
+      if (!Object.keys(ficheAppareil()).length) {
+        const candidats = Object.entries(appareilsConnus()).filter(([, f]) => f && f.nom && f.format === formatApp);
+        if (candidats.length) { setQuestionAppareil(candidats); return; }
+      }
+      // Le compte d'abord (voir plus bas, la reconnaissance), la fiche ensuite.
+      if (profilDuCompte >= 0) { if (profilDuCompte !== userIdx) setUserIdx(profilDuCompte); return; }
+      /* Un compte relié à AUCUN profil garde le choix de l'écran, « mais pas
+       * en admin » (19/10) : un profil Admin ne se rouvre pas tout seul sur un
+       * écran que rien ne rattache à lui — il revient au premier profil qui
+       * ne l'est pas, et l'Admin repasse par le code. */
+      const p = parseInt(profilAppareil(), 10);
+      let cible = (p >= 0 && p < users.length) ? p : userIdx;
+      const estAdmin = (j) => String((users[j] || {}).role || '').toLowerCase() === 'admin';
+      if (estAdmin(cible)) { const j = users.findIndex((u, k) => !estAdmin(k)); if (j >= 0) cible = j; }
+      if (cible !== userIdx) { setUserIdx(cible); return; }
+    }
+    retenirProfilAppareil(userIdx, formatApp);
+  }, [serverOk, userIdx, users, questionAppareil, formatApp, profilDuCompte]);
+  /* Reprendre un appareil connu : son identifiant, puis son profil — sauf un
+   * profil Admin, qui passe toujours par le code (ADR 0080). */
+  const reprendreAppareil = (id) => {
+    adopterAppareil(id);
+    const f = appareilsConnus()[id] || {};
+    // Un compte relié à un profil garde le sien : la fiche ne donne que l'écran.
+    const p = profilDuCompte >= 0 ? -1 : parseInt(f.profil, 10);
+    const admin = users[p] && String(users[p].role || '').toLowerCase() === 'admin';
+    if (p >= 0 && p < users.length && p !== userIdx && (haAdmin || !admin)) setUserIdx(p);
+    setQuestionAppareil(null);
+  };
+  /* L'apparence se RELIT quand la configuration change : réponse du serveur,
+   * autre profil, écran repris, réglage fait sur un autre écran (ADR 0223).
+   * Un champ que personne n'a encore posé laisse l'écran tel qu'il était. */
+  const apparenceLue = useRef('');
+  useEffect(() => {
+    if (!serverOk || SAFE_NOLOOK) return;
+    const ap = apparence();
+    const sig = JSON.stringify(ap);
+    if (sig === apparenceLue.current) return;
+    apparenceLue.current = sig;
+    if (ap.mode === 'light' || ap.mode === 'dark' || ap.mode === 'auto') setThemeMode(ap.mode);
+    if (typeof ap.theme === 'string') setLoggiaTheme(ap.theme);
+    if (typeof ap.ha === 'string') setHaTheme(ap.ha);
+    if (ap.look && typeof ap.look === 'object') setLook(readLook());
+  }, [serverOk, serverCfg, userIdx, questionAppareil]);
   // La configuration serveur arrive APRES le premier rendu. Sans cette
   // resynchronisation, `users` resterait celui du localStorage de l'appareil,
   // et les profils crees ailleurs n'apparaitraient jamais.
@@ -16661,11 +16521,10 @@ export default function App() {
   }, [serverCfg, users, haAdmin]);
 
   const [pinTarget, setPinTarget] = useState(null);
-  // Chip « n allumées » du header : compte les luminaires HA à l'état on.
+  // Chip « n allumées » du header (et de l'écran de veille) : les lumières de la maison à l'état on (L11) — le compte d'Objets › Lumières.
   const lightsOn = useMemo(() => {
     const S = hass && hass.states; if (!S) return 0;
-    let n = 0; for (const id in S) { if (id.indexOf('light.') === 0 && S[id] && S[id].state === 'on') n++; }
-    return n;
+    return lumieresDe(S, ctxLumieres()).filter(id => S[id] && S[id].state === 'on').length;
   }, [hass]);
   const applyUser = (i) => { cfgSet({ loggia_active_user: String(i) }); try { const u = users[i]; if (u && u.name) { const m = JSON.parse(localStorage.getItem('loggia-lastseen') || '{}'); m[u.name] = Date.now(); localStorage.setItem('loggia-lastseen', JSON.stringify(m)); } } catch {} setUserIdx(i); };
   const switchUser = (i) => { if (i === userIdx) return; if (users[i] && users[i].role === 'Admin') setPinTarget(i); else applyUser(i); };
@@ -16724,6 +16583,13 @@ export default function App() {
     // une tablette sur des roles perimes. Le serveur la refuse maintenant ;
     // on ne la tente donc que depuis un compte qui a le droit de l'ecrire.
     if (haAdmin && hu.id && users[i].haId !== hu.id) persistUsers(users.map((u, j) => j === i ? { ...u, haId: hu.id } : u));
+    /* Le COMPTE fait foi (19/10, ADR 0220 corrigée) : « quand je me connecte,
+     * ça me met sur Administrateur au lieu de Guillaume — ça doit suivre le
+     * profil avec lequel on est connecté à Home Assistant ». Le 17/10, la
+     * reconnaissance avait été réservée aux écrans neufs : un écran déjà
+     * connu restait sur sa fiche. Un compte relié à un profil ouvre désormais
+     * ce profil à CHAQUE ouverture, comme Home Assistant ; seul un compte
+     * relié à aucun profil (la tablette familiale) garde le choix de l'écran. */
     /* La reconnaissance ne PROUVE pas le code (24/09). Depuis l'ADR 0080, le
      * composant refuse d'ecrire `loggia_active_user` vers un profil Admin sans
      * laissez-passer : tenter ici aurait fait apparaitre un refus au demarrage,
@@ -16780,15 +16646,15 @@ export default function App() {
           voile assombrit (ou éclaircit, en mode clair) pour que le texte des
           cartes reste lisible sur n'importe quelle photo. */}
       {fondPhotoActif && (
-        <div aria-hidden="true" style={{ position: 'fixed', inset: 0, zIndex: -1, pointerEvents: 'none',
+        <div className="o-fond-photo" aria-hidden="true" style={{ position: 'fixed', inset: 0, zIndex: -1, pointerEvents: 'none',
           background: (lightMode ? 'linear-gradient(rgba(240,244,250,.6),rgba(240,244,250,.6)), ' : 'linear-gradient(rgba(5,7,11,.55),rgba(5,7,11,.55)), ')
             + `url("${fondPhotoActif}") center center / cover no-repeat var(--o-bg)` }} />
       )}
       {ficheDemo && <FicheAppareil id={ficheDemo} hass={hass} onClose={() => setFicheDemo(null)} />}
-      {idle && ambient > 0 && plageOk && <AmbientOverlay scenes={scenariosAccueil(scenarios()).map(s => ({ ...s, nom: nomScenario(s) }))} onScene={(s) => lancerScenario(getHass(), s.id)} wx={weatherMode || 'clouds'} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} inTemp={accueil ? accueil.inTemp : null} uniteTemp={uniteTemp(null, hass)} lightsOn={lightsOn} notifs={notifs}
-        ast={(() => { const S = (hass && hass.states) || {}; const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null; const aid = (secAlarm() && S[secAlarm()]) ? secAlarm() : rAl; return (aid && S[aid]) ? S[aid].state : null; })()} />}
+      {idle && ambient > 0 && plageOk && <Suspense fallback={null}><AmbientOverlay scenes={scenariosAccueil(scenarios()).map(s => ({ ...s, nom: nomScenario(s) }))} onScene={(s) => lancerScenario(getHass(), s.id)} wx={weatherMode || 'clouds'} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} inTemp={accueil ? accueil.inTemp : null} uniteTemp={uniteTemp(null, hass)} lightsOn={lightsOn} notifs={notifs}
+        ast={(() => { const S = (hass && hass.states) || {}; const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null; const aid = (secAlarm() && S[secAlarm()]) ? secAlarm() : rAl; return (aid && S[aid]) ? S[aid].state : null; })()} /></Suspense>}
       {haLost && <div role="alert" style={BANDEAU_ALERTE}>{tr('Connexion Home Assistant perdue — les données affichées peuvent être obsolètes')}</div>}
-      {!haLost && discovery.echec && <div role="alert" style={BANDEAU_ALERTE}>{tr('La découverte de la maison a été interrompue — recharge la page')}</div>}
+      {!haLost && discovery.echec && <div role="alert" style={BANDEAU_ALERTE}>{tr('La découverte de la maison a été interrompue — rechargez la page')}</div>}
       {/* L'échec d'une commande se DIT (audit du 03/10).
         *
         * Le toast n'était monté qu'une fois son texte connu, en `status` : une
@@ -16826,7 +16692,7 @@ export default function App() {
         return { online: ok, devCount, alarmTxt: al.t, alarmRgb: al.c };
       })()} />
       {navOpen && <div className="loggia-backdrop" role="presentation" onClick={() => setNavOpen(false)} />}
-      {pinTarget != null && <PinModal hass={hass} onClose={() => setPinTarget(null)} onSuccess={() => { applyUser(pinTarget); setPinTarget(null); }} />}
+      {pinTarget != null && <Suspense fallback={null}><PinModal hass={hass} onClose={() => setPinTarget(null)} onSuccess={() => { applyUser(pinTarget); setPinTarget(null); }} /></Suspense>}
       <div key={view} ref={vueRef} className="o-view" style={{ display: 'flex', flex: 1, minWidth: 0 }}>
       {/* Une barrière par vue (audit du 03/10). La seule vivait à la racine :
           une carte qui levait au rendu remplaçait TOUT l'écran par la page de
@@ -16841,14 +16707,24 @@ export default function App() {
           l'on verrait la page changer deux fois sous ses yeux. */}
       {(!loggiaRuntime.ready && view !== 'accueil') ? <main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
-        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'volets' ? <ObjetsView hass={hass} onNav={setView} filtre="volets" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'voletsplan' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} onNav={setView} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} retourAcc={retourAcc} onRetourAcc={onRetourAcc} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer && !compteOrdinaire(hass)} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); /* Une mesure absente reste null (audit du 03/10) : `base` porte les valeurs de vitrine du modèle (PIECES, l'écran d'avant la connexion), et la fiche de confort les affichait pour une vraie pièce — « Humidité 60 % » dans une chambre sans hygromètre. */ return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? dec(lv.temp, 1) + '°' : null, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : null, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} sante={santeAccueil} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} />}
+        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'volets' ? <ObjetsView hass={hass} onNav={setView} filtre="volets" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'voletsplan' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} onNav={setView} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} retourAcc={retourAcc} onRetourAcc={onRetourAcc} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer && !compteOrdinaire(hass)} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); /* Une mesure absente reste null (audit du 03/10) : `base` porte les valeurs de vitrine du modèle (PIECES, l'écran d'avant la connexion), et la fiche de confort les affichait pour une vraie pièce — « Humidité 60 % » dans une chambre sans hygromètre. */ return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? dec(lv.temp, 1) + '°' : null, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : null, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} sante={santeAccueil} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} planActif={look.plan !== false} cyclesPrises={cyclesPrises} />}
       </Barriere>
       </div>
       {navbar && <MobileNav vuesAutorisees={vuesAutorisees} view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} menuOuvert={navOpen} assistantAttendu={assistantAttendu} onAssistant={assistantNs ? () => setAssistantOuvert(true) : null} onDictee={assistantNs ? poserQuestion : null} hass={hass} />}
       {assistantOuvert && assistantNs && <Suspense fallback={null}><AssistantSheet hass={hass} ns={assistantNs} question={questionVocale} onClose={() => { setAssistantOuvert(false); setQuestionVocale(''); }} /></Suspense>}
+      {questionAppareil && <Suspense fallback={null}><QuestionAppareil candidats={questionAppareil} onChoisir={reprendreAppareil} onNouveau={() => setQuestionAppareil(null)} /></Suspense>}
       {entSheet && editMode && peutEditer && <Suspense fallback={null}><ViewEntSheet view={view} hass={hass} onClose={() => setEntSheet(false)} /></Suspense>}
     </div>
     </HeaderCtx.Provider>
     </LoggiaContext.Provider>
   );
 }
+
+// Ce que les vues chargées à la demande empruntent (outilsvues.js, ADR 0274).
+Object.assign(OUTILS_VUES, {
+  BandeauEdition, CameraTile, CardEditSheet, CarteAjout, CarteAttention, ChoixCamDispo,
+  ComposeurCartes, CvAlarm, CvPresence, CvSirene, EditableCard, GlypheCarte, Num, RM_ICO,
+  RoomGenericCard, adresseDessin, armCompte, dec, enDevices, hx, masqueDe, ouvrantsDe, peopleList,
+  sousCamera, sunInfo, useCoarse, useDomainCards, useLayoutEditor, useSeconde, useWide,
+  cameras: () => CAMERAS(),
+});

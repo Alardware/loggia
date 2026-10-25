@@ -6,41 +6,49 @@
  * ramenerait le monolithe entier dans ce morceau et annulerait le decoupage.
  */
 import { useState, useEffect, useRef, useMemo, useId } from 'react';
+import { AppareilsReglages } from './appareils.jsx';
+import { appareilsConnus } from '../state.js';
 import {
   Fi, LOOK_DEF, HIDDEN_VIEWS, readViewsCfg, writeViewsCfg, cl_hexRgb, userBg, userImg, ListeChoix, ChampSuggere, CroixFeuille, NomFeuille
 } from '../ui.jsx';
 import {
-  cfgVal, cfgSet, getHass, loggiaEnt, LOGGIA_CFG, LOGGIA_RESOLVED, LOGGIA_INDEX, enHaids, medCompanion,
-  medPlayers, normRooms, secAlarm, switchLightsCfg,
+  cfgVal, cfgSet, getHass, loggiaEnt, LOGGIA_CFG, LOGGIA_RESOLVED, LOGGIA_INDEX, enHaids, plateformeDe, medCompanion,
+  medPlayers, normRooms, secAlarm, switchLightsCfg, ctxLumieres,
   exportConfigComplete, lireConfigImport, importConfigComplete, resetLoggiaComplet, cheminPanneau, lirePageAccueil,
   definirPageAccueil, DROITS, DROITS_ADMIN_HA, compteOrdinaire
 } from '../state.js';
 import { conversationsDe, entiteChoisie, choixAssistant } from '../assistant.js';
+import { fuiteCalculee } from '../attention.js';
 import {
   CV_ICONS, cvInp, cvName, cvEstTpl, cvKey, TplForm, USER_COLORS, BottomSheet, EntPicker, FOND_PHOTO_CLE,
   lireFondPhoto, compresserImage
 } from '../ui.jsx';
 import { useLoggia } from '../runtime.js';
+import { lumieresDe } from '../lumieres.js';
 import { commanderService } from '../actions.js';
 import { viewReason } from '../views.js';
 import { detecterCapteursPieces } from '../resolve.js';
 import { autoFamille, FAMILLES_AUTO } from '../autos.js';
 import { sansAccents } from '../outils.js';
-import { croqAncienneListe } from '../lectures.js';
-import { soeursDistributeur, commandeDistribuer, lireDistributeur, mesurePortion, niveauDuBac, scriptsCandidats } from '../distributeur.js';
+import { croqAncienneListe, plantsCfg } from '../lectures.js';
+import { soeursDistributeur, commandeDistribuer, lireDistributeur, niveauDuBac } from '../distributeur.js';
+import { mesurePortion, scriptsCandidats } from '../distributeurfiche.js';
 import { BoutonConfirme } from '../fichecommune.jsx';
 import { reposerFocus } from '../focus.js';
 import { useDemandes, enVol } from '../optimiste.js';
 import { InterrupteursSection, gestesRegles, appareilsVisibles } from './interrupteurs.jsx';
-import { VoletsReglages, VoletsAffichage } from './volets.jsx';
+import { VoletsReglages } from './volets.jsx';
 import { FenetresReglages } from './fenetres.jsx';
 import { PresenceReglages } from './presence.jsx';
 import { NuitReglages } from './nuit.jsx';
 import { VeillesReglages } from './veilles.jsx';
 import { JournalReglages } from './journal.jsx';
 import { weatherEntity } from '../wxutil.jsx';
+import { lireQualiteCiel, ecrireQualiteCiel, niveauCielIci } from '../wxpresets.js';
 import { tr, trN, locale, choixLangue, languesDisponibles, nomProfil, comparerTextes } from '../i18n.js';
 import { raisonEchec, bilanEcritures, texteRefus } from '../refus.js';
+import { commanderChauffage } from '../chauffageetat.js';
+import { poserEtatEnfant } from '../enfantetat.js';
 import { uniteTemp, wattsDe } from '../unites.js';
 import { Panneau, Ligne, Pastille, CAPITALES, MONO, DESC_PANNEAU, FILET, btnPrimaire, btnSecondaire, btnDiscret, btnDanger } from './parcommun.jsx';
 
@@ -206,6 +214,9 @@ const PRESET_META = () => [
   { id: 'plum', name: 'Plum Wine', desc: tr('Prune, rose poudré'), cols: ['#eda4b6', '#341624', '#f2c6cf'] },
   { id: 'atrium', name: 'Atrium', desc: tr('A plat, sans ombre'), cols: ['#5b8cff', '#050609', '#2dd4bf'] },
   { id: 'projekt', name: 'The Projekt', desc: tr('Nuit bleue, lumière froide'), cols: ['#3ca2d9', '#020d12', '#bee8ff'] },
+  { id: 'saphir', name: 'Saphir', desc: tr('Bleu roi sur nuit profonde'), cols: ['#24428f', '#02060a', '#63a7d4'] },
+  { id: 'acier', name: 'Acier', desc: tr('Gris bleutés, sobre'), cols: ['#4e6a83', '#10161c', '#b7c6d3'] },
+  { id: 'givre', name: 'Givre', desc: tr("Bleus d'hiver, lumineux"), cols: ['#4d79a8', '#223a5e', '#d0e1f2'] },
 ];
 // Luminance 0..1 d'une couleur (hex/rgb) → choix sombre/clair
 
@@ -229,6 +240,27 @@ const ALERTES_DEF = () => ({ actif: false, service: '', categories: { fumee: tru
  * pas DE QUOI il s'agit, et Meteoalarm s'en sert pour une alerte météo — une
  * alerte vent a ouvert une chambre et allumé la maison. */
 const ALERTES_CLASSES = { fumee: ['smoke'], gaz: ['gas'], co: ['carbon_monoxide'], fuite: ['moisture'] };
+/* Les catégories qui font RÉAGIR la maison (alertes.py : LUMIERES, VOLETS, VANNE) : les décocher coupe aussi la réaction (audit du
+ * 19/10, M22). L'ouverture sous alarme armée ne fait que prévenir. */
+const REAGISSENT = ['fumee', 'gaz', 'co', 'fuite', 'alarme'];
+
+/** Les détecteurs d'une famille, reconnus à leur classe — comme le composant (audit du 19/10, M1 : une seule règle « plante ou
+ *  fuite »). Un `moisture` n'est pas une fuite quand un modèle ou un groupe le calcule (`fuiteCalculee`, ADR 0022), ni quand il est
+ *  le besoin d'eau d'une plante : son identifiant commence par la base d'une plante de `loggia_plants`, suivie de rien ou d'un « _ »
+ *  — la règle d'`estPlante` (attention.js) et du serveur (`alertes._est_plante`). `ctx` : `plateforme(id)` (l'index), `plantes`
+ *  (les bases). L'écran ne compte pas un détecteur qui n'alerte pas. */
+export function detecteursAlertes(S, classes, ctx = {}) {
+  const etats = S && typeof S === 'object' ? S : {};
+  const plateforme = typeof ctx.plateforme === 'function' ? ctx.plateforme : () => null;
+  const bases = (Array.isArray(ctx.plantes) ? ctx.plantes : []).filter(b => typeof b === 'string' && b);
+  const estPlante = (id) => bases.some(b => id.indexOf(b) === 0 && (id.length === b.length || id.charAt(b.length) === '_'));
+  return Object.keys(etats).filter(id => {
+    if (id.indexOf('binary_sensor.') !== 0) return false;
+    const dc = ((etats[id] || {}).attributes || {}).device_class;
+    if (classes.indexOf(dc) < 0) return false;
+    return !(dc === 'moisture' && (fuiteCalculee(plateforme(id)) || estPlante(id)));
+  });
+}
 
 /** Le nom d'un telephone. L'app compagnon nomme son service d'apres
  *  l'appareil (`mobile_app_<appareil>`), et son traceur porte le meme nom. */
@@ -307,11 +339,16 @@ function AlertesTele({ hass }) {
     if (h) h.callWS({ type: 'loggia/config/set', config: { loggia_alertes: n } })
       .catch((e) => { setMsg(raisonEchec(e, 'loggia_alertes')); setCfg(c => (c === n ? cfg : c)); });
   };
+  /* Le téléphone choisi ici ne sert pas qu'aux alertes de sûreté : la fin d'un cycle d'électroménager, les veilles (batterie, heures creuses…)
+   * l'utilisent AUSSI, sûreté coupée (`prevenir`, regles.py, ne lit que `service`). L'essai marche donc dès qu'un téléphone est choisi — « pour la prise
+   * lave vaisselle, j'ai testé, je ne reçois pas de notification quand c'est terminer malgrer le reglage activé » (retour du 15/10) : il restait grisé
+   * sûreté coupée, et rien ne permettait de vérifier que le téléphone recevait. Sûreté coupée, le titre n'en parle pas : « Loggia », celui des autres
+   * notifications du serveur. */
   const test = () => {
-    if (!cfg.service) { setMsg(tr('Choisis d’abord un téléphone.')); return; }
+    if (!cfg.service) { setMsg(tr('Choisissez d’abord un téléphone.')); return; }
     if (local) { setMsg(tr('Démonstration : rien ne part vers un vrai téléphone.')); return; }
-    Promise.resolve().then(() => hass.callService('notify', cfg.service, { title: tr('Loggia — sûreté'), message: tr('Notification de test — tout est en place.') }))
-      .then(() => setMsg(tr('Test envoyé — regarde ton téléphone.')))
+    Promise.resolve().then(() => hass.callService('notify', cfg.service, { title: cfg.actif ? tr('Loggia — sûreté') : tr('Loggia'), message: tr('Notification de test — tout est en place.') }))
+      .then(() => setMsg(tr('Test envoyé — regardez votre téléphone.')))
       .catch(() => setMsg(tr('Envoi impossible — Home Assistant a refusé ce service.')));
   };
   if (!cfg) {
@@ -322,8 +359,10 @@ function AlertesTele({ hass }) {
     );
   }
   const S = (hass && hass.states) || {};
-  // Les detecteurs de chaque famille, reconnus a leur classe — comme le composant.
-  const capteurs = (classes) => Object.keys(S).filter(id => id.indexOf('binary_sensor.') === 0 && classes.indexOf((S[id].attributes || {}).device_class) >= 0);
+  // Les detecteurs de chaque famille, reconnus a leur classe — comme le composant ; ni un `moisture` qu'un modèle ou un groupe calcule
+  // (ADR 0022, 16/10), ni le besoin d'eau d'une plante (audit du 19/10, M1) : l'écran ne compte pas un détecteur qui n'alerte pas.
+  const plantes = plantsCfg().map(p => p.base).filter(Boolean);
+  const capteurs = (classes) => detecteursAlertes(S, classes, { plateforme: plateformeDe, plantes });
   const decompte = (ids, humidite = false) => {
     if (!ids.length) return tr('Aucun détecteur pour l’instant');
     const n = ids.length;
@@ -382,16 +421,18 @@ function AlertesTele({ hass }) {
           </Ligne>
         )}
         <Ligne desc={msg || tr('Vérifier que le téléphone reçoit bien.')}>
-          <button onClick={test} disabled={!cfg.actif || !cfg.service} style={{ ...btnSecondaire, opacity: cfg.actif && cfg.service ? 1 : .45, cursor: cfg.actif && cfg.service ? 'pointer' : 'not-allowed' }}><Fi i="test-tube" size={13} />{tr('Envoyer un test')}</button>
+          <button onClick={test} disabled={!cfg.service} style={{ ...btnSecondaire, opacity: cfg.service ? 1 : .45, cursor: cfg.service ? 'pointer' : 'not-allowed' }}><Fi i="test-tube" size={13} />{tr('Envoyer un test')}</button>
         </Ligne>
       </Panneau>
 
       {!cfg.actif && (
         <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 18px', borderRadius: 14, background: 'rgba(var(--o-warn-rgb),.10)', border: '1px solid rgba(var(--o-warn-rgb),.45)', color: 'var(--o-warn)', fontSize: 12.5, fontWeight: 700, lineHeight: 1.45 }}>
           <Fi i="triangle-warning" size={15} color="var(--o-warn)" />
-          {/* Couper les alertes ne coupe QUE le telephone : la maison, elle,
-            * reagit toujours aux dangers (alertes.py, _reagir). */}
-          <span>{tr('Les alertes téléphone sont coupées. Les réglages ci-dessous restent enregistrés, mais aucune notification ne partira.')}{cfg.actions.actif ? ' ' + tr('La maison réagit quand même aux dangers.') : ''}</span>
+          {/* Couper les alertes de surete ne coupe NI la maison, qui reagit
+            * toujours aux dangers (alertes.py, _reagir), NI le telephone : il
+            * recoit encore les autres alertes de Loggia, la fin d'un cycle par
+            * exemple (regles.prevenir ne lit que le telephone, jamais `actif`). */}
+          <span>{tr('Les alertes de sûreté sont coupées : les réglages ci-dessous restent enregistrés, mais ne préviennent de rien. Le téléphone choisi reçoit quand même les autres alertes de Loggia, comme la fin d’un cycle.')}{cfg.actions.actif ? ' ' + tr('La maison réagit quand même aux dangers.') : ''}</span>
         </div>
       )}
 
@@ -403,6 +444,11 @@ function AlertesTele({ hass }) {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13.5, fontWeight: 700 }}>{t}</div>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 }}>{d}</div>
+              {/* Décocher coupe AUSSI la réaction de la maison (audit du 19/10, M22) : la vanne se coupait sur une fuite
+                * décochée. Seulement sous ce qui fait réagir la maison. */}
+              {REAGISSENT.indexOf(k) >= 0 && (
+                <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{tr('Décochée : ni alerte, ni réaction de la maison.')}</div>
+              )}
             </div>
             <Tgl on={!!cfg.categories[k]} cb={() => save({ categories: { ...cfg.categories, [k]: !cfg.categories[k] } })} label={t} />
           </div>
@@ -457,7 +503,8 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
   const t0 = rooms[0] && rooms[0].haid && rooms[0].haid.temp ? S[rooms[0].haid.temp] : null;
   const uTPrev = uniteTemp(t0 ? t0.attributes : null, hass);
   const temp = t0 && !isNaN(parseFloat(t0.state)) ? parseFloat(t0.state).toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' °' + uTPrev : '—';
-  const lightsOn = Object.keys(S).filter(id => id.indexOf('light.') === 0 && S[id].state === 'on').length;
+  // Le compte d'Objets › Lumières (L11), celui de l'Accueil : la LED d'une borne Wi-Fi n'est pas une lumière de la maison.
+  const lightsOn = lumieresDe(S, ctxLumieres()).filter(id => S[id] && S[id].state === 'on').length;
   const en = { ...enHaids(), ...(cfgVal('loggia_energyHaids', null) || {}) };
   // En watts, quelle que soit l'unité du compteur (audit du 03/10) : 2,75 kW
   // donnait « 3 W » dans l'aperçu. `null` sans valeur : « — », pas « 0 W ».
@@ -569,7 +616,7 @@ function ResetLoggiaBtn() {
       // Sans sauvegarde, pas de remise a zero : l'operation ne se rattrape
       // pas, et un fichier vide aurait l'air d'une sauvegarde (audit 18/09).
       setEtape(null); setArm(false);
-      window.alert(tr('Sauvegarde impossible : la remise à zéro est annulée. Réessaie quand Home Assistant répond.'));
+      window.alert(tr('Sauvegarde impossible : la remise à zéro est annulée. Réessayez quand Home Assistant répond.'));
       return;
     }
     setEtape('raz');
@@ -650,7 +697,7 @@ function ImportConfigBtn() {
       if (!telechargerConfig(j, 'loggia-avant-import')) throw new Error(PAS_DE_FICHIER);
     } catch {
       setEtape(null); setLu(null);
-      window.alert(tr('Sauvegarde impossible : l’import est annulé. Réessaie quand Home Assistant répond.'));
+      window.alert(tr('Sauvegarde impossible : l’import est annulé. Réessayez quand Home Assistant répond.'));
       return;
     }
     setEtape('import');
@@ -660,7 +707,7 @@ function ImportConfigBtn() {
       // connexion perdue n'en porte pas — l'envoi a pu passer ou non.
       window.alert(err && typeof err.code === 'string'
         ? tr('Import refusé par Home Assistant : {x}. La configuration de la maison n’a pas été touchée.', { x: motifEchec(err) })
-        : tr('Import interrompu : {x}. Recharge la page pour voir la configuration en place.', { x: motifEchec(err) }));
+        : tr('Import interrompu : {x}. Rechargez la page pour voir la configuration en place.', { x: motifEchec(err) }));
       return;
     }
     window.location.reload();
@@ -1213,7 +1260,7 @@ export function useEntConfig(hass) {
   // « [object Object] ».
   const texte = (v) => (typeof v === 'string' ? v : (typeof v === 'number' && Number.isFinite(v)) ? String(v) : '');
   const readEnt = () => ({
-    rooms: avecCle(normRooms(cfgVal('loggia_rooms', null)).map(r => ({ room: r.room || '', icon: r.icon || null, teinte: r.teinte || null, temp: (r.haid && r.haid.temp) || '', humidity: (r.haid && r.haid.humidity) || '', co2: (r.haid && r.haid.co2) || '', co2seuil: (r.haid && r.haid.co2seuil) != null ? String(r.haid.co2seuil) : '',
+    rooms: avecCle(normRooms(cfgVal('loggia_rooms', null)).map(r => ({ room: r.room || '', icon: r.icon || null, teinte: r.teinte || null, dehors: typeof r.dehors === 'boolean' ? r.dehors : null, temp: (r.haid && r.haid.temp) || '', humidity: (r.haid && r.haid.humidity) || '', co2: (r.haid && r.haid.co2) || '', co2seuil: (r.haid && r.haid.co2seuil) != null ? String(r.haid.co2seuil) : '',
       lights: Array.isArray(r.haid && r.haid.lights) ? r.haid.lights.join(', ') : ((r.haid && r.haid.lights) || '') }))),
     energy: { ...enHaids(), ...(cfgVal('loggia_energyHaids', null) || {}) },
     alarm: secAlarm() || '',
@@ -1258,7 +1305,8 @@ export function useEntConfig(hass) {
       cfgSet({
         // L'icone et la teinte choisies dans la fiche de l'accueil (v3.23)
         // ne se reglent pas ici, mais ne doivent pas s'y perdre.
-        loggia_rooms: ent.rooms.filter(r => r.room).map(r => ({ room: r.room, ...(r.icon ? { icon: r.icon } : {}), ...(r.teinte ? { teinte: r.teinte } : {}), haid: { temp: r.temp || null, humidity: r.humidity || null, co2: r.co2 || null, co2seuil: (Number(r.co2seuil) > 0 ? Math.round(Number(r.co2seuil)) : null),
+        // « Pièce du dehors » (décision D5, audit du 19/10) se règle dans la fiche de la pièce, et ne doit pas se perdre ici.
+        loggia_rooms: ent.rooms.filter(r => r.room).map(r => ({ room: r.room, ...(r.icon ? { icon: r.icon } : {}), ...(r.teinte ? { teinte: r.teinte } : {}), ...(typeof r.dehors === 'boolean' ? { dehors: r.dehors } : {}), haid: { temp: r.temp || null, humidity: r.humidity || null, co2: r.co2 || null, co2seuil: (Number(r.co2seuil) > 0 ? Math.round(Number(r.co2seuil)) : null),
           // Vide = toutes les lumieres de la piece. Une liste explicite ne
           // vaut que pour le bouton de la carte, pas pour le comptage.
           lights: String(r.lights || '').split(',').map(s => s.trim()).filter(Boolean) } })),
@@ -1345,10 +1393,10 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
      * en français derrière le compte traduit — « 3 sensors found par le nom ».
      * `trN` : le polonais accorde « czujnik » sur trois formes. */
     alert(!r.trouves
-      ? tr('Aucun capteur supplémentaire trouvé. Range tes capteurs dans une zone Home Assistant : la détection s’appuie dessus en premier.')
+      ? tr('Aucun capteur supplémentaire trouvé. Rangez vos capteurs dans une zone Home Assistant : la détection s’appuie dessus en premier.')
       : r.parZone
-        ? trN(r.trouves, '{n} capteur détecté ({z} par la zone Home Assistant) — vérifie puis « Enregistrer et recharger ».', '{n} capteurs détectés ({z} par la zone Home Assistant) — vérifie puis « Enregistrer et recharger ».', { z: r.parZone })
-        : trN(r.trouves, '{n} capteur détecté par le nom — vérifie puis « Enregistrer et recharger ».', '{n} capteurs détectés par le nom — vérifie puis « Enregistrer et recharger ».'));
+        ? trN(r.trouves, '{n} capteur détecté ({z} par la zone Home Assistant) — vérifiez puis « Enregistrer et recharger ».', '{n} capteurs détectés ({z} par la zone Home Assistant) — vérifiez puis « Enregistrer et recharger ».', { z: r.parZone })
+        : trN(r.trouves, '{n} capteur détecté par le nom — vérifiez puis « Enregistrer et recharger ».', '{n} capteurs détectés par le nom — vérifiez puis « Enregistrer et recharger ».'));
   };
   return (
     <>
@@ -1361,7 +1409,7 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
       {has('energy') && (
         <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', padding: '16px 0 4px' }}>
           <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>{tr('Énergie')}</div>
-          <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr("Capteurs de puissance (W) du flux énergétique. Les panneaux solaires, le véhicule et la batterie n'apparaissent sur le schéma que si tu les renseignes.")}</div>
+          <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 10 }}>{tr("Capteurs de puissance (W) du flux énergétique. Les panneaux solaires, le véhicule et la batterie n'apparaissent sur le schéma que si vous les renseignez.")}</div>
           {/* Deux colonnes : a trois, le champ tronquait les noms d'entites,
               qui depassent souvent trente caracteres. */}
           <div className="grid-par-about" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 8 }}>
@@ -1498,6 +1546,75 @@ export function ViewEntSheet({ view, hass, onClose }) {
       </>)}
     </BottomSheet>
   );
+}
+
+/* ── « Observer sans agir » (ADR 0004) ────────────────────────────────────────
+ *
+ * Chaque module qui commande quelque chose garde son drapeau côté serveur ;
+ * l'interrupteur des Règles les lit ensemble et les pose ensemble. Le planning
+ * de chauffe en est le cinquième (chantier Chauffage, plan 2, choix 16) : son
+ * état rend le drapeau à la RACINE — cette réponse n'a pas de `config` —, sa
+ * configuration le prend comme les autres.
+ *
+ * Un module MUET — sa lecture a échoué : la commande inconnue d'un Home
+ * Assistant pas encore redémarré après la mise à jour (`unknown_command`), un
+ * moteur absent (`not_available`) — vaut `undefined`. Il ne compte ni dans
+ * l'état de l'interrupteur ni pour « tous », et la bascule ne lui écrit rien.
+ * Jusqu'ici, un module muet empêchait « tous » d'être vrai, et la bascule
+ * l'écrivait quand même : son échec s'affichait en rouge à chaque geste. Quand
+ * personne ne répond, l'interrupteur attend, comme avant la première lecture.
+ */
+
+/** Les drapeaux lus : `true` ou `false` par module, `undefined` pour un module
+ *  muet — ou `null` quand aucun n'a répondu. */
+export function lireObservation(h) {
+  const lire = (type, f) => h.callWS({ type }).then(r => f((r && r.config) || {})).catch(() => undefined);
+  return Promise.all([
+    lire('loggia/volets/etat', c => !!(c.simulation && c.simulation.actif)),
+    lire('loggia/fenetres/etat', c => !!c.simulation),
+    lire('loggia/presence/etat', c => !!(c.simulation && c.simulation.actif)),
+    lire('loggia/nuit/etat', c => !!(c.simulation && c.simulation.actif)),
+    // Un booléen, à la racine de l'état (`async_etat`, chauffage.py).
+    h.callWS({ type: 'loggia/chauffage/etat' }).then(r => !!(r && r.simulation === true)).catch(() => undefined),
+    // Le mode enfant (chantier Mode enfant, E11) : le sixième, son drapeau à la racine aussi (`async_etat`, enfant.py).
+    h.callWS({ type: 'loggia/enfant/etat' }).then(r => !!(r && r.simulation === true)).catch(() => undefined),
+    /* Les veilles (audit du 19/10, H3) : la VMC du CO₂ et la prise des heures creuses partaient même en observation. Leur drapeau
+     * vit dans leur configuration, comme celui des volets. La sûreté (alertes.py), elle, n'en a pas : elle agit toujours. */
+    lire('loggia/veilles/etat', c => !!(c.simulation && c.simulation.actif)),
+  ]).then(([volets, fenetres, presence, nuit, chauffage, enfant, veilles]) => {
+    const lus = { volets, fenetres, presence, nuit, chauffage, enfant, veilles };
+    return Object.values(lus).some(v => typeof v === 'boolean') ? lus : null;
+  });
+}
+
+/** Ce que l'interrupteur montre : les modules qui ont répondu (`lus`), ceux
+ *  qui observent (`actifs`), et s'ils observent tous. */
+export function etatObservation(observe) {
+  const lus = observe ? Object.keys(observe).filter(k => typeof observe[k] === 'boolean') : [];
+  const actifs = lus.filter(k => observe[k]);
+  return { lus, actifs, tous: actifs.length > 0 && actifs.length === lus.length };
+}
+
+/** Les écritures d'une bascule vers `cible`, pour `bilanEcritures` : la clé
+ *  que le module garde au magasin et sa promesse, pour chaque module LU — un
+ *  module muet ne reçoit rien. Le planning de chauffe passe par
+ *  `commanderChauffage` : l'état qu'il rend remplace aussitôt celui des cartes
+ *  et de la fiche, qui ne proposent plus de reprise en main à un moteur qui
+ *  observe (tâche 7), sans attendre leur sondage. */
+export function ecrituresObservation(h, lus, cible) {
+  const ecrire = {
+    volets: ['loggia_volets', () => h.callWS({ type: 'loggia/volets/config', patch: { simulation: { actif: cible } } })],
+    fenetres: ['loggia_fenetres', () => h.callWS({ type: 'loggia/fenetres/config', patch: { simulation: cible } })],
+    presence: ['loggia_presence', () => h.callWS({ type: 'loggia/presence/config', patch: { simulation: { actif: cible } } })],
+    nuit: ['loggia_nuit', () => h.callWS({ type: 'loggia/nuit/config', patch: { simulation: { actif: cible } } })],
+    chauffage: ['loggia_chauffage', () => commanderChauffage(h, { type: 'loggia/chauffage/config', patch: { simulation: { actif: cible } } })],
+    /* Le mode enfant (chantier Mode enfant, E11) : « Observer sans agir » vaut pour lui aussi — le journal note ce qui serait parti,
+     * rien ne part. L'état rendu remplace celui des cartes et de la fiche (`poserEtatEnfant`), sans attendre leur sondage. */
+    enfant: ['loggia_enfant', () => h.callWS({ type: 'loggia/enfant/config', patch: { simulation: { actif: cible } } }).then((r) => { if (r && r.etat) poserEtatEnfant(r.etat); return r; })],
+    // Les veilles (audit du 19/10, H3) : le patch des volets, sous leur clé.
+    veilles: ['loggia_veilles', () => h.callWS({ type: 'loggia/veilles/config', patch: { simulation: { actif: cible } } })],
+  };
+  return Object.keys(ecrire).filter(k => lus.includes(k)).map(k => [ecrire[k][0], ecrire[k][1]()]);
 }
 
 export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode, onPickTheme, onFollowHa, navbar = true, onToggleNavbar, wxFx = true, onToggleWxFx, ambient = 0, onAmbient, ambPlage = 'toujours', onAmbPlage, retourAcc = 0, onRetourAcc, navMargin = 0, navAuto = true, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin = 0, topAuto = true, onTopOffset, onTopOffsetReset, hass, users = [], userIdx = 0, isAdmin: profilAdmin = false, onAddUser, onUpdateUser, onDeleteUser, customViews = [], onSaveCustomViews, onNav = null, droits = [] }) {
@@ -1680,6 +1797,18 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const [cvEditing, setCvEditing] = useState(null); // null | 'new' | objet vue custom
   // Veille : diaporama photos + réveil caméra — par appareil, lus par AmbientOverlay au montage.
   // Aperçu du nouvel accueil : par appareil, réversible — l'ancien reste le défaut.
+  /* « Ciel animé » (handoff du 17/10) : la qualité du ciel de l'Accueil sur
+   * CET appareil. « Auto » dit ce que l'appareil a retenu, mesuré par le ciel
+   * lui-même (« ici : léger »). */
+  const [qualiteCiel, setQualiteCiel] = useState(lireQualiteCiel);
+  const choisirQualiteCiel = (q) => { ecrireQualiteCiel(q); setQualiteCiel(q); };
+  const ciIci = niveauCielIci();
+  const descCiel = qualiteCiel === 'leger' ? tr('30 images par seconde, nuages moins détaillés, moitié moins de pluie')
+    : qualiteCiel === 'fixe' ? tr('Une image recalculée toutes les 2 minutes, sans animation')
+      : ciIci === 'plein' ? tr('Suit la fluidité de l’appareil · ici : plein')
+        : ciIci === 'leger' ? tr('Suit la fluidité de l’appareil · ici : léger')
+          : ciIci === 'fixe' ? tr('Suit la fluidité de l’appareil · ici : fixe')
+            : tr('Suit la fluidité de l’appareil');
   const [ambPhotos, setAmbPhotos] = useState(() => { try { return localStorage.getItem('loggia-ambphotos') === '1'; } catch { return false; } });
   const toggleAmbPhotos = () => setAmbPhotos(v => { const n = !v; try { localStorage.setItem('loggia-ambphotos', n ? '1' : '0'); } catch {} return n; });
   const [ambMotion, setAmbMotion] = useState(() => { try { return localStorage.getItem('loggia-ambmotion') === '1'; } catch { return false; } });
@@ -1767,10 +1896,12 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   // l'une n'empeche pas de compter l'autre.
   const [nbVolRegles, setNbVolRegles] = useState(0);
   const [ongletRegle, setOngletRegle] = useState('volets');
-  /* Observer sans agir : UN interrupteur pour les quatre modules qui
-   * commandent quelque chose — volets, chauffage, depart, nuit (maquettes du
-   * 18/09). Chaque module garde son propre drapeau cote serveur ; ici on les
-   * lit ensemble et on les pose ensemble. `null` : pas encore lus. */
+  /* Observer sans agir : UN interrupteur pour les modules qui commandent
+   * quelque chose — volets, chauffage, depart, nuit (maquettes du 18/09), et
+   * le planning de chauffe (plan 2 du chantier Chauffage). Chaque module garde
+   * son propre drapeau cote serveur ; ici on les lit ensemble et on les pose
+   * ensemble (`lireObservation`, `ecrituresObservation`). `null` : pas encore
+   * lus, ou personne n'a repondu. */
   const [observe, setObserve] = useState(null);
   /* Ce que la dernière bascule n'a pas pu poser, nommé — '' si tout a pris
    * (audit du 03/10). Effacé à la bascule suivante. */
@@ -1778,13 +1909,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const lireObserve = () => {
     const h = hass;
     if (!h || typeof h.callWS !== 'function') return;
-    const lire = (type, f) => h.callWS({ type }).then(r => f((r && r.config) || {})).catch(() => undefined);
-    Promise.all([
-      lire('loggia/volets/etat', c => !!(c.simulation && c.simulation.actif)),
-      lire('loggia/fenetres/etat', c => !!c.simulation),
-      lire('loggia/presence/etat', c => !!(c.simulation && c.simulation.actif)),
-      lire('loggia/nuit/etat', c => !!(c.simulation && c.simulation.actif)),
-    ]).then(([volets, fenetres, presence, nuit]) => setObserve({ volets, fenetres, presence, nuit }));
+    lireObservation(h).then(setObserve);
   };
   useEffect(() => {
     if (tab !== 'regles' || !peutRegles) return undefined;
@@ -1796,22 +1921,20 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const basculerObserve = async () => {
     const h = hass;
     if (!h || typeof h.callWS !== 'function' || !observe) return;
-    const cible = !Object.values(observe).some(v => v === true);
-    setObserve({ volets: cible, fenetres: cible, presence: cible, nuit: cible });
+    // Seuls les modules qui ont répondu basculent : un module muet ne compte
+    // pas, et ne reçoit rien (plan 2 du chantier Chauffage, choix 16).
+    const { lus, actifs } = etatObservation(observe);
+    const cible = !actifs.length;
+    setObserve({ ...observe, ...Object.fromEntries(lus.map(k => [k, cible])) });
     setObsRefus('');
-    /* Les quatre refus ne s'avalent plus (audit du 03/10). L'ancien filet
-     * jetait chaque rejet : sous un compte Home Assistant ordinaire, les
-     * quatre commandes sont réservées aux administrateurs (`require_admin`) —
-     * même pour un profil qui a reçu « Règles » —, la bascule revenait en
-     * arrière à la relecture et rien ne disait pourquoi. `require_admin` ne
-     * nomme rien : chaque écriture porte ici la clé qu'elle touche, et le
-     * bilan nomme celles qui n'ont pas pris. */
-    setObsRefus(await bilanEcritures([
-      ['loggia_volets', h.callWS({ type: 'loggia/volets/config', patch: { simulation: { actif: cible } } })],
-      ['loggia_fenetres', h.callWS({ type: 'loggia/fenetres/config', patch: { simulation: cible } })],
-      ['loggia_presence', h.callWS({ type: 'loggia/presence/config', patch: { simulation: { actif: cible } } })],
-      ['loggia_nuit', h.callWS({ type: 'loggia/nuit/config', patch: { simulation: { actif: cible } } })],
-    ]));
+    /* Les refus ne s'avalent plus (audit du 03/10). L'ancien filet jetait
+     * chaque rejet : sous un compte Home Assistant ordinaire, les commandes
+     * des modules sont réservées aux administrateurs (`require_admin`) — même
+     * pour un profil qui a reçu « Règles » —, la bascule revenait en arrière à
+     * la relecture et rien ne disait pourquoi. `require_admin` ne nomme rien :
+     * chaque écriture porte la clé qu'elle touche (`ecrituresObservation`), et
+     * le bilan nomme celles qui n'ont pas pris. */
+    setObsRefus(await bilanEcritures(ecrituresObservation(h, lus, cible)));
     lireObserve();
   };
   useEffect(() => {
@@ -1875,6 +1998,10 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       // Compté, plus écrit en dur : « 11 + les vues perso » était juste le jour
       // où on l'a tapé, et se serait démenti à la vue suivante (plan, M4).
       sub: tr('Menu latéral et vues perso'), big: String(1 + VUES_PRINCIPALES.length + HIDDEN_VIEWS().length + customViews.length), unit: tr('vues disponibles'), admin: true },
+    /* Les écrans de la maison, et la mise en page de celui-ci (ADR 0222) :
+     * ouverte à tous — chacun règle SON écran. */
+    { id: 'appareils', name: tr('Appareils'), ico: 'screen', col: 'var(--o-accent-soft)', bg: 'rgba(var(--o-accent-rgb),.14)',
+      sub: tr('Cet écran et sa mise en page'), big: String(Math.max(1, Object.keys(appareilsConnus()).length)), unit: tr('écrans connus'), admin: false, small: true },
     { id: 'about', name: tr('À propos'), ico: 'info', col: 'var(--o-text2)', bg: 'var(--o-s1)',
       sub: tr('React + Vite · servi par l’intégration'),
       big: (LOGGIA_INDEX && LOGGIA_INDEX.componentVersion) ? 'v' + LOGGIA_INDEX.componentVersion : '—',
@@ -2026,7 +2153,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>{(() => {
         const notFollow = haTheme !== 'FOLLOW';
         const ACCENTS = [['', 'Couleur du thème'], ['#2dd4bf', 'Turquoise'], ['#a78bfa', 'Violet'], ['#f5a524', 'Ambre'], ['#f87171', 'Rouge']];
-        const NATIFS = ['', 'projekt', 'atrium', 'ios', 'google', 'neumorphix'];
+        const NATIFS = ['', 'projekt', 'saphir', 'acier', 'givre', 'atrium', 'ios', 'google', 'neumorphix'];
         const COMMU = ['frosted', 'onedark', 'dracula', 'github', 'tokyo', 'nightowl', 'plum', 'material', 'lavande'];
         const ids = themeTab === 'natifs' ? NATIFS : COMMU;
         const themeList = ids.map(id => PRESET_META().find(x => x.id === id)).filter(Boolean);
@@ -2053,7 +2180,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 );
               })}
             </div>
-            {!notFollow && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '0 22px 18px' }}>{tr('Thème suivi depuis Home Assistant — coupe « Suivre » pour choisir manuellement.')}</div>}
+            {!notFollow && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '0 22px 18px' }}>{tr('Thème suivi depuis Home Assistant — coupez « Suivre » pour choisir manuellement.')}</div>}
           </AppCard>
 
           <AppCard title={tr('Couleurs')}>
@@ -2133,6 +2260,9 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <OptRow title={tr('Barre de navigation')} desc={tr('Accès rapide en bas de l’écran, sur mobile.')}>
               <Tgl on={!!navbar} cb={onToggleNavbar} label={tr('Barre de navigation mobile')} />
             </OptRow>
+            <OptRow title={tr('Plan 3D de la maison')} desc={tr('Le bouton « Plan » de la section Pièces de l’Accueil. Coupé, les pièces restent en cartes.')}>
+              <Tgl on={look.plan !== false} cb={() => onLook({ plan: look.plan === false })} label={tr('Plan 3D de la maison')} />
+            </OptRow>
             <OptRow title={tr("Page d'accueil")}
               desc={accueilDefaut === true
                 ? tr('Home Assistant ouvre Loggia au démarrage, sur ce compte.')
@@ -2148,6 +2278,11 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           <AppCard title={tr('Effets')} note={tr('coût GPU modéré')}>
             <OptRow title={tr('Effets météo animés')} desc={tr("Ciel vivant derrière la bannière d'accueil.")}>
               <Tgl on={!!wxFx} cb={onToggleWxFx} label={tr('Effets météo animés')} />
+            </OptRow>
+            <OptRow retrait eteint={!wxFx} title={tr('Ciel animé')} desc={descCiel}>
+              <Seg label={tr('Ciel animé')} value={qualiteCiel}
+                opts={[['auto', tr('Auto')], ['leger', tr('Léger')], ['fixe', tr('Fixe')]]}
+                onPick={choisirQualiteCiel} />
             </OptRow>
             <OptRow title={tr('Écran de veille')} desc={tr('Pour une tablette murale : après ce délai sans toucher, heure et météo.')}>
               <Seg label={tr('Écran de veille')} value={String(ambient || 0)}
@@ -2302,7 +2437,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         const deplacerS = (vid, dir) => { const n = echanger(idsS, vid, dir); if (n) ecrireOrdre(['accueil', ...idsP, ...n]); };
         return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <Panneau titre={tr('Vues intégrées')} desc={tr('Masque celles que tu n’utilises pas, réordonne les autres. La barre mobile garde ses raccourcis.')}
+          <Panneau titre={tr('Vues intégrées')} desc={tr('Masquez celles que vous n’utilisez pas, réordonnez les autres. La barre mobile garde ses raccourcis.')}
             droite={<span style={CAPITALES}>{tr('Visibilité du menu latéral')}</span>}>
             <Row icon="home" c="var(--o-accent)" name={tr('Accueil')} sub={tr('vue principale')} on fixe />
             {principales.map(([vid, name, icon, sub, c], idx) => { const why = viewReason(availViews, vid); return (
@@ -2315,7 +2450,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             ); })}
           </Panneau>
           {customViews.length > 0 && (
-            <Panneau titre={tr('Mes vues')} desc={tr('Tes vues, avec tes entités — elles apparaissent dans le menu latéral.')}>
+            <Panneau titre={tr('Mes vues')} desc={tr('Vos vues, avec vos entités — elles apparaissent dans le menu latéral.')}>
               {customViews.map(cv => (
                 <div key={cv.id} className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 22px', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
                   <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-accent-rgb),.14)', color: 'var(--o-accent-soft)' }}><Fi i={cv.icon || 'sparkles'} size={15} /></span>
@@ -2403,18 +2538,26 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           </div>
           <span style={{ flex: 1 }} />
           {(() => {
-            const noms = { volets: tr('Volets'), fenetres: tr('Chauffage'), presence: tr('Départ et retour'), nuit: tr('La nuit') };
-            const actifs = observe ? Object.keys(observe).filter(k => observe[k] === true) : [];
-            const tous = observe && actifs.length === Object.keys(noms).length;
+            const noms = { volets: tr('Volets'), fenetres: tr('Chauffage'), presence: tr('Départ et retour'), nuit: tr('La nuit'),
+              // Le moteur du chauffage : « Chauffage » nomme déjà la règle des fenêtres (plan 2, choix 16).
+              chauffage: tr('Planning de chauffe'),
+              // Le mode enfant (chantier Mode enfant, E11) : le plafond qui ramène, la coupure, la pause au coucher.
+              enfant: tr('Mode enfant'),
+              // Les veilles (audit du 19/10, H3) : la ventilation du CO₂, les heures creuses, et leur téléphone.
+              veilles: tr('Veilles') };
+            // « Tous » : tous ceux qui ont répondu — un module muet ne compte pas.
+            const { actifs, tous } = etatObservation(observe);
             // Des regles qui n'agissent plus : un etat d'attention (ADR 0047).
             const texte = !observe ? tr('Lecture…')
               : !actifs.length ? tr('Les règles agissent normalement.')
-                : tous ? tr('Les règles notent ce qu’elles feraient, sans rien toucher.')
+                : tous ? tr('Les règles automatiques notent ce qu’elles feraient ; minuteurs et boutons agissent toujours.')
                   : tr('En observation : {liste}', { liste: actifs.map(k => noms[k]).join(', ') });
             return (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '2px 4px', minWidth: 0 }}>
                 <div style={{ textAlign: 'right', minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 800 }}>{tr('Observer sans agir')}</div>
+                  {/* « sauf la sûreté » (audit du 19/10, ADR 0250) : en observation, la maison réagit encore à une fumée, un gaz,
+                    * une fuite — les lumières, les volets, la vanne, le téléphone. Le dire ici, sinon on croit tout figé. */}
+                  <div style={{ fontSize: 13, fontWeight: 800 }}>{tr('Observer sans agir')} <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)' }}>· {tr('sauf la sûreté')}</span></div>
                   <div style={{ fontSize: 11.5, fontWeight: 600, color: actifs.length ? 'var(--o-warn)' : 'var(--o-text2)' }}>{texte}</div>
                 </div>
                 <Tgl on={actifs.length > 0} cb={basculerObserve} off={!observe} label={tr('Observer sans agir')} />
@@ -2433,7 +2576,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <span>{obsRefus}</span>
           </div>
         )}
-        {ongletRegle === 'volets' ? <><VoletsAffichage cardSt={cardSt} /><div style={{ height: 16 }} /><VoletsReglages hass={hass} cardSt={cardSt} /></>
+        {ongletRegle === 'volets' ? <VoletsReglages hass={hass} cardSt={cardSt} />
           : ongletRegle === 'fenetres' ? <FenetresReglages hass={hass} cardSt={cardSt} />
             : ongletRegle === 'presence' ? <PresenceReglages hass={hass} cardSt={cardSt} />
               : ongletRegle === 'nuit' ? <NuitReglages hass={hass} cardSt={cardSt} />
@@ -2499,6 +2642,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         );
       })()}
 
+      {tab === 'appareils' && <AppareilsReglages peutOublier={isAdmin} />}
       {tab === 'about' && (() => {
         const cacheKb = (() => { try { let n = 0; for (let k = 0; k < localStorage.length; k++) { const key = localStorage.key(k); n += (localStorage.getItem(key) || '').length + key.length; } return Math.round(n / 1024 * 10) / 10; } catch { return null; } })();
         const entCount = (hass && hass.states) ? Object.keys(hass.states).length : 0;

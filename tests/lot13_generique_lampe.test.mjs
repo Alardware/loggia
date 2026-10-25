@@ -94,7 +94,9 @@ function boutons(f) {
 }
 
 test('aucun bouton de ces deux cartes ne contient de commande (nested-interactive)', () => {
-  for (const nom of ['RoomGenericCard', 'RoomLightCard']) {
+  // ASSERTION MODIFIÉE (chantier Prises, tâche 7) : la carte d'une prise a quitté la générique ; elle tient la même règle.
+  // ASSERTION MODIFIÉE (passe téléphone, tâche 3) : la plaque-interrupteur d'une lumière est un bouton — elle ne contient que son glyphe.
+  for (const nom of ['RoomGenericCard', 'RoomLightCard', 'RoomPriseCard', 'PlaqueBascule']) {
     const f = fonction(nom);
     for (const d of boutons(f)) {
       const c = contenu(f, d);
@@ -127,11 +129,11 @@ test('la carte générique : son nom est le texte affiché, la mesure d’un cap
   assert.ok(f.includes('<div style={RM_NAME}>{nom}</div>') && f.includes('<div style={{ ...RM_SUB, color: couleur }}>{sub}</div>'), 'le nom et l’état affichés');
   assert.ok(f.includes('{mesure.v}{mesure.u ? <span'), 'la mesure affichée en grand');
   assert.ok(f.includes("const valeur = mesure ? mesure.v + (mesure.u ? ' ' + mesure.u : '') : null;"), 'la mesure entre dans le nom, telle qu’affichée');
-  // Relecture du lot 13 : le verdict entre dans le nom tel que la table
-  // l'écrit, « Bon » — en capitales, une synthèse vocale épelle un mot court
-  // (« B-O-N »). L'écran, lui, garde ses capitales.
-  assert.ok(f.includes("subLu = libMesure + ' · ' + jauge.verdict.t;") && !/subLu = [^;]*toLocaleUpperCase/.test(f), 'le nom lit le verdict en capitales');
-  assert.ok(f.includes("sub = libMesure + ' · ' + jauge.verdict.t.toLocaleUpperCase(locale());"), 'l’écran a perdu ses capitales');
+  /* ASSERTIONS MODIFIÉES (chantier Capteurs, tâche 4 ; C11) : le verdict d'une mesure de la table a quitté cette carte
+   * avec la ligne « Libellé · VERDICT ». Sa carte (`RoomMesureCard`) écrit la PHRASE de sa zone, sans capitales, et son
+   * nom la lit telle qu'affichée (relecture du lot 13 : une synthèse vocale épelait « B-O-N »). */
+  assert.ok(!f.includes('libMesure') && !f.includes('jauge.verdict'), 'la carte générique écrit encore un verdict');
+  assert.ok(fonction('RoomMesureCard').includes("label={nomCarte(v.nom, valeur && famille ? famille + ' ' + valeur : valeur, v.phrase)}"), 'le nom de la carte d’une mesure lit sa phrase, telle qu’affichée');
 });
 
 test('la carte générique : le décor laisse filer le clic, les commandes passent dessus', () => {
@@ -157,7 +159,9 @@ test('la carte générique : le décor laisse filer le clic, les commandes passe
 test('la lampe : un div au dessin du bouton, sa bascule et sa glissière hors de tout bouton', () => {
   const f = fonction('RoomLightCard');
   assert.ok(!BOUTON.some(b => f.includes(b)), 'la lampe est encore un button');
-  const d = f.indexOf("<div ref={flashRef} className={'o-light-card o-rmcard o-cvdense' + (mort ? ' o-panne' : '')}");
+  // ASSERTION MODIFIÉE (chantier Lumières, tâche 5) : la carte 1a de sa maquette, qui garde le motif de l'ADR 0074 — sa racine, sa surface, ses commandes nommées.
+  // ASSERTION MODIFIÉE (passe téléphone, tâche 3) : la carte est aussi le conteneur de la grille commune (`o-gabarit`).
+  const d = f.indexOf("<div ref={flashRef} className={'o-light-card o-rmcard o-gabarit' + (v.muette ? ' o-panne' : '')} data-lumiere=\"\"");
   assert.ok(d >= 0, 'la racine garde ses classes et le halo du geste');
   const racine = balise(f, d);
   for (const attr of ['role=', 'tabIndex=', 'aria-label=', 'onClick=', 'onKeyDown=']) {
@@ -169,12 +173,19 @@ test('la lampe : un div au dessin du bouton, sa bascule et sa glissière hors de
     assert.ok(racine.includes(s), 'la racine a perdu ' + s);
   }
   const apres = f.slice(d + racine.length).trimStart();
-  assert.ok(apres.startsWith('{ouvre && <Surface onClick={ouvre} label={nomCarte(nom, sub)} />}'), 'la surface, premier enfant, nommée « nom, état affiché »');
-  assert.ok(f.includes("<div style={{ ...RM_SUB, color: on ? 'var(--o-warn)' : 'var(--o-text3)' }}>{sub}</div>"), 'l’état du nom est celui de l’écran');
-  // Le geste d'avant, sans rien perdre : la fiche de la lampe, sinon l'appareil.
-  assert.ok(f.includes('const ouvre = (adjustable && onOpen) ? () => onOpen({ id, name: a.friendly_name || id, on, bri, color, rgb, ct, dimmable, lc: st && st.last_changed })'));
-  assert.ok(f.includes(': onFiche ? () => onFiche(id) : null;'));
-  assert.ok(f.includes('<RmBascule on={on} nom={nom} onToggle={toggle} />') && f.includes("label={tr('Luminosité') + ' ' + nom}"), 'les commandes nomment la lampe');
+  assert.ok(apres.startsWith("{onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(v.nom, chiffre ? v.bri + ' %' : null, v.phrase.texte)} />}"), 'la surface, premier enfant, nommée « nom, pourcentage, état affiché »');
+  /* ASSERTION MODIFIÉE (retours du 15/10) : la phrase pose aussi sa longueur (`'--o-n'`), dont la feuille tire sa taille — de 12 à 11 px — sur une carte étroite, où elle passe sous le nom
+   * et le pourcentage, sur une ligne, comme celle d'un radiateur. Ce qu'elle dit ne change pas : l'état de l'écran (`v.phrase.texte`), en rouge s'il est en panne. */
+  /* ASSERTION MODIFIÉE (passe téléphone, tâche 3) : la phrase porte la classe de la grille commune et, allumée, l'encre de la lampe pour la carte étroite (T8) ;
+   * ce qu'elle dit ne change pas. */
+  assert.ok(f.includes("<div className=\"o-gab-phrase\" data-encre={v.on && !v.phrase.panne ? '' : undefined}") && f.includes("color: v.phrase.panne ? 'var(--o-bad)' : 'var(--o-text2)', '--o-n': Math.max(1, v.phrase.texte.length), '--o-encre': v.on ? v.encre : undefined }}>{v.phrase.texte}</div>"), 'l’état du nom est celui de l’écran');
+  // Le geste d'avant, sans rien perdre : la fabrique ouvre la fiche de la lampe, sinon celle de l'appareil (`ouvrir`).
+  assert.ok(app.includes('<RoomLightCard id={id} hass={hass} onOpen={ouvrir} label={label} />'));
+  /* ASSERTION MODIFIÉE (passe téléphone, tâche 3) : la bascule de la carte large et la plaque-interrupteur de la carte étroite partagent un seul geste (`basculer`) ;
+   * toutes deux nomment la lampe. */
+  assert.ok(f.includes('const basculer = () => { flash(c.col); v.commander(!v.on); };'), 'un seul geste');
+  assert.ok(f.includes('<RmBascule className="o-seul-large" on={v.on} nom={v.nom} onToggle={basculer} inerte={v.muette} />') && f.includes('<PlaqueBascule on={v.on} nom={v.nom} fond={fond} encre={encre} inerte={v.muette} onToggle={basculer}>')
+    && f.includes("label={tr('Luminosité') + ' ' + v.nom}"), 'les commandes nomment la lampe');
 });
 
 test('ce qui lit .o-light-card la trouve toujours', () => {
@@ -228,6 +239,7 @@ test('le corps d’une carte de pièce n’a pas de marge : le volet s’aligne 
   assert.ok(app.includes('PAS DE MARGE SUR LE CORPS (09/10)'), 'la raison a disparu du code');
   /* Le pied du volet garde SON écart (12) : c'est l'espace entre la barre et
    * les boutons, pas la marge du corps. */
-  assert.ok(app.includes("{[['open_cover', 'angle-up', tr('Ouvrir')], ['stop_cover', 'square', tr('Stop')], ['close_cover', 'angle-down', tr('Fermer')]]"),
+  // ASSERTION MODIFIÉE (19/10) : les trois boutons suivent ce que le cover accepte (`gestesCover`) ; ils restent trois, dans cet ordre.
+  assert.ok(app.includes("{[['monter', 'angle-up', tr('Ouvrir'), 100], ['stop', 'square', tr('Stop'), null], ['descendre', 'angle-down', tr('Fermer'), 0]]"),
     'les trois boutons du volet ont changé');
 });

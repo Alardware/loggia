@@ -40,12 +40,13 @@ const EXPOSE = 'data:text/javascript,' + encodeURIComponent([
   'export async function load(url, ctx, next) {',
   "  if (!url.endsWith('/src/App.jsx?l16vl')) return next(url, ctx);",
   "  const r = await next(url.slice(0, -6), ctx);",
-  "  return { ...r, source: String(r.source) + ';export { RoomGenericCard as __RoomGenericCard };' };",
+  // ASSERTION MODIFIÉE (chantier Capteurs, tâche 4) : une mesure de la table a sa carte, `RoomMesureCard`.
+  "  return { ...r, source: String(r.source) + ';export { RoomGenericCard as __RoomGenericCard, RoomMesureCard as __RoomMesureCard };' };",
   '}',
 ].join('\n'));
 register('./jsx-hooks.mjs', import.meta.url);
 register(EXPOSE);
-const { __RoomGenericCard: RoomGenericCard } = await import(new URL('../src/App.jsx?l16vl', import.meta.url).href);
+const { __RoomGenericCard: RoomGenericCard, __RoomMesureCard: RoomMesureCard } = await import(new URL('../src/App.jsx?l16vl', import.meta.url).href);
 
 const NL = String.fromCharCode(10);
 const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
@@ -56,9 +57,11 @@ function fonction(nom) {
 }
 
 const capteur = (id, v, dc, unite, nom) => ({ entity_id: id, state: String(v), last_changed: '2026-10-05T08:00:00Z', attributes: { friendly_name: nom, device_class: dc, unit_of_measurement: unite } });
-const carte = (st) => renderToStaticMarkup(createElement(RoomGenericCard, {
+// ASSERTION MODIFIÉE (chantier Capteurs, tâche 4) : une mesure à verdict se rend dans SA carte ; une mesure sans table, dans la carte de base.
+const rendre = (C, st) => renderToStaticMarkup(createElement(C, {
   id: st.entity_id, hass: { states: { [st.entity_id]: st }, config: { unit_system: { temperature: '°C' } }, callService: () => {} }, onOpen: () => {},
 }));
+const carte = (st) => rendre(RoomMesureCard, st);
 /* La ligne d'état : le premier `div` après celui du nom. */
 const ligneDe = (html, nom) => {
   const i = html.indexOf('>' + nom + '</div>');
@@ -66,48 +69,47 @@ const ligneDe = (html, nom) => {
   const d = html.indexOf('<div', i);
   return html.slice(d, html.indexOf('</div>', d) + 6);
 };
-const RANGEE = /^<div style="[^"]*display:flex"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">([^<]+)<\/span><span style="flex-shrink:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:pre">([^<]+)<\/span><\/div>$/;
-
-/* Un palier coupé de chaque mesure (relevés ci-dessus), et le CO₂ qui l'avait déjà. */
+/* Un palier coupé de chaque mesure (relevés ci-dessus), et le CO₂ qui l'avait déjà.
+ * ASSERTIONS MODIFIÉES (chantier Capteurs, tâche 4 ; C8, C11) : la carte d'une mesure n'écrit plus « Libellé · VERDICT »,
+ * mais la PHRASE de sa zone — le mot en tête, « · aérez » quand la zone le demande. Le mot ne peut donc plus être celui
+ * qui cède : la fin de la phrase cède d'abord.
+ * ASSERTIONS MODIFIÉES (chantier Capteurs, correction bis 2, point 1) : ces noms disent tous leur famille (« Cuisine température »,
+ * « Salon CO2 ») — la carte la tait, et la surface ne la redit plus : « Cuisine température, 30,0 °C, Trop chaud ». */
 const CAS = [
-  [capteur('sensor.cuisine_temperature', 30, 'temperature', '°C', 'Cuisine température'), 'Température', 'TROP CHAUD', 'Température · Trop chaud'],
-  [capteur('sensor.cuisine_temperature', 26.5, 'temperature', '°C', 'Cuisine température'), 'Température', 'UN PEU CHAUD', 'Température · Un peu chaud'],
-  [capteur('sensor.cuisine_humidite', 75, 'humidity', '%', 'Cuisine humidité'), 'Humidité', 'TROP HUMIDE', 'Humidité · Trop humide'],
-  [capteur('sensor.salon_bruit', 85, 'sound_pressure', 'dB', 'Salon bruit'), 'Bruit', 'TRÈS BRUYANT', 'Bruit · Très bruyant'],
-  [capteur('sensor.salon_co2', 1700, 'carbon_dioxide', 'ppm', 'Salon CO2'), 'Qualité d’air', 'CONFINÉ', 'Qualité d’air · Confiné'],
+  [capteur('sensor.cuisine_temperature', 30, 'temperature', '°C', 'Cuisine température'), 'Trop chaud', '30,0 °C'],
+  [capteur('sensor.cuisine_temperature', 26.5, 'temperature', '°C', 'Cuisine température'), 'Un peu chaud', '26,5 °C'],
+  [capteur('sensor.cuisine_humidite', 75, 'humidity', '%', 'Cuisine humidité'), 'Trop humide · aérez', '75 %'],
+  [capteur('sensor.salon_bruit', 85, 'sound_pressure', 'dB', 'Salon bruit'), 'Très bruyant', '85 dB'],
+  // ASSERTION MODIFIÉE (correction bis, point 8) : le CO₂ écrit sa famille, et la surface la dit avec le chiffre, comme les autres — sauf quand son nom la dit (bis 2).
+  [capteur('sensor.salon_co2', 1700, 'carbon_dioxide', 'ppm', 'Salon CO2'), 'Confiné · aérez', '1 700 ppm'],
 ];
 
-test('toute mesure à verdict : le libellé se réduit, le verdict garde sa largeur', () => {
-  for (const [st, lib, mot] of CAS) {
+test('toute mesure à verdict : sa phrase commence par le mot de sa zone, qui ne cède jamais', () => {
+  for (const [st, phrase] of CAS) {
     const ligne = ligneDe(carte(st), st.attributes.friendly_name);
-    const m = RANGEE.exec(ligne);
-    assert.ok(m, st.attributes.device_class + ' : la ligne n’est pas la rangée libellé + verdict — ' + ligne);
-    // Le libellé d'abord, le verdict ensuite (séparateur compris) : l'ordre
-    // de lecture ne change pas, seul le libellé cède.
-    assert.equal(m[1], lib, st.attributes.device_class);
-    assert.equal(m[2], ' · ' + mot, st.attributes.device_class);
+    // ASSERTION MODIFIÉE (chantier Capteurs, tâche 4 bis) : la phrase porte aussi la classe de la grille commune.
+    // ASSERTION MODIFIÉE (correction bis, point 6) : sur la carte large, la phrase vit dans son cadre — la phrase entière d'abord.
+    assert.ok(ligne.startsWith('<div class="o-mesure-phrases o-seul-large"><div class="o-mesure-phrase"'), st.attributes.device_class + ' : la ligne n’est pas la phrase de la carte — ' + ligne);
+    assert.ok(ligne.endsWith('>' + phrase + '</div>'), st.attributes.device_class + ' : ' + ligne);
   }
 });
 
-test('le nom accessible ne change pas, ni la ligne des cartes sans verdict', () => {
-  for (const [st, , , lu] of CAS) {
-    assert.ok(carte(st).includes('aria-label="' + st.attributes.friendly_name + ', '), 'la surface a perdu son nom');
-    assert.ok(carte(st).includes(', ' + lu + '"'), st.attributes.device_class + ' : le nom lu a changé');
+test('le nom accessible dit ce que la carte affiche ; la ligne des cartes sans verdict ne change pas', () => {
+  for (const [st, phrase, valeur] of CAS) {
+    assert.ok(carte(st).includes('aria-label="' + st.attributes.friendly_name + ', ' + valeur + ', ' + phrase + '"'), st.attributes.device_class + ' : le nom lu a changé');
   }
-  // Une mesure sans table de confort (une puissance) : la ligne d'avant, un
-  // seul texte.
-  const ligne = ligneDe(carte(capteur('sensor.four', 1250, 'power', 'W', 'Four')), 'Four');
+  // Une mesure sans table de confort (une puissance) : la carte de base, la ligne d'avant, un seul texte.
+  const ligne = ligneDe(rendre(RoomGenericCard, capteur('sensor.four', 1250, 'power', 'W', 'Four')), 'Four');
   assert.ok(!ligne.includes('display:flex') && !ligne.includes('<span'), 'une carte sans verdict a changé de ligne — ' + ligne);
   assert.ok(ligne.endsWith('>Puissance</div>'), ligne);
 });
 
-test('une seule rangée dans la carte : la même que le CO₂, pas une copie', () => {
-  const f = fonction('RoomGenericCard');
-  assert.equal(f.split("display: 'flex' }}><span style={{ minWidth: 0,").length - 1, 1, 'la rangée est écrite plus d’une fois');
-  // Posée pour toute mesure que la table de confort connaît, pas pour le seul CO₂.
-  const i = f.indexOf('ligneVerdict = [libMesure, jauge.verdict.t.toLocaleUpperCase(locale())];');
-  assert.ok(i > 0, 'la carte ne garde pas libellé et verdict à part');
-  const avant = f.slice(f.lastIndexOf(NL, i), i);
-  assert.ok(!/if \(/.test(avant), 'la rangée dépend encore d’une condition : ' + avant.trim());
-  assert.ok(!f.includes('ligneAir'), 'l’ancien nom, propre au CO₂, est resté');
+test('plus de rangée libellé + verdict : la carte d’une mesure n’écrit que sa phrase', () => {
+  assert.ok(!APP.includes('ligneVerdict') && !APP.includes('ligneAir'), 'la rangée d’avant est restée');
+  const f = fonction('RoomMesureCard');
+  // ASSERTION MODIFIÉE (chantier Capteurs, tâche 4 bis) : une phrase, et sa forme courte pour la carte étroite — deux écritures voulues, pas une copie.
+  // ASSERTION MODIFIÉE (correction bis, point 6) : la carte large écrit la phrase entière et sa forme de repli (tue au lecteur d'écran) ; chacune une fois.
+  assert.equal(f.split('className="o-mesure-phrase" data-longue=').length - 1, 1, 'la phrase est écrite plus d’une fois');
+  assert.equal(f.split('<div aria-hidden="true" className="o-mesure-phrase" data-repli=""').length - 1, 1, 'sa forme de repli, une fois, tue au lecteur d’écran');
+  assert.equal(f.split('className="o-mesure-phrase-courte o-gab-phrase o-seul-etroit"').length - 1, 1, 'sa forme courte, une fois');
 });

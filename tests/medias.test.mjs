@@ -19,18 +19,19 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+// ASSERTION MODIFIÉE (chantier Médias, tâche 1 ; § 10) : le navigateur a quitté App.jsx pour navigateurmedias.jsx, le morceau de la fiche chargé à la demande.
+const src = readFileSync(join(RACINE, 'src', 'navigateurmedias.jsx'), 'utf8');
 
 function corps(entete) {
   const i = src.indexOf(entete);
   assert.notEqual(i, -1, `${entete} introuvable`);
+  // Le navigateur ferme son module : sans fonction après lui, son corps va jusqu'à la fin du fichier.
   const fin = src.indexOf('\nfunction ', i + entete.length);
-  assert.notEqual(fin, -1, `fin de ${entete} introuvable`);
-  return src.slice(i, fin);
+  return src.slice(i, fin < 0 ? undefined : fin);
 }
 
 test('l’arbre est demandé au lecteur, pas deviné', () => {
-  const c = corps('function NavigateurMedias(');
+  const c = corps('export default function NavigateurMedias(');
   assert.match(c, /type: 'media_player\/browse_media', entity_id: id/,
     'l’arbre n’est plus demandé au lecteur lui-même');
   // Le premier niveau n'envoie PAS de media_content_id : c'est ce qui demande
@@ -40,7 +41,7 @@ test('l’arbre est demandé au lecteur, pas deviné', () => {
 });
 
 test('les trois silences ne se confondent pas', () => {
-  const c = corps('function NavigateurMedias(');
+  const c = corps('export default function NavigateurMedias(');
   for (const [quoi, jeton] of [
     ['le chargement', "setEtat('charge')"],
     ['l’échec', "setEtat('erreur')"],
@@ -54,7 +55,7 @@ test('les trois silences ne se confondent pas', () => {
 });
 
 test('on n’ouvre que ce qui s’ouvre, on ne joue que ce qui se joue', () => {
-  const c = corps('function NavigateurMedias(');
+  const c = corps('export default function NavigateurMedias(');
   const i = c.indexOf('const ouvrir =');
   const f = c.slice(i, c.indexOf('const remonter', i));
   assert.match(f, /if \(c\.can_expand\)/, 'un dossier n’est plus reconnu comme tel');
@@ -64,7 +65,7 @@ test('on n’ouvre que ce qui s’ouvre, on ne joue que ce qui se joue', () => {
 });
 
 test('revenir en arrière relit, plutôt que de tout garder', () => {
-  const c = corps('function NavigateurMedias(');
+  const c = corps('export default function NavigateurMedias(');
   // Un lecteur peut offrir des milliers de radios : garder l'arbre entier en
   // mémoire pour pouvoir remonter serait payer cher un simple retour.
   assert.match(c, /setPile\(p => \(p\.length > 1 \? p\.slice\(0, -1\) : p\)\)/,

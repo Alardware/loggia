@@ -20,7 +20,7 @@ export const COULEURS_PIECE = { probleme: 'var(--o-warn2)', actif: 'var(--o-warn
 
 /** La ligne d'etat d'une piece. `medias` = [{ tv: bool }] en lecture,
  * `ouverts` = [{ famille: 'porte'|'fenetre' }]. */
-export function ambiancePiece({ lumieres = 0, medias = [], chauffe = false, froid = false, ouverts = [], co2 = null } = {}) {
+export function ambiancePiece({ lumieres = 0, lampes = null, medias = [], chauffe = false, froid = false, ouverts = [], co2 = null } = {}) {
   const problemes = [];
   const liste = Array.isArray(ouverts) ? ouverts.filter(Boolean) : [];
   const portes = liste.filter(o => o.famille === 'porte').length;
@@ -42,7 +42,11 @@ export function ambiancePiece({ lumieres = 0, medias = [], chauffe = false, froi
   else if (froid) actifs.push(tr('Rafraîchit'));
   if (actifs.length) return { niveau: 'actif', texte: actifs.join(' · '), couleur: COULEURS_PIECE.actif, icone: null };
 
-  return { niveau: 'calme', texte: tr('Tout est éteint'), couleur: COULEURS_PIECE.calme, icone: null };
+  /* Ticket #34 : « Tout est éteint » s'affichait aussi dans une pièce SANS
+   * lampe, où il n'y a rien à éteindre. `lampes` : le nombre de lumières de la
+   * pièce, `null` quand l'appelant ne le sait pas (le texte d'avant). */
+  const texte = lampes === 0 ? tr('Tout est calme') : tr('Tout est éteint');
+  return { niveau: 'calme', texte, couleur: COULEURS_PIECE.calme, icone: null };
 }
 
 /** Une passe sur les etats : ce que chaque zone a de vivant — lecteurs en

@@ -53,7 +53,7 @@ def _poser_doublures() -> None:
         ("homeassistant.helpers.event", ("async_track_state_change_event",
                                          "async_call_later", "async_track_sunrise",
                                          "async_track_sunset", "async_track_time_change",
-                                         "async_track_time_interval")),
+                                         "async_track_time_interval", "async_track_point_in_time")),
         # `store.py` signale ce qui change aux ecrans abonnes (ADR 0067) ; la
         # doublure n'envoie rien, un test qui veut le voir la remplace.
         ("homeassistant.helpers.dispatcher", ("async_dispatcher_send", "async_dispatcher_connect")),
@@ -93,7 +93,8 @@ def _poser_doublures() -> None:
     _ev = sys.modules["homeassistant.helpers.event"]
     for _nom in ("async_track_state_change_event", "async_call_later",
                  "async_track_sunrise", "async_track_sunset",
-                 "async_track_time_change", "async_track_time_interval"):
+                 "async_track_time_change", "async_track_time_interval",
+                 "async_track_point_in_time"):
         setattr(_ev, _nom, lambda *a, **k: (lambda: None))
     sys.modules["homeassistant.helpers"].event = _ev
     _disp = sys.modules["homeassistant.helpers.dispatcher"]

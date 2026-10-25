@@ -134,8 +134,10 @@ const PORTEE = new Set(['ArrowFunctionExpression', 'FunctionExpression', 'Functi
 /* Les méthodes de tableau qui exécutent leur fonction sur-le-champ. */
 const IMMEDIATS = new Set(['map', 'flatMap', 'filter', 'forEach', 'reduce', 'some', 'every', 'find', 'sort']);
 /* Restes connus, plus anciens que cette relecture (« fichier constante »).
- * La liste ne fait que rétrécir : un reste converti doit en sortir. */
-const RESTES = ['src/App.jsx HUE_SCENES', 'src/App.jsx VIEW_TITLES', 'src/Onboarding.jsx VIEW_TITLES'];
+ * La liste ne fait que rétrécir : un reste converti doit en sortir.
+ * `HUE_SCENES` a suivi la bibliothèque Hue dans scenes.jsx, chargé à la
+ * demande depuis le 11/10 : le même reste, à sa nouvelle place. */
+const RESTES = ['src/scenes.jsx HUE_SCENES', 'src/App.jsx VIEW_TITLES', 'src/Onboarding.jsx VIEW_TITLES'];
 
 test('rien de ce qui dépend de la langue ne s’évalue à l’import', () => {
   const fautes = [], vus = new Set();

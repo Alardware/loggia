@@ -34,7 +34,8 @@ const CATS = Object.fromEntries(await Promise.all(LANGUES.map(async l =>
  * navigateur (`window.__loggiaCatalogue`, main.jsx). */
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'de-DE' }, configurable: true });
 globalThis.window = { __loggiaCatalogue: { code: 'de', cat: CATS.de } };
-const { verdictMesure, jaugeMesure } = await import('../src/confort.js');
+// ASSERTION MODIFIÉE (audit du 19/10, point 14) : `jaugeMesure` est parti — la barre des cartes (`barreMesure`) lit le même mot.
+const { verdictMesure, barreMesure, zoneMesure } = await import('../src/confort.js');
 const { tr, trSens, langue } = await import('../src/i18n.js');
 
 const sources = [];
@@ -53,7 +54,8 @@ test('en allemand, la jauge dit ce qu’on ressent : « Kalt » sous 16 °C, « 
   assert.equal(langue(), 'de', 'le test ne tourne pas en allemand');
   assert.equal(verdictMesure('temp', 15.5).t, 'Kalt');
   assert.equal(verdictMesure('hum', 25).t, 'Trocken');
-  assert.equal(jaugeMesure('hum', 25).verdict.t, 'Trocken', 'la jauge des cartes lit le même mot');
+  const b = barreMesure('hum', 25);
+  assert.equal(b.zones[b.i].t, 'Trocken', 'la jauge des cartes lit le même mot');
   assert.equal(trSens('Froid · ressenti'), 'Kalt');
   // Les modes gardent les leurs — quand Home Assistant ne donne pas le sien.
   assert.equal(tr('Froid'), 'Kühlen');
@@ -75,6 +77,27 @@ test('aucune langue ne dit le même mot sur deux paliers voisins', () => {
       assert.deepEqual(mots.filter((m, i) => i > 0 && m === mots[i - 1]), [], `${l} : deux paliers voisins de ${nom} disent la même chose`);
     }
   }
+});
+
+/* TEST AJOUTÉ (passe 1 ter, 16/10 ; C15 révisé) : les zones du DEHORS, traduites, et jamais le même mot sur deux paliers voisins. « Doux » est déjà
+ * l'arrondi d'une carte (« Sanft », « Soft ») : la douceur d'un temps passe par sa clé de sens ; le froid et le sec, par celles de la sensation. */
+test('les zones du dehors : traduites partout, deux paliers voisins ne disent jamais la même chose', () => {
+  const debut = PUR.indexOf('const PALIERS_DEHORS = {');
+  assert.ok(debut > 0, 'la table du dehors est introuvable');
+  const bloc = PUR.slice(debut, PUR.indexOf('\n};', debut));
+  for (const [nom, n] of [['temp', 6], ['hum', 4]]) {
+    const ligne = bloc.split('\n').find(l => l.trimStart().startsWith(nom + ': () => ['));
+    const cles = [...ligne.matchAll(/\btr(?:Sens)?\('([^']+)'\)/g)].map(m => m[1]);
+    assert.equal(cles.length, n, nom + ' : ' + n + ' paliers dehors');
+    for (const l of LANGUES) {
+      const mots = cles.map(k => CATS[l][k]);
+      assert.ok(mots.every(m => typeof m === 'string' && m), `${l} : un palier du dehors (${nom}) sans traduction`);
+      assert.deepEqual(mots.filter((m, i) => i > 0 && m === mots[i - 1]), [], `${l} : deux paliers voisins du dehors (${nom}) disent la même chose`);
+    }
+  }
+  assert.ok(bloc.includes("trSens('Doux · température')") && bloc.includes("trSens('Froid · ressenti')") && bloc.includes("trSens('Sec · ressenti')"));
+  // En allemand : « Frost », « Mild » — pas l'arrondi « Sanft » —, « Normal ».
+  assert.deepEqual([[-3, 'temp'], [20, 'temp'], [50, 'hum']].map(([v, cle]) => zoneMesure(cle, v, true).t), ['Frost', 'Mild', 'Normal']);
 });
 
 test('chaque clé lue par trSens porte son sens et existe dans les six catalogues', () => {
@@ -107,7 +130,8 @@ test('la sensation et les blancs ne lisent plus la clé d’un mode', () => {
   assert.ok(PUR.includes("[16, trSens('Froid · ressenti'), ORANGE]"));
   assert.ok(PUR.includes("[30, trSens('Sec · ressenti'), AMBRE]"));
   assert.ok(APP.includes("cold: [trSens('Froid · ressenti'), tr('Normal'), false]"), 'un capteur de froid');
-  assert.ok(APP.includes("const WHITE_TEMPS = () => [[tr('Bougie'), 2200, '#ffb46b'], [tr('Blanc chaud'), 2700, '#ffd9a0'], [tr('Blanc neutre'), 4000, '#fff1dd'], [tr('Blanc froid'), 6500, '#eaf2ff']];"),
+  // ASSERTION MODIFIÉE (chantier Lumières, tâche 8) : les quatre blancs de sa maquette (L9), nommés dans lumieresfiche.js, chargé avec la fiche.
+  assert.ok(lire('src', 'lumieresfiche.js').includes("export const BLANCS_NOMMES = () => [[2200, tr('Chaude'), tr('blanc chaud')], [2700, tr('Douce'), tr('blanc doux')], [4000, tr('Neutre'), tr('blanc neutre')], [6500, tr('Froide'), tr('blanc froid')]];"),
     'des noms de blancs, tous traduits');
   // `tr('Froid')` et `tr('Sec')` ne servent plus qu'aux modes, une fois chacun.
   const appels = (k) => SRC.split("tr('" + k + "')").length - 1;

@@ -1,0 +1,602 @@
+{
+  "types": [
+    {"nom": "Prise lave-vaisselle", "indice": "switch.prise_lave_vaisselle", "impose": null, "attendu": "lv"},
+    {"nom": "Lavevaisselle", "indice": "", "impose": null, "attendu": "lv"},
+    {"nom": "Prise LV", "indice": "", "impose": null, "attendu": "lv"},
+    {"nom": "Dishwasher", "indice": "", "impose": null, "attendu": "lv"},
+    {"nom": "Zmywarka kuchnia", "indice": "", "impose": null, "attendu": "lv"},
+    {"nom": "Sèche-linge", "indice": "", "impose": null, "attendu": "sl"},
+    {"nom": "Tumble dryer", "indice": "", "impose": null, "attendu": "sl"},
+    {"nom": "Suszarka", "indice": "", "impose": null, "attendu": "sl"},
+    {"nom": "Lave-linge buanderie", "indice": "", "impose": null, "attendu": "ll"},
+    {"nom": "Washing machine", "indice": "", "impose": null, "attendu": "ll"},
+    {"nom": "Pralka", "indice": "", "impose": null, "attendu": "ll"},
+    {"nom": "Fer à repasser", "indice": "", "impose": null, "attendu": "fer"},
+    {"nom": "Żelazko", "indice": "", "impose": null, "attendu": "fer"},
+    {"nom": "PRISE RÉFRIGÉRATEUR", "indice": "", "impose": null, "attendu": "frigo"},
+    {"nom": "Lodówka", "indice": "", "impose": null, "attendu": "frigo"},
+    {"nom": "Chłodziarka", "indice": "", "impose": null, "attendu": "frigo"},
+    {"nom": "Zamrażarka garaż", "indice": "", "impose": null, "attendu": "frigo"},
+    {"nom": "Machine à café", "indice": "", "impose": null, "attendu": "cafe"},
+    {"nom": "Ekspres do kawy", "indice": "", "impose": null, "attendu": "cafe"},
+    {"nom": "Borne de recharge garage", "indice": "", "impose": null, "attendu": "ve"},
+    {"nom": "EV charger", "indice": "", "impose": null, "attendu": "ve"},
+    {"nom": "Stacja ładowania", "indice": "", "impose": null, "attendu": "ve"},
+    {"nom": "Prise NAS", "indice": "switch.prise_nas", "impose": null, "attendu": "nas"},
+    {"nom": "Serwer", "indice": "", "impose": null, "attendu": "nas"},
+    {"nom": "Prise PC", "indice": "switch.prise_pc", "impose": null, "attendu": "pc"},
+    {"nom": "Komputer biuro", "indice": "", "impose": null, "attendu": "pc"},
+    {"nom": "TV-salon", "indice": "", "impose": null, "attendu": "tv"},
+    {"nom": "Telewizor salon", "indice": "", "impose": null, "attendu": "tv"},
+    {"nom": "Box fibre", "indice": "", "impose": null, "attendu": "box"},
+    {"nom": "Radiateur bureau", "indice": "", "impose": null, "attendu": "radia"},
+    {"nom": "Grzejnik łazienka", "indice": "", "impose": null, "attendu": "radia"},
+    {"nom": "Kaloryfer", "indice": "", "impose": null, "attendu": "radia"},
+    {"nom": "Syrena", "indice": "", "impose": null, "attendu": "siren"},
+    {"nom": "Téléphone salon", "indice": "", "impose": null, "attendu": "prise"},
+    {"nom": "Sac de boxe", "indice": "", "impose": null, "attendu": "prise"},
+    {"nom": "Environnement bureau", "indice": "", "impose": null, "attendu": "prise"},
+    {"nom": "Poêle", "indice": "switch.poele", "impose": null, "attendu": "prise"},
+    {"nom": "Prise 3", "indice": "switch.lave_vaisselle", "impose": null, "attendu": "lv"},
+    {"nom": null, "indice": "", "impose": null, "attendu": "prise"},
+    {"nom": "Prise séjour", "indice": "switch.prise_sejour", "impose": "cafe", "attendu": "cafe"},
+    {"nom": "Prise lave-vaisselle", "indice": "switch.prise_lave_vaisselle", "impose": "prise", "attendu": "prise"},
+    {"nom": "Prise séjour", "indice": "switch.prise_sejour", "impose": "inconnu", "attendu": "prise"},
+    {"nom": "Prise salon", "indice": "", "impose": "siren", "attendu": "siren"},
+    {"nom": "Waschmaschine", "indice": "", "impose": null, "attendu": "ll"},
+    {"nom": "Geschirrspüler", "indice": "", "impose": null, "attendu": "lv"},
+    {"nom": "Spülmaschine Küche", "indice": "", "impose": null, "attendu": "lv"},
+    {"nom": "Trockner", "indice": "", "impose": null, "attendu": "sl"},
+    {"nom": "Wäschetrockner Keller", "indice": "", "impose": null, "attendu": "sl"},
+    {"nom": "Kühlschrank", "indice": "", "impose": null, "attendu": "frigo"},
+    {"nom": "Gefrierschrank", "indice": "", "impose": null, "attendu": "frigo"},
+    {"nom": "Kaffeemaschine", "indice": "", "impose": null, "attendu": "cafe"},
+    {"nom": "Fernseher Wohnzimmer", "indice": "", "impose": null, "attendu": "tv"},
+    {"nom": "Bügeleisen", "indice": "", "impose": null, "attendu": "fer"},
+    {"nom": "Heizlüfter Bad", "indice": "", "impose": null, "attendu": "radia"},
+    {"nom": "Rechner", "indice": "", "impose": null, "attendu": "pc"},
+    {"nom": "Wasmachine", "indice": "", "impose": null, "attendu": "ll"},
+    {"nom": "Vaatwasser", "indice": "", "impose": null, "attendu": "lv"},
+    {"nom": "Droger", "indice": "", "impose": null, "attendu": "sl"},
+    {"nom": "Koelkast", "indice": "", "impose": null, "attendu": "frigo"},
+    {"nom": "Koffiezetapparaat", "indice": "", "impose": null, "attendu": "cafe"},
+    {"nom": "Televisie", "indice": "", "impose": null, "attendu": "tv"},
+    {"nom": "Strijkijzer", "indice": "", "impose": null, "attendu": "fer"},
+    {"nom": "Laadpaal oprit", "indice": "", "impose": null, "attendu": "ve"},
+    {"nom": "Lavatrice", "indice": "", "impose": null, "attendu": "ll"},
+    {"nom": "Lavastoviglie", "indice": "", "impose": null, "attendu": "lv"},
+    {"nom": "Asciugatrice", "indice": "", "impose": null, "attendu": "sl"},
+    {"nom": "Frigorifero", "indice": "", "impose": null, "attendu": "frigo"},
+    {"nom": "Macchina del caffè", "indice": "", "impose": null, "attendu": "cafe"},
+    {"nom": "Televisore", "indice": "", "impose": null, "attendu": "tv"},
+    {"nom": "Ferro da stiro", "indice": "", "impose": null, "attendu": "fer"},
+    {"nom": "Stufa camera", "indice": "", "impose": null, "attendu": "radia"},
+    {"nom": "Sirena giardino", "indice": "", "impose": null, "attendu": "siren"},
+    {"nom": "Lavadora", "indice": "", "impose": null, "attendu": "ll"},
+    {"nom": "Lavavajillas", "indice": "", "impose": null, "attendu": "lv"},
+    {"nom": "Secadora", "indice": "", "impose": null, "attendu": "sl"},
+    {"nom": "Frigorífico", "indice": "", "impose": null, "attendu": "frigo"},
+    {"nom": "Cafetera", "indice": "", "impose": null, "attendu": "cafe"},
+    {"nom": "Televisor", "indice": "", "impose": null, "attendu": "tv"},
+    {"nom": "Ordenador", "indice": "", "impose": null, "attendu": "pc"},
+    {"nom": "Servidor", "indice": "", "impose": null, "attendu": "nas"},
+    {"nom": "Radiador baño", "indice": "", "impose": null, "attendu": "radia"},
+    {"nom": "Hair dryer", "indice": "", "impose": null, "attendu": "prise"},
+    {"nom": "Sèche-cheveux", "indice": "", "impose": null, "attendu": "prise"},
+    {"nom": "Recharge vélo", "indice": "", "impose": null, "attendu": "prise"},
+    {"nom": "Recharge trottinette", "indice": "switch.recharge_trottinette", "impose": null, "attendu": "prise"},
+    {"nom": "Projecteur jardin", "indice": "", "impose": null, "attendu": "prise"},
+    {"nom": "Vidéoprojecteur", "indice": "", "impose": null, "attendu": "tv"},
+    {"nom": "Ventilateur tour", "indice": "", "impose": null, "attendu": "prise"},
+    {"nom": "Lampe Fer forgé", "indice": "", "impose": null, "attendu": "prise"},
+    {"nom": "Prise fer", "indice": "", "impose": null, "attendu": "fer"},
+    {"nom": "Sèche-serviettes", "indice": "", "impose": null, "attendu": "radia"},
+    {"nom": "Sèche-serviette", "indice": "", "impose": null, "attendu": "radia"},
+    {"nom": "Borne de recharge garage", "indice": "switch.borne", "impose": null, "attendu": "ve"}
+  ],
+  "prises": [
+    {
+      "cas": "une prise qui mesure",
+      "entite": {"entity_id": "switch.prise_nas", "device_class": null, "entity_category": null, "nom": "Prise NAS"},
+      "appareil": {"fabricant": "Tuya", "modele": "Smart plug (with power monitoring)"},
+      "soeurs": [
+        {"entity_id": "sensor.prise_nas_power", "device_class": "power", "entity_category": null, "nom": "Prise NAS Power"},
+        {"entity_id": "sensor.prise_nas_energy", "device_class": "energy", "entity_category": null, "nom": "Prise NAS Energy"},
+        {"entity_id": "sensor.prise_nas_voltage", "device_class": "voltage", "entity_category": null, "nom": "Prise NAS Voltage"},
+        {"entity_id": "switch.prise_nas_child_lock", "device_class": null, "entity_category": "config", "nom": "Prise NAS Child lock"},
+        {"entity_id": "sensor.prise_nas_linkquality", "device_class": null, "entity_category": "diagnostic", "nom": "Prise NAS Linkquality"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": "sensor.prise_nas_power", "energie": "sensor.prise_nas_energy"}
+    },
+    {
+      "cas": "le pont Zigbee2MQTT",
+      "entite": {"entity_id": "switch.zigbee2mqtt_bridge_permit_join", "device_class": null, "entity_category": null, "nom": "Zigbee2MQTT Bridge Permit join"},
+      "appareil": {"fabricant": "Zigbee2MQTT", "modele": "Bridge"},
+      "soeurs": [
+        {"entity_id": "sensor.zigbee2mqtt_bridge_version", "device_class": null, "entity_category": "diagnostic", "nom": "Zigbee2MQTT Bridge Version"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": false, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "le pont, même déclaré prise",
+      "entite": {"entity_id": "switch.zigbee2mqtt_bridge_permit_join", "device_class": "outlet", "entity_category": null, "nom": "Zigbee2MQTT Bridge Permit join"},
+      "appareil": {"fabricant": "Zigbee2MQTT", "modele": "Bridge"},
+      "soeurs": [],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": false, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "un groupe Zigbee2MQTT n'est pas le pont",
+      "entite": {"entity_id": "switch.groupe_prises", "device_class": "outlet", "entity_category": null, "nom": "Groupe prises"},
+      "appareil": {"fabricant": "Zigbee2MQTT", "modele": "Group"},
+      "soeurs": [],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "le pont se reconnaît à son appareil, jamais au nom",
+      "entite": {"entity_id": "switch.zigbee2mqtt_bridge_permit_join", "device_class": "outlet", "entity_category": null, "nom": "Zigbee2MQTT Bridge Permit join"},
+      "appareil": {"fabricant": "Tuya", "modele": "Smart plug"},
+      "soeurs": [],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "une sirène",
+      "entite": {"entity_id": "switch.alarme_sirene_siren_on", "device_class": null, "entity_category": null, "nom": "Alarme sirène Siren on"},
+      "appareil": {"fabricant": "Heiman", "modele": "Smart siren"},
+      "soeurs": [
+        {"entity_id": "sensor.alarme_sirene_power", "device_class": "power", "entity_category": null, "nom": "Alarme sirène Power"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": true,
+      "attendu": {"prise": false, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "la classe outlet sans mesure",
+      "entite": {"entity_id": "switch.prise_salon", "device_class": "outlet", "entity_category": null, "nom": "Prise salon"},
+      "appareil": {"fabricant": "Legrand", "modele": "Prise connectée"},
+      "soeurs": [
+        {"entity_id": "sensor.prise_salon_rssi", "device_class": "signal_strength", "entity_category": "diagnostic", "nom": "Prise salon RSSI"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "une prise qui ne mesure que la puissance",
+      "entite": {"entity_id": "switch.prise_sejour", "device_class": null, "entity_category": null, "nom": "Prise séjour"},
+      "appareil": {"fabricant": "Legrand", "modele": "NLP"},
+      "soeurs": [
+        {"entity_id": "sensor.prise_sejour_puissance", "device_class": "power", "entity_category": null, "nom": "Prise séjour Puissance"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": "sensor.prise_sejour_puissance", "energie": null}
+    },
+    {
+      "cas": "le piège du poêle",
+      "entite": {"entity_id": "switch.poele", "device_class": null, "entity_category": null, "nom": "Poêle"},
+      "appareil": {"fabricant": "Home Assistant", "modele": "Passerelle MQTT"},
+      "soeurs": [
+        {"entity_id": "sensor.energie_puissance_kw", "device_class": "power", "entity_category": null, "nom": "Energie puissance kW"},
+        {"entity_id": "sensor.solaire_production_totale", "device_class": "power", "entity_category": null, "nom": "Solaire production totale"},
+        {"entity_id": "sensor.energie_consommation_jour", "device_class": "energy", "entity_category": null, "nom": "Energie consommation jour"},
+        {"entity_id": "sensor.solaire_energie_totale", "device_class": "energy", "entity_category": null, "nom": "Solaire énergie totale"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": false, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "plusieurs puissances, une seule a les mots de la prise",
+      "entite": {"entity_id": "switch.prise_lave_linge", "device_class": null, "entity_category": null, "nom": "Prise lave-linge"},
+      "appareil": {"fabricant": "Shelly", "modele": "Shelly Pro 2PM"},
+      "soeurs": [
+        {"entity_id": "sensor.compteur_general_puissance", "device_class": "power", "entity_category": null, "nom": "Compteur général Puissance"},
+        {"entity_id": "sensor.prise_lave_linge_puissance", "device_class": "power", "entity_category": null, "nom": "Prise lave-linge Puissance"},
+        {"entity_id": "sensor.compteur_general_energie", "device_class": "energy", "entity_category": null, "nom": "Compteur général Énergie"},
+        {"entity_id": "sensor.prise_lave_linge_energie", "device_class": "energy", "entity_category": null, "nom": "Prise lave-linge Énergie"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": "sensor.prise_lave_linge_puissance", "energie": "sensor.prise_lave_linge_energie"}
+    },
+    {
+      "cas": "à égalité, le premier par identifiant",
+      "entite": {"entity_id": "switch.prise_bureau", "device_class": null, "entity_category": null, "nom": "Prise bureau"},
+      "appareil": {"fabricant": "Tuya", "modele": "Smart plug (with power monitoring)"},
+      "soeurs": [
+        {"entity_id": "sensor.prise_bureau_puissance_max", "device_class": "power", "entity_category": null, "nom": "Prise bureau Puissance max"},
+        {"entity_id": "sensor.prise_bureau_puissance", "device_class": "power", "entity_category": null, "nom": "Prise bureau Puissance"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": "sensor.prise_bureau_puissance", "energie": null}
+    },
+    {
+      "cas": "une entité de configuration",
+      "entite": {"entity_id": "switch.prise_nas_child_lock", "device_class": null, "entity_category": "config", "nom": "Prise NAS Child lock"},
+      "appareil": {"fabricant": "Tuya", "modele": "Smart plug (with power monitoring)"},
+      "soeurs": [
+        {"entity_id": "switch.prise_nas", "device_class": null, "entity_category": null, "nom": "Prise NAS"},
+        {"entity_id": "sensor.prise_nas_power", "device_class": "power", "entity_category": null, "nom": "Prise NAS Power"},
+        {"entity_id": "sensor.prise_nas_energy", "device_class": "energy", "entity_category": null, "nom": "Prise NAS Energy"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": false, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "un interrupteur sans appareil",
+      "entite": {"entity_id": "switch.radiateur_salon", "device_class": null, "entity_category": null, "nom": "Radiateur salon"},
+      "appareil": null,
+      "soeurs": [],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": false, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "sans appareil, mais de la classe outlet",
+      "entite": {"entity_id": "switch.prise_garage", "device_class": "outlet", "entity_category": null, "nom": "Prise garage"},
+      "appareil": null,
+      "soeurs": [],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "un module fil pilote",
+      "entite": {"entity_id": "switch.radiateur_chambre", "device_class": null, "entity_category": null, "nom": "Radiateur Chambre"},
+      "appareil": {"fabricant": "NodOn", "modele": "SIN-4-FP-21"},
+      "soeurs": [
+        {"entity_id": "select.radiateur_chambre_pilot_wire_mode", "device_class": null, "entity_category": null, "nom": "Radiateur Chambre Pilot wire mode"},
+        {"entity_id": "sensor.radiateur_chambre_power", "device_class": "power", "entity_category": null, "nom": "Radiateur Chambre Power"},
+        {"entity_id": "sensor.radiateur_chambre_energy", "device_class": "energy", "entity_category": null, "nom": "Radiateur Chambre Energy"}
+      ],
+      "lumiere": false, "fil_pilote": true, "sirene": false,
+      "attendu": {"prise": false, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "un interrupteur déclaré lumière",
+      "entite": {"entity_id": "switch.lumiere_exterieur", "device_class": null, "entity_category": null, "nom": "Lumière extérieur"},
+      "appareil": {"fabricant": "Tuya", "modele": "Smart plug (with power monitoring)"},
+      "soeurs": [
+        {"entity_id": "sensor.lumiere_exterieur_power", "device_class": "power", "entity_category": null, "nom": "Lumière extérieur Power"},
+        {"entity_id": "sensor.lumiere_exterieur_energy", "device_class": "energy", "entity_category": null, "nom": "Lumière extérieur Energy"}
+      ],
+      "lumiere": true, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": false, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "un capteur binaire de puissance n'est pas une mesure",
+      "entite": {"entity_id": "switch.prise_atelier", "device_class": null, "entity_category": null, "nom": "Prise atelier"},
+      "appareil": {"fabricant": "Sonoff", "modele": "S26R2"},
+      "soeurs": [
+        {"entity_id": "binary_sensor.prise_atelier_power", "device_class": "power", "entity_category": null, "nom": "Prise atelier Power"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": false, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "une mesure de diagnostic ne compte pas",
+      "entite": {"entity_id": "switch.prise_cave", "device_class": null, "entity_category": null, "nom": "Prise cave"},
+      "appareil": {"fabricant": "Tuya", "modele": "Smart plug"},
+      "soeurs": [
+        {"entity_id": "sensor.prise_cave_power", "device_class": "power", "entity_category": "diagnostic", "nom": "Prise cave Power"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": false, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "une seule puissance compte, quel que soit son nom",
+      "entite": {"entity_id": "switch.prise_cafe", "device_class": null, "entity_category": null, "nom": "Prise café"},
+      "appareil": {"fabricant": "Tuya", "modele": "Smart plug (with power monitoring)"},
+      "soeurs": [
+        {"entity_id": "switch.prise_cafe_child_lock", "device_class": null, "entity_category": "config", "nom": "Prise café Child lock"},
+        {"entity_id": "sensor.puissance_mesuree", "device_class": "power", "entity_category": null, "nom": "Power"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": "sensor.puissance_mesuree", "energie": null}
+    },
+    {
+      "cas": "un nom vide : aucune des deux puissances, l'énergie seule suffit",
+      "entite": {"entity_id": "switch.prise_sans_nom", "device_class": null, "entity_category": null, "nom": ""},
+      "appareil": {"fabricant": "Shelly", "modele": "Shelly Pro 2PM"},
+      "soeurs": [
+        {"entity_id": "sensor.sortie_1_puissance", "device_class": "power", "entity_category": null, "nom": "Sortie 1 puissance"},
+        {"entity_id": "sensor.sortie_2_puissance", "device_class": "power", "entity_category": null, "nom": "Sortie 2 puissance"},
+        {"entity_id": "sensor.sorties_energie", "device_class": "energy", "entity_category": null, "nom": "Sorties énergie"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": null, "energie": "sensor.sorties_energie"}
+    },
+    {
+      "cas": "multiprise à un seul compteur : ses sorties sont des prises, sans capteur à elles",
+      "entite": {"entity_id": "switch.multiprise_cuisine_l1", "device_class": null, "entity_category": null, "nom": "Lave-vaisselle"},
+      "appareil": {"fabricant": "Tuya", "modele": "Power strip (with power monitoring)"},
+      "soeurs": [
+        {"entity_id": "switch.multiprise_cuisine_l2", "device_class": null, "entity_category": null, "nom": "Bouilloire"},
+        {"entity_id": "switch.multiprise_cuisine_child_lock", "device_class": null, "entity_category": "config", "nom": "Multiprise cuisine Child lock"},
+        {"entity_id": "sensor.multiprise_cuisine_power", "device_class": "power", "entity_category": null, "nom": "Multiprise cuisine Power"},
+        {"entity_id": "sensor.multiprise_cuisine_energy", "device_class": "energy", "entity_category": null, "nom": "Multiprise cuisine Energy"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "multiprise : le compteur commun ne va à aucune sortie, même à celle qui porte le nom de l'appareil",
+      "entite": {"entity_id": "switch.multiprise_bureau_l1", "device_class": null, "entity_category": null, "nom": "Multiprise bureau L1"},
+      "appareil": {"fabricant": "Tuya", "modele": "Power strip (with power monitoring)"},
+      "soeurs": [
+        {"entity_id": "switch.multiprise_bureau_l2", "device_class": null, "entity_category": null, "nom": "Imprimante"},
+        {"entity_id": "sensor.multiprise_bureau_power", "device_class": "power", "entity_category": null, "nom": "Multiprise bureau Power"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "multiprise Tuya à quatre sorties : la prise 1 n'emprunte pas le total",
+      "entite": {"entity_id": "switch.multiprise_bureau_socket_1", "device_class": null, "entity_category": null, "nom": "Multiprise Bureau Socket 1"},
+      "appareil": {"fabricant": "Tuya", "modele": "Power strip (with power monitoring)"},
+      "soeurs": [
+        {"entity_id": "switch.multiprise_bureau_socket_2", "device_class": null, "entity_category": null, "nom": "Multiprise Bureau Socket 2"},
+        {"entity_id": "switch.multiprise_bureau_socket_3", "device_class": null, "entity_category": null, "nom": "Multiprise Bureau Socket 3"},
+        {"entity_id": "switch.multiprise_bureau_usb_1", "device_class": null, "entity_category": null, "nom": "Multiprise Bureau USB 1"},
+        {"entity_id": "switch.multiprise_bureau_child_lock", "device_class": null, "entity_category": "config", "nom": "Multiprise Bureau Child lock"},
+        {"entity_id": "sensor.multiprise_bureau_power", "device_class": "power", "entity_category": null, "nom": "Multiprise Bureau Power"},
+        {"entity_id": "sensor.multiprise_bureau_energy", "device_class": "energy", "entity_category": null, "nom": "Multiprise Bureau Energy"},
+        {"entity_id": "sensor.multiprise_bureau_voltage", "device_class": "voltage", "entity_category": null, "nom": "Multiprise Bureau Voltage"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "multiprise Tuya à quatre sorties : la sortie USB non plus",
+      "entite": {"entity_id": "switch.multiprise_bureau_usb_1", "device_class": null, "entity_category": null, "nom": "Multiprise Bureau USB 1"},
+      "appareil": {"fabricant": "Tuya", "modele": "Power strip (with power monitoring)", "nom": "Multiprise Bureau"},
+      "soeurs": [
+        {"entity_id": "switch.multiprise_bureau_socket_1", "device_class": null, "entity_category": null, "nom": "Multiprise Bureau Socket 1"},
+        {"entity_id": "switch.multiprise_bureau_socket_2", "device_class": null, "entity_category": null, "nom": "Multiprise Bureau Socket 2"},
+        {"entity_id": "switch.multiprise_bureau_socket_3", "device_class": null, "entity_category": null, "nom": "Multiprise Bureau Socket 3"},
+        {"entity_id": "sensor.multiprise_bureau_power", "device_class": "power", "entity_category": null, "nom": "Multiprise Bureau Power"},
+        {"entity_id": "sensor.multiprise_bureau_energy", "device_class": "energy", "entity_category": null, "nom": "Multiprise Bureau Energy"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "Shelly 2PM : la sortie renommée garde son canal",
+      "entite": {"entity_id": "switch.shelly_2pm_cuisine_switch_0", "device_class": null, "entity_category": null, "nom": "Cuisine Sèche-linge"},
+      "appareil": {"fabricant": "Shelly", "modele": "Shelly Plus 2PM", "nom": "Shelly 2PM Cuisine"},
+      "soeurs": [
+        {"entity_id": "switch.shelly_2pm_cuisine_switch_1", "device_class": null, "entity_category": null, "nom": "Shelly 2PM Cuisine Switch 1"},
+        {"entity_id": "sensor.shelly_2pm_cuisine_switch_0_power", "device_class": "power", "entity_category": null, "nom": "Shelly 2PM Cuisine Switch 0 power"},
+        {"entity_id": "sensor.shelly_2pm_cuisine_switch_1_power", "device_class": "power", "entity_category": null, "nom": "Shelly 2PM Cuisine Switch 1 power"},
+        {"entity_id": "sensor.shelly_2pm_cuisine_switch_0_energy", "device_class": "energy", "entity_category": null, "nom": "Shelly 2PM Cuisine Switch 0 energy"},
+        {"entity_id": "sensor.shelly_2pm_cuisine_switch_1_energy", "device_class": "energy", "entity_category": null, "nom": "Shelly 2PM Cuisine Switch 1 energy"},
+        {"entity_id": "sensor.shelly_2pm_cuisine_temperature", "device_class": "temperature", "entity_category": "diagnostic", "nom": "Shelly 2PM Cuisine Temperature"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": "sensor.shelly_2pm_cuisine_switch_0_power", "energie": "sensor.shelly_2pm_cuisine_switch_0_energy"}
+    },
+    {
+      "cas": "Shelly 2PM : l'autre sortie a le sien",
+      "entite": {"entity_id": "switch.shelly_2pm_cuisine_switch_1", "device_class": null, "entity_category": null, "nom": "Shelly 2PM Cuisine Switch 1"},
+      "appareil": {"fabricant": "Shelly", "modele": "Shelly Plus 2PM"},
+      "soeurs": [
+        {"entity_id": "switch.shelly_2pm_cuisine_switch_0", "device_class": null, "entity_category": null, "nom": "Cuisine Sèche-linge"},
+        {"entity_id": "sensor.shelly_2pm_cuisine_switch_0_power", "device_class": "power", "entity_category": null, "nom": "Shelly 2PM Cuisine Switch 0 power"},
+        {"entity_id": "sensor.shelly_2pm_cuisine_switch_1_power", "device_class": "power", "entity_category": null, "nom": "Shelly 2PM Cuisine Switch 1 power"},
+        {"entity_id": "sensor.shelly_2pm_cuisine_switch_0_energy", "device_class": "energy", "entity_category": null, "nom": "Shelly 2PM Cuisine Switch 0 energy"},
+        {"entity_id": "sensor.shelly_2pm_cuisine_switch_1_energy", "device_class": "energy", "entity_category": null, "nom": "Shelly 2PM Cuisine Switch 1 energy"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": "sensor.shelly_2pm_cuisine_switch_1_power", "energie": "sensor.shelly_2pm_cuisine_switch_1_energy"}
+    },
+    {
+      "cas": "Fibaro double relais : la première sortie, sans numéro, prend le capteur sans numéro",
+      "entite": {"entity_id": "switch.relais_buanderie", "device_class": null, "entity_category": null, "nom": "Lave-linge"},
+      "appareil": {"fabricant": "Fibargroup", "modele": "Double Switch 2 (FGS223)"},
+      "soeurs": [
+        {"entity_id": "switch.relais_buanderie_2", "device_class": null, "entity_category": null, "nom": "Sèche-linge"},
+        {"entity_id": "sensor.relais_buanderie_electric_consumption_w", "device_class": "power", "entity_category": null, "nom": "Relais buanderie Electric Consumption [W]"},
+        {"entity_id": "sensor.relais_buanderie_electric_consumption_w_2", "device_class": "power", "entity_category": null, "nom": "Relais buanderie Electric Consumption [W] (2)"},
+        {"entity_id": "sensor.relais_buanderie_electric_consumption_kwh", "device_class": "energy", "entity_category": null, "nom": "Relais buanderie Electric Consumption [kWh]"},
+        {"entity_id": "sensor.relais_buanderie_electric_consumption_kwh_2", "device_class": "energy", "entity_category": null, "nom": "Relais buanderie Electric Consumption [kWh] (2)"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": "sensor.relais_buanderie_electric_consumption_w", "energie": "sensor.relais_buanderie_electric_consumption_kwh"}
+    },
+    {
+      "cas": "Fibaro double relais : la seconde sortie prend le capteur numéro 2",
+      "entite": {"entity_id": "switch.relais_buanderie_2", "device_class": null, "entity_category": null, "nom": "Sèche-linge"},
+      "appareil": {"fabricant": "Fibargroup", "modele": "Double Switch 2 (FGS223)"},
+      "soeurs": [
+        {"entity_id": "switch.relais_buanderie", "device_class": null, "entity_category": null, "nom": "Lave-linge"},
+        {"entity_id": "sensor.relais_buanderie_electric_consumption_w", "device_class": "power", "entity_category": null, "nom": "Relais buanderie Electric Consumption [W]"},
+        {"entity_id": "sensor.relais_buanderie_electric_consumption_w_2", "device_class": "power", "entity_category": null, "nom": "Relais buanderie Electric Consumption [W] (2)"},
+        {"entity_id": "sensor.relais_buanderie_electric_consumption_kwh", "device_class": "energy", "entity_category": null, "nom": "Relais buanderie Electric Consumption [kWh]"},
+        {"entity_id": "sensor.relais_buanderie_electric_consumption_kwh_2", "device_class": "energy", "entity_category": null, "nom": "Relais buanderie Electric Consumption [kWh] (2)"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": "sensor.relais_buanderie_electric_consumption_w_2", "energie": "sensor.relais_buanderie_electric_consumption_kwh_2"}
+    },
+    {
+      "cas": "deux sorties ne se partagent jamais un capteur",
+      "entite": {"entity_id": "switch.multi_socket_1", "device_class": null, "entity_category": null, "nom": "Multi Socket 1"},
+      "appareil": {"fabricant": "Tuya", "modele": "Power strip"},
+      "soeurs": [
+        {"entity_id": "switch.multi_usb_1", "device_class": null, "entity_category": null, "nom": "Multi USB 1"},
+        {"entity_id": "sensor.multi_power_1", "device_class": "power", "entity_category": null, "nom": "Multi Power 1"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "deux switch sur l'appareil de la maison : aucun n'est une prise",
+      "entite": {"entity_id": "switch.poele", "device_class": null, "entity_category": null, "nom": "Poêle"},
+      "appareil": {"fabricant": "Home Assistant", "modele": "Passerelle MQTT", "nom": "Maison"},
+      "soeurs": [
+        {"entity_id": "switch.chauffe_eau", "device_class": null, "entity_category": null, "nom": "Chauffe-eau"},
+        {"entity_id": "sensor.energie_puissance_kw", "device_class": "power", "entity_category": null, "nom": "Energie puissance kW"},
+        {"entity_id": "sensor.energie_consommation_jour", "device_class": "energy", "entity_category": null, "nom": "Energie consommation jour"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": false, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "ESPHome Athom : le relais est la prise",
+      "entite": {"entity_id": "switch.athom_plug_relay", "device_class": null, "entity_category": null, "nom": "Athom Plug Relay"},
+      "appareil": {"fabricant": "Athom", "modele": "Smart Plug V2"},
+      "soeurs": [
+        {"entity_id": "switch.athom_plug_led", "device_class": null, "entity_category": null, "nom": "Athom Plug LED"},
+        {"entity_id": "sensor.athom_plug_power", "device_class": "power", "entity_category": null, "nom": "Athom Plug Power"},
+        {"entity_id": "sensor.athom_plug_energy", "device_class": "energy", "entity_category": null, "nom": "Athom Plug Energy"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": "sensor.athom_plug_power", "energie": "sensor.athom_plug_energy"}
+    },
+    {
+      "cas": "ESPHome Athom : la LED n'est pas une prise",
+      "entite": {"entity_id": "switch.athom_plug_led", "device_class": null, "entity_category": null, "nom": "Athom Plug LED"},
+      "appareil": {"fabricant": "Athom", "modele": "Smart Plug V2"},
+      "soeurs": [
+        {"entity_id": "switch.athom_plug_relay", "device_class": null, "entity_category": null, "nom": "Athom Plug Relay"},
+        {"entity_id": "sensor.athom_plug_power", "device_class": "power", "entity_category": null, "nom": "Athom Plug Power"},
+        {"entity_id": "sensor.athom_plug_energy", "device_class": "energy", "entity_category": null, "nom": "Athom Plug Energy"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": false, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "LocalTuya : le verrou enfant sans catégorie n'est pas une prise",
+      "entite": {"entity_id": "switch.prise_salon_verrou_enfant", "device_class": null, "entity_category": null, "nom": "Prise Salon Verrou enfant"},
+      "appareil": {"fabricant": "Tuya", "modele": "LocalTuya"},
+      "soeurs": [
+        {"entity_id": "switch.prise_salon", "device_class": null, "entity_category": null, "nom": "Prise Salon"},
+        {"entity_id": "sensor.prise_salon_puissance", "device_class": "power", "entity_category": null, "nom": "Prise Salon Puissance"},
+        {"entity_id": "sensor.prise_salon_courant", "device_class": "current", "entity_category": null, "nom": "Prise Salon Courant"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": false, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "LocalTuya : la sortie garde sa puissance malgré le verrou",
+      "entite": {"entity_id": "switch.prise_salon", "device_class": null, "entity_category": null, "nom": "Prise Salon"},
+      "appareil": {"fabricant": "Tuya", "modele": "LocalTuya"},
+      "soeurs": [
+        {"entity_id": "switch.prise_salon_verrou_enfant", "device_class": null, "entity_category": null, "nom": "Prise Salon Verrou enfant"},
+        {"entity_id": "sensor.prise_salon_puissance", "device_class": "power", "entity_category": null, "nom": "Prise Salon Puissance"},
+        {"entity_id": "sensor.prise_salon_courant", "device_class": "current", "entity_category": null, "nom": "Prise Salon Courant"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": "sensor.prise_salon_puissance", "energie": null}
+    },
+    {
+      "cas": "plusieurs switch dont un de classe outlet : lui seul est la prise",
+      "entite": {"entity_id": "switch.prise_garage_mode_eco", "device_class": null, "entity_category": null, "nom": "Prise garage Mode éco"},
+      "appareil": {"fabricant": "Shelly", "modele": "Plus Plug S"},
+      "soeurs": [
+        {"entity_id": "switch.prise_garage", "device_class": "outlet", "entity_category": null, "nom": "Prise garage"},
+        {"entity_id": "sensor.prise_garage_power", "device_class": "power", "entity_category": null, "nom": "Prise garage Power"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": false, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "plusieurs switch dont un de classe outlet : la prise garde sa mesure",
+      "entite": {"entity_id": "switch.prise_garage", "device_class": "outlet", "entity_category": null, "nom": "Prise garage"},
+      "appareil": {"fabricant": "Shelly", "modele": "Plus Plug S"},
+      "soeurs": [
+        {"entity_id": "switch.prise_garage_mode_eco", "device_class": null, "entity_category": null, "nom": "Prise garage Mode éco"},
+        {"entity_id": "sensor.prise_garage_power", "device_class": "power", "entity_category": null, "nom": "Prise garage Power"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": "sensor.prise_garage_power", "energie": null}
+    },
+    {
+      "cas": "sans les préférences énergie, le relais du Shelly EM reste une prise",
+      "entite": {"entity_id": "switch.shelly_em_relay", "device_class": null, "entity_category": null, "nom": "Shelly EM Relay"},
+      "appareil": {"fabricant": "Shelly", "modele": "Shelly EM"},
+      "soeurs": [
+        {"entity_id": "sensor.shelly_em_channel_1_power", "device_class": "power", "entity_category": null, "nom": "Shelly EM Channel 1 power"},
+        {"entity_id": "sensor.shelly_em_channel_2_power", "device_class": "power", "entity_category": null, "nom": "Shelly EM Channel 2 power"},
+        {"entity_id": "sensor.shelly_em_channel_1_energy", "device_class": "energy", "entity_category": null, "nom": "Shelly EM Channel 1 energy"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": true, "puissance": "sensor.shelly_em_channel_1_power", "energie": "sensor.shelly_em_channel_1_energy"}
+    },
+    {
+      "cas": "le relais du compteur de la maison n'est pas une prise",
+      "entite": {"entity_id": "switch.shelly_em_relay", "device_class": null, "entity_category": null, "nom": "Shelly EM Relay"},
+      "appareil": {"fabricant": "Shelly", "modele": "Shelly EM"},
+      "soeurs": [
+        {"entity_id": "sensor.shelly_em_channel_1_power", "device_class": "power", "entity_category": null, "nom": "Shelly EM Channel 1 power"},
+        {"entity_id": "sensor.shelly_em_channel_2_power", "device_class": "power", "entity_category": null, "nom": "Shelly EM Channel 2 power"},
+        {"entity_id": "sensor.shelly_em_channel_1_energy", "device_class": "energy", "entity_category": null, "nom": "Shelly EM Channel 1 energy"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "compteurs": ["sensor.shelly_em_channel_1_energy"],
+      "attendu": {"prise": false, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "le compteur de la maison, même déclaré outlet",
+      "entite": {"entity_id": "switch.poele", "device_class": "outlet", "entity_category": null, "nom": "Poêle"},
+      "appareil": {"fabricant": "Home Assistant", "modele": "Passerelle MQTT"},
+      "soeurs": [
+        {"entity_id": "sensor.poele_puissance", "device_class": "power", "entity_category": null, "nom": "Poêle puissance"},
+        {"entity_id": "sensor.energie_consommation_jour", "device_class": "energy", "entity_category": null, "nom": "Energie consommation jour"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "compteurs": ["sensor.energie_consommation_jour", "sensor.solaire_energie_totale"],
+      "attendu": {"prise": false, "puissance": null, "energie": null}
+    },
+    {
+      "cas": "les compteurs d'un autre appareil ne changent rien",
+      "entite": {"entity_id": "switch.prise_nas", "device_class": null, "entity_category": null, "nom": "Prise NAS"},
+      "appareil": {"fabricant": "Tuya", "modele": "Smart plug (with power monitoring)"},
+      "soeurs": [
+        {"entity_id": "sensor.prise_nas_power", "device_class": "power", "entity_category": null, "nom": "Prise NAS Power"},
+        {"entity_id": "sensor.prise_nas_energy", "device_class": "energy", "entity_category": null, "nom": "Prise NAS Energy"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "compteurs": ["sensor.linky_energie"],
+      "attendu": {"prise": true, "puissance": "sensor.prise_nas_power", "energie": "sensor.prise_nas_energy"}
+    },
+    {
+      "cas": "le domaine switch seulement",
+      "entite": {"entity_id": "light.lampe_salon", "device_class": null, "entity_category": null, "nom": "Lampe salon"},
+      "appareil": {"fabricant": "Tuya", "modele": "Smart plug (with power monitoring)"},
+      "soeurs": [
+        {"entity_id": "sensor.lampe_salon_power", "device_class": "power", "entity_category": null, "nom": "Lampe salon Power"}
+      ],
+      "lumiere": false, "fil_pilote": false, "sirene": false,
+      "attendu": {"prise": false, "puissance": null, "energie": null}
+    }
+  ],
+  "compteurs": [
+    {
+      "cas": "sans préférences énergie : aucun compteur",
+      "prefs": null,
+      "attendu": []
+    },
+    {
+      "cas": "l'ancien format : une source grid, ses connexions dans flow_from et flow_to",
+      "prefs": {"energy_sources": [
+        {"type": "grid", "flow_from": [{"stat_energy_from": "sensor.linky_hp", "stat_cost": "sensor.linky_hp_cout"}, {"stat_energy_from": "sensor.linky_hc"}],
+         "flow_to": [{"stat_energy_to": "sensor.linky_injection", "stat_compensation": null}], "cost_adjustment_day": 0},
+        {"type": "solar", "stat_energy_from": "sensor.onduleur_energie", "config_entry_solar_forecast": null}
+      ], "device_consumption": [{"stat_consumption": "sensor.prise_nas_energy"}]},
+      "attendu": ["sensor.linky_hc", "sensor.linky_hp", "sensor.linky_injection", "sensor.onduleur_energie"]
+    },
+    {
+      "cas": "le format récent : une source par connexion, la puissance nommée, la batterie et le gaz",
+      "prefs": {"energy_sources": [
+        {"type": "grid", "stat_energy_from": "sensor.energie_consommation_jour", "stat_energy_to": null, "power_config": {"stat_rate": "sensor.energie_puissance_kw"}},
+        {"type": "battery", "stat_energy_from": "sensor.batterie_decharge", "stat_energy_to": "sensor.batterie_charge", "stat_rate": "sensor.batterie_puissance"},
+        {"type": "gas", "stat_energy_from": "sensor.gaz_m3"},
+        {"type": "water", "stat_energy_from": "sensor.eau_m3"}
+      ]},
+      "attendu": ["sensor.batterie_charge", "sensor.batterie_decharge", "sensor.batterie_puissance", "sensor.energie_consommation_jour", "sensor.energie_puissance_kw", "sensor.gaz_m3"]
+    },
+    {
+      "cas": "des préférences abîmées ne lèvent pas",
+      "prefs": {"energy_sources": [null, 5, {"type": "grid", "flow_from": "pas une liste", "stat_energy_from": 7}, {"type": "solar"}]},
+      "attendu": []
+    }
+  ]
+}

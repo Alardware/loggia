@@ -15,22 +15,29 @@ const NL = String.fromCharCode(10);
 const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = src.indexOf(fin, d + 1); return src.slice(d, f < 0 ? undefined : f); };
 
 test('une seule table d’air : la banniere et le badge tombent sur les bornes de confort.js', () => {
-  // 1 150 ppm (fin du « Bon ») et 1 400 (debut de « Élevé ») : les captures du 19/09.
-  assert.ok(src.includes('function airPalier(co2) { return co2 == null || co2 < 1150 ? 0 : co2 < 1400 ? 1 : 2; }'), 'les bornes de la table');
-  assert.ok(src.includes("function airLabel(co2) { return [tr('BON'), tr('MOYEN'), tr('ÉLEVÉ')][airPalier(co2)]; }"), 'le mot de la banniere en decoule');
+  /* ASSERTION MODIFIÉE (audit du 19/10, M16) : plus de paliers à part (`airPalier`, `airLabel`, `co2Style`) — la bannière et le badge
+   * lisent le mot et la couleur de la table (`zoneMesure('co2')`). */
+  assert.ok(!src.includes('function airPalier') && !src.includes('function airLabel') && !src.includes('function co2Style'), 'les paliers à part sont revenus');
+  assert.ok(src.includes("const motCo2 = (co2) => { const z = zoneCo2(co2); return z ? z.t.toLocaleUpperCase(locale()) : ''; };"), 'le mot de la bannière vient de la table');
 });
 
-test('la carte capteur : la carte de base — la mesure en grand, le verdict de la table, la jauge dessous, plus de puces', () => {
-  // Retour user du 19/09 : « il faut revenir a la carte de base, celle-ci, pour
-  // le CO2 ajouter une jauge en dessous comme sur ces images ».
-  const c = bloc('function RoomGenericCard(', NL + 'function ');
-  assert.ok(c.includes("mesure = isNaN(n) ? { v: String(s), u: '' } : { v: fmtN(n), u: unite };"), 'la mesure, valeur et unite');
-  assert.ok(c.includes('const cle = isNaN(n) ? null : cleMesure(a.device_class);') && c.includes('const uniteJauge = uniteTemp(a, hass);') && c.includes("jauge = jaugeMesure(cle, cle === 'temp' ? versCelsius(n, uniteJauge) : n, uniteJauge);"), 'la jauge des mesures que la table connait, temperature convertie en Celsius, reperes dans l’unite du capteur (audit du 03/10)');
-  assert.ok(c.includes("const libMesure = cle === 'co2' ? tr('Qualité d’air') : MESURES_NOMS()[a.device_class];") && c.includes("sub = libMesure + ' · ' + jauge.verdict.t.toLocaleUpperCase(locale());"), 'le mot de la table, en capitales');
-  assert.ok(c.includes("if (cle === 'co2') { avis = jauge.verdict; teinte = TEINTE_PALIER[couleur] || 'or'; }"), 'le CO2 allume sa carte dans la couleur de son palier');
-  assert.ok(c.includes("sub = MESURES_NOMS()[a.device_class] || unite || tr('Mesure');"), 'sans regle : le nom de la mesure, rien d’invente');
-  assert.ok(c.includes("(dom === 'sensor' && mesure && !mort)") && c.includes('fontSize: 22, fontWeight: 800') && c.includes("color: avis != null ? couleur : 'var(--o-text)'"), 'la valeur en grand, coloree par le verdict du CO2 seulement');
-  assert.ok(c.includes('{jauge && !mort && <JaugeMesure jauge={jauge} />}') && c.includes('{barres && !mort && <JaugePile barres={barres} />}'), 'la jauge, ou les barres de la pile, sous le texte');
+/* ASSERTIONS MODIFIÉES (chantier Capteurs, tâche 4 ; C6, C11) : une mesure de la table a sa carte, `RoomMesureCard` —
+ * le chiffre en grand, la phrase de sa zone, la barre des zones (tests/carte_mesure.test.mjs). La carte de base garde
+ * la pile et les mesures sans table ; la ligne « Libellé · VERDICT », la jauge et la teinte du CO₂ sont parties. */
+test('la carte capteur : une mesure de la table a sa carte ; la carte de base garde la pile et le reste, plus de puces', () => {
+  const c = bloc('function RoomGenericCard(', NL + "/* ── La carte d'une MESURE");
+  // ASSERTION MODIFIÉE (audit du 19/10, point 13) : la valeur se lit STRICTEMENT (`lireNombre`).
+  assert.ok(c.includes("mesure = n == null ? { v: String(s), u: '' } : { v: fmtN(n), u: unite };"), 'la mesure, valeur et unite');
+  assert.ok(!c.includes('cleMesure(') && !c.includes('jaugeMesure(') && !c.includes('ligneVerdict') && !c.includes('<JaugeMesure'), 'la carte de base ne lit plus la table : la carte d’une mesure le fait');
+  // ASSERTION MODIFIÉE (audit du 19/10, point 14) : UNE source de noms, confort.js (`nomClasse`), plus `MESURES_NOMS`.
+  assert.ok(c.includes("sub = (nc && !nomDitFamille(nom, nc) ? nc : '') || unite || tr('Mesure');"), 'sans regle : le nom de la mesure, rien d’invente');
+  assert.ok(c.includes("(dom === 'sensor' && mesure && !mort)") && c.includes('fontSize: 22, fontWeight: 800'), 'la valeur en grand');
+  assert.ok(c.includes('{barres && !mort && <JaugePile barres={barres} />}'), 'les barres de la pile, sous le texte');
+  const m = bloc('function RoomMesureCard(', NL + 'function ');
+  // ASSERTION MODIFIÉE (chantier Capteurs, tâche 4 bis) : la phrase porte aussi la classe de la grille commune, et sa forme courte s'écrit à part.
+  // ASSERTION MODIFIÉE (correction bis, point 6) : la phrase de la carte large vit dans son cadre ; la carte étroite écrit toujours la sienne à part.
+  assert.ok(m.includes('<ChiffreMesure ') && m.includes('<BarreMesure ') && m.includes('className="o-mesure-phrases o-seul-large"') && m.includes('className="o-mesure-phrase-courte o-gab-phrase o-seul-etroit"'), 'la carte d’une mesure : le chiffre, la phrase, la barre');
+  assert.ok(src.includes(": (d === 'sensor' && estMesure(S[k])) ? <RoomMesureCard id={id} hass={hass} onOpen={ouvrir} label={label} />"), 'la fabrique envoie une mesure de la table à sa carte');
   assert.ok(!c.includes('soeurs.map') && !src.includes('PUCE_MESURE'), 'plus de puces soeurs');
   assert.ok(!c.includes("parts.join(' · ')"), 'plus la ligne « 579 ppm · 25,7 °C · 50 % »');
 });
