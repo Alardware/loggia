@@ -60,6 +60,15 @@ CLES_DES_MODULES: dict[str, str] = {
     # il les recense tout de suite. Son ETAT du jour (`loggia_enfant_etat`)
     # est un fichier a part, pas une configuration : rien a recharger.
     "loggia_enfant": "enfant",
+    # Le carnet de l'eau (chantier IoT, etape 3) : la vanne designee dans
+    # Parametres > Alertes - un import, « Quelle vanne » - se suit tout de
+    # suite, et la regle que la popup dit suit la configuration. Les alertes,
+    # elles, relisent la leur a chaque usage.
+    "loggia_alertes": "eau",
+    # Les plantes (passe bis de l'etape 3, point 13) : le besoin d'eau d'une
+    # plante ajoutee n'est pas un detecteur de fuite - le carnet le sait tout
+    # de suite, sans attendre le redemarrage.
+    "loggia_plants": "eau",
 }
 
 

@@ -271,6 +271,19 @@ test('le programme de l’appareil allumé se dit dans « En ce moment », plann
   assert.deepEqual(lignesMoment(etat([{ ...prog, planning: false }])), [], 'planning éteint : rien à dire');
 });
 
+test('un programme d’ailleurs qui le commande se dit dans « En ce moment », planning allumé seulement (26/10)', () => {
+  /* Le radiateur du bureau de la démo, commandé aussi par un planning Scheduler : sa fiche le disait, « En ce moment »
+   * restait muet. Le programme de l'appareil, plus précis, passe devant. */
+  const bureau = ch('bureau', { avertissements: ['programme_concurrent'], source: 'planning', mode: 'eco',
+    concurrents: [{ type: 'scheduler', entite: 'switch.schedule_radiateur_bureau', nom: 'Planning radiateur bureau' }] });
+  const [l] = lignesMoment(etat([bureau]));
+  assert.equal(l.sous, 'Un autre programme le commande aussi : le planning ne commande pas seul');
+  assert.equal(l.icone, 'calendar-clock');
+  assert.deepEqual(lignesMoment(etat([{ ...bureau, planning: false }])), [], 'planning éteint : rien à dire');
+  const deux = lignesMoment(etat([{ ...bureau, avertissements: ['programme_appareil', 'programme_concurrent'] }]));
+  assert.equal(deux[0].sous, 'Son propre programme est allumé : le planning ne commande pas seul');
+});
+
 test('un poêle MCZ en manuel se dit dans « En ce moment », planning allumé seulement (19/10)', () => {
   const manuel = ch('poele', { avertissements: ['puissance_fixe'], source: 'planning', mode: 'eco' });
   const [l] = lignesMoment(etat([manuel]));

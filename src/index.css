@@ -1936,6 +1936,21 @@ html.loggia-light .o-vacances { color-scheme: light; }
  * page cède, pas les mots (05/10). Le robot en profite : ses cinq onglets en
  * polonais tiennent à 320 px sans les 2 px de côté, que le mot centré n'utilise pas. */
 .rb-onglets > .rb-onglet { min-width: min-content; padding-left: 0; padding-right: 0; }
+/* La pastille qui COULE (26/10, `FicheOnglets`) : une seule, derrière les
+ * onglets, posée sur les bords de l'onglet choisi. Le bord avant part le
+ * premier ; l'arrière le suit avec un temps de retard et une courbe plus
+ * lente : elle s'étire, puis se referme sur le nouvel onglet. Le mot du nouvel
+ * onglet passe au blanc quand elle arrive. Sans `data-anime` (ouverture,
+ * redimensionnement), elle est posée net. */
+.rb-onglets { position: relative; }
+.rb-onglets > .rb-onglet { position: relative; z-index: 1; transition: color .16s ease; }
+.rb-onglets > .rb-onglet[aria-selected="true"] { transition-delay: .18s; }
+.rb-pastille { position: absolute; z-index: 0; border-radius: 12px; background: var(--o-accent-fond); pointer-events: none; }
+.rb-pastille[data-anime][data-sens="avant"] { transition: right .26s cubic-bezier(.3,.9,.3,1), left .34s cubic-bezier(.6,0,.25,1) .09s; }
+.rb-pastille[data-anime][data-sens="arriere"] { transition: left .26s cubic-bezier(.3,.9,.3,1), right .34s cubic-bezier(.6,0,.25,1) .09s; }
+@media (prefers-reduced-motion: reduce) {
+  .rb-pastille[data-anime], .rb-onglets > .rb-onglet { transition: none; }
+}
 /* Cinq onglets (le robot) sur un écran étroit : les mots entiers ne tiennent plus
  * toujours — « Panoramica Zone Programma Cronologia Manutenzione » faisait 295 px
  * dans une barre de 274 à 320 px, « Manutenzione » sortait de la barre jusqu'au

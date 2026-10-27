@@ -104,7 +104,8 @@ def normaliser_repas(brut) -> dict:
     if not isinstance(brut, dict):
         raise ValueError("un repas est un objet")
     ident = str(brut.get("id") or "")
-    if not IDENT.match(ident):
+    # `fullmatch` : `$` accepte un `\n` final, « r1\n » passait (25/10, ADR 0216).
+    if not IDENT.fullmatch(ident):
         raise ValueError("identifiant de repas invalide : %r" % (ident,))
     heure = lire_heure(brut.get("heure"))
     if heure is None:

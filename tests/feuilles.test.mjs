@@ -75,7 +75,8 @@ test('chaque feuille porte la croix sur sa ligne d’en-tête', () => {
       // demande (ficheswitch.jsx), porte sa croix et son nom par l'en-tête des fiches (`FicheEntete`, passé dans ses briques), lu plus bas.
       // ASSERTION MODIFIÉE (boot, 19/10) : la feuille du Calendrier garde sa coquille (App.jsx) ; son contenu, chargé à la demande
       // (feuillecalendrier.jsx), porte sa croix (`CroixFeuille`, en dernier sur sa ligne d'en-tête), lue DANS son module, plus bas.
-      if (!/<CroixFeuille|<TitreFeuille|<FicheEntete|<ContenuEnfant|<FicheRobotContent|<FicheDistributeurContent|<FicheChauffageContent|<FicheVoletContent|<FichePriseContent|<FicheLumiereContent|<FicheMediaContent|<FicheMeteoContenu|<FicheCapteurContent|<FicheBinaireContent|<FicheConfortContent|<FichePlanteContent|<FicheGroupeContent|<FicheSwitchContent|<FeuilleCalendrierContent/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
+      // ASSERTION MODIFIÉE (étape 3 IoT, 25/10 ; I27) : la popup d'une vanne : son contenu (`ContenuVanne`, fichevanne.jsx) porte l'en-tête commun — sa croix et son nom (`EnteteFiche`).
+      if (!/<CroixFeuille|<TitreFeuille|<FicheEntete|<ContenuEnfant|<FicheRobotContent|<FicheDistributeurContent|<FicheChauffageContent|<FicheVoletContent|<FichePriseContent|<FicheLumiereContent|<FicheMediaContent|<FicheMeteoContenu|<FicheCapteurContent|<FicheBinaireContent|<FicheConfortContent|<FichePlanteContent|<FicheGroupeContent|<FicheSwitchContent|<FeuilleCalendrierContent|<ContenuVanne/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
       i = s.indexOf('<BottomSheet', i + 1);
     }
   }
@@ -98,6 +99,8 @@ test('chaque feuille porte la croix sur sa ligne d’en-tête', () => {
   assert.ok(lire('src', 'fichedistributeur.jsx').includes('<EnteteFiche nom={nom}'), 'la fiche du distributeur a perdu l’en-tête commun');
   // La fiche d'un chauffage (plan 2 du chantier Chauffage, tâche 8) : le même en-tête commun — l'épingle, puis la croix.
   assert.ok(lire('src', 'fichechauffage.jsx').includes('<EnteteFiche nom={nom}'), 'la fiche du chauffage a perdu l’en-tête commun');
+  // ASSERTION AJOUTÉE (étape 3 IoT, 25/10 ; I27) : la popup d'une vanne, le même en-tête commun — l'épingle, puis la croix.
+  assert.ok(lire('src', 'fichevanne.jsx').includes('<EnteteFiche nom={v.nom} epingle={epingle}'), 'la popup de la vanne a perdu l’en-tête commun');
   /* ASSERTION AJOUTÉE (passe téléphone, corrections bis 2, point 2) : la fiche d'un lecteur. La liste plus haut accepte `<FicheMediaContent` sur son seul
    * nom — c'est la coquille, dans App.jsx, qui garde le BottomSheet — ; la croix, elle, vit DANS le contenu chargé à la demande (fichemedia.jsx), qui bâtit
    * son en-tête à la main. On la lit là, en dernier sur la ligne : le nom, l'épingle, puis la croix. Retirée de ce module, plus rien n'échouait. */
@@ -241,7 +244,8 @@ test('chaque feuille dit son nom : sa ligne de titre, ou NomFeuille posé sur le
       // demande (ficheswitch.jsx), porte sa croix et son nom par l'en-tête des fiches (`FicheEntete`, passé dans ses briques), lu plus bas.
       // ASSERTION MODIFIÉE (boot, 19/10) : la feuille du Calendrier garde sa coquille (App.jsx) ; son contenu, chargé à la demande
       // (feuillecalendrier.jsx), porte son nom (`NomFeuille` sur le mois), lu DANS son module, plus bas.
-      if (!/<TitreFeuille|<FicheEntete|<NomFeuille|<ContenuEnfant|<FicheRobotContent|<FicheDistributeurContent|<FicheChauffageContent|<FicheVoletContent|<FichePriseContent|<FicheLumiereContent|<FicheMediaContent|<FicheMeteoContenu|<FicheCapteurContent|<FicheBinaireContent|<FicheConfortContent|<FichePlanteContent|<FicheGroupeContent|<FicheSwitchContent|<FeuilleCalendrierContent/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
+      // ASSERTION MODIFIÉE (étape 3 IoT, 25/10 ; I27) : la popup d'une vanne : son contenu (`ContenuVanne`, fichevanne.jsx) porte l'en-tête commun — sa croix et son nom (`EnteteFiche`).
+      if (!/<TitreFeuille|<FicheEntete|<NomFeuille|<ContenuEnfant|<FicheRobotContent|<FicheDistributeurContent|<FicheChauffageContent|<FicheVoletContent|<FichePriseContent|<FicheLumiereContent|<FicheMediaContent|<FicheMeteoContenu|<FicheCapteurContent|<FicheBinaireContent|<FicheConfortContent|<FichePlanteContent|<FicheGroupeContent|<FicheSwitchContent|<FeuilleCalendrierContent|<ContenuVanne/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
       i = s.indexOf('<BottomSheet', i + 1);
     }
   }

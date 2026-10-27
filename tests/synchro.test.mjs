@@ -144,8 +144,12 @@ test('aucune écriture automatique de la maison depuis un compte ordinaire', () 
   const app = lire('src', 'App.jsx');
   // La liaison profil ↔ compte Home Assistant se déclenche au chargement, sans
   // que personne ne clique. C'est elle qui semait l'ombre sur la tablette.
-  assert.match(app, /if \(haAdmin && hu\.id && users\[i\]\.haId !== hu\.id\)/,
-    'la liaison profil ↔ compte repart depuis n’importe quel compte : elle sera refusée à chaque ouverture');
+  // ASSERTION MODIFIEE (ADR 0276, 27/10) : la liaison profil ↔ compte ne
+  // s'écrit plus depuis l'écran ; le SERVEUR la fait, pour le seul compte de
+  // la connexion (`loggia/profils/moi`), quel que soit son rôle.
+  assert.ok(!/persistUsers\(users\.map\(\(u, j\) => j === i \? \{ \.\.\.u, haId: hu\.id \}/.test(app),
+    'l’écran réécrit de nouveau toute la liste des profils pour y graver un lien');
+  assert.ok(app.includes("h.callWS({ type: 'loggia/profils/moi' })"), 'l’écran ne demande plus son profil au serveur');
   assert.match(app, /if \(haAdmin && !usersPousses\.current/,
     'le semis de la liste des profils repart depuis n’importe quel compte');
   assert.match(app, /setHaAdmin\(!!\(state\.available && state\.user && state\.user\.is_admin\)\)/,

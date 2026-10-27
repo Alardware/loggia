@@ -78,6 +78,12 @@ sont masquées, avec le motif.
   (fumée, monoxyde de carbone, gaz, fuite d'eau, sabotage) pousse une
   notification rouge dès qu'il se déclenche, en tête de liste. La vigilance
   météo (MétéoAlarm) a sa notification ambre à part, portant l'événement réel.
+- **L'arrivée d'eau** — une vanne d'eau, ou la prise qui la commande, a sa carte
+  et sa fiche : pourquoi elle est fermée (une fuite, une personne, une
+  automatisation), l'état de chaque détecteur de fuite, le journal du jour. Sur
+  une fuite, la maison ferme la vanne choisie, sinon toutes les vannes d'eau ;
+  elle ne la rouvre jamais seule, et « Rouvrir l'eau » demande si la fuite est
+  réparée. Je n'ai pas de vanne chez moi : c'est vérifié dans la démonstration.
 - **Journal d'activité par pièce** — sous les appareils d'une pièce, les
   dernières 24 heures : qui s'est allumé, ouvert, verrouillé, à quelle heure.
   Alimenté par le logbook de Home Assistant, poussé en direct.
@@ -203,7 +209,7 @@ seuils que la barre de confort des pièces.
   retire aucun. Un compte ne peut donc rien faire ici qu'il ne puisse déjà
   faire ailleurs dans Home Assistant.
 - Les commandes qui écrivent la configuration de la maison sont **réservées
-  aux administrateurs** (`require_admin`, sur les quinze commandes WebSocket
+  aux administrateurs** (`require_admin`, sur les seize commandes WebSocket
   concernées — un test verrouille la liste). L'identité vient de la
   connexion authentifiée, jamais d'un champ envoyé par le navigateur.
 - Les règles n'appellent que des services **écrits en dur** dans le composant
@@ -231,7 +237,9 @@ seuils que la barre de confort des pièces.
   enregistré côté serveur avec le reste de la configuration, et non plus
   seulement sur l'appareil. C'est ce qui permet de le retrouver sur un autre
   écran.
-- Aucune ressource externe : ni CDN, ni police distante, ni télémétrie.
+- Aucune ressource externe : ni CDN, ni police distante, ni télémétrie. Une
+  seule exception : à l'écran des mises à jour, les logos des intégrations
+  viennent de brands.home-assistant.io, comme dans Home Assistant.
 
 ## Développement
 

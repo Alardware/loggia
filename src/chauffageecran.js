@@ -348,6 +348,9 @@ export function lignesMoment(etat, unite = 'C', { admin = true } = {}) {
     } else if (avis.includes('programme_appareil')) {
       // Son propre programme (le chrono d'un poêle) commande aussi : le planning n'est pas seul (audit du 19/10).
       ligne = ['calendar-clock', 'var(--o-warn-rgb)', tr('Son propre programme est allumé : le planning ne commande pas seul')];
+    } else if (avis.includes('programme_concurrent')) {
+      // Un programme d'ailleurs (Scheduler, Velair, une automatisation) le commande aussi : deux chefs (26/10).
+      ligne = ['calendar-clock', 'var(--o-warn-rgb)', tr('Un autre programme le commande aussi : le planning ne commande pas seul')];
     } else if (avis.includes('puissance_fixe')) {
       // Un poêle MCZ en manuel chauffe à puissance fixe : la consigne, donc le planning, ne compte plus (19/10).
       ligne = ['settings-sliders', 'var(--o-warn-rgb)', tr('Mode manuel : le planning n’a pas d’effet')];

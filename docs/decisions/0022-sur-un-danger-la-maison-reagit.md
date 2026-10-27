@@ -88,3 +88,11 @@ Alertes — là où le danger se règle déjà.
   danger coché, la maison réagit.
 - Et le besoin d'eau d'une plante de `loggia_plants` n'est pas une fuite, quelle
   que soit sa plateforme (M1) : la règle du préfixe de l'écran vaut au serveur.
+
+## Amendement du 25/10/2026 — toutes les vannes d'eau, et la cause dite au carnet (chantier IoT, étape 3 ; ADR 0217)
+
+*À l'essai, rien de publié ; vérifié dans la démo seulement (l'utilisateur n'a ni vanne ni détecteur de fuite). Le serveur change : Home Assistant doit être REDÉMARRÉ à l'installation.*
+
+- **Faute d'une vanne choisie, la maison les ferme TOUTES (I30).** `_vanne` coupait « la première `valve` d'eau » par ordre d'identifiant : une vanne d'arrosage pouvait passer avant l'arrivée, et l'arrivée restait ouverte sur la fuite. `_vannes` rend la vanne désignée dans « Quelle vanne » (une prise comprise), sinon chaque `valve` de classe `water` joignable ; elles partent par domaine — `valve.close_valve` pour les vannes, `switch.turn_off` pour une prise désignée —, en tête de l'échelle et tenues, comme avant. Le danger passé, elles restent TOUTES coupées (`_vannes_coupees`, une liste), et la ligne « laisser coupée » du journal les compte. Plus de vannes fermées sur une fuite, jamais moins ; jamais une ouverture (un test de source refuse `open_valve` dans `alertes.py`).
+- **La règle dit la cause au carnet de l'eau AVANT d'agir.** `eau.py` (ADR 0217) apprend le détecteur et son nom (`annoncer_fermeture`) : la fermeture qui suit, dans les deux minutes, est notée « fuite », et la popup de la vanne dit « Depuis 14:02 · fuite : Sous l'évier ». Un carnet absent ou en échec ne retient pas la sûreté.
+- **« Vanne d'eau coupée » quitte Paramètres › Alertes** pour la popup de la vanne, où elle s'appelle « Fermer en cas de fuite » (I29) et s'écrit par une commande étroite (`loggia/eau/regle`). La valeur reste la même (`actions.vanne.actif`) ; Paramètres n'en garde qu'une ligne qui dit où elle se règle, et « Quelle vanne », dont le défaut s'écrit « toutes les vannes d'eau ».

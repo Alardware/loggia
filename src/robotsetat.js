@@ -145,9 +145,10 @@ export function departRobot(robot, maintenant = horloge.maintenant()) {
  * passe bis du 18/10, point A) avec le RÔLE que l'écran lui demande (`role` : `nettoyer_tout`, `pieces_selectionnees`, `pause`,
  * `reprendre`, `retour_base` — passe bis 2, point J) : le serveur le lance s'il est celui de ce rôle, et un départ par script se dit
  * par son nom (`libelle`). `geste` : le jeton du geste que l'appui a posé avec sa GARDE (`poserGeste`) — il tient tant que le serveur
- * n'a pas répondu, et prend son filet à la réponse (passe bis 2 du 18/10, point E).
+ * n'a pas répondu, et prend son filet à la réponse (passe bis 2 du 18/10, point E). `localiser` (petit paquet du 25/10) : « Localiser »,
+ * que le SERVEUR décide — son script `localiser` désigné, sinon `vacuum.locate` ; ni script ni rôle d'ici.
  */
-export async function lancerRobot(hass, robot, zones = [], { direct = null, tout = null, script = null, role = null, libelle = null, depart = true, geste = null } = {}) {
+export async function lancerRobot(hass, robot, zones = [], { direct = null, tout = null, script = null, role = null, libelle = null, depart = true, geste = null, localiser = false } = {}) {
   const noms = (zones || []).map(z => z && z.nom).filter(n => typeof n === 'string' && n);
   /* `tout` : une tondeuse qui vise TOUTES ses aires « tond tout le jardin » (passe bis du 18/10, point 2), comme le serveur le notera.
    * `script` : un script maison de l'aspirateur (point A ; sa réponse « Par le serveur ») — un départ dit son nom (`libelle`), un
@@ -162,7 +163,7 @@ export async function lancerRobot(hass, robot, zones = [], { direct = null, tout
       return null;
     }
     try {
-      const etat = await hass.callWS({ type: 'loggia/robots/lancer', robot, zones, ...(script ? { script, ...(role ? { role } : null) } : null) });
+      const etat = await hass.callWS({ type: 'loggia/robots/lancer', robot, zones, ...(localiser ? { localiser: true } : script ? { script, ...(role ? { role } : null) } : null) });
       poserEtatRobots(etat);
       relireBientot();
       return etat;

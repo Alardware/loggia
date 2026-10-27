@@ -20,7 +20,7 @@
  *    attributs des seules entités qui en ont besoin (le `last_triggered` d'une
  *    automatisation) : l'historique minimal ne les a pas.
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { tr, trSens, locale } from './i18n.js';
 import { Fi, Bascule, NomFeuille, CroixFeuille } from './ui.jsx';
 import { vacOption } from './state.js';
@@ -96,7 +96,8 @@ export function LigneReglage({ hass, r, motOption = null }) {
   if (r.type === 'bascule') {
     const dom = r.domaine === 'light' ? 'light' : 'switch';
     const on = ov != null ? ov : !!r.actif;
-    commande = <Bascule on={on} nom={r.nom} cb={() => { poser(!on); appel(dom, on ? 'turn_off' : 'turn_on', {}); }} />;
+    // Un refus — la garde de la vanne d'eau (actions.js), Home Assistant — retire l'avance : la bascule ne dit pas « allumé » 6 s pour rien.
+    commande = <Bascule on={on} nom={r.nom} cb={() => { poser(!on); commanderService(hass, r.id, dom, on ? 'turn_off' : 'turn_on', { entity_id: r.id }, () => poser(null)); }} />;
   } else if (r.type === 'choix') {
     const valeur = ov != null ? ov : r.valeur;
     const i = r.options.indexOf(valeur);
@@ -277,8 +278,48 @@ export function EnteteFiche({ nom, reglages = false, enReglages = false, onRegla
  * `idBase` vient d'un `useId()` du parent, appelé avant tout retour anticipé.
  * Onglet choisi : bleu plein, texte blanc (règle des puces). Les autres en
  * --o-text1 : en --o-text2, 4,24:1 en clair sur le fond de la barre (05/10).
+ *
+ * Le bleu plein n'est plus le fond du bouton : c'est UNE pastille commune,
+ * derrière les onglets, qui COULE vers celui qu'on choisit (26/10, d'après le
+ * `slidePill` d'une vidéo). Le bord du côté où l'on va part le premier et
+ * l'étire, le bord arrière rattrape un temps après, comme une goutte. On
+ * mesure l'onglet choisi dans la barre ; le CSS (`.rb-pastille`, index.css)
+ * décale les deux bords selon `data-sens`, et coupe tout en « réduire les
+ * animations ». Au premier affichage et au redimensionnement, elle est POSÉE
+ * (`data-anime` absent) : une popup qui s'ouvre ne la voit pas glisser du bord.
+ * Tant qu'elle n'est pas mesurée (premier rendu, tests sans mise en page),
+ * l'onglet choisi garde son fond bleu : jamais d'onglet choisi sans bleu.
  */
 export function FicheOnglets({ idBase, nom, onglets, actuel, onChoisir }) {
+  const barre = useRef(null);
+  const precedent = useRef(null); // l'index de l'onglet d'avant : il donne le sens
+  const [pastille, setPastille] = useState(null);
+  const ici = onglets.findIndex(o => o[0] === actuel);
+  // Les bords de l'onglet choisi dans la barre ; `offset*` se lisent depuis la
+  // barre, positionnée : ce sont aussi ceux d'un enfant `position: absolute`.
+  const placer = (anime, sens) => {
+    const el = barre.current;
+    const b = el && el.querySelector('[aria-selected="true"]');
+    if (!b || !b.offsetWidth) return;
+    setPastille({ g: b.offsetLeft, d: el.clientWidth - b.offsetLeft - b.offsetWidth,
+      h: b.offsetTop, bas: el.clientHeight - b.offsetTop - b.offsetHeight, anime, sens });
+  };
+  useLayoutEffect(() => {
+    const avant = precedent.current;
+    precedent.current = ici;
+    placer(avant != null && avant !== ici, avant != null && ici < avant ? 'arriere' : 'avant');
+  }, [ici]);
+  // La popup change de largeur (téléphone tourné, fenêtre) : la pastille se
+  // replace sans glisser. La fenêtre aussi, l'observateur ne voit pas tout.
+  useEffect(() => {
+    const el = barre.current;
+    if (!el) return undefined;
+    const replacer = () => placer(false, 'avant');
+    const obs = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(replacer) : null;
+    if (obs) obs.observe(el);
+    window.addEventListener('resize', replacer);
+    return () => { if (obs) obs.disconnect(); window.removeEventListener('resize', replacer); };
+  }, []);
   const aller = (e, i) => {
     const j = ongletVoisin(onglets.length, i, e.key);
     if (j < 0) return;
@@ -288,15 +329,18 @@ export function FicheOnglets({ idBase, nom, onglets, actuel, onChoisir }) {
     onChoisir(onglets[j][0]);
   };
   return (
-    <div role="tablist" aria-label={nom} className="rb-onglets" style={{ '--rb-n': onglets.length }}>
+    <div role="tablist" aria-label={nom} className="rb-onglets" ref={barre} style={{ '--rb-n': onglets.length }}>
       {onglets.map(([id, libelle, icone], i) => (
         <button key={id} id={idBase + '-t-' + id} type="button" role="tab" aria-selected={actuel === id}
           aria-controls={actuel === id ? idBase + '-p-' + id : undefined} tabIndex={actuel === id ? 0 : -1}
           onClick={() => onChoisir(id)} onKeyDown={(e) => aller(e, i)} className="rb-onglet"
-          style={{ background: actuel === id ? 'var(--o-accent-fond)' : 'transparent', color: actuel === id ? '#fff' : 'var(--o-text1)' }}>
+          style={{ background: actuel === id && !pastille ? 'var(--o-accent-fond)' : 'transparent', color: actuel === id ? '#fff' : 'var(--o-text1)' }}>
           <Fi i={icone} size={15} /><span>{libelle}</span>
         </button>
       ))}
+      {/* APRÈS les onglets : `.rb-onglet:nth-child(5)` compte encore les seuls onglets. */}
+      {pastille && <span aria-hidden="true" className="rb-pastille" data-sens={pastille.sens} data-anime={pastille.anime ? '1' : undefined}
+        style={{ left: pastille.g, right: pastille.d, top: pastille.h, bottom: pastille.bas }} />}
     </div>
   );
 }

@@ -40,6 +40,7 @@ CLE_APPAREILS = "loggia_appareils"
 
 # Ce que l'ecran tire : des minuscules et des chiffres. Rien d'autre ne passe,
 # pour qu'un identifiant ne puisse pas se faire passer pour une cle.
+# Lus par `fullmatch` (26/10) : avec `match`, le `$` de Python accepte un `\n` final.
 MOTIF_ID = re.compile(r"^[a-z0-9]{8,40}$")
 MOTIF_PROFIL = re.compile(r"^[0-9]{1,3}$")
 FORMATS: frozenset[str] = frozenset({"pc", "tablette", "mobile"})
@@ -57,19 +58,19 @@ def _fiches(valeur: Any) -> dict[str, dict[str, Any]]:
     if not isinstance(valeur, dict):
         return {}
     return {k: dict(v) for k, v in valeur.items()
-            if isinstance(k, str) and MOTIF_ID.match(k) and isinstance(v, dict)}
+            if isinstance(k, str) and MOTIF_ID.fullmatch(k) and isinstance(v, dict)}
 
 
 def _demande_valide(ident: Any, demande: Any) -> dict[str, Any]:
     """Les champs d'une fiche envoyee par l'ecran, verifies un a un."""
-    if not isinstance(ident, str) or not MOTIF_ID.match(ident):
+    if not isinstance(ident, str) or not MOTIF_ID.fullmatch(ident):
         raise ValueError("identifiant d'appareil invalide")
     if not isinstance(demande, dict):
         raise ValueError("fiche d'appareil invalide")
     champs: dict[str, Any] = {}
     if "profil" in demande:
         profil = demande["profil"]
-        if not isinstance(profil, str) or not MOTIF_PROFIL.match(profil):
+        if not isinstance(profil, str) or not MOTIF_PROFIL.fullmatch(profil):
             raise ValueError("profil d'appareil invalide")
         champs["profil"] = profil
     if "format" in demande:

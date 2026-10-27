@@ -249,7 +249,8 @@ def test_chaque_module_passe_par_le_demarrage_garde():
     dossier = RACINE / "custom_components" / "loggia"
     # ASSERTION MODIFIEE (chantier Mode enfant, tache 3) : `enfant` passe par
     # le demarrage garde comme les autres.
-    for f in ("chauffage", "distributeurs", "enfant", "fenetres", "interrupteurs", "lumieres", "minuteurs", "nuit",
+    # ASSERTION MODIFIEE (etape 3 IoT, 25/10 ; I28) : le carnet de l'eau passe par le demarrage garde.
+    for f in ("chauffage", "distributeurs", "eau", "enfant", "fenetres", "interrupteurs", "lumieres", "minuteurs", "nuit",
               "presence", "prises", "robots", "scenarios", "sirene", "veilles", "volets"):
         src = (dossier / (f + ".py")).read_text(encoding="utf-8")
         assert "hass.async_create_task(self._async_demarrer())" not in src, f
@@ -278,7 +279,8 @@ def test_chaque_module_vivant_sait_s_arreter():
     # son ecriture differee. Dix-huit avec le mode enfant (chantier Mode
     # enfant) : son ecoute, son tic de minute, ses echeances, son etat differe.
     # ASSERTION MODIFIEE (chantier Mode enfant, tache 3) : 17 -> 18.
-    assert len(noms) == 18, noms
+    # ASSERTION MODIFIEE (etape 3 IoT, 25/10 ; I28) : 18 -> 19, le carnet de l'eau - son ecoute, son ecriture differee.
+    assert len(noms) == 19, noms
     for nom in noms:
         src = (dossier / (nom + ".py")).read_text(encoding="utf-8")
         assert "def async_arreter" in src or "def arreter" in src, nom

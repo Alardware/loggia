@@ -274,7 +274,11 @@ test('Réglages : la ligne montre tout de suite ce qu’on vient de demander, et
   const b = trouver(LigneReglage({ hass: {}, r: { id: 'switch.verrou', type: 'bascule', nom: 'Verrou', actif: false } }), 'cb');
   assert.equal(b.props.on, true, 'la bascule ne montre pas la demande en vol');
   b.props.cb();
-  assert.deepEqual(appels.at(-1), ['switch', 'turn_off', { entity_id: 'switch.verrou' }]);
+  // Passe bis 2 de l'étape 3 IoT : la bascule passe aussi son rappel `surEchec`, qui retire l'avance sur un refus.
+  assert.deepEqual(appels.at(-1).slice(0, 3), ['switch', 'turn_off', { entity_id: 'switch.verrou' }]);
+  poses.length = 0;
+  appels.at(-1)[3]('eau');
+  assert.deepEqual(poses, [null], 'un refus défait la bascule');
   const c = trouver(LigneReglage({ hass: {}, r: { id: 'select.mode', type: 'choix', nom: 'Mode', valeur: 'a', options: ['a', 'b', 'c'] } }), 'plus');
   c.props.plus();
   assert.deepEqual(appels.at(-1), ['select', 'select_option', { entity_id: 'select.mode', option: 'c' }], 'le choix repart de l’option demandée');

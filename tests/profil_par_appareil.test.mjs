@@ -154,11 +154,32 @@ test('le compte relié passe devant la fiche ; un écran non relié ne rouvre pa
   const { readFileSync } = await import('node:fs');
   const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
   assert.ok(!app.includes('dejaChoisi'), 'la reconnaissance du compte est de nouveau réservée aux écrans neufs');
-  const i = app.indexOf('if (profilDuCompte >= 0) { if (profilDuCompte !== userIdx) setUserIdx(profilDuCompte); return; }');
+  const i = app.indexOf('if (duCompte >= 0) { if (duCompte !== userIdx) setUserIdx(duCompte); return; }');
   const j = app.indexOf('const p = parseInt(profilAppareil(), 10);');
   assert.ok(i > 0 && j > i, 'la fiche de l’écran passe devant le compte Home Assistant');
   assert.ok(app.includes("if (estAdmin(cible)) { const j = users.findIndex((u, k) => !estAdmin(k)); if (j >= 0) cible = j; }"),
     'un écran non relié rouvre un profil Admin sans le code');
   assert.ok(app.includes("return (!haAdmin && String(users[i].role || '').toLowerCase() === 'admin') ? -1 : i;"),
     'un compte non administrateur ouvre un profil Admin');
+});
+
+// ── D'abord quel écran, ensuite qui regarde (ADR 0222 puis 0276, 27/10) ─────
+// Relevé par la session de coordination : le serveur rend TOUJOURS un profil ;
+// passé avant la question d'appareil, il l'empêchait d'être posée, et un écran
+// au cache vidé perdait sa mise en page.
+
+test('la question d’appareil passe avant le profil du compte, qui s’applique après sa réponse', async () => {
+  const { readFileSync } = await import('node:fs');
+  const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  const q = app.indexOf('if (!questionPosee.current && !Object.keys(ficheAppareil()).length) {');
+  const r = app.indexOf('profilRepris.current = true;', q);
+  const c = app.indexOf('const duCompte = (profilServeur >= 0 && profilServeur < users.length) ? profilServeur : profilDuCompte;');
+  assert.ok(q > 0 && r > q && c > r, 'le profil du compte passe de nouveau avant la question d’appareil');
+  // La question posée, l'effet attend sa réponse sans figer le choix du profil.
+  assert.ok(app.includes('if (!serverOk || !users.length || questionAppareil || profilServeur === null) return;'),
+    'le profil se choisit pendant que la question est ouverte');
+  // Reprendre un appareil ne choisit plus le profil : l'effet le fait ensuite.
+  const debut = app.indexOf('const reprendreAppareil = (id) => {');
+  const corps = app.slice(debut, app.indexOf(String.fromCharCode(10) + '  };', debut));
+  assert.ok(debut > 0 && !corps.includes('setUserIdx'), 'reprendre un appareil impose de nouveau le profil de sa fiche, avant celui du compte');
 });

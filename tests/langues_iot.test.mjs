@@ -56,15 +56,18 @@ test('chaque bloc du chantier est dans les six catalogues, avec les mêmes clés
   }
 });
 
-test('le polonais nouveau se signale à Seba882 : soixante-huit textes à relire', () => {
+test('le polonais nouveau se signale à Seba882 : soixante-sept textes à relire', () => {
   const pl = blocs(TEXTE.pl);
   assert.ok(pl.every(b => b.marque), 'un bloc polonais sans la marque de relecture : ' + pl.filter(b => !b.marque).map(b => b.titre).join(' | '));
   /* ASSERTION MODIFIÉE (passe bis du 18/10, points 15, A et 14) : deux textes de l'Entretien partent (« Tout est en ordre. » et sa
    * suite : plus de phrase permanente), trois arrivent (le refus d'un script, son nom au journal, « Touchez une zone « ? » … »).
    * ASSERTION MODIFIÉE (passe bis 2 du 18/10, points D, E et I) : six arrivent — la phrase et le refus d'une tondeuse sans zone allumée,
-   * le refus d'une bascule sans réponse, la ligne d'un passage retenu, et les deux causes que le serveur écrit au journal. */
-  assert.deepEqual(pl.map(b => b.cles.length), [11, 5, 1, 1, 25, 16, 3, 6]);
-  assert.equal(pl.reduce((n, b) => n + b.cles.length, 0), 68);
+   * le refus d'une bascule sans réponse, la ligne d'un passage retenu, et les deux causes que le serveur écrit au journal.
+   * ASSERTION MODIFIEE (26/10, petit paquet) : « Départ non lancé — le robot ne répond pas » quitte le bloc des refus (tâche 4) — le
+   * robot muet se refuse aussi pour un geste, la phrase neutre va en fin de catalogue ; l'ancienne quitte aussi pl.js (une clé
+   * orpheline, comme à l'étape de l'eau). Soixante-huit devient soixante-sept (titre compris). */
+  assert.deepEqual(pl.map(b => b.cles.length), [11, 4, 1, 1, 25, 16, 3, 6]);
+  assert.equal(pl.reduce((n, b) => n + b.cles.length, 0), 67);
 });
 
 test('un gabarit de pluriel du chantier a ses formes polonaises', () => {

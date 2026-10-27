@@ -337,8 +337,13 @@ test('la roue en démo : le rôle seul, fondu dans la description entière ; l�
   assert.ok(!('localiser' in sans.vacuumScripts) && sans.vacuumScripts.pause === avant.vacuumScripts.pause, 'un rôle vide est retiré, les autres restent');
   assert.deepEqual(designerScriptDemo({ alarm: 'x', vacuumScripts: { pause: 'script.p' } }, 'pause', null), { alarm: 'x' }, 'le dernier rôle emporte `vacuumScripts`');
   assert.deepEqual(designerScriptDemo(null, 'pause', 'script.p'), { vacuumScripts: { pause: 'script.p' } }, 'une description qui n’existe pas naît du rôle');
-  for (const [role, script, entites] of [['danser', 'script.p', {}], ['pause', 'light.p', {}], ['pause', '', {}], ['pause', 'script.p', []], ['pause', 'script.p', 'texte']]) {
+  for (const [role, script, entites] of [['danser', 'script.p', {}], ['pause', 'light.p', {}], ['pause', '', {}]]) {
     assert.throws(() => designerScriptDemo(entites, role, script), { code: 'invalid_format' }, role + ' ' + script);
+  }
+  /* ASSERTION MODIFIÉE (25/10, petit paquet robots) : une description illisible a son code à elle (`description_illisible`), comme chez
+   * le vrai serveur — plus le refus générique `invalid_format`, que la roue ne savait dire que par son dernier recours. */
+  for (const entites of [[], 'texte']) {
+    assert.throws(() => designerScriptDemo(entites, 'pause', 'script.p'), { code: 'description_illisible' }, String(entites));
   }
   assert.ok(DEMO.includes("msg.type === 'loggia/robots/scripts'") && DEMO.includes("if (ordinaire) return Promise.reject({ code: 'unauthorized'"), 'le faux serveur répond à la commande, et la refuse à un compte ordinaire');
   // La maison par défaut n'a pas de description de scripts : désigner en crée une, et la source devient `scripts` sur-le-champ.
@@ -362,4 +367,47 @@ test('la démo de l’écran lit la variante des robots dans l’URL, et dit sa 
   assert.ok(DEMO.includes("if (VARIANTES_ROBOTS.indexOf(q.get('robots')) >= 0) VARIANTE_ROBOTS = q.get('robots');"), 'la variante');
   assert.ok(DEMO.includes("config: { latitude: 48.8566, longitude: 2.3522, time_zone: 'Europe/Paris', version: '2026.10.1' },"), 'la version, celle d’un Home Assistant récent');
   assert.ok(!/command:\s*['"]clean_V2/.test(DEMO), 'la démo n’envoie pas la commande brute : elle la nomme seulement (`commande`), et la reconnaît quand l’écran l’envoie');
+});
+
+/* TEST AJOUTÉ (trois défauts du 25/10, ADR 0218) : un geste par script vers un robot MUET se refuse comme chez le vrai
+ * (`robot_injoignable`), avant d'être joué — la démo mettait le robot muet en pause, ou le renvoyait à la base. */
+test('un geste par script vers un robot muet : `robot_injoignable`, et le robot reste muet', async () => {
+  const m = maisonRobotsDemo({ quand: QUAND, variante: 'scripts-sans-pieces' });
+  const scripts = m.config().loggia_entities.vacuumScripts;
+  m.states[ASP] = { ...m.states[ASP], state: 'unavailable' };
+  for (const role of ['pause', 'reprendre', 'retour_base', 'localiser', 'nettoyer_tout']) {
+    await assert.rejects(m.lancer({ type: 'loggia/robots/lancer', robot: ASP, zones: [], script: scripts[role], role }), { code: 'robot_injoignable' }, role);
+    assert.equal(m.states[ASP].state, 'unavailable', role + ' : un appareil mort reste mort');
+  }
+  await assert.rejects(m.lancer({ type: 'loggia/robots/lancer', robot: ASP, zones: [], localiser: true }), { code: 'robot_injoignable' });
+  // Un script qui n'est pas le sien reste `script_inconnu`, comme chez le vrai : ce refus-là passe avant.
+  await assert.rejects(m.lancer({ type: 'loggia/robots/lancer', robot: ASP, zones: [], script: 'script.autre', role: 'pause' }), { code: 'script_inconnu' });
+});
+
+/* TEST AJOUTÉ (petit paquet du 26/10) : un script MUET (`unavailable`, `unknown`) est un script ABSENT, comme chez le vrai
+ * (`_etat_script`, robots.py) — il ne part pas (`script_inconnu`), il ne garde pas la main sur les pièces, et « Localiser » se replie
+ * sur `locate`. La démo le croyait là dès qu'il avait un état : elle jouait le geste, et ouvrait le passage d'un script muet. */
+test('un script muet est un script absent : `script_inconnu`, pas la main sur les pièces, « Localiser » se replie', async () => {
+  for (const muet of ['unavailable', 'unknown', 'UNAVAILABLE']) {
+    const m = maisonRobotsDemo({ quand: QUAND, variante: 'scripts-sans-pieces' });
+    const scripts = m.config().loggia_entities.vacuumScripts;
+    for (const role of ['pause', 'reprendre', 'retour_base', 'nettoyer_tout']) m.states[scripts[role]] = { ...m.states[scripts[role]], state: muet };
+    for (const role of ['pause', 'reprendre', 'retour_base', 'nettoyer_tout']) {
+      await assert.rejects(m.lancer({ type: 'loggia/robots/lancer', robot: ASP, zones: [], script: scripts[role], role }), { code: 'script_inconnu' }, muet + ' : ' + role);
+      assert.equal(m.states[ASP].state, 'docked', muet + ' : ' + role + ' ne joue rien');
+    }
+    assert.equal(m.etat().en_cours[ASP], undefined, muet + ' : aucun passage ouvert');
+    // Son seul script de départ muet : il ne garde plus la main sur les pièces — la source n'est plus `scripts`.
+    assert.notEqual(m.etat().pieces[ASP].source, 'scripts', muet + ' : un script muet ne garde pas la main');
+    // « Localiser » : le script muet ne part pas, `locate` à sa place — la démo n'en change rien, et ne refuse pas.
+    m.states[scripts.localiser] = { ...m.states[scripts.localiser], state: muet };
+    await m.lancer({ type: 'loggia/robots/lancer', robot: ASP, zones: [], localiser: true });
+    assert.equal(m.states[ASP].state, 'docked');
+  }
+  // Un script qui répond part toujours, quel que soit son état ordinaire (`off`, `on`).
+  const m = maisonRobotsDemo({ quand: QUAND, variante: 'scripts-sans-pieces' });
+  const scripts = m.config().loggia_entities.vacuumScripts;
+  m.states[scripts.pause] = { ...m.states[scripts.pause], state: 'on' };
+  await m.lancer({ type: 'loggia/robots/lancer', robot: ASP, zones: [], script: scripts.pause, role: 'pause' });
+  assert.equal(m.states[ASP].state, 'paused');
 });

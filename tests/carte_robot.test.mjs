@@ -176,12 +176,17 @@ test('I7, I9, I3 A : sur la base — le prochain passage qui partira ; « Démar
   await attendre();
   m.rendre();
   assert.equal(phrase(m).props.children, 'Nettoie · tout le logement');
-  // Localiser (une autre carte, sur la base) : le service, puis « Il bipe » trois secondes — dans cet onglet.
+  /* Localiser (une autre carte, sur la base) : par le serveur, puis « Il bipe » trois secondes — dans cet onglet.
+   * ASSERTION MODIFIÉE (25/10, petit paquet robots) : « Localiser » se décide au serveur (`localiser: true`), qui envoie lui-même
+   * `vacuum.locate` faute de script ; rien ne part d'ici, et le bip suit sa réponse. */
   const w2 = poser();
   const m2 = await carte(w2, ASP);
   m2.appuyer(puce(m2, 'Localiser'));
   await attendre();
-  assert.deepEqual(w2.appels, ['vacuum.locate ' + ASP]);
+  const localiser = w2.ws.find(x => x.type === 'loggia/robots/lancer');
+  assert.deepEqual([localiser.robot, localiser.localiser, w2.appels], [ASP, true, []]);
+  localiser.ok({ ...ETAT() });
+  await attendre();
   m2.rendre();
   assert.deepEqual([phrase(m2).props.children, phrase(m2).props.style.color], ['Il bipe : suivez le son', 'var(--o-accent-soft)']);
   h.avancer(3000);
@@ -193,11 +198,14 @@ test('I7, I9, I3 A : sur la base — le prochain passage qui partira ; « Démar
  * quand il en désigne un qui répond (`vacuumScripts.localiser`, l'aspirateur principal), par le serveur avec son rôle ; « Il bipe » à la
  * réponse ; le geste partagé sans garde : un second appui pendant le vol ne rebipe pas, et « Démarrer » reste offert ; un serveur d'avant
  * (`invalid_format`) ou un script indisponible : `locate`, sans toast. */
+/* ASSERTION MODIFIÉE (25/10, petit paquet robots) : le SERVEUR choisit entre son script et `locate` (`localiser: true`) d'après la
+ * description de la maison sur le disque — la carte ne lit plus le cache de son onglet (`cfgVal`) ni `LOGGIA_RESOLVED` : un cache
+ * vide ou périmé ne change plus rien. Un serveur d'avant (`invalid_format`) : `locate` d'ici ; un refus du serveur : au toast. */
 test('point 3 : « Localiser » de la carte — son script par le serveur, le bipe à la réponse, un seul appui compte, « Démarrer » reste ; sans script qui répond, `locate`', () => dans(async ({ h }) => {
-  const SCRIPTS = { nettoyer_tout: 'script.robot_partout', localiser: 'script.robot_ou' };
-  const avecScripts = (etatOu = 'off') => {
-    const w = poser({ retouche: (c) => { c['script.robot_ou'] = st('script.robot_ou', etatOu, { friendly_name: 'Robot Ou' }); } });
-    setLoggiaState({ cfg: { loggia_entities: { vacuumScripts: SCRIPTS } }, resolved: { vacuum: { available: true, main: ASP } } });
+  const avecScripts = (etatOu = 'off', rejets = null) => {
+    const w = poser({ rejets, retouche: (c) => { c['script.robot_ou'] = st('script.robot_ou', etatOu, { friendly_name: 'Robot Ou' }); } });
+    // Le cache de l'onglet est vide : la décision n'en dépend plus.
+    setLoggiaState({ cfg: {}, resolved: {} });
     return w;
   };
   try {
@@ -206,7 +214,7 @@ test('point 3 : « Localiser » de la carte — son script par le serveur, le bi
     m.appuyer(puce(m, 'Localiser'));
     await attendre();
     const lancer = w.ws.find(x => x.type === 'loggia/robots/lancer');
-    assert.deepEqual([lancer.robot, lancer.zones, lancer.script, lancer.role], [ASP, [], 'script.robot_ou', 'localiser'], 'son script, avec son rôle, par le serveur');
+    assert.deepEqual([lancer.robot, lancer.zones, lancer.localiser, 'script' in lancer, 'role' in lancer], [ASP, [], true, false, false], 'le serveur décide, d’un seul message');
     assert.deepEqual(w.appels, [], 'pas de `locate` en plus');
     m.rendre();
     assert.deepEqual(puces(m).map(b => [b.props.title, b.props['aria-disabled'] || null]), [['Démarrer', null], ['Localiser', 'true']], 'en vol : la puce ne fait rien, « Démarrer » reste offert');
@@ -229,15 +237,16 @@ test('point 3 : « Localiser » de la carte — son script par le serveur, le bi
     // Le repli passe par un module charge a la demande : borne, pas deux tours fixes (CI, 25/10).
     await jusqua(() => w2.appels.length > 0);
     assert.deepEqual(w2.appels, ['vacuum.locate ' + ASP]);
-    // Le script désigné mais indisponible ou disparu : le serveur ne le lance pas et ne note rien (`_etat_script`, `script_inconnu`) — `locate`, sans toast.
-    const w3 = avecScripts('unavailable');
+    // Un refus du serveur (Home Assistant a refusé `locate`) : au toast, et rien ne part d'ici en plus.
+    const rejets = [];
+    const w3 = avecScripts('unavailable', rejets);
     const m3 = await carte(w3, ASP);
     m3.appuyer(puce(m3, 'Localiser'));
     await attendre();
-    w3.ws.find(x => x.type === 'loggia/robots/lancer').ko({ code: 'script_inconnu', message: 'script inconnu de ce robot : ' + ASP });
-    // Le repli passe par un module charge a la demande : borne, pas deux tours fixes (CI, 25/10).
-    await jusqua(() => w3.appels.length > 0);
-    assert.deepEqual(w3.appels, ['vacuum.locate ' + ASP]);
+    w3.ws.find(x => x.type === 'loggia/robots/lancer').ko({ code: 'geste_refuse', message: 'geste refuse par Home Assistant : ' + ASP });
+    // Le toast passe par un module charge a la demande : borne, pas deux tours fixes (CI, 25/10).
+    await jusqua(() => rejets.length > 0);
+    assert.deepEqual([w3.appels, rejets.map(e => e.code)], [[], ['geste_refuse']]);
   } finally { setLoggiaState({ cfg: {}, resolved: {} }); }
 }));
 

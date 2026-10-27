@@ -19,7 +19,9 @@ import { tr } from './i18n.js';
 
 /** Les refus d'un départ de robot, par leur code. */
 export const REFUS_ROBOTS = {
-  robot_injoignable: () => tr('Départ non lancé — le robot ne répond pas'),
+  /* Petit paquet du 26/10 : un robot muet se refuse aussi pour un geste — la pause, la reprise, la base, « Localiser » par script
+   * (`_async_lancer_script`, robots.py) — et le refus ne dit pas lequel : la phrase vaut pour tout geste. */
+  robot_injoignable: () => tr('Commande non envoyée — le robot ne répond pas'),
   deja_en_route: () => tr('Départ non lancé — le robot est déjà en route'),
   pieces_inconnues: () => tr('Départ non lancé — Loggia ne sait pas viser des pièces avec ce robot'),
   zone_inconnue: () => tr('Départ non lancé — cette zone n’appartient pas au robot'),
@@ -41,4 +43,7 @@ export const REFUS_ROBOTS = {
   /* Sa décision du 20/10 (« Mon script garde la main ») : un script de départ est désigné, le serveur ne part pas par zones ni par
    * segments — l'écran n'en envoie pas, mais le refus se dit des mêmes mots. */
   scripts_gardent_la_main: () => tr('Départ non lancé — vos scripts gardent la main pour les pièces'),
+  /* Petit paquet du 25/10 : la roue désigne un script, et la description de la maison (`loggia_entities`) n'est pas un objet sur le
+   * disque — le serveur n'écrit rien à sa place, et le dit par son code, plus par le refus générique. */
+  description_illisible: () => tr('Script non désigné — la description de la maison est illisible'),
 };

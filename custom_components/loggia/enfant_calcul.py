@@ -22,7 +22,7 @@ from typing import Any
 
 CLE = "loggia_enfant"
 MODULE = "enfant"
-# Un lecteur, tel que Home Assistant l'ecrit.
+# Un lecteur, tel que Home Assistant l'ecrit. Lus par `fullmatch` (26/10) : le `$` de Python accepte un `\n` final.
 LECTEUR = re.compile(r"^media_player\.[a-z0-9_]+$")
 HEURE = re.compile(r"^([01][0-9]|2[0-3]):([0-5][0-9])$")
 
@@ -77,12 +77,12 @@ def entier(x: Any, bas: int, haut: int) -> int | None:
 
 
 def valide(haid: Any) -> bool:
-    return isinstance(haid, str) and LECTEUR.match(haid) is not None
+    return isinstance(haid, str) and LECTEUR.fullmatch(haid) is not None
 
 
 def minutes(hhmm: Any) -> int | None:
     """« 07:30 » -> 450 ; None si ce n'est pas une heure ecrite ainsi."""
-    m = HEURE.match(hhmm) if isinstance(hhmm, str) else None
+    m = HEURE.fullmatch(hhmm) if isinstance(hhmm, str) else None
     return int(m.group(1)) * 60 + int(m.group(2)) if m else None
 
 

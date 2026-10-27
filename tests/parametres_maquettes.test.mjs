@@ -139,9 +139,12 @@ test('couper le téléphone ne coupe pas la maison, et le bandeau le dit', () =>
 });
 
 test('la vanne automatique est celle du composant, et l’écran la nomme', () => {
-  assert.ok(entre(ALERTES_PY, 'def _vanne(', 'async def _reagir(').includes('== "water"'), 'le composant a changé de règle');
-  assert.ok(ALERTES.includes("vannes.find(id => (S[id].attributes || {}).device_class === 'water')"));
-  assert.ok(ALERTES.includes("tr('Vide : la première vanne d’eau que Home Assistant connaît. Une prise commandée vaut aussi.')"));
+  /* ASSERTION MODIFIÉE (étape 3 IoT, 25/10 ; I30, ADR 0022 amendée) : sans vanne choisie, le composant ferme TOUTES les vannes d'eau
+   * (`_vannes`), et l'écran les nomme toutes. */
+  assert.ok(entre(ALERTES_PY, 'def _vannes(', 'def _annoncer_eau(').includes('== "water"'), 'le composant a changé de règle');
+  assert.ok(ALERTES.includes("vannes.filter(id => (S[id].attributes || {}).device_class === 'water')"));
+  // ASSERTION MODIFIÉE (étape 3 IoT, 25/10 ; I30) : sans vanne choisie, la maison les ferme TOUTES.
+  assert.ok(ALERTES.includes("tr('Vide : toutes les vannes d’eau que Home Assistant connaît. Une prise commandée vaut aussi.')"));
 });
 
 test('une lecture ratée se dit, au lieu de charger pour toujours', () => {
@@ -263,8 +266,10 @@ test('les puces de navigation choisies sont en bleu plein, texte blanc', () => {
     [lire('src', 'views', 'energiehisto.jsx'), "background: actif ? 'var(--o-accent-fond)' : 'transparent', color: actif ? '#fff' : 'var(--o-text2)',", 'périodes de l’historique'],
     [APP, "background: onglet === id ? 'var(--o-accent-fond)' : 'transparent', color: onglet === id ? '#fff' : 'var(--o-text2)' }}>{lbl}</button>", 'onglets de la bibliothèque'],
     /* ASSERTION MODIFIÉE (chantier IoT, tâche 8, 18/10 ; I15) : les onglets d'un robot sont ceux du socle commun (`FicheOnglets`,
-     * fichecommune.jsx) — les autres en --o-text1 depuis le 05/10 (4,24:1 en --o-text2, en clair). */
-    [lire('src', 'fichecommune.jsx'), "style={{ background: actuel === id ? 'var(--o-accent-fond)' : 'transparent', color: actuel === id ? '#fff' : 'var(--o-text1)' }}>", 'onglets d’un robot'],
+     * fichecommune.jsx) — les autres en --o-text1 depuis le 05/10 (4,24:1 en --o-text2, en clair).
+     * ASSERTION MODIFIÉE (pastille qui coule, 26/10) : le bleu plein est porté par la pastille commune (`.rb-pastille`,
+     * fond `--o-accent-fond`, tests/pastille_onglets.test.mjs) ; le bouton ne le reprend que tant qu'elle n'est pas posée. */
+    [lire('src', 'fichecommune.jsx'), "style={{ background: actuel === id && !pastille ? 'var(--o-accent-fond)' : 'transparent', color: actuel === id ? '#fff' : 'var(--o-text1)' }}>", 'onglets d’un robot'],
     [lire('src', 'views', 'systeme.jsx'), "background: x.cle === s.cle ? 'var(--o-accent-fond)' : 'transparent', color: x.cle === s.cle ? '#fff' : 'var(--o-text2)' }}>{x.nom}</button>", 'séries du Système'],
   ];
   // Puis « mets aussi les zones et modes en bleu » : plus d'exception.

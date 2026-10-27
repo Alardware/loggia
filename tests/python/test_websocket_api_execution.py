@@ -120,7 +120,9 @@ def test_toutes_les_commandes_sont_enregistrees(banc):
     # ASSERTION MODIFIEE (chantier IoT, tache 4, 18/10) : 49 -> 50, `loggia/robots/lancer`.
     # ASSERTION MODIFIEE (passe bis 2 de la tranche robots 2, 20/10) : 50 -> 51, `loggia/robots/scripts` — la roue de la popup
     # envoie le role seul, le serveur le fond dans la description de la maison.
-    assert len(banc.hass.commandes) == 52, sorted(banc.hass.commandes)
+    # ASSERTION MODIFIEE (etape 3 IoT, 25/10 ; I28, I29) : 52 -> 54, `loggia/eau/etat` (ouverte) et `loggia/eau/regle` (admin).
+    # 55 avec le profil du compte connecte (ADR 0276, 27/10).
+    assert len(banc.hass.commandes) == 55, sorted(banc.hass.commandes)
 
 
 def test_aucune_commande_ne_declare_id(banc):
@@ -890,6 +892,66 @@ def test_le_journal_veut_une_lampe_et_rien_d_autre(banc_lumieres, message):
     lancer(envoyer(banc_lumieres.hass, cx, {"id": 123, "type": "loggia/lumieres/journal", **message}))
     assert [e[1] for e in cx.erreurs] == ["invalid_format"]
     assert banc_lumieres.lumieres.lus == []
+
+
+# ── Le carnet de l'eau (chantier IoT, etape 3 ; I28, I29) ──────────────────
+# TESTS AJOUTES (etape 3 IoT, 25/10). L'etat se lit de tout compte, sous ses
+# droits de lecture ; « Fermer en cas de fuite » s'ecrit par une commande
+# ETROITE, aux administrateurs, qui ne prend qu'un booleen.
+class Eau:
+    def __init__(self):
+        self.lus, self.ecrits = [], []
+
+    async def async_etat(self, user=None):
+        self.lus.append(getattr(user, "id", None))
+        return {"vannes": {}, "regle": {"actif": True}}
+
+    async def async_regler(self, actif, *, user=None):
+        self.ecrits.append((actif, getattr(user, "id", None)))
+        return {"vannes": {}, "regle": {"actif": actif}}
+
+
+@pytest.fixture
+def banc_eau(creer_store):
+    module = charger("websocket_api")
+    hass = Hass()
+    e = Eau()
+    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}), acces_eau=lambda: e)
+    return types.SimpleNamespace(hass=hass, eau=e)
+
+
+def test_le_carnet_de_l_eau_se_lit_de_tout_compte(banc_eau):
+    cx = Connexion(admin=False)
+    lancer(envoyer(banc_eau.hass, cx, {"id": 140, "type": "loggia/eau/etat"}))
+    assert cx.erreurs == [] and cx.resultats == [(140, {"vannes": {}, "regle": {"actif": True}})]
+    assert banc_eau.eau.lus == ["u-lea"], "le compte vient de la session"
+
+
+def test_fermer_en_cas_de_fuite_reste_aux_administrateurs(banc_eau):
+    ordinaire, admin = Connexion(admin=False), Connexion(uid="u-papa", admin=True)
+    lancer(envoyer(banc_eau.hass, ordinaire, {"id": 141, "type": "loggia/eau/regle", "actif": False}))
+    assert [e[1] for e in ordinaire.erreurs] == ["unauthorized"] and banc_eau.eau.ecrits == []
+    lancer(envoyer(banc_eau.hass, admin, {"id": 142, "type": "loggia/eau/regle", "actif": False}))
+    assert admin.resultats == [(142, {"vannes": {}, "regle": {"actif": False}})]
+    assert banc_eau.eau.ecrits == [(False, "u-papa")]
+
+
+@pytest.mark.parametrize("message", [{}, {"actif": "non"}, {"actif": True, "entite": "valve.cave"}, {"actif": True, "user_id": "u-papa"}],
+                         ids=["sans_valeur", "pas_un_booleen", "une_autre_cle", "un_compte_du_client"])
+def test_fermer_en_cas_de_fuite_ne_prend_que_sa_valeur(banc_eau, message):
+    cx = Connexion(admin=True)
+    lancer(envoyer(banc_eau.hass, cx, {"id": 143, "type": "loggia/eau/regle", **message}))
+    assert [e[1] for e in cx.erreurs] == ["invalid_format"] and banc_eau.eau.ecrits == []
+
+
+def test_sans_carnet_l_eau_le_dit(creer_store):
+    module = charger("websocket_api")
+    hass = Hass()
+    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}))
+    cx = Connexion(admin=True)
+    lancer(envoyer(hass, cx, {"id": 144, "type": "loggia/eau/etat"}))
+    lancer(envoyer(hass, cx, {"id": 145, "type": "loggia/eau/regle", "actif": True}))
+    assert [e[1] for e in cx.erreurs] == ["not_available", "not_available"]
 
 
 def test_sans_carnet_les_lumieres_le_disent(creer_store):

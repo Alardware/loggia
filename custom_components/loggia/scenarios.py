@@ -50,7 +50,7 @@ from homeassistant.core import Context, HomeAssistant, callback
 from .discovery import async_index
 from .lumieres_maison import a_epargner, async_interrupteurs_declares, lumieres_de_la_maison, par_service
 from .refus import RefusNomme
-from .regles import demarrer
+from .regles import REFUS_EAU, demarrer
 from .nuit import CLE as CLE_NUIT, fait_nuit
 from .ouvrants import est_fenetre_de_toit, est_volet, ouvre_et_ferme
 
@@ -274,7 +274,8 @@ def valider_scenario(brut: Any) -> dict[str, Any]:
     ident = brut.get("id")
     if ident is not None:
         ident = str(ident)
-        if not SLUG.match(ident):
+        # `fullmatch` (26/10) : avec `match`, le `$` de Python accepte un `\n` final.
+        if not SLUG.fullmatch(ident):
             raise ValueError(f"identifiant invalide : {ident!r}")
         s["id"] = ident
     nom = brut.get("nom")
@@ -284,7 +285,7 @@ def valider_scenario(brut: Any) -> dict[str, Any]:
     icone = brut.get("icone")
     if icone is not None:
         icone = str(icone).strip().lower()
-        if not re.match(r"^[a-z0-9-]{1,40}$", icone):
+        if not re.fullmatch(r"^[a-z0-9-]{1,40}$", icone):
             raise ValueError(f"icone invalide : {icone!r}")
         s["icone"] = icone
     teinte = brut.get("teinte")
@@ -831,6 +832,7 @@ class LoggiaScenarios:
         fait: list[dict[str, Any]] = []
         touchees: list[str] = []
         refusees: list[str] = []
+        eau_retenue: list[str] = []
         erreurs = 0
         if s.get("lien"):
             lien = s["lien"]
@@ -858,6 +860,14 @@ class LoggiaScenarios:
                 refusees.extend(ecartees)
                 n = 0
                 for domaine, service, cibles_, data in ordres(a, haids, c["maison"]):
+                    # Un scenario ne ROUVRE jamais l'eau (passe bis 2 de l'etape 3 IoT ; ADR 0217) : la prise designee, une
+                    # vanne d'eau, sont retenues et comptees au journal ; le reste de l'ordre part.
+                    eau = await self.regles.eau_retenue(service, cibles_, data) if self.regles is not None else []
+                    if eau:
+                        eau_retenue.extend(eau)
+                        cibles_ = [h for h in cibles_ if h not in eau]
+                        if not cibles_:
+                            continue
                     charge: dict[str, Any] = {"entity_id": list(cibles_)}
                     charge.update(data)
                     try:
@@ -872,17 +882,19 @@ class LoggiaScenarios:
                 fait.append({"famille": a["famille"], "geste": a["geste"], "n": n,
                              "piece": a.get("piece") or (piece if a.get("portee") == "piece" else None)})
         self._derniers[s["id"]] = time.time()
-        await self._noter_lancement(s, nom, touchees, refusees, fait, erreurs)
+        await self._noter_lancement(s, nom, touchees, refusees, fait, erreurs, eau_retenue)
         # `erreurs` : des commandes que Home Assistant a refusees — l'ecran doit
         # le dire au lieu de feindre un succes (audit 18/09).
         return {"id": s["id"], "fait": fait, "n": len(touchees), "refusees": len(refusees), "erreurs": erreurs}
 
-    async def _noter_lancement(self, s, nom, touchees, refusees, fait, erreurs=0) -> None:
+    async def _noter_lancement(self, s, nom, touchees, refusees, fait, erreurs=0, eau=()) -> None:
         if self.regles is None:
             return
         # Des parties, une par famille : « lumieres 3 · volets 2 », que l'ecran
         # traduit gabarit par gabarit (ADR 0070).
         detail: list = [(f["famille"] + " {n}", {"n": f["n"]}) for f in fait]
+        if eau:
+            detail.append(REFUS_EAU)
         if refusees:
             detail.append(("{n} cible(s) refusee(s) par les permissions du compte", {"n": len(refusees)}))
         if erreurs:

@@ -245,6 +245,19 @@ décision : **08:05** le 20/10. Le boot reste sous sa borne (1 084 531 ≤ 1 084
 compacté, et trois resserrements sans effet (`MOTS_FICHE_ROBOT` sans les mots que les puces portent déjà,
 `vueCarnetRobot`, `useEtatRobots`).
 
+## Petit paquet du 25/10
+
+1. **Un identifiant se valide en entier.** `SCRIPT`, `ROBOT`, `IDENT` (robots.py), `ROBOT` (robots_carnet.py) et `ZONE`
+   (robots_pieces.py) passent par `fullmatch` : avec `match`, le `$` de Python acceptait un `\n` final (« script.x\n »).
+2. **L'aspirateur principal est celui du serveur.** `loggia/robots/etat` publie `principal` (`_aspirateur_principal`, sous les
+   droits de lecture) ; la popup ne lit plus que lui pour la roue et les scripts maison — sans réponse, aucun script (la roue
+   attend seulement, désactivée). `LOGGIA_RESOLVED.vacuum.main` reste pour les cartes et l'Accueil ; le faux serveur fait pareil.
+3. **« Localiser » se décide au serveur.** `loggia/robots/lancer {localiser: true}` : son script `localiser` désigné et qui répond,
+   sinon `vacuum.locate` sous le contexte de la personne (`robot_injoignable`, `geste_refuse`) ; l'écran ne lit plus `cfgVal`. Un
+   serveur d'avant refuse la clé (`invalid_format`) et l'écran envoie `locate` lui-même — jamais un départ à la place.
+4. **Une description illisible a son code.** `description_illisible` (`RefusNomme`) dans `fusion_vacuum_scripts` ; la roue le dit
+   en une phrase, dans les sept langues (le polonais à relire par Seba882).
+
 ## Ce que cela coûte
 
 Un redémarrage de Home Assistant à l'installation, sur son « go » : `robots.py` change,
@@ -323,3 +336,44 @@ propres scripts envoient (`clean_V2`), une exception nommée. Dans la roue, dés
 que ce rôle : le reste de la description de la maison ne bouge pas, quel que soit l'écran qui le fait.
 « Localiser » passe par votre script quand vous en désignez un, et ne retient plus « Nettoyer tout le
 logement ». Un redémarrage de Home Assistant à l'installation.
+
+## Trois défauts du 25/10
+
+Un geste par script maison (pause, reprise, retour à la base, localiser) partait vers un robot muet :
+Home Assistant lançait le script, l'écran disait « fait », et rien ne bougeait. `_async_lancer_script`
+refuse désormais un robot `absent` pour TOUT rôle par `robot_injoignable`, comme un départ et comme
+`locate`, avant tout appel : rien ne part, rien au carnet ni au journal. Les contrôles d'avant gardent
+leur ordre (script inconnu, puis droits, puis le robot). La démo (`lancerRobotDemo`) jouait le geste sur
+un robot muet : elle le refuse aussi. Tests : `test_un_script_maison_ne_part_pas_vers_un_robot_muet`
+(`tests/python/test_robots.py`), et le dernier test de `tests/demo_robots.test.mjs`. Un redémarrage de
+Home Assistant à l'installation.
+
+## Petit paquet du 26/10
+
+Le refus `robot_injoignable` disait « Départ non lancé — le robot ne répond pas », y compris pour une
+pause, une reprise, un retour à la base ou « Localiser » par script : le refus ne porte pas le geste, la
+phrase devient neutre, « Commande non envoyée — le robot ne répond pas » (`src/refusrobots.js`, six
+catalogues ; l'ancienne clé les quitte tous les six). La démo
+croyait qu'un script maison existait dès qu'il avait un état : comme le vrai (`_etat_script`), un script
+`unavailable` ou `unknown` est absent — il ne part pas (`script_inconnu`), ne garde pas la main sur les
+pièces, et « Localiser » se replie sur `locate` (`scriptRepondDemo`, `src/demo.js`). Tests :
+`tests/refus_codes.test.mjs`, le dernier test de `tests/demo_robots.test.mjs`. Rien ne change côté
+serveur : pas de redémarrage de Home Assistant.
+
+## Grille des pièces (26/10)
+
+Les puces de « Où » se suivaient dans un `flex-wrap` : des lignes irrégulières, des largeurs
+différentes, et « Tout le logement » ressemblait à une pièce de plus. Il a choisi la « Grille
+régulière » (plutôt qu'un menu déroulant ou que rien) : « Tout le logement » (« Tout le jardin » pour
+une tondeuse) prend toute la ligne, à part, au-dessus ; 12 px d'air ; puis les pièces dans une grille
+sans cadre, aux colonnes de largeur égale, `repeat(auto-fill, minmax(104px, 1fr))`. Le minimum est
+MESURÉ en démo : la largeur utile du panneau de tête vaut 236 px à 320 de fenêtre, 276 à 360, 306 à
+390 et 396 dans la popup de bureau ; il faut au plus 114 px pour garder deux colonnes à 320, plus de
+97 pour n'en pas mettre trois à 390, au plus 126 pour en avoir trois au bureau — 104 donne deux
+colonnes au téléphone et trois au bureau. Chaque puce (`PuceOu`) prend toute sa case et passe de 40 à
+44 px de haut (une cible tactile, la même partout) ; un nom trop long se coupe sur sa ligne, en points
+de suspension, et garde son nom entier en `title` et en `aria-label`. Rien ne change dans ce que les
+puces font ni envoient (`toutChoisi`, `toutPrendre`, `basculerZone`, `z.inerte`, `enRoute`), ni dans
+les lignes de « Où ». L'ordre du DOM est l'ordre visuel : la tabulation suit les lignes de la grille,
+avec le focus commun (`:focus-visible`). Tests : `tests/fiche_robot.test.mjs` (« grille des pièces » ;
+la hauteur de 44 px au point 13).

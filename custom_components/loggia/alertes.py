@@ -31,7 +31,8 @@ La moitie « action » de §18 : sur un danger, la maison reagit d'elle-meme.
   fumee, monoxyde, gaz     → les volets remontes — les issues, et l'acces des
                              secours. Pas de lumiere sur le gaz : un relais
                              qui claque est une etincelle ;
-  fuite                    → la vanne d'eau coupee.
+  fuite                    → la vanne d'eau coupee : celle qu'on a choisie,
+                             sinon TOUTES les vannes d'eau (I30, 25/10).
 Tout cela en tete de l'echelle (surete), tenu tant que le danger dure. Quand
 il passe, la maison revient a l'etat d'avant — sauf la vanne, qui reste
 coupee jusqu'a ce qu'une main la rouvre : une fuite s'inspecte (ADR 0022).
@@ -49,6 +50,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import Event, HomeAssistant, callback
 
+from .const import DOMAIN
 from .lumieres_maison import async_interrupteurs_declares, lumieres_de_la_maison, par_service, registre_de
 from .ouvrants import CLASSES_VOLETS, STORE_BANNE, ouvre_et_ferme
 from .regles import niveau
@@ -179,6 +181,11 @@ class LoggiaAlertes:
     # simples, que chaque instance remplace par les siennes.
     _au_demarrage = None
     _depot = None
+    # Les vannes d'eau coupees sur une fuite (chantier IoT, etape 3 ; I30) :
+    # toutes, faute d'en avoir choisi une. Un TUPLE vide au niveau de la classe
+    # (passe bis, point 11) : une liste s'y partageait entre les instances ;
+    # chacune pose la sienne.
+    _vannes_coupees: tuple = ()
     # Home Assistant a-t-il fini de demarrer — la revue est-elle passee ?
     _demarre = False
 
@@ -196,7 +203,7 @@ class LoggiaAlertes:
         # ce qu'on a touche — pour le rendre —, et la vanne qu'on a coupee.
         self._dangers: dict[str, str] = {}
         self._avant: dict[str, dict] = {}
-        self._vanne_coupee: str | None = None
+        self._vannes_coupees: list[str] = []
         # Le dernier etat CONNU de chaque capteur, avant qu'il ne se taise
         # (audit du 19/10, H5) : {entity_id: etat}. Un retour depuis
         # `unavailable` se compare a lui, pas au silence.
@@ -529,8 +536,11 @@ class LoggiaAlertes:
         brut = (cfg.get("actions") if isinstance(cfg, dict) else None) or {}
         if isinstance(brut, dict):
             for k, v in brut.items():
-                if k == "vanne" and isinstance(v, dict):
-                    actions["vanne"].update(v)
+                if k == "vanne":
+                    # Une vanne abimee (pas une table) garde le defaut, comme la popup la lit (eau_calcul.regle_de ;
+                    # passe bis, point 8) : elle prenait sa place, et `_reagir` tombait sur la fuite.
+                    if isinstance(v, dict):
+                        actions["vanne"].update(v)
                 elif k in actions:
                     actions[k] = v
         return actions
@@ -581,16 +591,29 @@ class LoggiaAlertes:
             self._avant[haid] = {"state": st.state, "brightness": attrs.get("brightness"),
                                  "position": attrs.get("current_position")}
 
-    def _vanne(self, designee) -> str | None:
-        """La vanne d'eau : celle qu'on a designee, sinon la premiere `valve`
-        d'eau que Home Assistant connait. Une prise designee vaut aussi."""
+    def _vannes(self, designee) -> list:
+        """Les vannes d'eau a couper : celle qu'on a designee (une prise
+        designee vaut aussi), sinon TOUTES les `valve` d'eau joignables (chantier
+        IoT, etape 3 ; I30, ADR 0022 amendee). La regle coupait « la premiere »
+        par ordre d'identifiant : une vanne d'arrosage pouvait passer avant
+        l'arrivee. Fermer est le sens sur : plus de vannes fermees sur une
+        fuite, jamais moins."""
         if isinstance(designee, str) and designee:
-            return designee
-        for haid in self._entites("valve"):
-            st = self._hass.states.get(haid)
-            if st is not None and (st.attributes or {}).get("device_class") == "water":
-                return haid
-        return None
+            return [designee]
+        return [haid for haid in self._entites("valve")
+                if (getattr(self._hass.states.get(haid), "attributes", None) or {}).get("device_class") == "water"]
+
+    def _annoncer_eau(self, vannes: list, etat: Any, nom: str) -> None:
+        """Le carnet de l'eau (eau.py) apprend la cause et le detecteur AVANT
+        que la regle n'agisse : la popup dira « fuite sous l'evier ». Absent ou
+        en echec, il ne retient pas la surete."""
+        carnet = ((getattr(self._hass, "data", None) or {}).get(DOMAIN) or {}).get("eau")
+        if carnet is None:
+            return
+        try:
+            carnet.annoncer_fermeture(vannes, etat.entity_id, nom)
+        except Exception:  # noqa: BLE001
+            _LOGGER.warning("Loggia alertes : le carnet de l'eau n'a pas pu noter la cause", exc_info=True)
 
     async def _categorie_reagit(self, cat: str) -> bool:
         """Cette categorie fait-elle reagir la maison ? Decochee dans
@@ -640,15 +663,20 @@ class LoggiaAlertes:
                                         quoi="remonter", motif=motif, priorite=PRIORITE, tenir=True)
         vanne = actions.get("vanne") or {}
         if vanne.get("actif") and cat in VANNE:
-            entite = self._vanne(vanne.get("entite"))
-            if entite:
-                domaine = entite.split(".")[0]
-                service = "close_valve" if domaine == "valve" else "turn_off"
-                partis = await self._regles.agir("alertes", "danger", domaine, service, [entite],
-                                                 quoi="couper", motif=motif, priorite=PRIORITE,
-                                                 tenir=True)
+            entites = self._vannes(vanne.get("entite"))
+            if entites:
+                self._annoncer_eau(entites, etat, nom)
+                partis: list = []
+                # Par domaine : une `valve` par `close_valve`, une prise designee
+                # par `turn_off`. Jamais d'ouverture.
+                for domaine in sorted({h.split(".")[0] for h in entites}):
+                    lot = [h for h in entites if h.split(".")[0] == domaine]
+                    service = "close_valve" if domaine == "valve" else "turn_off"
+                    partis += await self._regles.agir("alertes", "danger", domaine, service, lot,
+                                                      quoi="couper", motif=motif, priorite=PRIORITE,
+                                                      tenir=True)
                 if partis:
-                    self._vanne_coupee = entite
+                    self._vannes_coupees = list(partis)
             else:
                 await self._regles.noter("alertes", "danger", "couper", n=0, motif=motif,
                                          detail="aucune vanne d’eau : rien à couper")
@@ -706,11 +734,11 @@ class LoggiaAlertes:
                 await self._regles.agir("alertes", "danger", "cover", "set_cover_position",
                                         sorted(haids), {"position": pos}, quoi="rendre",
                                         motif="danger passé", priorite=PRIORITE)
-        if self._vanne_coupee:
-            await self._regles.noter("alertes", "danger", "laisser coupée", cibles=[self._vanne_coupee],
-                                     n=1, motif="danger passé",
+        if self._vannes_coupees:
+            await self._regles.noter("alertes", "danger", "laisser coupée", cibles=list(self._vannes_coupees),
+                                     n=len(self._vannes_coupees), motif="danger passé",
                                      detail="la vanne d’eau se rouvre à la main")
-            self._vanne_coupee = None
+            self._vannes_coupees = []
 
     async def _porte_ouverte(self, etat: Any) -> None:
         """Une ouverture n'alerte que si une alarme est armee — sinon c'est la vie."""

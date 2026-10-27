@@ -71,6 +71,7 @@ PLATEFORME_LOGGIA = "loggia"
 # `vtherm_over_climate` / `vtherm_over_switch` / `vtherm_over_valve` →
 # `underlying_entities` (et, dans ses versions anciennes, a plat).
 PLATEFORME_BT = "better_thermostat"
+# La cle ENTIERE, par `fullmatch` (26/10) : le `$` de Python accepte un `\n` final.
 SOUS_JACENT_A_PLAT = re.compile(r"^underlying_(entity|climate|switch|valve)_\d+$")
 
 # Le bit de `supported_features` qui dit qu'un `climate` recoit une consigne
@@ -439,7 +440,7 @@ def sous_jacents_vtherm(attributs: Any) -> list[str]:
     for cle, valeur in attributs.items():
         if isinstance(valeur, dict):
             ajouter(valeur.get("underlying_entities"))
-        elif isinstance(valeur, str) and SOUS_JACENT_A_PLAT.match(str(cle)):
+        elif isinstance(valeur, str) and SOUS_JACENT_A_PLAT.fullmatch(str(cle)):
             ajouter([valeur])
     return sorted(trouves)
 

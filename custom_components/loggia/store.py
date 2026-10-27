@@ -26,8 +26,9 @@ from typing import Any, Callable
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
-from . import appareils
+from . import appareils, profils
 from .code_admin import CLE_CLAIR, CLE_HACHE, code_valide, enregistrement_valide, hacher
+from .eau_calcul import garder_fermer_sur_fuite
 from .refus import RefusNomme
 
 _LOGGER = logging.getLogger(__name__)
@@ -54,6 +55,9 @@ FORBIDDEN_KEYS: frozenset[str] = frozenset({CLE_CLAIR, CLE_HACHE})
 # Ce qui ne sort JAMAIS du magasin, meme pour un administrateur : le client
 # apprend seulement si un code est defini (`loggia_admin_pin_defini`).
 SECRETES: frozenset[str] = frozenset({CLE_CLAIR, CLE_HACHE})
+# La configuration des alertes : « Fermer en cas de fuite » y vit, et ne
+# s'ecrit que par sa commande etroite (`_set_locked`, eau_calcul.py).
+CLE_ALERTES = "loggia_alertes"
 
 # Le dashboard est celui de la MAISON : ses reglages sont communs a tous les
 # comptes Home Assistant, sinon un telephone ou une tablette connectee sous un
@@ -560,6 +564,27 @@ class LoggiaStore:
             self._data = nouveau
             return value
 
+    async def async_profil_du_compte(self, user_id: str, nom: str, is_admin: bool) -> dict[str, Any]:
+        """Le profil Loggia de ce compte Home Assistant, relie ou cree d'office
+        (ADR 0276, `profils.py`). N'ecrit que si la liste change, et le signale
+        alors aux ecrans abonnes, qui relisent les profils.
+
+        `user_id`, `nom` et `is_admin` viennent de la CONNEXION authentifiee :
+        un compte ne relie ou ne cree que son propre profil."""
+        async with self._lock:
+            data = await self._load()
+            avant = data["shared"].get(profils.CLE_PROFILS)
+            index, liste, change = profils.profil_du_compte(avant, user_id, nom, is_admin)
+            if change:
+                commun = {**data["shared"], profils.CLE_PROFILS: liste}
+                if _taille({profils.CLE_PROFILS: liste}) > MAX_VALUE_BYTES:
+                    raise RefusNomme("payload_too_large", "trop de profils", profils.CLE_PROFILS)
+                nouveau = {**data, "shared": commun}
+                await self._store.async_save(nouveau)
+                self._data = nouveau
+                self._signaler(None, communes=[profils.CLE_PROFILS])
+            return {"index": index, "profils": liste, "cree": change}
+
     async def async_get_user(self, user_id: str) -> dict[str, Any]:
         """Configuration vue par un utilisateur : le commun, puis ses cles d'appareil.
 
@@ -701,6 +726,14 @@ class LoggiaStore:
                     commun.get(appareils.CLE_APPAREILS), demande,
                     compte=user_id, is_admin=is_admin,
                     maintenant=int(time.time() * 1000))}
+
+        # « Fermer en cas de fuite » ne s'ecrit que par `loggia/eau/regle`
+        # (chantier IoT, etape 3, passe bis, point 6) : Parametres envoie
+        # `loggia_alertes` ENTIERE, depuis ce qu'il a lu a l'ouverture, et la
+        # bascule de la popup, changee entre-temps, revenait a l'ancienne
+        # valeur. Sous ce verrou, la valeur du disque reste.
+        if CLE_ALERTES in patch:
+            patch = {**patch, CLE_ALERTES: garder_fermer_sur_fuite(commun.get(CLE_ALERTES), patch[CLE_ALERTES])}
 
         for key, value in patch.items():
             if key in FORBIDDEN_KEYS:

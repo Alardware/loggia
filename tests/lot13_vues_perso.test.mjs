@@ -163,7 +163,9 @@ test('la carte d’entité : chaque commande passe sur la surface et nomme l’a
     assert.ok(c.includes('const ' + v + ' = { ...mini,'), v + ' ne dérive plus de mini : il perdrait sa position');
   }
   const tags = [...c.matchAll(/<button[\s>]/g)].map(m => balise(c, baliseOuvrante(c, m.index)));
-  assert.ok(tags.length >= 14, 'les boutons de la carte ne sont plus lus : ' + tags.length);
+  // ASSERTION MODIFIÉE (étape 3 IoT, 25/10 ; I11) : 14 -> 13 — le bouton « Ouvrir » / « Fermer » d'une vanne quitte `CvCard` : il rouvrait
+  // l'eau d'un appui ; la vanne a sa carte (cartevanne.jsx), qui demande.
+  assert.ok(tags.length >= 13, 'les boutons de la carte ne sont plus lus : ' + tags.length);
   for (const t of tags) {
     const court = t.replace(/\s+/g, ' ').slice(0, 80);
     // ASSERTION MODIFIÉE (chantier Médias, tâche 5 ; M17) : le mini d'un lecteur étale `miniAccent` (`{ ...miniAccent, … }`) pour y poser l'inertie : la position vient avec lui.
