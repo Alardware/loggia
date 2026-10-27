@@ -54,7 +54,18 @@ def hacher(pin: str, sel: bytes | None = None, iterations: int = ITERATIONS) -> 
         raise ValueError("code invalide : de quatre a huit chiffres")
     sel = sel if sel is not None else os.urandom(16)
     empreinte = hashlib.pbkdf2_hmac("sha256", pin.encode("utf-8"), sel, int(iterations))
-    return {"sel": sel.hex(), "hache": empreinte.hex(), "iterations": int(iterations)}
+    return {"sel": sel.hex(), "hache": empreinte.hex(), "iterations": int(iterations), "longueur": len(pin)}
+
+
+def longueur_de(e: Any) -> int | None:
+    """Le nombre de chiffres du code, s'il est connu (ADR 0278, ticket #38).
+
+    Le pave de l'ecran verifiait des le quatrieme chiffre : un code de huit,
+    accepte par le reglage, ne pouvait jamais etre saisi. La longueur lui dit
+    quand verifier. Un enregistrement d'avant le 27/10 ne la porte pas : elle
+    s'apprend a la premiere reussite (websocket_api)."""
+    n = e.get("longueur") if isinstance(e, dict) else None
+    return n if isinstance(n, int) and not isinstance(n, bool) and 4 <= n <= 8 else None
 
 
 def enregistrement_valide(e: Any) -> bool:

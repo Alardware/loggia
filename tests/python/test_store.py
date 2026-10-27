@@ -194,6 +194,12 @@ def test_le_pin_suit_la_maison_mais_hache(creer_store, store_module):
     vu = lancer(magasin.async_get_user("u1"))
     assert vu["loggia_admin_pin_defini"] is True
     assert "loggia_admin_pin_hache" not in vu and "loggia_admin_pin" not in vu, "le hache ne sort pas non plus"
+    # Sa longueur sort, elle (ADR 0278) : le pave sait quand verifier. Une
+    # valeur ecrite dans la partie commune par un client ne compte pas.
+    assert vu["loggia_admin_pin_longueur"] == 4
+    data = lancer(magasin._load())
+    data["shared"]["loggia_admin_pin_longueur"] = 6
+    assert lancer(magasin.async_get_user("u1"))["loggia_admin_pin_longueur"] == 4
     with pytest.raises(ValueError):
         lancer(magasin.async_set_code_admin({"sel": "zz", "hache": "00", "iterations": 1000}))
 
@@ -612,7 +618,7 @@ def test_effacer_un_compte_signale_ses_cles_et_le_code_admin_signale_le_fait(cre
     assert len(envois) == 1, "un compte deja efface ne signale rien"
     code_admin = charger("code_admin")
     lancer(magasin.async_set_code_admin(code_admin.hacher("1234")))
-    assert envois[-1][1] == {"user_id": None, "perso": [], "communes": ["loggia_admin_pin_defini"]}
+    assert envois[-1][1] == {"user_id": None, "perso": [], "communes": ["loggia_admin_pin_defini", "loggia_admin_pin_longueur"]}
     assert "1234" not in repr(envois)
 
 

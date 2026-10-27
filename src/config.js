@@ -88,7 +88,7 @@ export const estCleAppareil = (k) => typeof k === 'string'
  * chaque ecran le profil qu'il avait le jour de la sauvegarde. */
 const CLES_SERVEUR = new Set([
   'loggia_appareils',
-  'loggia_admin_pin_defini', 'loggia_admin_pin', 'loggia_admin_pin_hache',
+  'loggia_admin_pin_defini', 'loggia_admin_pin_longueur', 'loggia_admin_pin', 'loggia_admin_pin_hache',
   'loggia_minuteurs', 'loggia_sirene_test',
 ]);
 

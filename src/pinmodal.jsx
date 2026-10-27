@@ -8,6 +8,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { tr, trN } from './i18n.js';
 import { inerterAutour } from './ui.jsx';
+import { cfgVal } from './state.js';
 
 // Modale du code administrateur — gate le basculement vers un profil Admin.
 // Le code n'est PLUS dans le navigateur (18/09) : il est vérifié par le
@@ -18,6 +19,13 @@ import { inerterAutour } from './ui.jsx';
 // enfant » quand la fiche d'un lecteur ouvre le pavé.
 export function PinModal({ hass, onClose, onSuccess, sousTitre = null }) {
   const [pin, setPin] = useState('');
+  /* Combien de chiffres attendre (ADR 0278, ticket #38). Le pavé vérifiait
+   * dès le quatrième : un code de huit, accepté par Paramètres, ne se
+   * saisissait jamais. Le composant dit la longueur, jamais le code. Jamais
+   * défini : 0000, quatre. Défini avant le 27/10 : inconnue tant qu'il n'a
+   * pas été tapé juste une fois — on valide alors par ✓, de 4 à 8 chiffres. */
+  const lu = Number(cfgVal('loggia_admin_pin_longueur', 0));
+  const longueur = cfgVal('loggia_admin_pin_defini', false) !== true ? 4 : (lu >= 4 && lu <= 8 ? lu : null);
   const [error, setError] = useState(false);
   const [attente, setAttente] = useState(false);
   const [bloque, setBloque] = useState(0);   // secondes annoncées par le serveur
@@ -76,12 +84,17 @@ export function PinModal({ hass, onClose, onSuccess, sousTitre = null }) {
     if (attente || bloque) return;
     setError(false); setHorsLigne(false); setFaux(false);
     setPin(p => {
-      if (p.length >= 4) return p;
+      if (p.length >= (longueur || 8)) return p;
       const np = p + d;
-      if (np.length === 4) timers.current.push(setTimeout(() => { verifier(np); }, 110));
+      if (np.length === longueur) timers.current.push(setTimeout(() => { verifier(np); }, 110));
       return np;
     });
   };
+  const valider = () => { if (!attente && !bloque && pin.length >= 4) verifier(pin); };
+  const points = longueur || Math.max(4, pin.length);
+  const dit = longueur === 4 ? trN(pin.length, '{n} chiffre sur 4', '{n} chiffres sur 4')
+    : longueur ? trN(pin.length, '{n} chiffre sur {t}', '{n} chiffres sur {t}', { t: longueur })
+      : trN(pin.length, '{n} chiffre saisi', '{n} chiffres saisis');
   return (
     <div role="presentation" ref={voileRef}
       onPointerDown={(e) => { partiDuVoile.current = e.target === e.currentTarget; }}
@@ -116,7 +129,7 @@ export function PinModal({ hass, onClose, onSuccess, sousTitre = null }) {
           * région inerte ne dit rien. Lue, pas vue — ce qui se voit, c'est le
           * sous-titre. */}
         <div className="o-vh" role="alert">{faux ? tr('Code incorrect') : ''}</div>
-        {/* Les quatre points, en mots : « 2 chiffres sur 4 », annoncé à chaque
+        {/* Les points, en mots : « 2 chiffres sur 4 », annoncé à chaque
           * touche comme les points se remplissent à l'œil — le nombre, jamais
           * les chiffres. Les points eux-mêmes se taisent. Hors flux (o-vh),
           * l'équivalent ne prend pas de place dans la rangée.
@@ -124,10 +137,10 @@ export function PinModal({ hass, onClose, onSuccess, sousTitre = null }) {
           * Les deux gabarits vont NUS à trN. Passés d'abord par tr, l'objet de
           * formes du polonais serait tranché SANS le nombre, donc toujours en
           * « other » : « 2 cyfr » au lieu de « 2 cyfry » (ADR 0071). */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 12, margin: '22px 0' }}><span className="o-vh" role="status">{trN(pin.length, '{n} chiffre sur 4', '{n} chiffres sur 4')}</span>{[0, 1, 2, 3].map(i => <span key={i} aria-hidden="true" style={{ width: 14, height: 14, borderRadius: '50%', background: i < pin.length ? (error ? 'var(--o-bad)' : 'var(--o-accent-soft)') : 'transparent', border: `1px solid ${error ? 'var(--o-bad)' : 'var(--o-bd2)'}`, transition: 'background .15s' }} />)}</div>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 12, margin: '22px 0' }}><span className="o-vh" role="status">{dit}</span>{Array.from({ length: points }, (_, i) => <span key={i} aria-hidden="true" style={{ width: 14, height: 14, borderRadius: '50%', background: i < pin.length ? (error ? 'var(--o-bad)' : 'var(--o-accent-soft)') : 'transparent', border: `1px solid ${error ? 'var(--o-bad)' : 'var(--o-bd2)'}`, transition: 'background .15s' }} />)}</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => <button key={n} onClick={() => add(String(n))} style={padBtn}>{n}</button>)}
-          <span />
+          {longueur ? <span /> : <button onClick={valider} disabled={pin.length < 4} aria-label={tr('Valider')} style={{ ...padBtn, fontSize: 17, opacity: pin.length < 4 ? .4 : 1 }}>✓</button>}
           <button onClick={() => add('0')} style={padBtn}>0</button>
           <button onClick={() => setPin(p => p.slice(0, -1))} style={{ ...padBtn, fontSize: 15 }}>⌫</button>
         </div>

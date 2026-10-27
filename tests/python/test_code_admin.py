@@ -24,7 +24,9 @@ def test_quatre_a_huit_chiffres(module):
 
 def test_le_hache_ne_dit_pas_le_code_et_le_verifie(module):
     e = module.hacher("1234")
-    assert set(e) == {"sel", "hache", "iterations"}
+    # ASSERTION MODIFIEE (ADR 0278, 27/10) : l'enregistrement porte aussi la
+    # longueur du code, pour que le pave sache quand verifier.
+    assert set(e) == {"sel", "hache", "iterations", "longueur"}
     # Le code n'est pas range en clair. Sur un sel tire au hasard, « 1234 » tombe
     # dans l'hexadecimal environ une fois sur 700 (25/10, vu une fois) : sel fixe.
     fixe = module.hacher("1234", sel=b"\0" * 16)
@@ -40,6 +42,20 @@ def test_le_hache_ne_dit_pas_le_code_et_le_verifie(module):
     assert a == b
     with pytest.raises(ValueError):
         module.hacher("12")
+
+
+def test_la_longueur_du_code_et_rien_d_autre(module):
+    """Ticket #38 (ADR 0278) : le pave verifiait des le quatrieme chiffre, un
+    code de huit ne se saisissait jamais. L'enregistrement dit combien de
+    chiffres attendre ; une valeur hors de 4 a 8 ne dit rien."""
+    for code in ("0000", "12345", "12345678"):
+        assert module.longueur_de(module.hacher(code)) == len(code)
+    ancien = {k: v for k, v in module.hacher("12345678").items() if k != "longueur"}
+    assert module.longueur_de(ancien) is None, "un code d'avant le 27/10 n'a pas de longueur connue"
+    assert module.enregistrement_valide(ancien) and module.verifier("12345678", ancien), "il se verifie quand meme"
+    for faux in (3, 9, True, "8", None):
+        assert module.longueur_de({**ancien, "longueur": faux}) is None
+    assert module.longueur_de(None) is None
 
 
 def test_un_enregistrement_abime_ne_laisse_rien_passer(module):
