@@ -27,7 +27,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
 from . import appareils, profils
-from .code_admin import CLE_CLAIR, CLE_HACHE, code_valide, enregistrement_valide, hacher
+from .code_admin import CLE_CLAIR, CLE_HACHE, code_valide, enregistrement_valide, hacher, longueur_de
 from .eau_calcul import garder_fermer_sur_fuite
 from .refus import RefusNomme
 
@@ -625,6 +625,13 @@ class LoggiaStore:
         # Les secrets restent ici ; le client sait seulement s'il y a un code.
         commun = {k: v for k, v in data["shared"].items() if k not in SECRETES}
         commun["loggia_admin_pin_defini"] = enregistrement_valide(data["shared"].get(CLE_HACHE))
+        # Et combien de chiffres il compte, pour que le pave sache quand
+        # verifier (ADR 0278) — jamais le code lui-meme. Une valeur ecrite par
+        # un client ne compte pas : seul le hache la dit.
+        commun.pop("loggia_admin_pin_longueur", None)
+        longueur = longueur_de(data["shared"].get(CLE_HACHE)) if commun["loggia_admin_pin_defini"] else None
+        if longueur:
+            commun["loggia_admin_pin_longueur"] = longueur
         if appareils.CLE_APPAREILS in commun:
             commun[appareils.CLE_APPAREILS] = appareils.pour_l_ecran(commun[appareils.CLE_APPAREILS])
         return {**commun, **couvre}
@@ -645,7 +652,30 @@ class LoggiaStore:
             await self._store.async_save(nouveau)
             self._data = nouveau
             # Les ecrans n'apprennent que le fait, jamais le code (ADR 0067).
-            self._signaler(None, communes=["loggia_admin_pin_defini"])
+            self._signaler(None, communes=["loggia_admin_pin_defini", "loggia_admin_pin_longueur"])
+
+    async def async_apprendre_longueur_code(self, sel: str, hache: str, longueur: int) -> bool:
+        """Ajoute sa longueur a un code d'avant le 27/10 (ADR 0278).
+
+        SOUS LE VERROU, et seulement si le code range est encore celui qui
+        vient d'etre verifie (meme sel, meme hache) et n'a pas de longueur.
+        La verification lit l'enregistrement, puis passe des dizaines de
+        millisecondes dans PBKDF2 : un administrateur peut definir un nouveau
+        code entre-temps. Reecrire l'enregistrement lu ramenerait l'ancien
+        code — il rouvrirait l'Admin, et le nouveau ne marcherait plus."""
+        if not isinstance(longueur, int) or isinstance(longueur, bool) or not 4 <= longueur <= 8:
+            return False
+        async with self._lock:
+            data = await self._load()
+            e = data["shared"].get(CLE_HACHE)
+            if (not enregistrement_valide(e) or e.get("sel") != sel or e.get("hache") != hache
+                    or longueur_de(e) is not None):
+                return False
+            nouveau = {**data, "shared": {**data["shared"], CLE_HACHE: {**e, "longueur": longueur}}}
+            await self._store.async_save(nouveau)
+            self._data = nouveau
+            self._signaler(None, communes=["loggia_admin_pin_longueur"])
+            return True
 
     async def async_set_user(
         self,

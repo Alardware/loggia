@@ -117,7 +117,7 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 
 from . import appareils
-from .code_admin import CODE_DEFAUT, LaissezPasser, Limiteur, code_valide, hacher, passage_admin, verifier
+from .code_admin import CODE_DEFAUT, LaissezPasser, Limiteur, code_valide, hacher, longueur_de, passage_admin, verifier
 from .discovery import async_index
 from .refus import RefusNomme
 from .scenarios import ScenariosInconnusError, controle_de
@@ -723,6 +723,13 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
                 # PBKDF2 pese quelques dizaines de millisecondes : hors de la boucle.
                 ok = await hass.async_add_executor_job(verifier, pin, enregistrement)
             if ok:
+                if enregistrement is not None and longueur_de(enregistrement) is None:
+                    # Un code d'avant le 27/10 : sa longueur s'apprend ici, a
+                    # la premiere reussite (ADR 0278). Ensuite le pave verifie
+                    # seul au bon chiffre, sans bouton. Par le magasin, sous
+                    # son verrou : un code redefini pendant PBKDF2 reste le
+                    # nouveau.
+                    await store.async_apprendre_longueur_code(enregistrement["sel"], enregistrement["hache"], len(pin))
                 limiteur.reussi(uid)
                 laissez_passer.accorder(uid)
                 connection.send_result(msg["id"], {"ok": True})

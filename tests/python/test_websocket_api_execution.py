@@ -307,6 +307,45 @@ def test_un_code_defini_se_verifie_et_l_ancien_ne_passe_plus(banc):
     assert cx.resultats[-1] == (52, {"ok": True})
 
 
+def test_un_code_a_huit_chiffres_d_avant_apprend_sa_longueur(banc):
+    """Ticket #38 (ADR 0278) : un code a huit chiffres, accepte par le reglage,
+    ne se saisissait pas — le pave verifiait des le quatrieme. Un code range
+    avant le 27/10 ne porte pas sa longueur : elle s'apprend a la premiere
+    reussite, et l'ecran la lit ensuite. Un essai rate n'apprend rien."""
+    code_admin = charger("code_admin")
+    ancien = {k: v for k, v in code_admin.hacher("12345678").items() if k != "longueur"}
+    lancer(banc.store.async_set_code_admin(ancien))
+    assert "loggia_admin_pin_longueur" not in lancer(banc.store.async_get_user("u1"))
+    cx = Connexion(admin=False)
+    lancer(envoyer(banc.hass, cx, {"id": 60, "type": "loggia/pin/verifier", "pin": "1234"}))
+    assert cx.resultats[-1][1]["ok"] is False
+    assert code_admin.longueur_de(lancer(banc.store.async_get_code_admin())) is None, "un code faux a appris une longueur"
+    lancer(envoyer(banc.hass, cx, {"id": 61, "type": "loggia/pin/verifier", "pin": "12345678"}))
+    assert cx.resultats[-1] == (61, {"ok": True})
+    assert lancer(banc.store.async_get_user("u1"))["loggia_admin_pin_longueur"] == 8
+    assert code_admin.verifier("12345678", lancer(banc.store.async_get_code_admin())), "le code lui-meme n'a pas change"
+
+
+def test_un_code_redefini_pendant_la_verification_reste_le_nouveau(banc):
+    """La verification lit le code, puis passe des dizaines de millisecondes
+    dans PBKDF2. Un administrateur qui definit un nouveau code entre-temps ne
+    doit pas voir revenir l'ancien quand la longueur s'apprend : l'ancien
+    rouvrirait l'Admin, et le nouveau ne marcherait plus (ADR 0278)."""
+    code_admin = charger("code_admin")
+    ancien = {k: v for k, v in code_admin.hacher("12345678").items() if k != "longueur"}
+    lancer(banc.store.async_set_code_admin(ancien))
+    lu = lancer(banc.store.async_get_code_admin())
+    # Entre la lecture et l'apprentissage : un nouveau code, de cinq chiffres.
+    lancer(banc.store.async_set_code_admin(code_admin.hacher("24680")))
+    assert lancer(banc.store.async_apprendre_longueur_code(lu["sel"], lu["hache"], 8)) is False
+    e = lancer(banc.store.async_get_code_admin())
+    assert code_admin.verifier("24680", e) and not code_admin.verifier("12345678", e), "l'ancien code est revenu"
+    assert code_admin.longueur_de(e) == 5
+    # Le meme enregistrement, deja dote de sa longueur, ne se reecrit pas non plus.
+    assert lancer(banc.store.async_apprendre_longueur_code(e["sel"], e["hache"], 8)) is False
+    assert code_admin.longueur_de(lancer(banc.store.async_get_code_admin())) == 5
+
+
 # ── Un refus previsible se dit par son CODE (audit du 03/10) ────────────────
 #
 # Le composant refusait en francais sans accents — « trop de scenarios (24 au

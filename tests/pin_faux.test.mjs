@@ -84,3 +84,36 @@ test('« Code incorrect » : sur un refus du serveur seulement, effacé à la to
   assert.ok(!/setTimeout\([^;]*setFaux/.test(SRC),
     'pas de minuteur : effacé en 650 ms comme le rouge des points, une annonce en file d’attente peut se perdre');
 });
+
+/* Un code de huit chiffres se saisit (ticket #38, ADR 0278).
+ *
+ * Paramètres accepte un code de 4 à 8 chiffres ; le pavé vérifiait dès le
+ * quatrième, et un code de huit ne passait jamais — essayé à quatre chiffres,
+ * il comptait même un raté. Le composant dit maintenant la LONGUEUR (jamais le
+ * code) : le pavé attend le bon nombre de points. Un code rangé avant le 27/10
+ * ne la porte pas encore : ✓ valide, de 4 à 8 chiffres, et la première
+ * réussite l'apprend au composant. */
+test('le pavé attend autant de chiffres que le code en compte', async () => {
+  const { setLoggiaState } = await import('../src/state.js');
+  const points = (html) => (html.match(/<span aria-hidden="true" style="width:14px;height:14px/g) || []).length;
+  try {
+    setLoggiaState({ cfg: { loggia_admin_pin_defini: true, loggia_admin_pin_longueur: 8 } });
+    const huit = await ouvrir();
+    assert.equal(points(huit), 8, 'un code de huit chiffres montre huit points');
+    assert.ok(huit.includes(trN(0, '{n} chiffre sur {t}', '{n} chiffres sur {t}', { t: 8 })), 'et le dit : « 0 chiffre sur 8 »');
+    assert.ok(!huit.includes('aria-label="Valider"'), 'longueur connue : il vérifie seul, sans bouton');
+
+    setLoggiaState({ cfg: { loggia_admin_pin_defini: true } });
+    const inconnu = await ouvrir();
+    assert.ok(/<button[^>]*disabled=""[^>]*aria-label="Valider"/.test(inconnu), 'longueur inconnue : ✓, fermé tant qu’il manque des chiffres');
+    assert.equal(points(inconnu), 4, 'quatre points au départ, la rangée s’allonge avec la saisie');
+
+    setLoggiaState({ cfg: { loggia_admin_pin_defini: false, loggia_admin_pin_longueur: 8 } });
+    assert.equal(points(await ouvrir()), 4, 'jamais défini : 0000, quatre chiffres — une longueur restée là ne compte pas');
+  } finally {
+    setLoggiaState({ cfg: {} });
+  }
+  const add = SRC.slice(SRC.indexOf('const add = (d) =>'), SRC.indexOf('const valider'));
+  assert.ok(add.includes('if (np.length === longueur)'), 'la vérification part au DERNIER chiffre, plus au quatrième');
+  assert.ok(!/length === 4\)/.test(add), 'le quatrième chiffre ne déclenche plus rien de lui-même');
+});
