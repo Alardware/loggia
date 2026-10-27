@@ -57,7 +57,9 @@ test('une limite atteinte se dit dans la langue de l’écran, et la limite y es
 /* TEST AJOUTÉ (chantier IoT, tâche 4, 18/10 ; I3 A) : ce que le serveur
  * nomme — l'identifiant d'un robot, d'une zone — ne s'affiche jamais. */
 test('un départ de robot refusé se dit, sans l’identifiant que le serveur nomme', () => {
-  assert.equal(texteRefus(refus('robot_injoignable', 'robot injoignable : vacuum.robot')), 'Départ non lancé — le robot ne répond pas');
+  /* ASSERTION MODIFIEE (26/10, petit paquet) : `robot_injoignable` revient aussi pour une pause, une reprise, un retour à la base ou
+   * « Localiser » par script (`_async_lancer_script`, robots.py), et le refus ne porte pas le geste : la phrase est neutre. */
+  assert.equal(texteRefus(refus('robot_injoignable', 'robot injoignable : vacuum.robot')), 'Commande non envoyée — le robot ne répond pas');
   assert.equal(texteRefus(refus('deja_en_route', 'deja en route : vacuum.robot')), 'Départ non lancé — le robot est déjà en route');
   assert.equal(texteRefus(refus('pieces_inconnues', 'pieces inconnues de cette integration : vacuum.robot')),
     'Départ non lancé — Loggia ne sait pas viser des pièces avec ce robot');

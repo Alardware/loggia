@@ -428,11 +428,20 @@ test('sur un danger, la maison réagit — et cela se règle à côté du télé
   assert.ok(par.includes("actions: { actif: true, lumieres: true, volets: true, vanne: { actif: true, entite: '' } }"), 'plus de défaut pour les actions');
   assert.ok(par.includes("save({ actions: { ...cfg.actions, actif: !cfg.actions.actif } })"), 'plus d’interrupteur général');
   for (const k of ['lumieres', 'volets']) assert.ok(par.includes(`save({ actions: { ...cfg.actions, ${k}: !cfg.actions.${k} } })`), `plus d’interrupteur pour ${k}`);
-  assert.ok(par.includes("vanne: { ...cfg.actions.vanne, actif: !cfg.actions.vanne.actif }"), 'plus d’interrupteur pour la vanne');
-  // La vanne se choisit dans une liste ; vide, c'est la regle du composant :
-  // la premiere vanne d'EAU (alertes.py, _vanne) — l'ecran dit laquelle.
+  /* ASSERTION MODIFIÉE (étape 3 IoT, 25/10 ; I29) : « Fermer en cas de fuite » — l'ancienne « Vanne d'eau coupée » — DÉMÉNAGE dans la
+   * popup de la vanne, qui l'écrit par sa commande étroite (`loggia/eau/regle`) ; Paramètres n'en garde qu'une ligne qui dit où elle se
+   * règle, et n'écrit plus jamais `actions.vanne.actif` — pas même depuis une configuration lue à l'ouverture et périmée depuis. */
+  assert.ok(!par.includes("vanne: { ...cfg.actions.vanne, actif: !cfg.actions.vanne.actif }"), 'la bascule de la vanne a quitté Paramètres');
+  /* ASSERTION MODIFIÉE (passe bis de l'étape 3, 25/10 ; points 5, 6 et 16) : la ligne ne nomme plus le filtre — une prise désignée
+   * se range sous Prises, pas sous IoT ; et la valeur du disque, c'est le SERVEUR qui la garde (`loggia/config/set`, store.py) —
+   * la relecture d'avant l'écriture est partie (tests/parametres_alertes_ecriture.test.mjs joue le panneau). */
+  assert.ok(par.includes("tr('Se règle dans la popup de la vanne d’eau.')"), 'la ligne dit où elle se règle');
+  assert.ok(!par.includes('Objets › IoT'), 'sans nommer un filtre faux pour une prise désignée');
+  assert.ok(!par.includes('frais.actions.vanne.actif'), 'plus de relecture avant d’écrire');
+  // La vanne se choisit dans une liste ; vide, c'est la règle du composant :
+  // ASSERTION MODIFIÉE (étape 3 IoT, 25/10 ; I30) : TOUTES les vannes d'eau (alertes.py, `_vannes`) — l'écran dit lesquelles.
   assert.ok(par.includes("label={tr('Entité de la vanne d’eau')} value={vanne}"), 'la vanne ne se désigne plus');
-  assert.ok(par.includes("vannes.find(id => (S[id].attributes || {}).device_class === 'water')"), 'le choix automatique ne suit plus celui du composant');
+  assert.ok(par.includes("vannes.filter(id => (S[id].attributes || {}).device_class === 'water')"), 'le choix automatique ne suit plus celui du composant');
   // Une configuration écrite avant les actions garde ses défauts.
   assert.ok(par.includes("actions: { ...d.actions, ...(c.actions || {}), vanne: { ...d.actions.vanne, ...((c.actions || {}).vanne || {}) } }"));
 });

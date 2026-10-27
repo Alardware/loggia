@@ -336,6 +336,11 @@ function AlertesTele({ hass }) {
      * pas » et envoyait chercher une panne. Sur un échec, la bascule revient
      * aussi à la valeur d'avant — sauf si un réglage plus récent l'a déjà
      * remplacée. */
+    /* « Fermer en cas de fuite » se règle dans la popup de la vanne, par sa commande étroite (chantier IoT, étape 3 ; I29) : la
+     * configuration lue à l'ouverture de Paramètres peut être périmée depuis. C'est le SERVEUR qui la garde — `loggia/config/set`
+     * reprend `actions.vanne.actif` du disque, sous le verrou du magasin (store.py, passe bis, point 6). La relecture que l'étape 3
+     * faisait ici avant d'écrire est partie : elle ne ramenait plus la bascule après un refus (point 5), et deux réglages rapides
+     * relisaient la même configuration — le second effaçait le premier. */
     if (h) h.callWS({ type: 'loggia/config/set', config: { loggia_alertes: n } })
       .catch((e) => { setMsg(raisonEchec(e, 'loggia_alertes')); setCfg(c => (c === n ? cfg : c)); });
   };
@@ -383,9 +388,10 @@ function AlertesTele({ hass }) {
   // Les vannes possibles : une `valve`, ou une prise commandee sur l'arrivee d'eau.
   const vannes = Object.keys(S).filter(id => id.indexOf('valve.') === 0).sort();
   const prises = Object.keys(S).filter(id => id.indexOf('switch.') === 0).sort();
-  // Sans choix, le composant prend la premiere vanne d'EAU qu'il connait (alertes.py, _vanne).
-  const vanneAuto = vannes.find(id => (S[id].attributes || {}).device_class === 'water') || null;
+  // Sans choix, le composant les ferme TOUTES (alertes.py, `_vannes` ; I30) : l'écran dit lesquelles.
+  const vannesEau = vannes.filter(id => (S[id].attributes || {}).device_class === 'water');
   const nomDe = (id) => (S[id] && S[id].attributes && S[id].attributes.friendly_name) || id;
+  const vanneAuto = vannesEau.length > 1 ? tr('toutes les vannes d’eau') : vannesEau.length ? nomDe(vannesEau[0]) : null;
   // Par nom affiché, pas par identifiant : la liste se lit comme elle s'écrit.
   const parNom = (ids) => ids.slice().sort((a, b) => comparerTextes(nomDe(a), nomDe(b)));
   const vanne = cfg.actions.vanne.entite || '';
@@ -467,14 +473,17 @@ function AlertesTele({ hass }) {
         <Ligne eteint={actOff} titre={tr('Volets remontés')} desc={tr('Fumée, monoxyde, gaz — les issues, et l’accès des secours.')}>
           <Tgl on={!!cfg.actions.volets} cb={() => save({ actions: { ...cfg.actions, volets: !cfg.actions.volets } })} label={tr('Volets remontés')} />
         </Ligne>
-        <Ligne eteint={actOff} titre={tr('Vanne d’eau coupée')} desc={tr('Sur une fuite. Reste coupée jusqu’à ce qu’on la rouvre à la main.')}>
-          <Tgl on={!!cfg.actions.vanne.actif} cb={() => save({ actions: { ...cfg.actions, vanne: { ...cfg.actions.vanne, actif: !cfg.actions.vanne.actif } } })} label={tr('Vanne d’eau coupée')} />
+        {/* « Fermer en cas de fuite » (chantier IoT, étape 3 ; I29) : la bascule a DÉMÉNAGÉ dans la popup de la vanne — un réglage ne se
+          * double pas. Ici, une ligne qui dit sa valeur et où elle se règle ; « Quelle vanne » reste. Sans nommer de filtre (passe bis,
+          * point 16) : une prise désignée se range sous Prises, pas sous IoT. */}
+        <Ligne eteint={actOff} titre={tr('Fermer en cas de fuite')} desc={tr('Se règle dans la popup de la vanne d’eau.')}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--o-text2)' }}>{cfg.actions.vanne.actif ? tr('Activé') : tr('Désactivé')}</span>
         </Ligne>
-        <Ligne retrait eteint={actOff || !cfg.actions.vanne.actif} titre={tr('Quelle vanne')} desc={tr('Vide : la première vanne d’eau que Home Assistant connaît. Une prise commandée vaut aussi.')}>
+        <Ligne retrait eteint={actOff || !cfg.actions.vanne.actif} titre={tr('Quelle vanne')} desc={tr('Vide : toutes les vannes d’eau que Home Assistant connaît. Une prise commandée vaut aussi.')}>
           <ChoixEntite icone="water" label={tr('Entité de la vanne d’eau')} value={vanne} onChange={v => save({ actions: { ...cfg.actions, vanne: { ...cfg.actions.vanne, entite: v } } })}
-            nom={vanne ? nomDe(vanne) : vanneAuto ? nomDe(vanneAuto) : tr('Aucune vanne d’eau')} ident={vanne || (vanneAuto ? vanneAuto + ' · ' + tr('auto') : tr('rien à couper'))}
+            nom={vanne ? nomDe(vanne) : vanneAuto || tr('Aucune vanne d’eau')} ident={vanne || (vannesEau.length ? vannesEau.join(', ') + ' · ' + tr('auto') : tr('rien à couper'))}
             options={[
-              { id: '', label: tr('Automatique') + (vanneAuto ? ' — ' + nomDe(vanneAuto) : ''), sub: vanneAuto },
+              { id: '', label: tr('Automatique') + (vanneAuto ? ' — ' + vanneAuto : ''), sub: vannesEau.join(', ') || null },
               ...parNom(vannes).map(x => ({ id: x, label: nomDe(x), sub: x, groupe: tr('Vannes') })),
               // Tout `switch.*` : une prise, mais aussi un interrupteur — le groupe le dit.
               ...parNom(prises).map(x => ({ id: x, label: nomDe(x), sub: x, groupe: tr('Prises et interrupteurs') })),
@@ -1617,6 +1626,23 @@ export function ecrituresObservation(h, lus, cible) {
   return Object.keys(ecrire).filter(k => lus.includes(k)).map(k => [ecrire[k][0], ecrire[k][1]()]);
 }
 
+/* Le VRAI logo d'une mise à jour (27/10). « Je veux leur vraie icône, pas des
+ * trucs inventés. » D'abord l'image que Home Assistant donne (`entity_picture`) ;
+ * si elle manque ou ne charge pas — « Home Assistant Core » restait vide chez
+ * lui —, le logo officiel de l'intégration qui publie la mise à jour, là où
+ * l'interface de Home Assistant le prend (brands.home-assistant.io, `_/` = image
+ * de remplacement si la marque n'en a pas). L'icône du groupe ne vient qu'en
+ * dernier, quand aucune des deux ne charge. */
+const logoMarque = (domaine) => (domaine && /^[a-z0-9_]+$/.test(domaine) ? 'https://brands.home-assistant.io/_/' + domaine + '/icon.png' : null);
+function LogoMaj({ pic, plateforme, icone }) {
+  const [ko, setKo] = useState([]);
+  const src = [pic, logoMarque(plateforme)].find(u => u && ko.indexOf(u) < 0);
+  if (!src) return <Fi i={icone} size={14} />;
+  // `onError` n'est pas une interaction : c'est le repli quand l'image ne charge pas.
+  // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
+  return <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={() => setKo(k => [...k, src])} />;
+}
+
 export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode, onPickTheme, onFollowHa, navbar = true, onToggleNavbar, wxFx = true, onToggleWxFx, ambient = 0, onAmbient, ambPlage = 'toujours', onAmbPlage, retourAcc = 0, onRetourAcc, navMargin = 0, navAuto = true, onNavOffset, onNavOffsetReset, onNavSet, onTopSet, look = LOOK_DEF, onLook, topMargin = 0, topAuto = true, onTopOffset, onTopOffsetReset, hass, users = [], userIdx = 0, isAdmin: profilAdmin = false, onAddUser, onUpdateUser, onDeleteUser, customViews = [], onSaveCustomViews, onNav = null, droits = [] }) {
   /* La section ouverte survit au rechargement, comme la vue elle-meme.
    *
@@ -1831,7 +1857,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     // « Home Assistant Core Update » : le mot de la fin ne dit rien de plus
     // que la section ou il s'affiche.
     const nom = String(at.friendly_name || at.title || id.replace('update.', '').replace(/_/g, ' ')).replace(/\s+(update|mise à jour)$/i, '');
-    return { id, name: nom, avail: s.state === 'on', installed: at.installed_version, latest: at.latest_version, prog, pic: at.entity_picture, notes: lienSur(at.release_url) };
+    return { id, name: nom, avail: s.state === 'on', installed: at.installed_version, latest: at.latest_version, prog, pic: at.entity_picture, plateforme: plateformeDe(id), notes: lienSur(at.release_url) };
   }) : [];
   // purge l'optimiste dès que HA prend le relais (in_progress réel) ou que la MàJ est terminée (state off)
   const connecte = !!hass;
@@ -2279,7 +2305,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <OptRow title={tr('Effets météo animés')} desc={tr("Ciel vivant derrière la bannière d'accueil.")}>
               <Tgl on={!!wxFx} cb={onToggleWxFx} label={tr('Effets météo animés')} />
             </OptRow>
-            <OptRow retrait eteint={!wxFx} title={tr('Ciel animé')} desc={descCiel}>
+            <OptRow eteint={!wxFx} title={tr('Ciel animé')} desc={descCiel}>
               <Seg label={tr('Ciel animé')} value={qualiteCiel}
                 opts={[['auto', tr('Auto')], ['leger', tr('Léger')], ['fixe', tr('Fixe')]]}
                 onPick={choisirQualiteCiel} />
@@ -2616,9 +2642,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 {gr.items.map(u => (
                   <div key={u.id} className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 22px', borderTop: FILET }}>
                     <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: 'var(--o-s1)', color: 'var(--o-text2)' }}>
-                      {/* `onError` n'est pas une interaction : c'est le repli quand l'image ne charge pas. */}
-                      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
-                      {u.pic ? <img src={u.pic} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={(e) => { e.currentTarget.remove(); }} /> : <Fi i={gr.icone} size={14} />}
+                      <LogoMaj pic={u.pic} plateforme={u.plateforme} icone={gr.icone} />
                     </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>

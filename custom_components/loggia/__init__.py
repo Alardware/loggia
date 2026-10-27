@@ -60,7 +60,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 # autres, il doit se taire avant qu'ils ne s'arretent.
 MODULES_VIVANTS = (
     "rechargement",
-    "alertes", "chauffage", "distributeurs", "enfant", "fenetres", "interrupteurs", "lumieres", "minuteurs",
+    "alertes", "chauffage", "distributeurs", "eau", "enfant", "fenetres", "interrupteurs", "lumieres", "minuteurs",
     "nuit", "presence", "prises", "robots", "scenarios", "sirene", "veilles", "volets", "regles",
 )
 
@@ -143,7 +143,8 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
                               acces_chauffage=lambda: hass.data.get(DOMAIN, {}).get("chauffage"),
                               acces_prises=lambda: hass.data.get(DOMAIN, {}).get("prises"),
                               acces_lumieres=lambda: hass.data.get(DOMAIN, {}).get("lumieres"),
-                              acces_enfant=lambda: hass.data.get(DOMAIN, {}).get("enfant"))
+                              acces_enfant=lambda: hass.data.get(DOMAIN, {}).get("enfant"),
+                              acces_eau=lambda: hass.data.get(DOMAIN, {}).get("eau"))
             data["ws"] = True
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : configuration utilisateur indisponible")
@@ -316,6 +317,18 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
             data["lumieres"] = LoggiaLumieres(hass, data["store"])
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : carnet des lumieres indisponible")
+
+    # Le carnet de l'eau (chantier IoT, etape 3 ; I28, ADR 0217) : pourquoi une
+    # vanne d'eau est fermee, ses detecteurs, le journal du jour, notes ecran
+    # ferme. Il ne commande rien : le magasin lui suffit. La regle de fuite
+    # (alertes.py) le trouve ici au moment d'agir, et lui dit la cause avant.
+    if not data.get("eau") and data.get("store"):
+        try:
+            from .eau import LoggiaEau
+
+            data["eau"] = LoggiaEau(hass, data["store"])
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia : carnet de l'eau indisponible")
 
     # Le mode enfant (chantier Mode enfant) : les profils par piece, le plafond
     # de volume, le temps d'ecran et le coucher tenus ecran ferme, la demande

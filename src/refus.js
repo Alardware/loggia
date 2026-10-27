@@ -168,6 +168,9 @@ const REFUS = {
   /* Un minuteur posé sur un appareil déjà éteint (`off`, `standby`) : le serveur le refuse (minuteurs.py, audit du 19/10) —
    * il le couperait de nouveau une fois rallumé. La fiche le sait souvent un sondage trop tard. */
   minuteur_deja_eteint: () => tr('L’appareil est déjà éteint.'),
+  /* Un appui qui rouvrirait l'eau, sans en-tête monté pour ouvrir la popup de la vanne (actions.js, passe bis 2 de l'étape 3 IoT) :
+   * la même phrase que la ligne du journal, quand le serveur refuse (regles.py). */
+  eau_seule: () => tr('Loggia ne rouvre jamais l’eau seule'),
 };
 
 /** Des refus de plus, que seul un module chargé à la demande peut recevoir —

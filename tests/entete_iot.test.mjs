@@ -52,6 +52,22 @@ test('I14 : « 3 appareils · 1 en marche », « 1 appareil » — le titre en i
   assert.ok(html().includes('>7 appareils · 2 en marche</span>'));
 });
 
+/* TEST AJOUTÉ (étape 3 IoT, 25/10 ; I14) : « … · eau fermée sur fuite » — seulement quand une vanne de la liste l'est, d'après le carnet
+ * du serveur (`loggia/eau/etat`), et qu'elle l'est encore ; jamais une vanne fermée à la main. */
+test('I14 : « · eau fermée sur fuite », seulement quand une vanne l’est', async () => {
+  const EE = await import('../src/eauetat.js');
+  const etat = { vannes: { 'valve.arrivee_eau': { ferme: true, cause: 'fuite' } } };
+  const fermee = { ...S, 'valve.arrivee_eau': { state: 'closed', attributes: {} } };
+  assert.equal(E.fuiteIot(OBJETS, fermee, etat), true);
+  assert.equal(E.fuiteIot(OBJETS, S, etat), false, 'rouverte depuis : plus fermée sur fuite');
+  assert.equal(E.fuiteIot(OBJETS, fermee, { vannes: { 'valve.arrivee_eau': { ferme: true, cause: 'personne' } } }), false, 'fermée à la main');
+  assert.equal(E.fuiteIot(OBJETS, fermee, null), false, 'le serveur muet ne fait rien dire');
+  EE.reglerEauEtat({ hass: null });
+  EE.poserEtatEau(etat);
+  assert.ok(html(OBJETS, fermee).includes('>7 appareils · 2 en marche · eau fermée sur fuite</span>'));
+  EE.reglerEauEtat();
+});
+
 test('la rangée : la hauteur des autres en-têtes, le compte sur UNE ligne (index.css)', () => {
   assert.ok(CSS.includes('.o-iot-entete { display: flex; align-items: center; gap: 12px; min-height: 40px; }'));
   assert.ok(CSS.includes('.o-iot-entete > h2 { flex: none; }'));

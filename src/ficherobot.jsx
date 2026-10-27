@@ -100,17 +100,25 @@ function useHistoriqueRobot(hass, idRobot, idSurface, etat, jours = 14) {
 
 /* ════════════ L'accueil du robot (1b ; I16, § 7.6) ════════════ */
 
-/* Une puce de « Où » (40 px, 12,5 / 700, 0 12px, le rayon 10 de sa maquette) : choisie, le bleu plein et le blanc (règle des puces) ;
+/* Une puce de « Où » (44 px, 12,5 / 700, 0 12px, le rayon 10 de sa maquette) : choisie, le bleu plein et le blanc (règle des puces) ;
  * son point de 8 px — la couleur de la pièce, qui la relie au plan — devant, à 7 px. Inerte au travail : elle montre ce qui se
- * nettoie, sans opacité, le gris de texte pour les autres. */
+ * nettoie, sans opacité, le gris de texte pour les autres. Grille des pièces (26/10, ADR 0218) : elle prend TOUTE la largeur de sa
+ * case (ou de la ligne, pour « Tout »), 44 px de haut partout — une cible tactile ; un nom trop long se coupe sur sa ligne, en
+ * points de suspension, et garde son nom entier en `title` et en `aria-label`. */
 const PuceOu = ({ on, inerte = false, couleur = null, onClick, children }) => (
   <button type="button" onClick={inerte ? undefined : onClick} aria-pressed={on} aria-disabled={inerte || undefined}
-    style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 40, padding: '0 12px', borderRadius: 10, border: 'none', cursor: inerte ? 'default' : 'pointer',
-      fontSize: 12.5, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : inerte ? 'var(--o-text2)' : 'var(--o-text1)' }}>
+    title={typeof children === 'string' ? children : undefined} aria-label={typeof children === 'string' ? children : undefined}
+    style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 7, width: '100%', minWidth: 0, height: 44, padding: '0 12px', borderRadius: 10, border: 'none', cursor: inerte ? 'default' : 'pointer',
+      boxSizing: 'border-box', textAlign: 'left', fontSize: 12.5, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : inerte ? 'var(--o-text2)' : 'var(--o-text1)' }}>
     {couleur && <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: couleur, flexShrink: 0 }} />}
-    {children}
+    <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{children}</span>
   </button>
 );
+
+/* La grille des pièces (26/10) : des colonnes de largeur ÉGALE, autant qu'il en tient à 104 px au moins — deux au téléphone (popup de
+ * 360 à 390 px), trois dans la popup de bureau. Mesuré en démo, à 320, 360, 390 et 1280 px de large (ADR 0218). Pas de cadre : la
+ * grille est posée dans le panneau de tête, comme les puces avant elle. */
+const GRILLE_PIECES = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))', gap: 8, marginTop: 12 };
 
 /* Une tuile de l'Accueil (14 × 16) : son nom 12 / 700 au gris secondaire, la valeur 20 / 800, la ligne 12 / 600 ; elle ouvre un
  * onglet. Sans onglet où mener (pas de Planning), elle n'est pas un bouton : un bouton qui ne fait rien ne s'offre pas. */
@@ -151,8 +159,12 @@ function OngletAccueil({ vue, etat, zones, choisir, enRoute, toutChoisi, bascule
           * Muet, rien ne se choisit : le départ ne partirait pas — « Où » ne se dessine pas (passe bis du 18/10, point 12). */}
         {choisir && zones.length > 0 && !vue.panne && (<>
           <div style={{ ...PETITES_CAPITALES, marginTop: 18 }}>{tr('Où')}</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+          {/* « Tout le logement » (« Tout le jardin ») sur toute la ligne, à part ; puis la grille des pièces, un peu d'air entre les deux
+            * (26/10). L'ordre du DOM est l'ordre visuel : la tabulation suit les lignes de la grille. */}
+          <div className="rb-a-ou-tout" style={{ marginTop: 8 }}>
             <PuceOu on={toutChoisi} inerte={enRoute} onClick={toutPrendre}>{vue.domaine === 'lawn_mower' ? tr('Tout le jardin') : tr('Tout le logement')}</PuceOu>
+          </div>
+          <div className="rb-a-pieces" style={GRILLE_PIECES}>
             {zones.map(z => <PuceOu key={z.id} on={!!z.choisie} inerte={enRoute || z.inerte} couleur={z.couleur} onClick={() => basculerZone(z)}>{z.nom}</PuceOu>)}
           </div>
         </>)}
@@ -613,12 +625,18 @@ export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', v
    * publie (la source 3). Un serveur d'avant cette tranche n'a pas `pieces` : la règle d'aujourd'hui, corrigée du bit et de la liste
    * (R1, R4). */
   const piecesServeur = domaine === 'vacuum' && vue.etat && vue.etat.pieces && typeof vue.etat.pieces === 'object' ? vue.etat.pieces[idRobot] || null : null;
-  /* Les scripts maison (`vacuumScripts`) sont ceux de l'aspirateur PRINCIPAL (`resolved.vacuum.main`) et de lui seul (passe bis 2 du
+  /* Les scripts maison (`vacuumScripts`) sont ceux de l'aspirateur PRINCIPAL (celui du serveur, ci-dessous) et de lui seul (passe bis 2 du
    * 18/10, point C) : la popup d'un autre aspirateur ne les montre pas, et le serveur les lui refuserait (`script_inconnu`). L'ÉTAT du
    * serveur d'abord (`pieces[robot].scripts`, passe bis 2 du 20/10 : ce que la roue vient d'écrire s'y lit sur-le-champ, et le cache de
    * la description n'a plus voix au chapitre), sinon la description que l'écran tient — un serveur d'avant, la démo. */
   const designesServeur = piecesServeur && piecesServeur.scripts && typeof piecesServeur.scripts === 'object' ? piecesServeur.scripts : null;
-  const scripts = vac ? (designesServeur || entScripts || loggiaEnt('vacuumScripts', null) || descrLocale.vacuumScripts || {}) : {};
+  /* L'aspirateur principal est celui que le SERVEUR retient (`principal` de son état, petit paquet du 25/10) : la découverte prend le
+   * premier aspirateur (`resolved.vacuum.main`), le serveur aucun quand deux aspirateurs n'en nomment pas — et l'écran proposait des
+   * scripts qu'il ignorait. Sans réponse du serveur, aucun script ; la roue ATTEND seulement, désactivée, sur celui que l'écran résout. */
+  const etatServeur = vue.etat && typeof vue.etat === 'object' ? vue.etat : null;
+  const principal = domaine === 'vacuum' && !!etatServeur && etatServeur.principal === idRobot;
+  const roue = etatServeur ? principal : !!vac;
+  const scripts = principal ? (designesServeur || entScripts || loggiaEnt('vacuumScripts', null) || descrLocale.vacuumScripts || {}) : {};
   /* Sa décision du 20/10 (« Mon script garde la main ») : dès qu'un script de DÉPART est désigné et présent (`scriptDepart` :
    * 'pieces' ou 'depart'), Loggia ne prend jamais la main sur les pièces — ni zones de Home Assistant, ni pièces publiées. Les puces
    * sont ses interrupteurs quand le script des pièces est désigné et qu'une pièce en a un ; sinon, aucune puce, et une ligne dit à un
@@ -880,7 +898,7 @@ export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', v
         )}
         {/* La puissance, puis les scripts de la maison (l'aspirateur principal seul) : des rangées du panneau des réglages de l'appareil. */}
         {actuel === 'reglages' && <PageReglagesAppareil hass={hass} nom={nom} libelleNom={tr('Nom du robot')} reglages={reglages} fiche={fiche} idRetour={idOnglets + '-retour'}
-          avant={<>{puissance}{vac ? <PanneauScripts hass={hass} scripts={scripts} ordinaire={compteOrdinaire(hass)} pret={!!vue.etat} /> : null}</>}
+          avant={<>{puissance}{roue ? <PanneauScripts hass={hass} scripts={scripts} ordinaire={compteOrdinaire(hass)} pret={!!vue.etat} /> : null}</>}
           retour={() => { setOnglet('accueil'); focaliser(idOnglets + '-roue'); }} onFiche={onFiche ? () => onFiche(idRobot) : null} />}
       </div>
       {/* La carte du logement (I2 A), dans une SECONDE feuille montée APRÈS le contenu : elle se pose dans <body> à la suite de celle du

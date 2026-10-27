@@ -65,7 +65,8 @@ INDISPONIBLE = {"unavailable", "unknown"}
 # ── Ce qui se calcule, sans Home Assistant ──────────────────────────────────
 
 def valide(haid: Any) -> bool:
-    return isinstance(haid, str) and bool(ENTITE.match(haid))
+    # `fullmatch` (26/10) : avec `match`, le `$` de Python accepte un `\n` final.
+    return isinstance(haid, str) and bool(ENTITE.fullmatch(haid))
 
 
 def gere_duree(drapeaux: Any) -> bool:

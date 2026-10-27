@@ -243,6 +243,17 @@ def test_un_repas_propre_ou_refuse(module):
             module.normaliser_repas(mauvais)
 
 
+def test_un_identifiant_de_repas_se_valide_en_entier(module):
+    """Trois defauts du 25/10 (ADR 0216) : en Python, `$` accepte un `\\n`
+    final, et `IDENT.match` laissait passer « r1\\n ». L'identifiant se valide
+    en ENTIER (`fullmatch`), comme dans robots.py."""
+    for ident in ("r1\n", "r1\r", "r1 ", "\nr1"):
+        with pytest.raises(ValueError):
+            module.normaliser_repas({"id": ident, "heure": "07:00", "jours": []})
+    assert module.normaliser({"repas": [repas(id="r1\n")]})["repas"] == [], "un id a saut de ligne garde au chargement"
+    assert module.normaliser_repas({"id": "r-1_a", "heure": "07:00", "jours": []})["id"] == "r-1_a"
+
+
 def test_au_chargement_l_illisible_est_ecarte(module):
     brut = {"appareil": " dev ", "repas": [repas(), repas(heure="midi"), repas(), repas(id="r2")]
             + [repas(id="x%d" % i) for i in range(20)]}

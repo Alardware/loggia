@@ -66,8 +66,11 @@ def test_le_chauffage_se_recharge(rechargement):
 def test_chaque_cle_nommee_est_bien_celle_de_son_module(rechargement):
     """La table ne vaut que si elle dit vrai : la cle d'un module, c'est sa
     constante `CLE`. Un renommage d'un cote seul couperait le rechargement."""
+    # ASSERTION MODIFIEE (passe bis de l'etape 3, 25/10 ; point 13) : un module peut relire PLUSIEURS cles - le carnet de l'eau,
+    # `loggia_alertes` (`CLE`) et `loggia_plants` (`CLE_PLANTES`).
     for cle, nom in rechargement.CLES_DES_MODULES.items():
-        assert charger(nom).CLE == cle, nom
+        module = charger(nom)
+        assert cle in (module.CLE, getattr(module, "CLE_PLANTES", None)), nom
 
 
 def _nuit_sur(magasin, hass, regles_module):

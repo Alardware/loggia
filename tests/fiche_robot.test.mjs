@@ -334,8 +334,9 @@ test('point A : les scripts maison partent par le serveur — départ, pièces p
     c['script.robot_pieces'] = st('script.robot_pieces', 'off', { friendly_name: 'Nettoyer les pièces' });
     c['script.robot_pause'] = st('script.robot_pause', 'off', { friendly_name: 'Pause douce' });
   };
+  // ASSERTION MODIFIÉE (25/10, petit paquet robots) : l'aspirateur principal est celui que le SERVEUR retient (`principal` de son état).
   const ouvrir = async (opts) => {
-    const w = poser(opts);
+    const w = poser({ etat: { ...ETAT(), principal: ASP }, ...opts });
     setLoggiaState({ ent: { vacuumScripts: scripts } });
     return { w, ...(await fiche(w)) };
   };
@@ -381,8 +382,9 @@ test('point C : les scripts maison n’appartiennent qu’à l’aspirateur prin
       c['script.robot_partout'] = st('script.robot_partout', 'off', { friendly_name: 'Nettoyer partout' });
       c['script.robot_pause'] = st('script.robot_pause', 'off', { friendly_name: 'Pause douce' });
     };
+    // ASSERTION MODIFIÉE (25/10, petit paquet robots) : le principal se lit dans l'état du serveur (`principal`), qui nomme l'autre.
     const ouvrir = async (opts) => {
-      const w = poser(opts);
+      const w = poser({ etat: { ...ETAT(), principal: 'vacuum.principal' }, ...opts });
       setLoggiaState({ ent: { vacuumScripts: { nettoyer_tout: 'script.robot_partout', pause: 'script.robot_pause' } } });
       return { w, ...(await fiche(w)) };
     };
@@ -517,11 +519,47 @@ test('point 13 : les puces de l’Accueil ont le rayon de sa maquette, et le mot
   assert.equal(a.etat.encre, 'var(--o-text)');
   const ma = monter(accueil().type, a);
   const ou = monter(PuceOu(ma), ma.trouver(e => e.type && e.type.name === 'PuceOu')[1].props).arbre;
-  assert.deepEqual([ou.props.style.borderRadius, ou.props.style.fontSize, ou.props.style.padding, ou.props.style.gap, ou.props.style.height], [10, 12.5, '0 12px', 7, 40]);
+  // ASSERTION MODIFIEE (26/10, grille des pièces) : 44 px de haut au lieu de 40 — une cible tactile au téléphone, la même hauteur
+  // pour « Tout » et pour chaque case de la grille ; le rayon, le corps, la marge et l'écart du point restent ceux de sa maquette.
+  assert.deepEqual([ou.props.style.borderRadius, ou.props.style.fontSize, ou.props.style.padding, ou.props.style.gap, ou.props.style.height], [10, 12.5, '0 12px', 7, 44]);
   const puces = ma.trouver(e => e.type === 'button' && /rb-a-puce/.test(e.props.className || ''));
   assert.deepEqual(puces.map(b => b.props.style.borderRadius), [10, 10], 'la principale et la seconde');
 }));
 const PuceOu = (m) => m.trouver(e => e.type && e.type.name === 'PuceOu')[0].type;
+
+/* TEST AJOUTÉ (26/10, grille des pièces ; son choix « Grille régulière ») : « Tout le logement » (« Tout le jardin ») est À PART, seul
+ * sur sa ligne, au-dessus ; la grille, sans cadre, aux colonnes de largeur égale (`auto-fill`, `minmax(…, 1fr)`), ne contient QUE les
+ * pièces, dans leur ordre ; chaque puce prend toute sa case, 44 px de haut, et garde son nom entier en `title` et en `aria-label`,
+ * le texte coupé en points de suspension sur une ligne. La tondeuse passe par le même composant. */
+test('grille des pièces : « Tout » à part, la grille ne tient que les pièces, chaque puce garde son nom entier', () => dans(async () => {
+  for (const [robot, tout, noms] of [[ASP, 'Tout le logement', ['Salon', 'Cuisine', 'Bureau']], [TOND, 'Tout le jardin', ['Pelouse arrière', 'Pelouse avant']]]) {
+    const w = poser();
+    const { accueil } = await fiche(w, robot);
+    const ma = monter(accueil().type, accueil().props);
+    const [aPart] = ma.trouver(e => e.type === 'div' && e.props.className === 'rb-a-ou-tout');
+    const [grille] = ma.trouver(e => e.type === 'div' && e.props.className === 'rb-a-pieces');
+    assert.ok(aPart && grille, robot + ' : « Tout » à part et la grille');
+    const puces = (n) => { const out = []; parcourir(n.props.children, e => { if (e.type && e.type.name === 'PuceOu') out.push(e); }); return out; };
+    assert.deepEqual(puces(aPart).map(p => texteDe(p)), [tout], robot + ' : « Tout » seul sur sa ligne');
+    assert.deepEqual(puces(grille).map(p => texteDe(p)), noms, robot + ' : la grille ne tient que les pièces, dans leur ordre');
+    if (robot === ASP) assert.ok(puces(grille).every(p => p.props.couleur), 'chaque pièce garde son point de couleur');
+    const g = grille.props.style;
+    assert.equal(g.display, 'grid');
+    assert.match(g.gridTemplateColumns, /^repeat\(auto-fill, minmax\(\d+px, 1fr\)\)$/, 'des colonnes de largeur égale');
+    assert.ok(g.marginTop > 0, 'un peu d’air entre « Tout » et la grille');
+    assert.ok(!g.border && !g.background && !g.boxShadow, 'pas de boîte dans une boîte : la grille n’a pas de cadre');
+    // L'ordre du DOM : « Tout », puis la grille — la tabulation suit l'ordre visuel.
+    const ordre = ma.trouver(e => e.type && e.type.name === 'PuceOu').map(p => texteDe(p));
+    assert.deepEqual(ordre, [tout, ...noms]);
+    for (const p of puces(grille)) {
+      const b = monter(p.type, p.props).arbre;
+      assert.deepEqual([b.props.title, b.props['aria-label']], [texteDe(p), texteDe(p)], 'le nom entier, en title et en aria-label');
+      assert.deepEqual([b.props.style.width, b.props.style.minWidth, b.props.style.height], ['100%', 0, 44], 'toute sa case, 44 px');
+      const [mot] = b.props.children.filter(x => x && x.props && !x.props['aria-hidden']);
+      assert.deepEqual([mot.props.style.overflow, mot.props.style.textOverflow, mot.props.style.whiteSpace], ['hidden', 'ellipsis', 'nowrap'], 'coupé sur une ligne');
+    }
+  }
+}));
 
 test('I17 : les pièces nouvelles prennent les jetons du thème, jamais une couleur en dur', () => {
   const pieces = vacRooms({ states: { [ASP]: { state: 'docked', attributes: { rooms: { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6, g: 7, h: 8 } } } } }, ASP, []);
@@ -546,7 +584,9 @@ const PIECES_ZONES = () => ({
   ],
   segments: [{ id: 'seg:1', nom: 'Salon', slug: 'salon', segments: [1] }, { id: 'seg:2', nom: 'Cuisine', slug: 'cuisine', segments: [2] }, { id: 'seg:3', nom: 'Bureau', slug: 'bureau', segments: [3] }],
 });
-const avecPieces = (pieces, etat = ETAT()) => ({ ...etat, pieces: { [ASP]: pieces } });
+/* ASSERTION MODIFIÉE (25/10, petit paquet robots) : l'état d'un serveur de cette tranche dit aussi l'aspirateur principal qu'il retient
+ * (`principal`) — ici le seul de la maison ; la popup ne prend plus celui que l'écran résout pour ses scripts. */
+const avecPieces = (pieces, etat = ETAT()) => ({ principal: ASP, ...etat, pieces: { [ASP]: pieces } });
 const BIT = 16384;
 
 test('R2, R3, R4 : les zones de Home Assistant sont les puces de « Où » ; « Nettoyer 2 pièces » part par le serveur avec ses zones, jamais un segment', () => dans(async () => {
@@ -862,13 +902,37 @@ test('la roue : pas de scripts de la maison pour un robot qui n’est pas l’as
   assert.equal(out.length, 0);
 }));
 
+/* TEST AJOUTÉ (petit paquet du 25/10, point 2) : l'aspirateur principal est celui que le SERVEUR retient (`principal` de son état).
+ * Deux aspirateurs et rien de nommé : le serveur n'en retient aucun, et ses scripts ne valent pour personne — l'écran, qui prenait le
+ * premier aspirateur découvert (`LOGGIA_RESOLVED.vacuum.main`), proposait la roue et partait par des scripts que le serveur ignorait. */
+test('petit paquet, point 2 : le principal est celui du serveur — aucun retenu, ni roue ni scripts ; retenu, les deux', () => dans(() => chezLui({ vacuumRooms: ROOMS_SON_CAS, vacuumScripts: SCRIPTS_SON_CAS }, async () => {
+  const sansScripts = { ...PIECES_SON_CAS(false), source: 'segments', scripts: {} };
+  const w = poser({ etat: { ...avecPieces(sansScripts), principal: null }, retouche: sonCas });
+  const { m, accueil } = await fiche(w);
+  accueil().props.principale.agir();
+  const lancer = w.ws.find(x => x.type === 'loggia/robots/lancer');
+  assert.deepEqual([lancer.robot, 'script' in lancer], [ASP, false], 'le service standard, par le serveur : pas le script que le serveur ignorerait');
+  de(m, 'EnteteFiche').props.onReglages(); m.rendre();
+  assert.equal(scriptsDe(de(m, 'PageReglagesAppareil')), undefined, 'pas de roue des scripts : ils ne seraient à personne');
+  // Le serveur le retient : la roue, et son départ par son script.
+  const w2 = poser({ etat: { ...avecPieces(PIECES_SON_CAS(false)), principal: ASP }, retouche: sonCas });
+  const f2 = await fiche(w2);
+  f2.accueil().props.principale.agir();
+  assert.deepEqual(w2.ws.filter(x => x.type === 'loggia/robots/lancer').map(x => [x.script, x.role]), [['script.robot_partout', 'nettoyer_tout']]);
+  de(f2.m, 'EnteteFiche').props.onReglages(); f2.m.rendre();
+  assert.ok(scriptsDe(de(f2.m, 'PageReglagesAppareil')), 'la roue des scripts de la maison');
+})));
+
 /* ASSERTION MODIFIÉE (passe bis 2 du 20/10, relecture de contrôle — point 3) : « Localiser » est le geste de la CARTE (`localiserRobot`),
  * partagé et SANS garde — un script gardé bloquait « Nettoyer tout le logement » sept secondes, la puce inerte ; un second appui ne
  * relance pas le script ; « Il bipe » revient à la réponse ; un serveur d'avant (`invalid_format`) ou un script indisponible : `locate`. */
+/* ASSERTION MODIFIÉE (25/10, petit paquet robots) : « Localiser » se décide au SERVEUR (`localiser: true`) — son script s'il en désigne un
+ * qui répond, sinon `locate` —, d'après la description de la maison sur le disque : l'écran ne lit plus son cache (`cfgVal`) ni
+ * l'aspirateur que la découverte prend. Le script indisponible se juge donc au serveur ; un refus du serveur va au toast. */
 test('« Localiser » passe par son script quand il en désigne un qui répond — le geste de la carte, sans garde : un seul appui, « Nettoyer tout » reste, « Il bipe » à la réponse ; sinon `locate`', () => dans(() => chezLui({ vacuumRooms: ROOMS_SON_CAS, vacuumScripts: SCRIPTS_SON_CAS }, async () => {
   const { setLoggiaState: poserEtat } = await import('../src/state.js');
-  // La carte lit la description de la maison et l'aspirateur principal là où l'écran les tient (`cfgVal`, `LOGGIA_RESOLVED`).
-  const chezLuiCarte = () => poserEtat({ cfg: { loggia_entities: { vacuumRooms: ROOMS_SON_CAS, vacuumScripts: SCRIPTS_SON_CAS } }, resolved: PRINCIPAL });
+  // Le cache de l'onglet ne dit plus rien : vide, « Localiser » part pareil au serveur.
+  const chezLuiCarte = () => poserEtat({ cfg: {}, resolved: {} });
   const w = poser({ etat: avecPieces(PIECES_SON_CAS(false)), retouche: sonCas });
   chezLuiCarte();
   const { vue, accueil, relire } = await fiche(w);
@@ -876,7 +940,7 @@ test('« Localiser » passe par son script quand il en désigne un qui répond �
   assert.equal(a.seconde.mot, 'Localiser');
   a.seconde.agir();
   const lancer = w.ws.find(x => x.type === 'loggia/robots/lancer');
-  assert.deepEqual([lancer.script, lancer.role, lancer.zones], ['script.robot_ou', 'localiser', []], 'son script, avec son rôle, par le serveur');
+  assert.deepEqual([lancer.localiser, 'script' in lancer, 'role' in lancer, lancer.zones], [true, false, false, []], 'le serveur décide, d’un seul message');
   assert.deepEqual(w.appels, [], 'pas de `vacuum.locate` en plus');
   relire();
   const b = accueil().props;
@@ -887,7 +951,7 @@ test('« Localiser » passe par son script quand il en désigne un qui répond �
   await attendre(); relire();
   assert.equal(vue.arbre.bipe, true, '« Il bipe : suivez le son » à la réponse');
   assert.equal(accueil().props.etat.mot, 'Il bipe');
-  // Un serveur d'avant cette passe (son schéma ignore le rôle) : `invalid_format` — `locate`, sans toast.
+  // Un serveur d'avant ce paquet (son schéma refuse `localiser`) : `invalid_format` — `locate` d'ici, sans toast.
   const w2 = poser({ etat: avecPieces(PIECES_SON_CAS(false)), retouche: sonCas });
   chezLuiCarte();
   const f2 = await fiche(w2);
@@ -896,15 +960,15 @@ test('« Localiser » passe par son script quand il en désigne un qui répond �
   // Le repli passe par un module charge a la demande : borne, pas deux tours fixes (CI, 25/10).
   await jusqua(() => w2.appels.length > 0);
   assert.deepEqual([w2.appels, w2.rejets], [['vacuum.locate ' + ASP], []], '`locate` à sa place, rien au toast');
-  // Son script indisponible ou disparu : le serveur ne le lance pas et ne note rien (`_etat_script`, `script_inconnu`) — `locate` à sa place.
-  const w3 = poser({ etat: avecPieces(PIECES_SON_CAS(false)), retouche: (c) => { sonCas(c); c['script.robot_ou'].state = 'unavailable'; } });
+  // Un refus du serveur (Home Assistant a refusé `locate`) : au toast, et rien ne part d'ici en plus.
+  const w3 = poser({ etat: avecPieces(PIECES_SON_CAS(false)), retouche: sonCas });
   chezLuiCarte();
   const f3 = await fiche(w3);
   f3.accueil().props.seconde.agir();
-  w3.ws.find(x => x.type === 'loggia/robots/lancer').ko({ code: 'script_inconnu', message: 'script inconnu de ce robot : ' + ASP });
-  // Le repli passe par un module charge a la demande : borne, pas deux tours fixes (CI, 25/10).
-  await jusqua(() => w3.appels.length > 0);
-  assert.deepEqual([w3.appels, w3.rejets], [['vacuum.locate ' + ASP], []], '`locate` à sa place, rien au toast');
+  w3.ws.find(x => x.type === 'loggia/robots/lancer').ko({ code: 'geste_refuse', message: 'geste refuse par Home Assistant : ' + ASP });
+  // Le toast passe par un module charge a la demande : borne, pas deux tours fixes (CI, 25/10).
+  await jusqua(() => w3.rejets.length > 0);
+  assert.deepEqual([w3.appels, w3.rejets.map(e => e.code)], [[], ['geste_refuse']], 'le refus au toast, pas de `locate` en douce');
 })));
 
 test('point 2 : un passage d’avant s’édite — ses zones d’alors se montrent, et une puce d’une autre forme remplace l’ancienne ; `invalid_format` se dit traduit', () => dans(async () => {

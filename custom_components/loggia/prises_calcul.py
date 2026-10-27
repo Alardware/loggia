@@ -19,7 +19,8 @@ from typing import Any
 from .prises_types import TYPES
 
 CLE = "loggia_prises"
-# Un interrupteur, tel que Home Assistant l'ecrit.
+# Un interrupteur, tel que Home Assistant l'ecrit. Lu par `fullmatch` (26/10) :
+# le `$` de Python accepte un `\n` final.
 INTERRUPTEUR = re.compile(r"^switch\.[a-z0-9_]+$")
 # Ce qu'on peut imposer (P2) : les types de l'ecran, sauf la sirene, qui n'est
 # jamais une prise (P1).
@@ -38,7 +39,7 @@ def nombre(x: Any) -> float | None:
 
 
 def _interrupteur(haid: Any) -> bool:
-    return isinstance(haid, str) and INTERRUPTEUR.match(haid) is not None
+    return isinstance(haid, str) and INTERRUPTEUR.fullmatch(haid) is not None
 
 
 # ── La configuration `loggia_prises` (spec 6.1) ────────────────────────────

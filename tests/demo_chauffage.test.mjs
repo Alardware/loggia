@@ -58,12 +58,22 @@ const JOUR_BUREAU_LUNDI = [{ de: 0, a: 450, mode: 'hors_gel' }, { de: 450, a: 81
  * reprise bornée à aujourd'hui — seule la barre de la carte la lisait, et la
  * carte n'a plus de barre (cartes 1a). Les assertions qui la lisaient plus bas
  * la perdent aussi ; la reprise elle-même se lit toujours (`reprise`, `fin`). */
-const CLES_CHAUFFAGE = ['applique', 'avertissements', 'cle', 'entite', 'famille', 'fenetre', 'fenetre_mode', 'fenetre_ouverte', 'fin', 'jour', 'mode',
-  'modes', 'nom', 'options', 'ouvrant_ouvert', 'planning', 'puis', 'reprise', 'semaine', 'source', 'temperatures'];
+/* ASSERTION MODIFIÉE (26/10) : `programme` et `concurrents`, le programme de l'appareil allumé et ceux d'ailleurs
+ * qui le commandent, comme le serveur (tests/demo_chauffage_concurrents.test.mjs). */
+const CLES_CHAUFFAGE = ['applique', 'avertissements', 'cle', 'concurrents', 'entite', 'famille', 'fenetre', 'fenetre_mode', 'fenetre_ouverte', 'fin',
+  'jour', 'mode', 'modes', 'nom', 'options', 'ouvrant_ouvert', 'planning', 'programme', 'puis', 'reprise', 'semaine', 'source', 'temperatures'];
 
 const par = (etat, cle) => etat.chauffages.find((c) => c.cle === cle);
 const etat = (m) => m.ws({ type: 'loggia/chauffage/etat' });
 const semaineVide = () => ({ lun: [], mar: [], mer: [], jeu: [], ven: [], sam: [], dim: [] });
+/* ASSERTION MODIFIÉE (26/10) : la démo a deux chefs — le Timer du poêle, un planning Scheduler sur le radiateur du
+ * bureau —, et allumer un planning par-dessus se refuse comme sur le serveur. Les essais qui allument le planning du
+ * poêle, ou qui lisent les avertissements du bureau, les coupent d'abord, comme on le ferait chez soi
+ * (tests/demo_chauffage_concurrents.test.mjs tient les deux chefs). */
+const sansProgrammes = (m) => {
+  for (const id of ['switch.poele_timer', 'switch.schedule_radiateur_bureau']) m.states[id] = { ...m.states[id], state: 'off' };
+  return m;
+};
 
 test('l’état a la forme exacte de loggia/chauffage/etat', async () => {
   const m = maisonChauffageDemo({ quand: LUNDI_10H });
@@ -153,7 +163,7 @@ test('un module fil pilote se nomme comme son appareil, un thermostat garde son 
 });
 
 test('l’état dit si un planning tourne, compté sur toute la configuration', async () => {
-  const m = maisonChauffageDemo({ quand: LUNDI_10H });
+  const m = sansProgrammes(maisonChauffageDemo({ quand: LUNDI_10H }));
   assert.equal((await etat(m)).plannings_allumes, true, 'la chambre et le bureau');
   const eteints = await m.ws({ type: 'loggia/chauffage/config', patch: { chauffages: { [CHAMBRE]: { planning: false }, [BUREAU]: { planning: false } } } });
   assert.equal(eteints.etat.plannings_allumes, false);
@@ -331,7 +341,7 @@ test('un compte ordinaire ne peut ni écrire la configuration ni toucher à l’
 });
 
 test('le poêle s’allume avec la semaine type, et l’ordre passe dans sa consigne', async () => {
-  const m = maisonChauffageDemo({ quand: LUNDI_10H });
+  const m = sansProgrammes(maisonChauffageDemo({ quand: LUNDI_10H }));
   const r = await m.ws({ type: 'loggia/chauffage/config', patch: { chauffages: { [POELE]: { planning: true } } } });
   assert.deepEqual(Object.keys(r).sort(), ['config', 'etat']);
   assert.deepEqual(r.config.chauffages[POELE], { entite: POELE, famille: 'thermostat', planning: true, semaine: SEMAINE_TYPE,
@@ -410,7 +420,7 @@ test('Observer sans agir : le calcul et le journal, aucun ordre', async () => {
 });
 
 test('un module coupé se dit, et ne consomme plus', async () => {
-  const m = maisonChauffageDemo({ quand: a(12, 13, 31) });
+  const m = sansProgrammes(maisonChauffageDemo({ quand: a(12, 13, 31) }));
   await etat(m);
   assert.equal(m.states['sensor.radiateur_bureau_puissance'].state, '1000');
   m.states['switch.radiateur_bureau'] = { ...m.states['switch.radiateur_bureau'], state: 'off' };
@@ -465,7 +475,7 @@ test('chaque mot du journal de la démo est un mot que le serveur écrit', async
    * celles du serveur. Un mot qu'il n'écrit pas n'aurait pas de clé. */
   const serveur = readFileSync(join(RACINE, 'custom_components', 'loggia', 'chauffage.py'), 'utf8');
   const ecrit = (mot) => serveur.includes('"' + mot + '"');
-  const m = maisonChauffageDemo({ quand: LUNDI_10H });
+  const m = sansProgrammes(maisonChauffageDemo({ quand: LUNDI_10H }));
   await m.ws({ type: 'loggia/chauffage/main', chauffage: BUREAU, mode: 'confort_1' });
   await m.ws({ type: 'loggia/chauffage/main', chauffage: BUREAU, mode: 'hors_gel', fin: 'relance' });
   await m.ws({ type: 'loggia/chauffage/main', chauffage: BUREAU, reprendre: true });
@@ -626,7 +636,7 @@ test('un chauffage introuvable : ni mode appliqué ni mode d’ouverture, ce ne 
   /* Relecture du 12/10, point 3 — comme `_etat_un` : sans état, les modes
    * d'un thermostat se devinaient de sa famille, et un poêle disparu en Été
    * disait recevoir le Hors-gel — le moteur ne lui envoie rien. */
-  const m = maisonChauffageDemo({ quand: LUNDI_10H });
+  const m = sansProgrammes(maisonChauffageDemo({ quand: LUNDI_10H }));
   await m.ws({ type: 'loggia/chauffage/config', patch: { chauffages: { [POELE]: { planning: true } } } });
   await m.ws({ type: 'loggia/chauffage/maison', mode: 'ete' });
   delete m.states[POELE];
@@ -634,7 +644,7 @@ test('un chauffage introuvable : ni mode appliqué ni mode d’ouverture, ce ne 
   assert.deepEqual(po.avertissements, ['introuvable']);
   assert.deepEqual([po.mode, po.applique, po.fenetre_mode], ['arret', null, null], 'le mode voulu reste ; rien n’est appliqué');
   // Témoin : le poêle présent reçoit son Arrêt.
-  const n = maisonChauffageDemo({ quand: LUNDI_10H });
+  const n = sansProgrammes(maisonChauffageDemo({ quand: LUNDI_10H }));
   await n.ws({ type: 'loggia/chauffage/config', patch: { chauffages: { [POELE]: { planning: true } } } });
   const p2 = par(await n.ws({ type: 'loggia/chauffage/maison', mode: 'ete' }), POELE);
   assert.deepEqual([p2.mode, p2.applique, p2.fenetre_mode], ['arret', 'arret', 'arret']);
@@ -691,7 +701,7 @@ test('un chauffage reconnu reçoit la semaine type dans SES modes, comme chauffa
   /* Relecture de la tâche 10 : le jumeau de démo `chauffageDefautCha` donnait
    * la semaine type telle quelle — l'Éco à un module qui n'en a pas, que le
    * serveur ne lui aurait jamais posé (`chauffage_defaut`, chauffage_config.py). */
-  const m = maisonChauffageDemo({ quand: LUNDI_10H });
+  const m = sansProgrammes(maisonChauffageDemo({ quand: LUNDI_10H }));
   await m.ws({ type: 'loggia/chauffage/config', patch: { chauffages: { [BUREAU]: null } } });
   m.states[BUREAU] = { ...m.states[BUREAU], attributes: { ...m.states[BUREAU].attributes, options: ['comfort', 'frost_protection', 'off'] } };
   const r = await m.ws({ type: 'loggia/chauffage/config', patch: { chauffages: { [BUREAU]: { planning: true } } } });
@@ -708,7 +718,7 @@ test('un chauffage reconnu reçoit la semaine type dans SES modes, comme chauffa
    * Confort −1. La démo ne charge pas le module de la fiche — il ferait sortir
    * 33 Ko du boot dans un morceau à part (mesuré à la construction). */
   for (const options of [['comfort', 'frost_protection', 'off'], ['eco', 'frost_protection', 'off'], ['comfort_-1', 'eco'], ['comfort_-1']]) {
-    const n = maisonChauffageDemo({ quand: LUNDI_10H });
+    const n = sansProgrammes(maisonChauffageDemo({ quand: LUNDI_10H }));
     await n.ws({ type: 'loggia/chauffage/config', patch: { chauffages: { [BUREAU]: null } } });
     n.states[BUREAU] = { ...n.states[BUREAU], attributes: { ...n.states[BUREAU].attributes, options } };
     const permis = par(await etat(n), BUREAU).modes;

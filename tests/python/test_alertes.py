@@ -103,7 +103,8 @@ def creer(module, store_module):
         # La maison qui reagit (§18) : le vrai constructeur les pose, la fabrique aussi.
         a._dangers = {}
         a._avant = {}
-        a._vanne_coupee = None
+        # ASSERTION MODIFIEE (etape 3 IoT, 25/10 ; I30) : les vannes coupees, une liste - toutes les vannes d'eau faute d'en avoir choisi une.
+        a._vannes_coupees = []
         # Audit du 19/10 : le dernier etat connu avant un silence (H5), les
         # detecteurs muets guettes et deja signales (M5), l'attente du
         # demarrage (H4) — le vrai constructeur les pose, la fabrique aussi.
@@ -300,7 +301,8 @@ def test_la_fuite_coupe_la_vanne(creer):
     a = creer(etats=maison())
     lancer(a._reagir(FUITE, "fuite"))
     assert appels(a) == [("valve", "close_valve", ["valve.eau"], {})]
-    assert a._vanne_coupee == "valve.eau"
+    # ASSERTION MODIFIEE (etape 3 IoT, 25/10 ; I30) : la liste des vannes coupees.
+    assert a._vannes_coupees == ["valve.eau"]
 
 
 def test_une_prise_designee_vaut_une_vanne(creer):
@@ -398,7 +400,8 @@ def test_la_vanne_reste_coupee_et_le_journal_le_dit(creer):
     ligne = lancer(a._regles.journal())[0]
     assert ligne["quoi"] == "laisser coupée"
     assert "rouvre à la main" in ligne["detail"]
-    assert a._vanne_coupee is None
+    # ASSERTION MODIFIEE (etape 3 IoT, 25/10 ; I30) : la liste des vannes coupees, videe.
+    assert a._vannes_coupees == []
     assert a._regles.tenues("alertes") == {}
 
 
@@ -702,3 +705,87 @@ def test_sans_registre_le_danger_allume_tout_ce_qui_est_une_lampe(creer):
     lancer(a._reagir(FUMEE, "fumee"))
     assert appels(a)[0] == ("light", "turn_on", ["light.cachee", "light.couloir", "light.salon", LED],
                             {"brightness_pct": 100})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TESTS AJOUTES (etape 3 IoT, 25/10 ; I28, I30, ADR 0022 amendee, ADR 0217).
+#
+# Faute d'une vanne choisie, la regle fermait « la premiere `valve` d'eau » par
+# ordre d'identifiant : une vanne d'arrosage pouvait passer avant l'arrivee.
+# Elle les ferme TOUTES - fermer est le sens sur. Et elle dit au carnet de
+# l'eau (eau.py) la cause et le detecteur AVANT d'agir : la popup dira « fuite
+# sous l'evier ». Jamais une ouverture.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class FauxCarnet:
+    def __init__(self, hass):
+        self.hass, self.annonces = hass, []
+
+    def annoncer_fermeture(self, vannes, detecteur, nom):
+        # Ce qui est deja parti au moment de l'annonce : rien.
+        self.annonces.append((list(vannes), detecteur, nom, len(self.hass.services.appels)))
+
+
+def avec_carnet(a):
+    carnet = FauxCarnet(a._hass)
+    a._hass.data = {"loggia": {"eau": carnet}}
+    return carnet
+
+
+def test_sans_vanne_choisie_toutes_les_vannes_d_eau(creer):
+    etats = {**maison(), "valve.arrosage": FauxEtat("valve.arrosage", "open", {"device_class": "water"}),
+             "valve.gaz": FauxEtat("valve.gaz", "open", {"device_class": "gas"}),
+             "valve.muette": FauxEtat("valve.muette", "unavailable", {"device_class": "water"})}
+    a = creer(etats=etats)
+    lancer(a._reagir(FUITE, "fuite"))
+    assert appels(a) == [("valve", "close_valve", ["valve.arrosage", "valve.eau"], {})], "toutes les vannes d'eau joignables ; jamais le gaz"
+    assert a._vannes_coupees == ["valve.arrosage", "valve.eau"]
+
+
+def test_une_vanne_choisie_est_la_seule_fermee(creer):
+    etats = {**maison(), "valve.arrosage": FauxEtat("valve.arrosage", "open", {"device_class": "water"})}
+    a = creer({"actions": {"vanne": {"actif": True, "entite": "valve.eau"}}}, etats)
+    lancer(a._reagir(FUITE, "fuite"))
+    assert appels(a) == [("valve", "close_valve", ["valve.eau"], {})]
+
+
+def test_la_regle_dit_la_cause_au_carnet_avant_d_agir(creer):
+    a = creer(etats=maison())
+    carnet = avec_carnet(a)
+    lancer(a._reagir(FUITE, "fuite"))
+    assert carnet.annonces == [(["valve.eau"], "binary_sensor.sdb_fuite", "Fuite SDB", 0)], "annoncee AVANT la commande"
+    assert appels(a) == [("valve", "close_valve", ["valve.eau"], {})]
+
+
+def test_sans_carnet_la_vanne_se_ferme_quand_meme(creer):
+    """Le carnet absent (un demarrage rate) ne retient pas la surete."""
+    a = creer(etats=maison())
+    a._hass.data = {"loggia": {}}
+    lancer(a._reagir(FUITE, "fuite"))
+    assert appels(a) == [("valve", "close_valve", ["valve.eau"], {})]
+
+
+def test_le_danger_passe_toutes_les_vannes_restent_coupees(creer):
+    etats = {**maison(), "valve.arrosage": FauxEtat("valve.arrosage", "open", {"device_class": "water"})}
+    a = creer(etats=etats)
+    lancer(a._reagir(FUITE, "fuite"))
+    a._hass.services.appels.clear()
+    lancer(a._danger_passe(FUITE.entity_id))
+    assert a._hass.services.appels == [], "aucune vanne rouverte"
+    ligne = lancer(a._regles.journal())[0]
+    assert ligne["quoi"] == "laisser coupée" and ligne["n"] == 2
+
+
+def test_la_regle_n_ouvre_jamais_une_vanne():
+    from conftest import COMPOSANT
+
+    source = (COMPOSANT / "alertes.py").read_text(encoding="utf-8")
+    assert "open_valve" not in source and "set_valve_position" not in source, "une regle qui se trompe ne doit jamais ouvrir l'eau"
+
+
+def test_les_vannes_coupees_ne_se_partagent_pas_entre_instances():
+    """TEST AJOUTE (passe bis de l'etape 3, 25/10 ; point 11) : une liste au niveau de la CLASSE se partageait entre les
+    instances - un rechargement de l'integration aurait herite des vannes coupees par l'ancienne. Le defaut de classe est un
+    tuple, chaque instance pose sa liste."""
+    alertes = charger("alertes")
+    assert isinstance(alertes.LoggiaAlertes.__dict__["_vannes_coupees"], tuple)

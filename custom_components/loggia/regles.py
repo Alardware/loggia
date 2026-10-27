@@ -52,6 +52,7 @@ from typing import Any
 from homeassistant.core import Context, HomeAssistant, callback
 
 from .const import DOMAIN
+from .eau_calcul import est_vanne_eau
 from .textes import joindre, langue_serveur, parties, rendre_fr, traduire
 from .volets_calcul import cible_de
 
@@ -169,6 +170,49 @@ CRITIQUE: dict[str, Any] = {
 }
 # Et ce qui la rend silencieuse : elle arrive, elle ne sonne pas.
 SILENCIEUSE: dict[str, Any] = {"importance": "low", "push": {"sound": "none"}}
+
+
+# ── La maison ne rouvre jamais l'eau seule (passe bis 2 de l'etape 3 IoT, 25/10 ; ADR 0217) ──
+# Rouvrir, c'est une personne, depuis la popup de la vanne, apres la question.
+# Ce qu'une regle, un planning, une veille, un scenario ou un bouton sans fil
+# demanderait de ROUVRIR est retenu (`agir`, scenarios.py, interrupteurs.py) ;
+# fermer passe toujours. Ici et non dans le carnet (eau_calcul.py) : le carnet
+# note, il ne nomme aucun service.
+SERVICES_OUVRANTS = ("turn_on", "toggle", "open_valve", "set_valve_position")
+REFUS_EAU = "Loggia ne rouvre jamais l’eau seule"
+
+
+def est_ouvrant(service: Any, data: Any) -> bool:
+    """Ce service OUVRIRAIT-il ce qu'il vise ? `set_valve_position` a 0 ferme :
+    il ne l'est pas. Lu par `a_ne_pas_rouvrir`, et par interrupteurs.py avant de
+    resoudre une cible qui n'est pas une liste d'entites (trois defauts du 25/10)."""
+    if service not in SERVICES_OUVRANTS:
+        return False
+    if service == "set_valve_position":
+        try:
+            position = float((data if isinstance(data, dict) else {}).get("position"))
+        except (TypeError, ValueError):
+            position = 0.0
+        return position > 0
+    return True
+
+
+def a_ne_pas_rouvrir(service: Any, cibles: Any, data: Any, designee: Any, attributs_de: Any) -> list[str]:
+    """Les cibles qu'un ordre de la MAISON rouvrirait : la prise (ou l'entite)
+    designee dans Parametres > Alertes, et toute `valve` de classe `water`.
+    `set_valve_position` a 0 ferme : il passe. `attributs_de` : entity_id ->
+    attributs, ou None."""
+    if not est_ouvrant(service, data):
+        return []
+    if isinstance(cibles, str):
+        cibles = [cibles]
+    refus = []
+    for h in cibles or ():
+        if not isinstance(h, str) or not h:
+            continue
+        if (isinstance(designee, str) and h == designee) or (h.startswith("valve.") and est_vanne_eau(attributs_de(h))):
+            refus.append(h)
+    return refus
 
 
 def demarrer(hass: HomeAssistant, module: Any, coro: Any, nom: str) -> None:
@@ -439,6 +483,12 @@ class Regles:
         self._defait_gestes = async_track_state_change_event(
             self.hass, sorted(toutes), self._sur_changement)
 
+    def est_mien(self, ident: Any) -> bool:
+        """Ce contexte est-il celui d'un ordre de Loggia (`agir`) ? Le carnet de
+        l'eau s'en sert pour qu'une fermeture a la main ne passe pas pour celle
+        de la regle de fuite (chantier IoT, etape 3, passe bis, point 10)."""
+        return isinstance(ident, str) and ident in self._miens
+
     @callback
     def _sur_changement(self, event) -> None:
         """Une main s'est-elle posee sur cette entite ?
@@ -589,6 +639,47 @@ class Regles:
             return {}
         return cfg if isinstance(cfg, dict) else {}
 
+    # ── L'eau ne se rouvre pas seule (passe bis 2 de l'etape 3 IoT ; ADR 0217) ──
+    async def eau_retenue(self, service: str, cibles, data: dict | None = None) -> list[str]:
+        """Les cibles qu'un ordre de la maison ROUVRIRAIT — la prise designee
+        comme vanne d'eau (`loggia_alertes.actions.vanne.entite`), une `valve`
+        de classe `water` — et qui ne partent donc pas. Une ligne au journal de
+        Home Assistant ; celle de Loggia, l'appelant l'ecrit (`REFUS_EAU`).
+        Rouvrir, c'est une personne, depuis la popup de la vanne : l'ecran
+        appelle Home Assistant lui-meme, il ne passe jamais par ici."""
+        if service not in SERVICES_OUVRANTS:
+            return []
+        actions = self._table(self._table(await self._alertes()).get("actions"))
+        designee = self._table(actions.get("vanne")).get("entite")
+
+        def attributs(haid: str):
+            try:
+                return getattr(self.hass.states.get(haid), "attributes", None)
+            except Exception:  # noqa: BLE001 — un etat illisible : la classe reste inconnue
+                return None
+        refus = a_ne_pas_rouvrir(service, cibles, data, designee, attributs)
+        if refus:
+            _LOGGER.warning("Loggia ne rouvre jamais l'eau seule : %s retenu pour %s", service, ", ".join(refus))
+        return refus
+
+    async def eau_a_garder(self) -> bool:
+        """Y a-t-il de l'eau a garder ? La prise designee dans Parametres > Alertes, ou une `valve` de classe `water`. Sans
+        elles, un bouton qui vise une piece part tel qu'il est regle, et c'est Home Assistant qui la resout, comme avant
+        (trois defauts du 25/10) ; des etats illisibles : on garde."""
+        actions = self._table(self._table(await self._alertes()).get("actions"))
+        designee = self._table(actions.get("vanne")).get("entite")
+        if isinstance(designee, str) and designee:
+            return True
+        try:
+            return any(est_vanne_eau(getattr(self.hass.states.get(h), "attributes", None))
+                       for h in self.hass.states.async_entity_ids("valve"))
+        except Exception:  # noqa: BLE001 — des etats illisibles : dans le doute, on garde
+            return True
+
+    @staticmethod
+    def _table(x: Any) -> dict:
+        return x if isinstance(x, dict) else {}
+
     def _maintenant(self):
         from homeassistant.util import dt as dt_util
 
@@ -735,6 +826,10 @@ class Regles:
         """
         await self._charger()
         demandees = [h for h in cibles if isinstance(h, str)]
+        # La maison ne ROUVRE jamais l'eau seule (passe bis 2 de l'etape 3 IoT ; ADR 0217) : la prise designee, une vanne d'eau,
+        # ne partent pas — en observation non plus, le journal ne dit pas ce qui ne serait jamais parti. Fermer passe toujours.
+        eau = await self.eau_retenue(service, demandees, data)
+        demandees = [h for h in demandees if h not in eau]
         geles = [h for h in demandees if self.gele(h)]
         tenus_par: dict[str, int] = {}
         retenues = []
@@ -776,6 +871,8 @@ class Regles:
                 self._tenues.pop(h, None)
 
         details: list = []
+        if eau:
+            details.append(REFUS_EAU)
         if echec:
             # Au journal aussi : « ferme 0 » sans motif se lisait comme un
             # volet gele, pas comme une commande refusee.

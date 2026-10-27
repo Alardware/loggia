@@ -25,7 +25,8 @@ import { tr, trSens, locale } from './i18n.js';
 import { Fi, Bascule, ListeChoix } from './ui.jsx';
 import { Ico } from './icones.jsx';
 import { compteOrdinaire, enHaids, enPrix, LOGGIA_INDEX } from './state.js';
-import { commanderService } from './actions.js';
+import { commanderService, estVanneCarte } from './actions.js';
+import { lazyRecharge } from './recharge.js';
 import { useOptimiste } from './optimiste.js';
 import { ecrireRegle, raisonEchec, texteRefus } from './refus.js';
 import { wattsDe, kwhDe } from './unites.js';
@@ -40,6 +41,11 @@ import {
 import { fileEcritures } from './voletsfiche.js';
 import { EnteteFiche, PETITES_CAPITALES, filet } from './fichecommune.jsx';
 import { LISERE } from './styles.js';
+
+/* Le contenu de la popup d'une vanne (fichevanne.jsx), pour la prise désignée comme vanne d'eau : chargé à la demande, seulement
+ * quand une fiche de prise s'ouvre sur elle (passe bis de l'étape 3 IoT, point 9). Par vanne.jsx, le MÊME morceau que la carte : un
+ * morceau de plus pesait au démarrage (son adresse). */
+const VanneDansPrise = lazyRecharge(() => import('./vanne.jsx').then((m) => ({ default: m.ContenuVanne })));
 
 /* Les panneaux de sa maquette : le gris --o-s3, l'arrondi du thème, sans ombre, et le liseré du réglage « Liserés ». */
 const PANNEAU = { background: 'var(--o-s3)', border: LISERE, borderRadius: 'var(--o-radius,18px)', boxSizing: 'border-box', minWidth: 0 };
@@ -430,6 +436,11 @@ export default function FichePriseContent({ hass, id, prise = null, piece = null
   const B = ordinaire ? BasculeLue : Bascule;
   const choixType = impose ? type : 'deviner';
   const valeurType = (NOMS_PRISE()[type] || NOMS_PRISE().prise) + (impose ? '' : ' ' + tr('(deviné)'));
+  /* La prise désignée comme vanne d'eau (Paramètres › Alertes, « Quelle vanne » ; passe bis de l'étape 3 IoT, point 9) n'a pas de
+   * fiche de prise : sa bascule la rallumait d'un appui. La recherche, une carte posée avant que la configuration soit lue, ou un
+   * appui qui voulait la rallumer (actions.js) ouvrent cette fiche : elle montre la popup de la vanne, SUR sa question (qui ne se
+   * pose que si la vanne est fermée). Après les crochets de la prise : leur ordre ne change pas. */
+  if (estVanneCarte(id)) return <VanneDansPrise id={id} hass={hass} epingle={epingle} onFiche={onFiche} question />;
   return (
     <div ref={racine} className="rb-fiche" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <EnteteFiche nom={nom} epingle={epingle} plaque={plaque} sousNom={[piece, typeEcrit(type)].filter(Boolean).join(' · ')} />

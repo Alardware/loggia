@@ -93,7 +93,7 @@ def _texte(v: Any) -> str | None:
 def _passage(brut: Any) -> dict[str, Any] | None:
     """Un passage relu : sans robot, sans heures ou sans issue lisibles, il s'ecarte ; un champ secondaire
     illisible reprend sa valeur vide."""
-    if not isinstance(brut, dict) or not isinstance(brut.get("robot"), str) or not ROBOT.match(brut["robot"]):
+    if not isinstance(brut, dict) or not isinstance(brut.get("robot"), str) or not ROBOT.fullmatch(brut["robot"]):
         return None
     debut, fin, duree = _nombre(brut.get("debut")), _nombre(brut.get("fin")), _nombre(brut.get("duree_s"))
     if debut is None or fin is None or duree is None or fin < debut or duree < 0 or brut.get("issue") not in ISSUES:
@@ -131,7 +131,7 @@ def _demande(brut: Any) -> dict[str, Any] | None:
 def _par_robot(brut: Any, lire) -> dict[str, Any]:
     out = {}
     for robot, v in (brut.items() if isinstance(brut, dict) else []):
-        propre = lire(v) if isinstance(robot, str) and ROBOT.match(robot) else None
+        propre = lire(v) if isinstance(robot, str) and ROBOT.fullmatch(robot) else None
         if propre is not None:
             out[robot] = propre
     return out

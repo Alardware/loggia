@@ -735,23 +735,52 @@ def test_sans_aire_allumee_ni_l_ecran_ni_le_planning_ne_font_tondre(creer):
     assert r.hass.services.appels == [("lawn_mower", "start_mowing", {"entity_id": ["lawn_mower.t"]})], "sans aire : tout le jardin"
 
 
-def test_le_planning_d_une_tondeuse_retient_son_passage_et_dit_la_vraie_cause(creer):
+class _HorlogeFigee:
+    """L'horloge FIGEE d'un module : `time.time()` et `time.monotonic()` rendent toujours le meme instant, le reste du module `time`
+    est le vrai. Seule la reference `time` du module teste change — l'horloge globale, dont asyncio se sert, reste vraie."""
+
+    def __init__(self, instant):
+        self._instant = instant
+
+    def time(self):
+        return self._instant
+
+    def monotonic(self):
+        return self._instant
+
+    def __getattr__(self, nom):
+        import time as vrai
+        return getattr(vrai, nom)
+
+
+def test_le_planning_d_une_tondeuse_retient_son_passage_et_dit_la_vraie_cause(creer, module, regles_module, monkeypatch):
     """TEST AJOUTE (passe bis 2 du 18/10, point I ; la sonde de la relecture de controle). Avant de tondre, le planning allume les zones
     du passage et ETEINT les autres. Si l'extinction d'une autre aire echoue, la tondeuse ne part pas — elle tondrait ce que le passage
     excluait — et le passage est retenu. La cause ecrite est la vraie : une aire sous la main de quelqu'un n'est pas « commande refusee
-    par Home Assistant »."""
+    par Home Assistant ».
+
+    ASSERTION MODIFIEE (25/10, a la demande de la session d'installation) : il a echoue UNE fois dans la suite complete, sur une
+    machine chargee (le passage rouge a fini plus vite, avec deux avertissements), sans se reproduire ensuite (25 fois seul, 3 fois
+    dans la suite). Rien n'y depend plus du temps reel : l'horloge de `robots` et de `regles` est figee ; la borne d'attente des
+    bascules (`ATTENTE_DEPART_S`, que la boucle asyncio compte en temps vrai) passe a une heure — les faux services repondent sur le
+    champ, la borne ne sert qu'a ne jamais etre atteinte sous la charge ; et chaque assertion dit le journal entier, pour qu'un
+    echec, s'il revient, s'explique de lui-meme."""
+    for m in (module, regles_module):
+        monkeypatch.setattr(m, "time", _HorlogeFigee(T0))
+    monkeypatch.setattr(module, "ATTENTE_DEPART_S", 3600.0)
     etats = {"lawn_mower.t": FauxEtat("docked"), "switch.t_zone_avant": FauxEtat("off"), "switch.t_zone_arriere": FauxEtat("on")}
     config = {"plannings": [planning(robot="lawn_mower.t", zones=AVANT_SEULE)]}
     r = creer(config, etats, registre=REGISTRE_T)
     r.hass.services.refuse = ("switch", "turn_off")
-    assert lancer(r.async_minute(LUNDI_0930)) == [], "l'aire arriere est restee allumee : pas de tonte"
-    assert ("lawn_mower", "start_mowing") not in [a[:2] for a in r.hass.services.appels] and r.carnet["demandes"] == {}
-    assert journal(r)[0] == ("retenu", "commande refusee par Home Assistant", 0)
+    assert lancer(r.async_minute(LUNDI_0930)) == [], ("l'aire arriere est restee allumee : pas de tonte", journal(r))
+    assert ("lawn_mower", "start_mowing") not in [a[:2] for a in r.hass.services.appels] and r.carnet["demandes"] == {}, (
+        r.hass.services.appels, r.carnet["demandes"], journal(r))
+    assert journal(r)[0] == ("retenu", "commande refusee par Home Assistant", 0), journal(r)
     for sous_la_main in ("switch.t_zone_avant", "switch.t_zone_arriere"):
         r = creer(config, etats, registre=REGISTRE_T)
         r.regles.gele = lambda h, x=sous_la_main: h == x
-        assert lancer(r.async_minute(LUNDI_0930)) == [], sous_la_main
-        assert ("lawn_mower", "start_mowing") not in [a[:2] for a in r.hass.services.appels], sous_la_main
+        assert lancer(r.async_minute(LUNDI_0930)) == [], (sous_la_main, journal(r))
+        assert ("lawn_mower", "start_mowing") not in [a[:2] for a in r.hass.services.appels], (sous_la_main, r.hass.services.appels)
         assert journal(r)[0] == ("retenu", "sous la main de quelqu’un", 0), (sous_la_main, journal(r))
 
 
@@ -1837,3 +1866,138 @@ def test_une_lecture_des_pieces_qui_leve_n_empeche_ni_tout_le_logement_ni_les_au
     r.async_lancer = leve
     assert lancer(r.async_minute(LUNDI_0930)) == ["p2"]
     assert r.hass.services.appels == [("lawn_mower", "start_mowing", {"entity_id": ["lawn_mower.t"]})]
+
+
+# ── Petit paquet du 25/10 (tranche robots 2, ADR 0218) ────────────────────────────────────────────────────────────────────────────
+#
+# TESTS AJOUTES : (1) un identifiant se valide en ENTIER (`fullmatch`) — en Python, `$` accepte un `\n` final, et « script.x\n »
+# passait ; (2) le serveur PUBLIE l'aspirateur principal qu'il retient (`principal`), pour que l'ecran ne propose jamais des scripts
+# que le serveur ignorera ; (3) « Localiser » se decide au serveur (`localiser`), d'apres la description de la maison sur le disque,
+# jamais d'apres le cache d'un onglet ; (4) une description de la maison illisible se refuse par un code nomme.
+
+def test_un_identifiant_se_valide_en_entier_un_retour_a_la_ligne_final_ne_passe_plus(creer, module):
+    from conftest import charger as charger_module
+    with pytest.raises(ValueError):
+        module.fusion_vacuum_scripts({}, "pause", "script.robot_pause\n")
+    for mauvais in (planning(robot="vacuum.robot\n"), planning(id="p1\n")):
+        with pytest.raises(ValueError):
+            module.normaliser_planning(mauvais)
+    assert module.normaliser({"robots": {"vacuum.robot\n": {"calme": {"actif": True}}}})["robots"] == {}
+    r = associe(creer, etats=ETATS_SON_CAS, entites={"vacuumScripts": {"localiser": "script.robot_ou\n", "pause": "script.robot_pause"}})
+    assert r._roles_designes("vacuum.robot", lancer(r._async_entites())) == {"pause": "script.robot_pause"}, "un script mal forme n'est pas designe"
+    with pytest.raises(ValueError) as e:
+        lancer(r.async_lancer_depart("vacuum.robot\n", [], user=Compte("u1")))
+    assert getattr(e.value, "code", None) is None, "un robot mal forme est un format refuse, pas un robot injoignable"
+    with pytest.raises(ValueError) as e:
+        lancer(r.async_lancer_depart("vacuum.robot", [], script="script.robot_pause\n", role="pause", user=Compte("u1")))
+    assert getattr(e.value, "code", None) is None
+    with pytest.raises(ValueError):
+        lancer(r.async_designer_script("pause", "script.robot_pause\n", user=Compte("u1", admin=True)))
+    assert r.hass.services.appels == []
+    # Le carnet et les zones de Home Assistant : la meme regle.
+    carnet = charger_module("robots_carnet")
+    assert carnet._par_robot({"vacuum.robot\n": {"x": 1}, "vacuum.robot": {"x": 2}}, lambda v: v) == {"vacuum.robot": {"x": 2}}
+    pieces = charger_module("robots_pieces")
+    assert pieces.est_zone_ha({"zone": "cuisine"}) and not pieces.est_zone_ha({"zone": "cuisine\n"})
+
+
+def test_l_etat_publie_l_aspirateur_principal_que_le_serveur_retient(creer):
+    # Un seul aspirateur : lui.
+    r = associe(creer, etats=ETATS_SON_CAS, entites=ENTITES_SON_CAS)
+    assert lancer(r.async_etat(None))["principal"] == "vacuum.robot"
+    # Deux aspirateurs, aucun nomme : AUCUN — et l'ecran ne doit rien proposer (il prenait le premier).
+    deux = {**ETATS_SON_CAS, "vacuum.autre": FauxEtat("docked", {"supported_features": 0})}
+    r = associe(creer, etats=deux, registre=[Entree("vacuum.autre", "d3", platform="ecovacs")], entites=ENTITES_SON_CAS)
+    etat = lancer(r.async_etat(None))
+    assert etat["principal"] is None
+    assert etat["pieces"]["vacuum.robot"]["scripts"] == {} and etat["pieces"]["vacuum.autre"]["scripts"] == {}
+    # Nomme dans la description : celui-la ; nomme mais absent de la maison : on retombe sur la regle (deux : aucun).
+    r = associe(creer, etats=deux, registre=[Entree("vacuum.autre", "d3", platform="ecovacs")], entites={**ENTITES_SON_CAS, "vacuum": {"main": "vacuum.autre"}})
+    assert lancer(r.async_etat(None))["principal"] == "vacuum.autre"
+    r = associe(creer, etats=deux, registre=[Entree("vacuum.autre", "d3", platform="ecovacs")], entites={**ENTITES_SON_CAS, "vacuum": {"main": "vacuum.parti"}})
+    assert lancer(r.async_etat(None))["principal"] is None
+    # Un compte qui ne LIT pas l'aspirateur principal ne le voit pas nomme.
+    r = associe(creer, etats=ETATS_SON_CAS, entites=ENTITES_SON_CAS)
+    assert lancer(r.async_etat(Compte("u2", lit={"script.robot_ou"})))["principal"] is None
+
+
+def test_localiser_se_decide_au_serveur_son_script_s_il_repond_sinon_locate(creer):
+    # Son script `localiser`, designe et present : `script.turn_on`, un geste — rien au carnet.
+    r = associe(creer, etats=ETATS_SON_CAS, entites=ENTITES_SON_CAS)
+    etat = lancer(r.async_lancer_depart("vacuum.robot", [], localiser=True, user=Compte("u1")))
+    assert r.hass.services.appels == [("script", "turn_on", {"entity_id": ["script.robot_ou"]})] and r.hass.services.contextes == ["u1"]
+    assert "en_cours" in etat and r.carnet["demandes"] == {}
+    # Sans script designe : `vacuum.locate`, au nom de la personne ; rien au carnet, rien au journal.
+    r = associe(creer, etats=ETATS_SON_CAS, entites={})
+    lancer(r.async_lancer_depart("vacuum.robot", [], localiser=True, user=Compte("u1")))
+    assert r.hass.services.appels == [("vacuum", "locate", {"entity_id": ["vacuum.robot"]})] and r.hass.services.contextes == ["u1"]
+    assert r.carnet["demandes"] == {} and journal(r) == []
+    # Son script muet, ou le robot qui n'est pas l'aspirateur principal : `locate`.
+    r = associe(creer, etats={**ETATS_SON_CAS, "script.robot_ou": FauxEtat("unavailable")}, entites=ENTITES_SON_CAS)
+    lancer(r.async_lancer_depart("vacuum.robot", [], localiser=True, user=Compte("u1")))
+    assert r.hass.services.appels == [("vacuum", "locate", {"entity_id": ["vacuum.robot"]})]
+    deux = {**ETATS_SON_CAS, "vacuum.autre": FauxEtat("docked", {"supported_features": 512})}
+    r = associe(creer, etats=deux, registre=[Entree("vacuum.autre", "d3", platform="ecovacs")], entites=ENTITES_SON_CAS)
+    lancer(r.async_lancer_depart("vacuum.robot", [], localiser=True, user=Compte("u1")))
+    assert r.hass.services.appels == [("vacuum", "locate", {"entity_id": ["vacuum.robot"]})], "deux aspirateurs, aucun nomme : ses scripts ne sont a personne"
+    # Un robot muet : refus nomme, rien ne part ; un `locate` que Home Assistant refuse : `geste_refuse`.
+    r = associe(creer, "unavailable", etats=ETATS_SON_CAS, entites={})
+    with pytest.raises(ValueError) as e:
+        lancer(r.async_lancer_depart("vacuum.robot", [], localiser=True, user=Compte("u1")))
+    assert getattr(e.value, "code", None) == "robot_injoignable" and r.hass.services.appels == []
+    r = associe(creer, etats=ETATS_SON_CAS, entites={})
+    r.hass.services.refuse = ("vacuum", "locate")
+    with pytest.raises(ValueError) as e:
+        lancer(r.async_lancer_depart("vacuum.robot", [], localiser=True, user=Compte("u1")))
+    assert getattr(e.value, "code", None) == "geste_refuse"
+    # Les droits de pilotage valent comme pour un depart ; une tondeuse ne se localise pas ; on ne melange pas avec un script.
+    r = associe(creer, etats=ETATS_SON_CAS, entites={})
+    with pytest.raises(PermissionError):
+        lancer(r.async_lancer_depart("vacuum.robot", [], localiser=True, user=Compte("u1"), controle=lambda haid: False))
+    r = creer({}, {"lawn_mower.t": FauxEtat("docked")})
+    with pytest.raises(ValueError):
+        lancer(r.async_lancer_depart("lawn_mower.t", [], localiser=True, user=Compte("u1")))
+    r = associe(creer, etats=ETATS_SON_CAS, entites=ENTITES_SON_CAS)
+    with pytest.raises(ValueError):
+        lancer(r.async_lancer_depart("vacuum.robot", [], localiser=True, script="script.robot_ou", role="localiser", user=Compte("u1")))
+    assert r.hass.services.appels == []
+    # Le schema de `loggia/robots/lancer` l'accepte, et le relaie.
+    ws = (RACINE / "custom_components" / "loggia" / "websocket_api.py").read_text(encoding="utf-8")
+    corps = ws[ws.index('vol.Required("type"): WS_ROB_LANCER'):ws.index('vol.Required("type"): WS_ROB_SCRIPTS')]
+    assert 'vol.Optional("localiser"): bool' in corps and '("script", "role", "localiser")' in corps
+
+
+@pytest.mark.parametrize("muet", ["unavailable", "unknown"])
+@pytest.mark.parametrize("role", ["nettoyer_tout", "pieces_selectionnees", "pause", "reprendre", "retour_base", "localiser"])
+def test_un_script_maison_ne_part_pas_vers_un_robot_muet(creer, role, muet):
+    """TEST AJOUTE (trois defauts du 25/10, ADR 0218) : un geste par script (pause, reprise, base, localiser) partait vers un robot
+    muet — Home Assistant lance le script, l'ecran dit « fait », et rien ne bouge. Comme un depart et comme `locate`, il se refuse
+    AVANT l'appel par `robot_injoignable` : rien ne part, rien au carnet ni au journal. Les droits passent d'abord."""
+    script = ENTITES_AVEC_PIECES["vacuumScripts"][role]
+    r = associe(creer, muet, etats=ETATS_SON_CAS, entites=ENTITES_AVEC_PIECES)
+    with pytest.raises(ValueError) as e:
+        if role == "localiser":
+            lancer(r.async_lancer_depart("vacuum.robot", [], localiser=True, user=Compte("u1")))
+        else:
+            lancer(r.async_lancer_depart("vacuum.robot", [], script=script, role=role, user=Compte("u1")))
+    assert getattr(e.value, "code", None) == "robot_injoignable", role
+    assert r.hass.services.appels == [], role + " : rien n'est parti"
+    assert r.carnet["demandes"] == {} and journal(r) == [], role + " : rien au carnet ni au journal"
+    # Un script que ce compte ne pilote pas : PermissionError d'abord, comme avant.
+    r = associe(creer, muet, etats=ETATS_SON_CAS, entites=ENTITES_AVEC_PIECES)
+    with pytest.raises(PermissionError):
+        lancer(r.async_lancer_depart("vacuum.robot", [], script=script, role=role, user=Compte("u1"),
+                                     controle=lambda haid: haid != script))
+    assert r.hass.services.appels == []
+
+
+def test_une_description_de_la_maison_illisible_se_refuse_par_son_code(creer, module):
+    for illisible in ([], "texte", 3):
+        with pytest.raises(ValueError) as e:
+            module.fusion_vacuum_scripts(illisible, "pause", "script.p")
+        assert getattr(e.value, "code", None) == "description_illisible"
+    r = associe(creer, bits=0, options={}, etats=ETATS_SON_CAS, entites=["pas", "un", "objet"])
+    with pytest.raises(ValueError) as e:
+        lancer(r.async_designer_script("pause", "script.robot_pause", user=Compte("u1", admin=True)))
+    assert getattr(e.value, "code", None) == "description_illisible"
+    assert lancer(r.store.async_get_shared("loggia_entities")) == ["pas", "un", "objet"]

@@ -48,7 +48,8 @@ class PlanRefuse(ValueError):
 
 def etage_valide(etage: str) -> bool:
     """Un nom d'etage sur : il devient un nom de fichier."""
-    return bool(_ETAGE.match(etage or ""))
+    # `fullmatch` (26/10) : avec `match`, le `$` de Python accepte un `\n` final.
+    return bool(_ETAGE.fullmatch(etage or ""))
 
 
 def verifier_glb(octets: bytes) -> None:

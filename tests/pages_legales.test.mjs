@@ -122,7 +122,11 @@ test('la confidentialité dit vrai : ni mesure d’audience, ni adresse tierce, 
   // Les seules adresses externes du code : des liens que l'on CLIQUE (GitHub,
   // Ko-fi), deux exemples d'adresse Home Assistant, l'espace de noms SVG. Une
   // adresse de plus oblige à relire la politique de confidentialité.
-  const PERMIS = new Set(['www.w3.org', 'homeassistant.local', 'xxxx.ui.nabu.casa', 'github.com', 'ko-fi.com']);
+  // ASSERTION MODIFIÉE (27/10, sa décision) : les logos des intégrations, à l'écran des mises à jour,
+  // viennent de brands.home-assistant.io — la politique de confidentialité le dit, aux deux endroits.
+  const PERMIS = new Set(['www.w3.org', 'homeassistant.local', 'xxxx.ui.nabu.casa', 'github.com', 'ko-fi.com', 'brands.home-assistant.io']);
+  const conf = lire('site', 'legal', 'confidentialite.html');
+  assert.equal(conf.split('<code>brands.home-assistant.io</code>').length - 1, 2, 'la politique de confidentialité ne nomme plus le service des logos');
   for (const { p, texte } of SRC) {
     for (const m of texte.matchAll(/https?:\/\/([a-z0-9.-]+\.[a-z]{2,})/gi)) {
       assert.ok(PERMIS.has(m[1].toLowerCase()), p + ' nomme ' + m[1] + ' : la politique de confidentialité est à relire');

@@ -125,7 +125,9 @@ test('la taille : compacte (une rangee de 88 px) ou standard (deux), rangee dans
   assert.ok(h.includes('compacts: null') && h.includes('(layout.compacts || []).length'), 'Toutes les entites l’efface, et elle compte comme une retouche');
   assert.ok(h.includes('estLarge, basculerLarge, estCompact, basculerCompact }'), 'l’editeur la rend');
   const dc = bloc('function useDomainCards(', NL + '}');
-  assert.ok(dc.includes('const compact = (id, label = null) => card(id, label, null, true);') && dc.includes("if (chip) return <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} dense />;") && dc.includes('return { card, compact, nom, plante, distributeur, sheets, fermer, ouvrir };'), 'la compacte passe par la fabrique : CvCard dense pour une entite, la chip du distributeur ou de la plante sinon');
+  /* ASSERTION MODIFIÉE (étape 3 IoT, 25/10 ; I31) : une vanne, large ou compacte, passe aussi par `CvCard`, qui lui donne SA carte (chargée
+   * à la demande) — avant la carte d'une prise, pour une prise désignée comme vanne ; la compacte reste `CvCard` dense. */
+  assert.ok(dc.includes('const compact = (id, label = null) => card(id, label, null, true);') && dc.includes("if (chip || estVanneCarte(k)) return <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} dense={chip} />;") && dc.includes('return { card, compact, nom, plante, distributeur, sheets, fermer, ouvrir };'), 'la compacte passe par la fabrique : CvCard dense pour une entite, la chip du distributeur ou de la plante sinon');
   const c = bloc('function EditableCard(', NL + '}');
   assert.ok(c.includes("compact ? 'o-cvrow1' : ''") && c.includes('if (compact) {') && c.includes("minHeight: 0, height: '100%'"), 'la carte d’edition compacte tient sur une rangee');
   assert.ok(c.includes("brut.indexOf('zone:') !== 0") && c.includes('taille && !!ed.basculerCompact'), 'pas de compacte pour une zone fil pilote, ni la ou la vue n’en offre pas');

@@ -91,6 +91,8 @@ MAX_PLANNINGS = 24
 MAX_ZONES = 30
 MAX_SEGMENTS = 20
 
+# Un identifiant se valide EN ENTIER, par `fullmatch` (petit paquet du 25/10) : avec `match`, le `$` de Python accepte un `\n` final,
+# et « script.x\n » passait. Les ancres restent, pour qui relit le motif.
 ROBOT = re.compile(r"^(vacuum|lawn_mower)\.[a-z0-9_]+$")
 IDENT = re.compile(r"^[a-z0-9_-]{1,40}$")
 AIRE = re.compile(r"(^|_)(zone|area)_")
@@ -265,12 +267,13 @@ def fusion_vacuum_scripts(entites: Any, role: Any, script: Any) -> dict[str, Any
     refuse — rien ne s'ecrit a sa place. Pure : rend une copie, ne modifie rien sur place."""
     if role not in ROLES_SCRIPT:
         raise ValueError("role de script invalide : %r" % (role,))
-    if script is not None and (not isinstance(script, str) or not SCRIPT.match(script)):
+    if script is not None and (not isinstance(script, str) or not SCRIPT.fullmatch(script)):
         raise ValueError("script invalide : %r" % (script,))
     if entites is None:
         entites = {}
     if not isinstance(entites, dict):
-        raise ValueError("description de la maison illisible")
+        # Un refus NOMME (petit paquet du 25/10) : la roue le dit en une phrase (refusrobots.js), plus le refus generique.
+        raise RefusNomme("description_illisible", "description de la maison illisible", CLE_ENTITES)
     brut = entites.get("vacuumScripts")
     scripts = dict(brut) if isinstance(brut, dict) else {}
     if script is None:
@@ -335,10 +338,10 @@ def normaliser_planning(brut) -> dict:
     if not isinstance(brut, dict):
         raise ValueError("un planning est un objet")
     ident = str(brut.get("id") or "")
-    if not IDENT.match(ident):
+    if not IDENT.fullmatch(ident):
         raise ValueError("identifiant de planning invalide : %r" % (ident,))
     robot = str(brut.get("robot") or "")
-    if not ROBOT.match(robot):
+    if not ROBOT.fullmatch(robot):
         raise ValueError("robot invalide : %r" % (robot,))
     heure = lire_heure(brut.get("heure"))
     if heure is None:
@@ -375,7 +378,7 @@ def normaliser(brut) -> dict:
         cfg["plannings"].append(propre)
     robots = brut.get("robots")
     for haid, reglages in (robots.items() if isinstance(robots, dict) else []):
-        if not isinstance(haid, str) or not ROBOT.match(haid) or not isinstance(reglages, dict):
+        if not isinstance(haid, str) or not ROBOT.fullmatch(haid) or not isinstance(reglages, dict):
             continue
         pluie = reglages.get("pluie")
         try:
@@ -512,7 +515,7 @@ class LoggiaRobots:
             return
         avant, quand = self.carnet, self._maintenant()
         valeur = getattr(etat, "state", None)
-        if ROBOT.match(haid):
+        if ROBOT.fullmatch(haid):
             self.carnet = voir_phase(self.carnet, haid, phase(valeur), quand)
         for robot, s in self._suivis.items():
             if haid == s.get("surface"):
@@ -912,7 +915,7 @@ class LoggiaRobots:
         if not isinstance(brut, dict) or self._aspirateur_principal(entites) != robot:
             return {}
         return {role: haid for role, haid in brut.items()
-                if role in ROLES_SCRIPT and isinstance(haid, str) and SCRIPT.match(haid)}
+                if role in ROLES_SCRIPT and isinstance(haid, str) and SCRIPT.fullmatch(haid)}
 
     def _etat_script(self, script: Any) -> Any:
         """L'etat d'un script maison qui REPOND, ou None : absent de la maison, ou muet (`unavailable`, `unknown`). Home Assistant
@@ -1143,7 +1146,7 @@ class LoggiaRobots:
         `script.turn_on` rend la main des que le script DEMARRE (point M) : on l'attend jusque-la, ATTENTE_DEPART_S au plus ; un
         echec a l'interieur du script ne remonte pas, seul un refus de Home Assistant se dit — `commande_refusee` pour un depart,
         `geste_refuse` pour un geste (point K)."""
-        if not isinstance(script, str) or not SCRIPT.match(script):
+        if not isinstance(script, str) or not SCRIPT.fullmatch(script):
             raise ValueError("script invalide : %r" % (script,))
         if role not in ROLES_SCRIPT:
             raise ValueError("role de script invalide : %r" % (role,))
@@ -1156,13 +1159,15 @@ class LoggiaRobots:
             raise PermissionError("pas le droit de lancer %s" % script)
         depart = role in SCRIPTS_DEPART
         etat_robot = self.hass.states.get(robot)
+        ph = phase(getattr(etat_robot, "state", None))
+        # Un robot muet se refuse pour TOUT role, geste compris (trois defauts du 25/10, ADR 0218) : le script partait, l'ecran disait
+        # « fait », et rien ne bougeait. Rien ne part, rien au carnet ni au journal ; les droits passent avant.
+        if ph == "absent":
+            raise RefusNomme("robot_injoignable", "robot injoignable", robot)
         libelle = nom_de_script(etat_script, etat_robot)
         par = getattr(user, "id", None)
         quand = jeton = restante = None
         if depart:
-            ph = phase(getattr(etat_robot, "state", None))
-            if ph == "absent":
-                raise RefusNomme("robot_injoignable", "robot injoignable", robot)
             if ph in ("travail", "pause", "retour") or self._depart_recent(robot) or self._vol(robot):
                 raise RefusNomme("deja_en_route", "deja en route", robot)
             quand = self._demander(robot, zones, tout=False, source="loggia", par=par, libelle=libelle)
@@ -1191,8 +1196,38 @@ class LoggiaRobots:
         await self.regles.noter(MODULE, "main", quoi, cibles=[robot], motif="depuis l’écran")
         return await self.async_etat(user)
 
+    async def _async_localiser(self, robot: str, *, user: Any, controle: Any) -> dict[str, Any]:
+        """« Localiser », decide ICI (petit paquet du 25/10) : l'ecran lisait la description de la maison dans le cache de son onglet
+        (`cfgVal`) pour savoir si un script `localiser` etait designe — vide ou perime, `locate` partait alors qu'un script existait,
+        ou l'inverse. Le serveur lit la description telle qu'elle est sur le disque : le script `localiser` de l'aspirateur principal,
+        designe et qui repond, part par `_async_lancer_script` (un geste, rien au carnet) ; sinon `vacuum.locate`, un service explicite,
+        sous le contexte de la personne et ATTENTE_DEPART_S au plus. Un robot muet se refuse (`robot_injoignable`) — Home Assistant
+        sauterait l'entite en silence, et l'ecran dirait « Il bipe » ; un `locate` refuse, `geste_refuse`. Ni carnet, ni journal :
+        c'etait deja le cas du `locate` que l'ecran envoyait lui-meme."""
+        if not robot.startswith("vacuum."):
+            raise ValueError("seul un aspirateur se localise : %r" % (robot,))
+        script = (await self._scripts_du_robot(robot)).get("localiser")
+        if self._etat_script(script) is not None:
+            try:
+                return await self._async_lancer_script(robot, script, "localiser", [], user=user, controle=controle)
+            except RefusNomme as err:
+                # Le script vient de disparaitre entre la lecture et le lancement : `locate` a sa place, comme avant.
+                if err.code != "script_inconnu":
+                    raise
+        if phase(getattr(self.hass.states.get(robot), "state", None)) == "absent":
+            raise RefusNomme("robot_injoignable", "robot injoignable", robot)
+        par = getattr(user, "id", None)
+        ctx = Context(user_id=par) if par else Context()
+        try:
+            await self._attendre(self.hass.services.async_call("vacuum", "locate", {"entity_id": [robot]}, blocking=True, context=ctx),
+                                 time.monotonic() + ATTENTE_DEPART_S)
+        except Exception as err:  # noqa: BLE001 — un refus, une panne : la meme suite
+            _LOGGER.warning("Loggia robots : localiser %s n'a pas abouti", robot, exc_info=True)
+            raise RefusNomme("geste_refuse", "geste refuse par Home Assistant", robot) from err
+        return await self.async_etat(user)
+
     async def async_lancer_depart(self, robot: Any, zones: Any = None, *, script: Any = None, role: Any = None, user: Any = None,
-                                  controle: Any = None) -> dict[str, Any]:
+                                  controle: Any = None, localiser: bool = False) -> dict[str, Any]:
         """`loggia/robots/lancer {robot, zones, script, role}` : le depart que donne une personne depuis l'ecran (I3 A).
 
         `zones` a la forme de celles d'un planning (`[{id, nom, segments}]`). Des pieces partent par la commande
@@ -1216,11 +1251,16 @@ class LoggiaRobots:
         zone disparue du registre comprise), `autre_carte` ; et chez Ecovacs, `pieces_perimees` (une liste que le robot ne publie
         plus a l'instant du depart, ou plus rien). Depuis la passe bis du 20/10, `scripts_gardent_la_main` : un script de depart
         est designe, et Loggia ne prend pas la main sur les pieces — ni zones, ni segments. `script` et `role` : un script maison
-        de l'aspirateur principal (`_async_lancer_script`) ; un script qui n'est pas celui de ce role, `script_inconnu`."""
-        if not isinstance(robot, str) or not ROBOT.match(robot):
+        de l'aspirateur principal (`_async_lancer_script`) ; un script qui n'est pas celui de ce role, `script_inconnu`. `localiser`
+        (petit paquet du 25/10) : « Localiser », que le serveur decide seul (`_async_localiser`) — ni zones, ni script avec lui."""
+        if not isinstance(robot, str) or not ROBOT.fullmatch(robot):
             raise ValueError("robot invalide : %r" % (robot,))
         if controle is not None and not controle(robot):
             raise PermissionError("pas le droit de piloter %s" % robot)
+        if localiser:
+            if script is not None or role is not None or zones:
+                raise ValueError("localiser se demande seul, sans zones ni script")
+            return await self._async_localiser(robot, user=user, controle=controle)
         zones = lire_zones(zones if zones is not None else [])
         # Un script maison de l'aspirateur part par ici aussi (point A) : ses regles a lui.
         if script is not None:
@@ -1352,7 +1392,14 @@ class LoggiaRobots:
                     pieces[robot] = await self._async_pieces(robot, entites, entrees)
                 except Exception:  # noqa: BLE001
                     _LOGGER.warning("Loggia robots : pieces de %s illisibles", robot, exc_info=True)
+        # L'aspirateur principal que le serveur RETIENT (petit paquet du 25/10) : celui dont les scripts maison valent. L'ecran le lit
+        # pour tout ce qui touche a ces scripts — il prenait le premier aspirateur decouvert, et proposait des scripts que le serveur
+        # ignorait. None : aucun (deux aspirateurs et rien de nomme), ou un aspirateur que ce compte ne lit pas.
+        principal = self._aspirateur_principal(entites)
+        if principal is not None and lecture is not None and not lecture(principal):
+            principal = None
         return {
+            "principal": principal,
             "config": await self.async_config(),
             # La pluie ne retient une tondeuse que si la maison a une meteo :
             # sans elle, l'ecran ne propose pas le reglage.
@@ -1383,7 +1430,7 @@ class LoggiaRobots:
             if not isinstance(patch["robots"], dict):
                 raise ValueError("robots : un objet par robot")
             for haid, reglages in patch["robots"].items():
-                if not isinstance(haid, str) or not ROBOT.match(haid) or not isinstance(reglages, dict):
+                if not isinstance(haid, str) or not ROBOT.fullmatch(haid) or not isinstance(reglages, dict):
                     raise ValueError("robot invalide : %r" % (haid,))
                 actuel = cfg["robots"].get(haid) or reglages_defaut()
                 if "calme" in reglages:
@@ -1420,7 +1467,7 @@ class LoggiaRobots:
         y lit les roles designes (`pieces[robot].scripts`)."""
         if role not in ROLES_SCRIPT:
             raise ValueError("role de script invalide : %r" % (role,))
-        if script is not None and (not isinstance(script, str) or not SCRIPT.match(script)):
+        if script is not None and (not isinstance(script, str) or not SCRIPT.fullmatch(script)):
             raise ValueError("script invalide : %r" % (script,))
         await self.store.async_modifier_shared(CLE_ENTITES, lambda en_place: fusion_vacuum_scripts(en_place, role, script))
         self.store.signaler_communes([CLE_ENTITES])

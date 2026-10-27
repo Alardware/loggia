@@ -30,12 +30,19 @@ ADMIN_SEULEMENT = [
     # de la tranche robots 2, 20/10) : il s'ecrit dans la description de la
     # maison (`loggia_entities`), que seul un administrateur ecrit.
     "WS_ROB_SCRIPTS",
+    # ASSERTION MODIFIEE (etape 3 IoT, 25/10 ; I29, I32) : « Fermer en cas de
+    # fuite », dans la popup de la vanne - `actions.vanne.actif` de
+    # `loggia_alertes`, une cle de la maison.
+    "WS_EAU_REGLE",
 ]
 # Ce qui se LIT, ou se fait, depuis tout compte connecte — a dessein.
 OUVERTES = [
     "WS_GET", "WS_SET", "WS_DELETE", "WS_DISCOVERY", "WS_INT_ETAT", "WS_VOL_ETAT", "WS_FEN_ETAT",
     "WS_PRE_ETAT", "WS_NUI_ETAT", "WS_VEI_ETAT", "WS_REG_ETAT", "WS_SCN_ETAT", "WS_SCN_LANCER",
     "WS_ROB_ETAT", "WS_PIN_VERIFIER",
+    # Le profil du compte connecte (ADR 0276) : chaque compte relie ou cree
+    # SON profil, designe par la connexion — jamais par le message.
+    "WS_PROF_MOI",
     # Le minuteur d'une lampe (21/09) : le geste d'une fiche, comme lancer un
     # scenario — ouvert a tout compte, mais filtre par ses droits de PILOTAGE.
     "WS_MIN_ETAT", "WS_MIN_POSER", "WS_MIN_ANNULER",
@@ -73,6 +80,9 @@ OUVERTES = [
     # robot depuis l'ecran, le geste de tous les jours — comme lancer un
     # scenario, ouvert a tout compte et borne a ce qu'il PILOTE.
     "WS_ROB_LANCER",
+    # ASSERTION MODIFIEE (etape 3 IoT, 25/10 ; I28) : le carnet de l'eau se lit
+    # de tout compte, sous ses droits de LECTURE - comme celui des lumieres.
+    "WS_EAU_ETAT",
 ]
 # Ce qui s'ouvre au CODE DE LA MAISON (chantier Mode enfant, E2 B) : les gestes
 # du parent. Pas de `require_admin` - une tablette de famille porte un compte

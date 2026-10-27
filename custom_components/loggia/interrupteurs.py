@@ -45,7 +45,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import Event, HomeAssistant, callback
 
-from .regles import demarrer
+from .regles import demarrer, est_entite, est_ouvrant
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
@@ -116,6 +116,97 @@ def _entites_de(data) -> list:
     if isinstance(ids, list):
         return [i for i in ids if isinstance(i, str)]
     return []
+
+
+# Ce par quoi un appel de service VISE (trois defauts du 25/10, ADR 0217) : la garde de l'eau ne lisait que `entity_id`, et un
+# `turn_on` regle sur une piece rallumait la prise designee comme vanne. Un service ouvrant qui vise autrement qu'une liste
+# d'entites se resout ici, par les registres, comme Home Assistant le ferait ; le reste part en `entity_id` explicite.
+CLES_CIBLE = ("entity_id", "device_id", "area_id", "floor_id", "label_id")
+
+
+class CibleIllisible(Exception):
+    """Une cible qui ne se resout pas — registre illisible, forme inconnue : un service ouvrant ne part pas."""
+
+
+def _valeurs(cle: str, v: Any) -> list[str]:
+    """Une cle de cible lue comme Home Assistant la lit : une chaine ou une liste de chaines ; `entity_id` en chaine se
+    decoupe aux virgules et passe en minuscules (`cv.comp_entity_ids`). Toute autre forme leve CibleIllisible."""
+    if isinstance(v, str):
+        v = [p.strip() for p in v.split(",")] if cle == "entity_id" else [v]
+    if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+        raise CibleIllisible("%s : forme inconnue" % cle)
+    return [x.strip().lower() for x in v] if cle == "entity_id" else list(v)
+
+
+def _cible_explicite(data: Any) -> bool:
+    """La cible n'est-elle QU'UNE liste d'entites ecrites telles que Home Assistant les lira ? Alors la garde lit `entity_id`
+    tel quel, comme avant."""
+    if not isinstance(data, dict) or "target" in data or any(c in data for c in CLES_CIBLE[1:]):
+        return False
+    ids = data.get("entity_id")
+    liste = [ids] if isinstance(ids, str) else ids
+    return isinstance(liste, list) and all(est_entite(h) for h in liste)
+
+
+def _sans_rien(entree: Any) -> bool:
+    """Ce que Home Assistant ne vise jamais par une piece, un appareil ou une etiquette : une entite de reglage ou de
+    diagnostic, masquee, ou desactivee."""
+    return all(getattr(entree, a, None) is None for a in ("entity_category", "hidden_by", "disabled_by"))
+
+
+def resoudre_cible(hass: Any, domaine: str, data: dict) -> list[str]:
+    """Les entites qu'un appel `domaine.*` viserait avec `data` — `entity_id` (`all`, `none` compris), `device_id`, `area_id`,
+    `floor_id`, `label_id`, a plat ou dans un bloc `target`. Une entite est dans une piece si son `area_id` y est, ou si elle n'en
+    a pas et que son appareil y est. Leve CibleIllisible quand elle ne se resout pas."""
+    cible: dict[str, list[str]] = {}
+    blocs = [data]
+    if "target" in data:
+        if not isinstance(data["target"], dict):
+            raise CibleIllisible("target : forme inconnue")
+        blocs.append(data["target"])
+    for bloc in blocs:
+        for cle in CLES_CIBLE:
+            if bloc.get(cle) is not None:
+                cible.setdefault(cle, []).extend(v for v in _valeurs(cle, bloc[cle]) if v != "none")
+    explicites = [h for h in cible.get("entity_id", []) if h != "all"]
+    if any(not est_entite(h) for h in explicites):
+        raise CibleIllisible("entity_id : forme inconnue")
+    vues: list[str] = list(explicites)
+    if "all" in cible.get("entity_id", []):
+        if domaine == "homeassistant":
+            raise CibleIllisible("entity_id: all sans domaine")
+        vues.extend(hass.states.async_entity_ids(domaine))
+    if any(cible.get(c) for c in CLES_CIBLE[1:]):
+        try:
+            from homeassistant.helpers import (
+                area_registry as ar,
+                device_registry as dr,
+                entity_registry as er,
+            )
+
+            entites = list(er.async_get(hass).entities.values())
+            appareils = dict(dr.async_get(hass).devices)
+            pieces = dict(ar.async_get(hass).areas)
+        except Exception as err:  # noqa: BLE001 — un registre illisible : on ne devine pas
+            raise CibleIllisible("registre illisible") from err
+        etiquettes = set(cible.get("label_id", []))
+        zones = set(cible.get("area_id", []))
+        zones |= {a for a, p in pieces.items() if getattr(p, "floor_id", None) in set(cible.get("floor_id", []))}
+        zones |= {a for a, p in pieces.items() if etiquettes & set(getattr(p, "labels", None) or ())}
+        designes = set(cible.get("device_id", []))
+        designes |= {d for d, x in appareils.items() if etiquettes & set(getattr(x, "labels", None) or ())}
+        dans_zone = {d for d, x in appareils.items() if getattr(x, "area_id", None) in zones}
+        indirectes = []
+        for e in entites:
+            if not _sans_rien(e) or not isinstance(getattr(e, "entity_id", None), str):
+                continue
+            zone, appareil = getattr(e, "area_id", None), getattr(e, "device_id", None)
+            if (zone in zones or (not zone and appareil in dans_zone) or appareil in designes
+                    or etiquettes & set(getattr(e, "labels", None) or ())):
+                indirectes.append(e.entity_id)
+        # Un service de domaine ne touche que ses entites ; `homeassistant.*` les touche toutes.
+        vues.extend(sorted(h for h in indirectes if domaine == "homeassistant" or h.startswith(domaine + ".")))
+    return list(dict.fromkeys(vues))
 
 
 class LoggiaInterrupteurs:
@@ -313,6 +404,30 @@ class LoggiaInterrupteurs:
                 )
                 continue
             data = geste.get("data")
+            # Une piece, un appareil, un etage, une etiquette, `all` : la cible se resout en entites AVANT la garde de l'eau (trois
+            # defauts du 25/10, ADR 0217). Illisible, un service ouvrant ne part pas ; fermer passe toujours tel quel. Sans eau a
+            # garder (ni prise designee, ni vanne d'eau), le bouton part tel qu'il est regle : Home Assistant resout la piece.
+            if (self.regles is not None and isinstance(data, dict) and est_ouvrant(nom_service, data)
+                    and ("target" in data or any(c in data for c in CLES_CIBLE)) and not _cible_explicite(data)
+                    and await self.regles.eau_a_garder()):
+                try:
+                    vues = resoudre_cible(self.hass, domaine, data)
+                except CibleIllisible as err:
+                    _LOGGER.warning("Loggia ne rouvre jamais l'eau seule : %s refuse pour %s / %s — cible non resolue (%s)",
+                                    service, cle, action, err)
+                    continue
+                data = {k: v for k, v in data.items() if k not in CLES_CIBLE and k != "target"}
+                data["entity_id"] = vues
+                if not vues:
+                    continue
+            # Un bouton sans fil ne ROUVRE pas l'eau non plus (passe bis 2 de l'etape 3 IoT ; ADR 0217) : rouvrir, c'est une
+            # personne, depuis la popup de la vanne. La prise designee, une vanne d'eau, quittent l'appel ; le reste part.
+            eau = await self.regles.eau_retenue(nom_service, _entites_de(data), data) if self.regles is not None else []
+            if eau:
+                reste = [h for h in _entites_de(data) if h not in eau]
+                if not reste:
+                    continue
+                data = {**data, "entity_id": reste}
             try:
                 await self.hass.services.async_call(
                     domaine,

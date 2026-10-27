@@ -272,4 +272,4 @@ def segments_perimes(segments: Any, attributs: Any, plateforme: Any) -> bool:
 
 def est_zone_ha(z: Any) -> bool:
     """Une zone de depart ou de planning a la forme « zone de Home Assistant » (R5) ?"""
-    return isinstance(z, dict) and isinstance(z.get("zone"), str) and bool(ZONE.match(z["zone"]))
+    return isinstance(z, dict) and isinstance(z.get("zone"), str) and bool(ZONE.fullmatch(z["zone"]))

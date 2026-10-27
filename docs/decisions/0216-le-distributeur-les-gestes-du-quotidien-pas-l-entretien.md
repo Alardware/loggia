@@ -261,3 +261,11 @@ octets).
    le vrai total (la taille × le poids ; réglée à 2, « Distribuer 90 g ») ; la variante `z2m`
    garde la forme de sa maquette, « 2 portions · 12 g ».
 9. **Les documents** ne portent plus un chiffre de boot qui vieillit : « neutre au démarrage ».
+
+## Trois défauts du 25/10
+
+L'identifiant d'un repas (`IDENT` de `distributeurs.py`) se validait par `match` sur `^…$` : en Python,
+`$` accepte un `\n` final, et « r1\n » passait. Il se valide maintenant en entier (`fullmatch`), comme
+dans `robots.py`. C'était la seule expression d'identifiant de `distributeurs.py` et de
+`distributeur_appareil.py` ; l'heure (`_HEURE`) se lit sur un texte déjà nettoyé et ne change pas.
+Test : `test_un_identifiant_de_repas_se_valide_en_entier` (`tests/python/test_distributeurs.py`).

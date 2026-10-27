@@ -51,6 +51,8 @@ import {
   actionCtx,
   commander,
   commanderService,
+  estVanneCarte,
+  surVanne,
 } from './actions.js';
 import { mergedProfile as profileOf, profiles as profileTable } from './profiles.js';
 import { deviceCard, presentableDevices, presentationSummary, cleCamera } from './present.js';
@@ -151,6 +153,9 @@ const FicheRobotContent = lazyRecharge(() => import('./ficherobot.jsx'));
 // La fiche du distributeur, à onglets comme celle du robot (ADR 0155, 05/10) :
 // chargée à la demande par `FicheDistributeur`, la coquille posée ici.
 const FicheDistributeurContent = lazyRecharge(() => import('./fichedistributeur.jsx'));
+// Une vanne (chantier IoT, étape 3) : sa carte — large, étroite, compacte — et sa popup, d'UN morceau chargé à la demande (vanne.jsx,
+// par `CarteVanne`, `fiche` posé ou non) — le démarrage n'en porte que l'adresse.
+const VanneContent = lazyRecharge(() => import('./vanne.jsx'));
 // La fiche d'un chauffage, à onglets elle aussi (plan 2 du chantier Chauffage,
 // tâche 8) : chargée à la demande par `FicheChauffage`, avec la semaine, le
 // calcul du planning (chauffageplanning.js, chauffage.js) et son historique
@@ -864,7 +869,7 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
             * vit dans un élément CACHÉ, que `aria-labelledby` lit quand même
             * (audit du 03/10). */}
           <NomFeuille><span hidden>{tr('Rechercher')}</span></NomFeuille>
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 14, padding: '11px 14px' }}>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--o-s1)', border: LISERE, borderRadius: 14, padding: '11px 14px' }}>
             <Ico name="search" size={16} color="var(--o-text2)" />
             <input
               autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr('Pièce, vue, scène…')} aria-label={tr('Rechercher')}
@@ -914,7 +919,7 @@ function Header() {
   const { onToggleTheme, onToggleNav, onNav, editMode, onToggleEdit, users = [], userIdx = 0, onSwitchUser, peutEditer = false, droits = [], notifs = [], onLireNotifs = null, customViews = [], rooms = [], onAssistant = null, onDictee = null, hass: hassCtx = null } = ctx;
   const cur = users[userIdx] || { name: 'Administrateur', role: 'Admin', grad: 'linear-gradient(135deg,var(--o-lampe-b),var(--o-bad))' };
   const curBg = userBg(cur);
-  const hbtn = { width: 42, height: 42, borderRadius: '50%', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0 };
+  const hbtn = { width: 42, height: 42, borderRadius: '50%', background: 'var(--o-s1)', border: LISERE, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0 };
   /* `border` et non `borderColor` : `hbtn` pose deja le raccourci, et React
    * ne garantit pas l'ordre entre les deux. En quittant l'edition il retirait
    * `borderColor` en laissant `border` — le bouton pouvait garder sa bordure
@@ -927,6 +932,11 @@ function Header() {
   const [searchOpen, setSearchOpen] = useState(false);
   // La fiche d'une prise que la recherche ouvre (point 12) : elle survit à la fermeture de la recherche.
   const [fichePrise, setFichePrise] = useState(null);
+  /* La prise désignée comme vanne d'eau qu'un appui voulait rallumer (actions.js ; passe bis de l'étape 3 IoT, point 9) : sa fiche
+   * s'ouvre ici — l'en-tête est sur chaque vue —, et la fiche d'une prise-vanne montre la popup de la vanne, sur sa question
+   * (ficheprise.jsx : rien de plus au démarrage). Inscrit tant qu'il est monté, retiré en partant (passe bis 2) : un en-tête démonté
+   * gardait l'appui, et la popup ne s'ouvrait nulle part — sans en-tête, le toast dit pourquoi (actions.js). */
+  useEffect(() => surVanne(setFichePrise), []);
   // ⌘K (mac) / Ctrl+K : ouvre/ferme la recherche globale
   useEffect(() => {
     const onKey = (e) => { if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); setSearchOpen(o => !o); } };
@@ -1029,7 +1039,7 @@ function Header() {
     {searchOpen && <SearchSheet onClose={() => setSearchOpen(false)} onNav={onNav} customViews={customViews} rooms={rooms} droits={droits} onFiche={setFichePrise} />}
     {fichePrise && <FichePrise id={fichePrise} hass={getHass()} onClose={() => setFichePrise(null)} />}
     <header ref={hdrRef} className="loggia-hdr" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 'calc(14px + var(--o-safe-top,0px)) 28px 14px', borderBottom: '1px solid var(--o-s1)', position: 'sticky', top: 0, background: 'var(--o-header)', backdropFilter: 'blur(12px)', zIndex: 40, transform: hidden ? 'translateY(-100%)' : 'translateY(0)', transition: REDUCE_MOTION ? 'none' : 'transform .3s ease', willChange: 'transform' }}>
-      <button onClick={onToggleNav} title={tr('Afficher / masquer le menu')} style={{ width: 42, height: 42, borderRadius: 14, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0 }}><Ico name="menu-burger" size={20} /></button>
+      <button onClick={onToggleNav} title={tr('Afficher / masquer le menu')} style={{ width: 42, height: 42, borderRadius: 14, background: 'var(--o-s1)', border: LISERE, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0 }}><Ico name="menu-burger" size={20} /></button>
       {/* Sa largeur minimale vit dans index.css (`.o-hdr-search`) : elle
         * dépend de la place de l'en-tête, pas de celle de l'écran.
         *
@@ -1040,7 +1050,7 @@ function Header() {
         * comme celles des boutons voisins : le raccourci s'y lit encore quand
         * l'en-tête étroit cache sa touche. `aria-keyshortcuts` le donne au
         * lecteur d'écran, `aria-haspopup` dit qu'une feuille s'ouvre. */}
-      <div className="o-hdr-search" role="button" tabIndex={0} title={tr('Rechercher (Ctrl+K)')} aria-haspopup="dialog" aria-keyshortcuts={IS_MAC ? 'Meta+K' : 'Control+K'} onClick={() => setSearchOpen(true)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSearchOpen(true); } }} style={{ flex: 1, maxWidth: 420, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 14, padding: '10px 14px', cursor: 'pointer' }}>
+      <div className="o-hdr-search" role="button" tabIndex={0} title={tr('Rechercher (Ctrl+K)')} aria-haspopup="dialog" aria-keyshortcuts={IS_MAC ? 'Meta+K' : 'Control+K'} onClick={() => setSearchOpen(true)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSearchOpen(true); } }} style={{ flex: 1, maxWidth: 420, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--o-s1)', border: LISERE, borderRadius: 14, padding: '10px 14px', cursor: 'pointer' }}>
         <Ico name="search" size={16} color="var(--o-text2)" />
         <span style={{ flex: 1, minWidth: 0, fontSize: 14, color: 'var(--o-text2)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tr('Rechercher une pièce, une scène…')}</span>
         <span className="o-hdr-kbd" style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: 'var(--o-text2)', background: 'var(--o-bd2)', border: '1px solid var(--o-bd2)', borderRadius: 10, padding: '2px 7px' }}>{IS_MAC ? '⌘K' : tr('Ctrl K') /* « Strg K » sur un clavier allemand, comme « Rechercher (Ctrl+K) » (audit du 03/10) */}</span>
@@ -2161,7 +2171,7 @@ function JaugePile({ barres }) {
  * ventilateur… — au GABARIT MAISON, comme les lampes et les volets : icone en
  * haut a gauche, bascule ou repere en haut a droite, nom SOUS l'icone, etat
  * ensuite. La rangee horizontale de `CvCard` reste aux autres vues. */
-const ROOM_GENERIQUES = ['switch', 'input_boolean', 'fan', 'humidifier', 'siren', 'valve', 'lock', 'camera', 'binary_sensor', 'sensor'];
+const ROOM_GENERIQUES = ['switch', 'input_boolean', 'fan', 'humidifier', 'siren', 'lock', 'camera', 'binary_sensor', 'sensor'];
 /**
  * Le glyphe d'une carte : celui qu'on a CHOISI, sinon celui de la famille.
  *
@@ -2189,8 +2199,8 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   // Le carre d'une camera montre un appareil photo ; le repere en haut a
   // droite, la camera video — les deux glyphes de la maquette.
   const call = (d, svc, data) => commanderService(hass, id, d, svc, { entity_id: id, ...(data || {}) });
-  const togglable = ['switch', 'input_boolean', 'fan', 'humidifier', 'siren', 'valve'].indexOf(dom) >= 0;
-  const on = !mort && (dom === 'valve' ? s === 'open' : dom === 'lock' ? s === 'locked' : s === 'on');
+  const togglable = ['switch', 'input_boolean', 'fan', 'humidifier', 'siren'].indexOf(dom) >= 0;
+  const on = !mort && (dom === 'lock' ? s === 'locked' : s === 'on');
   const [ov, setOv] = useOptimiste(s);
   const actif = ov != null ? ov : on;
   // Avant l'index de la découverte, une PRISE s'affiche ici, en switch ordinaire : la règle commune des switch que l'index ne classe pas (F2).
@@ -2204,7 +2214,6 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
     if (dom === 'switch' && onOpen && appuiBascule({ on: actif, garde: gs.garde, ouvrable: true }) === 'fiche') { onOpen(id); return; }
     const nv = !actif; setOv(nv);
     if (dom === 'lock') call('lock', nv ? 'lock' : 'unlock');
-    else if (dom === 'valve') call('valve', nv ? 'open_valve' : 'close_valve');
     else call('homeassistant', nv ? 'turn_on' : 'turn_off');
   };
   const fmtN = (n) => decMax(Math.round(n * 10) / 10, 1);
@@ -2273,7 +2282,6 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   }
   else if (dom === 'fan') { sub = actif ? (a.percentage != null ? tr('Vitesse {n} %', { n: Math.round(a.percentage) }) : tr('En marche')) : tr('Éteint'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
   else if (dom === 'humidifier') { sub = actif ? (a.current_humidity != null ? tr('Humidité {n} %', { n: Math.round(a.current_humidity) }) : tr('En marche')) : tr('Éteint'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
-  else if (dom === 'valve') { sub = actif ? tr('Ouverte') : tr('Fermée'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
   else { sub = actif ? tr('Allumée') : tr('Éteinte'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
   const TEINTES = { accent: ['rgba(var(--o-accent-rgb),.16)', 'var(--o-accent-soft)', 'rgba(var(--o-accent-rgb),'], ok: ['rgba(var(--o-ok-rgb),.16)', 'var(--o-ok)', 'rgba(var(--o-ok-rgb),'], bad: ['rgba(var(--o-bad-rgb),.16)', 'var(--o-bad)', 'rgba(var(--o-bad-rgb),'], or: [hx('var(--o-lampe)', .16), 'var(--o-warn)', 'rgba(var(--o-lampe-rgb),'], froid: ['rgba(var(--o-cold-rgb),.16)', 'var(--o-cold)', 'rgba(var(--o-cold-rgb),'], orange: ['rgba(var(--o-warn2-rgb),.16)', 'var(--o-warn2)', 'rgba(var(--o-warn2-rgb),'] };
   const [icoFond, icoTexte, lavisBase] = TEINTES[teinte];
@@ -3285,20 +3293,17 @@ const TEINTE_ROBOT = { vacuum: ['var(--o-accent-rgb)', 'var(--o-accent-soft)'], 
 const RM_PUCE_ROBOT = { ...RM_BTN, height: 44, padding: '0 8px', borderRadius: 10, border: 'none', minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 12.5 };
 const RM_PUCE_CHOISIE = { background: 'var(--o-accent-fond)', color: '#fff' };
 
-/* « Localiser » : son script maison s'il en désigne un (`vacuumScripts.localiser`, la roue de la popup — l'aspirateur principal seul ;
- * passe bis 2 du 20/10), par le serveur avec son rôle ; sinon le service `locate`. Puis « Il bipe : suivez le son » trois secondes —
- * quand Home Assistant a ACCEPTÉ (I7). Un serveur d'avant (`invalid_format` : son schéma ignore le rôle ; `unknown_command`), ou un
- * script qu'il ne reconnaît pas — absent, `unavailable` : il ne lance rien et ne note rien (`_etat_script`) — : le service, sans toast ;
- * un autre refus remonte au toast, comme toute commande (`signalerRobot`). La carte, la compacte, la popup et la fiche universelle
- * passent toutes ici. Rend ce qui a pris. */
+/* « Localiser », que le SERVEUR décide (petit paquet du 25/10) : son script maison s'il en désigne un qui répond (`vacuumScripts.localiser`,
+ * l'aspirateur principal qu'il retient), sinon `vacuum.locate` — d'après la description de la maison sur le disque, plus d'après le cache
+ * de cet onglet. Un seul appui ; puis « Il bipe : suivez le son » trois secondes, quand Home Assistant a ACCEPTÉ (I7). Un serveur d'avant
+ * (`invalid_format` : son schéma refuse `localiser` ; `unknown_command`) : le service d'ici, sans toast ; un autre refus remonte au toast,
+ * comme toute commande (`signalerRobot`). La carte, la compacte, la popup et la fiche universelle passent toutes ici. Rend ce qui a pris. */
 function localiserRobot(H, id, domaine) {
   const bip = () => (bipeRobot(id), apresCommandeRobot(), true);
   // Le service par le moteur d'actions (`commanderService`) : la capacité vérifiée, un refus au toast ; réglé non nul quand Home Assistant a accepté.
   const direct = () => Promise.resolve(commanderService(H, id, domaine, 'locate', { entity_id: id })).then((r) => r != null && bip());
-  const v = LOGGIA_RESOLVED && LOGGIA_RESOLVED.vacuum, d = v && v.main === id && cfgVal('loggia_entities'), sc = d && d.vacuumScripts && d.vacuumScripts.localiser;
-  if (!sc) return direct();
-  return lancerRobot(H, id, [], { script: sc, role: 'localiser', depart: false, direct }).then((etat) => !etat || bip(),
-    (e) => (/^(invalid_format|script_inconnu)$/.test(e && e.code) ? direct() : (signalerRobot(e), false)));
+  return lancerRobot(H, id, [], { localiser: true, depart: false, direct }).then((etat) => !etat || bip(),
+    (e) => (e && e.code === 'invalid_format' ? direct() : (signalerRobot(e), false)));
 }
 
 /* Ce que la carte, la compacte, la popup et « En ce moment » lisent d'un robot, dans un `hass` VIVANT (I7, I33, I35) : la carte
@@ -3533,6 +3538,18 @@ function RoomFeederCard({ v, onOpen, chip = false }) {
     </div>
   );
 }
+/* ── Une vanne (chantier IoT, étape 3 ; sa maquette « Cartes IoT », 1a ; I5, I11, I12, I31) ──
+ * Sa carte — large, étroite, compacte — se charge à la demande (cartevanne.jsx) : la vanne d'eau, ses détecteurs et sa règle de
+ * sûreté n'ont rien à faire au démarrage d'une maison qui n'en a pas. Ici ne reste que la coquille : le `hass` vivant de la vanne
+ * et des binaires (un détecteur qui voit de l'eau change sa phrase), le gabarit des cartes IoT — le même dessin que le robot et le
+ * distributeur —, et un repli de la même taille, vide, le temps qu'elle arrive. Une vanne est une `valve`, ou la prise désignée dans
+ * Paramètres › Alertes (« Quelle vanne ») : elle a sa carte partout, Objets, une pièce, une vue personnelle. */
+// `estVanneCarte` vit dans actions.js : la garde des commandes la lit aussi (passe bis de l'étape 3, point 9).
+/* La carte, et la popup (1f) quand `fiche` est posé — UNE coquille pour les deux (passe bis, point 9 : la place du démarrage) : la
+ * feuille entière vit dans fichevanne.jsx, qui reçoit d'ici la fiche universelle et l'épingle ; la carte, son glyphe. Le repli de la
+ * carte : sa place (`RM_CARD` porte le liseré), ou celle de la compacte que sa cellule dimensionne ; la popup, rien. */
+const CarteVanne = (p) => <Suspense fallback={p.fiche ? null : <div className="o-rmcard" style={p.chip ? { height: '100%' } : RM_CARD} />}><VanneContent {...p} Glyphe={GlypheCarte} Appareil={FicheAppareil} Epingle={BoutonEpingle} /></Suspense>;
+
 /* Le distributeur de la bibliothèque des cartes : un exemple à 74 %, sa phrase et sa puce, sans geste. */
 const biblioDistributeur = () => ({ nom: tr('Croquettes'), pct: 74, ration: 18, envoi: {}, enVol: null, mort: false, raison: null, distribuer: () => {},
   phrase: { texte: tr('Repas à {h}', { h: '18:00' }) + ' · ' + tr('≈ {n} j', { n: 8 }), encre: 'var(--o-text2)' } });
@@ -4409,9 +4426,9 @@ function RoomPilotSheet({ zone, hass, onClose }) {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, margin: '10px 0 18px' }}>
-          <button aria-label={tr('Baisser la consigne')} disabled={!reglable} onClick={() => setT(-0.5)} style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 19, fontWeight: 700, cursor: 'pointer', ...(reglable ? null : RM_INERTE) }}>−</button>
+          <button aria-label={tr('Baisser la consigne')} disabled={!reglable} onClick={() => setT(-0.5)} style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--o-s1)', border: LISERE, color: 'var(--o-text)', fontSize: 19, fontWeight: 700, cursor: 'pointer', ...(reglable ? null : RM_INERTE) }}>−</button>
           <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', textAlign: 'center', lineHeight: 1.35 }}>{tr('± par')}<br />{tr('pas de 0,5°')}</span>
-          <button aria-label={tr('Monter la consigne')} disabled={!reglable} onClick={() => setT(0.5)} style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 19, fontWeight: 700, cursor: 'pointer', ...(reglable ? null : RM_INERTE) }}>+</button>
+          <button aria-label={tr('Monter la consigne')} disabled={!reglable} onClick={() => setT(0.5)} style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--o-s1)', border: LISERE, color: 'var(--o-text)', fontSize: 19, fontWeight: 700, cursor: 'pointer', ...(reglable ? null : RM_INERTE) }}>+</button>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {!mort && zoneModes(S, zone).map((opt) => { const on = z.modeBrut === opt; return (
@@ -4939,7 +4956,7 @@ const FicheValeur = ({ children, couleur = 'var(--o-text)' }) => (
 // Ce qu'une rangée montre À LA PLACE de sa commande quand l'appareil ne répond plus.
 const FicheIndispo = () => <FicheValeur couleur="var(--o-text3)">{tr('Indisponible')}</FicheValeur>;
 const FicheBouton = ({ children, onClick, icone = null, title = null }) => (
-  <button onClick={onClick} title={title || undefined} aria-label={title || undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>{icone && <Fi i={icone} size={12} />}{children}</button>
+  <button onClick={onClick} title={title || undefined} aria-label={title || undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10, border: LISERE, background: 'var(--o-s1)', color: 'var(--o-text1)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>{icone && <Fi i={icone} size={12} />}{children}</button>
 );
 /* Des puces exclusives, arrondi 9 — pas de pilules. Choisie : bleu plein,
  * texte blanc, quel que soit l'appareil (retour du 18/09). */
@@ -5069,7 +5086,7 @@ function RoomClimateSheet({ id, hass, onClose }) {
       .filter(e => e.indexOf('binary_sensor.') === 0 && S[e] && S[e].state === 'on' && ['window', 'door', 'garage_door', 'opening'].indexOf((S[e].attributes || {}).device_class) >= 0)
       .map(e => cvName(S[e], e))
     : [];
-  const rond = { width: 44, height: 44, borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 20, fontWeight: 700, cursor: 'pointer', flexShrink: 0 };
+  const rond = { width: 44, height: 44, borderRadius: 12, background: 'var(--o-s2)', border: LISERE, color: 'var(--o-text)', fontSize: 20, fontWeight: 700, cursor: 'pointer', flexShrink: 0 };
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
@@ -5792,7 +5809,7 @@ function ChoixIcone({ valeur, onChoisir, suggerees }) {
   const poser = (ic) => { onChoisir(ic); if (ic) setRecentes(noterIconeRecente(ic)); };
   // Les deux fleches de la bande : la HAUTEUR de la bande, pas celle d'un
   // bouton rond — sinon elles flottent a cote d'elle.
-  const fleche = { width: 30, height: 56, padding: 0, flexShrink: 0, borderRadius: 12, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' };
+  const fleche = { width: 30, height: 56, padding: 0, flexShrink: 0, borderRadius: 12, border: LISERE, background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' };
 
   return (
     <>
@@ -5801,7 +5818,7 @@ function ChoixIcone({ valeur, onChoisir, suggerees }) {
       {/* On CHERCHE avant de feuilleter : « lave » trouve le lave-vaisselle,
         * dont la clé est `dishwasher`. La recherche passe devant la famille
         * ouverte et fouille toute la bibliothèque. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 42, padding: '0 12px', borderRadius: 12, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 42, padding: '0 12px', borderRadius: 12, background: 'var(--o-s1)', border: LISERE }}>
         <Fi i="search" size={13} color="var(--o-text3)" />
         {/* L'étiquette ICÔNE désigne ce champ par `htmlFor`, que la règle ne suit pas :
           * la directive vise le champ, pas la div qui l'enveloppe (05/10). */}
@@ -5953,7 +5970,7 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
   // Sans `outline: none` (23/09, plan M7) : posé en style en ligne, il battait
   // la règle `:focus-visible` de la feuille et le champ focalisé ne se voyait
   // plus au clavier. L'anneau d'accent revient, ici comme ailleurs.
-  const champ = { width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600 };
+  const champ = { width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: LISERE, color: 'var(--o-text)', fontSize: 13, fontWeight: 600 };
   const etiquette = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--o-text3)', margin: '14px 2px 7px' };
   /* Les puces colorées du domaine, de la pièce et de la largeur ont vécu du
    * 14/09 au 29/09 — « manque de couleurs dans l'édition ». La couleur reste,
@@ -5971,7 +5988,7 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
   const choisirIcone = (ic) => setMonIcone(ic === monIcone ? null : ic);
   /* La ligne d'un menu a la forme du champ NOM au-dessus : un réglage ne
    * change pas de boîte selon qu'on y tape ou qu'on y choisit. */
-  const ligneMenu = { width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 10, height: 44, padding: '0 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 700 };
+  const ligneMenu = { width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 10, height: 44, padding: '0 13px', borderRadius: 10, background: 'var(--o-s1)', border: LISERE, color: 'var(--o-text)', fontSize: 13, fontWeight: 700 };
   /* L'icône du domaine porte SA teinte — sauf sur la ligne choisie, qui est
    * en accent plein : là, tout passe en blanc, comme partout ailleurs. */
   const glypheDomaine = (dm, choisi) => {
@@ -6003,7 +6020,7 @@ function CardEditSheet({ ed, id, nom, origine, hass, onClose, piece = null }) {
           <TitreFeuille style={{ fontSize: 15, fontWeight: 800 }}>{estSection ? tr('Modifier le titre') : tr('Modifier l’entité')}</TitreFeuille>
 
           {peutChoisirIcone && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, padding: 12, borderRadius: 14, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, padding: 12, borderRadius: 14, background: 'var(--o-s1)', border: LISERE }}>
               <span style={{ width: 44, height: 44, flexShrink: 0, borderRadius: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: apercuAllume ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: apercuAllume ? '#fff' : 'var(--o-text2)' }}>
                 {icoApercu ? <Ico name={icoApercu} size={24} anime={apercuAllume} /> : <PlugIcon size={22} />}
               </span>
@@ -6455,7 +6472,7 @@ function ComposeurCartes({ hass, dc = null, present = [], onToggle, onClose, pie
           <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginBottom: 12 }}>{tr('Cochez pour ajouter, décochez pour retirer. Tout s’applique tout de suite.')}</div>
 
           <input aria-label={tr('Rechercher une carte, un appareil, une pièce…')} value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr('Rechercher une carte, un appareil, une pièce…')}
-            style={{ width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 13, fontWeight: 600 }} />
+            style={{ width: '100%', boxSizing: 'border-box', padding: '10px 13px', borderRadius: 10, background: 'var(--o-s1)', border: LISERE, color: 'var(--o-text)', fontSize: 13, fontWeight: 600 }} />
           {puces.length > 2 && (
             <div className="o-favrow" style={{ display: 'flex', gap: 8, overflowX: 'auto', flexWrap: 'nowrap', margin: '10px 0 0' }}>
               {puces.map(f => (
@@ -6597,7 +6614,7 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
       attenteRef.current = () => call(dom, 'set_value', { value: nv });
       commitRef.current = setTimeout(viderAttente, 450);
     };
-    const btn = { width: 30, height: 30, borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer', flexShrink: 0 };
+    const btn = { width: 30, height: 30, borderRadius: 10, border: LISERE, background: 'var(--o-s1)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer', flexShrink: 0 };
     controle = (<>
       <button style={btn} aria-label={'− ' + label} onClick={() => !isNaN(v) && poser(v - pas)}>−</button>
       <span style={{ minWidth: 44, textAlign: 'center', fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{isNaN(v) ? '—' : decMax(v, 2)}{a.unit_of_measurement ? ' ' + a.unit_of_measurement : ''}</span>
@@ -7208,6 +7225,8 @@ function useDomainCards(hass, { onNav = null } = {}) {
   const [meteoPop, setMeteoPop] = useState(null);
   const [sensPop, setSensPop] = useState(null);
   const [appPop, setAppPop] = useState(null);
+  // Une vanne (étape 3 IoT, I27) ouvre SA popup, chargée à la demande ; tout le reste, la fiche universelle.
+  const FicheApp = estVanneCarte(appPop) ? CarteVanne : FicheAppareil;
   const [calPop, setCalPop] = useState(null);
   const [camPop, setCamPop] = useState(null);
   const [prisePop, setPrisePop] = useState(null);
@@ -7242,7 +7261,8 @@ function useDomainCards(hass, { onNav = null } = {}) {
      * rien. Un switch que l'index ne classe pas encore — le NAS, les premières secondes — suit la règle commune (F2, `gardeDeSwitch`) :
      * si l'état des prises le nomme, ou n'a pas encore répondu, c'est la fiche. Le choix se fait ICI, à l'ouverture, et tient :
      * la feuille ne change pas sous les doigts quand la réponse arrive. */
-    else if (d === 'switch' && !cvEstLumiere(id)) setPrisePop({ id, fiche: gardeDeSwitch(lireEtatPrises(), id, { reconnue: priseDe(S, id).prise, indexLu: indexLu() }) });
+    // La prise désignée comme vanne d'eau (étape 3 IoT, I31) ouvre la popup de l'eau, comme une vanne : par `appPop`, plus bas.
+    else if (d === 'switch' && !cvEstLumiere(id) && !estVanneCarte(id)) setPrisePop({ id, fiche: gardeDeSwitch(lireEtatPrises(), id, { reconnue: priseDe(S, id).prise, indexLu: indexLu() }) });
     else if (d === 'lock') setLockPop(id);
     else if (d === 'binary_sensor') setBinPop(id);
     // Un robot a sa fiche a lui (ADR 0042) : accueil, zones, planning,
@@ -7281,7 +7301,8 @@ function useDomainCards(hass, { onNav = null } = {}) {
     }
     // La vigilance météo (chantier Capteurs, C28) : sa carte, large ou compacte, avant la carte générique d'un binaire.
     if (estVigilance(k, S[k], LOGGIA_INDEX && LOGGIA_INDEX.entityMeta ? LOGGIA_INDEX.entityMeta.get(k) : null)) return <RoomVigilanceCard id={id} hass={hass} onOpen={ouvrir} label={label} chip={chip} />;
-    if (chip) return <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} dense />;
+    // Une vanne (étape 3 IoT, I31), large ou compacte : `CvCard` lui donne sa carte, chargée à la demande — avant la carte d'une prise.
+    if (chip || estVanneCarte(k)) return <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} dense={chip} />;
     const d = k.split('.')[0];
     // Une prise qui n'est pas une lumiere n'est plus une carte lumiere : elle
     // rejoint les autres appareils, au gabarit, avec sa puissance.
@@ -7318,7 +7339,7 @@ function useDomainCards(hass, { onNav = null } = {}) {
       {mediaPop && <FicheMedia id={mediaPop} hass={hass} onClose={() => setMediaPop(null)} />}
       {meteoPop && <FicheMeteo id={meteoPop} hass={hass} onClose={() => setMeteoPop(null)} />}
       {sensPop && <FicheCapteur id={sensPop} hass={hass} onClose={() => setSensPop(null)} />}
-      {appPop && <FicheAppareil id={appPop} hass={hass} onClose={() => setAppPop(null)} />}
+      {appPop && <FicheApp id={appPop} hass={hass} fiche onClose={() => setAppPop(null)} />}
       {calPop && <FeuilleCalendrier hass={hass} onClose={() => setCalPop(null)} />}
       {camPop && <CamSheet haid={camPop} nom={cvName(S[camPop], camPop)} hass={hass} onClose={() => setCamPop(null)} onNav={onNav} />}
       {/* Une PRISE (P1) ouvre sa fiche (chantier Prises, § 3.5), comme un switch que l'index ne classe pas encore et que l'état des prises garde (F2) ; un autre switch, sa feuille d'avant. */}
@@ -11899,7 +11920,7 @@ function MenuDeroulant({ icone = null, etiquette, valeur, options, surChoix, ren
   return (
     <div role="presentation" style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
       <ListeChoix value={valeur} onChange={surChoix} label={etiquette} options={(options || []).map(v => ({ id: v, label: String(rendre(v)) }))}
-        style={{ padding: '7px 13px', borderRadius: 14, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' }}>
+        style={{ padding: '7px 13px', borderRadius: 14, background: 'var(--o-s1)', border: LISERE, color: 'var(--o-text1)' }}>
         {() => (
           <>
             {icone && <Fi i={icone} size={14} color="var(--o-text2)" />}
@@ -12017,7 +12038,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   // Alarme en cours d'armement : le temps restant, battu à la seconde.
   const cptAlarme = dom === 'alarm_control_panel' ? armCompte(st) : null;
   useSeconde(!!cptAlarme);
-  const on = vl ? vl.on : vp ? vp.on : vr ? vr.travail : !dead && (vue ? vue.allume : dom === 'cover' ? coverActif(st) : dom === 'lock' ? s === 'unlocked' : vd ? vd.playing : dom === 'climate' ? s !== 'off' : dom === 'valve' ? s === 'open' : s === 'on');
+  const on = vl ? vl.on : vp ? vp.on : vr ? vr.travail : !dead && (vue ? vue.allume : dom === 'cover' ? coverActif(st) : dom === 'lock' ? s === 'unlocked' : vd ? vd.playing : dom === 'climate' ? s !== 'off' : s === 'on');
   // Sans fiche à ouvrir (la compacte de l'appareil, dans SA fiche), elle demande sur place : deux appuis (A4). Coupée entre-temps, la question tombe (F4).
   const [demande, setDemande] = useDemandeCoupure(on);
   const enDemande = vp ? vp.on && demande : gs.garde && on && demande;
@@ -12045,7 +12066,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   // ouvrait une courbe (05/10).
   const dateTxt = dom === 'sensor' ? texteDate(st) : null;
   const ouvrable = !dead && !!onOpen && ((dom === 'sensor' && dateTxt == null && !isNaN(parseFloat(s)))
-    || ['light', 'climate', 'cover', 'media_player', 'vacuum', 'lawn_mower', 'fan', 'lock', 'switch', 'humidifier', 'valve', 'water_heater', 'siren', 'binary_sensor', 'input_boolean', 'alarm_control_panel'].indexOf(dom) >= 0);
+    || ['light', 'climate', 'cover', 'media_player', 'vacuum', 'lawn_mower', 'fan', 'lock', 'switch', 'humidifier', 'water_heater', 'siren', 'binary_sensor', 'input_boolean', 'alarm_control_panel'].indexOf(dom) >= 0);
   const runnable = { scene: ['scene', 'turn_on', tr('Activer')], script: ['script', 'turn_on', tr('Exécuter')], button: ['button', 'press', tr('Appuyer')], input_button: ['input_button', 'press', tr('Appuyer')], automation: ['automation', 'trigger', tr('Exécuter')] }[dom];
   // L'icône du geste, montrée À LA PLACE du mot sur une carte étroite (05/10).
   const icoRun = { button: 'cursor-finger', input_button: 'cursor-finger' }[dom] || 'play';
@@ -12070,7 +12091,6 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   else if (dom === 'lock') stateTxt = ({ locked: tr('Verrouillée'), unlocked: tr('Déverrouillée'), locking: tr('Verrouillage…'), unlocking: tr('Déverrouillage…'), jammed: tr('Bloquée'), open: tr('Ouverte'), opening: tr('Ouverture…') })[s] || String(s);
   else if (dom === 'alarm_control_panel') stateTxt = s === 'disarmed' ? tr('Désarmée') : s === 'triggered' ? tr('ALERTE') : (s === 'arming' || s === 'pending') ? (cptAlarme ? tr('Activation dans {n} s', { n: cptAlarme.reste }) : tr('Activation en cours…')) : s === 'armed_home' ? tr('Maison') : s === 'armed_night' ? tr('Nuit') : tr('Armée');
   else if (dom === 'binary_sensor') stateTxt = s === 'on' ? tr('Détecté') : tr('RAS');
-  else if (dom === 'valve') stateTxt = s === 'open' ? tr('Ouvert') : s === 'closed' ? tr('Fermé') : String(s);
   else if (dom === 'person') stateTxt = s === 'home' ? tr('Présent') : tr('Absent');
   else if (dom === 'sensor' && dateTxt != null) stateTxt = dateTxt;
   else if (dom === 'sensor') stateTxt = (isNaN(parseFloat(s)) ? s : parseFloat(s)) + (a.unit_of_measurement ? ' ' + a.unit_of_measurement : '');
@@ -12103,6 +12123,9 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
    * carte (lot 13 de l'audit du 03/10). Compacte climat : la consigne vit
    * entre les boutons — le sous-titre ne garde que la température relevée. */
   const sousTitre = dense && dom === 'climate' && a.current_temperature != null ? tr('actuel {n}°', { n: decMax(a.current_temperature, 1) }) : stateTxt;
+  /* Une vanne (étape 3 IoT, I11, I31) a SA carte, chargée à la demande — la standard d'une vue personnelle comme la compacte. Sa
+   * bascule rouvrait l'eau d'un seul appui, même après une fuite. Ici, après tous les crochets : ils ne font rien pour elle. */
+  if (estVanneCarte(id)) return <CarteVanne id={id} hass={hass} nom={label} chip={dense} onOpen={onOpen} />;
   return (
     /* La carte n'englobe plus ses commandes (lot 13 de l'audit du 03/10, motif
      * de l'ADR 0074). Racine `role="button"`, elle rendait sa descendance
@@ -12287,11 +12310,6 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
       {!dense && vd && vd.on && !vd.indispo && vd.cmd.lecture && vd.reprenable && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button aria-label={(vd.playing ? tr('Pause') : tr('Lecture')) + ' ' + name} onClick={(e) => { e.stopPropagation(); vd.lecture(); }} style={{ position: 'relative', flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontWeight: 700, fontSize: 12 }}><Fi i={vd.playing ? 'pause' : 'play'} size={13} />{vd.playing ? tr('Pause') : tr('Lecture')}</button>
-        </div>
-      )}
-      {!dense && dom === 'valve' && !dead && (
-        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <button aria-label={(on ? tr('Fermer') : tr('Ouvrir')) + ' ' + name} onClick={(e) => { e.stopPropagation(); call('valve', on ? 'close_valve' : 'open_valve'); }} style={{ position: 'relative', flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>{on ? tr('Fermer') : tr('Ouvrir')}</button>
         </div>
       )}
       {/* Les épingles sont des lignes à commandes : positionnées, elles passent
@@ -13652,7 +13670,8 @@ function CvTyped({ x, hass, dc }) {
   if (t === 'chiffre') return <CvBigSensor id={id} hass={hass} onOpen={ouvreCapteur} />;
   if (t === 'jauge') return <CvGauge id={id} hass={hass} onOpen={ouvreCapteur} />;
   if (t === 'graph') return <CvHistory id={id} hass={hass} onOpen={ouvreCapteur} />;
-  if (t === 'gros') return <CvBigToggle id={id} hass={hass} />;
+  // Sur une vanne, la carte de la vanne : le gros interrupteur la rouvrait d'un appui (passe bis de l'étape 3 IoT, point 9).
+  if (t === 'gros' && !estVanneCarte(id)) return <CvBigToggle id={id} hass={hass} />;
   if (t === 'personne') return <CvPerson id={id} hass={hass} />;
   if (t === 'meteo') return <CvWeather id={id} hass={hass} />;
   if (t === 'agenda') return <CvAgenda id={id} hass={hass} />;
@@ -16434,6 +16453,7 @@ export default function App() {
    * le retrouve au rechargement, ou que l'ordinateur en soit. Ensuite, c'est
    * l'ecran qui l'ecrit, et elle ne suit plus aucun autre ecran. */
   const profilRepris = useRef(false);
+  const questionPosee = useRef(false);
   /** Le profil relié au compte Home Assistant connecté, ou -1. Un profil Admin
    *  ne se prend que si le compte est administrateur (ADR 0080). Calculé au
    *  rendu : les effets en dépendent par sa VALEUR, pas par une fonction. */
@@ -16448,16 +16468,43 @@ export default function App() {
    * (ADR 0222). */
   const formatApp = formatEcran(useCoarse(), useWide(1180));
   const [questionAppareil, setQuestionAppareil] = useState(null);
+  /* UN COMPTE = SON PROFIL (ADR 0276, ticket #38, 27/10) : « s'il est connecté
+   * à Home Assistant avec son compte, ça doit charger son profil, point ».
+   * Le serveur relie — ou crée — le profil du compte de la CONNEXION, puis
+   * rend son rang : rien ne dépend plus d'un nom identique, ni d'un compte
+   * administrateur pour enregistrer le lien. `null` tant qu'il n'a pas
+   * répondu ; -1 pour un composant qui ne connaît pas la commande. */
+  const [profilServeur, setProfilServeur] = useState(null);
   useEffect(() => {
-    if (!serverOk || !users.length || questionAppareil) return;
+    if (!serverOk) return undefined;
+    const h = getHass();
+    if (!h || typeof h.callWS !== 'function') { setProfilServeur(-1); return undefined; }
+    let vivant = true;
+    h.callWS({ type: 'loggia/profils/moi' }).then((r) => {
+      if (!vivant || !r) return;
+      if (Array.isArray(r.profils) && r.profils.length) setUsers(cur => (usersSig(r.profils) !== usersSig(cur) ? withUserKeys(r.profils) : cur));
+      setProfilServeur(typeof r.index === 'number' ? r.index : -1);
+    }).catch(() => { if (vivant) setProfilServeur(-1); });
+    return () => { vivant = false; };
+  }, [serverOk]);
+  useEffect(() => {
+    if (!serverOk || !users.length || questionAppareil || profilServeur === null) return;
     if (!profilRepris.current) {
-      profilRepris.current = true;
-      if (!Object.keys(ficheAppareil()).length) {
+      /* D'abord QUEL ÉCRAN (ADR 0222) : un écran sans fiche, alors que la
+       * maison connaît des appareils nommés de son type, demande une fois
+       * s'il est l'un d'eux — sinon il perdrait sa mise en page. Le profil se
+       * choisit APRÈS sa réponse : l'effet repasse ici quand la question se
+       * ferme. */
+      if (!questionPosee.current && !Object.keys(ficheAppareil()).length) {
+        questionPosee.current = true;
         const candidats = Object.entries(appareilsConnus()).filter(([, f]) => f && f.nom && f.format === formatApp);
         if (candidats.length) { setQuestionAppareil(candidats); return; }
       }
-      // Le compte d'abord (voir plus bas, la reconnaissance), la fiche ensuite.
-      if (profilDuCompte >= 0) { if (profilDuCompte !== userIdx) setUserIdx(profilDuCompte); return; }
+      profilRepris.current = true;
+      // Ensuite QUI REGARDE : le profil du compte, relié par le serveur
+      // (ADR 0276), sinon rapproché ici ; la fiche de l'écran après.
+      const duCompte = (profilServeur >= 0 && profilServeur < users.length) ? profilServeur : profilDuCompte;
+      if (duCompte >= 0) { if (duCompte !== userIdx) setUserIdx(duCompte); return; }
       /* Un compte relié à AUCUN profil garde le choix de l'écran, « mais pas
        * en admin » (19/10) : un profil Admin ne se rouvre pas tout seul sur un
        * écran que rien ne rattache à lui — il revient au premier profil qui
@@ -16469,16 +16516,13 @@ export default function App() {
       if (cible !== userIdx) { setUserIdx(cible); return; }
     }
     retenirProfilAppareil(userIdx, formatApp);
-  }, [serverOk, userIdx, users, questionAppareil, formatApp, profilDuCompte]);
-  /* Reprendre un appareil connu : son identifiant, puis son profil — sauf un
-   * profil Admin, qui passe toujours par le code (ADR 0080). */
+  }, [serverOk, userIdx, users, questionAppareil, formatApp, profilDuCompte, profilServeur]);
+  /* Reprendre un appareil connu : son identifiant seulement. Le profil se
+   * choisit ensuite, quand la question se ferme : celui du compte (ADR 0276),
+   * sinon celui de la fiche reprise — sauf un profil Admin, qui passe
+   * toujours par le code (ADR 0080). */
   const reprendreAppareil = (id) => {
     adopterAppareil(id);
-    const f = appareilsConnus()[id] || {};
-    // Un compte relié à un profil garde le sien : la fiche ne donne que l'écran.
-    const p = profilDuCompte >= 0 ? -1 : parseInt(f.profil, 10);
-    const admin = users[p] && String(users[p].role || '').toLowerCase() === 'admin';
-    if (p >= 0 && p < users.length && p !== userIdx && (haAdmin || !admin)) setUserIdx(p);
     setQuestionAppareil(null);
   };
   /* L'apparence se RELIT quand la configuration change : réponse du serveur,
@@ -16582,7 +16626,9 @@ export default function App() {
     // masquait ensuite toute la liste des profils : c'est ce qui figeait
     // une tablette sur des roles perimes. Le serveur la refuse maintenant ;
     // on ne la tente donc que depuis un compte qui a le droit de l'ecrire.
-    if (haAdmin && hu.id && users[i].haId !== hu.id) persistUsers(users.map((u, j) => j === i ? { ...u, haId: hu.id } : u));
+    // Le lien profil <-> compte s'enregistre au SERVEUR désormais, pour tout
+    // compte (`loggia/profils/moi`, ADR 0276) : réécrire ici la liste entière
+    // pouvait effacer un profil qu'il venait de créer.
     /* Le COMPTE fait foi (19/10, ADR 0220 corrigée) : « quand je me connecte,
      * ça me met sur Administrateur au lieu de Guillaume — ça doit suivre le
      * profil avec lequel on est connecté à Home Assistant ». Le 17/10, la

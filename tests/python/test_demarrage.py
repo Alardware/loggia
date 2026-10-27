@@ -135,7 +135,9 @@ def test_le_demarrage_cree_les_quinze_modules_le_service_et_le_panneau(composant
     # ASSERTION MODIFIEE (chantier Mode enfant, tache 3) : 43 -> 49.
     # ASSERTION MODIFIEE (chantier IoT, tache 4, 18/10) : 49 -> 50, `loggia/robots/lancer`.
     # ASSERTION MODIFIEE (passe bis 2 de la tranche robots 2, 20/10) : 50 -> 51, `loggia/robots/scripts` — la roue de la popup.
-    assert data.get("ws") is True and len(hass.commandes) == 52
+    # ASSERTION MODIFIEE (etape 3 IoT, 25/10 ; I28, I29) : 52 -> 54, `loggia/eau/etat` et `loggia/eau/regle`.
+    # ASSERTION MODIFIEE (ADR 0276, 27/10) : 54 -> 55, `loggia/profils/moi`.
+    assert data.get("ws") is True and len(hass.commandes) == 55
     assert hass.services.has_service(composant.DOMAIN, "scenario")
     assert "loggia" in hass.data.get("frontend_panels", {}), "le panneau n'est pas dans le menu"
     hass.executer()
@@ -183,7 +185,9 @@ def test_un_rechargement_rebatit_les_modules_sans_rien_reenregistrer(composant, 
     # ASSERTION MODIFIEE (chantier Mode enfant, tache 3) : 43 -> 49.
     # ASSERTION MODIFIEE (chantier IoT, tache 4, 18/10) : 49 -> 50, `loggia/robots/lancer`.
     # ASSERTION MODIFIEE (passe bis 2 de la tranche robots 2, 20/10) : 50 -> 51, `loggia/robots/scripts`.
-    assert len(hass.commandes) == 52
+    # ASSERTION MODIFIEE (etape 3 IoT, 25/10 ; I28, I29) : 52 -> 54, le carnet de l'eau.
+    # ASSERTION MODIFIEE (ADR 0276, 27/10) : 54 -> 55, le profil du compte.
+    assert len(hass.commandes) == 55
     assert "loggia" in hass.data.get("frontend_panels", {})
     # La vue du plan 3D vit jusqu'a l'arret du process : une seule fois.
     assert [v.url for v in hass.vues] == ["/api/loggia/plan/{etage}"]

@@ -23,7 +23,7 @@
  */
 
 import { entityCaps } from './capabilities.js';
-import { getHass } from './state.js';
+import { getHass, cfgVal } from './state.js';
 import { domaineDe } from './outils.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -682,8 +682,39 @@ export function finApresDebut(journee, dDebut, hDebut, dFin, hFin) {
   return new Date(dFin + 'T' + hFin) > new Date(dDebut + 'T' + hDebut);
 }
 
-export function commanderService(hass, id, domaine, service, data) {
-  const d = data || {};
+/* Une vanne : une `valve`, ou l'entité choisie dans Paramètres › Alertes (« Quelle vanne »), lue au moment même — elle a sa carte et
+ * sa popup partout (App.jsx, chantier IoT, étape 3). Une PRISE désignée ne se rallume jamais d'un
+ * appui (chantier IoT, étape 3, passe bis, point 9) — d'où qu'il vienne : la recherche, la fiche de la prise, une ligne de la fiche
+ * universelle, le gros interrupteur, une carte posée avant que la configuration soit lue. `turn_on` ne part pas : l'écran ouvre la
+ * popup de la vanne sur sa question (`surVanne` : l'en-tête de chaque vue s'y inscrit, App.jsx ; la fiche de la prise la montre,
+ * ficheprise.jsx), qui rouvre elle-même. Fermer part toujours : le sens sûr.
+ *
+ * Passe bis 2 (25/10, relecture de contrôle, sonde `garde.mjs`) : la garde vit dans `sansVanne`, à l'ENTRÉE de `lancerCommande`
+ * (où passent `commander` et la route vérifiée de `commanderService`) et sur la route directe de `commanderService` (un champ en
+ * plus). Elle garde `turn_on`, `toggle` et `open` / `open_valve` (la position d'une vanne ne se règle que dans sa popup). Un ordre
+ * GROUPÉ (le bouton des lumières d'une pièce) perd la vanne et part pour les autres. L'appui retenu ouvre la popup — l'en-tête monté
+ * s'inscrit, et `surVanne` rend de quoi s'en retirer en partant —, sans en-tête monté le toast dit pourquoi (`eau_seule`, refus.js), et
+ * le rappel `surEchec` tombe quand plus rien ne part : la bascule de la fiche universelle ne reste pas « allumée » 6 s pour rien. Avant
+ * la configuration lue, `cfgVal` lit la copie locale de `loggia_alertes` s'il en existe une (state.js, `cfgBrute`) ; sans elle, la
+ * toute première seconde reste un trou, que le serveur ferme (regles.py, ADR 0217). */
+export const estVanneCarte = (id) => !!id && (/^valve\./.test(id) || id === ((cfgVal('loggia_alertes', {}).actions || {}).vanne || {}).entite);
+let ouvrirVanne = null;
+export const surVanne = (f) => { ouvrirVanne = f; return () => { if (ouvrirVanne === f) ouvrirVanne = null; }; };
+
+/* Les entités qui partent — `id` tel quel quand rien n'est à retenir (une commande sans entité aussi), le reste d'un groupe, ou
+ * `false` quand plus rien ne part. */
+function sansVanne(id, c, surEchec) {
+  if (!/^(turn_on|toggle|open)/.test(c)) return id;
+  const ids = [].concat(id), reste = ids.filter(x => !estVanneCarte(x));
+  if (reste.length === ids.length) return id;
+  if (ouvrirVanne) ouvrirVanne(ids.find(estVanneCarte)); else Promise.reject({ code: 'eau_seule' });
+  if (Array.isArray(id) && reste.length) return reste;
+  if (typeof surEchec === 'function') surEchec('eau');
+  return false;
+}
+
+export function commanderService(hass, id, domaine, service, data, surEchec) {
+  let d = data || {};
   const trad = id ? capaciteDe(domaine, service, d) : null;
   /* `planAction` ne rebatit que le champ de la capacite : tout ce que l'appel
    * portait en plus serait perdu en chemin. Un `code` d'alarme, une duree de
@@ -702,9 +733,14 @@ export function commanderService(hass, id, domaine, service, data) {
      * ENVOYÉ, bornes de l'entité appliquées, si l'appel a abouti ; `null` sinon —, et `null` tout de suite pour un plan refusé, comme
      * avant ; un appelant qui l'ignorait n'y voit rien. Le verrou de « Distribuer » tient jusqu'à cette réponse : un distributeur en
      * nuage qui répond en 3 s servait deux rations. */
-    const { valeur, fait } = lancerCommande(hass, id, trad.capacite, trad.champ ? d[trad.champ] : undefined, null, options);
+    const { valeur, fait } = lancerCommande(hass, id, trad.capacite, trad.champ ? d[trad.champ] : undefined, null, options, surEchec);
     return valeur == null ? null : fait;
   }
+  // La route directe passe par la même garde (passe bis 2) : un `turn_on` qui porte un champ de plus rouvrait la prise désignée.
+  const e = d.entity_id || id;
+  const reste = sansVanne(e, service, surEchec);
+  if (reste === false) return null;
+  if (reste !== e) d = { ...d, entity_id: reste };
   if (hass && hass.callService) return reglee(hass.callService(domaine, service, d));
   return null;
 }
@@ -733,6 +769,9 @@ export function commander(hass, id, capability, value, champ, options, surEchec)
  * ce que plus aucun appel n'accepte se DIT, une fois, par le même canal que
  * tout refus — le reste part quand même. */
 function lancerCommande(hass, id, capability, value, champ, options, surEchec) {
+  // Rien ne part : `commanderService` rend null, `commander` undefined (ses appelants lisent `!= null`).
+  id = sansVanne(id, capability, surEchec);
+  if (id === false) return {};
   if (!Array.isArray(id)) return lancerUn(hass, id, capability, value, champ, options, surEchec);
   const ctx = actionCtx(hass);
   const lots = [];

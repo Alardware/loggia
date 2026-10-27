@@ -6,7 +6,7 @@ Assistant. Le client ne peut pas designer un autre utilisateur — aucune comman
 n'accepte de champ `user_id`. Un utilisateur ne lit et n'ecrit donc que sa propre
 configuration, et les permissions Home Assistant restent celles de sa session.
 
-Les 52 commandes, toutes prefixees `loggia/`. Le compte et la repartition
+Les 55 commandes, toutes prefixees `loggia/`. Le compte et la repartition
 entre ouvertes, reservees et ouvertes au code de la maison sont verrouilles
 par `test_websocket_api.py` : une commande nouvelle doit y etre rangee d'un
 cote ou de l'autre.
@@ -47,6 +47,13 @@ cote ou de l'autre.
                                leurs droits de lecture)
     lumieres/journal        -> les notes d'une lampe depuis la veille (tous,
                                s'ils peuvent la lire)
+  Le carnet de l'eau (chantier IoT, etape 3 ; I28, I29)
+    eau/etat                -> pourquoi chaque vanne d'eau est fermee, ses
+                               detecteurs, le journal du jour, la regle (tous,
+                               sous leurs droits de lecture)
+    eau/regle               -> « Fermer en cas de fuite » : cette valeur
+                               seule, fondue au serveur dans `loggia_alertes`
+                               (admin)
   Le mode enfant (chantier Mode enfant, spec 7.4)
     enfant/etat             -> les profils, leurs appareils, et ce que le mode
                                fait de chaque lecteur (tous, sous leurs droits
@@ -84,6 +91,10 @@ cote ou de l'autre.
   Le code administrateur
     pin/verifier    -> verifie ici, essais limites
     pin/definir     -> le definir, hache (admin)
+  Le profil du compte (ADR 0276)
+    profils/moi     -> le profil Loggia du compte connecte, relie ou cree
+                       d'office : ouverte a tout compte, mais ne touche qu'a
+                       SON profil, designe par la connexion
 
 `loggia/discovery` est ouverte a tout compte authentifie, a dessein. Les
 commandes equivalentes de Home Assistant — `config/area_registry/list` et ses
@@ -154,6 +165,8 @@ WS_PRI_ETAT = "loggia/prises/etat"
 WS_PRI_CONFIG = "loggia/prises/config"
 WS_LUM_ETAT = "loggia/lumieres/etat"
 WS_LUM_JOURNAL = "loggia/lumieres/journal"
+WS_EAU_ETAT = "loggia/eau/etat"
+WS_EAU_REGLE = "loggia/eau/regle"
 WS_ENF_ETAT = "loggia/enfant/etat"
 WS_ENF_CONFIG = "loggia/enfant/config"
 WS_ENF_LEVER = "loggia/enfant/lever"
@@ -166,6 +179,7 @@ WS_MIN_ANNULER = "loggia/minuteurs/annuler"
 WS_SIR_TESTER = "loggia/sirene/tester"
 WS_PIN_VERIFIER = "loggia/pin/verifier"
 WS_PIN_DEFINIR = "loggia/pin/definir"
+WS_PROF_MOI = "loggia/profils/moi"
 
 
 def _user_info(connection: websocket_api.ActiveConnection) -> dict[str, Any]:
@@ -218,7 +232,7 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
                    acces_veilles=None, acces_regles=None, acces_scenarios=None,
                    acces_robots=None, acces_minuteurs=None, acces_sirene=None,
                    acces_distributeurs=None, acces_chauffage=None, acces_prises=None,
-                   acces_lumieres=None, acces_enfant=None) -> None:
+                   acces_lumieres=None, acces_enfant=None, acces_eau=None) -> None:
     """Declare les commandes aupres du serveur WebSocket.
 
     `acces_interrupteurs` est un APPELABLE, pas l'objet : ces commandes ne
@@ -718,6 +732,24 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
                 _LOGGER.warning("Loggia : code administrateur — trop d'essais rates, compte bloque %d s", duree)
             connection.send_result(msg["id"], {"ok": False, "bloque": duree})
 
+    @websocket_api.websocket_command({vol.Required("type"): WS_PROF_MOI})
+    @websocket_api.async_response
+    async def handle_prof_moi(hass, connection, msg):
+        """Le profil du compte connecte (ADR 0276) : « s'il est connecte a
+        Home Assistant avec son compte, ca doit charger son profil, point ».
+
+        Ouverte a tout compte, a dessein : une epouse au compte ordinaire doit
+        retrouver SON profil. Rien ne vient du message — ni compte, ni nom, ni
+        role : tout est lu sur la connexion, et un profil Admin ne se donne qu'a
+        un administrateur de Home Assistant."""
+        user = connection.user
+        try:
+            res = await store.async_profil_du_compte(user.id, user.name or "", bool(user.is_admin))
+        except ValueError as err:
+            _relayer(connection, msg, err)
+            return
+        connection.send_result(msg["id"], res)
+
     @websocket_api.websocket_command({vol.Required("type"): WS_PIN_DEFINIR, vol.Required("pin"): str})
     @websocket_api.require_admin
     @websocket_api.async_response
@@ -774,6 +806,10 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         # point J ; `localiser` depuis la passe bis de la tranche robots 2, 20/10) : c'est lui qui dit si le script lance un
         # passage, pas sa place dans une liste.
         vol.Optional("role"): vol.In(["nettoyer_tout", "pieces_selectionnees", "pause", "reprendre", "retour_base", "localiser"]),
+        # « Localiser », que le SERVEUR decide (petit paquet du 25/10) : le script `localiser` designe, sinon `vacuum.locate` —
+        # d'apres la description de la maison sur le disque, jamais d'apres le cache d'un onglet. Un serveur d'avant refuse la cle
+        # (`invalid_format`), et l'ecran envoie alors `locate` lui-meme : jamais un depart a la place.
+        vol.Optional("localiser"): bool,
     })
     @websocket_api.async_response
     async def handle_rob_lancer(hass, connection, msg):
@@ -784,7 +820,7 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
         try:
             etat = await robots.async_lancer_depart(msg["robot"], msg["zones"], user=connection.user,
                                                     controle=controle_de(connection.user),
-                                                    **{k: msg[k] for k in ("script", "role") if k in msg})
+                                                    **{k: msg[k] for k in ("script", "role", "localiser") if k in msg})
         except PermissionError as err:
             connection.send_error(msg["id"], "unauthorized", str(err))
             return
@@ -1067,6 +1103,44 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
             connection.send_error(msg["id"], "unauthorized", str(err))
             return
         connection.send_result(msg["id"], journal)
+
+    # ── Le carnet de l'eau (chantier IoT, etape 3 ; I28, I29) ──────────────
+    # `etat` se lit de tout compte, sous ses droits de LECTURE, comme le carnet
+    # des lumieres. `regle` est « Fermer en cas de fuite » (I29) : la bascule de
+    # la popup. Elle ne prend QU'UN booleen et ne touche QUE
+    # `actions.vanne.actif`, fondue au serveur dans `loggia_alertes` telle
+    # qu'elle est sur le disque, sous le verrou du magasin - jamais la cle
+    # entiere depuis le cache d'un onglet. C'est un reglage de la maison :
+    # administrateurs seulement.
+    def _eau(connection, msg):
+        eau = acces_eau() if acces_eau else None
+        if eau is None:
+            connection.send_error(msg["id"], "not_available", "carnet de l'eau indisponible")
+        return eau
+
+    @websocket_api.websocket_command({vol.Required("type"): WS_EAU_ETAT})
+    @websocket_api.async_response
+    async def handle_eau_etat(hass, connection, msg):
+        eau = _eau(connection, msg)
+        if eau is None:
+            return
+        connection.send_result(msg["id"], await eau.async_etat(connection.user))
+
+    @websocket_api.websocket_command({vol.Required("type"): WS_EAU_REGLE, vol.Required("actif"): bool})
+    @websocket_api.require_admin
+    @websocket_api.async_response
+    async def handle_eau_regle(hass, connection, msg):
+        eau = _eau(connection, msg)
+        if eau is None:
+            return
+        try:
+            etat = await eau.async_regler(msg["actif"], user=connection.user)
+        except ValueError as err:
+            # Un plafond du magasin, une valeur refusee : rien ne s'ecrit, et le
+            # refus nomme la cle (`loggia_alertes`).
+            _relayer(connection, msg, err)
+            return
+        connection.send_result(msg["id"], etat)
 
     # ── Le mode enfant (chantier Mode enfant, spec 7.4) ────────────────────
     # Trois regimes. `etat` se lit de tout compte, sous ses droits de LECTURE
@@ -1372,6 +1446,8 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
     websocket_api.async_register_command(hass, handle_pri_config)
     websocket_api.async_register_command(hass, handle_lum_etat)
     websocket_api.async_register_command(hass, handle_lum_journal)
+    websocket_api.async_register_command(hass, handle_eau_etat)
+    websocket_api.async_register_command(hass, handle_eau_regle)
     websocket_api.async_register_command(hass, handle_enf_etat)
     websocket_api.async_register_command(hass, handle_enf_config)
     websocket_api.async_register_command(hass, handle_enf_lever)
@@ -1384,6 +1460,7 @@ def async_register(hass: HomeAssistant, store: LoggiaStore,
     websocket_api.async_register_command(hass, handle_sir_tester)
     websocket_api.async_register_command(hass, handle_pin_verifier)
     websocket_api.async_register_command(hass, handle_pin_definir)
+    websocket_api.async_register_command(hass, handle_prof_moi)
     websocket_api.async_register_command(hass, handle_vei_etat)
     websocket_api.async_register_command(hass, handle_vei_config)
     websocket_api.async_register_command(hass, handle_nui_etat)
