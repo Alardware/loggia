@@ -21,6 +21,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(RACINE, 'src');
 
@@ -126,7 +127,7 @@ test('la cloche annonce le nombre des NON LUES, pas la longueur du journal', () 
   /* « Lu » vit dans le journal depuis le 01/10 : `notifs` garde aussi les
    * lues, et la cloche disait « 7 non lues » pour deux. Les deux portes — le
    * bandeau et la carte compte du tiroir — comptent comme leur pastille. */
-  const app = readFileSync(join(SRC, 'App.jsx'), 'utf8');
+  const app = MONOLITHE;
   assert.equal(app.split("trN(nbNonVues, '{n} non lue', '{n} non lues')").length - 1, 2, 'les deux cloches');
   assert.ok(!app.includes('trN(notifs.length'), 'un compte qui mêle les lues aux non lues');
 });

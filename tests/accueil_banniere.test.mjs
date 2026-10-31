@@ -7,11 +7,12 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE, DASHBOARD } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282) ; DASHBOARD : l'Accueil en entier, ses hooks compris (ADR 0283)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
   /* + l'ecran de veille et la modale du code : sortis d'App.jsx le 23/09
    * (plan M1). Ce que ce fichier verifie n'a pas bouge, seulement son
    * adresse — on relit donc le monolithe ET ce qui en est sorti. */
-const src = ['App.jsx', 'ecranveille.jsx', 'pinmodal.jsx'].map(f => readFileSync(join(RACINE, 'src', f), 'utf8')).join(String.fromCharCode(10));
+const src = [MONOLITHE, ...['ecranveille.jsx', 'pinmodal.jsx'].map(f => readFileSync(join(RACINE, 'src', f), 'utf8'))].join(String.fromCharCode(10));
 const ui = readFileSync(join(RACINE, 'src', 'ui.jsx'), 'utf8');
 const views = readFileSync(join(RACINE, 'src', 'views.js'), 'utf8');
 const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
@@ -35,7 +36,7 @@ test('l’entite meteo sert encore : fond de la banniere, veille, Exterieur, car
 });
 
 test('la banniere : pas de vignette meteo, les avatars sur la ligne du nom', () => {
-  const home = bloc('function Dashboard(', NL + 'function ');
+  const home = DASHBOARD;
   assert.ok(!home.includes('o-banner-wx') && !home.includes('extPiece') && !home.includes('<WxMini wx={wx} on={wxFx} />' + NL + '                <WeatherIco'), 'plus de vignette');
   assert.ok(home.includes('<div className="o-banner-row" style={{ position: \'relative\', display: \'flex\', flexDirection: \'column\', gap: 0, minWidth: 0 }}>'), 'la banniere est une colonne');
   const ligne = bloc('              <div className="o-greet-ligne"', '              {/* Le resume est un ITEM');

@@ -15,13 +15,14 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 /* L'indice formate ses valeurs (« 19,4 °C ») : la langue est fixée AVANT le
  * premier import, comme dans pieces_confort. */
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 const { mesuresFiche, indiceConfort } = await import('../src/confort.js');
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const app = MONOLITHE;
 const NL = String.fromCharCode(10);
 const bloc = (debut, fin) => { const d = app.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = app.indexOf(fin, d + 1); return app.slice(d, f < 0 ? undefined : f); };
 
@@ -65,7 +66,8 @@ test('la vue Pièce, la fiche et l’Accueil ne prêtent plus rien du modèle', 
   const d = fc.indexOf('export default function RoomComfortModal(');
   assert.ok(d >= 0, 'la fiche de confort introuvable');
   const fiche = fc.slice(d, fc.indexOf(NL + '}', d));
-  assert.ok(fiche.includes('const mesures = mesuresFiche(live, piece);') && fiche.includes('temp: versCelsius(mesures.temp, uniteT),') && fiche.includes('hum: mesures.hum,') && fiche.includes('co2: mesures.co2,'), 'la fiche ne passe pas par mesuresFiche');
+  // ASSERTION MODIFIÉE (30/10, G1-D5) : les mesures de la fiche s'arrondissent comme leur chiffre s'écrit, avant d'être jugées.
+  assert.ok(fiche.includes('const mesures = mesuresFiche(live, piece);') && fiche.includes("temp: valeurEcrite('temp', mesures.temp, uniteT),") && fiche.includes("hum: arrondiMesure('hum', mesures.hum),") && fiche.includes("co2: arrondiMesure('co2', mesures.co2),"), 'la fiche ne passe pas par mesuresFiche');
   assert.ok(!fiche.includes('parseNum(piece.'), 'la fiche relit encore les chaînes de la pièce');
   assert.ok(app.includes("{ ...p, temp: '—', hum: '—', badge: null, live: { temp: null, hum: null, co2: null } }"), 'une pièce sans capteurs de l’Accueil garde les valeurs du modèle');
 });

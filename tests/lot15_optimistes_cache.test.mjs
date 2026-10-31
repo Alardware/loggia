@@ -31,6 +31,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (p) => readFileSync(p, 'utf8').replace(/\r\n/g, '\n');
 const parcourir = (rep, out = []) => {
@@ -58,7 +59,7 @@ const SOURCES = parcourir(join(RACINE, 'src'))
   .filter(([c]) => !c.startsWith('src/langues/'))
   .map(([c, t]) => [c, sansScenes(c, t)]);
 const source = (c) => (SOURCES.find(([x]) => x === c) || [])[1] || '';
-const APP = source('src/App.jsx') + source('src/views/voletsplan.jsx'); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
+const APP = MONOLITHE + source('src/views/voletsplan.jsx'); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
 const PAR = source('src/views/parametres.jsx');
 const DIST = source('src/fichedistributeur.jsx');
 const compter = (s, motif) => s.split(motif).length - 1;

@@ -19,7 +19,11 @@ import { armerReleve } from '../releve.js';
 import { consoJourKwh, autosuffisance, resumeEnergie } from '../bilan.js';
 import { compteurDuJour, useTotauxJour } from '../jourstat.js';
 import { fmtWatts } from '../format.js';
-import { LOGGIA_INDEX, enPrix, enVente, enHaids } from '../state.js';
+import { LOGGIA_INDEX, enPrix, enVente, enHaids, enBatteries, enPrevisionSolaire } from '../state.js';
+// Les sources qui se comptent à plusieurs, et la batterie au sens de Loggia (chantier G3, ADR 0302).
+import { idsDe, sommeLue } from '../energieparts.js';
+import { puissanceBatterie, niveauBatterie, reserveBatterieKwh, autonomieBatterie, consoPourAutonomie, texteAutonomie } from '../energiebatterie.js';
+import { usePrevisionSolaire } from '../previsionsolaire.js';
 import energyHomeImg from '../assets/energy/home.webp';
 import energySolarImg from '../assets/energy/solar.webp';
 import energyEvImg from '../assets/energy/ev-car-home.webp';
@@ -86,6 +90,7 @@ const SCENE = { x0: 133.33, w: CHIP_RESEAU_X + 46 + 6 - 133.33, h: 250, mx: 133.
 
 const SCENE_RATIO = (SCENE.w / SCENE.h).toFixed(4);
 
+/* Le mot d'une pastille s'écrit à l'encre de l'îlot sombre (`o-sombre`, index.css) : son fond est sombre dans tous les thèmes. */
 const Chip = ({ x, y, color, txt, icon, live = false }) => {
   const w = 22 + txt.length * 6.4 + 12;
   return (
@@ -93,7 +98,7 @@ const Chip = ({ x, y, color, txt, icon, live = false }) => {
       {live && !REDUCE_MOTION && <rect x="-3" y="-3" width={w + 6} height="28" rx="14" fill="none" stroke={color} strokeWidth="1.4" opacity=".45"><animate attributeName="opacity" values=".45;.08;.45" dur="2.4s" repeatCount="indefinite" /><animate attributeName="x" values="-3;-6;-3" dur="2.4s" repeatCount="indefinite" /><animate attributeName="y" values="-3;-6;-3" dur="2.4s" repeatCount="indefinite" /><animate attributeName="width" values={`${w + 6};${w + 12};${w + 6}`} dur="2.4s" repeatCount="indefinite" /><animate attributeName="height" values="28;34;28" dur="2.4s" repeatCount="indefinite" /></rect>}
       <rect width={w} height="22" rx="11" fill="rgba(8,13,22,.9)" stroke={color} strokeWidth="1.6" />
       <g transform="translate(13 11)">{(CHIP_ICONS[icon] || CHIP_ICONS.sun)(color)}</g>
-      <text x={(w + 22) / 2 - 1} y="15" textAnchor="middle" fontSize="11" fontWeight="800" fill="#eaf0fb" fontFamily="var(--o-font)">{txt}</text>
+      <text x={(w + 22) / 2 - 1} y="15" textAnchor="middle" fontSize="11" fontWeight="800" className="o-sombre" fill="var(--o-text)" fontFamily="var(--o-font)">{txt}</text>
     </g>
   );
 };
@@ -142,7 +147,7 @@ const HouseChip = ({ x, y, color, txt, glyph }) => {
     <g transform={`translate(${x - w / 2} ${y - 11 * k})`}>
       <rect width={w} height={22 * k} rx={11 * k} fill="rgba(8,13,22,.9)" stroke={color} strokeWidth={1.6 * k} />
       <g transform={`translate(${13 * k} ${11 * k}) scale(${k})`}>{glyph}</g>
-      <text x={(w + 22 * k) / 2 - k} y={15 * k} textAnchor="middle" fontSize={11 * k} fontWeight="800" fill="#eaf0fb" fontFamily="var(--o-font)">{txt}</text>
+      <text x={(w + 22 * k) / 2 - k} y={15 * k} textAnchor="middle" fontSize={11 * k} fontWeight="800" className="o-sombre" fill="var(--o-text)" fontFamily="var(--o-font)">{txt}</text>
     </g>
   );
 };
@@ -255,7 +260,7 @@ function PastillesEnergie({ solarW = 0, gridW = 0, exportW = 0, homeW = 0, appW 
         * plus rien a suivre : elle se pose au-dessus du toit, a gauche du
         * badge de production, et ne peut plus rencontrer personne. */}
       {day && <Chip icon="sun" x={250} y={48} color="var(--o-gold)" txt={irr + ' W/m²'} />}
-      {solarPresente && format !== 'mobile' && <Chip icon="panel" x={352} y={78} color="#ffa63c" txt={fmtKW(solarW)} live={solarW > 5} />}
+      {solarPresente && format !== 'mobile' && <Chip icon="panel" x={352} y={78} color="var(--o-flux-panneau)" txt={fmtKW(solarW)} live={solarW > 5} />}
       {/* La maison et le pylône ne disent que ce qui se lit (audit du 03/10).
         * Sans compteur, l'appel passe `null` et la pastille s'efface — comme
         * celle des panneaux sans capteur de production. Elles affichaient
@@ -305,15 +310,19 @@ function EnergieContent({ hass, edit = false, onEnt }) {
    * sens separement (`power_config`), et deux capteurs toujours positifs ne
    * disent rien a eux seuls : la puissance de la batterie est leur DIFFERENCE.
    * Le capteur signe reste prioritaire quand il existe. */
-  const batPresente = !!(EN.batNow || EN.batSoc || EN.batChargeNow || EN.batDechargeNow);
-  const batW = (() => {
-    if (avail(EN.batNow)) return Math.round(numW(EN.batNow));
-    const c = avail(EN.batChargeNow) ? Math.max(0, numW(EN.batChargeNow)) : null;
-    const d = avail(EN.batDechargeNow) ? Math.max(0, numW(EN.batDechargeNow)) : null;
-    if (c == null && d == null) return null;
-    return Math.round((c || 0) - (d || 0));
-  })();
-  const batSoc = avail(EN.batSoc) ? Math.round(num(EN.batSoc)) : null;
+  /* TOUTES LES BATTERIES, ET LE SENS DE HOME ASSISTANT (chantier G3, ADR 0302).
+   * Son `stat_rate` est positif en DÉCHARGE : `puissanceBatterie` l'inverse,
+   * additionne les batteries, et garde l'ordre d'avant — le capteur signé de
+   * la fiche, sinon les deux sens. Le niveau se pondère par la capacité quand
+   * Home Assistant la déclare. */
+  const lireW = (id) => (avail(id) ? numW(id, null) : null);
+  const lireN = (id) => (avail(id) ? num(id, null) : null);
+  const batPresente = !!(idsDe(EN, 'batNow').length || idsDe(EN, 'batRate').length || idsDe(EN, 'batSoc').length || EN.batChargeNow || EN.batDechargeNow);
+  const batBrut = puissanceBatterie(EN, lireW);
+  const batW = batBrut == null ? null : Math.round(batBrut);
+  const batteries = enBatteries();
+  const socBrut = niveauBatterie({ EN, batteries, lire: lireN });
+  const batSoc = socBrut == null ? null : Math.round(socBrut);
 
   // Postes de consommation : la liste proposee, puis l'agencement.
   const postes = enDevices((hass && hass.states) || null);
@@ -344,14 +353,18 @@ function EnergieContent({ hass, edit = false, onEnt }) {
     const st = (hass && hass.states && hass.states[id]) || null;
     return (st && st.attributes && st.attributes.friendly_name) || id;
   };
-  const solarAvail = avail(EN.solarNow) || avail(EN.solarOutput);
-  const consoAvail = avail(EN.gridNow) || avail(EN.consoNow);
+  /* Deux onduleurs : leurs DEUX puissances (ADR 0302). Le flux net du réseau
+   * aussi se somme, au cas — rare — de deux compteurs distincts. */
+  const solarSomme = sommeLue(idsDe(EN, 'solarNow'), lireW);
+  const netSomme = sommeLue(idsDe(EN, 'consoNow'), lireW);
+  const solarAvail = solarSomme != null || avail(EN.solarOutput);
+  const consoAvail = avail(EN.gridNow) || netSomme != null;
   const surplusAvail = avail(EN.injectionNow) || avail(EN.surplusNow);
   // consoNow = flux NET du compteur (négatif = export) — source unique du temps réel
   // réseau (cf. CONTEXTE de packages/energie.yaml). On dérive import/export du net BRUT en priorité :
   // aucune dépendance à la fraîcheur des templates du package.
-  const solarW = Math.round(avail(EN.solarNow) ? numW(EN.solarNow) : numW(EN.solarOutput));
-  const netRaw = avail(EN.consoNow) ? Math.round(numW(EN.consoNow)) : null;
+  const solarW = Math.round(solarSomme != null ? solarSomme : numW(EN.solarOutput));
+  const netRaw = netSomme != null ? Math.round(netSomme) : null;
   const gridDrawW = netRaw != null ? Math.max(0, netRaw) : Math.round(avail(EN.gridNow) ? numW(EN.gridNow) : 0);
   const surplusW = netRaw != null ? Math.max(0, -netRaw) : Math.round(avail(EN.injectionNow) ? numW(EN.injectionNow) : Math.max(0, numW(EN.surplusNow)));
   const consoW = avail(EN.consoMaison) ? Math.round(numW(EN.consoMaison)) : Math.max(0, gridDrawW + solarW - surplusW);
@@ -365,6 +378,10 @@ function EnergieContent({ hass, edit = false, onEnt }) {
    * de l'arrivee sur la page. */
   const [tourEn, setTourEn] = useState(0);
   useEffect(() => armerReleve(() => setTourEn(x => x + 1), 5 * 60000), []);
+  /* LA PRODUCTION PRÉVUE (chantier G3, E7) : Forecast.Solar ou Solcast,
+   * rattachés aux onduleurs dans le tableau Énergie. Home Assistant la tient
+   * (`energy/solar_forecast`) ; relue au même tour que l'historique. */
+  const prevision = usePrevisionSolaire(hass, enPrevisionSolaire(), tourEn);
 
   /* LE TOTAL DU JOUR, SUR N'IMPORTE QUEL COMPTEUR (audit du 07/10).
    *
@@ -381,7 +398,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
    * rien : un tiret vaut mieux qu'un index pris pour une journee.
    */
   const CPT_JOUR = [EN.consoJour, EN.consoJourHc, EN.consoJourHp, EN.consoReseauToday,
-    EN.consoHcToday, EN.consoHpToday, EN.prodJour, EN.injectionJour, EN.coutJour, EN.revenuJour];
+    EN.consoHcToday, EN.consoHpToday, ...idsDe(EN, 'prodJour'), EN.injectionJour, EN.coutJour, EN.revenuJour];
   const cumulatifs = CPT_JOUR.filter(id => id && S && S[id] && !compteurDuJour(S[id]));
   const totauxJour = useTotauxJour(hass, cumulatifs, tourEn);
   /* `kwh` ramene en kilowattheures ce qui est une energie ; une somme d'argent
@@ -398,7 +415,10 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   const euroJour = (id) => valJour(id, false);
 
   // Bilans / coûts du package
-  const prodJour = kwhJour(EN.prodJour);
+  /* La production du jour de TOUS les onduleurs (`prodJourParts`, calculé
+   * depuis le 07/10 et jamais lu) : un compteur muet ne compte pas, aucun
+   * lisible et il n'y a pas de chiffre. */
+  const prodJour = sommeLue(idsDe(EN, 'prodJour'), kwhJour);
   const autosuff = avail(EN.autosuffJour) ? Math.round(num(EN.autosuffJour)) : null;
   const tauxAutoconso = avail(EN.tauxAutoconso) ? Math.round(num(EN.tauxAutoconso)) : null;
   /* Le COUT du jour (05/10). `resolveEnergy` le resolvait depuis le tableau
@@ -515,11 +535,19 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   const partPropre = totalMix > 0 ? Math.round((solaireUtile + batterieSortie) / totalMix * 100) : 0;
   const couleurAnneau = importW === 0 && totalMix > 0 ? 'var(--o-ok)' : solarActive ? 'var(--o-gold)' : 'var(--o-accent)';
 
+  /* L'AUTONOMIE DE LA BATTERIE (chantier G3, E6) : « ≈ 3 h de réserve » = ce
+   * qu'elle tient (niveau × capacité) ÷ ce que la maison consomme, batterie
+   * comprise (`consoPourAutonomie`, relecture du 30/10). Seulement
+   * quand Home Assistant déclare la capacité de TOUTES les batteries : on ne
+   * devine pas une capacité. */
+  const autonomie = batPresente && consoLue
+    ? texteAutonomie(autonomieBatterie({ reserveKwh: reserveBatterieKwh({ batteries, lire: lireN }), consoW: consoPourAutonomie({ consoW, batW, mesuree: avail(EN.consoMaison) }) })) : null;
+
   /* Les SOURCES en direct, sous le disque. Une source absente de l'installation
    * n'a pas de jeton : on ne montre pas une batterie à qui n'en a pas. */
   const jetons = [
     solarAvail && { icone: 'sun', couleur: 'var(--o-gold)', v: fmtW(solarW), label: tr('Solaire') },
-    batPresente && { icone: 'battery-full', couleur: 'var(--o-purple)', v: batW != null ? fmtW(Math.abs(batW)) : (batSoc != null ? batSoc + ' %' : '—'), label: (batW > 0 ? tr('Charge') : batW < 0 ? tr('Décharge') : tr('En veille')) + (batSoc != null ? ' · ' + batSoc + ' %' : '') },
+    batPresente && { icone: 'battery-full', couleur: 'var(--o-purple)', v: batW != null ? fmtW(Math.abs(batW)) : (batSoc != null ? batSoc + ' %' : '—'), label: (batW > 0 ? tr('Charge') : batW < 0 ? tr('Décharge') : tr('En veille')) + (batSoc != null ? ' · ' + batSoc + ' %' : ''), sous: autonomie },
     reseauLu && { icone: 'bolt', couleur: exporting ? 'var(--o-ok)' : 'var(--o-accent-soft)', v: fmtW(gridNetW), label: exporting ? tr('Vente réseau') : tr('Achat réseau') },
     evBranche && { icone: 'car-side', couleur: 'var(--o-ok)', v: evW != null ? fmtW(evW) : '—', label: tr('Véhicule') },
   ].filter(Boolean);
@@ -542,6 +570,9 @@ function EnergieContent({ hass, edit = false, onEnt }) {
     autoPct != null && { l: tr('Autosuffisance'), v: String(autoPct), u: '%' },
     totalToday != null && { l: tr('Réseau importé'), v: dec(totalToday, 1), u: 'kWh' },
     injJour != null && { l: tr('Réseau exporté'), v: dec(injJour, 1), u: 'kWh' },
+    // La production PRÉVUE (E7), après ce qui s'est passé : aujourd'hui, puis demain.
+    prevision.aujourdhui != null && { l: tr('Prévu aujourd’hui'), v: dec(prevision.aujourdhui, 1), u: 'kWh' },
+    prevision.demain != null && { l: tr('Prévu demain'), v: dec(prevision.demain, 1), u: 'kWh' },
   ].filter(Boolean);
 
   /* Les tuiles de mesure, sous l'historique. Le gaz et l'eau viennent du
@@ -680,6 +711,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
                         <span style={{ lineHeight: 1.2 }}>
                           <span style={{ display: 'block', fontSize: 13.5, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{j.v}</span>
                           <span style={{ display: 'block', fontSize: 10.5, fontWeight: 600, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{j.label}</span>
+                          {j.sous && <span style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: 'var(--o-purple)', whiteSpace: 'nowrap' }}>{j.sous}</span>}
                         </span>
                       </div>
                     ))}

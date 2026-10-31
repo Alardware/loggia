@@ -14,7 +14,9 @@
  *  - son nom, celui de son appareil ou son modèle disent un frigo, un
  *    congélateur, une cave à vin, un processeur, un disque, une imprimante 3D,
  *    un point de rosée, un ressenti, une sonde interne, un aquarium, une
- *    piscine — dans les sept langues de Loggia ;
+ *    piscine — dans les sept langues de Loggia ; et, pour une pièce du dehors
+ *    (chantier G4, A3), le RealFeel, le refroidissement éolien, le thermomètre
+ *    mouillé, l'indice de chaleur d'un service météo, une sonde de sol ;
  *  - son appareil a un autre rôle (`autreRole`) : un chauffe-eau, une prise ou
  *    un relais (un `switch`, ou une puissance mesurée).
  * La sonde d'un thermostat ou d'un humidificateur (tado, Nest, Ecobee, Sensibo)
@@ -39,8 +41,16 @@ export const CLE_NON_JUGEES = 'loggia_mesures_nonjugees';
 // Des RACINES, prises au début d'un mot : « réfrigérateur », « Kühlschrank », « congélateur », « extrudeuse » ; le plateau d'une
 // IMPRIMANTE seulement (« heatbed », « plateau chauffant »), jamais un plateau quelconque.
 const RACINES = /(^|[^a-z0-9])(frigo|fridge|refrigera|frigorif|congel|freezer|kuhl|gefrier|koelkast|vriez|nevera|lodowk|zamraz|cave a vin|wine|weinkuhl|processeu|processo|chipset|carte mere|motherboard|mainboard|nozzle|hotend|extrud|heat ?bed|heater bed|print bed|plateau chauff|plateau d.?imprim|rosee|dew ?point|taupunkt|dauwpunt|rugiada|rocio|punkt rosy|ressenti|feels like|apparent temp|internal|device temp|aquarium|piscin|zwembad|schwimmbad|basen)/;
-// Des mots entiers, trop courts pour une racine : « CPU », « SoC », « interne » (pas « internet »), « Pool ».
-const MOTS = /(^|[^a-z0-9])(cpu|gpu|soc|nvme|ssd|hdd|disk|disque|buse|interne|tool ?0|pool)(?![a-z0-9])/;
+/* Une température qui n'est pas l'AIR du dehors (chantier G4, A3 ; ADR 0303), dans les sept langues : le RealFeel d'AccuWeather
+ * (actif par défaut, à l'ombre aussi), le refroidissement éolien, le thermomètre mouillé, l'indice de chaleur, la température
+ * apparente ou ressentie (« gefühlte », « percepita », « sensación térmica », « odczuwalna ») — et le SOL : « soil », « Boden »,
+ * « bodem », « suolo », « suelo », « gleba ». Rangée dans « Jardin », chacune devenait LA température du jardin. Le « ł » polonais
+ * ne se décompose pas : il reste un espace dans le nom, un « l » dans l'identifiant (`[l ]`). */
+const RESSENTI_SOL = /(^|[^a-z0-9])(realfeel|real feel|wind ?chill|refroidissement eolien|windkuhl|raffreddamento|enfriamiento|wych[l ]odz|wet ?bulb|thermometre mouille|bulbe humide|feuchtkugel|natte ?bol|bulbo umido|bulbo humedo|termometr[a-z]* wilgotn|heat ?index|indice de chaleur|hitzeindex|hitte ?index|indice di calore|indice de calor|indeks ciep[l ]a|apparent|gefuhlt|gevoelstemp|percepit|sensacion termica|odczuwaln|soil|boden|bodem|suolo|suelo|gleba|gleby|glebie)/;
+// Des mots entiers, trop courts pour une racine : « CPU », « SoC », « interne » (pas « internet »), « Pool » ; le « sol » (A3), mais
+// jamais celui d'une pièce : « Sous-sol », « S/sol », « Ss-sol », « Entre-sol » (relecture G4, point 4) — des mots entiers eux
+// aussi : « Capteurs sol » reste un sol.
+const MOTS = /(^|[^a-z0-9])(cpu|gpu|soc|nvme|ssd|hdd|disk|disque|buse|interne|tool ?0|pool|(?<!(?:^|[^a-z0-9])(?:sous|ss|s|entre) )sol)(?![a-z0-9])/;
 /* « Bed temperature » : le lit d'une imprimante (OctoPrint, Prusa, Bambu, Klipper), mais aussi « Master Bed Temperature », une chambre.
  * Il ne compte qu'avec un signe d'imprimante dans le texte ou chez ses sœurs. */
 const LIT = /(^|[^a-z0-9])bed temp/;
@@ -74,7 +84,7 @@ export function horsAir(id, S, meta, appareil, soeurs, piece = null) {
   const m = meta(id) || {};
   if (m.category) return true;
   const texte = texteDe(id, S, m, appareil, piece);
-  return RACINES.test(texte) || MOTS.test(texte) || (LIT.test(texte) && IMPRIMANTE.test(texte + ' ' + (soeurs || []).join(' '))) || autreRole(soeurs, S, meta);
+  return RACINES.test(texte) || RESSENTI_SOL.test(texte) || MOTS.test(texte) || (LIT.test(texte) && IMPRIMANTE.test(texte + ' ' + (soeurs || []).join(' '))) || autreRole(soeurs, S, meta);
 }
 
 /* Ce que mesure aussi un thermostat, et qui n'est pas la pièce : l'eau de la chaudière, le départ, le retour, l'eau chaude sanitaire,

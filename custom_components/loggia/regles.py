@@ -45,14 +45,16 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
-import re
+import secrets
 import time
 from typing import Any
 
 from homeassistant.core import Context, HomeAssistant, callback
 
+from . import destinataires
 from .const import DOMAIN
 from .eau_calcul import est_vanne_eau
+from .entites import motif
 from .textes import joindre, langue_serveur, parties, rendre_fr, traduire
 from .volets_calcul import cible_de
 
@@ -129,7 +131,7 @@ def niveau(palier: str, rang: int = 0) -> int:
 
 # La forme d'un identifiant d'entite : `domaine.objet`, en minuscules, chiffres
 # et soulignes — ce que Home Assistant ecrit lui-meme.
-ENTITE = re.compile(r"^[a-z0-9_]+\.[a-z0-9_]+$")
+ENTITE = motif()
 
 
 def est_entite(valeur: Any) -> bool:
@@ -213,6 +215,42 @@ def a_ne_pas_rouvrir(service: Any, cibles: Any, data: Any, designee: Any, attrib
         if (isinstance(designee, str) and h == designee) or (h.startswith("valve.") and est_vanne_eau(attributs_de(h))):
             refus.append(h)
     return refus
+
+
+def journal_lisible(lignes: Any, lecture: Any) -> list:
+    """Le journal tel qu'un compte peut le lire (28/10, ADR 0279).
+
+    `lecture` est le test de `_lecture_autorisee` (discovery.py) : None quand
+    tout est permis — presque toutes les installations, et les
+    administrateurs —, et le journal passe tel quel. Sinon chaque ligne ne
+    garde que les cibles que ce compte peut lire ; une ligne dont il ne peut
+    lire AUCUNE cible disparait. Une ligne sans cible (une alerte, un geste de
+    la maison) reste. Les lignes du journal ne sont jamais modifiees : une
+    ligne filtree est une copie."""
+    lignes = list(lignes or ())
+    if lecture is None:
+        return lignes
+    sortie = []
+    for e in lignes:
+        cibles = e.get("cibles") if isinstance(e, dict) else None
+        if not cibles:
+            sortie.append(e)
+            continue
+        lisibles = [h for h in cibles if isinstance(h, str) and lecture(h)]
+        if not lisibles:
+            continue
+        sortie.append(e if len(lisibles) == len(cibles) else {**e, "cibles": lisibles})
+    return sortie
+
+
+def cles_lisibles(table: Any, lecture: Any) -> dict:
+    """Une table {entity_id: ...} (gels, tenues, ordres en attente) reduite aux
+    entites que ce compte peut lire. None : tout est permis."""
+    if not isinstance(table, dict):
+        return {}
+    if lecture is None:
+        return dict(table)
+    return {h: v for h, v in table.items() if isinstance(h, str) and lecture(h)}
 
 
 def demarrer(hass: HomeAssistant, module: Any, coro: Any, nom: str) -> None:
@@ -721,11 +759,61 @@ class Regles:
         sur une enceinte, une lumiere qui clignote."""
         return self.dans_la_plage((await self._alertes()).get("calme"), self._maintenant())
 
+    async def _cibles(self, pour: str, cfg: dict) -> list[str]:
+        """Les services decouverts pour ce public (destinataires.py). Une
+        decouverte qui casse ne coupe rien : le repli prend la suite."""
+        try:
+            gens = await destinataires.personnes(self.hass, cfg.get("personnes"))
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Loggia regles : destinataires illisibles, repli", exc_info=True)
+            return []
+        return destinataires.choisir(gens, pour)
+
+    async def async_destinataires(self) -> dict[str, Any]:
+        """Qui recevra quoi, pour Parametres > Alertes (`loggia/notifications/destinataires`,
+        administrateurs) : chaque personne, ses telephones, ce qui est corrige,
+        et le service de repli."""
+        cfg = await self._alertes()
+        gens = await destinataires.personnes(self.hass, cfg.get("personnes"))
+        return {"personnes": gens, "repli": str(cfg.get("service") or "").strip(),
+                "routes": {p: destinataires.choisir(gens, p) for p in destinataires.POUR}}
+
+    async def a_qui_parler(self, pour: str = "tous") -> bool:
+        """Quelqu'un recevrait-il une notification de ce public ? Un telephone
+        decouvert, ou le service choisi dans Parametres > Alertes. Ce que lisent
+        les ecrans qui disaient « choisissez un telephone » (veilles, prises)."""
+        cfg = await self._alertes()
+        return bool(str(cfg.get("service") or "").strip()) or bool(await self._cibles(pour, cfg))
+
+    async def _pousser(self, service: str, charge: dict) -> bool:
+        """Un envoi, et ce que Home Assistant en dit tout de suite. L'appel ne
+        bloque pas : l'application compagnon note elle-meme un echec de push
+        sans le lever ; ce qui se voit ici, c'est un service refuse."""
+        try:
+            await self.hass.services.async_call("notify", service, charge, blocking=False)
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia regles : notify.%s a echoue", service)
+            return False
+        return True
+
     async def prevenir(self, module: str, regle: str, message: str, *,
                        titre: str = "Loggia", critique: bool = False,
                        motif: str = "", simuler: bool = False,
-                       data: dict | None = None) -> bool:
-        """Previent quelqu'un, par le telephone choisi dans Parametres > Alertes.
+                       data: dict | None = None, pour: str = "tous") -> bool:
+        """Previent les bonnes personnes, sur leur telephone (ADR 0301).
+
+        `pour` : `tous` (la surete), `admins` (le mode enfant), `presents` (la
+        fin d'un cycle, la collecte, les veilles ordinaires) — destinataires.py.
+        Le service choisi dans Parametres > Alertes est le REPLI : quand rien
+        n'est decouvert pour ce public, et quand un envoi est refuse. Le repli
+        se dit au journal de Home Assistant, en debug.
+
+        La SURETE (`tous`) part TOUJOURS aussi au repli (relecture du 30/10,
+        point 1) : un groupe `notify.famille` dont un seul telephone est trouve,
+        un Telegram, un vieux telephone qui ne leve rien, une personne sans
+        compte — avant ce chantier, le repli les servait ; une alerte de surete
+        ne doit jamais atteindre moins de monde qu'avant. Un `tag` commun dans
+        `data` laisse l'application compagnon fondre les doublons.
 
         Deux regimes, et rien entre les deux :
 
@@ -740,46 +828,83 @@ class Regles:
         l'appui renvoie en `mobile_app_notification_action`. Il s'ajoute au
         regime du son, sans l'ecraser.
 
-        Chaque envoi laisse une ligne au journal, avec son regime : quand rien
-        n'a sonne cette nuit, on sait si c'etait voulu. Rend vrai si quelque
-        chose est parti.
+        Le son critique, le silence des heures calmes et les boutons sont des
+        cles de l'application compagnon : ils ne partent que vers un service
+        `mobile_app_*` — et vers le repli, qui les recevait deja et peut etre
+        un groupe de telephones. Un service choisi a la main pour une personne
+        (Telegram, un courriel) recoit le texte seul.
+
+        Chaque envoi laisse une ligne au journal, avec son regime et le nombre
+        de telephones atteints : quand rien n'a sonne cette nuit, on sait si
+        c'etait voulu. Rend vrai si quelque chose est parti.
         """
+        if pour not in destinataires.POUR:
+            raise ValueError("pour : tous, admins ou presents, pas %r" % (pour,))
         await self._charger()
         cfg = await self._alertes()
-        service = str(cfg.get("service") or "").strip()
+        repli = str(cfg.get("service") or "").strip()
         quoi = "alerter" if critique else "prevenir"
         # Le telephone lit la langue du serveur (ADR 0070) ; le journal, lui,
         # garde le francais rendu et les parties que l'ecran traduit.
         langue = langue_serveur(self.hass)
         texte = traduire(message, langue)
-        if not service:
-            await self.noter(module, regle, quoi, n=0, motif=motif,
-                             detail=("personne a qui parler · {message}", {"message": texte}))
-            return False
-        if not self.hass.services.has_service("notify", service):
-            await self.noter(module, regle, quoi, n=0, motif=motif,
-                             detail=("notify.{service} introuvable · {message}",
-                                     {"service": service, "message": texte}))
-            return False
-        charge: dict[str, Any] = {"title": traduire(titre, langue), "message": texte}
+        cibles = await self._cibles(pour, cfg)
+        doublons = False
+        if (pour == "tous" and cibles and repli and repli not in cibles
+                and self.hass.services.has_service("notify", repli)):
+            cibles = [*cibles, repli]
+            doublons = True
+        if not cibles:
+            if not repli:
+                await self.noter(module, regle, quoi, n=0, motif=motif,
+                                 detail=("personne a qui parler · {message}", {"message": texte}))
+                return False
+            if not self.hass.services.has_service("notify", repli):
+                await self.noter(module, regle, quoi, n=0, motif=motif,
+                                 detail=("notify.{service} introuvable · {message}",
+                                         {"service": repli, "message": texte}))
+                return False
+            _LOGGER.debug("Loggia regles : personne de decouvert pour « %s », repli sur notify.%s", pour, repli)
+            cibles = [repli]
+        extra: dict[str, Any] = {}
         regime = None
         if critique:
-            charge["data"] = copy.deepcopy(CRITIQUE)
+            extra = copy.deepcopy(CRITIQUE)
             regime = "critique"
         elif self.dans_la_plage(cfg.get("calme"), self._maintenant()):
-            charge["data"] = copy.deepcopy(SILENCIEUSE)
+            extra = copy.deepcopy(SILENCIEUSE)
             regime = "silencieuse, heures calmes"
         if data:
-            charge["data"] = {**charge.get("data", {}), **copy.deepcopy(data)}
+            extra = {**extra, **copy.deepcopy(data)}
+        if doublons:
+            # Le meme telephone peut l'avoir deux fois (par lui-meme, et par un
+            # groupe de repli) : un tag commun, et l'application n'en garde qu'une.
+            extra["tag"] = "loggia-" + secrets.token_hex(6)
+
+        def charge(service: str) -> dict[str, Any]:
+            c: dict[str, Any] = {"title": traduire(titre, langue), "message": texte}
+            if extra and (service.startswith(destinataires.PREFIXE_APP) or service == repli):
+                c["data"] = copy.deepcopy(extra)
+            return c
+
+        partis = len(cibles)
         if not simuler:
-            try:
-                await self.hass.services.async_call("notify", service, charge, blocking=False)
-            except Exception:  # noqa: BLE001
-                _LOGGER.exception("Loggia regles : notify.%s a echoue", service)
+            partis, essaye = 0, set(cibles)
+            for service in cibles:
+                if await self._pousser(service, charge(service)):
+                    partis += 1
+                    continue
+                # Un envoi refuse : le repli, une fois, s'il n'est pas deja servi.
+                if repli and repli not in essaye and self.hass.services.has_service("notify", repli):
+                    essaye.add(repli)
+                    _LOGGER.debug("Loggia regles : notify.%s refuse, repli sur notify.%s", service, repli)
+                    if await self._pousser(repli, charge(repli)):
+                        partis += 1
+            if not partis:
                 await self.noter(module, regle, quoi, n=0, motif=motif,
                                  detail=("envoi impossible · {message}", {"message": texte}))
                 return False
-        await self.noter(module, regle, quoi, n=1, motif=motif,
+        await self.noter(module, regle, quoi, n=partis, motif=motif,
                          detail=joindre(regime, message), simule=simuler)
         return True
 

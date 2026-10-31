@@ -1,4 +1,4 @@
-# Loggia Dashboard
+# Loggia pour Home Assistant
 
 [![Release](https://img.shields.io/github/v/release/Alardware/loggia?label=version&color=4da3ff)](https://github.com/Alardware/loggia/releases)
 [![CI](https://github.com/Alardware/loggia/actions/workflows/validate.yml/badge.svg)](https://github.com/Alardware/loggia/actions)
@@ -8,153 +8,109 @@
 
 Un tableau de bord Home Assistant qui se remplit tout seul.
 
-Loggia lit les registres de votre installation — zones, appareils, entités — et
+Loggia lit les registres de votre installation (zones, appareils, entités) et
 en déduit ce qu'il peut afficher. Aucun identifiant d'entité n'est écrit dans le
 code : ce qui n'existe pas chez vous n'apparaît pas, et ce que vous ajoutez plus
 tard apparaît sans rien toucher.
 
-Le même dashboard s'adapte à l'écran qui le regarde : sur tablette comme sur
-téléphone, le bandeau du haut disparaît, la navigation passe en bas et la
-barre latérale devient un tiroir. C'est le TYPE d'appareil qui décide, jamais
-la largeur.
+Je l'ai construit pour ma maison, et je le partage parce qu'il peut servir la
+vôtre. Il s'ouvre comme un panneau de Home Assistant, en plein écran, sans
+carte iframe ni module Lovelace à ajouter.
 
 ## Essayer sans rien installer
 
-**[La démo en ligne](https://alardware.github.io/loggia/)** : rien à installer, aucune adresse à saisir. Une
-maison de démonstration se monte — pièces, lumières, volets, thermostats,
-agenda, scénarios, robots, **jouables** (une lampe basculée bascule) — avec
-deux profils dont un administrateur pour tout essayer. Elle tourne entièrement
-dans le navigateur, sans Home Assistant derrière : rien n'est envoyé nulle
-part, et tout s'évapore à la fermeture de l'onglet. Un badge « Démonstration »
-reste à l'écran.
+**[La démo en ligne](https://alardware.github.io/loggia/)** monte une maison de
+démonstration (pièces, lumières, volets, thermostats, robots, scénarios) que
+l'on peut manipuler, avec un profil administrateur pour tout essayer. Elle
+tourne entièrement dans le navigateur : rien n'est envoyé nulle part, et tout
+s'efface à la fermeture de l'onglet.
 
-Sur une installation, la même démo s'ouvre avec `?demo` sur la page directe
-du dashboard — `http://<votre-ha>:8123/loggia-static/index.html?demo` — sans
-lire ni écrire votre configuration. C'est aussi le banc d'essai du projet : les
-branches que l'installation de l'auteur n'exerce pas se testent là.
+## Ce que vous obtenez
+
+Les vues se composent d'après ce que Home Assistant connaît déjà :
+
+| Vue | Ce qu'elle montre |
+| --- | --- |
+| Accueil | la maison d'un coup d'œil : pièces, météo, caméras, « À surveiller » |
+| Pièces | les zones de Home Assistant qui contiennent un équipement |
+| Objets | les appareils par familles : lumières, volets, chauffage, prises, multimédia, robots et appareils connectés, capteurs |
+| Scénarios | huit proposés d'après vos appareils, plus les vôtres ; une scène ou un script se lie |
+| Énergie | le tableau de bord Énergie de Home Assistant (compteur, solaire, appareils suivis) |
+| Sécurité | alarme, caméras, personnes, détecteurs |
+| Système | processeur, mémoire, disque, température |
+
+Chaque appareil a sa carte, et sa fiche s'ouvre d'un toucher.
+
+**Une vue sans rien à montrer disparaît du menu**, et revient d'elle-même le
+jour où l'appareil existe. Paramètres → Vues liste celles qui sont masquées, et
+pourquoi.
+
+Et, sans rien régler :
+
+- **les alertes de sûreté** : fumée, monoxyde de carbone, gaz, fuite d'eau,
+  sabotage, en tête de l'écran dès qu'un capteur se déclenche ; la vigilance
+  météo à part ;
+- **l'arrivée d'eau** : sur une fuite, la maison ferme la vanne, et ne la
+  rouvre jamais seule ;
+- **le journal de chaque pièce** sur vingt-quatre heures ;
+- **les caméras en direct**, sur l'Accueil et dans Sécurité ;
+- **un minuteur d'extinction** sur les lampes et les prises, tenu par Home
+  Assistant même quand aucun écran n'est ouvert ;
+- **un mode ambiant** pour une tablette murale ;
+- **sept langues** : français, anglais, allemand, néerlandais, italien,
+  espagnol, polonais.
+
+Le même tableau de bord s'adapte à l'écran : sur tablette et téléphone, la
+navigation passe en bas. C'est le TYPE d'appareil qui décide, jamais
+la largeur. Chaque type d'écran garde son propre rangement des
+cartes ; le contenu, lui, se synchronise.
 
 ## Installation
 
-### Par HACS
+### HACS (recommandé)
 
-1. HACS → Intégrations → menu ⋮ → **Dépôts personnalisés**
-2. Coller `https://github.com/Alardware/loggia`, catégorie **Integration**
-3. Installer **Loggia Dashboard**, puis redémarrer Home Assistant
-4. Paramètres → Appareils et services → **Ajouter une intégration** → Loggia
+[![Ouvrir dans HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Alardware&repository=loggia&category=integration)
 
-Loggia apparaît dans le menu latéral. Il n'y a rien à configurer : ni copie dans
-`www/`, ni tableau de bord YAML, ni carte iframe.
+1. Cliquez sur le bouton ci-dessus, ou dans HACS : menu ⋮ → *Dépôts
+   personnalisés* → URL `https://github.com/Alardware/loggia`, type
+   *Intégration* → *Ajouter*.
+2. Ouvrez « Loggia Dashboard » dans HACS → *Télécharger*.
+3. Redémarrez Home Assistant.
 
-### À la main
+### Manuelle
 
-Copier `custom_components/loggia/` dans votre dossier `config/custom_components/`,
-redémarrer, puis ajouter l'intégration depuis l'interface. Le mode historique
-(`loggia:` dans `configuration.yaml`) reste accepté.
+1. Téléchargez la dernière
+   [version](https://github.com/Alardware/loggia/releases).
+2. Copiez le dossier `custom_components/loggia` dans le dossier
+   `custom_components` de votre configuration Home Assistant. Vous obtenez
+   `/config/custom_components/loggia/`. Pour copier, vous pouvez utiliser les
+   modules complémentaires *Samba share*, *Studio Code Server* ou *File editor*.
+3. Redémarrez Home Assistant.
 
-**Requiert Home Assistant 2024.7 ou plus récent.**
+**Home Assistant 2024.7 ou plus récent est nécessaire.**
 
-## Ce qui est trouvé tout seul
+## Configuration
 
-| Vue | Source |
-|---|---|
-| Pièces | zones Home Assistant contenant un équipement d'ambiance |
-| Lumières | domaine `light`, regroupées par zone |
-| Climat | domaine `climate`, avec le capteur de température de l'appareil ou de la zone |
-| Volets | domaine `cover` |
-| Aspirateur, tondeuse | domaines `vacuum` et `lawn_mower` et les entités du même appareil (batterie, carte ou zones, consommables, réglages) — leur fiche s'ouvre depuis leur carte, dans Objets : accueil (« Où » : les zones de Home Assistant associées au robot, ou les pièces qu'il publie), planning, historique, entretien |
-| Médias | domaine `media_player` |
-| Sécurité | `alarm_control_panel`, `camera` (flux dédoublonnés), `person` ; détecteurs pris parmi les `binary_sensor` de la même caméra |
-| Énergie | **préférences du tableau de bord Énergie natif** — compteur, injection, production solaire, appareils suivis |
-| Système | capteurs de charge processeur en `%`, puis mémoire, disque, température et disponibilité du même appareil |
-| Scénarios | proposés par Loggia — huit, composés d'après lumières, volets, lecteurs, thermostats, alarme et serrures — plus les vôtres ; une scène ou un script (`scene`, `script`) se lie. Le service `loggia.scenario` (champ `id` : `nuit`, `depart`, `retour`, `reveil`, `cinema`, `musique`, `invites`, `tout_eteindre`, ou `perso_<nom>` pour l'un des vôtres) en lance un depuis une automatisation, l'assistant vocal ou un bouton sans fil, avec les droits du compte qui appelle |
+1. Paramètres → Appareils et services → **Ajouter une intégration**.
+2. Cherchez **Loggia**.
+3. Loggia apparaît dans le menu latéral. Il n'y a rien d'autre à faire : ni
+   copie dans `www/`, ni tableau de bord YAML.
 
-**Une vue sans rien à montrer disparaît du menu.** Elle réapparaît d'elle-même
-le jour où l'appareil correspondant existe. Paramètres → Vues liste celles qui
-sont masquées, avec le motif.
+**Les profils.** Chaque compte Home Assistant ouvre son propre profil Loggia,
+créé à sa première visite : ses vues, son thème, son rangement, sur tous ses
+écrans. Un administrateur de Home Assistant a un profil administrateur ; les
+autres comptes, un profil de la famille.
 
-## Et sans rien configurer non plus
+**Le code administrateur.** Il protège le passage vers un profil
+administrateur et les réglages du mode enfant. Il n'y en a pas au départ, et
+tant qu'il n'est pas créé, aucun code n'ouvre rien. Un administrateur de Home
+Assistant le crée la première fois que Loggia le demande, ou dans Paramètres ›
+Profils (4 à 8 chiffres).
 
-- **Alertes sûreté** — tout capteur binaire dont la classe désigne un danger
-  (fumée, monoxyde de carbone, gaz, fuite d'eau, sabotage) pousse une
-  notification rouge dès qu'il se déclenche, en tête de liste. La vigilance
-  météo (MétéoAlarm) a sa notification ambre à part, portant l'événement réel.
-- **L'arrivée d'eau** — une vanne d'eau, ou la prise qui la commande, a sa carte
-  et sa fiche : pourquoi elle est fermée (une fuite, une personne, une
-  automatisation), l'état de chaque détecteur de fuite, le journal du jour. Sur
-  une fuite, la maison ferme la vanne choisie, sinon toutes les vannes d'eau ;
-  elle ne la rouvre jamais seule, et « Rouvrir l'eau » demande si la fuite est
-  réparée. Je n'ai pas de vanne chez moi : c'est vérifié dans la démonstration.
-- **Journal d'activité par pièce** — sous les appareils d'une pièce, les
-  dernières 24 heures : qui s'est allumé, ouvert, verrouillé, à quelle heure.
-  Alimenté par le logbook de Home Assistant, poussé en direct.
-- **Le côté de l'Accueil, prêt à l'emploi** — « À surveiller » en tête quand
-  quelque chose le mérite, l'heure, la météo, la carte CO₂ (la pièce la plus
-  chargée, une barre par heure sur vingt-quatre heures, le seuil d'aération,
-  et le geste pour aérer quand il y a quelque chose à commander), En ce
-  moment, le calendrier. Chaque bloc se retire, se range ou revient en mode
-  édition.
-- **Des capteurs lisibles d'un coup d'œil** — la carte d'un capteur de CO₂,
-  de température, d'humidité ou de bruit porte une jauge à paliers, du bleu
-  (l'idéal) au rouge, et un trait à la valeur ; une pile, cinq barres. Toutes
-  les piles de la maison se retrouvent dans la vue Énergie, la plus basse
-  d'abord.
-- **Caméras en direct** — le flux sur l'Accueil et dans la vue Sécurité.
-  Un clic sur une vignette l'ouvre en grand, avec les modes de la caméra
-  (détection, suivi, mode privé) quand l'appareil en propose. De deux
-  caméras, un menu règle combien s'affichent par ligne — de une à quatre,
-  chacune avec son schéma —, et le choix est propre à l'ordinateur, à la
-  tablette et au téléphone.
-- **Minuteur d'extinction** — « +30 min » sur la fiche d'une lampe ou d'une
-  prise : Home Assistant l'éteint à l'heure, même si aucun écran n'est
-  ouvert. Le décompte se lit à la seconde, sur tous les appareils ; éteinte
-  à la main avant l'heure, le minuteur s'efface. Le « Test sonore (3 s) »
-  d'une sirène est tenu de la même façon : Home Assistant l'allume et
-  l'éteint, écran ouvert ou non.
-- **Vignette météo animée** — la condition se voit dans la vignette de
-  l'accueil : pluie qui tombe, étoiles, halo de soleil, éclair d'orage.
-- **Mode ambiant** — pour une tablette murale : après un délai sans toucher,
-  un écran de veille sombre — heure en grand, météo, lumières allumées,
-  alarme, alertes. Un toucher le retire, on retrouve l'écran où on l'avait
-  laissé.
-- **Chip « n allumées »** dans l'en-tête, visible de partout ; un clic ouvre
-  la vue Lumières.
-- **Sept langues** — français, anglais, allemand, néerlandais, italien,
-  espagnol, polonais : l'interface, le journal et les alertes envoyées au
-  téléphone.
-  Les états et commandes viennent de Home Assistant dans toutes ses langues ;
-  changer de langue est immédiat, sans rechargement.
-
-## Vues personnalisées et cartes template
-
-Une vue custom se compose depuis l'interface (admin) : des entités — chaque
-domaine a sa carte générique — et des **cartes template**, dont le contenu est
-un template Jinja évalué par Home Assistant et mis à jour en direct dès qu'une
-entité référencée change. N'importe quelle donnée calculable devient
-affichable, sans YAML.
-
-## Apparence
-
-Thèmes clair et sombre, préréglages (dont un rendu « verre » avec flou
-d'arrière-plan), **teinte d'état** réglable — les cartes actives se lavent de
-leur couleur : lampe allumée dorée, volet ouvert à l'accent, chauffage qui
-rougeoie — et **fonds d'écran** discrets dans la palette du thème. Les
-ambiances lumineuses de la bibliothèque Hue portent un dégradé de leurs
-couleurs ; une photo se pose par scène dans `config/www/hue_scenes/`,
-nommée par l'identifiant Hue de la scène (`<uuid>.jpeg`). Le mode
-« Suivre Home Assistant » calque le thème actif de HA. Ces réglages suivent
-votre profil d'un écran à l'autre ; un écran peut garder les siens
-(Paramètres → Appareils), une tablette murale par exemple.
-
-Si le pire arrive, l'écran d'erreur propose de **repartir sans les vues
-custom** ou de revenir aux **réglages d'usine** — le dashboard sait se
-réparer.
-
-## Ce qui demande une configuration
-
-Tout n'a pas d'équivalent standard dans Home Assistant. Ces éléments se
-désignent sur la page concernée : passez en **mode édition**, puis ouvrez
-**Entités de la vue** dans le bandeau du haut (Accueil, Objets, Énergie,
-Sécurité) :
+**Ce qui se désigne à la main.** Certains appareils n'ont pas d'équivalent
+standard dans Home Assistant. Ils se désignent sur la page concernée : **mode
+édition**, puis **Entités de la vue** dans le bandeau du haut (Accueil, Objets,
+Énergie, Sécurité) :
 
 - les radiateurs **fil pilote** — un `switch` entouré d'aides (consigne, mode,
   automatique) qu'aucune convention ne permet de deviner ;
@@ -179,103 +135,88 @@ Sécurité) :
 - les capteurs d'énergie d'un package maison, si vous préférez les vôtres à ceux
   que le tableau de bord Énergie expose.
 
-## Où sont vos réglages
+**Vos propres vues.** Un administrateur compose une vue depuis l'interface :
+des entités, chacune avec sa carte, et des **cartes template**, dont le contenu
+est un template Jinja évalué par Home Assistant et mis à jour en direct.
 
-Dans `.storage/loggia_dashboard_config`, **par utilisateur Home Assistant** :
-chacun garde ses pièces, son thème et ses vues, sur tous ses appareils, et ce
-qu'un écran change arrive sur les autres sans rechargement. C'est
-l'intégration qui écrit ce fichier, via des commandes WebSocket authentifiées —
-l'identité vient de la connexion, jamais du navigateur.
+## Exemple : lancer un scénario depuis une automatisation
 
-Sans l'intégration, le dashboard retombe sur le `localStorage` du navigateur :
-les réglages restent, mais ne suivent plus d'un appareil à l'autre.
+Le service `loggia.scenario` lance un scénario de Loggia depuis une
+automatisation, l'assistant vocal ou un bouton sans fil. L'identifiant est
+`nuit`, `depart`, `retour`, `reveil`, `cinema`, `musique`, `invites`,
+`tout_eteindre`, ou `perso_<nom>` pour un des vôtres.
 
-## Trois niveaux, pas dix
+```yaml
+automation:
+  - alias: "Mode nuit à 23 h"
+    triggers:
+      - trigger: time
+        at: "23:00:00"
+    actions:
+      - action: loggia.scenario
+        data:
+          id: nuit
+```
 
-Tout ce qui a un état parle la même langue. Normal : discret, dans la couleur
-du texte. Attention : ambre, visible, sans clignoter — une pile à 20 %, un
-CO₂ « élevé » (1 400 ppm), un ouvrant ouvert alarme armée. Action nécessaire :
-rouge, lavis, point qui bat, bandeau — l'alarme déclenchée, la fumée, une pile
-à 5 %, Home Assistant perdu. Les mêmes seuils partout (pièce, rail, point
-d'attention, veille du serveur), et les couleurs viennent du thème : le mode
-clair reste lisible. Les jauges des capteurs montrent, elles, l'échelle
-entière — cinq couleurs, de l'idéal au trop —, tirées de la même table de
-seuils que la barre de confort des pièces.
+## En cas de problème
 
-## Sécurité
+| Ce que vous voyez | Ce qu'il faut faire |
+| --- | --- |
+| Loggia n'est pas dans le menu latéral | L'intégration n'est pas ajoutée : Paramètres → Appareils et services → Ajouter une intégration → Loggia. Puis redémarrez Home Assistant. |
+| Après une mise à jour, rien n'a changé | L'écran garde l'ancienne version : rechargez la page (Ctrl+F5), ou fermez et rouvrez l'application Home Assistant. |
+| Une vue manque | Rien ne l'alimente chez vous. Paramètres → Vues dit pourquoi. |
+| Les réglages ne suivent pas d'un écran à l'autre | L'intégration n'est pas ajoutée : sans elle, chaque navigateur garde les siens. |
+| « Aucun code n'est encore défini » | Un administrateur de Home Assistant doit créer le code administrateur, dans Paramètres › Profils. |
 
-- Les appels de service passent par l'API standard de Home Assistant, avec
-  **ses** autorisations : Loggia n'ajoute aucun filtre par-dessus, et n'en
-  retire aucun. Un compte ne peut donc rien faire ici qu'il ne puisse déjà
-  faire ailleurs dans Home Assistant.
-- Les commandes qui écrivent la configuration de la maison sont **réservées
-  aux administrateurs** (`require_admin`, sur les seize commandes WebSocket
-  concernées — un test verrouille la liste). L'identité vient de la
-  connexion authentifiée, jamais d'un champ envoyé par le navigateur.
-- Les règles n'appellent que des services **écrits en dur** dans le composant
-  (`cover.open_cover`, `climate.set_hvac_mode`…) : vous en choisissez la cible,
-  jamais le service. Trois exceptions, toutes explicites :
-  - un **bouton sans fil** appelle le service de son affectation — c'est là
-    tout son intérêt, et affecter demande d'être administrateur ;
-  - une **notification** part vers le service `notify.…` que vous avez désigné
-    dans Alertes ;
-  - un **robot** nettoie des pièces par les zones de Home Assistant qu'on lui a
-    associées, une fois, dans ses réglages (`vacuum.clean_area`, Home Assistant
-    2026.3 et après) ; sans association, ou avant, il est commandé d'après sa
-    plateforme, lue au registre de Home Assistant, parce que les aspirateurs ne
-    parlent pas tous la même langue — avec une exception nommée : un Ecovacs
-    dont la bibliothèque n'a pas de commande de pièces, qui publie ses pièces et
-    pour lequel aucun script de départ n'est désigné, part par la commande brute
-    que ses propres scripts envoient (`clean_V2`). Vos scripts gardent la main :
-    dès qu'un script de départ est désigné dans la roue de sa popup, Loggia ne
-    commande pas les pièces elle-même.
+- Journaux : Paramètres → Système → Journaux, cherchez `loggia`.
+- Signalez un problème sur [GitHub](https://github.com/Alardware/loggia/issues)
+  en indiquant la version de Loggia et, si possible, une capture d'écran.
+
+## Vos données
+
+- **Les réglages** sont rangés par l'intégration dans
+  `.storage/loggia_dashboard_config`, par compte Home Assistant. Avant chaque
+  écriture, une copie est gardée (les dix dernières, au plus une par quart
+  d'heure) ; Paramètres → À propos permet d'en remettre une.
+- **Les commandes passent par Home Assistant**, avec ses autorisations :
+  un compte ne peut rien faire dans Loggia qu'il ne puisse déjà faire ailleurs.
+  Ce qui modifie la configuration de la maison est réservé aux
+  administrateurs (`require_admin`, sur les dix-neuf commandes WebSocket
+  concernées).
+- **Le code administrateur est haché** par l'intégration et n'est jamais
+  renvoyé à un écran. Les essais ratés sont limités.
 - Le jeton d'accès Home Assistant n'est lu que **pour les images** : les
-  instantanés et le flux d'une caméra, la carte d'un robot aspirateur,
-  auprès du proxy d'images de Home Assistant. Il n'est ni stocké, ni envoyé
-  ailleurs.
-- Le code PIN administrateur suit la maison depuis le 03/09 : il est
-  enregistré côté serveur avec le reste de la configuration, et non plus
-  seulement sur l'appareil. C'est ce qui permet de le retrouver sur un autre
-  écran.
-- Aucune ressource externe : ni CDN, ni police distante, ni télémétrie. Une
-  seule exception : à l'écran des mises à jour, les logos des intégrations
-  viennent de brands.home-assistant.io, comme dans Home Assistant.
+  caméras et la carte d'un robot, auprès du proxy d'images de Home Assistant.
+  Il n'est ni stocké, ni envoyé ailleurs.
+- **Rien ne sort de chez vous** : ni police distante, ni CDN, ni télémétrie.
+  Une seule exception : sur l'écran des mises à jour, les logos des
+  intégrations viennent de `brands.home-assistant.io`, comme dans Home
+  Assistant.
 
 ## Développement
 
 ```bash
 npm install
-npm test           # disponibilité des vues, sur installations synthétiques
-npm run lint       # variables non définies, règles des hooks React
+npm test           # tests du tableau de bord
+npm run lint
 npm run build      # construit dans dist/
 
 pip install pytest
-python -m pytest tests/python -q   # stockage de la configuration
+python -m pytest tests/python -q   # tests de l'intégration
 ```
-
-Les tests Python posent leurs propres doublures de Home Assistant : ils tournent
-sans l'installer, et la suite ne se fige pas sur une version. Les tests
-JavaScript qui rendent un composant passent par `tests/rendu.mjs` (le JSX
-compilé par l'esbuild de Vite, le HTML statique de React).
 
 La démo (`?demo` sur le serveur de développement) accepte des paramètres
 d'aperçu, pour vérifier une traduction, un thème ou une vue d'un seul
 chargement : `mode=auto|light|dark`, `lang=<le code d'une des sept langues>`, `theme=<nom du thème>`
 (c'est par lui que l'audit de contraste rejoue chaque variante), `vue=<identifiant>` ou `vue=room:<pièce>`,
 `fiche=<entity_id>` (ouvre la fiche d'un appareil).
-
-Le frontend est du React + Vite, compilé avec `base: './'` — le dossier
-`custom_components/loggia/frontend/` est donc servable sous n'importe quel
-préfixe d'URL.
-
-Le moteur de règles a son vocabulaire et ses décisions : `docs/GLOSSAIRE.md`
-et `docs/decisions/` — une décision par fichier, avec son contexte.
+Les décisions du projet sont dans `docs/decisions/`, une par fichier, avec leur
+contexte.
 
 ## Soutenir
 
-Loggia est développé sur mon temps libre, pour ma maison d'abord — et partagé
-parce qu'il peut servir la vôtre. Si le projet vous est utile, un café aide à
-le faire vivre :
+Loggia est développé sur mon temps libre. Si le projet vous est utile, un café
+aide à le faire vivre :
 
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/alardware)
 

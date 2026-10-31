@@ -24,11 +24,12 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Chaque source JSX du produit, avec son nom. */
 function sources() {
-  const out = [['src/App.jsx', readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8')]];
+  const out = [['src/App.jsx', MONOLITHE]];
   const vues = join(RACINE, 'src', 'views');
   for (const f of readdirSync(vues)) {
     if (f.endsWith('.jsx')) out.push(['src/views/' + f, readFileSync(join(vues, f), 'utf8')]);
@@ -53,7 +54,7 @@ test('aucune surcharge n’ajoute une propriété détaillée à une base', () =
 });
 
 test('le bouton d’édition colore sa bordure par le raccourci', () => {
-  const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const src = MONOLITHE;
   const i = src.indexOf('const editBtn = editMode ?');
   assert.notEqual(i, -1, 'le bouton d’édition de l’en-tête a disparu');
   const ligne = src.slice(i, src.indexOf('\n', i));

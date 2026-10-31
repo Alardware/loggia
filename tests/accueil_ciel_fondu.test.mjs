@@ -8,9 +8,10 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = MONOLITHE;
 const regle = (sel) => { const d = css.indexOf(sel + ' {'); assert.ok(d >= 0, sel + ' introuvable'); return css.slice(d, css.indexOf('}', d) + 1); };
 
 test('le ciel s’efface sur le fond du theme, quel qu’il soit', () => {

@@ -182,7 +182,7 @@ export function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, inTemp, un
         </div>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 16, maxWidth: '84vw' }}>
-        {inTemp != null && <span style={chip}>{pt('#54c8f0')}{inTemp.toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} °{uniteTemp} {tr('intérieur')}</span>}
+        {inTemp != null && <span style={chip}>{pt('var(--o-cyan)')}{inTemp.toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} °{uniteTemp} {tr('intérieur')}</span>}
         {lightsOn > 0 && <span style={{ ...chip, color: 'var(--o-lampe)' }}>{pt('var(--o-lampe)')}{trN(lightsOn, '{n} allumée', '{n} allumées')}</span>}
         {ast != null && <span style={{ ...chip, color: ast === 'triggered' ? 'var(--o-bad)' : ast === 'disarmed' ? 'var(--o-ok)' : 'var(--o-warn)' }}>{pt(ast === 'triggered' ? 'var(--o-bad)' : ast === 'disarmed' ? 'var(--o-ok)' : 'var(--o-warn)')}{ast === 'triggered' ? tr('Alarme') : ast === 'disarmed' ? tr('Alarme désarmée') : tr('Alarme armée')}</span>}
       </div>

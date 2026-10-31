@@ -17,6 +17,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(RACINE, 'src');
 
@@ -427,7 +428,7 @@ test('ce qui a été retiré ne revient pas', () => {
   assert.match(readFileSync(join(RACINE, 'site', 'legal', 'mentions-legales.html'), 'utf8'), /@bybas\/weather-icons/,
     'le crédit des icônes météo a disparu des mentions légales, alors que les dessins sont toujours livrés');
   assert.ok(readdirSync(join(RACINE, 'src', 'assets', 'wx')).length >= 17, 'les dessins météo ont disparu');
-  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const app = MONOLITHE;
   // `stag` rendait `undefined`, et son commentaire prétendait la garder « pour
   // les ~200 appels existants ». Il en restait UN.
   assert.ok(!/const stag = \(\) => undefined;/.test(app), '`stag` est revenue : elle ne rend rien');

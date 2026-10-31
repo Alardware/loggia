@@ -30,14 +30,9 @@ import { niveauPile, couleurNiveau, seuilsPile } from './attention.js';
 import { PLAGES_PLANTE } from './objets.js';
 import { dernierSignal } from './mesuresfiche.js';
 import { EnteteFiche, filet } from './fichecommune.jsx';
-import { LISERE } from './styles.js';
 import { vuePlante, conseilsPlante, barrePlante, dernierReleve, quandPlante } from './plantes.js';
+import { PANNEAU, RANGEE_SERREE, EN_BOUTON, TITRE, SOUS } from './fichekit.js';
 
-const PANNEAU = { background: 'var(--o-s3)', border: LISERE, borderRadius: 'var(--o-radius,18px)', boxSizing: 'border-box', minWidth: 0 };
-const RANGEE = { display: 'flex', alignItems: 'center', gap: 12, width: '100%', boxSizing: 'border-box', padding: '12px 14px 12px 16px' };
-const EN_BOUTON = { border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', color: 'var(--o-text)', textAlign: 'left' };
-const TITRE = { display: 'block', fontSize: 14, fontWeight: 700 };
-const SOUS = { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 };
 const VALEUR = { fontSize: 13, fontWeight: 800, color: 'var(--o-text1)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' };
 
 /* Le dernier relevé d'une plante MUETTE (§ 7.3) : UNE lecture des statistiques à l'heure de Home Assistant, sur dix jours, pour le
@@ -138,16 +133,16 @@ export default function FichePlanteContent({ pl, hass, onFiche = null, maintenan
       </div>
 
       <div style={{ ...PANNEAU, overflow: 'hidden' }}>
-        <div style={RANGEE}>
+        <div style={RANGEE_SERREE}>
           <span style={{ ...TITRE, flex: 1, minWidth: 0 }}>{tr('Pile du capteur')}</span>
           <span style={{ ...VALEUR, color: niveau ? couleurNiveau(niveau).col : pile == null ? 'var(--o-text3)' : 'var(--o-text1)' }}>{pile == null ? '—' : nombre(pile, 0) + '\u00a0%'}</span>
         </div>
-        <div style={{ ...RANGEE, borderTop: filet(1) }}>
+        <div style={{ ...RANGEE_SERREE, borderTop: filet(1) }}>
           <span style={{ ...TITRE, flex: 1, minWidth: 0 }}>{tr('Dernier signal')}</span>
           <span style={VALEUR}>{signal == null ? '—' : relTime(new Date(signal).toISOString())}</span>
         </div>
         {onFiche && (ids.hum || ids.cond) && (
-          <button type="button" onClick={() => onFiche(ids.hum || ids.cond)} style={{ ...RANGEE, ...EN_BOUTON, borderTop: filet(1) }}>
+          <button type="button" onClick={() => onFiche(ids.hum || ids.cond)} style={{ ...RANGEE_SERREE, ...EN_BOUTON, borderTop: filet(1) }}>
             <span style={{ flex: 1, minWidth: 0 }}><span style={TITRE}>{tr('L’appareil')}</span><span style={SOUS}>{tr('L’épingle, les commandes et toutes ses entités')}</span></span>
             <Fi i="angle-small-right" size={16} color="var(--o-text3)" />
           </button>

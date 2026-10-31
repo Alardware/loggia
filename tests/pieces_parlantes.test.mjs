@@ -8,8 +8,9 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE, DASHBOARD, importsDe } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282) ; DASHBOARD : l'Accueil en entier, ses hooks compris (ADR 0283)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = MONOLITHE;
 const attention = readFileSync(join(RACINE, 'src', 'attention.js'), 'utf8');
 const en = readFileSync(join(RACINE, 'src', 'langues', 'en.js'), 'utf8');
 const demo = readFileSync(join(RACINE, 'src', 'demo.js'), 'utf8');
@@ -17,7 +18,8 @@ const NL = String.fromCharCode(10);
 const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = src.indexOf(fin, d + 1); return src.slice(d, f < 0 ? undefined : f); };
 
 test('la carte piece : une ligne d’etat a priorite, dans ses deux variantes, sans toucher au gabarit', () => {
-  assert.ok(src.includes("import { ambiancePiece, ambiancesParPiece } from './ambiance.js';"), 'le module pur');
+  // ASSERTION MODIFIÉE (ADR 0283) : la ligne d'import se répartit entre App.jsx et ses modules ; on lit ses noms.
+  assert.ok(['ambiancePiece', 'ambiancesParPiece'].every(n => importsDe(src, './ambiance.js').has(n)), 'le module pur');
   const c = bloc('function PieceCard(', NL + '}');
   assert.ok(c.includes('idx = 0, ambiance = null })'), 'la carte recoit l’ambiance de sa piece');
   const calcul = "const amb = lights ? ambiancePiece({ lumieres: n, lampes: lights.length, ...(ambiance || {}), co2: p.live && p.live.co2 }) : null;";
@@ -30,7 +32,7 @@ test('la carte piece : une ligne d’etat a priorite, dans ses deux variantes, s
 });
 
 test('l’Accueil range ce que chaque piece a de vivant, par zone puis par nom', () => {
-  const d = bloc('function Dashboard(', NL + '}');
+  const d = DASHBOARD;
   assert.ok(d.includes("const ambiances = ambiancesParPiece(etatsAcc, (a && a.index && a.index.areaNameOf) || null, rmNorm);"), 'une passe sur les etats, normalisee comme les lumieres');
   assert.ok(d.includes("return (zone && zone.name && ambiances[rmNorm(zone.name)]) || ambiances[rmNorm(nom)] || null;"), 'la zone de la piece d’abord, son nom sinon');
   assert.ok(d.includes("clim={roomClimInfo(p.name)} ambiance={ambianceDe(p.name)} onOpen="), 'chaque carte recoit la sienne');

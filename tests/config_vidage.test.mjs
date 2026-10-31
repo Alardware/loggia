@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 
 import { createConfig, brancherVidage } from '../src/config.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 class Fenetre extends EventTarget {}
 class Document extends EventTarget {
   constructor() { super(); this.visibilityState = 'visible'; }
@@ -76,7 +77,7 @@ test('createConfig en mode local : ni file, ni ecouteur — detacher existe et n
 });
 
 test('la consigne d’un champ numerique en attente part au demontage de la fiche et quand la page se cache', () => {
-  const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  const app = MONOLITHE;
   const i = app.indexOf('\nfunction LigneEntite(');
   const c = app.slice(i, app.indexOf('\nfunction ', i + 1));
   assert.ok(c.includes("attenteRef.current = () => call(dom, 'set_value', { value: nv });") && c.includes('commitRef.current = setTimeout(viderAttente, 450);'), 'ce qui attend est nomme, et le calme l’envoie');

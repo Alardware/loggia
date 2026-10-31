@@ -468,3 +468,55 @@ def test_icone_de_zone_transportee(decouverte):
     """
     hass = poser(decouverte, zones=[zone("chambre", "Chambre Enfant", icone="mdi:teddy-bear")])
     assert decouverte.async_index(hass)["areas"][0]["icon"] == "mdi:teddy-bear"
+
+
+# ── Tempo (chantier G3, E4 ; ADR 0302) ──────────────────────────────────────
+# Le creneau d'heures creuses de `rtetempo` n'a pas de cle de traduction : son
+# identifiant stable finit par `_off_peak`. La couleur du lendemain se reconnait
+# a sa FORME — un `enum` dont les options disent bleu, blanc et rouge — et a
+# son identifiant stable, qui dit « next ». Seul le ROLE sort, jamais l'identifiant.
+
+COULEURS = ["Bleu", "Blanc", "Rouge"]
+
+
+def test_le_creneau_de_rtetempo_se_reconnait_a_son_identifiant_stable(decouverte):
+    hass = poser(
+        decouverte,
+        entites=[entite("binary_sensor.rte_tempo_heures_creuses", platform="rtetempo", unique_id="rtetempo_A1B2_off_peak"),
+                 entite("binary_sensor.porte", platform="zha", unique_id="0x1_off")],
+        etats={"binary_sensor.rte_tempo_heures_creuses": {}, "binary_sensor.porte": {"device_class": "door"}},
+    )
+    roles = {e["id"]: e.get("tarif") for e in decouverte.async_index(hass)["entities"]}
+    assert roles == {"binary_sensor.rte_tempo_heures_creuses": "creneau", "binary_sensor.porte": None}
+    assert "A1B2" not in repr(decouverte.async_index(hass))
+
+
+def test_la_couleur_du_lendemain_se_reconnait_a_sa_forme(decouverte):
+    hass = poser(
+        decouverte,
+        entites=[entite("sensor.rte_tempo_couleur_actuelle", platform="rtetempo", unique_id="rtetempo_A1B2_current_color"),
+                 entite("sensor.rte_tempo_prochaine_couleur", platform="rtetempo", unique_id="rtetempo_A1B2_next_color"),
+                 entite("sensor.rte_tempo_prochaine_couleur_visuel", platform="rtetempo", unique_id="rtetempo_A1B2_next_color_emoji"),
+                 entite("sensor.edf_tempo_demain", platform="myelectricaldata", unique_id="med_tempo_tomorrow"),
+                 entite("sensor.prochaine_alarme", platform="mobile_app", unique_id="pixel_next_alarm")],
+        etats={"sensor.rte_tempo_couleur_actuelle": {"device_class": "enum", "options": COULEURS},
+               "sensor.rte_tempo_prochaine_couleur": {"device_class": "enum", "options": COULEURS},
+               "sensor.rte_tempo_prochaine_couleur_visuel": {"device_class": "enum", "options": ["🔵", "⚪", "🔴"]},
+               "sensor.edf_tempo_demain": {"device_class": "enum", "options": ["TEMPO_BLEU", "TEMPO_BLANC", "TEMPO_ROUGE"]},
+               "sensor.prochaine_alarme": {"device_class": "timestamp"}},
+    )
+    roles = {e["id"]: e.get("tarif") for e in decouverte.async_index(hass)["entities"]}
+    assert roles == {"sensor.rte_tempo_couleur_actuelle": "couleur",
+                     "sensor.rte_tempo_prochaine_couleur": "couleur_demain",
+                     "sensor.rte_tempo_prochaine_couleur_visuel": None,
+                     "sensor.edf_tempo_demain": "couleur_demain",
+                     "sensor.prochaine_alarme": None}
+
+
+def test_des_couleurs_en_anglais_aussi(decouverte):
+    tarifs = charger("tarifs")
+    assert tarifs.role_tarif("sensor", "x_tomorrow", None, {"options": ["blue", "white", "red"]}) == "couleur_demain"
+    assert tarifs.role_tarif("sensor", "x_today", None, {"options": ["blue", "white"]}) is None
+    assert tarifs.role_tarif("binary_sensor", "x_off_peak", None, {}) == "creneau"
+    assert tarifs.role_tarif("binary_sensor", None, None, {}) is None
+    assert tarifs.role_tarif("sensor", "x_next", "next_color", None) is None

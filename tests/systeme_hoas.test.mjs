@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 /* La langue de la MACHINE qui lance les tests ne doit rien changer au resultat.
  *
  * `i18n.js` resout sa langue a l'import, d'apres `navigator.language` — que Node
@@ -29,7 +30,7 @@ const NL = String.fromCharCode(10);
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const vue = lire('src', 'views', 'systeme.jsx');
 const pur = lire('src', 'systeme.js');
-const app = lire('src', 'App.jsx');
+const app = MONOLITHE;
 const css = lire('src', 'index.css');
 const en = lire('src', 'langues', 'en.js');
 const demo = lire('src', 'demo.js');

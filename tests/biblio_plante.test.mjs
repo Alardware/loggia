@@ -23,7 +23,10 @@ register('data:text/javascript,' + encodeURIComponent([
   "  return { ...r, source: String(r.source) + ';export { BiblioView };' };",
   '}',
 ].join('\n')));
-const F = await import(new URL('../src/App.jsx?biblio', import.meta.url).href);
+await import(new URL('../src/App.jsx?biblio', import.meta.url).href);
+/* ASSERTION MODIFIÉE (ADR 0283) : la Bibliothèque se charge à la demande (edition/biblio.jsx) ; App.jsx n'en garde qu'une coquille,
+ * que le rendu statique ne déplie pas. Le module se rend lui-même, App.jsx chargé d'abord : c'est lui qui pose `OUTILS_VUES`. */
+const F = await import(new URL('../src/edition/biblio.jsx', import.meta.url).href);
 
 test('H1 : la Bibliothèque se rend, cartes de plante comprises (large et compacte)', () => {
   const html = renderToStaticMarkup(createElement(F.BiblioView, {}));

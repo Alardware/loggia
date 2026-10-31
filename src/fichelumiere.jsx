@@ -45,15 +45,8 @@ import { useEtatLumieres } from './lumieresetat.js';
 import { BLANCS_NOMMES, COULEURS_NOMMEES, ecartTeintes, reglageLumiere, bornesBlanc, blancBorne, degradeBlanc, degradeTeinte, encreBlancs, typeLumiere, phraseFiche,
   phraseMinuteur, minutesAllumee, texteDuree, fonduDe, effetsLumiere, niveauBlanc } from './lumieresfiche.js';
 import { EnteteFiche, PETITES_CAPITALES, filet } from './fichecommune.jsx';
-import { LISERE } from './styles.js';
+import { PANNEAU, RANGEE, EN_BOUTON, TITRE, SOUS, ALERTE } from './fichekit.js';
 
-/* Les panneaux de sa maquette : le gris --o-s3, l'arrondi du thème, sans ombre, et le liseré du réglage « Liserés ». */
-const PANNEAU = { background: 'var(--o-s3)', border: LISERE, borderRadius: 'var(--o-radius,18px)', boxSizing: 'border-box', minWidth: 0 };
-const RANGEE = { display: 'flex', alignItems: 'center', gap: 12, width: '100%', boxSizing: 'border-box', padding: '12px 14px 12px 18px' };
-const EN_BOUTON = { border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', color: 'var(--o-text)', textAlign: 'left' };
-const TITRE = { display: 'block', fontSize: 14, fontWeight: 700 };
-const SOUS = { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 };
-const ALERTE = { fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)' };
 const PETIT = { fontSize: 11, fontWeight: 700, color: 'var(--o-text3)' };
 // Une puce de sa maquette (`ChipButton`) : 40 px de haut, le gris doux, sans bordure ; inerte à .4 ; choisie, le bleu plein et le blanc.
 const PUCE = (peut = true, choisie = false) => ({ height: 40, padding: '0 8px', borderRadius: 10, border: 'none', fontFamily: 'inherit', fontSize: 12, fontWeight: 700,

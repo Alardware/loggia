@@ -72,11 +72,14 @@ const CODES = [
   'chauffage_programme_appareil',
   // Velair, Scheduler ou une automatisation commande déjà le chauffage (D5).
   'chauffage_programme_concurrent',
+  // Le décalage du capteur d'un thermostat, hors de −5 à +5 °C (30/10).
+  'chauffage_decalage_hors_bornes',
 ];
 
 // ASSERTION MODIFIÉE (audit du 19/10) : douze codes, le programme de l'appareil en plus.
 // ASSERTION MODIFIÉE (audit du 19/10, D5) : treize codes, le programme concurrent en plus.
-test('les treize codes sont ceux que le composant envoie', () => {
+// ASSERTION MODIFIÉE (30/10) : quatorze, le décalage hors bornes en plus.
+test('les quatorze codes sont ceux que le composant envoie', () => {
   const dossier = join(RACINE, 'custom_components', 'loggia');
   const py = readdirSync(dossier).filter(f => f.endsWith('.py'))
     .map(f => readFileSync(join(dossier, f), 'utf8')).join('\n');

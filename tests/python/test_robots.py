@@ -523,16 +523,18 @@ def test_l_etat_dit_la_config_la_meteo_et_le_journal(creer):
 # ── Le branchement ──────────────────────────────────────────────────────────
 
 def test_le_module_est_branche_dans_le_composant():
+    from conftest import declaration
+
     init = (RACINE / "custom_components" / "loggia" / "__init__.py").read_text(encoding="utf-8")
-    assert 'data["robots"] = LoggiaRobots(hass, data["store"], data.get("regles"))' in init
-    assert 'acces_robots=lambda: hass.data.get(DOMAIN, {}).get("robots")' in init
+    # ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : le module nait d'une ligne de `MODULES`, ses
+    # commandes sont des lignes de `COMMANDES`.
+    assert 'Module("robots", "LoggiaRobots", _REGLES, _REGLES,' in init
+    assert "async_register_ws(hass, store, lambda nom: hass.data.get(DOMAIN, {}).get(nom))" in init
     ws = (RACINE / "custom_components" / "loggia" / "websocket_api.py").read_text(encoding="utf-8")
     assert 'WS_ROB_ETAT = "loggia/robots/etat"' in ws and 'WS_ROB_CONFIG = "loggia/robots/config"' in ws
-    ecrire = ws[ws.index('{vol.Required("type"): WS_ROB_CONFIG'):]
-    assert ecrire.index("@websocket_api.require_admin") < ecrire.index("async def handle_rob_config"), \
+    assert "acces=ADMIN" in declaration(ws, "Commande(WS_ROB_CONFIG,"), \
         "ecrire le planning de la maison reste aux administrateurs"
-    assert "websocket_api.async_register_command(hass, handle_rob_etat)" in ws
-    assert "websocket_api.async_register_command(hass, handle_rob_config)" in ws
+    assert 'module="robots"' in declaration(ws, "Commande(WS_ROB_ETAT,")
 
 
 # ── Le carnet des passages, en temps reel (chantier IoT, tache 4 ; I3 A, spec 9) ─
@@ -1326,11 +1328,15 @@ def test_le_carnet_ne_commande_rien_et_aucun_toggle():
     robots = (RACINE / "custom_components" / "loggia" / "robots.py").read_text(encoding="utf-8")
     assert '"toggle"' not in robots and "'toggle'" not in robots, "un robot se commande par un service explicite"
     ws = (RACINE / "custom_components" / "loggia" / "websocket_api.py").read_text(encoding="utf-8")
-    assert 'WS_ROB_LANCER = "loggia/robots/lancer"' in ws and "websocket_api.async_register_command(hass, handle_rob_lancer)" in ws
-    corps = ws[ws.index("async def handle_rob_lancer"):ws.index("# ── Le distributeur de croquettes")]
+    from conftest import declaration
+
+    # ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : une ligne de `COMMANDES` ; l'etat se lit par
+    # le gestionnaire commun `_etat(par_compte=True)`.
+    assert 'WS_ROB_LANCER = "loggia/robots/lancer"' in ws and "Commande(WS_ROB_LANCER, handle_rob_lancer," in ws
+    corps = ws[ws.index("async def handle_rob_lancer"):ws.index("# La roue de la popup designe un script par ROLE")]
     assert "controle=controle_de(connection.user)" in corps and "user=connection.user" in corps, "borne a ce que le compte pilote"
     assert '"unauthorized"' in corps and "_relayer(connection, msg, err)" in corps, "un refus nomme son code"
-    assert "await robots.async_etat(connection.user)" in ws, "l'etat se lit sous les droits du compte"
+    assert "_etat(par_compte=True)" in declaration(ws, "Commande(WS_ROB_ETAT,"), "l'etat se lit sous les droits du compte"
 
 
 # ── Les pieces sans rien configurer (chantier IoT, tranche robots 2, 19/10 ; ADR 0218) ───────────────────────────────────────────
@@ -1790,9 +1796,13 @@ def test_designer_refuse_sans_rien_ecrire_et_la_commande_est_aux_administrateurs
     assert lancer(r.store.async_get_shared("loggia_entities")) == ["pas", "un", "objet"]
     # Le composant : la commande existe, reservee aux administrateurs, enregistree, et relaie le refus par son code.
     ws = (RACINE / "custom_components" / "loggia" / "websocket_api.py").read_text(encoding="utf-8")
-    assert 'WS_ROB_SCRIPTS = "loggia/robots/scripts"' in ws and "websocket_api.async_register_command(hass, handle_rob_scripts)" in ws
-    corps = ws[ws.index('vol.Required("type"): WS_ROB_SCRIPTS'):ws.index("# ── Le distributeur de croquettes")]
-    assert "@websocket_api.require_admin" in corps and "_relayer(connection, msg, err)" in corps
+    from conftest import declaration
+
+    # ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : une ligne de `COMMANDES`, et son gestionnaire.
+    assert 'WS_ROB_SCRIPTS = "loggia/robots/scripts"' in ws
+    assert "acces=ADMIN" in declaration(ws, "Commande(WS_ROB_SCRIPTS, handle_rob_scripts,")
+    corps = ws[ws.index("async def handle_rob_scripts"):ws.index("# ── Le distributeur de croquettes")]
+    assert "_relayer(connection, msg, err)" in corps
     assert "robots.async_designer_script(msg[\"role\"], msg[\"script\"]" in corps
 
 
@@ -1963,8 +1973,11 @@ def test_localiser_se_decide_au_serveur_son_script_s_il_repond_sinon_locate(cree
     assert r.hass.services.appels == []
     # Le schema de `loggia/robots/lancer` l'accepte, et le relaie.
     ws = (RACINE / "custom_components" / "loggia" / "websocket_api.py").read_text(encoding="utf-8")
-    corps = ws[ws.index('vol.Required("type"): WS_ROB_LANCER'):ws.index('vol.Required("type"): WS_ROB_SCRIPTS')]
-    assert 'vol.Optional("localiser"): bool' in corps and '("script", "role", "localiser")' in corps
+    from conftest import declaration
+
+    # ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : le schema est dans la ligne de `COMMANDES`.
+    assert 'vol.Optional("localiser"): bool' in declaration(ws, "Commande(WS_ROB_LANCER,")
+    assert '("script", "role", "localiser")' in ws[ws.index("async def handle_rob_lancer"):]
 
 
 @pytest.mark.parametrize("muet", ["unavailable", "unknown"])

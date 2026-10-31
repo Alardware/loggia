@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 // Le stockage local de l'écran : la copie de `loggia_alertes` que `cfgSet` y laisse (state.js).
 const LS = new Map();
@@ -127,7 +128,7 @@ test('la bascule de la fiche universelle retire son avance sur un refus ; l’en
   const FC = readFileSync(new URL('../src/fichecommune.jsx', import.meta.url), 'utf8');
   assert.ok(FC.includes("commanderService(hass, r.id, dom, on ? 'turn_off' : 'turn_on', { entity_id: r.id }, () => poser(null))"),
     'le rappel `surEchec` défait la bascule');
-  const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  const APP = MONOLITHE;
   assert.ok(APP.includes('useEffect(() => surVanne(setFichePrise), []);'), 'monté il s’inscrit, démonté il se retire');
   assert.ok(!/^\s*surVanne\(setFichePrise\);/m.test(APP), 'plus d’inscription pendant le rendu');
 });

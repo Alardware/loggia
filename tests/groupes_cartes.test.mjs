@@ -22,6 +22,7 @@ import { indexOf } from './fixtures.mjs';
 import { monter } from './crochets.mjs';
 import { maisonGroupes, ctxDe } from './maison_capteurs.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -41,7 +42,7 @@ const G = await import('../src/groupes.js');
 const FG = await import('../src/fichegroupe.jsx');
 const J = await import('../src/journee.jsx');
 const { comptesSecurite } = await import('../src/attention.js');
-const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+const APP = MONOLITHE;
 
 const PIECES = ['Séjour', 'Chambre', 'Cuisine'];
 const heure = (iso) => String(iso).slice(11, 16);

@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 import {
   CLASSES_PORTE, CLASSES_FENETRE, CLASSES_MOUVEMENT, CLASSES_SURETE, SEUIL_CO2, NIVEAUX, ICONES_ATTENTION,
   familleOuvrant, comptesSecurite, tuilesSecurite, pointsAttention, niveauMax, resumeAttention, couleurNiveau, iconePoint, motsSurete,
@@ -14,7 +15,7 @@ import {
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const police = readFileSync(join(RACINE, 'public', 'fonts', 'uicons-regular-rounded.css'), 'utf8');
-const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const app = MONOLITHE;
 const source = readFileSync(join(RACINE, 'src', 'attention.js'), 'utf8');
 
 const dansPolice = (ic) => police.includes('.fi-rr-' + ic + ':before');
@@ -49,7 +50,8 @@ test('les constantes : classes, seuil et niveaux', () => {
   assert.equal(SEUIL_CO2, 1400, 'le palier « Élevé » des captures du 19/09');
   assert.deepEqual(NIVEAUX, ['danger', 'alerte', 'info']);
   // ASSERTION MODIFIÉE (audit du 19/10, M16) : `airPalier` est parti ; la bannière et le badge lisent la table (`zoneMesure('co2')`).
-  assert.ok(!app.includes('function airPalier') && app.includes("zoneMesure('co2', co2)"), 'la bannière lit la table de confort.js');
+  // ASSERTION MODIFIÉE (30/10, G1-D5) : la table juge le chiffre écrit — le CO₂ arrondi à l'unité (`arrondiMesure`).
+  assert.ok(!app.includes('function airPalier') && app.includes("zoneMesure('co2', arrondiMesure('co2', co2))"), 'la bannière lit la table de confort.js');
 });
 
 test('familleOuvrant : portes, fenêtres, rien', () => {

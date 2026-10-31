@@ -14,6 +14,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const main = lire('src', 'main.jsx');
@@ -41,7 +42,7 @@ test('GitHub Pages publie la démo depuis main', () => {
 });
 
 test('la démo ne nomme pas un serveur qu’elle n’a pas', () => {
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   assert.ok(main.includes('window.__loggiaDemo = true;'));
   assert.ok(app.includes("if (typeof window !== 'undefined' && window.__loggiaDemo) return tr('maison de démonstration');"));
   assert.ok(lire('src', 'langues', 'en.js').includes("'maison de démonstration': 'demo home',"));

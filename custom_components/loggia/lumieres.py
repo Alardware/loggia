@@ -27,8 +27,9 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.core import HomeAssistant, callback
 
 from .const import DOMAIN
-from .lumieres_calcul import (clore_demarrage, contexte, elaguer, fiche_neuve, fin_demarrage, garder_liens, lien_de,
-                              lire_carnet, noter, sans_doute_demarrage, sans_rallumage_en_doute, veille_a_minuit)
+from .lumieres_calcul import (annoncer_fondu, clore_demarrage, contexte, elaguer, fiche_neuve, fin_demarrage,
+                              garder_liens, lien_de, lire_carnet, noter, sans_doute_demarrage, sans_fondu,
+                              sans_rallumage_en_doute, veille_a_minuit)
 from .lumieres_maison import (CLE_ENTITES, CLE_INTERRUPTEURS, async_interrupteurs_declares, lire_registre,
                               lumieres_de_la_maison)
 from .regles import demarrer
@@ -349,7 +350,8 @@ class LoggiaLumieres:
         lien = lien_de(self._liens, getattr(ctx, "id", None), getattr(ctx, "parent_id", None), quand)
         avant = self.carnet.get(haid) or fiche_neuve()
         apres = noter(avant, getattr(etat, "state", None), getattr(etat, "attributes", None), quand,
-                      contexte(getattr(ctx, "user_id", None), lien), demarrage=self._fenetre_demarrage)
+                      contexte(getattr(ctx, "user_id", None), lien), demarrage=self._fenetre_demarrage,
+                      origine=getattr(ctx, "id", None))
         if apres != avant:
             self.carnet[haid] = apres
             # Une note, ou un changement de ce que la lampe etait (`vu`) : l'ecriture
@@ -357,6 +359,22 @@ class LoggiaLumieres:
             # 10 K : le fichier entier ne se reecrit pas pour si peu.
             presse = any(apres[k] != avant[k] for k in ("vu", "niveau_a", "evenements"))
             self._programmer_ecriture(DELAI_ECRITURE_S if presse else DELAI_ECRITURE_LENT_S)
+
+    @callback
+    def annoncer_fondu(self, haids: Any, duree: Any, eteindre: bool, qui: Any = None, origine: Any = None) -> None:
+        """Un fondu que Loggia demande MAINTENANT a ces lampes (un scenario, ADR
+        0304), au nom du compte `qui`, par l'ordre de contexte `origine` (`Context.id`,
+        que portent ses premiers paliers) : le carnet ne note pas ses paliers
+        (`lumieres_calcul.annoncer_fondu`). Appele AVANT l'ordre, dont les etats
+        suivent. Une lampe que le carnet ne suit pas est ignoree ; rien ne
+        s'ecrit - un fondu ne dure que quelques minutes."""
+        if self._arrete:
+            return
+        maintenant = time.time()
+        for haid in haids if isinstance(haids, (list, tuple, set)) else ():
+            if haid in self.suivies:
+                self.carnet[haid] = annoncer_fondu(self.carnet.get(haid) or fiche_neuve(), maintenant, duree,
+                                                   eteindre, qui, origine)
 
     # ── La fenetre de demarrage (doute D1) ─────────────────────────────────
     def _poser_fin_demarrage(self, demarre: float | None) -> None:
@@ -475,7 +493,8 @@ class LoggiaLumieres:
         # demarrage s'y ecrit telle qu'avant son silence, sans le doute : un redemarrage
         # en pleine fenetre repart de ce qu'elle etait (`sans_doute_demarrage`, D1).
         maintenant = time.time()
-        dit = {h: sans_rallumage_en_doute(sans_doute_demarrage(f), maintenant) for h, f in self.carnet.items()}
+        # Un fondu annonce (ADR 0304) ne s'ecrit pas non plus : il ne dure que quelques minutes.
+        dit = {h: sans_rallumage_en_doute(sans_doute_demarrage(sans_fondu(f)), maintenant) for h, f in self.carnet.items()}
         try:
             await self._store_etat().async_save(copy.deepcopy(dit))
         except Exception:  # noqa: BLE001

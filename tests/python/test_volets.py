@@ -968,13 +968,17 @@ def test_le_composant_transmet_le_socle_aux_volets():
     texte = src.read_text(encoding="utf-8")
     # La GARDE aussi, pas seulement la ligne : desarmee, le socle n'est jamais
     # cree, la ligne reste pourtant lisible dans le fichier, et le test passe.
-    assert 'if not data.get("regles") and data.get("store"):' in texte, \
+    # ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : les modules naissent d'une table, `MODULES`, et
+    # d'une seule boucle : la garde est celle de la boucle, la ligne celle de la table.
+    assert "if data.get(module.cle) or not all(data.get(r) for r in module.requis):" in texte, \
         "la garde du socle a saute : il ne serait plus cree"
-    assert 'data["regles"] = Regles(hass, data["store"])' in texte, \
+    assert 'Module("regles", "Regles", ("store",), ("store",),' in texte, \
         "le socle n'est plus cree"
-    assert 'LoggiaVolets(hass, data["store"], data.get("regles"))' in texte,         "les volets ne recoivent plus le socle"
+    assert 'Module("volets", "LoggiaVolets", _REGLES, _REGLES,' in texte and '_REGLES = ("store", "regles")' in texte, \
+        "les volets ne recoivent plus le socle"
     # Et il naît AVANT eux, sinon ils recevraient None.
-    assert texte.index('data["regles"] = Regles') < texte.index("LoggiaVolets(hass"),         "le socle est cree apres les volets : ils recevraient None"
+    assert texte.index('Module("regles",') < texte.index('Module("volets",'), \
+        "le socle est cree apres les volets : ils recevraient None"
 
 
 PLAN = {"actif": True, "jours": [0, 1, 2, 3, 4, 5, 6]}

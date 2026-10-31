@@ -19,8 +19,9 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const app = MONOLITHE;
 /* Les libelles vivent dans BARRE_VUES depuis le 10/10, juste au-dessus du
    composant : la barre y choisit ses entrees au lieu de les ecrire en dur. */
 const debut = app.indexOf('const BARRE_VUES = ()');
@@ -57,11 +58,13 @@ test('le polonais garde ses mots : aucune forme courte, ni aucune autre écritur
 
 test('une case ne rétrécit pas sous son libellé tant que le texte reste lisible', () => {
   assert.ok(nav.includes("flex: corps.cap ? '1 1 auto' : 1, minWidth: corps.cap ? 0 : 'auto', ...(corps.cap ? { maxWidth: corps.cap } : {}),"));
-  assert.ok(nav.includes("padding: '9px 2px 7px'"), '2 px de marge au lieu de 4');
+  assert.ok(nav.includes("padding: '9px ' + corps.marge + 'px 7px'"), 'la marge de la case vient de la mesure');
+  // Lot 7 de l'audit du 28/10 (V1) : 2 px de part et d'autre, 3 sous 360 px — 6 px entre deux libellés au lieu de 4.
+  assert.ok(nav.includes('const marge = nav.clientWidth <= 360 ? 3 : 2;') && nav.includes('const place = nav.clientWidth - autres - 2 * marge * libelles.length - 2;'), 'la place des libellés compte la marge');
   assert.ok(nav.includes('fontSize: corps.px,'));
   assert.ok(nav.includes('const px = Math.max(9.5, Math.min(11, Math.floor(110 * place / naturel) / 10));'), 'le corps s’ajuste de 11 à 9,5 px');
   assert.ok(nav.includes('if (naturel * px / 11 > place) {'), 'la coupe « … » seulement sous 9,5 px');
-  assert.ok(nav.includes('if (tri[i] > part) { cap = Math.floor(part) + 4; break; }'), 'les courts entiers, les longs se partagent le reste');
+  assert.ok(nav.includes('if (tri[i] > part) { cap = Math.floor(part) + 2 * marge; break; }'), 'les courts entiers, les longs se partagent le reste');
   assert.equal((nav.match(/<span data-libelle="" style=\{libelle\}>/g) || []).length, 2, 'les cinq vues et le Menu');
   assert.ok(nav.includes('if (!nav.clientWidth) return;'), 'cachée, elle ne mesure rien');
   assert.ok(nav.includes("polices.addEventListener('loadingdone', ajuster)"), 'remesurée quand la police arrive');

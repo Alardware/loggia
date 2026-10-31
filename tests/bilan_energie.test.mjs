@@ -24,14 +24,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 // `i18n.js` résout sa langue à l'import : la fixer AVANT (règle du dépôt).
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 const { consoJourKwh, autosuffisance, resumeEnergie } = await import('../src/bilan.js');
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const APP = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES).replace(/\r\n/g, '\n');
+const APP = (MONOLITHE + VUES_SORTIES).replace(/\r\n/g, '\n');
 
 /** Le CODE d'une fonction d'App.jsx, sans ses commentaires. */
 const code = (debut) => {
@@ -162,7 +162,9 @@ test('la notification « Surplus solaire » ne lit qu’une puissance, jamais l�
   // Relecture du 03/10 : l’index d’export (850 kWh) passait le seuil de 100 W
   // en permanence, la nuit comprise.
   const n = code('function deriveNotifs(');
-  assert.ok(n.includes('const net = wattsOf(EH.consoNow);'));
+  /* ASSERTION MODIFIÉE (30/10, G3-D3 ; relecture, point 6) : le flux net se lit par ses parts, toujours une puissance en watts — dans la
+   * FICHE seule : le flux net découvert ne déclenche pas la notification. */
+  assert.ok(n.includes("const net = sommeLue(idsDe(ficheEnergie(), 'consoNow'), wattsOf);"));
   assert.ok(n.includes('const sur = net != null ? Math.max(0, -net) : wattsOf(EH.injectionNow || EH.surplusNow);'));
   assert.ok(!n.includes('injectionJour'), 'un compteur d’énergie comparé à un seuil en watts');
 });

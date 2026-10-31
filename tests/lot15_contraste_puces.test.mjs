@@ -18,10 +18,11 @@ import { fileURLToPath } from 'node:url';
 import { lireCouleur, contraste, composer, garde, SEUILS } from '../src/contraste.js';
 import * as STYLES from '../src/styles.js';
 
+import { PIECES_DU_MONOLITHE, MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const NL = String.fromCharCode(10);
-const APP = lire('src', 'App.jsx');
+const APP = MONOLITHE;
 const bloc = (src, debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = src.indexOf(fin, d + 1); return src.slice(d, f < 0 ? undefined : f); };
 const sources = (dir) => readdirSync(dir).flatMap(n => { const p = join(dir, n); return statSync(p).isDirectory() ? sources(p) : /\.(jsx?|mjs)$/.test(n) ? [p] : []; });
 
@@ -32,7 +33,7 @@ test('aucun texte quasi noir sur le fond d’accent — sauf deux icônes', () =
     lire(...nom.split('/')).split(NL).forEach((l, i) => {
       if (l.indexOf('#06121f') < 0) return;
       // Une icône seule dans sa case (la coche du composeur) : 3:1 lui suffit.
-      if (nom === 'src/App.jsx' && l.includes("<Fi i={on ? 'check' : 'plus'} size={11} /></span>")) return;
+      if (PIECES_DU_MONOLITHE.includes(nom.slice(4)) && l.includes("<Fi i={on ? 'check' : 'plus'} size={11} /></span>")) return;
       // La coche de l'accueil, son pendant ; et le logo « O » sur son dégradé.
       if (nom === 'src/Onboarding.jsx' && (l.includes('<Fi i="check" size={11} color="#06121f" />') || l.includes("linear-gradient(135deg,var(--o-ok),var(--o-accent))"))) return;
       // L'écran d'erreur : ses couleurs sont fixes, le thème n'a peut-être pas chargé.

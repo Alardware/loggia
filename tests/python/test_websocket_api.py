@@ -9,6 +9,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from conftest import declaration
+
 RACINE = Path(__file__).resolve().parents[2]
 SOURCE = (RACINE / "custom_components" / "loggia" / "websocket_api.py").read_text(encoding="utf-8")
 
@@ -34,6 +36,13 @@ ADMIN_SEULEMENT = [
     # fuite », dans la popup de la vanne - `actions.vanne.actif` de
     # `loggia_alertes`, une cle de la maison.
     "WS_EAU_REGLE",
+    # ASSERTION MODIFIEE (29/10, versions ; ADR 0285) : les versions precedentes
+    # de la configuration. Les lister montre qui a ecrit quand ; en rendre une
+    # remplace la configuration de toute la maison, comme l'import.
+    "WS_VER_LISTE", "WS_VER_RENDRE",
+    # ASSERTION MODIFIÉE (30/10, G2-1 ; ADR 0301) : qui recoit quoi — les personnes, leurs telephones et
+    # les corrections de `loggia_alertes`, que seuls les administrateurs corrigent.
+    "WS_NOT_DESTINATAIRES",
 ]
 # Ce qui se LIT, ou se fait, depuis tout compte connecte — a dessein.
 OUVERTES = [
@@ -64,7 +73,8 @@ OUVERTES = [
     # LECTURE du compte, comme `etat`.
     "WS_CHA_HISTORIQUE",
     # Les manoeuvres d'un volet (chantier Volets, spec 6.5) : des lignes du
-    # journal, que `regles/etat` donne deja entier a tout compte.
+    # journal, sous les droits de lecture du compte, comme `regles/etat`
+    # depuis le 28/10 (ADR 0279).
     "WS_VOL_MANOEUVRES",
     # L'etat des prises (chantier Prises, spec 6.1) : la carte et la popup
     # d'une prise, de tout compte - comme l'etat des volets.
@@ -83,6 +93,9 @@ OUVERTES = [
     # ASSERTION MODIFIEE (etape 3 IoT, 25/10 ; I28) : le carnet de l'eau se lit
     # de tout compte, sous ses droits de LECTURE - comme celui des lumieres.
     "WS_EAU_ETAT",
+    # ASSERTION MODIFIÉE (30/10, G2-1 ; ADR 0301) : « C'est sorti » depuis le bandeau de l'Accueil —
+    # sortir les bacs n'est pas un privilege ; il n'ecrit que le jour, dans la partie commune.
+    "WS_COL_SORTI",
 ]
 # Ce qui s'ouvre au CODE DE LA MAISON (chantier Mode enfant, E2 B) : les gestes
 # du parent. Pas de `require_admin` - une tablette de famille porte un compte
@@ -95,10 +108,15 @@ CODE_OU_ADMIN = [
 
 
 def _bloc(constante: str) -> str:
-    """Les lignes entre la declaration `websocket_command` d'une commande et son `async def`."""
-    debut = SOURCE.index('vol.Required("type"): ' + constante)
-    fin = SOURCE.index("async def ", debut)
-    return SOURCE[debut:fin]
+    """La ligne de la table `COMMANDES` d'une commande : son gestionnaire, son schema, son acces, son module.
+
+    ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : les commandes etaient declarees
+    par leurs decorateurs (`websocket_command`, `require_admin`) ; elles sont
+    desormais des lignes d'une table, et `acces=ADMIN` y tient lieu de
+    `require_admin` - que la boucle d'inscription pose
+    (`test_le_registre_pose_require_admin`). Le niveau EXECUTE de chaque
+    commande est epingle par test_websocket_registre.py."""
+    return declaration(SOURCE, "Commande(%s," % constante)
 
 
 def _corps(nom: str, suivant: str) -> str:
@@ -106,8 +124,20 @@ def _corps(nom: str, suivant: str) -> str:
     return SOURCE[SOURCE.index("async def " + nom):SOURCE.index(suivant)]
 
 
+def test_le_registre_pose_require_admin():
+    """TEST AJOUTE (lot 8, 30/10 ; ADR 0291) : la boucle d'inscription pose les
+    memes decorateurs qu'avant, dans le meme ordre - `require_admin` en
+    dehors, puis le module, puis la garde du code de la maison."""
+    gestionnaire = SOURCE[SOURCE.index("def _gestionnaire("):SOURCE.index("def _code_ou_admin(")]
+    assert "if commande.acces == ADMIN:\n        gestionnaire = websocket_api.require_admin(gestionnaire)" in gestionnaire
+    assert gestionnaire.index("require_admin") < gestionnaire.index("websocket_api.websocket_command(")
+    assert gestionnaire.index('"not_available"') < gestionnaire.index("_code_ou_admin(ctx, connection, msg)")
+    assert "if commande.acces == CODE_OU_ADMIN and not _code_ou_admin(ctx, connection, msg):" in gestionnaire
+
+
 def test_toutes_les_commandes_sont_classees():
-    declarees = set(re.findall(r'vol\.Required\("type"\): (WS_[A-Z_]+)', SOURCE))
+    # ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : les commandes se lisent dans la table `COMMANDES`.
+    declarees = set(re.findall(r"Commande\((WS_[A-Z_]+),", SOURCE))
     # ASSERTION MODIFIEE (chantier Mode enfant, tache 3) : un troisieme regime,
     # le code de la maison ou un administrateur.
     assert declarees == set(ADMIN_SEULEMENT) | set(OUVERTES) | set(CODE_OU_ADMIN), \
@@ -115,10 +145,11 @@ def test_toutes_les_commandes_sont_classees():
 
 
 def test_ecrire_la_maison_reste_aux_administrateurs():
+    # ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : `acces=ADMIN` dans la table, au lieu du decorateur.
     for c in ADMIN_SEULEMENT:
-        assert "@websocket_api.require_admin" in _bloc(c), c + " a perdu son require_admin"
+        assert "acces=ADMIN" in _bloc(c), c + " a perdu son require_admin"
     for c in OUVERTES:
-        assert "@websocket_api.require_admin" not in _bloc(c), c + " est devenue reservee : une tablette de famille ne l'atteint plus"
+        assert "acces=" not in _bloc(c), c + " est devenue reservee : une tablette de famille ne l'atteint plus"
 
 
 def test_le_mode_enfant_s_ouvre_au_code_de_la_maison():
@@ -128,18 +159,16 @@ def test_le_mode_enfant_s_ouvre_au_code_de_la_maison():
     porte le code que l'ecran traduit deja (`code_admin_requis`). Les gestes de
     la chambre passent par les droits de PILOTAGE du compte, et l'etat par ses
     droits de LECTURE. Le profil se nomme `profil`, jamais `id`."""
-    garde = SOURCE[SOURCE.index("def _code_ou_admin(connection, msg)"):SOURCE.index("async def handle_enf_etat")]
+    # ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : la garde est posee par la boucle d'inscription pour chaque ligne
+    # `acces=CODE_OU_ADMIN` de la table, au lieu d'un appel en tete de chaque gestionnaire ; l'etat passe par `_etat`.
+    garde = SOURCE[SOURCE.index("def _code_ou_admin(ctx: Contexte, connection, msg)"):SOURCE.index("# ── Les gestionnaires communs")]
     assert "connection.user.is_admin" in garde and "laissez_passer.valide(connection.user.id)" in garde
     assert '"code_admin_requis"' in garde, "le refus nomme son code, l'ecran le traduit"
-    suivants = {"handle_enf_config": "async def handle_enf_lever", "handle_enf_lever": "async def handle_enf_repondre",
-                "handle_enf_repondre": "async def handle_enf_demander"}
     for c in CODE_OU_ADMIN:
-        assert "@websocket_api.require_admin" not in _bloc(c), c + " est devenue reservee : le code de la maison ne l'ouvre plus"
-        nom = "handle_" + c[3:].lower()
-        assert "_code_ou_admin(connection, msg)" in _corps(nom, suivants[nom]), nom + " a perdu la garde du code"
-    assert "await enfant.async_etat(connection.user)" in _corps("handle_enf_etat", "async def handle_enf_config")
+        assert "acces=CODE_OU_ADMIN" in _bloc(c), c + " a perdu la garde du code, ou est devenue reservee"
+    assert "_etat(par_compte=True)" in _bloc("WS_ENF_ETAT")
     for nom, suivant in (("handle_enf_demander", "async def handle_enf_dormir"),
-                         ("handle_enf_dormir", "# ── Suivre la configuration")):
+                         ("handle_enf_dormir", "# ── Les versions precedentes")):
         corps = _corps(nom, suivant)
         assert "controle=controle_de(connection.user)" in corps, nom + " ne respecte pas les droits de pilotage"
         assert '"unauthorized"' in corps and "_relayer(connection, msg, err)" in corps
@@ -149,23 +178,26 @@ def test_le_mode_enfant_s_ouvre_au_code_de_la_maison():
 
 
 def test_chaque_commande_est_enregistree():
-    attendus = set()
+    # ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : une seule boucle inscrit toute la table ; chaque commande y a UNE
+    # ligne. L'inscription EXECUTEE des 57 est epinglee par test_websocket_registre.py.
+    assert "for commande in COMMANDES:\n        websocket_api.async_register_command(hass, _gestionnaire(ctx, commande))" in SOURCE
     # ASSERTION MODIFIEE (chantier Mode enfant, tache 3) : les trois regimes.
-    for c in ADMIN_SEULEMENT + OUVERTES + CODE_OU_ADMIN:
-        nom = "handle_" + c[3:].lower()
-        attendus.add(nom)
-        assert f"websocket_api.async_register_command(hass, {nom})" in SOURCE, nom + " n'est pas enregistree"
+    attendus = ADMIN_SEULEMENT + OUVERTES + CODE_OU_ADMIN
     # ET DANS L'AUTRE SENS (24/09, plan S7) : une commande retiree laissait son
     # enregistrement derriere elle, et le composant levait un NameError au
     # demarrage — que ce fichier ne voyait pas, faute d'appeler la fonction.
-    inscrits = set(re.findall(r"async_register_command\(hass, (handle_[a-z_]+)\)", SOURCE))
-    assert inscrits == attendus, "enregistrement orphelin : " + repr(sorted(inscrits - attendus))
+    lignes = re.findall(r"Commande\((WS_[A-Z_]+),", SOURCE)
+    assert sorted(lignes) == sorted(attendus), "ligne orpheline ou en double : " + repr(sorted(set(lignes) ^ set(attendus)))
 
 
 def test_le_code_administrateur_ne_sort_jamais_du_serveur():
-    assert "await store.async_get_code_admin()" in SOURCE
+    # ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : le magasin est celui du contexte des gestionnaires.
+    assert "await ctx.store.async_get_code_admin()" in SOURCE
     assert "hass.async_add_executor_job(verifier, pin, enregistrement)" in SOURCE, "PBKDF2 hors de la boucle"
-    assert "hmac.compare_digest(pin.encode(\"utf-8\"), CODE_DEFAUT.encode(\"utf-8\"))" in SOURCE, "le code par defaut se compare a temps constant"
+    # ASSERTION MODIFIEE (audit du 28/10, H1 ; ADR 0279) : il n'y a plus de code par defaut a comparer. Jamais defini, rien ne
+    # passe, et le refus se nomme.
+    assert "CODE_DEFAUT" not in SOURCE, "un code par defaut ouvre encore le laissez-passer"
+    assert '"code_non_defini"' in SOURCE, "un code jamais defini se refuse sans dire pourquoi"
     assert 'connection.send_result(msg["id"], {"ok": False, "bloque": attente})' in SOURCE, "un compte bloque apprend combien de temps, pas pourquoi il a rate"
     assert "limiteur.rate(uid)" in SOURCE and "limiteur.reussi(uid)" in SOURCE
     corps = SOURCE[SOURCE.index("async def handle_pin_verifier"):SOURCE.index("async def handle_pin_definir")]
@@ -199,12 +231,15 @@ def test_l_etat_du_distributeur_passe_le_compte_et_le_detail():
     par les droits du compte — c'est `connection.user` qui le porte, jamais un
     champ du client. `detail` (la fiche ouverte) est le seul cas ou la Tuya
     officielle est interrogee."""
-    corps = SOURCE[SOURCE.index("async def handle_dis_etat"):SOURCE.index("async def handle_dis_config")]
+    corps = SOURCE[SOURCE.index("async def handle_dis_etat"):SOURCE.index("# ── Le chauffage")]
     assert re.search(r"distributeurs\.async_etat\(\s*connection\.user, detail=bool\(msg\.get\(\"detail\"\)\)\)", corps)
     assert 'vol.Optional("detail", default=False): bool' in _bloc("WS_DIS_ETAT")
-    config = SOURCE[SOURCE.index("async def handle_dis_config"):SOURCE.index("# ── Le chauffage")]
+    # ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : `config` passe par le gestionnaire commun `_config`, qui relaie le
+    # refus et rend l'etat sous les droits du compte.
+    assert '_config(etat="compte")' in _bloc("WS_DIS_CONFIG")
+    config = SOURCE[SOURCE.index("def _config("):SOURCE.index("# ── La configuration")]
     assert "_relayer(connection, msg, err)" in config, "trop de repas perd son code"
-    assert 'await distributeurs.async_enregistrer(msg["patch"])' in config
+    assert 'await module.async_enregistrer(msg["patch"])' in config
 
 
 def test_le_chauffage_borne_la_main_et_garde_l_ete():
@@ -216,7 +251,8 @@ def test_le_chauffage_borne_la_main_et_garde_l_ete():
     assert "controle = controle_de(connection.user)" in main
     assert "par=connection.user.id" in main
     assert "_relayer(connection, msg, err)" in main, "un mode refuse perd son code"
-    maison = SOURCE[SOURCE.index("async def handle_cha_maison"):SOURCE.index("async def handle_cha_config")]
+    # ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : `config` est une ligne de la table ; le corps suivant est l'historique.
+    maison = SOURCE[SOURCE.index("async def handle_cha_maison"):SOURCE.index("# L'historique d'un chauffage")]
     assert "admin=bool(connection.user.is_admin)" in maison
     assert '"not_admin"' in maison
     assert 'vol.Required("chauffage")' in _bloc("WS_CHA_MAIN"), "le chauffage se nomme `chauffage`, jamais `id`"

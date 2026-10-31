@@ -20,7 +20,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const src = readFileSync(join(RACINE, 'src', 'views', 'volets.jsx'), 'utf8');
@@ -447,7 +447,7 @@ test('sur un danger, la maison réagit — et cela se règle à côté du télé
 });
 
 test('la fiche volet n’a plus la grille de modes : la bascule suffit', () => {
-  const app = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
+  const app = (MONOLITHE + VUES_SORTIES);
   const debut = app.indexOf('function RoomCoverSheet(');
   const fin = app.indexOf('function RoomClimateSheet(', debut);
   assert.ok(debut > 0 && fin > debut, 'la fiche volet précède la fiche thermostat');
@@ -464,7 +464,7 @@ test('la fiche volet n’a plus la grille de modes : la bascule suffit', () => {
 });
 
 test('la pièce n’a plus de journal d’activité, la Sécurité garde le sien', () => {
-  const app = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
+  const app = (MONOLITHE + VUES_SORTIES);
   const rv = app.indexOf('function RoomView(');
   const room = app.slice(rv, app.indexOf(String.fromCharCode(10) + 'function ', rv + 1));
   assert.ok(!room.includes('<RoomActivityCard'), 'plus de journal sous les appareils de la pièce');
@@ -472,7 +472,7 @@ test('la pièce n’a plus de journal d’activité, la Sécurité garde le sien
 });
 
 test('la glissière des cartes a retrouvé sa hauteur d’avant, sans changer de dessin', () => {
-  const app = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
+  const app = (MONOLITHE + VUES_SORTIES);
   const j = app.indexOf('function RmJauge(');
   const jauge = app.slice(j, app.indexOf(String.fromCharCode(10) + '}', j));
   // ASSERTION MODIFIÉE (chantier Lumières, tâche 4) : l'épaisseur devient un réglage (`piste`, 24 px par défaut) ; la fiche d'une lumière la veut à 32.
@@ -483,7 +483,7 @@ test('la glissière des cartes a retrouvé sa hauteur d’avant, sans changer de
 });
 
 test('les boutons de la carte enceinte sont des icônes, pas des « » en texte', () => {
-  const app = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
+  const app = (MONOLITHE + VUES_SORTIES);
   /* ASSERTION MODIFIÉE (chantier Médias, tâche 4 ; M2 A, M13) : précédent et suivant ont quitté la carte pour la popup — leurs
    * chevrons avec eux. La carte garde UNE puce, lecture ou pause, à icône (14 px), dans son propre composant (`PuceLecture`). */
   const d = app.indexOf('function PuceLecture(');

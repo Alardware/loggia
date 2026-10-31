@@ -174,6 +174,15 @@ ACTIONS_DEFAUT: dict[str, Any] = {"actif": True, "lumieres": True, "volets": Tru
                                   "vanne": {"actif": True, "entite": ""}}
 
 
+@callback
+def etat_ecoute(data: Any) -> bool:
+    """Ce que les alertes ecoutent : les binaires et les alarmes, y compris
+    quand l'entite disparait (son danger doit se rendre). Le reste de la maison
+    ne reveille plus `_on_state` (28/10, ADR 0280)."""
+    haid = data.get("entity_id") if isinstance(data, dict) else None
+    return isinstance(haid, str) and haid.startswith(("binary_sensor.", "alarm_control_panel."))
+
+
 class LoggiaAlertes:
     """Ecoute les etats et pousse les alertes de surete configurees."""
 
@@ -220,7 +229,10 @@ class LoggiaAlertes:
         # On GARDE de quoi se taire : sans ce fil, l'ecoute survivait au
         # dechargement du composant et un rechargement en posait une seconde
         # (24/09, plan S7).
-        self._defait = hass.bus.async_listen("state_changed", self._on_state)
+        # Filtree AVANT le rappel (28/10, ADR 0280) : sans `event_filter`,
+        # `_on_state` tournait a chaque changement d'etat de la maison pour en
+        # rejeter presque tous.
+        self._defait = hass.bus.async_listen("state_changed", self._on_state, event_filter=etat_ecoute)
         # Un danger deja la quand Home Assistant demarre (audit du 19/10, H4) :
         # son premier etat n'a pas d'etat d'avant, et l'ecoute l'ignorait. On
         # attend que Home Assistant ait FINI de demarrer, comme fenetres.py,
@@ -490,11 +502,11 @@ class LoggiaAlertes:
         if len(noms) == 1:
             nom = noms[0][0]
             parti = await self._regles.prevenir("alertes", "muet", (gabarit(MSG_MUET), {"nom": nom}),
-                                                titre=TITRE, motif=motif)
+                                                titre=TITRE, motif=motif, pour="tous")
         else:
             nom = ", ".join(n for n, _ in noms)
             parti = await self._regles.prevenir("alertes", "muet", (gabarit(MSG_MUETS), {"nom": nom}),
-                                                titre=TITRE, motif=motif)
+                                                titre=TITRE, motif=motif, pour="tous")
         # Retenus — et ecrits — seulement si c'est parti (contre-relecture,
         # point B) : un telephone disparu ne doit pas les faire taire pour
         # toujours. Ils se rediront a leur prochain silence, ou au demarrage.
@@ -780,7 +792,7 @@ class LoggiaAlertes:
         # chaque langue, le nom de l'appareil vient de Home Assistant (ADR 0070).
         parti = await self._regles.prevenir(
             "alertes", categorie, (gabarit(message), {"nom": nom}), titre=TITRE,
-            critique=categorie in DANGER, motif=etat.entity_id)
+            critique=categorie in DANGER, motif=etat.entity_id, pour="tous")
         if parti:
             _LOGGER.info("Loggia : alerte %s envoyée pour %s", categorie, etat.entity_id)
 

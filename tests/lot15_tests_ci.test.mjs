@@ -106,12 +106,13 @@ test('ce que le moteur ne sait pas vérifier garde sa route directe, ENTIÈRE', 
   assert.deepEqual(h1.appels, [['media_player', 'play_media', lecture]]);
   assert.equal(r1.rendu, null, 'la route directe ne prétend pas savoir ce qui a été appliqué');
 
-  // Un champ que la capacité ne déclare pas (une transition) : la validation le
-  // perdrait, donc l'appel garde la route directe, transition comprise.
-  const fondu = { entity_id: 'light.salon', brightness_pct: 40, transition: 2 };
+  /* ASSERTION MODIFIÉE (30/10, G5-1) : la transition est désormais un champ que `set_brightness` DÉCLARE (ADR 0304) ; l'exemple
+   * d'un champ non déclaré devient un clignotement (`flash`). La règle ne change pas : la validation le perdrait, donc l'appel
+   * garde la route directe, flash compris. */
+  const eclair = { entity_id: 'light.salon', brightness_pct: 40, flash: 'short' };
   const h2 = fauxHass();
-  await rejetsPendant(() => commanderService(h2, 'light.salon', 'light', 'turn_on', fondu));
-  assert.deepEqual(h2.appels, [['light', 'turn_on', fondu]], 'la transition est tombée en chemin');
+  await rejetsPendant(() => commanderService(h2, 'light.salon', 'light', 'turn_on', eclair));
+  assert.deepEqual(h2.appels, [['light', 'turn_on', eclair]], 'le clignotement est tombé en chemin');
 
   // Sans entité désignée, pas de plan possible : la route directe aussi.
   const h3 = fauxHass();

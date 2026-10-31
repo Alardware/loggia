@@ -21,8 +21,9 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const app = MONOLITHE;
 const LANGUES = ['en', 'de', 'nl', 'it', 'es', 'pl'];
 const CATALOGUES = {};
 for (const l of LANGUES) CATALOGUES[l] = (await import(pathToFileURL(join(RACINE, 'src', 'langues', l + '.js')).href)).default;

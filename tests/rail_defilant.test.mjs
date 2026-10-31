@@ -21,13 +21,14 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bornesRail, AIR_HAUT, SANS_FIN } from '../src/railcolonne.js';
 
+import { MONOLITHE, importsDe, DASHBOARD } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282) ; DASHBOARD : l'Accueil en entier, ses hooks compris (ADR 0283)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = MONOLITHE;
 const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
 const theme = readFileSync(join(RACINE, 'src', 'theme.js'), 'utf8');
 const NL = String.fromCharCode(10);
 const bloc = (texte, debut, fin) => { const d = texte.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = texte.indexOf(fin, d + debut.length); return texte.slice(d, f < 0 ? undefined : f); };
-const home = bloc(src, 'function Dashboard(', NL + 'function ');
+const home = DASHBOARD;
 // En début de ligne : `.o-rail-cell {` est aussi la fin de `html.loggia-tactile .o-rail-cell {`.
 const regle = (sel) => bloc(css, NL + sel + ' {', '}');
 // Les blocs CSS dont le sélecteur parle du rail (commentaires retirés).
@@ -213,6 +214,7 @@ test('en mouvement réduit, l’en-tête ne glisse plus par-dessus la colonne (r
   const ligne = h.split(NL).find(l => l.includes('<header ref={hdrRef} className="loggia-hdr"'));
   assert.ok(ligne.includes("transition: REDUCE_MOTION ? 'none' : 'transform .3s ease'"), 'les deux bougent d’un coup');
   assert.ok(!ligne.includes("transition: 'transform"), 'plus de glissade en dur');
-  assert.ok(src.includes('  REDUCE_MOTION, Fi, Anim,'), 'importé');
+  // ASSERTION MODIFIÉE (ADR 0283) : l'en-tête est sorti d'App.jsx et importe lui-même ce qu'il lit.
+  assert.ok(importsDe(src, './ui.jsx').has('REDUCE_MOTION'), 'importé');
   assert.ok(css.includes('@media (prefers-reduced-motion: reduce) { .o-rail-cell { transition: none !important; } }'), 'la colonne, elle, saute déjà');
 });

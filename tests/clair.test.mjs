@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
@@ -23,7 +23,7 @@ const css = lire('src', 'index.css');
   /* + l'ecran de veille et la modale du code : sortis d'App.jsx le 23/09
    * (plan M1). Ce que ce fichier verifie n'a pas bouge, seulement son
    * adresse — on relit donc le monolithe ET ce qui en est sorti. */
-const app = (['App.jsx', 'ecranveille.jsx', 'pinmodal.jsx', 'theme.js'].map(f => lire('src', f)).join(String.fromCharCode(10)) + VUES_SORTIES);
+const app = ([MONOLITHE, ...['ecranveille.jsx', 'pinmodal.jsx', 'theme.js'].map(f => lire('src', f))].join(String.fromCharCode(10)) + VUES_SORTIES);
 
 const bloc = (debut) => { const i = css.indexOf(debut); return css.slice(i, css.indexOf('\n}', i)); };
 const jetons = (texte) => { const m = {}; for (const [, k, v] of texte.matchAll(/(--o-[a-z0-9-]+):\s*(#[0-9a-fA-F]{6})\b/g)) m[k] = v; return m; };

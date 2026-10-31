@@ -44,17 +44,11 @@ import {
 } from './voletsfiche.js';
 import { EnteteFiche, FicheOnglets, PanneauOnglet, PETITES_CAPITALES, filet, focaliser, JOURS_DERNIERS } from './fichecommune.jsx';
 import { LISERE } from './styles.js';
+import { PANNEAU, RANGEE, EN_BOUTON, TITRE, SOUS, ALERTE } from './fichekit.js';
 
-/* Les panneaux de sa maquette : le gris --o-s3, l'arrondi du thème, sans
- * ombre — et la bordure du réglage « Liserés » (LISERE), qui vaut pour tous. */
-const PANNEAU = { background: 'var(--o-s3)', border: LISERE, borderRadius: 'var(--o-radius,18px)', boxSizing: 'border-box', minWidth: 0 };
+// Une liste : le panneau des maquettes (fichekit.js), qui coupe ce qui déborde de ses coins.
 const LISTE = { ...PANNEAU, overflow: 'hidden' };
-const RANGEE = { display: 'flex', alignItems: 'center', gap: 12, width: '100%', boxSizing: 'border-box', padding: '12px 14px 12px 18px' };
-const EN_BOUTON = { border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', color: 'var(--o-text)', textAlign: 'left' };
-const TITRE = { display: 'block', fontSize: 14, fontWeight: 700 };
-const SOUS = { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 };
 const VALEUR = { fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap' };
-const ALERTE = { fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)' };
 // Un bouton carré de sa maquette (`ChipButton`) : le gris doux, sans bordure ; inerte à .4.
 const CARRE = (l, h, r, peut = true) => ({ width: l, height: h, flexShrink: 0, padding: 0, borderRadius: r, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)',
   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit', fontSize: 12, fontWeight: 700, opacity: peut ? 1 : 0.4, cursor: peut ? 'pointer' : 'default' });

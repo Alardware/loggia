@@ -45,6 +45,7 @@ import { createElement } from 'react';
 import { area, device, entity, state, states, ctxOf } from './fixtures.mjs';
 import { monter } from './crochets.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -61,7 +62,7 @@ register('data:text/javascript,' + encodeURIComponent([
 const { setLoggiaState } = await import('../src/state.js');
 const F = await import(new URL('../src/App.jsx?capteurs_sections', import.meta.url).href);
 const CS = await import('../src/capteurssections.jsx');
-const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+const APP = MONOLITHE;
 
 /* Une maison : le capteur de la chambre (CO₂, température, humidité, bruit, et un
  * diagnostic), un second CO₂ dans la chambre, le thermostat du salon et sa sonde,

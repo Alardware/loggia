@@ -50,7 +50,8 @@ const titres = () => ({ air: tr('Air'), confort: tr('Confort'), maison: trSens('
  * aussi, NEUTRES (M7) : les PM1 et PM10, l'indice, les COV en ppb ou en µg/m³ — que la table ne lit pas : ses bornes sont celles
  * d'un indice —, le dioxyde d'azote et l'ozone. La pression, sans jugement, reste dans Confort. */
 const AIR = ['co2', 'co', 'pm25', 'cov'];
-const AIR_SANS_TABLE = ['pm1', 'pm10', 'aqi', 'volatile_organic_compounds', 'volatile_organic_compounds_parts', 'nitrogen_dioxide', 'ozone'];
+// Un monoxyde dans une unité que la table ne sait pas ramener au ppm (G1-D6) : hors de la famille `co`, il reste dans Air, neutre.
+const AIR_SANS_TABLE = ['pm1', 'pm10', 'aqi', 'volatile_organic_compounds', 'volatile_organic_compounds_parts', 'nitrogen_dioxide', 'ozone', 'carbon_monoxide'];
 
 /** La section d'un objet d'Objets › Capteurs. `dehors(piece)` dit une pièce du dehors. */
 export function sectionDe(o, S, dehors) {

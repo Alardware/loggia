@@ -19,8 +19,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { composant, rendre } from './rendu.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const app = MONOLITHE;
 const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
 const NL = String.fromCharCode(10);
 const BS = String.fromCharCode(92);
@@ -231,7 +232,7 @@ test('le corps d’une carte de pièce n’a pas de marge : le volet s’aligne 
    * Sept cartes portaient cette marge, toutes inertes sauf celle-la. Les
    * retirer ne change rien la ou elles ne servaient pas, et repare le volet :
    * mesure apres, titre a 56 contre 57 et boutons a 135 contre 136. */
-  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const app = MONOLITHE;
   const marges = app.match(/marginTop: 14 \}\}>\n\s+<div style=\{RM_NAME\}/g) || [];
   assert.equal(marges.length, 0,
     'une carte de pièce a repris une marge sur son corps : elle débordera dès que son contenu remplira la carte');

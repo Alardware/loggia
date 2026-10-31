@@ -21,6 +21,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Les fichiers de `src/` dont le nom repond a `motif`, sous-dossiers compris.
@@ -67,7 +68,7 @@ test('aucune feuille de style ne fait glisser tous les defilements d’office', 
 });
 
 test('les deux defilements de l’audit lisent la preference', () => {
-  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const app = MONOLITHE;
   assert.ok(app.includes("if (el) el.scrollBy({ left: sens * el.clientWidth * 0.8, behavior: REDUCE_MOTION ? 'auto' : 'smooth' });"),
     'les fleches de la bande d’icones');
   assert.ok(app.includes("if (el && el.scrollIntoView) el.scrollIntoView({ behavior: REDUCE_MOTION ? 'auto' : 'smooth', block: 'start' });"),

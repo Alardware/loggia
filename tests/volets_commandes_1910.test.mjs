@@ -26,6 +26,7 @@ import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 // Retire le balisage jusqu'a ce qu'il n'en reste plus (CodeQL, PR #36).
 const sansBalises = (h) => { let t = h, p; do { p = t; t = t.replace(/<[^>]+>/g, ''); } while (t !== p); return t; }
 
@@ -55,7 +56,7 @@ const ENTETE = await import(new URL('../src/entetevolets.jsx', import.meta.url).
 const Fiche = (await import(new URL('../src/fichevolet.jsx', import.meta.url).href)).default;
 
 const lire = (chemin) => readFileSync(new URL('../' + chemin, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-const APP = lire('src/App.jsx') + lire('src/views/voletsplan.jsx'); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
+const APP = MONOLITHE + lire('src/views/voletsplan.jsx'); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
 const AU_REPOS = { repeter: () => 0, arreterMinuterie: () => {}, plusTard: () => 0, annuler: () => {} };
 const T = Date.parse('2026-10-12T15:00:00+02:00');
 const ISO = new Date(T - 3600000).toISOString();
@@ -342,7 +343,7 @@ test('point 11 — l’en-tête d’Objets : tous muets, pas « tous fermés » 
 });
 
 test('point 12 — le code mort est parti : la règle « restreignent », sa phrase, les commentaires périmés', () => {
-  const sources = ['src/voletsfiche.js', 'src/fichevolet.jsx', 'src/App.jsx', 'src/voletcourse.js'].map(lire).join('\n');
+  const sources = ['src/voletsfiche.js', 'src/fichevolet.jsx', 'src/voletcourse.js'].map(lire).concat(MONOLITHE).join('\n');
   assert.ok(!sources.includes("'restreignent'") && !sources.includes('JOURS_PROPRES'));
   assert.ok(!sources.includes("tr('La maison ne bouge pas ce jour-là')"));
   assert.ok(!APP.includes('programmation nocturne'), 'ni « Détail volet … programmation nocturne », ni la feuille des chambres');

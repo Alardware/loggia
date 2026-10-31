@@ -21,6 +21,7 @@ import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 // Retire le balisage jusqu'a ce qu'il n'en reste plus (CodeQL, PR #36).
 const sansBalises = (h) => { let t = h, p; do { p = t; t = t.replace(/<[^>]+>/g, ''); } while (t !== p); return t; }
 
@@ -47,7 +48,7 @@ const EnteteVolets = (await import(new URL('../src/entetevolets.jsx', import.met
 /* Les minuteries du magasin des courses, au repos : un rendu statique ne s'anime pas, et une
  * minuterie réelle garderait le processus du test en vie. */
 const AU_REPOS = { repeter: () => 0, arreterMinuterie: () => {}, plusTard: () => 0, annuler: () => {} };
-const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const APP = MONOLITHE.replace(/\r\n/g, '\n');
 
 const T = Date.parse('2026-10-12T15:00:00+02:00');
 const ISO = new Date(T - 3600000).toISOString();

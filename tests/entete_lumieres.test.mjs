@@ -17,6 +17,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { monter, horlogeFausse, documentFaux } from './crochets.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 // ui.jsx arme une image dès son chargement : Node n'a pas `requestAnimationFrame`.
 if (typeof globalThis.requestAnimationFrame !== 'function') {
@@ -28,7 +29,7 @@ const E = await import(new URL('../src/entetelumieres.jsx', import.meta.url).hre
 const L = await import('../src/lumieresetat.js');
 const { setLoggiaState } = await import('../src/state.js');
 const lire = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-const APP = lire('src/App.jsx'), CSS = lire('src/index.css');
+const APP = MONOLITHE, CSS = lire('src/index.css');
 
 const st = (id, state) => [id, { entity_id: id, state, last_changed: '2026-10-14T18:00:00.000Z', last_updated: '2026-10-14T18:00:00.000Z', attributes: { supported_color_modes: ['brightness'] } }];
 const S = Object.fromEntries([st('light.bureau', 'on'), st('light.ampoule', 'on'), st('light.veilleuse', 'on'), st('light.chambre', 'off'), st('light.morte', 'unavailable'), st('switch.applique', 'on')]);

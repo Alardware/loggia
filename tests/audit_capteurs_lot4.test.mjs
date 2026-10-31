@@ -19,6 +19,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { monter } from './crochets.mjs';
 import { maisonGroupes, ctxDe } from './maison_capteurs.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -44,7 +45,7 @@ const PL = await import('../src/plantes.js');
 const L = await import('../src/lectures.js');
 const PRES = await import('../src/views/presence.jsx');
 const lire = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
-const APP = lire('src/App.jsx');
+const APP = MONOLITHE;
 
 const PIECES = ['Séjour', 'Chambre', 'Cuisine'];
 const T = (h, mn = 0, j = 19) => new Date(2026, 9, j, h, mn).getTime();

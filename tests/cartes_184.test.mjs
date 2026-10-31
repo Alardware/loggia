@@ -24,11 +24,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES, DASHBOARD } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274) ; DASHBOARD : l'Accueil en entier, ses hooks compris (ADR 0283)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
-const src = (lire('src', 'App.jsx') + lire('src', 'views', 'voletsplan.jsx') + VUES_SORTIES); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
+const src = (MONOLITHE + lire('src', 'views', 'voletsplan.jsx') + VUES_SORTIES); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
 // Les commentaires CSS citent parfois des accolades : ils sortent avant de compter.
 const css = lire('src', 'index.css').replace(/\/\*[\s\S]*?\*\//g, '');
 
@@ -146,5 +146,5 @@ test('en édition, deux pointillés empilés gardent 2 px d’écart, comme sur 
   const ecart = Number(m[1]);
   assert.equal(8 - 2 * (ecart + 1), 2, 'espace entre les deux traits');
   // Même dosage que les pièces de l'Accueil, à la même rangée de 8.
-  assert.ok(fonction('Dashboard').includes("'--o-pointille-ecart': '" + ecart + "px'"), 'l’Accueil pose ' + ecart + ' px');
+  assert.ok(DASHBOARD.includes("'--o-pointille-ecart': '" + ecart + "px'"), 'l’Accueil pose ' + ecart + ' px');
 });

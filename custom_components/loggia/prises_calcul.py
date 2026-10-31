@@ -11,31 +11,24 @@ de la configuration porte ce nom (spec 6.1) : il ne s'ecrit qu'ici.
 """
 from __future__ import annotations
 
-import math
-import re
 from datetime import datetime
 from typing import Any
 
+from .entites import motif
+from .nombres import fini
 from .prises_types import TYPES
 
 CLE = "loggia_prises"
 # Un interrupteur, tel que Home Assistant l'ecrit. Lu par `fullmatch` (26/10) :
 # le `$` de Python accepte un `\n` final.
-INTERRUPTEUR = re.compile(r"^switch\.[a-z0-9_]+$")
+INTERRUPTEUR = motif("switch")
 # Ce qu'on peut imposer (P2) : les types de l'ecran, sauf la sirene, qui n'est
 # jamais une prise (P1).
 IMPOSABLES = tuple(t for t in TYPES if t != "siren")
 
 
-def nombre(x: Any) -> float | None:
-    """Un nombre fini, ou None — un booleen n'en est pas un."""
-    if isinstance(x, bool) or not isinstance(x, (int, float)):
-        return None
-    try:
-        valeur = float(x)
-    except OverflowError:
-        return None
-    return valeur if math.isfinite(valeur) else None
+# Un nombre fini, ou None — un booleen n'en est pas un (nombres.py, lot 8).
+nombre = fini
 
 
 def _interrupteur(haid: Any) -> bool:

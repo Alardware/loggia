@@ -454,3 +454,69 @@ def test_un_bouton_sans_fil_n_ouvre_ni_serrure_ni_alarme(module, creer):
     # Et ce qui ferme, ou ce qui n'ouvre rien, passe toujours.
     assert ("lock", "lock") in faits
     assert ("light", "toggle") in faits
+
+
+# ── Lot 8 de l'audit du 28/10, B3 : une liste blanche, et des gestes verifies a l'ecriture ──
+# TESTS AJOUTES (30/10). Les gestes de la maison au 30/10, releves dans sa configuration (trois boutons Zigbee2MQTT, dix
+# gestes ; les noms d'entites sont remplaces) : ils doivent tous rester permis.
+GESTES_DE_LA_MAISON = [
+    {"service": "light.turn_on", "data": {"entity_id": "light.a", "brightness_pct": 100, "rgb_color": [255, 200, 150]}},
+    {"service": "light.turn_on", "data": {"entity_id": "light.a", "brightness_step_pct": 10}},
+    {"service": "light.turn_on", "data": {"entity_id": "light.a", "brightness_step_pct": -10}},
+    {"service": "homeassistant.turn_on", "data": {"entity_id": "switch.b"}},
+    {"service": "homeassistant.turn_off", "data": {"entity_id": "switch.b"}},
+]
+# Les gestes que l'ecran propose (src/views/interrupteurs.jsx, GESTES), hors « Service libre ».
+GESTES_DE_L_ECRAN = ["homeassistant.toggle", "homeassistant.turn_on", "homeassistant.turn_off", "light.turn_on",
+                     "light.toggle", "scene.turn_on", "script.turn_on"]
+
+
+def test_les_gestes_de_la_maison_et_de_l_ecran_restent_permis(module, creer):
+    assert module.valider_gestes(GESTES_DE_LA_MAISON) == GESTES_DE_LA_MAISON
+    for service in GESTES_DE_L_ECRAN + ["loggia.scenario", "cover.close_cover", "media_player.media_play_pause",
+                                        "lock.lock", "alarm_control_panel.alarm_arm_away", "fan.toggle",
+                                        # Home Assistant met le service en minuscules : la casse ne fait pas refuser.
+                                        "Light.Turn_On", "input_text.set_value", "tts.speak",
+                                        "homeassistant.update_entity"]:
+        assert module.service_permis(service), service
+    i = creer()
+    for n, geste in enumerate(GESTES_DE_LA_MAISON):
+        lancer(i.async_affecter("z2m/Bouton", "b%d" % n, [geste], "Bouton"))
+    assert len(lancer(i.async_affectations())["z2m/Bouton"]["actions"]) == len(GESTES_DE_LA_MAISON)
+
+
+@pytest.mark.parametrize("service", [
+    "shell_command.purger", "hassio.host_reboot", "recorder.purge", "homeassistant.restart", "homeassistant.stop",
+    "homeassistant.reload_all", "python_script.x", "lock.unlock", "lock.open", "alarm_control_panel.alarm_disarm",
+    "light", "light.turn_on.x", "light.turn on", "", ".turn_on", "Lock.Unlock", "mqtt.publish", "sonos.join",
+])
+def test_un_service_hors_liste_se_refuse_a_l_ecriture_et_rien_ne_s_ecrit(module, creer, service):
+    i = creer()
+    with pytest.raises(ValueError) as refus:
+        lancer(i.async_affecter("z2m/Bouton", "single", [{"service": "light.toggle"}, {"service": service}], "Bouton"))
+    assert refus.value.code == "interrupteur_service_refuse"
+    assert refus.value.nomme == service, "le refus nomme le service apres les deux-points"
+    assert lancer(i.async_affectations()) == {}, "rien ne s'ecrit si un seul geste est refuse"
+
+
+@pytest.mark.parametrize("gestes", [
+    "light.toggle", [None], ["light.toggle"], [{}], [{"service": 3}], [{"service": "light.toggle", "data": []}],
+    [{"service": "light.toggle", "cible": "light.a"}],
+])
+def test_un_geste_mal_forme_se_refuse_par_son_code(creer, gestes):
+    i = creer()
+    with pytest.raises(ValueError) as refus:
+        lancer(i.async_affecter("z2m/Bouton", "single", gestes, "Bouton"))
+    assert refus.value.code == "interrupteur_geste_illisible"
+    assert lancer(i.async_affectations()) == {}
+
+
+def test_un_geste_hors_liste_deja_ecrit_ne_part_pas(creer):
+    """Une affectation ecrite avant la liste blanche, ou a la main : l'appui ne l'appelle pas, et le geste voisin part."""
+    i = creer({"z2m/Bouton": {"nom": "Bouton", "actions": {"single": [
+        {"service": "shell_command.purger", "data": {}},
+        {"service": "homeassistant.restart", "data": {}},
+        {"service": "light.toggle", "data": {"entity_id": "light.a"}},
+    ]}}})
+    lancer(i._async_executer("z2m/Bouton", "single"))
+    assert [(d, s) for d, s, _ in i.hass.services.appels] == [("light", "toggle")]

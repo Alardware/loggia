@@ -157,7 +157,10 @@ def test_chaque_lecture_qui_echoue_se_dit(fichier, attendu):
 
 def test_le_code_administrateur_s_essaie_un_compte_a_la_fois():
     src = (RACINE / "custom_components" / "loggia" / "websocket_api.py").read_text(encoding="utf-8")
-    assert "async with verrous_pin.setdefault(uid, asyncio.Lock()):" in src
+    # ASSERTION MODIFIEE (audit du 28/10, B4 ; ADR 0279) : un verrou par compte, qui s'en va quand plus personne ne l'attend
+    # (`VerrousParCompte`, tests/python/test_code_admin.py).
+    assert "verrous_pin = VerrousParCompte()" in src
+    assert "async with verrous_pin.de(uid):" in src
 
 
 def test_la_version_ne_relit_plus_le_manifeste_a_chaque_decouverte():

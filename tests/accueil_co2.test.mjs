@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 const A = await import('../src/air.js');
 const { WIDGETS_OPTION } = await import('../src/horloge.js');
@@ -108,7 +109,7 @@ test('le geste pour aérer : la ventilation de la veille, sinon les volets de la
 
 test('le branchement : en option dans le rail, rien sans capteur, la couleur dit l’état', () => {
   assert.deepEqual(WIDGETS_OPTION, ['heure', 'co2'], 'le calendrier les a quittes le 02/10 (decision 0132)');
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   assert.ok(app.includes("const ACC_RAIL = ['attention', 'heure', 'meteo', 'co2', 'moment', 'rappels', 'agenda'];"));
   /* Le seuil affiché est celui de la piece retenue, pas celui de la maison
    * (ADR 0044, son « non fait » — 25/09) : une piece peut avoir le sien, et

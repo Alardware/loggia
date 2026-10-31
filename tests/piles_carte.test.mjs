@@ -26,7 +26,7 @@ import { monter } from './crochets.mjs';
 import { maisonPiles, maisonPlantes, ctxDe, fusion } from './maison_capteurs.mjs';
 import { pilesMaison, pilesDeLaMaison, vuePiles, glyphePile } from '../src/piles.js';
 import { SEUILS_PILE, seuilsPile, reglerSeuilPile, oublierSeuilPile, niveauPile, couleurPile } from '../src/attention.js';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES, importsDe } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
@@ -48,7 +48,7 @@ const CS = await import('../src/capteurssections.jsx');
 const FG = await import('../src/fichegroupe.jsx');
 const { maisonCapteursDemo } = await import('../src/demo.js');
 const { registresDuComposant } = await import('../src/discovery.js');
-const APP = (readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8') + VUES_SORTIES);
+const APP = (MONOLITHE + VUES_SORTIES);
 const FC = readFileSync(new URL('../src/fichecapteur.jsx', import.meta.url), 'utf8');
 
 const PIECES = ['Entrée', 'Chambre', 'Salon', 'Cuisine', 'Bureau', 'Séjour'];
@@ -166,7 +166,12 @@ test('C32, C33 : Objets — une carte pour toutes les piles, dans Plantes et pil
   assert.ok(APP.slice(r, APP.indexOf('\n}\n', r)).includes('useHass(piles.map(p => p.id))') && !APP.slice(r, APP.indexOf('\n}\n', r)).includes('useSeuilPile('), 'la carte s’abonne à ses piles ; le seuil n’est pas le sien');
   const a = APP.indexOf('\nexport default function App(');
   const racine = APP.slice(a, APP.indexOf('\n}\n', a));
-  assert.ok(racine.includes('const hass = useHass(haKeys, noisyKeys);') && racine.indexOf('useSeuilPile(hass);') > racine.indexOf('const hass = useHass(haKeys, noisyKeys);'), 'la racine relit le seuil, après son relevé');
+  /* ASSERTION MODIFIÉE (ADR 0283) : la relecture du seuil vit dans un hook de la racine (`useConnexionApp`, app/hooks.jsx),
+   * qu'App() appelle APRÈS son relevé ; le hook la fait avec le `hass` qu'il reçoit. */
+  const h = APP.indexOf('\nfunction useConnexionApp(');
+  const crochet = APP.slice(h, APP.indexOf('\n}\n', h));
+  assert.ok(racine.includes('const hass = useHass(haKeys, noisyKeys);') && racine.indexOf('useConnexionApp({') > racine.indexOf('const hass = useHass(haKeys, noisyKeys);')
+    && /useConnexionApp\(\{[^}]*\bhass\b/.test(racine) && crochet.includes('useSeuilPile(hass);'), 'la racine relit le seuil, après son relevé');
   assert.equal(APP.split('useSeuilPile(').length - 1, 2, 'la définition, et UN appel : celui de la racine');
   const FGS = readFileSync(new URL('../src/fichegroupe.jsx', import.meta.url), 'utf8');
   assert.ok(!FGS.includes('reglerSeuilPile') && !FGS.includes('loggia/veilles/etat') && FGS.includes('const seuils = seuilsPile();'), 'la popup lit le seuil en vigueur, sans le régler ni relire les veilles');
@@ -235,7 +240,8 @@ test('C32 : une seule règle — le coin d’un capteur, la rangée Pile des fic
   assert.ok(APP.includes("const RangeePile = ({ n }) => (n == null ? null : <FicheRangee titre={tr('Pile')} desc={tr('Capteur sans fil')} droite={<FicheValeur couleur={couleurPile(n, 'var(--o-text)')}>{n} %</FicheValeur>} />);"), 'la rangée Pile');
   assert.ok(APP.includes("color: bat ? couleurPile(n, 'var(--o-text)') : 'var(--o-text)' }}>"), 'la valeur d’une pile dans la fiche universelle');
   assert.ok(!APP.includes("n < 20 ? 'var(--o-bad)'") && !APP.includes("n < 50 ? 'var(--o-warn)'") && !APP.includes('const SEUIL_PILE') && !APP.includes('const couleurPile =') && !APP.includes("device_class === 'battery' && n < 20"), 'plus de seconde règle dans App.jsx');
-  assert.ok(APP.includes("import { pilesDeLaMaison as pilesCarte, vuePiles, glyphePile } from './piles.js';") /* ASSERTION MODIFIÉE (ADR 0274) : `pilesMaison` part avec la vue Énergie */ && APP.includes("import { pilesMaison } from '../piles.js';") && APP.includes('couleurPile, reglerSeuilPile,'), 'la règle vient d’attention.js et de piles.js');
+  // ASSERTION MODIFIÉE (ADR 0283) : les cartes sorties d'App.jsx importent elles-mêmes ce qu'elles lisent ; la ligne recopiée se lit par ses noms (`importsDe`).
+  assert.ok(['pilesCarte', 'vuePiles', 'glyphePile'].every(n => importsDe(APP, './piles.js').has(n)) && /pilesDeLaMaison as pilesCarte/.test(APP) /* ASSERTION MODIFIÉE (ADR 0274) : `pilesMaison` part avec la vue Énergie */ && APP.includes("import { pilesMaison } from '../piles.js';") && ['couleurPile', 'reglerSeuilPile'].every(n => importsDe(APP, './attention.js').has(n)), 'la règle vient d’attention.js et de piles.js');
   assert.equal(FC.split("color: couleurPile(pile, 'var(--o-text1)')").length - 1, 2, 'la rangée Pile des deux fiches de capteur');
   assert.ok(!FC.includes('pile < 20 ?'));
   const coin = (n) => renderToStaticMarkup(createElement(F.PileRepere, { n }));

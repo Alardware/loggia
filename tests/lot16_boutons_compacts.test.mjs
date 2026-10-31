@@ -48,8 +48,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 
+import { PIECES_DU_MONOLITHE, MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const lire = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
-const app = lire('src/App.jsx');
+const app = MONOLITHE;
 const css = lire('src/index.css');
 const police = lire('public/fonts/uicons-regular-rounded.css');
 
@@ -266,7 +267,7 @@ test('rien, plus loin, n’annule la requête : les sélecteurs du geste ne vive
     for (const e of readdirSync(new URL('../' + dossier, import.meta.url), { withFileTypes: true })) {
       const p = dossier + '/' + e.name;
       if (e.isDirectory()) visite(p);
-      else if (/\.(jsx?|css)$/.test(e.name) && p !== 'src/App.jsx' && p !== 'src/index.css' && /o-cvact|o-cvpastille/.test(lire(p))) autres.push(p);
+      else if (/\.(jsx?|css)$/.test(e.name) && !PIECES_DU_MONOLITHE.includes(p.slice(4)) && p !== 'src/index.css' && /o-cvact|o-cvpastille/.test(lire(p))) autres.push(p);
     }
   };
   visite('src');

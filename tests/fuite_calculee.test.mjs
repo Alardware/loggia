@@ -33,8 +33,10 @@ const { setLoggiaState, plateformeDe } = await import('../src/state.js');
 const F = await import(new URL('../src/App.jsx?fuite', import.meta.url).href);
 const { maisonCapteursDemo } = await import('../src/demo.js');
 const { registresDuComposant } = await import('../src/discovery.js');
+const { MONOLITHE } = await import('./monolithe.mjs');
 const lire = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
-const APP = lire('../src/App.jsx');
+// ASSERTION MODIFIÉE (ADR 0283) : App.jsx et ce qui en sort — l'Accueil n'est plus dans App.jsx.
+const APP = MONOLITHE;
 const PAR = lire('../src/views/parametres.jsx');
 const ATT = lire('../src/attention.js');
 const PY = lire('../custom_components/loggia/alertes.py');
@@ -84,7 +86,8 @@ test('« En ce moment » (deriveNotifs) et l’Accueil : la même exclusion, par
   assert.deepEqual(notifs, ['binary_sensor.fuite_evier', 'binary_sensor.cave_humide'], 'le modèle et le groupe ne sont pas des fuites ; le YAML inconnu du registre, si (l’ordre des états)');
   assert.ok(APP.includes("    if (a.device_class === 'moisture' && (estPlante(id) || fuiteCalculee(plateformeDe(id)))) continue;"), '« En ce moment »');
   // ASSERTION MODIFIÉE (audit du 19/10, M14) : l'Accueil passe aussi les entités masquées — un groupe et une entité masquée n'y comptent pas.
-  assert.ok(APP.includes("    plantes: plantsCfg().map(p => p.base).filter(Boolean),\n    // Un `moisture` calculé n'est pas une fuite (ADR 0022, 16/10) : la plateforme, lue dans l'index ; un groupe, une entité masquée n'y comptent pas (M14).\n    plateforme: plateformeDe, masque: masqueDe,\n  });"), 'l’Accueil passe la plateforme à « À surveiller »');
+  // ASSERTION MODIFIÉE (30/10, G3-E4) : l'Accueil passe aussi la couleur Tempo du lendemain, après la plateforme et le masque.
+  assert.ok(APP.includes("    plantes: plantsCfg().map(p => p.base).filter(Boolean),\n    // Un `moisture` calculé n'est pas une fuite (ADR 0022, 16/10) : la plateforme, lue dans l'index ; un groupe, une entité masquée n'y comptent pas (M14).\n    plateforme: plateformeDe, masque: masqueDe,\n"), 'l’Accueil passe la plateforme à « À surveiller »');
   assert.equal(plateformeDe('binary_sensor.fuite_evier'), 'mqtt');
   assert.equal(plateformeDe('binary_sensor.cave_humide'), null, 'inconnue du registre : null');
 }));

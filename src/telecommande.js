@@ -33,7 +33,24 @@ export const GESTES_TV = [
 /* Une table par intégration. Les valeurs viennent des bibliothèques
  * elles-mêmes, pas d'une supposition : `pyatv.interface.RemoteControl`,
  * `androidtv.constants.KEYS`, les keycodes Android, les noms ECP de Roku, les
- * codes Tizen. Un `null` veut dire « cette télécommande ne sait pas faire ». */
+ * codes Tizen. Un `null` veut dire « cette télécommande ne sait pas faire ».
+ *
+ * Android TV en ADB (G1-D1, 30/10) : dans `KEYS`, `RESUME` vaut 224, c'est
+ * KEYCODE_WAKEUP — la touche « Lecture » réveillait la box. `KEYS` n'a ni PLAY
+ * ni PLAY_PAUSE ; ce qu'il ne connaît pas, l'intégration le passe TEL QUEL au
+ * shell ADB : `input keyevent 85` est KEYCODE_MEDIA_PLAY_PAUSE.
+ *
+ * `precedent` et `suivant` ne sont PAS dessinés : le pavé de la télécommande
+ * (fichemedia.jsx) n'a que les flèches, OK, Retour, Accueil et Lecture ; la
+ * piste précédente et la suivante passent par le LECTEUR (`media_previous_track`,
+ * `media_next_track`). Plusieurs de leurs valeurs, ici, AVANCENT dans la vidéo
+ * au lieu de changer de piste : REWIND / FAST_FORWARD d'Android TV en ADB
+ * (keycodes 89 / 90) et FASTFORWARD de LG, `skip_backward` / `skip_forward` de
+ * pyatv (un saut de quelques secondes), `reverse` / `forward` de Roku (Rev /
+ * Fwd). Qui les dessinerait doit les écrire « Reculer » / « Avancer », ou les
+ * changer pour la piste : `input keyevent 88` / `input keyevent 87` en ADB,
+ * `previous` / `next` chez pyatv ; Roku et LG n'ont pas de touche de piste.
+ * MEDIA_PREVIOUS / MEDIA_NEXT d'Android TV Remote changent bien de piste. */
 export const TOUCHES_TV = {
   apple_tv: {
     haut: 'up', bas: 'down', gauche: 'left', droite: 'right', ok: 'select',
@@ -44,7 +61,7 @@ export const TOUCHES_TV = {
   androidtv: {
     haut: 'UP', bas: 'DOWN', gauche: 'LEFT', droite: 'RIGHT', ok: 'CENTER',
     retour: 'BACK', accueil: 'HOME', menu: 'MENU', info: null,
-    lecture: 'RESUME', precedent: 'REWIND', suivant: 'FAST_FORWARD',
+    lecture: 'input keyevent 85', precedent: 'REWIND', suivant: 'FAST_FORWARD',
     vol_moins: 'VOLUME_DOWN', vol_plus: 'VOLUME_UP', muet: 'MUTE',
   },
   androidtv_remote: {

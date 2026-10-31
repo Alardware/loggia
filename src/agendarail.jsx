@@ -167,7 +167,9 @@ export function BandeJours({ jours, compte, choisi, onChoisir, grand = false }) 
               border: (!sel && cejour) ? '1px solid var(--o-accent-soft)' : '1px solid transparent',
               background: sel ? 'var(--o-accent-fond)' : 'var(--o-s2)',
               color: sel ? '#fff' : 'var(--o-text1)', font: 'inherit', cursor: onChoisir ? 'pointer' : 'default' }}>
-            <span style={{ fontSize: grand ? 9.5 : 9, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', opacity: .8 }}>{dow}</span>
+            {/* 11 px, sans voile (lot 7 de l'audit du 28/10, V4) : à 9 px et 80 % d'opacité, « mer » tombait à 3,69:1. Le jour
+              * reste plus discret que la date par sa couleur, `--o-text2`, que la garde de contraste tient lisible. */}
+            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: sel ? 'inherit' : 'var(--o-text2)' }}>{dow}</span>
             <span style={{ fontSize: grand ? 18 : 16, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{j.getDate()}</span>
             <span aria-hidden="true" style={{ width: 4, height: 4, borderRadius: '50%', background: n ? (sel ? '#fff' : 'var(--o-accent-soft)') : 'transparent' }} />
           </button>

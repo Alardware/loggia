@@ -76,9 +76,13 @@ test('E2 B, E14 : les réglages et la levée veulent le code de la maison ou un 
   const m = maisonMediasDemo({ quand: A(17, 40) });
   await refuse(m.ws({ type: 'loggia/enfant/config', patch: { profils: { chambre: { volume_max: 55 } } } }, { admin: false }), 'code_admin_requis');
   await refuse(m.ws({ type: 'loggia/enfant/lever', profil: 'chambre', minutes: 30 }, { admin: false }), 'code_admin_requis');
+  /* ASSERTION MODIFIÉE (audit du 28/10, H1 ; ADR 0279) : jamais défini, AUCUN code n'ouvre rien — `0000` ouvrait tout — et le
+   * refus se nomme. Un administrateur pose le code, puis le parent le tape. */
+  await refuse(m.ws({ type: 'loggia/pin/verifier', pin: '0000' }), 'code_non_defini');
+  assert.deepEqual(await m.ws({ type: 'loggia/pin/definir', pin: '4321' }), { defini: true });
   assert.deepEqual(await m.ws({ type: 'loggia/pin/verifier', pin: '1234' }), { ok: false, bloque: 0 }, 'un code faux n’ouvre rien');
   await refuse(m.ws({ type: 'loggia/enfant/config', patch: { profils: { chambre: { volume_max: 55 } } } }, { admin: false }), 'code_admin_requis');
-  assert.deepEqual(await m.ws({ type: 'loggia/pin/verifier', pin: '0000' }), { ok: true });
+  assert.deepEqual(await m.ws({ type: 'loggia/pin/verifier', pin: '4321' }), { ok: true });
   const r = await m.ws({ type: 'loggia/enfant/config', patch: { profils: { chambre: { volume_max: 55 } } } }, { admin: false });
   assert.deepEqual([r.config.profils.chambre.volume_max, r.etat.lecteurs[OFF].plafond, m.config().loggia_enfant.profils.chambre.volume_max], [55, 55, 55], 'le code de la maison a ouvert les réglages : le plafond change partout');
   await refuse(m.ws({ type: 'loggia/enfant/config', patch: { profils: { chambre: { volume_max: 500 } } } }), 'invalid_format');

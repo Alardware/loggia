@@ -415,3 +415,24 @@ def test_la_vue_d_un_lecteur_dit_ce_que_l_ecran_lit(calc):
     leve = calc.lever(e, 30, MARDI.timestamp())
     v5 = calc.vue_lecteur("chambre", p, leve, TV, True, a(MARDI, 21), MARDI.timestamp() + 1)
     assert v5["leve_jusqua"] == MARDI.timestamp() + 1800 and v5["plafond"] is None and v5["bloque"] is None
+
+
+# TEST AJOUTE (audit du 28/10, H1 ; ADR 0279) : la phrase pour dormir part a l'Echo en `custom`, que l'integration Alexa joue
+# comme une phrase PRONONCEE. Elle se valide au serveur : longueur, caracteres imprimables, une lettre au moins, pas de
+# balisage. Les blancs du bord s'en vont ; une phrase illisible relue du magasin s'ecarte.
+@pytest.mark.parametrize("phrase", [
+    "", " ", "a", "x" * 121, "joue\nde la pluie", "joue\tdu bruit", "joue\u200bdu bruit", "<speak>joue</speak>",
+    "joue {x}", "joue \\ x", "123 456", "!!!", 7, None,
+], ids=repr)
+def test_une_phrase_pour_dormir_illisible_se_refuse(calc, phrase):
+    cfg = calc.poser_patch(calc.config_defaut(), {"profils": {"chambre": {"nom": "Lino"}}})
+    with pytest.raises(ValueError, match="phrases_dormir"):
+        calc.poser_patch(cfg, {"profils": {"chambre": {"phrases_dormir": [phrase]}}})
+
+
+def test_une_phrase_pour_dormir_se_range_sans_ses_blancs(calc):
+    cfg = calc.poser_patch(calc.config_defaut(), {"profils": {"chambre": {"nom": "Lino"}}})
+    neuf = calc.poser_patch(cfg, {"profils": {"chambre": {"phrases_dormir": ["  joue des sons de pluie ", "mets l'océan, s'il te plaît"]}}})
+    assert neuf["profils"]["chambre"]["phrases_dormir"] == ["joue des sons de pluie", "mets l'océan, s'il te plaît"]
+    relu = calc.lire_config({"profils": {"chambre": {"zone": "chambre", "phrases_dormir": ["joue\nla pluie", " joue du vent "]}}})
+    assert relu["profils"]["chambre"]["phrases_dormir"] == ["joue du vent"]

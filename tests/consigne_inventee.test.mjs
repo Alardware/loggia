@@ -20,8 +20,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { consigneClimat, plageClimat, pasConsigne } from '../src/consigne.js';
 
+import { MONOLITHE, importsDe } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const APP = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8').replace(/\r\n/g, '\n');
+const APP = MONOLITHE.replace(/\r\n/g, '\n');
 const compter = (s, motif) => s.split(motif).length - 1;
 const corps = (nom) => {
   const i = APP.indexOf('function ' + nom + '(');
@@ -69,7 +70,8 @@ test('un appui sur ± ne fabrique jamais une consigne', () => {
 });
 
 test('plus aucun écran ne retombe sur 20 ou sur 19', () => {
-  assert.ok(APP.includes("import { consigneClimat, plageClimat, pasConsigne } from './consigne.js';"), 'App ne lit plus la consigne par la fonction testée');
+  // ASSERTION MODIFIÉE (ADR 0283) : les cartes sorties d'App.jsx importent elles-mêmes ce qu'elles lisent ; la ligne recopiée se lit par ses noms (`importsDe`).
+  assert.ok(['consigneClimat', 'plageClimat', 'pasConsigne'].every(n => importsDe(APP, './consigne.js').has(n)), 'App ne lit plus la consigne par la fonction testée');
   assert.equal(compter(APP, 'a.temperature != null ? a.temperature : 20'), 0, 'le thermostat invente de nouveau 20');
   assert.equal(compter(APP, 'deCelsius(19, uT)'), 0, 'le fil pilote invente de nouveau 19');
   assert.equal(compter(APP, 'const realTarget = consigneClimat(a);'), 2, 'carte et fiche du thermostat ne lisent plus par la même porte');
@@ -117,7 +119,9 @@ test('sans consigne lisible, rien ne part et les boutons sont inertes', async ()
 
 test('« — » à la place du chiffre, comme la compacte ; la plage se lit dans la fiche', () => {
   // Les cartes 1a (tâche 10 bis A) l'écrivent à une décimale, suivie de « ° » : « 20,0° ».
-  assert.equal(compter(APP, "const consigne = target != null ? nombre(Number(target), 1) + '°' : '—';"), 2);
+  // ASSERTION MODIFIÉE (30/10) : la carte du thermostat retire, au planning, le décalage de son capteur (`- dec`).
+  assert.equal(compter(APP, "const consigne = target != null ? nombre(Number(target), 1) + '°' : '—';")
+    + compter(APP, "const consigne = target != null ? nombre(Number(target) - dec, 1) + '°' : '—';"), 2);
   const fiche = corps('RoomClimateSheet');
   assert.ok(fiche.includes("{reglable ? fmt(target) : '—'}"), 'la fiche du thermostat affiche un chiffre inventé');
   assert.ok(fiche.includes("reglable ? tr('consigne {t} °{u}'"), 'l’en-tête de la fiche annonce une consigne vide');

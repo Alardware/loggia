@@ -6,6 +6,7 @@ import { migrerAnciennesCles } from './state.js';
  * lit quand plus rien ne marche, et il etait le seul a rester en francais.
  * `i18n.js` ne depend ni d'App ni du rendu — il repond meme ici. */
 import { tr } from './i18n.js';
+import { alerter, HoteAlertes } from './ui.jsx';
 import { ecouterPrechargement } from './recharge.js';
 import { ecouterHorsEcran } from './horsecran.js';
 
@@ -104,19 +105,25 @@ class LoggiaErrorBoundary extends React.Component {
             >
               {tr('Repartir sans le thème')}
             </button>
-            {/* Filet n° 2 : tout effacer. Confirmation native — ici, plus rien du
-                dashboard n'est montable, donc pas de BottomSheet. */}
+            {/* Filet n° 2 : tout effacer. La feuille d'alerte le demande : son
+                hôte vit hors de cette barrière (voir le rendu, plus bas). Si
+                elle ne peut pas s'afficher non plus, la confirmation native
+                d'avant reprend la main (`repli`). */}
             <button
               onClick={() => {
-                if (!window.confirm(tr('Effacer tous les réglages Loggia de ce navigateur (vues, utilisateurs, thème, entités) et repartir des réglages d’usine ?'))) return;
-                try {
-                  const ls = window.localStorage;
-                  for (let i = ls.length - 1; i >= 0; i--) {
-                    const k = ls.key(i);
-                    if (k && (k.indexOf('loggia') === 0 || k.indexOf('orion') === 0)) ls.removeItem(k);
-                  }
-                } catch {}
-                window.location.reload();
+                const question = tr('Effacer tous les réglages Loggia de ce navigateur (vues, utilisateurs, thème, entités) et repartir des réglages d’usine ?');
+                const effacer = () => {
+                  try {
+                    const ls = window.localStorage;
+                    for (let i = ls.length - 1; i >= 0; i--) {
+                      const k = ls.key(i);
+                      if (k && (k.indexOf('loggia') === 0 || k.indexOf('orion') === 0)) ls.removeItem(k);
+                    }
+                  } catch {}
+                  window.location.reload();
+                };
+                alerter({ titre: tr("Réglages d'usine"), texte: question, action: { libelle: tr('Effacer'), faire: effacer },
+                  repli: () => { if (window.confirm(question)) effacer(); } });
               }}
               style={{ padding: '10px 18px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(240,100,90,.12)', border: '1px solid rgba(240,100,90,.35)', color: '#f0938c' }}
             >
@@ -129,6 +136,8 @@ class LoggiaErrorBoundary extends React.Component {
   }
 }
 
+/* L'hôte des feuilles d'alerte, à côté de l'App et hors de sa barrière : il
+ * sert encore quand l'écran de secours remplace tout (voir `alerter`, ui.jsx). */
 createRoot(document.getElementById('root')).render(
-  <LoggiaErrorBoundary><App /></LoggiaErrorBoundary>
+  <><LoggiaErrorBoundary><App /></LoggiaErrorBoundary><HoteAlertes /></>
 );

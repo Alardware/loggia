@@ -30,13 +30,14 @@ appel direct n'a donc pas lieu (audit 18/09).
 """
 from __future__ import annotations
 
+import copy
 import logging
-import re
 import time
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import Context, HomeAssistant, callback
 
+from .entites import motif_de
 from .regles import demarrer
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
@@ -52,7 +53,7 @@ DUREE = 3  # secondes : ce que le bouton annonce
 # Une sirene est un `siren.*`, ou un `switch.*` reconnu comme tel par la carte
 # (ADR 0034) : les deux s'allument et s'eteignent par turn_on / turn_off.
 DOMAINES = ("siren", "switch")
-ENTITE = re.compile(r"^(%s)\.[a-z0-9_]+$" % "|".join(DOMAINES))
+ENTITE = motif_de(DOMAINES)
 
 # SirenEntityFeature.DURATION : la sirene sait s'eteindre seule apres `duration`.
 DRAPEAU_DUREE = 16
@@ -119,9 +120,13 @@ class LoggiaSirene:
 
     async def _async_rattraper(self, _hass=None) -> None:
         self._au_demarrage = None
-        # Un test qui traverse un redemarrage a deja trop dure : on eteint.
+        # Un test qui traverse un redemarrage a deja trop dure : on eteint. Une
+        # sirene qui leve ne coupe plus les suivantes (28/10, ADR 0280).
         for haid in sorted(self.table):
-            await self._async_eteindre(haid, rattrape=True)
+            try:
+                await self._async_eteindre(haid, rattrape=True)
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Loggia sirene : le rattrapage de %s a echoue", haid)
 
     # ── Le rendez-vous ─────────────────────────────────────────────────────
     def _armer(self, haid: str) -> None:
@@ -148,28 +153,35 @@ class LoggiaSirene:
 
     # ── L'extinction ───────────────────────────────────────────────────────
     async def _async_eteindre(self, haid: str, rattrape: bool = False) -> None:
+        """Eteindre D'ABORD, sauvegarder ensuite, et sous garde (28/10, ADR
+        0280) : une ecriture refusee avant l'extinction laissait la sirene de
+        test allumee."""
         entree = self.table.pop(haid, None)
         self._desarmer(haid)
-        await self._sauver()
         if entree is None:
             return
         st = self.hass.states.get(haid)
-        if st is None or str(st.state).lower() in ETEINT:
-            return
-        ctx = Context(user_id=entree["par"]) if entree.get("par") else Context()
-        dom = haid.split(".", 1)[0]
+        eteinte = False
+        if st is not None and str(st.state).lower() not in ETEINT:
+            ctx = Context(user_id=entree["par"]) if entree.get("par") else Context()
+            dom = haid.split(".", 1)[0]
+            try:
+                await self.hass.services.async_call(dom, "turn_off", {"entity_id": [haid]},
+                                                    blocking=False, context=ctx)
+                eteinte = True
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Loggia sirene : l'extinction de %s a echoue", haid)
         try:
-            await self.hass.services.async_call(dom, "turn_off", {"entity_id": [haid]},
-                                                blocking=False, context=ctx)
+            await self._sauver()
         except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia sirene : l'extinction de %s a echoue", haid)
-            return
-        if self.regles is not None:
+            _LOGGER.exception("Loggia sirene : la table n'a pas pu etre sauvegardee apres %s", haid)
+        if eteinte and self.regles is not None:
             await self.regles.noter(MODULE, "test", "eteindre", cibles=[haid], n=1,
                                     motif="fin du test (redemarrage pendant le test)" if rattrape else "fin du test")
 
     async def _sauver(self) -> None:
-        await self.store.async_set_shared(CLE, self.table)
+        # Une COPIE au magasin (28/10, ADR 0280), comme les minuteurs.
+        await self.store.async_set_shared(CLE, copy.deepcopy(self.table))
 
     # ── Ce que l'interface demande ─────────────────────────────────────────
     async def async_tester(self, haid: str, par: str | None = None,

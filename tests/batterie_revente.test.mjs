@@ -18,11 +18,11 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveEnergy } from '../src/resolve.js';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
-const APP = (lire('src', 'App.jsx') + VUES_SORTIES);
+const APP = (MONOLITHE + VUES_SORTIES);
 const HISTO = lire('src', 'views', 'energiehisto.jsx');
 const STATE = lire('src', 'state.js');
 
@@ -124,13 +124,17 @@ test('le prix de rachat se lit comme celui d’achat', () => {
 test('la batterie se lit dans les DEUX sens, pas seulement signée', () => {
   /* Deux capteurs toujours positifs ne disent rien séparément : la puissance
    * de la batterie est leur différence, positive quand elle se remplit. */
-  assert.ok(APP.includes('const batPresente = !!(EN.batNow || EN.batSoc || EN.batChargeNow || EN.batDechargeNow);'),
-    'la batterie n’existe que si un capteur signé est renseigné');
-  assert.ok(APP.includes("const c = avail(EN.batChargeNow) ? Math.max(0, numW(EN.batChargeNow)) : null;"), 'la charge');
-  assert.ok(APP.includes("const d = avail(EN.batDechargeNow) ? Math.max(0, numW(EN.batDechargeNow)) : null;"), 'la décharge');
-  assert.ok(APP.includes('return Math.round((c || 0) - (d || 0));'), 'la différence, positive en charge');
-  assert.ok(APP.includes('if (avail(EN.batNow)) return Math.round(numW(EN.batNow));'),
-    'un capteur signé doit rester prioritaire');
+  /* ASSERTION MODIFIÉE (30/10, G3-E1) : la lecture est sortie dans `puissanceBatterie` (energiebatterie.js) — toutes les
+   * batteries, le `stat_rate` de Home Assistant inversé. La règle d'ici ne change pas : le capteur signé de la fiche d'abord,
+   * la différence des deux sens en dernier, positive en charge. Les cas chiffrés sont dans g3_energie_complete. */
+  assert.ok(APP.includes("const batPresente = !!(idsDe(EN, 'batNow').length || idsDe(EN, 'batRate').length || idsDe(EN, 'batSoc').length || EN.batChargeNow || EN.batDechargeNow);"),
+    'la batterie existe dès qu’un de ses capteurs est renseigné');
+  assert.ok(APP.includes('const batBrut = puissanceBatterie(EN, lireW);'), 'la vue lit la batterie par `puissanceBatterie`');
+  const BAT = lire('src', 'energiebatterie.js');
+  assert.ok(BAT.includes("const c = sommeLue(idsDe(E, 'batChargeNow'), lire);"), 'la charge');
+  assert.ok(BAT.includes("const d = sommeLue(idsDe(E, 'batDechargeNow'), lire);"), 'la décharge');
+  assert.ok(BAT.includes('return Math.max(0, c || 0) - Math.max(0, d || 0);'), 'la différence, positive en charge');
+  assert.ok(BAT.indexOf("idsDe(E, 'batNow')") < BAT.indexOf("idsDe(E, 'batRate')"), 'un capteur signé doit rester prioritaire');
 });
 
 test('la revente s’affiche, et seulement quand elle existe', () => {

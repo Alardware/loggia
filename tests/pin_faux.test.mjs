@@ -29,7 +29,14 @@ const PL = (await import('../src/langues/pl.js')).default;
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = readFileSync(join(RACINE, 'src', 'pinmodal.jsx'), 'utf8').replace(/\r\n/g, '\n');
-const ouvrir = async () => rendre(await composant('pinmodal.jsx', 'PinModal'), { hass: null, onClose: () => {}, onSuccess: () => {} });
+/* Un code DÉFINI, de quatre chiffres : jamais défini, le pavé ne demande plus rien (audit du 28/10, ADR 0279,
+ * tests/code_non_defini.test.mjs). La configuration est posée avant chaque rendu, sauf quand un test pose la sienne. */
+const { setLoggiaState } = await import('../src/state.js');
+const CODE_QUATRE = { loggia_admin_pin_defini: true, loggia_admin_pin_longueur: 4 };
+const ouvrir = async (cfg = CODE_QUATRE) => {
+  setLoggiaState({ cfg });
+  return rendre(await composant('pinmodal.jsx', 'PinModal'), { hass: null, onClose: () => {}, onSuccess: () => {} });
+};
 
 test('la région qui dit « Code incorrect » est là dès l’ouverture, vide', async () => {
   const html = await ouvrir();
@@ -51,6 +58,7 @@ test('un code faux se VOIT aussi, sans couleur ni animation, et sans décaler le
    * défaut, « Requis pour les réglages du mode enfant » quand la fiche d'un lecteur l'ouvre (`sousTitre`). Le code faux garde sa ligne. */
   assert.ok(SRC.includes("{faux ? tr('Code incorrect') : (sousTitre || tr('Requis pour ce profil'))}"),
     'l’erreur n’a toujours pas de texte visible : un œil qui distingue mal le rouge ne la voit pas');
+  setLoggiaState({ cfg: CODE_QUATRE });
   const enfant = rendre(await composant('pinmodal.jsx', 'PinModal'), { hass: null, onClose: () => {}, onSuccess: () => {}, sousTitre: 'Requis pour les réglages du mode enfant' });
   assert.ok(enfant.includes('margin-top:4px">Requis pour les réglages du mode enfant</div>'), 'le sous-titre de la fiche d’un lecteur');
   assert.ok(SRC.includes('aria-hidden={faux || undefined}'), 'lu deux fois : la région d’alerte le dit déjà');
@@ -94,22 +102,20 @@ test('« Code incorrect » : sur un refus du serveur seulement, effacé à la to
  * ne la porte pas encore : ✓ valide, de 4 à 8 chiffres, et la première
  * réussite l'apprend au composant. */
 test('le pavé attend autant de chiffres que le code en compte', async () => {
-  const { setLoggiaState } = await import('../src/state.js');
   const points = (html) => (html.match(/<span aria-hidden="true" style="width:14px;height:14px/g) || []).length;
   try {
-    setLoggiaState({ cfg: { loggia_admin_pin_defini: true, loggia_admin_pin_longueur: 8 } });
-    const huit = await ouvrir();
+    const huit = await ouvrir({ loggia_admin_pin_defini: true, loggia_admin_pin_longueur: 8 });
     assert.equal(points(huit), 8, 'un code de huit chiffres montre huit points');
     assert.ok(huit.includes(trN(0, '{n} chiffre sur {t}', '{n} chiffres sur {t}', { t: 8 })), 'et le dit : « 0 chiffre sur 8 »');
     assert.ok(!huit.includes('aria-label="Valider"'), 'longueur connue : il vérifie seul, sans bouton');
 
-    setLoggiaState({ cfg: { loggia_admin_pin_defini: true } });
-    const inconnu = await ouvrir();
+    const inconnu = await ouvrir({ loggia_admin_pin_defini: true });
     assert.ok(/<button[^>]*disabled=""[^>]*aria-label="Valider"/.test(inconnu), 'longueur inconnue : ✓, fermé tant qu’il manque des chiffres');
     assert.equal(points(inconnu), 4, 'quatre points au départ, la rangée s’allonge avec la saisie');
 
-    setLoggiaState({ cfg: { loggia_admin_pin_defini: false, loggia_admin_pin_longueur: 8 } });
-    assert.equal(points(await ouvrir()), 4, 'jamais défini : 0000, quatre chiffres — une longueur restée là ne compte pas');
+    /* ASSERTION MODIFIÉE (audit du 28/10, H1 ; ADR 0279) : jamais défini, il n'y a plus de `0000` à taper — et une longueur
+     * restée là ne fait pas apparaître de pavé. */
+    assert.equal(points(await ouvrir({ loggia_admin_pin_defini: false, loggia_admin_pin_longueur: 8 })), 0, 'jamais défini : aucun pavé, aucun point');
   } finally {
     setLoggiaState({ cfg: {} });
   }

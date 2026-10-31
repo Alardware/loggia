@@ -545,6 +545,37 @@ export function dater(points) {
   return Object.freeze({ [DATEES]: true, liste });
 }
 const estDatee = (p) => !!(p && typeof p === 'object' && p[DATEES]);
+
+/**
+ * L'écart entre le capteur d'un thermostat et la pièce (30/10) : la MÉDIANE de
+ * « ce que lit l'appareil − ce que lit la pièce », dans l'unité de la maison.
+ * `appareil` : l'historique du `climate` (sa `current_temperature`) ; `piece` :
+ * celui de la sonde, son état — ou son `attribut`. Chaque relevé de l'appareil
+ * se rapproche de la dernière mesure de la pièce d'au plus 30 min ; une lecture
+ * de 0 ou moins est une trame fausse (un MCZ qui se reconnecte), écartée.
+ * Chez lui, sept jours de son poêle donnaient −1,48 (842 relevés). `{ ecart, n }`,
+ * l'écart au demi-degré ; null sous 48 relevés : pas de quoi proposer.
+ */
+export function ecartMesure(appareil, piece, attribut = null) {
+  const A = (dater(appareil) || { liste: [] }).liste;
+  const P = (dater(piece) || { liste: [] }).liste
+    .map(x => ({ t: x.t, v: Number(attribut ? (x.e.attributes || {})[attribut] : x.e.state) }))
+    .filter(x => Number.isFinite(x.v));
+  const ecarts = [];
+  let j = -1;
+  for (const x of A) {
+    const v = Number((x.e.attributes || {}).current_temperature);
+    if (!Number.isFinite(v) || v <= 0) continue;
+    while (j + 1 < P.length && P[j + 1].t <= x.t) j++;
+    if (j < 0 || x.t - P[j].t > 30 * 60000) continue;
+    ecarts.push(v - P[j].v);
+  }
+  if (ecarts.length < 48) return null;
+  ecarts.sort((a, b) => a - b);
+  const k = ecarts.length >> 1;
+  const m = ecarts.length % 2 ? ecarts[k] : (ecarts[k - 1] + ecarts[k]) / 2;
+  return { ecart: Math.round(m * 2) / 2 || 0, n: ecarts.length };
+}
 // Un historique lu : une liste brute, ou datée.
 const estHistorique = (p) => Array.isArray(p) || estDatee(p);
 

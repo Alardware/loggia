@@ -47,8 +47,11 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import Context, HomeAssistant, callback
 
+from .const import DOMAIN
 from .discovery import async_index
-from .lumieres_maison import a_epargner, async_interrupteurs_declares, lumieres_de_la_maison, par_service
+from .lumieres_maison import (a_epargner, async_interrupteurs_declares, blanc_borne, lumieres_de_la_maison, par_service,
+                              sait_fondre, sait_le_blanc)
+from .nombres import lu
 from .refus import RefusNomme
 from .regles import REFUS_EAU, demarrer
 from .nuit import CLE as CLE_NUIT, fait_nuit
@@ -113,6 +116,12 @@ SERVICES_ALARME = {"absent": "alarm_arm_away", "nuit": "alarm_arm_night",
 # Le prereglage quand le thermostat en a un, la consigne sinon.
 PRESETS_CHAUFFAGE = {"confort": ("comfort", 20.0), "eco": ("eco", 17.0)}
 BORNES_VALEUR = {"lumieres": (1, 100), "chauffage": (5, 30)}
+# Le fondu et le blanc d'une action « lumieres » (ADR 0304), tous deux
+# FACULTATIFS : la lampe fait le fondu elle-meme (`transition`, en secondes),
+# si elle l'annonce - Loggia n'a rien de differe a tenir ; le blanc
+# (`color_temp_kelvin`) va aux lampes qui le prennent, borne par chacune.
+FONDU_MAX_S = 3600
+BORNES_BLANC = (1500, 10000)
 
 SLUG = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
 
@@ -139,10 +148,12 @@ def _a(famille: str, geste: str, portee: str = "maison", **reste: Any) -> dict[s
 # a reconnaitre une scene ou un script existant qui fait la meme chose ;
 # `piece` vaut « la piece de la television » ou « celle de l'enceinte » tant
 # que l'utilisateur n'en a pas choisi une.
+# Trois ont un fondu (ADR 0304) : « Reveil » monte a 30 % en trois minutes,
+# « Bonne nuit » s'eteint en dix secondes, « Cinema » se regle en trois.
 INTEGRES: list[dict[str, Any]] = [
     {"id": "reveil", "icone": "sunrise", "teinte": "ambre",
      "mots": ("reveil", "wake", "morning", "matin", "bonjour", "good_morning"),
-     "actions": [_a("volets", "ouvrir"), _a("lumieres", "allumer", valeur=30, si="nuit"),
+     "actions": [_a("volets", "ouvrir"), _a("lumieres", "allumer", valeur=30, si="nuit", fondu=180),
                  _a("chauffage", "confort")]},
     {"id": "depart", "icone": "running", "teinte": "bain",
      "mots": ("depart", "je_pars", "pars", "leave", "leaving", "away", "goodbye", "sortie", "absent"),
@@ -154,11 +165,11 @@ INTEGRES: list[dict[str, Any]] = [
                  _a("chauffage", "confort")]},
     {"id": "nuit", "icone": "moon", "teinte": "chambre",
      "mots": ("nuit", "night", "bonne_nuit", "good_night", "dodo", "sleep", "coucher", "bedtime"),
-     "actions": [_a("lumieres", "eteindre", sauf_veilleuses=True), _a("volets", "fermer"),
+     "actions": [_a("lumieres", "eteindre", sauf_veilleuses=True, fondu=10), _a("volets", "fermer"),
                  _a("medias", "eteindre"), _a("alarme", "nuit"), _a("serrures", "verrouiller")]},
     {"id": "cinema", "icone": "film", "teinte": "vert", "piece": "tv",
      "mots": ("cinema", "film", "movie", "netflix", "soiree_film"),
-     "actions": [_a("medias", "pause"), _a("lumieres", "allumer", portee="piece", valeur=10),
+     "actions": [_a("medias", "pause"), _a("lumieres", "allumer", portee="piece", valeur=10, fondu=3),
                  _a("volets", "fermer", portee="piece"), _a("medias", "allumer_tv", portee="piece")]},
     {"id": "musique", "icone": "music", "teinte": "tendre", "piece": "enceinte",
      "mots": ("musique", "music", "radio", "playlist", "soiree", "party", "fete", "apero"),
@@ -263,7 +274,28 @@ def valider_action(brut: Any) -> dict[str, Any]:
             raise ValueError("valeur illisible") from err
         v = max(bornes[0], min(bornes[1], v))
         action["valeur"] = int(v) if famille == "lumieres" else round(v, 1)
+    if famille == "lumieres":
+        # Le fondu (secondes) et le blanc (K), facultatifs (ADR 0304) : absents,
+        # nuls ou vides, l'action reste celle d'avant. Un blanc ne vaut que pour
+        # un allumage.
+        fondu = _nombre_facultatif(brut.get("fondu"), "fondu illisible")
+        if fondu is not None and fondu > 0:
+            action["fondu"] = int(max(0, min(FONDU_MAX_S, fondu)))
+        blanc = _nombre_facultatif(brut.get("blanc"), "blanc illisible")
+        if blanc is not None and blanc > 0 and geste == "allumer":
+            action["blanc"] = int(max(BORNES_BLANC[0], min(BORNES_BLANC[1], blanc)))
     return action
+
+
+def _nombre_facultatif(x: Any, refus: str) -> float | None:
+    """Un nombre facultatif d'une action : None pour rien (absent, None, vide),
+    sinon un nombre fini - un booleen ou un texte qui ne se lit pas : ValueError."""
+    if x is None or x == "":
+        return None
+    v = lu(x)
+    if v is None:
+        raise ValueError(refus)
+    return round(v)
 
 
 def valider_scenario(brut: Any) -> dict[str, Any]:
@@ -515,6 +547,27 @@ def cibles(action: dict[str, Any], maison: dict[str, Any], piece: str | None,
     return out
 
 
+def ordre_lumiere(action: dict[str, Any], attrs: Any, allumer: bool) -> dict[str, Any]:
+    """L'ordre d'une lampe (`light.*`) pour une action « lumieres » : allumee, son
+    niveau (`brightness_pct`) ; un fondu (`transition`) si l'action en a un et si la
+    lampe sait fondre ; allumee, un blanc (`color_temp_kelvin`) si l'action en a un
+    et si la lampe le prend, ramene a ses bornes (ADR 0304)."""
+    data: dict[str, Any] = {"brightness_pct": int(action.get("valeur") or 100)} if allumer else {}
+    if action.get("fondu") and sait_fondre(attrs):
+        data["transition"] = int(action["fondu"])
+    if allumer and action.get("blanc") and sait_le_blanc(attrs):
+        data["color_temp_kelvin"] = blanc_borne(attrs, action["blanc"])
+    return data
+
+
+def capacites_lumieres(maison: dict[str, Any], haids) -> dict[str, bool]:
+    """Ce que les lampes `haids` savent faire d'un scenario : `fondu`, une au moins
+    sait fondre ; `blanc`, une au moins prend un blanc. L'ecran n'offre les puces
+    du fondu et du blanc qu'a ce compte (ADR 0304)."""
+    attrs = [((maison.get("entites") or {}).get(h) or {}).get("attrs") for h in haids if h.startswith("light.")]
+    return {"fondu": any(sait_fondre(a) for a in attrs), "blanc": any(sait_le_blanc(a) for a in attrs)}
+
+
 def ordres(action: dict[str, Any], haids: list[str],
            maison: dict[str, Any]) -> list[tuple[str, str, list[str], dict[str, Any]]]:
     """Les appels de service d'une action, sur ses cibles."""
@@ -525,10 +578,21 @@ def ordres(action: dict[str, Any], haids: list[str],
     if famille == "lumieres":
         # Chacun par son service (lumieres_maison) : une lampe par `light`,
         # avec son niveau ; un interrupteur declare lumiere par `homeassistant`,
-        # tel quel - il n'a pas de niveau.
+        # tel quel - il n'a pas de niveau. Le fondu et le blanc (ADR 0304) ne
+        # vont qu'a la lampe qui les prend, le blanc borne par elle : les lampes
+        # dont l'ordre est le meme partent ensemble, les autres a part.
         allumer = geste != "eteindre"
-        niveau = {"brightness_pct": int(action.get("valeur") or 100)} if allumer else {}
-        return [(d, s, lot, dict(niveau) if d == "light" else {}) for d, s, lot in par_service(haids, allumer)]
+        out = []
+        for d, s, lot in par_service(haids, allumer):
+            if d != "light":
+                out.append((d, s, lot, {}))
+                continue
+            lots: dict[str, tuple[list[str], dict[str, Any]]] = {}
+            for haid in lot:
+                data = ordre_lumiere(action, ((maison.get("entites") or {}).get(haid) or {}).get("attrs"), allumer)
+                lots.setdefault(repr(sorted(data.items())), ([], data))[0].append(haid)
+            out.extend((d, s, cibles_, data) for cibles_, data in lots.values())
+        return out
     if famille == "volets":
         return [(domaine, "open_cover" if geste == "ouvrir" else "close_cover", haids, {})]
     if famille == "medias":
@@ -870,9 +934,16 @@ class LoggiaScenarios:
                             continue
                     charge: dict[str, Any] = {"entity_id": list(cibles_)}
                     charge.update(data)
+                    # Un ordre de fondu a SON contexte, enfant de celui du lancement et au nom du meme compte : seul
+                    # lui est annonce au carnet (ADR 0304). Partage, il faisait avaler un autre ordre du scenario -
+                    # « allumer le salon a 20 % » apres « eteindre en 10 s » (contre-relecture du 31/10).
+                    contexte_ordre = ctx
+                    if domaine == "light" and data.get("transition"):
+                        contexte_ordre = Context(user_id=user_id, parent_id=ctx.id) if user_id else Context(parent_id=ctx.id)
+                        self._annoncer_fondu(cibles_, data["transition"], service == "turn_off", user_id, contexte_ordre.id)
                     try:
                         await self.hass.services.async_call(domaine, service, charge,
-                                                            blocking=False, context=ctx)
+                                                            blocking=False, context=contexte_ordre)
                     except Exception:  # noqa: BLE001
                         _LOGGER.exception("Loggia scenarios : %s.%s a echoue", domaine, service)
                         erreurs += 1
@@ -886,6 +957,21 @@ class LoggiaScenarios:
         # `erreurs` : des commandes que Home Assistant a refusees — l'ecran doit
         # le dire au lieu de feindre un succes (audit 18/09).
         return {"id": s["id"], "fait": fait, "n": len(touchees), "refusees": len(refusees), "erreurs": erreurs}
+
+    def _annoncer_fondu(self, haids: list[str], duree: Any, eteindre: bool, user_id: str | None,
+                        origine: Any = None) -> None:
+        """Le carnet des lumieres apprend le fondu AVANT l'ordre (ADR 0304) : ses
+        paliers ne rempliront pas le journal. Sans carnet - le module absent ou en
+        panne -, le scenario part quand meme."""
+        donnees = getattr(self.hass, "data", None)
+        carnet = (donnees.get(DOMAIN) or {}).get("lumieres") if isinstance(donnees, dict) else None
+        annoncer = getattr(carnet, "annoncer_fondu", None)
+        if annoncer is None:
+            return
+        try:
+            annoncer(list(haids), duree, eteindre, user_id, origine)
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Loggia scenarios : fondu non annonce au carnet", exc_info=True)
 
     async def _noter_lancement(self, s, nom, touchees, refusees, fait, erreurs=0, eau=()) -> None:
         if self.regles is None:
@@ -974,8 +1060,17 @@ class LoggiaScenarios:
                 journal = await self.regles.journal(limite=40, module=MODULE)
             except Exception:  # noqa: BLE001
                 journal = []
+        # Ce que les lampes savent faire d'un fondu et d'un blanc, par portee
+        # (ADR 0304) : la fiche n'offre ces puces qu'ou une lampe visee le sait.
+        lampes = maison.get("lumieres") or []
+        entites = maison.get("entites") or {}
+        def dans(portee: str, piece: str | None = None) -> list[str]:
+            return [h for h in lampes if dans_la_portee(entites.get(h) or {}, portee, piece)]
+
+        capacites = {"maison": capacites_lumieres(maison, lampes), "vie": capacites_lumieres(maison, dans("vie")),
+                     "pieces": {z: capacites_lumieres(maison, dans("piece", z)) for z in maison["zones"]}}
         return {"scenarios": scenarios, "liens": liens, "pieces": maison["zones"],
-                "alarme": c["alarme"], "journal": journal}
+                "alarme": c["alarme"], "journal": journal, "lampes": capacites}
 
     def _verrou_config(self) -> asyncio.Lock:
         """Un seul « lire, changer, ecrire » a la fois sur `loggia_scenarios`

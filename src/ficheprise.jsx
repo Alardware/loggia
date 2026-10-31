@@ -40,20 +40,13 @@ import {
 } from './prisesfiche.js';
 import { fileEcritures } from './voletsfiche.js';
 import { EnteteFiche, PETITES_CAPITALES, filet } from './fichecommune.jsx';
-import { LISERE } from './styles.js';
+import { PANNEAU, RANGEE, EN_BOUTON, TITRE, SOUS, ALERTE } from './fichekit.js';
 
 /* Le contenu de la popup d'une vanne (fichevanne.jsx), pour la prise désignée comme vanne d'eau : chargé à la demande, seulement
  * quand une fiche de prise s'ouvre sur elle (passe bis de l'étape 3 IoT, point 9). Par vanne.jsx, le MÊME morceau que la carte : un
  * morceau de plus pesait au démarrage (son adresse). */
 const VanneDansPrise = lazyRecharge(() => import('./vanne.jsx').then((m) => ({ default: m.ContenuVanne })));
 
-/* Les panneaux de sa maquette : le gris --o-s3, l'arrondi du thème, sans ombre, et le liseré du réglage « Liserés ». */
-const PANNEAU = { background: 'var(--o-s3)', border: LISERE, borderRadius: 'var(--o-radius,18px)', boxSizing: 'border-box', minWidth: 0 };
-const RANGEE = { display: 'flex', alignItems: 'center', gap: 12, width: '100%', boxSizing: 'border-box', padding: '12px 14px 12px 18px' };
-const EN_BOUTON = { border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', color: 'var(--o-text)', textAlign: 'left' };
-const TITRE = { display: 'block', fontSize: 14, fontWeight: 700 };
-const SOUS = { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 };
-const ALERTE = { fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)' };
 // Une puce de sa maquette (`ChipButton`) : 40 px de haut, le gris doux, sans bordure ; inerte à .4.
 const PUCE = (peut = true) => ({ height: 40, padding: '0 8px', borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)', fontFamily: 'inherit',
   fontSize: 12, fontWeight: 700, minWidth: 0, whiteSpace: 'nowrap', opacity: peut ? 1 : 0.4, cursor: peut ? 'pointer' : 'default' });

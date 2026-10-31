@@ -43,6 +43,7 @@ Ici vivent le temps reel, les abonnements et les appels.
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 import re
 from functools import partial
@@ -59,9 +60,10 @@ from .chauffage_familles import (MUETS, commande, consigne_en_unite, deja, famil
                                  lire_appareil, PLATEFORME_SCHEDULER, PLATEFORME_VELAIR, PREFIXE_CONSIGNE,
                                  concurrents_scheduler, entites_velair,
                                  historique_resume, mode_applicable, mode_chauffe, modes_permis, options_du_module,
-                                 programmes_de_l_appareil, puissance_fixe, refroidit, temperature_du_mode,
+                                 pas_revele, programmes_de_l_appareil, puissance_fixe, refroidit, temperature_du_mode,
                                  trame_fausse)
 from .const import DOMAIN
+from .eau_chaude import ESSAIS_LEVEE, RELANCE as RELANCE_EAU, RELANCE_MAX as RELANCE_EAU_MAX, absence_voulue, levee_a, option_active, ordres_absence, sait_absence
 from .refus import RefusNomme
 from .regles import demarrer
 from .store import MaisonReserveeError
@@ -78,6 +80,9 @@ MODULE = "chauffage"
 # les reprises en main — dans SON fichier de `.storage`, comme le journal.
 CLE = "loggia_chauffage"
 CLE_ETAT = "loggia_chauffage_etat"
+# Les chauffe-eau que Loggia a mis en mode absence pour les Vacances (eau_chaude.py) :
+# ce qu'il levera, et rien d'autre. Un fichier a part, comme les reprises.
+CLE_EAU = "loggia_eau_chaude_etat"
 VERSION_ETAT = 1
 # Apres un ordre, l'appareil a le temps de le dire : un etat different dans
 # cette fenetre n'est pas un geste (§ 5.4).
@@ -271,12 +276,30 @@ class LoggiaChauffage:
         self._relances: dict[str, Any] = {}
         # La verification du dernier ordre parti, par chauffage (`_verifier_plus_tard`).
         self._verifications: dict[str, Any] = {}
+        # Le pas que chaque appareil a REVELE en prenant nos consignes a sa facon (30/10) :
+        # {entity_id: pas}. Un poele MCZ n'annonce pas qu'il est au degre.
+        self._pas: dict[str, float] = {}
+        # Le dernier ordre qu'un appareil n'a pas garde, par chauffage (30/10) : {"mode", "temperature", "depuis"}.
+        self._defaits: dict[str, dict[str, Any]] = {}
+        # Les `switch` du programme de chaque appareil pilote, ecoutes : {entity_id: cle} (30/10).
+        self._programmes: dict[str, str] = {}
         self._minuteur = None
         self._ecoute = None
         self._au_demarrage = None
         # L'ecoute du registre des entites : un radiateur renomme (audit du 19/10).
         self._ecoute_registre = None
         self._depot = None
+        # Les chauffe-eau mis en mode absence pour les Vacances, et leur fichier (eau_chaude.py).
+        self._eau_poses: set[str] = set()
+        # Ceux qu'on a remis a la main pendant les Vacances : laisses tranquilles jusqu'a leur fin.
+        self._eau_laisses: set[str] = set()
+        # Ceux qu'on a VUS en absence depuis notre ordre : seul un « off » apres un « on » est un geste.
+        self._eau_vus: set[str] = set()
+        # Les levees refusees, par ballon : trois essais, puis un message au journal (en memoire).
+        self._eau_essais: dict[str, int] = {}
+        # Depuis quand un ballon pose attend d'etre leve (muet) : le reveil court est borne.
+        self._eau_attente: datetime | None = None
+        self._depot_eau = None
         self._registre_dit = False
         # Arrete (`async_arreter`) : plus rien ne se programme, ne s'abonne ni ne
         # commande, meme pour une tache deja en vol. Sans lui, un rechargement
@@ -299,6 +322,7 @@ class LoggiaChauffage:
             self.reprises = lire_reprises(brut, self.maintenant())
             if brut is not None and brut != self.reprises:
                 await self._sauver_reprises()
+            await self._lire_eau()
             if self._arrete:
                 return                              # arrete pendant l'ecriture
             # Le rattrapage attend que Home Assistant ait FINI de demarrer : avant,
@@ -393,7 +417,15 @@ class LoggiaChauffage:
 
     def _attributs(self, entite: str | None) -> tuple[Any, dict]:
         st = self.hass.states.get(entite) if entite else None
-        return getattr(st, "state", None), dict(getattr(st, "attributes", None) or {})
+        return getattr(st, "state", None), self._avec_pas(entite, dict(getattr(st, "attributes", None) or {}))
+
+    def _avec_pas(self, entite: str | None, attrs: dict) -> dict:
+        """Les attributs d'un appareil, avec le pas qu'il a REVELE quand il n'en annonce
+        aucun (30/10, `pas_revele`) : la consigne suivante part a ce pas."""
+        pas = self._pas.get(entite) if entite else None
+        if pas is not None and attrs.get("target_temp_step") is None:
+            return {**attrs, "target_temp_step": pas}
+        return attrs
 
     def _nom_appareil(self, appareil: str | None) -> str | None:
         """Le nom d'un appareil au registre des appareils : celui que l'utilisateur
@@ -529,6 +561,14 @@ class LoggiaChauffage:
                 return haid
         return None
 
+    def _programme_de(self, entite: str | None, fam: str | None) -> str | None:
+        """`_programme_allume` d'un chauffage connu par son entite : l'appareil de son
+        entree au registre (30/10)."""
+        entree = next((e for e in self._entrees() if entite and getattr(e, "entity_id", None) == entite), None)
+        if entree is None:
+            return None
+        return self._programme_allume({"famille": fam, "appareil": getattr(entree, "device_id", None)})
+
     # ── Les abonnements ────────────────────────────────────────────────────
     def _recenser(self) -> None:
         """Les chauffages au planning allume, {entity_id: cle} : ceux dont le moteur
@@ -555,11 +595,22 @@ class LoggiaChauffage:
                 _LOGGER.debug("Loggia chauffage : ecoute deja retiree")
             self._ecoute = None
         self._recenser()
+        # Le programme de chaque appareil pilote (le Timer d'un poele), ecoute : il
+        # s'eteint, le planning reprend tout de suite ; il s'allume, le moteur se retient (30/10).
+        entrees = self._entrees()
+        self._programmes = {}
+        for entite, cle in self._pilotes.items():
+            if (self.cfg["chauffages"].get(cle) or {}).get("famille") == "vtherm":
+                continue
+            entree = next((e for e in entrees if getattr(e, "entity_id", None) == entite), None)
+            for haid in programmes_de_l_appareil(entrees, getattr(entree, "device_id", None)):
+                self._programmes.setdefault(haid, cle)
         if not self._pilotes:
             return
         from homeassistant.helpers.event import async_track_state_change_event
 
-        self._ecoute = async_track_state_change_event(self.hass, sorted(self._pilotes), self._sur_etat)
+        self._ecoute = async_track_state_change_event(self.hass, sorted(self._pilotes) + sorted(self._programmes),
+                                                      self._sur_etat)
 
     @callback
     def _sur_registre(self, event) -> None:
@@ -596,6 +647,13 @@ class LoggiaChauffage:
         entite = d.get("entity_id")
         cle = self._pilotes.get(entite)
         neuf, vieux = d.get("new_state"), d.get("old_state")
+        prog = self._programmes.get(entite) if cle is None else None
+        if prog is not None:
+            # Le programme de l'appareil s'allume ou s'eteint : le moteur se retient, ou reprend (30/10).
+            avant, apres = (str(getattr(x, "state", "")).lower() for x in (vieux, neuf))
+            if neuf is not None and avant != apres and apres in ("on", "off"):
+                self.hass.async_create_task(self.async_evaluer([prog], raison="programme"))
+            return
         if cle is None or neuf is None or str(neuf.state).lower() in MUETS:
             return
         c = self.cfg["chauffages"].get(cle) or {}
@@ -608,7 +666,7 @@ class LoggiaChauffage:
         if refroidit(fam, neuf.state):
             return                                  # elle refroidit : le planning de chauffe attend (audit du 19/10)
         unite = unite_temperature(self.hass)
-        lu = lire_appareil(fam, neuf.state, neuf.attributes, unite)
+        lu = lire_appareil(fam, neuf.state, neuf.attributes, unite, self._decalage(c))
         if lu["signature"] == lire_appareil(fam, vieux.state, vieux.attributes, unite)["signature"]:
             return                                  # la piece se rechauffe : ce n'est pas un geste
         if fam == "vtherm":
@@ -620,10 +678,17 @@ class LoggiaChauffage:
                     self.hass.async_create_task(self.async_evaluer([cle], raison="retour"))
                 return                              # VTherm se met de lui-meme en securite ou en delestage
         ordre = self._ordres.get(cle)
-        confirme = ordre is not None and deja(fam, ordre["cible"], neuf.state, neuf.attributes,
-                                              c.get("temperatures"), unite)
+        confirme = ordre is not None and deja(fam, ordre["cible"], neuf.state,
+                                              self._avec_pas(entite, dict(neuf.attributes or {})),
+                                              c.get("temperatures"), unite, self._decalage(c))
+        if not confirme and ordre is not None and fam == "thermostat":
+            pas = pas_revele(ordre.get("envoye"), (neuf.attributes or {}).get("temperature"))
+            if pas is not None:
+                self._pas[entite] = pas             # pris a SON pas : 17,5 °C envoyes, 17 lus (30/10)
+                confirme = True
         if confirme:
             ordre["vu"] = True                      # l'appareil a repondu : la stabilisation est finie
+            self._defaits.pop(cle, None)
         ctx = getattr(event, "context", None)
         if getattr(ctx, "id", None) in self._miens:
             return                                  # notre ordre, rendu par Home Assistant
@@ -632,6 +697,8 @@ class LoggiaChauffage:
                 return                              # l'echo de notre ordre, sous un autre contexte
             if not ordre.get("vu") and (self.maintenant() - ordre["ts"]).total_seconds() < STABILISATION:
                 return                              # l'appareil se cherche encore
+        if self._programme_de(entite, fam):
+            return                                  # son programme allume (le Timer d'un poele) : pas un geste (30/10)
         self.hass.async_create_task(self._async_geste(cle, entite, lu, getattr(ctx, "user_id", None)))
 
     # ── Le calcul, et l'ordre ──────────────────────────────────────────────
@@ -652,6 +719,10 @@ class LoggiaChauffage:
                     await self._fin_des_vacances(maintenant)
                 except Exception:  # noqa: BLE001
                     _LOGGER.exception("Loggia chauffage : la fin des vacances n'a pas pu etre enregistree")
+                try:
+                    await self._eau_chaude(maintenant)
+                except Exception:  # noqa: BLE001
+                    _LOGGER.exception("Loggia chauffage : l'eau chaude des vacances n'a pas pu etre reglee")
                 registre = self._entrees_par_id()
                 for cle, c in list(self.cfg["chauffages"].items()):
                     if self._hors_service():
@@ -679,6 +750,13 @@ class LoggiaChauffage:
                        "fin": list(heure_murale(fin, self.fuseau)) if fin else None}
         ouverte = bool(self.fenetres.get(entite)) if fenetre is None else fenetre
         return mode_voulu(c["semaine"], self.cfg["maison"], reprise, ouverte, jour, minute, c["fenetre"])
+
+    @staticmethod
+    def _decalage(c: dict[str, Any] | None) -> float:
+        """Le decalage d'un thermostat, en °C (30/10) : ce que le moteur ajoute a la
+        consigne de la piece avant de l'envoyer. 0 pour le reste."""
+        d = (c or {}).get("decalage")
+        return float(d) if (c or {}).get("famille") == "thermostat" and isinstance(d, (int, float)) else 0.0
 
     def _coupures_fenetre(self) -> dict[str, tuple[list[str], str, str]]:
         """Les radiateurs que le moteur tient COUPES pour une fenetre ouverte :
@@ -712,7 +790,7 @@ class LoggiaChauffage:
             elif c["famille"] == "thermostat" and isinstance(attrs.get("temperature"), (int, float)):
                 t = posee if posee is not None else temperature_du_mode(mode, c["temperatures"])
                 rendre = None if t is None else (
-                    PREFIXE_CONSIGNE + str(float(consigne_en_unite(t, attrs, unite_temperature(self.hass)))))
+                    PREFIXE_CONSIGNE + str(float(consigne_en_unite(t + self._decalage(c), attrs, unite_temperature(self.hass)))))
                 laisse = PREFIXE_CONSIGNE + str(float(attrs["temperature"]))
             else:
                 rendre = None
@@ -780,15 +858,27 @@ class LoggiaChauffage:
         if (c["famille"] == "vtherm" and cible["mode"] != "arret"
                 and attrs.get("preset_mode") in PRESETS_AUTOMATIQUES):
             return
+        programme = self._programme_de(entite, c["famille"])
+        if programme and cible["mode"] != "arret":
+            # Son propre programme commande (le Timer d'un poele) : chaque ordre serait defait
+            # dans la minute (30/10). Rien ne part ; son extinction relance le calcul
+            # (`_sur_etat`). L'Arret passe : c'est la fenetre ouverte, ou l'Ete, qui l'eteint.
+            if self._notes.get(cle) != ("programme", programme):
+                self._notes[cle] = ("programme", programme)
+                await self.regles.noter(MODULE, voulu["source"], "retenu", cibles=[entite], n=0,
+                                        motif=self._motif({**c, "entite": entite}, voulu, maintenant),
+                                        detail="son programme commande")
+            return
         unite = unite_temperature(self.hass)
-        if deja(c["famille"], cible, etat, attrs, c["temperatures"], unite):
+        if deja(c["famille"], cible, etat, attrs, c["temperatures"], unite, self._decalage(c)):
             self._notes.pop(cle, None)
+            self._defaits.pop(cle, None)
             return
         ordre = self._ordres.get(cle)
         if (ordre is not None and ordre["cible"] == cible
                 and (maintenant - ordre["ts"]).total_seconds() < STABILISATION):
             return                                  # parti, l'appareil n'a pas encore repondu
-        appels = commande(c["famille"], cible, etat, attrs, c["temperatures"], unite)
+        appels = commande(c["famille"], cible, etat, attrs, c["temperatures"], unite, self._decalage(c))
         if not appels:
             return
         await self._commander(cle, c, entite, cible, voulu, appels, maintenant, raison, relance)
@@ -842,9 +932,11 @@ class LoggiaChauffage:
         ctx = Context(user_id=r["par"]) if regle == "main" and r.get("par") else Context()
         self._miens.append(ctx.id)
         del self._miens[:-256]
-        # L'ordre, et de quoi le redire s'il ne se confirme pas (`_async_verifier`).
+        # L'ordre, et de quoi le redire s'il ne se confirme pas (`_async_verifier`). `envoye` : la
+        # consigne partie, dans l'unite de la maison — ce que l'appareil en fait revele son pas.
+        envoye = next((d.get("temperature") for _domaine, service, d in appels if service == "set_temperature"), None)
         ordre = self._ordres[cle] = {"cible": dict(cible), "ts": maintenant, "relance": relance,
-                                     "regle": regle, "quoi": quoi, "motif": motif}
+                                     "regle": regle, "quoi": quoi, "motif": motif, "envoye": envoye}
         try:
             for domaine, service, donnees in appels:
                 await asyncio.wait_for(
@@ -954,9 +1046,20 @@ class LoggiaChauffage:
                 if not entite:
                     return
                 etat, attrs = self._attributs(entite)
-                if deja(c["famille"], ordre["cible"], etat, attrs, c["temperatures"], unite_temperature(self.hass)):
+                if deja(c["famille"], ordre["cible"], etat, attrs, c["temperatures"], unite_temperature(self.hass),
+                        self._decalage(c)):
                     return                          # pris, sans que son echo soit passe par nous
+                if c["famille"] == "thermostat":
+                    pas = pas_revele(ordre.get("envoye"), attrs.get("temperature"))
+                    if pas is not None:
+                        self._pas[entite] = pas     # pris a SON pas, sans que son echo soit passe par nous (30/10)
+                        return
                 relancer = not ordre.get("relance")
+                if not relancer:
+                    # Perdu deux fois : ce qu'il fait a la place se DIT, jusqu'a ce qu'un ordre tienne (30/10).
+                    lu = lire_appareil(c["famille"], etat, attrs, unite_temperature(self.hass), self._decalage(c))
+                    self._defaits[cle] = {"mode": lu["mode"], "temperature": lu["temperature"],
+                                          "depuis": self._a_l_heure_de_la_maison(self.maintenant())}
                 await self.regles.noter(MODULE, ordre["regle"], ordre["quoi"], cibles=[entite], n=0,
                                         motif=ordre["motif"],
                                         detail=joindre("non confirmé", None if relancer else "nouvel échec, on attend"),
@@ -986,6 +1089,14 @@ class LoggiaChauffage:
             fin = lire_instant(self.cfg["maison"].get("vacances_fin"))
             if fin is not None:
                 instants.append(fin)
+        # Le mode absence des chauffe-eau se leve AVANT le retour (eau_chaude.py).
+        leve = levee_a(self.cfg)
+        if leve is not None:
+            instants.append(leve)
+        # Un ballon pose qu'on n'a pas pu lever (muet) : un reveil court, borne (eau_chaude.RELANCE_MAX).
+        attente = getattr(self, "_eau_attente", None)
+        if attente is not None and maintenant - attente < RELANCE_EAU_MAX:
+            instants.append(maintenant + RELANCE_EAU)
         futurs = [i for i in instants if i > maintenant]
         return min(futurs) if futurs else None
 
@@ -1017,6 +1128,98 @@ class LoggiaChauffage:
             return
         await self._ecrire_maison("planning", None, maintenant)
         await self.regles.noter(MODULE, "maison", MOTS_MAISON["planning"], n=0, motif="fin des vacances")
+
+    # ── L'eau chaude des Vacances (chantier G3, E2 ; eau_chaude.py) ─────────
+    async def _eau_chaude(self, maintenant: datetime) -> None:
+        """Option cochee et maison en Vacances : chaque chauffe-eau qui sait le
+        faire passe en mode absence, et le quitte `AVANCE_RETOUR` avant la fin.
+        Loggia ne leve que ce qu'il a pose. « Observer sans agir » : rien ne part."""
+        poses = set(getattr(self, "_eau_poses", None) or ())
+        laisses = set(getattr(self, "_eau_laisses", None) or ())
+        if not poses and not laisses and not option_active(self.cfg):
+            self._eau_attente = None
+            return
+        etats = getattr(self.hass, "states", None)
+        ids = etats.async_entity_ids("water_heater") if etats is not None and hasattr(etats, "async_entity_ids") else []
+        lus: dict[str, Any] = {}
+        for haid in ids:
+            st = etats.get(haid)
+            if st is None or str(st.state).lower() in MUETS or not sait_absence(getattr(st, "attributes", None)):
+                lus[haid] = None
+                continue
+            away = (st.attributes or {}).get("away_mode")
+            lus[haid] = away if away in ("on", "off") else None
+        voulu = absence_voulue(self.cfg, maintenant)
+        vus_avant = set(getattr(self, "_eau_vus", None) or ())
+        ordres, tenus, garde, vus = ordres_absence(lus, voulu, poses, laisses, vus_avant)
+        if self._simule():
+            return                                  # Observer sans agir (ADR 0004)
+        essais = getattr(self, "_eau_essais", None)
+        if essais is None:
+            essais = self._eau_essais = {}
+        for haid, poser in ordres:
+            ctx = Context()
+            self._miens.append(ctx.id)
+            del self._miens[:-256]
+            try:
+                await asyncio.wait_for(self.hass.services.async_call(
+                    "water_heater", "set_away_mode", {"entity_id": [haid], "away_mode": poser},
+                    blocking=True, context=ctx), DELAI_APPEL)
+            except Exception:  # noqa: BLE001 — refus ou silence : on retentera au prochain calcul
+                if poser:
+                    _LOGGER.warning("Loggia chauffage : le mode absence de %s n'a pas pu etre pose", haid, exc_info=True)
+                    tenus.discard(haid)
+                    continue
+                essais[haid] = essais.get(haid, 0) + 1
+                if essais[haid] < ESSAIS_LEVEE:
+                    tenus.add(haid)                 # retente au reveil suivant (5 min)
+                    _LOGGER.debug("Loggia chauffage : levee du mode absence de %s refusee (%d)", haid, essais[haid])
+                else:
+                    # Trois refus : Loggia cesse, et le dit. Le ballon reste en absence : a lever a la main.
+                    _LOGGER.warning("Loggia chauffage : le mode absence de %s n'a pas pu etre leve apres %d essais ; "
+                                    "il reste en absence, a lever a la main", haid, essais[haid], exc_info=True)
+                    essais.pop(haid, None)
+        for haid in [h for h in essais if h not in tenus]:
+            essais.pop(haid, None)
+        # Encore pose alors que l'absence n'est plus voulue (un ballon muet) : le reveil court reviendra le lever.
+        if tenus and not voulu:
+            self._eau_attente = getattr(self, "_eau_attente", None) or maintenant
+        else:
+            self._eau_attente = None
+        if tenus != poses or garde != laisses or vus != vus_avant:
+            self._eau_poses = tenus
+            self._eau_laisses = garde
+            self._eau_vus = vus
+            await self._sauver_eau()
+
+    def _store_eau(self):
+        if getattr(self, "_depot_eau", None) is None:
+            from homeassistant.helpers.storage import Store
+
+            self._depot_eau = Store(self.hass, VERSION_ETAT, CLE_EAU)
+        return self._depot_eau
+
+    async def _lire_eau(self) -> None:
+        try:
+            brut = await self._store_eau().async_load()
+        except Exception:  # noqa: BLE001 — illisible : rien de pose, rien a lever
+            _LOGGER.warning("Loggia chauffage : l'etat de l'eau chaude est illisible", exc_info=True)
+            brut = None
+        def lue(cle: str) -> set[str]:
+            liste = brut.get(cle) if isinstance(brut, dict) else None
+            return {h for h in liste if isinstance(h, str)} if isinstance(liste, list) else set()
+
+        self._eau_poses = lue("poses")
+        self._eau_laisses = lue("laisses")
+        self._eau_vus = lue("vus")
+
+    async def _sauver_eau(self) -> None:
+        try:
+            await self._store_eau().async_save({"poses": sorted(getattr(self, "_eau_poses", None) or ()),
+                                                "laisses": sorted(getattr(self, "_eau_laisses", None) or ()),
+                                                "vus": sorted(getattr(self, "_eau_vus", None) or ())})
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia chauffage : l'etat de l'eau chaude n'a pas ete enregistre")
 
     async def _ecrire_maison(self, mode: Any, fin: Any, maintenant: datetime,
                              par_presence: bool = False) -> None:
@@ -1059,6 +1262,7 @@ class LoggiaChauffage:
         self.reprises[cle] = nouvelle_reprise(lu["mode"], t, fin, maintenant, par,
                                               programme=lu.get("programme") is True)
         self._ordres.pop(cle, None)                 # la main a pris la suite : notre dernier ordre est perime
+        self._defaits.pop(cle, None)
         self._annuler_verification(cle)
         await self._sauver_reprises()
         await self.regles.noter(MODULE, "main", "reprise en main", cibles=[entite], n=0,
@@ -1418,6 +1622,8 @@ class LoggiaChauffage:
         maison = dict(self.cfg["maison"])
         maison["vacances_fin"] = self._a_l_heure_de_la_maison(maison.get("vacances_fin"))
         return {"chauffages": liste, "maison": maison, "simulation": self._simule(),
+                # L'option de l'eau chaude des Vacances (chantier G3, E2) : la popup du chauffe-eau la lit.
+                "eau_chaude": dict(self.cfg.get("eau_chaude") or {"absence": False}),
                 # La regle des fenetres en « Observer sans agir » : hors planning, c'est elle
                 # qui coupe — et elle ne coupe rien. L'ecran s'en sert (partie D).
                 "fenetres_observe": self._fenetres_observe(regle),
@@ -1478,6 +1684,10 @@ class LoggiaChauffage:
                                if getattr(e, "entity_id", None) == entite), None)
             if puissance_fixe(plateforme, attrs):
                 avertissements.append("puissance_fixe")
+        # Son dernier ordre perdu deux fois (30/10) ; son programme allume le dit deja mieux.
+        defait = self._defaits.get(cle) if (c or {}).get("planning") and not programme else None
+        if defait is not None:
+            avertissements.append("ordre_defait")
         # Un module fil pilote se nomme comme son APPAREIL (« Radiateur Chambre ») :
         # son `select` s'affiche sous ce nom suivi de celui de l'exposition
         # (« Radiateur Chambre Pilot wire mode » sous zigbee2mqtt). L'ecran nomme
@@ -1517,6 +1727,10 @@ class LoggiaChauffage:
             "concurrents": concurrents,
             # Le VTherm ou le Better Thermostat qui le commande : la fiche le nomme.
             "commande_par": commande_par,
+            # Le decalage de son capteur (°C, 30/10) : l'ecran montre et regle la consigne de la PIECE.
+            "decalage": self._decalage(c),
+            # Ce qu'il fait au lieu de son dernier ordre, perdu deux fois (30/10) : {"mode", "temperature" (°C), "depuis"}.
+            "defait": defait,
             # Planning eteint, la carte commande le module elle-meme : avec l'option telle
             # qu'il l'ecrit, `select_option` refusant toute autre graphie.
             "options": options_du_module(attrs.get("options")) if fam == "fil_pilote" and entite else None,
@@ -1583,7 +1797,9 @@ class LoggiaChauffage:
         if self._rate():
             return                                  # rate au demarrage : le fichier qu'il n'a pas su lire reste tel quel
         try:
-            await self._store_etat().async_save(self.reprises)
+            # Une COPIE (28/10, ADR 0280) : `Store` serialise plus tard, et les
+            # reprises vivantes peuvent changer entre-temps.
+            await self._store_etat().async_save(copy.deepcopy(self.reprises))
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia chauffage : reprises en main non enregistrees")
 

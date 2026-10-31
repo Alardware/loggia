@@ -17,6 +17,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ecrireRegle, refusNomme } from '../src/refus.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8').replace(/\r\n/g, '\n');
 
@@ -88,7 +89,7 @@ test('un refus déjà nommé par le serveur garde SES clés ; un autre code pass
 });
 
 test('le câblage : la barre passe par le filet commun, et le refus par le canal du toast', () => {
-  const app = lire('src', 'App.jsx') + lire('src', 'views', 'voletsplan.jsx');
+  const app = MONOLITHE + lire('src', 'views', 'voletsplan.jsx');
   const i = app.indexOf('function VoletsContent(');
   assert.ok(i > 0, 'la vue Volets a changé de forme');
   const corps = app.slice(i, app.indexOf('\nfunction ', i + 1));

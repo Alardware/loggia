@@ -18,7 +18,35 @@
  * se lit, on rend `null` : pas de carte vaut mieux qu'une carte qui invente.
  *
  * Aucun React ici, et aucune couleur : tout se teste à la main.
+ *
+ * OÙ LA LIRE (30/10, chantier G2 ; ADR 0301). Le calendrier ne se reconnaissait
+ * qu'à des mots français sans accents : rien dans cinq des sept langues, ni
+ * pour « Déchets » ou « Poubelles ». Il se reconnaît d'abord à sa PLATEFORME
+ * (Waste Collection Schedule, Afvalbeheer), puis à son nom, sans accents, dans
+ * les sept langues ; sans calendrier, les CAPTEURS qui portent un jour de
+ * passage. Le composant lit la même liste (`collecte.py`, un test les compare),
+ * et un choix dans Paramètres › Veilles ne fait que corriger.
  */
+import { sansAccents } from './outils.js';
+
+/* Les intégrations de ramassage : leur plateforme suffit. */
+const PLATEFORMES_COLLECTE = ['waste_collection_schedule', 'afvalbeheer'];
+/* Les mots du ramassage, sans accents, dans les sept langues — ceux du composant.
+ * Des mots entiers (relecture du 30/10) : « Familie Müller », « Tonte des
+ * bordures », « Collectif parents » ne sont pas des ramassages. */
+const MOTS_COLLECTE = ['collecte', 'collectes', 'collection', 'collections', 'ramassage', 'ramassages', 'poubelle', 'poubelles',
+  'ordure', 'ordures', 'dechet', 'dechets', 'waste', 'abfall', 'abfuhr', 'mull', 'muell',
+  'mullkalender', 'mulltermin', 'mulltermine', 'mulltonne', 'mulltonnen',
+  'inzameling', 'inzamelingen', 'ophaling', 'ophalingen', 'afval', 'raccolta', 'rifiuti', 'rifiuto',
+  'recogida', 'recogidas', 'residuos', 'residuo', 'basura', 'basuras',
+  'odpad', 'odpady', 'odpadow', 'odpadu', 'smieci', 'wywoz', 'wywozu'];
+/* Les composés de l'allemand et du néerlandais : « Abfallkalender » commence par
+ * le mot, « Restmüll », « Restafval », « Müllabfuhr » ou « Müllabholung » finit par lui. */
+const DEBUTS_COLLECTE = ['abfall', 'abfuhr', 'afval'];
+const FINS_COLLECTE = ['mull', 'muell', 'abfall', 'afval', 'abfuhr', 'abholung'];
+
+const CLES_JOURS = ['jours_restants', 'daysTo', 'days_to', 'Days_until', 'days_until', 'days', 'jours'];
+const CLES_DATE = ['date', 'next_date', 'prochaine_date', 'next_collection', 'collection_date'];
 
 const DATE_ISO = /^(\d{4})-(\d{2})-(\d{2})(?:[T ]|$)/;
 
@@ -73,13 +101,13 @@ export function lireCollecte(etat, maintenant = new Date()) {
   /* 1. Le nombre de jours, dans l'ordre des formes rencontrées. Un capteur qui
    * dit 0 jour parle d'aujourd'hui : on teste la PRÉSENCE de la clé. */
   let jours = null;
-  for (const k of ['jours_restants', 'daysTo', 'days_to', 'days', 'jours']) {
+  for (const k of CLES_JOURS) {
     if (at[k] !== undefined) { const n = nombre(at[k]); if (n !== null) { jours = n; break; } }
   }
 
   /* 2. La date, dans les attributs puis dans l'état. */
   let date = null;
-  for (const k of ['date', 'next_date', 'prochaine_date', 'next_collection', 'collection_date']) {
+  for (const k of CLES_DATE) {
     if (at[k] !== undefined) { date = dateDe(at[k]); if (date) break; }
   }
   if (!date) date = dateDe(etat.state);
@@ -163,7 +191,7 @@ export function familleCollecte(nom, rang = 0) {
  * Un jour sans collecte reste dans la liste, avec `types` vide : la bande
  * montre les sept jours, pas seulement ceux qui portent un bac.
  */
-export function joursCollecte(evenements, maintenant = new Date(), n = 7) {
+function joursCollecte(evenements, maintenant = new Date(), n = 7) {
   const now = maintenant instanceof Date ? maintenant : new Date(maintenant);
   const jour0 = minuit(now);
   const parJour = new Map();
@@ -193,4 +221,119 @@ export function joursCollecte(evenements, maintenant = new Date(), n = 7) {
     }
     return { date: d, jour: i, types };
   });
+}
+
+/* ── Où lire la collecte (chantier G2, D2 ; ADR 0301) ────────────────────── */
+
+const motDeCollecte = (m) => MOTS_COLLECTE.indexOf(m) >= 0
+  || DEBUTS_COLLECTE.some(d => m.indexOf(d) === 0)
+  || FINS_COLLECTE.some(f => m.length >= f.length && m.slice(-f.length) === f);
+
+/** Un de ces noms parle-t-il de ramassage, dans l'une des sept langues ? Mot à mot, sans accents. */
+export function nomDeCollecte(...noms) {
+  return noms.some(n => !!n && sansAccents(n).split(/[^a-z0-9]+/).some(m => !!m && motDeCollecte(m)));
+}
+
+/* Un capteur qui porte un jour de passage : sa classe, une clé connue, ou un
+ * état qui EST une date. « Déchets triés : 12 kg » n'en est pas un. */
+function ditUneDate(st) {
+  const a = (st && st.attributes) || {};
+  return a.device_class === 'date' || a.device_class === 'timestamp'
+    || CLES_JOURS.some(k => k in a) || CLES_DATE.some(k => k in a) || !!dateDe(st && st.state);
+}
+
+/**
+ * Les calendriers et les capteurs de ramassage de la maison :
+ *   { calendriers: [id…], capteurs: [id…], plateforme: [id…] }
+ * Ceux que leur PLATEFORME désigne d'abord, puis ceux que leur nom désigne —
+ * nom affiché ou identifiant —, chaque groupe dans l'ordre des identifiants.
+ * Les tests de date passent AVANT le nom : la maison compte des centaines de
+ * capteurs, et ce calcul suit chaque changement d'état.
+ */
+export function sourcesCollecte(S, plateformeDe = () => null) {
+  const cals = [], caps = [];
+  for (const id of Object.keys(S || {})) {
+    const estCal = id.indexOf('calendar.') === 0;
+    if (!estCal && id.indexOf('sensor.') !== 0) continue;
+    const st = S[id] || {};
+    const plateforme = PLATEFORMES_COLLECTE.indexOf(plateformeDe(id)) >= 0;
+    const parNom = () => nomDeCollecte((st.attributes || {}).friendly_name, id.slice(id.indexOf('.') + 1));
+    if (estCal) { if (plateforme || parNom()) cals.push([plateforme ? 0 : 1, id]); }
+    else if (plateforme || (ditUneDate(st) && parNom())) caps.push([plateforme ? 0 : 1, id]);
+  }
+  const ranger = (l) => l.sort((a, b) => (a[0] - b[0]) || (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0)).map(x => x[1]);
+  const plateforme = [...cals, ...caps].filter(x => x[0] === 0).map(x => x[1]).sort();
+  return { calendriers: ranger(cals), capteurs: ranger(caps), plateforme };
+}
+
+/**
+ * LA source de l'Accueil : `{ calendrier, capteurs }`. Celle que Paramètres a
+ * choisie si elle existe encore ; sinon la PLATEFORME d'abord — son calendrier,
+ * puis ses capteurs —, puis un calendrier reconnu à son nom, puis des capteurs.
+ * Même règle que le composant (`collecte.source`).
+ */
+export function sourceCollecte(S, plateformeDe = () => null, choisie = '') {
+  if (choisie && S && S[choisie]) {
+    return choisie.indexOf('calendar.') === 0 ? { calendrier: choisie, capteurs: [] } : { calendrier: null, capteurs: [choisie] };
+  }
+  const s = sourcesCollecte(S, plateformeDe);
+  const par = (oui) => [s.calendriers.filter(x => (s.plateforme.indexOf(x) >= 0) === oui), s.capteurs.filter(x => (s.plateforme.indexOf(x) >= 0) === oui)];
+  for (const [cals, caps] of [par(true), par(false)]) {
+    if (cals.length) return { calendrier: cals[0], capteurs: [] };
+    if (caps.length) return { calendrier: null, capteurs: caps };
+  }
+  return { calendrier: null, capteurs: [] };
+}
+
+/**
+ * Le prochain passage lu dans des CAPTEURS, à la forme d'un jour de
+ * `joursCollecte` : `{ date, jour, types: [{ cle, rgb, nom }] }`, ou `null`.
+ * Plusieurs capteurs, une tournée : le plus proche, et ce qui passe ce jour-là
+ * — les types que le capteur dit, sinon son nom (un capteur par bac, comme
+ * Afvalbeheer).
+ */
+function collecteDesCapteurs(etats, maintenant = new Date()) {
+  const lus = [];
+  for (const st of etats || []) {
+    const lu = lireCollecte(st, maintenant);
+    if (lu && lu.jours >= 0) lus.push({ lu, nom: String(((st && st.attributes) || {}).friendly_name || '').trim() });
+  }
+  if (!lus.length) return null;
+  const jours = Math.min(...lus.map(x => x.lu.jours));
+  const noms = [];
+  let date = null;
+  for (const { lu, nom } of lus) {
+    if (lu.jours !== jours) continue;
+    date = date || lu.date;
+    for (const t of (lu.types.length ? lu.types : (nom ? [nom] : []))) if (noms.indexOf(t) < 0) noms.push(t);
+  }
+  const types = [];
+  noms.forEach((n, i) => { const f = familleCollecte(n, i); if (!types.some(x => x.cle === f.cle)) types.push(f); });
+  return { date: minuit(date), jour: jours, types };
+}
+
+/**
+ * Le prochain jour qui porte un bac, d'où qu'il vienne : les événements du
+ * calendrier (ceux de l'agenda, marqués `_cal`), ou les capteurs.
+ */
+export function prochaineCollecte({ calendrier = null, capteurs = [], evenements = [], etats = {} } = {}, maintenant = new Date()) {
+  if (calendrier) {
+    const j = joursCollecte((evenements || []).filter(e => e && e._cal === calendrier), maintenant);
+    return j.find(x => x.types.length) || null;
+  }
+  if (capteurs && capteurs.length) return collecteDesCapteurs(capteurs.map(id => (etats || {})[id]).filter(Boolean), maintenant);
+  return null;
+}
+
+/** « 2026-10-31 » : le jour d'une collecte, tel que le composant le range
+ * (`loggia_collecte`) — ISO, mois de 1 à 12, ce que n'est pas `cleJour` d'agenda.js. */
+export function jourIso(d) {
+  if (!(d instanceof Date) || isNaN(d.getTime())) return '';
+  const p = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+
+/** Les bacs de CE ramassage sont-ils sortis ? La partie commune le dit, pour tous les écrans. */
+export function sortiPour(etat, prochain) {
+  return !!(etat && prochain && prochain.date && typeof etat.sorti === 'string' && etat.sorti === jourIso(prochain.date));
 }

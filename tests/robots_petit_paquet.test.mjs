@@ -10,6 +10,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 const { texteRefus, enregistrerRefus, raisonEchec } = await import('../src/refus.js');
 const { REFUS_ROBOTS } = await import('../src/refusrobots.js');
@@ -44,8 +45,10 @@ test('point 3 : « Localiser » part au serveur avec `localiser`, sans script ni
   assert.equal(RE.departRobot(ASP), null, 'un geste, pas un départ : rien ne se note pour la carte');
   RE.reglerRobotsEtat({});
   // Le geste de la carte : plus de cache de l'onglet, plus de l'aspirateur que la découverte prend.
-  const app = lire('src/App.jsx');
-  const corps = app.slice(app.indexOf('function localiserRobot('), app.indexOf('/* Ce que la carte, la compacte, la popup et « En ce moment » lisent'));
+  const app = MONOLITHE;
+  // ASSERTION MODIFIÉE (ADR 0283) : la carte d'un lecteur porte le même commentaire et se range avant celle du robot ; le repère se cherche APRÈS la fonction.
+  const debut = app.indexOf('function localiserRobot(');
+  const corps = app.slice(debut, app.indexOf('/* Ce que la carte, la compacte, la popup et « En ce moment » lisent', debut));
   assert.ok(corps.includes('localiser: true') && !corps.includes('cfgVal') && !corps.includes('LOGGIA_RESOLVED') && !corps.includes('script_inconnu'), corps);
   assert.ok(/invalid_format/.test(corps), 'un serveur d’avant refuse la clé : `locate` en direct, jamais un départ');
 });

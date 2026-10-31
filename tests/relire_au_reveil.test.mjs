@@ -24,8 +24,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { doitRelire } from '../src/config.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const APP = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const APP = MONOLITHE;
 
 test('trois réveils déclenchent la relecture', () => {
   /* L'onglet redevient visible, la fenêtre reprend le focus, la connexion

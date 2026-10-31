@@ -24,9 +24,11 @@ TEXTES: dict[str, dict[str, str]] = json.loads(r"""
     "{nom} demande 15 min de plus ({appareil})": "{nom} asks for 15 more minutes ({appareil})",
     "Volume ramené trois fois en dix minutes sur {appareil}": "Volume brought back three times in ten minutes on {appareil}",
     "{appareil} se rallume après l’heure": "{appareil} keeps turning back on after hours",
+    "Demain : {types}": "Tomorrow: {types}",
     "{nom}, l’écran s’éteint dans cinq minutes": "{nom}, the screen turns off in five minutes",
     "Accorder 15 min": "Allow 15 min",
-    "Refuser": "Refuse"
+    "Refuser": "Refuse",
+    "C’est sorti": "It’s out"
   },
   "de": {
     "Loggia — sûreté": "Loggia — Sicherheit",
@@ -49,9 +51,11 @@ TEXTES: dict[str, dict[str, str]] = json.loads(r"""
     "{nom} demande 15 min de plus ({appareil})": "{nom} bittet um 15 Minuten mehr ({appareil})",
     "Volume ramené trois fois en dix minutes sur {appareil}": "Lautstärke dreimal in zehn Minuten auf {appareil} zurückgesetzt",
     "{appareil} se rallume après l’heure": "{appareil} schaltet sich nach der Zeit wieder ein",
+    "Demain : {types}": "Morgen: {types}",
     "{nom}, l’écran s’éteint dans cinq minutes": "{nom}, der Bildschirm geht in fünf Minuten aus",
     "Accorder 15 min": "15 Min. gewähren",
-    "Refuser": "Ablehnen"
+    "Refuser": "Ablehnen",
+    "C’est sorti": "Ist draußen"
   },
   "nl": {
     "Loggia — sûreté": "Loggia — veiligheid",
@@ -74,9 +78,11 @@ TEXTES: dict[str, dict[str, str]] = json.loads(r"""
     "{nom} demande 15 min de plus ({appareil})": "{nom} vraagt 15 minuten extra ({appareil})",
     "Volume ramené trois fois en dix minutes sur {appareil}": "Volume drie keer in tien minuten teruggezet op {appareil}",
     "{appareil} se rallume après l’heure": "{appareil} gaat na de toegestane tijd weer aan",
+    "Demain : {types}": "Morgen: {types}",
     "{nom}, l’écran s’éteint dans cinq minutes": "{nom}, het scherm gaat over vijf minuten uit",
     "Accorder 15 min": "15 min toestaan",
-    "Refuser": "Weigeren"
+    "Refuser": "Weigeren",
+    "C’est sorti": "Staat buiten"
   },
   "it": {
     "Loggia — sûreté": "Loggia — sicurezza",
@@ -99,9 +105,11 @@ TEXTES: dict[str, dict[str, str]] = json.loads(r"""
     "{nom} demande 15 min de plus ({appareil})": "{nom} chiede 15 minuti in più ({appareil})",
     "Volume ramené trois fois en dix minutes sur {appareil}": "Volume riportato tre volte in dieci minuti su {appareil}",
     "{appareil} se rallume après l’heure": "{appareil} si riaccende fuori orario",
+    "Demain : {types}": "Domani: {types}",
     "{nom}, l’écran s’éteint dans cinq minutes": "{nom}, lo schermo si spegne tra cinque minuti",
     "Accorder 15 min": "Concedi 15 min",
-    "Refuser": "Rifiuta"
+    "Refuser": "Rifiuta",
+    "C’est sorti": "È fuori"
   },
   "es": {
     "Loggia — sûreté": "Loggia — seguridad",
@@ -124,9 +132,11 @@ TEXTES: dict[str, dict[str, str]] = json.loads(r"""
     "{nom} demande 15 min de plus ({appareil})": "{nom} pide 15 minutos más ({appareil})",
     "Volume ramené trois fois en dix minutes sur {appareil}": "Volumen devuelto tres veces en diez minutos en {appareil}",
     "{appareil} se rallume après l’heure": "{appareil} se vuelve a encender fuera de horario",
+    "Demain : {types}": "Mañana: {types}",
     "{nom}, l’écran s’éteint dans cinq minutes": "{nom}, la pantalla se apaga en cinco minutos",
     "Accorder 15 min": "Conceder 15 min",
-    "Refuser": "Rechazar"
+    "Refuser": "Rechazar",
+    "C’est sorti": "Ya está fuera"
   },
   "pl": {
     "Loggia — sûreté": "Loggia — bezpieczeństwo",
@@ -149,9 +159,11 @@ TEXTES: dict[str, dict[str, str]] = json.loads(r"""
     "{nom} demande 15 min de plus ({appareil})": "{nom} prosi o 15 minut więcej ({appareil})",
     "Volume ramené trois fois en dix minutes sur {appareil}": "Głośność obniżona trzy razy w dziesięć minut na {appareil}",
     "{appareil} se rallume après l’heure": "{appareil} włącza się ponownie po godzinie",
+    "Demain : {types}": "Jutro: {types}",
     "{nom}, l’écran s’éteint dans cinq minutes": "{nom}, ekran wyłączy się za pięć minut",
     "Accorder 15 min": "Przyznaj 15 min",
-    "Refuser": "Odmów"
+    "Refuser": "Odmów",
+    "C’est sorti": "Wystawione"
   }
 }
 """)

@@ -139,6 +139,8 @@ export async function registresDuComposant(hass) {
       // La famille d'un chauffage, que le serveur a reconnue (fil_pilote,
       // thermostat, vtherm) : l'écran n'a pas l'identifiant stable pour le faire.
       famille: e.famille || null,
+      // Le rôle dans le contrat à couleurs (`tarifs.py`, chantier G3, E4) : le créneau, la couleur du lendemain.
+      tarif: e.tarif || null,
       device_class: e.device_class, original_device_class: e.device_class,
       unit_of_measurement: e.unit, hidden_by: e.hidden ? 'user' : null,
     })),
@@ -232,6 +234,8 @@ export function buildIndex({ areas = [], devices = [], entities = [], floors = [
       // La famille d'un chauffage ('fil_pilote', 'thermostat', 'vtherm'), posee
       // par le composant. Sans lui (registres de Home Assistant), null.
       famille: e.famille || null,
+      // Le rôle dans le contrat à couleurs ('creneau', 'couleur', 'couleur_demain'), posé par le composant (tarifs.py).
+      tarif: e.tarif || null,
     });
   });
 

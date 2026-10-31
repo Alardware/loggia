@@ -1266,3 +1266,22 @@ def test_les_lignes_de_loggia_d_une_lumiere_passent_par_les_manoeuvres_des_volet
     v.regles = regles
     reponse = lancer(v.async_manoeuvres(LINO, paris(0)))
     assert [(e["module"], e["quoi"]) for e in reponse["lignes"]] == [("scenarios", "Soirée"), ("nuit", "eteindre")]
+
+
+# ── Un fondu demande par Loggia (chantier G5, ADR 0304) ─────────────────────
+
+def test_un_fondu_annonce_ne_fait_qu_une_entree_et_ne_s_ecrit_pas(creer, horloge):
+    """« Reveil » lance par u-papa : 30 % en trois minutes, des paliers toutes les
+    quarante secondes, sans contexte passe le premier. UNE note au carnet ; le
+    fichier ne garde pas le fondu ; une lampe que le carnet ne suit pas est ignoree."""
+    b = creer()
+    b.attendre(paris(18, 1))
+    b.l.annoncer_fondu([BUREAU, "light.led", "light.inconnue"], 180, False, "u-papa", "c1")
+    assert "fondu" in b.l.carnet[BUREAU] and "light.led" not in b.l.carnet and "light.inconnue" not in b.l.carnet
+    b.publier(paris(18, 1, 1), BUREAU, "on", {"brightness": 3}, types.SimpleNamespace(id="c1", parent_id=None, user_id="u-papa"))
+    for i, b255 in enumerate((20, 40, 60, 77), start=1):
+        b.publier(paris(18, 1, 1) + 40 * i, BUREAU, "on", {"brightness": b255})
+    assert b.journal(BUREAU) == [note(paris(18, 1, 1), "on", 30, user="u-papa")]
+    b.attendre(paris(18, 10))
+    assert "fondu" not in b.depot.contenu[BUREAU], "un fondu ne dure que quelques minutes : il ne s'ecrit pas"
+    assert b.depot.contenu[BUREAU]["evenements"] == [note(paris(18, 1, 1), "on", 30, user="u-papa")]

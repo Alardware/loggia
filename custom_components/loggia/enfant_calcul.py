@@ -15,15 +15,17 @@ au fuseau de la maison (`dt`, `dt_util.now()`) ; un jour s'ecrit Â« 2026-10-17 Â
 """
 from __future__ import annotations
 
-import math
 import re
 from datetime import datetime, timedelta
 from typing import Any
 
+from .entites import motif
+from .nombres import fini
+
 CLE = "loggia_enfant"
 MODULE = "enfant"
 # Un lecteur, tel que Home Assistant l'ecrit. Lus par `fullmatch` (26/10) : le `$` de Python accepte un `\n` final.
-LECTEUR = re.compile(r"^media_player\.[a-z0-9_]+$")
+LECTEUR = motif("media_player")
 HEURE = re.compile(r"^([01][0-9]|2[0-3]):([0-5][0-9])$")
 
 # Le plafond de volume : de 10 a 100 par pas de 5 a l'ecran ; le serveur accepte tout entier des bornes.
@@ -54,19 +56,21 @@ RAMENES_MAX = 20
 PREVENTIONS = ("volume", "rallumage", "voix")
 PHRASES_DORMIR_DEFAUT = ("joue du bruit blanc", "joue de la musique pour dormir")
 PHRASES_MAX = 2
+# Une phrase pour dormir part a l'Echo en `custom` : l'integration Alexa la
+# joue comme une phrase PRONONCEE (28/10, ADR 0279). Elle se valide donc au
+# serveur : de 2 a 120 caracteres une fois les blancs du bord retires, des
+# caracteres imprimables seulement (ni retour a la ligne, ni caractere de
+# controle ou invisible), au moins une lettre, et aucun des signes qui
+# ouvriraient un balisage (`<`, `>`, `{`, `}`, `\`).
+PHRASE_MIN = 2
+PHRASE_MAX = 120
+PHRASE_INTERDITS = frozenset("<>{}\\")
 NOM_MAX = 64
 PREFIXE_ACTION = "LOGGIA_ENFANT_"
 
 
-def nombre(x: Any) -> float | None:
-    """Un nombre fini, ou None - un booleen n'en est pas un."""
-    if isinstance(x, bool) or not isinstance(x, (int, float)):
-        return None
-    try:
-        valeur = float(x)
-    except OverflowError:
-        return None
-    return valeur if math.isfinite(valeur) else None
+# Un nombre fini, ou None - un booleen n'en est pas un (nombres.py, lot 8).
+nombre = fini
 
 
 def entier(x: Any, bas: int, haut: int) -> int | None:
@@ -151,7 +155,7 @@ def lire_profil(ident: str, brut: Any) -> dict[str, Any] | None:
             p["heures"][jour] = plage
     phrases = brut.get("phrases_dormir")
     if isinstance(phrases, list):
-        p["phrases_dormir"] = [s for s in phrases if isinstance(s, str) and s.strip()][:PHRASES_MAX]
+        p["phrases_dormir"] = [t for t in map(phrase_valide, phrases) if t is not None][:PHRASES_MAX]
     return p
 
 
@@ -171,6 +175,18 @@ def lire_config(brut: Any) -> dict[str, Any]:
     simulation = brut.get("simulation")
     cfg["simulation"]["actif"] = isinstance(simulation, dict) and simulation.get("actif") is True
     return cfg
+
+
+def phrase_valide(s: Any) -> str | None:
+    """La phrase pour dormir telle qu'elle se range, ou None si elle se refuse."""
+    if not isinstance(s, str):
+        return None
+    t = s.strip()
+    if not PHRASE_MIN <= len(t) <= PHRASE_MAX or not t.isprintable():
+        return None
+    if any(c in PHRASE_INTERDITS for c in t) or not any(c.isalpha() for c in t):
+        return None
+    return t
 
 
 def _refus(quoi: str) -> ValueError:
@@ -233,10 +249,12 @@ def _poser_profil(ident: str, courant: dict[str, Any] | None, patch: dict[str, A
             p["heures"][jour] = _plage(plage)
     if "phrases_dormir" in patch:
         phrases = patch["phrases_dormir"]
-        if (not isinstance(phrases, list) or not phrases or len(phrases) > PHRASES_MAX
-                or not all(isinstance(s, str) and s.strip() and len(s) <= 120 for s in phrases)):
+        if not isinstance(phrases, list) or not phrases or len(phrases) > PHRASES_MAX:
             raise _refus("phrases_dormir : une ou deux phrases")
-        p["phrases_dormir"] = list(phrases)
+        rangees = [phrase_valide(t) for t in phrases]
+        if any(t is None for t in rangees):
+            raise _refus("phrases_dormir : de 2 a 120 caracteres, au moins une lettre, sans retour a la ligne ni < > { } \\")
+        p["phrases_dormir"] = rangees
     return p
 
 

@@ -121,6 +121,8 @@ const REFUS = {
     ? tr('« {k} » non enregistré — trop volumineux', { k })
     : tr('Réglage non enregistré — trop volumineux')),
   code_admin_requis: () => tr('Profil non changé — le code administrateur est requis'),
+  /* Jamais défini, aucun code n'ouvre rien (audit du 28/10, ADR 0279). */
+  code_non_defini: () => tr('Aucun code administrateur n’est défini — un administrateur de Home Assistant doit le créer'),
   /* Les bornes des volets (audit du 19/10, volets.py `_valider_patch`). */
   volets_decalage_hors_bornes: (k) => (k
     ? tr('« {k} » non enregistré — un décalage va de −120 à +240 minutes', { k })
@@ -171,6 +173,12 @@ const REFUS = {
   /* Un appui qui rouvrirait l'eau, sans en-tête monté pour ouvrir la popup de la vanne (actions.js, passe bis 2 de l'étape 3 IoT) :
    * la même phrase que la ligne du journal, quand le serveur refuse (regles.py). */
   eau_seule: () => tr('Loggia ne rouvre jamais l’eau seule'),
+  /* Un bouton sans fil n'appelle que les gestes de la maison (interrupteurs.py, lot 8 de l'audit du 28/10, B3) : le
+   * « Service libre » refuse un domaine hors de la liste, et le refus nomme le service. */
+  interrupteur_service_refuse: (k) => (k
+    ? tr('« {k} » non enregistré — un bouton sans fil ne peut pas appeler ce service', { k })
+    : tr('Geste non enregistré — un bouton sans fil ne peut pas appeler ce service')),
+  interrupteur_geste_illisible: () => tr('Geste non enregistré — il est mal formé'),
 };
 
 /** Des refus de plus, que seul un module chargé à la demande peut recevoir —

@@ -1,0 +1,39 @@
+# Le composant contre un VRAI Home Assistant (28/10, ADR 0281).
+#
+# La suite de validate.yml tourne sur des doublures de Home Assistant ecrites a
+# la main : rapide, et lancee a chaque push, mais aveugle a une derive de
+# l'API de Home Assistant. Ce banc installe la version que hacs.json annonce
+# (tests/ha_reel/requirements.txt) et y demarre le composant : ajout depuis
+# l'interface, demarrage, panneau, aller-retour WebSocket, magasin.
+#
+# Une fois par semaine, et a la demande. Pas a chaque push : le paquet tire
+# tout Home Assistant, plusieurs minutes d'installation pour quelques tests.
+name: Vrai Home Assistant
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 5 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  fumee:
+    name: Tests de fumee (Home Assistant du minimum annonce)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          # Home Assistant 2024.7 demande Python 3.12.
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: tests/ha_reel/requirements.txt
+      - run: pip install -r tests/ha_reel/requirements.txt
+      - run: python -m pytest -c tests/ha_reel/pytest.ini tests/ha_reel -q

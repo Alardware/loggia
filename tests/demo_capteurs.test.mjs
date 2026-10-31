@@ -168,7 +168,9 @@ test('§ 12 : les piles — le bouton du salon à 14 % ; la batterie de la maiso
   assert.deepEqual([m.states['sensor.bouton_salon_pile'].state, m.states['sensor.bouton_salon_pile'].attributes.device_class, ents.get('sensor.bouton_salon_pile').device, devs.get('bouton_salon').area],
     ['14', 'battery', 'bouton_salon', 'salon']);
   assert.equal(m.states['sensor.batterie_niveau'].state, '78');
-  assert.ok(DEMO.includes("batSoc: 'sensor.batterie_niveau'"), 'la batterie de la maison, le rôle `batSoc` d’Énergie');
+  /* ASSERTION MODIFIÉE (30/10, G3-E1) : la batterie de la maison vient du tableau Énergie de la démo — son niveau est le `stat_soc`
+   * que Home Assistant nomme, et `resolveEnergy` en fait le rôle `batSoc`. */
+  assert.ok(DEMO.includes("stat_soc: 'sensor.batterie_niveau'"), 'la batterie de la maison, le rôle `batSoc` d’Énergie');
   assert.ok(!ents.has('sensor.basilic_humidite_du_sol') && !ents.has('sensor.basilic_moisture'), 'le Basilic : une plante configurée (`loggia_plants`), sans appareil connu');
   assert.ok(DEMO.includes("loggia_plants: [{ base: 'sensor.basilic', name: etiquette('Basilic'), room: lieu('Cuisine') }],"));
 });

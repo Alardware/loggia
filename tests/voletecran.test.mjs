@@ -11,6 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 // La langue AVANT l'import : i18n et les dates la lisent au chargement.
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 const V = await import('../src/voletecran.js');
@@ -40,11 +41,11 @@ test('V12 : le seuil est FIXE, à 2 % — aux deux bouts, et l’état publié �
 
 test('V12 : la clé loggia_coverseuil n’est plus lue, le réglage a quitté Paramètres', () => {
   for (const f of ['src/voletecran.js', 'src/App.jsx', 'src/views/volets.jsx', 'src/views/parametres.jsx']) {
-    assert.ok(!/cfgVal\('loggia_coverseuil'|loggia_coverseuil:/.test(lire(f)), f + ' lit ou écrit encore le seuil réglable');
+    assert.ok(!/cfgVal\('loggia_coverseuil'|loggia_coverseuil:/.test(f === 'src/App.jsx' ? MONOLITHE : lire(f)), f + ' lit ou écrit encore le seuil réglable');
   }
   assert.ok(!lire('src/views/volets.jsx').includes('VoletsAffichage'), 'le réglage « Considérer fermé en dessous de » est revenu');
   assert.ok(!lire('src/views/parametres.jsx').includes('VoletsAffichage'), 'Paramètres rend encore le réglage du seuil');
-  assert.ok(!lire('src/App.jsx').includes('function coverSeuil('), 'le seuil réglable est revenu dans App.jsx');
+  assert.ok(!MONOLITHE.includes('function coverSeuil('), 'le seuil réglable est revenu dans App.jsx');
 });
 
 test('V3 : un volet se reconnaît à sa classe — ni garage, ni portail, ni fenêtre de toit, ni sans classe', () => {

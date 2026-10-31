@@ -25,7 +25,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(RACINE, 'src');
@@ -308,7 +308,7 @@ test('les dessins des plantes sont des fichiers servis à côté de la page : le
   /* Chantier Capteurs, étapes 2 et 3, tâche 1 (C34, la place d'abord) : les deux dessins de PLANT_ART pesaient 6 778 octets
    * au démarrage, en adresses `data:`. Ils deviennent deux fichiers de `public/plantes/`, recopiés à côté de la page comme
    * les polices ; la carte d'une plante n'en garde que l'adresse, relative à la page. */
-  const app = (readFileSync(join(SRC, 'App.jsx'), 'utf8') + VUES_SORTIES);
+  const app = (MONOLITHE + VUES_SORTIES);
   const i = app.indexOf('const PLANT_ART = {');
   assert.notEqual(i, -1, 'PLANT_ART a disparu : la carte d’une plante perd son dessin');
   const bloc = app.slice(i, app.indexOf('};', i) + 2);
@@ -336,7 +336,7 @@ test('les dessins des plantes sont des fichiers servis à côté de la page : le
 });
 
 test('le fond météo attend la première peinture', () => {
-  const app = (readFileSync(join(SRC, 'App.jsx'), 'utf8') + VUES_SORTIES);
+  const app = (MONOLITHE + VUES_SORTIES);
   const i = app.indexOf('<WeatherGL');
   assert.notEqual(i, -1, 'le fond météo a disparu');
   // La garde de montage : la ligne au-dessus du calque du ciel. (Le 17/10, elle

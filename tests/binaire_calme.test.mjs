@@ -18,6 +18,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { monter } from './crochets.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -34,7 +35,7 @@ register('data:text/javascript,' + encodeURIComponent([
 const F = await import(new URL('../src/App.jsx?binaire_calme', import.meta.url).href);
 const FC = await import('../src/fichecapteur.jsx');
 const J = await import('../src/journee.jsx');
-const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+const APP = MONOLITHE;
 
 const rendre = (Comp, props) => renderToStaticMarkup(createElement(Comp, props));
 const st = (id, s, a) => ({ entity_id: id, state: s, attributes: a, last_changed: '2026-10-16T08:00:00Z', last_updated: '2026-10-16T09:00:00Z' });

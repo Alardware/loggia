@@ -2,6 +2,8 @@
 
 *17 octobre 2026 — accepté (tranche 1 de `docs/chantier-synchronisation.md`)*
 
+*Corrigée par l'ADR [0276](0276-un-compte-home-assistant-son-profil.md) (27/10, ticket #38).*
+
 ## Le problème
 
 > « Sur la synchronisation il faudrait que ce soit comme pour une vraie app.

@@ -25,9 +25,10 @@ import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
-const APP = lire('src', 'App.jsx');
+const APP = MONOLITHE;
 const PUR = lire('src', 'confort.js');
 
 /* Le mot du bandeau tel que l'Accueil le calcule : `zoneCo2` et `motCo2`, lus dans App.jsx.
@@ -43,9 +44,10 @@ const code = process.env.LOGGIA_L;
 const url = (p) => new URL(p, process.env.LOGGIA_R).href;
 Object.defineProperty(globalThis, 'navigator', { value: { language: code + '-' + code.toUpperCase() }, configurable: true });
 globalThis.window = code === 'fr' ? {} : { __loggiaCatalogue: { code, cat: (await import(url('src/langues/' + code + '.js'))).default } };
-const { verdictMesure, barreMesure, zoneMesure } = await import(url('src/confort.js'));
+const { verdictMesure, barreMesure, zoneMesure, arrondiMesure } = await import(url('src/confort.js'));
 const { tr, langue, locale } = await import(url('src/i18n.js'));
-const airLabel = new Function('zoneMesure', 'locale', process.env.LOGGIA_AIR + '\\nreturn motCo2;')(zoneMesure, locale);
+// ASSERTION MODIFIÉE (30/10, G1-D5) : zoneCo2 juge le chiffre écrit, arrondi à l'unité (arrondiMesure).
+const airLabel = new Function('zoneMesure', 'locale', 'arrondiMesure', process.env.LOGGIA_AIR + '\\nreturn motCo2;')(zoneMesure, locale, arrondiMesure);
 const b = barreMesure('co2', 1500);
 const carte = (v) => verdictMesure('co2', v).t;
 process.stdout.write(JSON.stringify({

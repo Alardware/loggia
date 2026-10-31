@@ -12,6 +12,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 
 // Le stockage d'UN navigateur ; chaque test repart d'un écran vierge.
@@ -152,7 +153,7 @@ test('rien n’est écrit quand rien ne change', async () => {
 
 test('le compte relié passe devant la fiche ; un écran non relié ne rouvre pas un Admin', async () => {
   const { readFileSync } = await import('node:fs');
-  const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  const app = MONOLITHE;
   assert.ok(!app.includes('dejaChoisi'), 'la reconnaissance du compte est de nouveau réservée aux écrans neufs');
   const i = app.indexOf('if (duCompte >= 0) { if (duCompte !== userIdx) setUserIdx(duCompte); return; }');
   const j = app.indexOf('const p = parseInt(profilAppareil(), 10);');
@@ -170,7 +171,7 @@ test('le compte relié passe devant la fiche ; un écran non relié ne rouvre pa
 
 test('la question d’appareil passe avant le profil du compte, qui s’applique après sa réponse', async () => {
   const { readFileSync } = await import('node:fs');
-  const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  const app = MONOLITHE;
   const q = app.indexOf('if (!questionPosee.current && !Object.keys(ficheAppareil()).length) {');
   const r = app.indexOf('profilRepris.current = true;', q);
   const c = app.indexOf('const duCompte = (profilServeur >= 0 && profilServeur < users.length) ? profilServeur : profilDuCompte;');

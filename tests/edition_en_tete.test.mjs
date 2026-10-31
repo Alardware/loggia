@@ -16,11 +16,11 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { detecterCapteursPieces } from '../src/resolve.js';
 import { DROITS_IDS } from '../src/state.js';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
-const app = (lire('src', 'App.jsx') + lire('src', 'views', 'voletsplan.jsx') + VUES_SORTIES); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
+const app = (MONOLITHE + lire('src', 'views', 'voletsplan.jsx') + VUES_SORTIES); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
 const par = lire('src', 'views', 'parametres.jsx');
 const ui = lire('src', 'ui.jsx');
 const en = lire('src', 'langues', 'en.js');
@@ -41,7 +41,8 @@ const VUES = [
 
 test('le bandeau d’edition est le PREMIER enfant du contenu, dans toutes les vues', () => {
   for (const [nom, debut] of VUES) {
-    const vue = bloc(app, debut, NL + 'function ');
+    // ASSERTION MODIFIÉE (ADR 0283) : la tranche s'arrête à la fin de la fonction ; une vue sortie d'App.jsx n'a plus de fonction voisine.
+    const vue = bloc(app, debut, NL + '}' + NL);
     assert.equal((vue.match(/<BandeauEdition/g) || []).length, 1, nom + ' : une barre, pas deux');
     const c = vue.indexOf('className="loggia-content"');
     assert.ok(c >= 0, nom + ' : pas de contenu ?');

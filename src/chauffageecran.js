@@ -121,6 +121,15 @@ export function modeVoisin(modes, mode, sens) {
  * rien. Un cran vaut donc un pas, un demi-degré au moins, et tombe sur la
  * grille de ce pas. null sans consigne lisible ou sans sens.
  */
+/* Le décalage du capteur d'un thermostat (30/10), dans `unite` : ce qu'il lit
+ * de plus que la pièce (`decalage`, en °C, que le moteur ajoute à ce qu'il
+ * envoie). Au planning, la carte et la fiche disent et règlent la consigne de
+ * la PIÈCE : celle de l'appareil, moins lui. 0 sans décalage. */
+export function decalageEn(ch, unite) {
+  const d = ch && typeof ch.decalage === 'number' && Number.isFinite(ch.decalage) ? ch.decalage : 0;
+  return unite === 'F' ? d * 1.8 : d;
+}
+
 export function consigneVoisine(consigne, sens, attributs, unite) {
   const s = Math.sign(sens);
   if (typeof consigne !== 'number' || !Number.isFinite(consigne) || !s) return null;
@@ -346,14 +355,23 @@ export function lignesMoment(etat, unite = 'C', { admin = true } = {}) {
     } else if (mode !== 'arret' && avis.includes('module_coupe')) {
       ligne = ['power', 'var(--o-warn-rgb)', tr('Module coupé : le planning ne peut rien')];
     } else if (avis.includes('programme_appareil')) {
-      // Son propre programme (le chrono d'un poêle) commande aussi : le planning n'est pas seul (audit du 19/10).
-      ligne = ['calendar-clock', 'var(--o-warn-rgb)', tr('Son propre programme est allumé : le planning ne commande pas seul')];
+      /* Son propre programme (le chrono d'un poêle) commande : chaque ordre serait défait dans la minute, le moteur
+       * n'envoie rien tant qu'il est allumé, sauf l'Arrêt (audit du 19/10 ; 30/10). */
+      ligne = ['calendar-clock', 'var(--o-warn-rgb)', tr('Son propre programme commande : Loggia attend qu’il s’éteigne')];
     } else if (avis.includes('programme_concurrent')) {
       // Un programme d'ailleurs (Scheduler, Velair, une automatisation) le commande aussi : deux chefs (26/10).
       ligne = ['calendar-clock', 'var(--o-warn-rgb)', tr('Un autre programme le commande aussi : le planning ne commande pas seul')];
     } else if (avis.includes('puissance_fixe')) {
       // Un poêle MCZ en manuel chauffe à puissance fixe : la consigne, donc le planning, ne compte plus (19/10).
       ligne = ['settings-sliders', 'var(--o-warn-rgb)', tr('Mode manuel : le planning n’a pas d’effet')];
+    } else if (avis.includes('ordre_defait')) {
+      /* Son dernier ordre perdu deux fois (30/10) : ce qu'il fait à la place — sa consigne pour la pièce, dans
+       * l'unité de la maison, ou son mode. Il se tait dès qu'un ordre tient. */
+      const d = ch.defait && typeof ch.defait === 'object' ? ch.defait : {};
+      const motD = motMode(d.mode);
+      ligne = ['triangle-warning', 'var(--o-warn-rgb)', Number.isFinite(d.temperature)
+        ? tr('Il n’a pas gardé l’ordre de Loggia : il est à {t}', { t: nombre(deCelsius(d.temperature, unite), 1, 0) + ' °' + unite })
+        : motD ? tr('Il n’a pas gardé l’ordre de Loggia : il est en {mode}', { mode: motD }) : tr('Il n’a pas gardé l’ordre de Loggia')];
     } else if (ch.source === 'fenetre') {
       ligne = ['window-alt', rgbMode(mode) || GRIS, mot ? tr('Fenêtre ouverte · {mode}', { mode: mot }) : tr('Fenêtre ouverte')];
     } else if (ch.source === 'main') {

@@ -22,8 +22,9 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const APP = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const APP = MONOLITHE;
 const CSS = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
 
 /* 10/10 — les deux remontent AU NIVEAU DES AUTRES VUES.
@@ -41,7 +42,9 @@ const CSS = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
  * tombe. */
 
 /** Le bloc qui porte la salutation de l'Accueil, et ce qu'il s'ajoute en haut. */
-const BANNIERE = /\{\/\* BANNER[\s\S]{0,400}?\*\/\}\s*\n\s*<div style=\{\{[^}]*padding: '([^']+)' \}\}>/;
+/* ASSERTION MODIFIÉE (ADR 0283) : ce bloc est devenu la racine de `BanniereAccueil` ; on l'y lit.
+ * ASSERTION MODIFIÉE (lot 7 de l'audit du 28/10, V2) : il porte la classe `o-banniere`, dont le téléphone réduit le BAS seulement. */
+const BANNIERE = /function BanniereAccueil\([^)]*\) \{\s*return \(\s*\n\s*<div (?:className="o-banniere" )?style=\{\{[^}]*padding: '([^']+)' \}\}>/;
 
 /** Ce qu'une tête s'ajoute au-dessus d'elle, en pixels. */
 const hautAccueil = () => {

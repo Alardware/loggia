@@ -22,8 +22,9 @@ import { fileURLToPath } from 'node:url';
 import { cfgSet, setLoggiaState } from '../src/state.js';
 import { lotPiece, lotSansPiece, grilleAvecPiece, grilleSansPiece } from '../src/ecrirepiece.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const APP = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const APP = MONOLITHE;
 
 /* La maison : deux pièces, leur place sur l'Accueil, la grille de la vue du Salon. */
 const ACCUEIL = {

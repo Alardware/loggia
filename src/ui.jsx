@@ -205,8 +205,9 @@ export const USER_COLORS = ['#4f8cff', 'var(--o-ok)', 'var(--o-purple)', '#ff8a4
 export const cvName = (st, id) => (st && st.attributes && st.attributes.friendly_name) || id.slice(id.indexOf('.') + 1).replace(/_/g, ' ');
 
 /* ── Fond photo ──────────────────────────────────────────────────────────────
- * L'image de l'utilisateur, compressee a l'import et gardee en dataURL dans le
- * localStorage de l'APPAREIL — jamais envoyee au serveur. Cache module : la
+ * L'image de l'utilisateur, compressee a l'import, rangee sur Home Assistant
+ * sous son compte (ADR 0289, fondphoto.js) et gardee en COPIE dataURL dans le
+ * localStorage de l'appareil, pour le demarrage. Cache module : la
  * chaine pese des centaines de kilo-octets, on ne la relit pas a chaque rendu.
  * L'evenement `loggia-fond-photo` invalide le cache quand on ecrit. */
 export const FOND_PHOTO_CLE = 'loggia-fond-photo';
@@ -482,7 +483,9 @@ export function useIdTitreFeuille() {
 export function CroixFeuille({ style = null }) {
   const fermer = useContext(FermerCtx);
   return (
-    <button type="button" data-croix="" onClick={() => { if (fermer) fermer(); }} aria-label={tr('Fermer')} title={tr('Fermer')}
+    /* « Fermer la fiche » (lot 7 de l'audit du 28/10, V7) : dans la fiche d'un volet, un lecteur d'écran annonçait deux
+     * « Fermer » — la croix, et « Fermer Volet salon » qui ferme le volet. */
+    <button type="button" data-croix="" onClick={() => { if (fermer) fermer(); }} aria-label={tr('Fermer la fiche')} title={tr('Fermer la fiche')}
       style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text1)', ...style }}>{CROIX}</button>
   );
 }
@@ -719,7 +722,7 @@ export function BottomSheet({ onClose, children, opaque = false, onglets = false
      * feuille partait alors à la section et l'ajout ne se faisait jamais
      * (retour 01/09). Les gestes internes (poignée, boutons) sont plus bas
      * dans l'arbre : ils continuent de fonctionner. */
-    <div role="presentation" ref={voileRef}
+    <div role="presentation" ref={voileRef} className="o-voile"
       onPointerDown={(e) => { e.stopPropagation(); partiDuVoile.current = e.target === e.currentTarget; }}
       onPointerMove={(e) => e.stopPropagation()}
       onPointerUp={(e) => e.stopPropagation()}
@@ -780,6 +783,78 @@ export function BottomSheet({ onClose, children, opaque = false, onglets = false
     </div>
   );
   return (typeof document !== 'undefined' && document.body) ? createPortal(feuille, document.body) : feuille;
+}
+
+/* ── La feuille d'alerte (lot 6 de l'audit du 28/10, M8) ─────────────────────
+ *
+ * `window.alert` et `window.confirm` dessinaient une boîte du système : hors
+ * du thème, hors de la règle des feuilles, avec des boutons que Loggia ne
+ * traduit pas (« OK », « Annuler » dans la langue du navigateur). Une
+ * feuille à la place : un titre, le message, la croix ; et, quand il y a
+ * quelque chose à faire, UN bouton d'action au bleu plein — jamais un
+ * « OK » ni un « Annuler » qui ne ferait que fermer.
+ *
+ * `alerter` se lance de n'importe où, d'un rappel asynchrone aussi : un
+ * événement que `HoteAlertes` reçoit. L'hôte est monté UNE fois, à côté de
+ * l'App (boot.jsx) et hors de sa barrière : il répond encore sur l'écran de
+ * secours. Sans hôte vivant, ou si la feuille casse à son tour, `repli`
+ * prend le relais — le dialogue natif d'avant : une alerte ne se perd pas.
+ */
+const EVT_ALERTE = 'loggia:alerte';
+let hotesAlertes = 0;
+let numeroAlerte = 0;
+
+/** Montre une feuille d'alerte. `action` : `{ libelle, faire }`, le seul bouton.
+ * `repli` : ce qui se fait sans feuille ; par défaut, `window.alert(texte)`. */
+export function alerter({ titre, texte, action = null, repli = null }) {
+  const natif = repli || (() => { try { window.alert(texte); } catch { /* sans fenêtre : rien à dire */ } });
+  if (!hotesAlertes || typeof window === 'undefined') { natif(); return; }
+  window.dispatchEvent(new CustomEvent(EVT_ALERTE, { detail: { id: ++numeroAlerte, titre, texte, action, repli: natif } }));
+}
+
+export function FeuilleAlerte({ titre, texte, action, onClose }) {
+  return (
+    <BottomSheet onClose={onClose}>
+      {(close) => (
+        <div>
+          <TitreFeuille style={{ fontSize: 17, fontWeight: 800 }}>{titre}</TitreFeuille>
+          <div role="alert" style={{ marginTop: 8, fontSize: 13.5, fontWeight: 600, lineHeight: 1.5, color: 'var(--o-text1)', overflowWrap: 'anywhere' }}>{texte}</div>
+          {action && (
+            <button type="button" onClick={() => { close(); action.faire(); }}
+              style={{ width: '100%', minHeight: 44, marginTop: 16, padding: '0 16px', borderRadius: 12, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 800, background: 'var(--o-accent-fond)', color: '#fff' }}>{action.libelle}</button>
+          )}
+        </div>
+      )}
+    </BottomSheet>
+  );
+}
+
+/* La barrière de l'hôte : une feuille qui casse ne doit ni noircir l'écran
+ * (l'hôte vit hors de toute autre barrière) ni perdre son message. */
+class BarriereAlerte extends Component {
+  constructor(props) { super(props); this.state = { casse: false }; }
+  static getDerivedStateFromError() { return { casse: true }; }
+  componentDidCatch(err) { console.error('Loggia : la feuille d’alerte a cassé', err); this.props.onPanne(); }
+  render() { return this.state.casse ? null : this.props.children; }
+}
+
+/** L'hôte des feuilles d'alerte : une à la fois, les suivantes attendent leur tour. */
+export function HoteAlertes() {
+  const [file, setFile] = useState([]);
+  useEffect(() => {
+    const recevoir = (e) => setFile((l) => [...l, e.detail]);
+    hotesAlertes++;
+    window.addEventListener(EVT_ALERTE, recevoir);
+    return () => { hotesAlertes--; window.removeEventListener(EVT_ALERTE, recevoir); };
+  }, []);
+  const a = file[0];
+  if (!a) return null;
+  const suivante = () => setFile((l) => l.filter((x) => x.id !== a.id));
+  return (
+    <BarriereAlerte key={a.id} onPanne={() => { suivante(); a.repli(); }}>
+      <FeuilleAlerte titre={a.titre} texte={a.texte} action={a.action} onClose={suivante} />
+    </BarriereAlerte>
+  );
 }
 
 

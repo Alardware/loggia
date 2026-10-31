@@ -184,15 +184,18 @@ const LISTES = {
  * lampe qui accepte `xy` accepte la couleur, une lampe `brightness` se tamise.
  * C'est la seule façon de le savoir, et elle vaut pour toutes les lampes.
  */
+/* `set_hs` et `set_xy` (ADR 0304) : Home Assistant accepte `hs_color` et `xy_color` de toute lampe en couleur, comme `rgb_color`,
+ * et convertit ; la bibliothèque des ambiances choisit l'espace que la lampe parle. */
+const COULEUR = ['set_brightness', 'set_color', 'set_hs', 'set_xy'];
 const MODES_COULEUR = {
   onoff: [],
   brightness: ['set_brightness'],
   color_temp: ['set_brightness', 'set_color_temp'],
-  hs: ['set_brightness', 'set_color'],
-  xy: ['set_brightness', 'set_color'],
-  rgb: ['set_brightness', 'set_color'],
-  rgbw: ['set_brightness', 'set_color'],
-  rgbww: ['set_brightness', 'set_color', 'set_color_temp'],
+  hs: COULEUR,
+  xy: COULEUR,
+  rgb: COULEUR,
+  rgbw: COULEUR,
+  rgbww: [...COULEUR, 'set_color_temp'],
   // `white` : revenir au blanc d'un ruban `hs + white` (`light.turn_on` avec `white`, actions.js ; audit du 19/10, B6).
   white: ['set_brightness', 'set_white'],
 };

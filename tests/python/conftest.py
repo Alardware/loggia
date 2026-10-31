@@ -118,6 +118,24 @@ def _poser_doublures() -> None:
 _poser_doublures()
 
 
+def declaration(source: str, debut: str) -> str:
+    """Le texte d'une ligne de table, de `debut` a sa parenthese fermante (lot 8, ADR 0291).
+
+    `Commande(WS_ROB_SCRIPTS,` dans websocket_api.py, `Module("robots",` dans
+    __init__.py : ce que les tests de cablage relisent depuis que les
+    commandes et les modules sont declares en table."""
+    i = source.index(debut)
+    profondeur = 0
+    for j in range(i, len(source)):
+        if source[j] == "(":
+            profondeur += 1
+        elif source[j] == ")":
+            profondeur -= 1
+            if profondeur == 0:
+                return source[i:j + 1]
+    raise ValueError(debut)
+
+
 PAQUET = "loggia_test"
 
 

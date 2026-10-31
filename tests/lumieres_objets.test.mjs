@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs';
 
 import { area, device, entity, state, states, ctxOf } from './fixtures.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 
 /* Sa maison, en petit : une Hue couleur, un variateur Legrand, la LED de sa
@@ -122,7 +123,7 @@ test('L11 : le compteur de l’Accueil compte comme Objets › Lumières — la 
 
 test('L11 : l’écran de veille, l’en-tête et l’aperçu des Paramètres comptent par `lumieresDe` — plus aucun compte de `light.*` à la main', () => {
   const lire = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-  const app = lire('src/App.jsx'), params = lire('src/views/parametres.jsx'), etat = lire('src/state.js');
+  const app = MONOLITHE, params = lire('src/views/parametres.jsx'), etat = lire('src/state.js');
   assert.ok(app.includes("return lumieresDe(S, ctxLumieres()).filter(id => S[id] && S[id].state === 'on').length;"), 'le chip « n allumées » du header et de l’écran de veille');
   assert.ok(app.includes('if (!lightIds.length) lightIds = lumieresDe(S, ctxLumieres());'), 'le compteur de l’Accueil');
   // ASSERTION MODIFIÉE (ADR 0261, A1) : `switchLights` et `ctxLumieres` vivent dans state.js, à côté du réglage — une seule copie.
@@ -161,7 +162,7 @@ test('ADR 0261 : la découverte retire ce que le registre cache ou désactive, e
 });
 
 test('ADR 0261 : plus aucun motif de nom dans la découverte — la LED d’une borne se reconnaît à sa catégorie seule', () => {
-  const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  const app = MONOLITHE;
   assert.ok(!app.includes('u6|g6|unifi|udm|usw|uap'), 'le motif UniFi est parti');
   const i = app.indexOf('function discoverLights(');
   assert.ok(app.slice(i, app.indexOf('\n}\n', i)).includes('const ids = lumieresDe(S, { meta, switchsLumiere: switchLights() });'), 'la découverte lit `lumieresDe`');

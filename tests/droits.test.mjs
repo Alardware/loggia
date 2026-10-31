@@ -25,6 +25,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DROITS, DROITS_IDS, droitsDe } from '../src/state.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 
@@ -79,7 +80,7 @@ test('chaque autorisation du catalogue commande vraiment quelque chose', () => {
   // Une case à cocher qui n'ouvre rien est pire qu'une case absente : elle
   // promet. Chaque identifiant est donc relu dans le code qu'il gouverne.
   const par = lire('src', 'views', 'parametres.jsx');
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   const sansGarde = [];
   for (const [id] of DROITS) {
     // `edition` est le seul droit qui ne soit pas un onglet des Paramètres.
@@ -114,7 +115,7 @@ test('le sommaire des Paramètres suit les autorisations, pas le rôle', () => {
 test('le mode édition se ferme quand le droit disparaît', () => {
   // Changer de profil en cours d'édition laisserait autrement les poignées de
   // déplacement à l'écran, sous un profil qui n'y a pas droit.
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   assert.ok(app.indexOf('useEffect(() => { if (!peutEditer) setEditMode(false); }, [peutEditer]);') >= 0,
     'plus rien ne referme le mode édition quand le droit est retiré');
   assert.ok(app.indexOf('editMode && isAdmin') < 0,
@@ -123,7 +124,7 @@ test('le mode édition se ferme quand le droit disparaît', () => {
 
 test('la recherche ne propose pas une section qu’on ne peut pas ouvrir', () => {
   // La trouver pour tomber sur une page vide serait pire que ne pas la trouver.
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   assert.ok(app.indexOf('if (droit && droits.indexOf(droit) < 0) return;') >= 0,
     'la recherche ne filtre plus les sections des Paramètres');
 });
@@ -142,7 +143,7 @@ test('le rôle ne garde plus rien qui relève du mode édition', () => {
   // `isAdmin` n'a plus le droit d'apparaître que là où il désigne le rôle
   // lui-même, restreint les vues, ou passe aux Paramètres — qui gardent la
   // gestion des profils. En ajouter un oblige à passer par ici.
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   const usages = (app.match(/isAdmin[^,}\n]{0,60}/g) || []).map(s => s.trim()).sort();
   assert.deepEqual(usages, [
     // Les vues autorisées : un admin n'en a aucune de restreinte.

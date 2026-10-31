@@ -15,10 +15,11 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const CSS = lire('src', 'index.css');
-const APP = lire('src', 'App.jsx');
+const APP = MONOLITHE;
 const compter = (t, m) => t.split(m).length - 1;
 
 test('deux rangées : l’icône et la commande en haut, le texte sur toute la largeur', () => {

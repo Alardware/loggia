@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import { contraste, lireCouleur, composer } from '../src/contraste.js';
 import { THEMES, fondGlyphe, fondRepere, fondPhrase, teinteDe } from './jetons_loggia.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 process.env.TZ = 'Europe/Paris';
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 const L = await import('../src/lumieres.js');
@@ -277,7 +278,7 @@ test('11 bis, R7 : la glyphe et le repère gardent leurs 3:1 contre le fond que 
  * haut de la carte (`fondPhrase`) — la phrase est plus bas, où il est plus léger —, et au pied, où il tombe à 0,03. */
 test('T8 : la carte étroite écrit la phrase d’une lampe allumée à son encre — et cette encre se lit comme du TEXTE sur le lavis : 4,5:1 au moins, sombre et clair, de 2 200 à 6 500 K, une couleur saturée, le violet de la veilleuse', () => {
   // L'encre de la phrase est celle de la plaque, calculée ici (`encreLumiere`) — pas une teinte brute : la carte la passe à la feuille (`--o-encre`).
-  const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  const APP = MONOLITHE;
   assert.ok(APP.includes("'--o-encre': v.on ? v.encre : undefined"), 'la phrase étroite d’une lampe allumée prend l’encre de la vue (`v.encre`)');
   for (const [nomT, T] of Object.entries(THEMES)) {
     for (const [nom, a] of [...CAS_ENCRE, ['violet', COULEUR([149, 0, 255])]]) {

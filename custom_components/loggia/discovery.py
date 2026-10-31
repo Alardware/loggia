@@ -31,6 +31,7 @@ from homeassistant.helpers import (
 )
 
 from .chauffage_familles import PLATEFORME_BT, commandes_par, famille
+from .tarifs import role_tarif
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -260,6 +261,14 @@ def _entites(hass: HomeAssistant, autorise: Any = None) -> list[dict[str, Any]]:
             # Commande par un VTherm ou un Better Thermostat : pas un chauffage de plus.
             if fam and e.entity_id not in commandes:
                 entree["famille"] = fam
+        # Le contrat a couleurs (tarifs.py, chantier G3, E4) : le creneau d'heures creuses
+        # reconnu a son identifiant stable, la couleur du lendemain a sa forme. Le role seul.
+        # Un binaire se lit a son identifiant seul ; un capteur, a ses options (sans copie : ils sont des centaines).
+        elif domaine in ("binary_sensor", "sensor"):
+            attributs = getattr(hass.states.get(e.entity_id), "attributes", None) or {} if domaine == "sensor" else {}
+            role = role_tarif(domaine, getattr(e, "unique_id", None), getattr(e, "translation_key", None), attributs)
+            if role:
+                entree["tarif"] = role
         sortie.append(entree)
     return sortie
 

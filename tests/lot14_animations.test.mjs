@@ -24,6 +24,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE, PIECES_DU_MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const css = lire('src', 'index.css');
@@ -84,9 +85,10 @@ test('le halo garde le dessin de l’ancienne ombre : 5 px de plus, même rouge,
 
 test('chaque point LIVE déclare son rayon, bordure comprise', () => {
   const sites = [];
-  const fichiers = ['App.jsx', ...readdirSync(join(RACINE, 'src')).filter(f => /\.jsx?$/.test(f) && f !== 'App.jsx')];
+  // App.jsx et ce qui en sort se lisent d'un seul texte (ADR 0282).
+  const fichiers = ['App.jsx', ...readdirSync(join(RACINE, 'src')).filter(f => /\.jsx?$/.test(f) && !PIECES_DU_MONOLITHE.includes(f))];
   for (const f of fichiers) {
-    for (const m of lire('src', f).matchAll(/className="o-livedot"[^>]*?style=\{\{([^}]*)\}\}/g)) sites.push([f, m[1]]);
+    for (const m of (f === 'App.jsx' ? MONOLITHE : lire('src', f)).matchAll(/className="o-livedot"[^>]*?style=\{\{([^}]*)\}\}/g)) sites.push([f, m[1]]);
   }
   assert.equal(sites.length, 3, 'la cloche, la tuile caméra, la carte caméra d’une pièce');
   for (const [f, st] of sites) {

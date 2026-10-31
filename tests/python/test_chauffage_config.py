@@ -24,6 +24,31 @@ FIL = {"entite": "select.radiateur_bureau_pilot_wire_mode", "famille": "fil_pilo
        "permis": ["confort", "eco", "hors_gel", "arret"]}
 
 
+def test_le_decalage_d_un_thermostat_se_relit_et_se_valide(cc):
+    """30/10 : un poele qui lit 1,5 °C de moins que la piece. Au demi-degre, de -5 a +5 ;
+    absent vaut 0 et la configuration n'en garde rien ; un thermostat seulement."""
+    poele = {"entite": "climate.poele", "famille": "thermostat", "planning": True,
+             "temperatures": {"confort": 20, "eco": 17, "hors_gel": 7}, "fenetre": "arret"}
+    lu = cc.lire_config({"chauffages": {"p": {**poele, "decalage": -1.4}, "f": {**FIL, "decalage": 2},
+                                        "q": {**poele, "decalage": 9}}})["chauffages"]
+    assert lu["p"]["decalage"] == -1.5
+    assert "decalage" not in lu["f"], "un module n'a pas de consigne"
+    assert "decalage" not in lu["q"], "hors bornes : ecarte au chargement, jamais refuse"
+    actuel = cc.lire_config({"chauffages": {"p": poele}})["chauffages"]["p"]
+    assert "decalage" not in actuel, "absent : rien de plus dans la configuration"
+    assert cc.valider_chauffage({"decalage": -1.5}, actuel)["decalage"] == -1.5
+    assert cc.valider_chauffage({"decalage": 1.2}, actuel)["decalage"] == 1.0
+    assert "decalage" not in cc.valider_chauffage({"decalage": 0}, {**actuel, "decalage": -1.5})
+    with pytest.raises(ValueError) as refus:
+        cc.valider_chauffage({"decalage": -6}, actuel)
+    assert (refus.value.code, refus.value.nomme) == ("chauffage_decalage_hors_bornes", "decalage")
+    for faux in ("-1", True, None):
+        with pytest.raises(ValueError):
+            cc.valider_chauffage({"decalage": faux}, actuel)
+    with pytest.raises(ValueError):
+        cc.valider_chauffage({"decalage": -1}, {**FIL, "planning": True})
+
+
 def test_la_semaine_type_du_premier_allumage(cc):
     s = cc.semaine_type()
     assert s["lun"] == [{"h": "06:30", "mode": "confort"}, {"h": "08:30", "mode": "eco"},

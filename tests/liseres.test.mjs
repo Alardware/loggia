@@ -22,10 +22,11 @@ import { fileURLToPath } from 'node:url';
 // Un import d'ensemble : un nom manquant échoue en assertion, pas au chargement.
 import * as STYLES from '../src/styles.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { LISERE, CARTE_RAIL, CARTE_MAISON } = STYLES;
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8').replace(/\r\n/g, '\n');
-const APP = lire('src', 'App.jsx');
+const APP = MONOLITHE;
 const SYSTEME = lire('src', 'views', 'systeme.jsx');
 const ROBOT = lire('src', 'ficherobot.jsx');
 // La fiche du distributeur et son socle (ADR 0155, 05/10) : les mêmes panneaux que le robot.

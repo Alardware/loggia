@@ -14,13 +14,14 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const README = lire('README.md');
 
 /* Les chiffres en toutes lettres : le README écrit « douze », pas « 12 ». */
 const MOTS = ['zéro', 'une', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix',
-  'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize'];
+  'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize', 'dix-sept', 'dix-huit', 'dix-neuf', 'vingt'];
 const enLettres = (n) => MOTS[n] || String(n);
 
 test('le nombre de commandes réservées aux administrateurs', () => {
@@ -32,7 +33,8 @@ test('le nombre de commandes réservées aux administrateurs', () => {
   const liste = bloc.slice(0, bloc.indexOf(']'));
   const n = (liste.match(/"WS_[A-Z_]+"/g) || []).length;
   assert.ok(n > 0, 'la liste des commandes admin est illisible');
-  const m = README.match(/sur les ([a-zé]+) commandes WebSocket/);
+  // ASSERTION MODIFIÉE (29/10, versions ; ADR 0285) : seize -> dix-huit, le trait d'union en fait partie.
+  const m = README.match(/sur les ([a-zé-]+) commandes WebSocket/);
   assert.ok(m, 'le README ne dit plus combien de commandes sont réservées');
   assert.equal(m[1], enLettres(n),
     `le README annonce « ${m[1]} » commandes réservées, il y en a ${n}`);
@@ -49,8 +51,8 @@ test('le nombre total de commandes WebSocket, dans le docstring du composant', (
 test('le jeton d’accès : le README ne promet plus « un seul endroit »', () => {
   /* Il est lu pour les images — la caméra, la carte du robot —, et le README
    * doit dire cela, pas un compte qui se démentira à la prochaine image. */
-  const sources = ['camera.jsx', 'vacplan.jsx', 'App.jsx', 'ui.jsx']
-    .map(f => lire('src', f)).join('\n');
+  const sources = ['camera.jsx', 'vacplan.jsx', 'ui.jsx']
+    .map(f => lire('src', f)).concat(MONOLITHE).join('\n');
   const lectures = (sources.match(/auth\.data\.access_token/g) || []).length;
   assert.ok(lectures >= 1, 'plus aucune lecture du jeton : la phrase du README est à réécrire');
   assert.ok(!/jeton[^.]*lu \*\*à un seul endroit\*\*/.test(README),
@@ -153,7 +155,7 @@ test('les paramètres d’aperçu de la démo existent, et « lang » couvre tou
   const main = lire('src', 'main.jsx');
   /* `fiche` se lit plus tard que les autres — il ouvre un appareil, pas un
    * réglage d'amorçage — et vit donc dans App.jsx. */
-  const lecteurs = main + '\n' + lire('src', 'App.jsx');
+  const lecteurs = main + '\n' + MONOLITHE;
   const { LANGUES } = await import(new URL('../src/langues/index.js', import.meta.url));
   const servies = LANGUES.filter(l => l.code !== 'auto').length;
   assert.ok(README.includes("`lang=<le code d'une des " + enLettres(servies) + " langues>`"),
@@ -167,7 +169,7 @@ test('les paramètres d’aperçu de la démo existent, et « lang » couvre tou
 
 test('les cartes template : le README les vend, le composeur sait en poser', () => {
   assert.match(README, /\*\*cartes template\*\*/, 'le README ne les vend plus');
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   const ui = lire('src', 'ui.jsx');
   assert.match(app, /<TplForm hass=\{hass\} onAdd=/,
     'le composeur n’offre plus de poser une carte template : le README promettrait du vide');

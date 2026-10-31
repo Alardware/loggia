@@ -20,6 +20,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const LANGUES = ['en', 'de', 'nl', 'it', 'es', 'pl'];
@@ -119,7 +120,7 @@ test('la fiche et la carte du robot lisent ces mots par trSens', () => {
     assert.ok(appels >= 1, f + ' : la fiche ne montre plus ses options');
     assert.equal((src.match(/\btrSens\(vacOption\(/g) || []).length, appels, f + ' : une option du robot se lit sans son sens');
   }
-  const fan = lire('src', 'App.jsx').split('\n').find(l => l.startsWith('const FAN_FR = () => ({'));
+  const fan = MONOLITHE.split('\n').find(l => l.startsWith('const FAN_FR = () => ({'));
   assert.ok(fan, 'FAN_FR introuvable');
   assert.ok(!fan.includes("tr('Normal')") && fan.split("trSens('Normal · réglage')").length === 3, 'la carte du robot dit « Normalnie » en polonais');
 });

@@ -22,6 +22,7 @@ import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -136,7 +137,7 @@ test('hvac_modes : une chaîne ne fait plus tomber la vue, un null ne fait plus 
 });
 
 test('une seule règle pour lire hvac_modes', () => {
-  const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  const APP = MONOLITHE;
   const lectures = APP.match(/\.hvac_modes\b/g) || [];
   assert.equal(lectures.length, 1, 'hvac_modes ne se lit plus qu’à un endroit : modesClimat');
   assert.ok(/function modesClimat\(/.test(APP));

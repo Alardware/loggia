@@ -17,6 +17,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(RACINE, 'src');
 const GABARIT = '{a} : {b}';
@@ -110,7 +111,7 @@ test('plus aucun libellé collé à sa valeur dans src/', () => {
 
 test('les cinq endroits passent par le gabarit', () => {
   const lire = (f) => readFileSync(join(SRC, f), 'utf8');
-  const app = lire('App.jsx');
+  const app = MONOLITHE;
   assert.ok(app.includes("{alarmeTuile ? tr('{a} : {b}', { a: tr('Alarme'), b: alarmeTuile.texte }) : ''}"), 'l’état de l’alarme, dit au lecteur d’écran');
   assert.ok(app.includes("{attentionLigne ? tr('{a} : {b}', { a: tr('À surveiller'), b: resumeAttention(points) }) : ''}"), 'la carte « À surveiller », dite au lecteur d’écran');
   const ui = lire('ui.jsx');

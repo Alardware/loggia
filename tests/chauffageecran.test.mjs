@@ -18,6 +18,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const {
   ORDRE_MODES, couleurMode, rgbMode, encreMode, motMode, modeVoisin, heureMurale, lignesMoment,
   jourDeLaFin, finMurale, phrasePlanning, mesureLisible, estMuet, moduleMuet, enChauffe, consigneAtteinte, teinteClimat,
@@ -266,7 +267,8 @@ test('un module coupé : le planning ne peut rien — et cela l’emporte', () =
 test('le programme de l’appareil allumé se dit dans « En ce moment », planning allumé seulement (audit du 19/10)', () => {
   const prog = ch('poele', { avertissements: ['programme_appareil'], programme: 'switch.poele_timer', source: 'main' });
   const [l] = lignesMoment(etat([prog]));
-  assert.equal(l.sous, 'Son propre programme est allumé : le planning ne commande pas seul');
+  // ASSERTION MODIFIÉE (30/10) : le moteur n'envoie plus rien tant que son programme commande — la ligne le dit.
+  assert.equal(l.sous, 'Son propre programme commande : Loggia attend qu’il s’éteigne');
   assert.equal(l.icone, 'calendar-clock');
   assert.deepEqual(lignesMoment(etat([{ ...prog, planning: false }])), [], 'planning éteint : rien à dire');
 });
@@ -281,7 +283,24 @@ test('un programme d’ailleurs qui le commande se dit dans « En ce moment », 
   assert.equal(l.icone, 'calendar-clock');
   assert.deepEqual(lignesMoment(etat([{ ...bureau, planning: false }])), [], 'planning éteint : rien à dire');
   const deux = lignesMoment(etat([{ ...bureau, avertissements: ['programme_appareil', 'programme_concurrent'] }]));
-  assert.equal(deux[0].sous, 'Son propre programme est allumé : le planning ne commande pas seul');
+  // ASSERTION MODIFIÉE (30/10) : le texte de la ligne du programme de l'appareil a changé, pas son rang.
+  assert.equal(deux[0].sous, 'Son propre programme commande : Loggia attend qu’il s’éteigne');
+});
+
+test('un ordre que l’appareil n’a pas gardé se dit dans « En ce moment », ce qu’il fait à la place (30/10)', () => {
+  const poele = ch('poele', { avertissements: ['ordre_defait'], source: 'planning', mode: 'confort',
+    defait: { mode: null, temperature: 19, depuis: '2026-10-30T15:11:00+01:00' } });
+  const [l] = lignesMoment(etat([poele]));
+  assert.equal(l.sous, 'Il n’a pas gardé l’ordre de Loggia : il est à 19 °C');
+  assert.equal(l.icone, 'triangle-warning');
+  assert.equal(lignesMoment(etat([poele]), 'F')[0].sous, 'Il n’a pas gardé l’ordre de Loggia : il est à 66,2 °F');
+  const radiateur = ch('rad', { avertissements: ['ordre_defait'], source: 'planning', mode: 'confort', defait: { mode: 'eco', temperature: null } });
+  assert.equal(lignesMoment(etat([radiateur]))[0].sous, 'Il n’a pas gardé l’ordre de Loggia : il est en Éco');
+  assert.equal(lignesMoment(etat([{ ...radiateur, defait: null }]))[0].sous, 'Il n’a pas gardé l’ordre de Loggia');
+  assert.deepEqual(lignesMoment(etat([{ ...poele, planning: false }])), [], 'planning éteint : rien à dire');
+  // Son programme allumé l'explique mieux : sa ligne passe devant.
+  assert.equal(lignesMoment(etat([{ ...poele, avertissements: ['programme_appareil', 'ordre_defait'] }]))[0].sous,
+    'Son propre programme commande : Loggia attend qu’il s’éteigne');
 });
 
 test('un poêle MCZ en manuel se dit dans « En ce moment », planning allumé seulement (19/10)', () => {
@@ -570,7 +589,7 @@ test('la plaque : l’orange de la chauffe, le bleu du froid, éteinte au gris ;
     assert.deepEqual(plaqueMode(neutre), ['var(--o-s1)', 'var(--o-text1)'], JSON.stringify(neutre));
   }
   // La carte et la fiche la lisent toutes deux : pas de seconde règle.
-  const app = lire('src/App.jsx');
+  const app = MONOLITHE;
   assert.ok(/const plaqueChauffage = \(o\) => \{ const \[fond, encre\] = plaqueMode\(o\); return RM_ICO\(fond, encre\); \};/.test(app), 'la carte a sa propre règle');
   assert.ok(lire('src/fichechauffage.jsx').includes('plaqueMode({'), 'la fiche a sa propre règle');
 });

@@ -27,6 +27,7 @@ import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -133,7 +134,7 @@ test('découverte : une scène jamais lancée ne compte pas parmi les indisponib
 });
 
 test('une seule règle : CvCard, Objets et la découverte passent par enPanne', () => {
-  const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  const app = MONOLITHE;
   const disc = readFileSync(new URL('../src/discovery.js', import.meta.url), 'utf8');
   // `assert.ok` et non `assert.match` : un échec recopierait tout App.jsx.
   assert.ok(/^import \{[^}]*\benPanne\b[^}]*\} from '\.\/outils\.js';$/m.test(app), 'App.jsx prend enPanne à outils.js');

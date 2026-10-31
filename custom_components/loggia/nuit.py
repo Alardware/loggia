@@ -38,7 +38,8 @@ from homeassistant.core import HomeAssistant, callback
 from .presence import CLE as CLE_PRESENCE, invite_present
 from .const import DOMAIN
 from .lumieres_maison import (MUETS, a_epargner, async_interrupteurs_declares, attributs_des_lumieres,
-                              lumieres_de_la_maison, par_service, registre_de, service_de, veilleuses_de)
+                              lumieres_de_la_maison, par_service, registre_de, sait_fondre, service_de,
+                              veilleuses_de)
 from .refus import RefusNomme
 from .regles import demarrer, niveau
 
@@ -50,9 +51,9 @@ _LOGGER = logging.getLogger(__name__)
 CLE = "loggia_nuit"
 SOLEIL = "sun.sun"
 
-# Le bit TRANSITION de LightEntityFeature : une lampe qui ne l'a pas ne sait
-# pas s'eteindre en fondu, et le lui demander ne ferait rien de bon.
-LIGHT_TRANSITION = 32
+# Le bit TRANSITION de LightEntityFeature (`LIGHT_TRANSITION`) vit dans
+# `lumieres_maison`, avec le test qui le lit (`sait_fondre`) : les scenarios le
+# partagent depuis l'ADR 0304.
 
 DEFAUT: dict[str, Any] = {
     "veilleuse": {"actif": False, "lampes": [], "duree": 30, "fondu": 5, "depuis": "19:00"},
@@ -436,11 +437,7 @@ class LoggiaNuit:
 
     def _sait_fondre(self, haid: str) -> bool:
         st = self.hass.states.get(haid)
-        f = (st.attributes.get("supported_features") if st else None) or 0
-        try:
-            return bool(int(f) & LIGHT_TRANSITION)
-        except (TypeError, ValueError):
-            return False
+        return sait_fondre(dict(getattr(st, "attributes", None) or {}) if st is not None else None)
 
     async def _async_eteindre_veilleuse(self, haid: str) -> None:
         st = self.hass.states.get(haid)

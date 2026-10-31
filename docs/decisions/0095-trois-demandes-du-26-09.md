@@ -4,6 +4,8 @@ Date : 26/09/2026, poursuivie le 27. Statut : acceptée. Trois demandes d'un seu
 message, un défaut trouvé en chemin, puis quatre allers-retours devant l'écran
 qui ont corrigé le reste.
 
+*Remplacée en partie par les ADR [0193](0193-la-carte-et-la-fiche-d-une-prise.md) et [0194](0194-le-cycle-d-un-electromenager-se-repere-dans-sa-courbe.md) (13/10), pour le § 4.*
+
 ## 1. « Ouverture » ouvre Appareils, filtré
 
 **Demande :** « la vue volets, je ne comprends pas pourquoi ça ne m'ouvre pas

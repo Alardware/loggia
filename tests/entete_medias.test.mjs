@@ -11,12 +11,13 @@ import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 register('./jsx-hooks.mjs', import.meta.url);
 const E = await import(new URL('../src/entetemedias.jsx', import.meta.url).href);
 const { setLoggiaState } = await import('../src/state.js');
 const lire = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-const APP = lire('src/App.jsx'), CSS = lire('src/index.css');
+const APP = MONOLITHE, CSS = lire('src/index.css');
 
 const OFF = 'media_player.chambre_echo_dot', HACS = 'media_player.echo_dot_chambre', TV = 'media_player.tv_salon', ATV = 'media_player.apple_tv_chambre', BUREAU = 'media_player.bureau_echo_dot';
 const st = (id, state, attributes = {}) => [id, { entity_id: id, state, last_changed: '2026-10-17T18:00:00.000Z', last_updated: '2026-10-17T18:00:00.000Z', attributes }];

@@ -47,6 +47,8 @@ export const CLES_TELEPHONE = [
   '{nom} demande 15 min de plus ({appareil})',
   'Volume ramené trois fois en dix minutes sur {appareil}',
   '{appareil} se rallume après l’heure',
+  /* Le rappel de collecte, la veille au soir (chantier G2, S2 ; ADR 0301). */
+  'Demain : {types}',
 ];
 
 /* Ce que le serveur dit ou montre SANS passer par le telephone (chantier Mode
@@ -59,6 +61,8 @@ export const CLES_VOIX = [
   '{nom}, l’écran s’éteint dans cinq minutes',
   'Accorder 15 min',
   'Refuser',
+  /* Le bouton du rappel de collecte (ADR 0301) : le même mot que le bandeau de l'Accueil. */
+  'C’est sorti',
 ];
 
 /* Les cles du telephone d'un catalogue, en chaines. Une valeur qui n'en est

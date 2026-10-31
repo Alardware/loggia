@@ -19,9 +19,11 @@ import { tr, locale } from '../i18n.js';
 import { nombre } from '../format.js';
 import { facteurKwh, kwhDe } from '../unites.js';
 import { useStats, bornesStat, damier, sommeStat, libellePeriode, RECUL_MAX } from '../stats.js';
-import { plagesVraies, barreTarif, prixDuMoment, prixEnCours, prochainTarif } from '../tarif.js';
+import { plagesVraies, barreTarif, prixDuMoment, prixEnCours, prochainTarif, lirePrevision, prixVarie, fenetreMoinsChere } from '../tarif.js';
 import { useEtatsHist } from '../historique.jsx';
 import { EnHistoBarres, EnCalendrier, CalendrierMois } from '../engraphes.jsx';
+// La production de TOUS les onduleurs (chantier G3, D3) : la clé seule, sinon ses parts.
+import { idsDe } from '../energieparts.js';
 
 const CARTE = {
   background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))',
@@ -141,6 +143,19 @@ export function CarteTarif({ hass, EN = {}, tour = 0, devise = '€', etroit = f
   const prix = prixMulti != null
     ? { valeur: prixMulti, enHc, unique: false, multi: true }
     : prixDuMoment({ hc: hcLu, hp: hpLu, enHc });
+  /* LE PRIX QUI VARIE (chantier G3, D4 et E5 ; ADR 0302). Une seule connexion
+   * dont le prix vient d'une ENTITÉ qui bouge — un prix spot, un tarif horaire —
+   * n'a pas de « tarif unique » : c'est le prix du moment. Il varie quand sa
+   * prévision ou sa journée en a connu plusieurs ; un prix fixe publié par une
+   * entité reste un tarif unique. Sa prévision, quand l'entité la porte en
+   * attribut, dit où est le creux. */
+  const dynamique = num(EN.hcPrice) == null && num(EN.hpPrice) == null && (prixHa || []).length === 1
+    && prixHa[0].valeur == null && prixHa[0].entite ? prixHa[0].entite : null;
+  const histPrix = useEtatsHist(hass, dynamique, t0, t1, tour);
+  const eDyn = brut(dynamique);
+  const previsionPrix = eDyn ? lirePrevision(eDyn.attributes) : [];
+  const varie = !!dynamique && prixVarie(previsionPrix, histPrix);
+  const creux = varie ? fenetreMoinsChere(previsionPrix, Date.now()) : null;
   /* LE PRIX DE REVENTE. Le tableau de bord le declare en face de celui
    * d'achat ; personne n'a de capteur « tarif de rachat » par defaut, et on ne
    * le devine pas. Plusieurs connexions peuvent en porter un : on prend le
@@ -180,7 +195,7 @@ export function CarteTarif({ hass, EN = {}, tour = 0, devise = '€', etroit = f
             {/* À plus de deux tarifs sans capteur de créneau, on sait CE QUE
               * coûte le kWh maintenant, pas dans quel créneau on se trouve :
               * « Tarif en cours » le dit sans rien promettre de plus. */}
-            {prix.unique ? tr('Tarif unique') : prix.enHc === true ? tr('Heures creuses') : prix.enHc === false ? tr('Heures pleines') : prix.multi ? tr('Tarif en cours') : tr('Heures creuses et pleines')}
+            {prix.unique ? (varie ? tr('Prix du moment') : tr('Tarif unique')) : prix.enHc === true ? tr('Heures creuses') : prix.enHc === false ? tr('Heures pleines') : prix.multi ? tr('Tarif en cours') : tr('Heures creuses et pleines')}
           </div>
         </div>
         {(prix.valeur != null || prixVente != null) && (
@@ -201,6 +216,13 @@ export function CarteTarif({ hass, EN = {}, tour = 0, devise = '€', etroit = f
           </div>
         )}
       </div>
+      {/* Le creux de la prévision : la fenêtre continue la moins chère, deux heures. Demain, il le dit. */}
+      {creux && (
+        <div style={{ marginTop: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-ok)' }}>
+          {(new Date(creux.debut).toDateString() === new Date().toDateString() ? tr('Le moins cher : {de}–{a}', { de: heure(creux.debut), a: heure(creux.fin) })
+            : tr('Le moins cher : demain {de}–{a}', { de: heure(creux.debut), a: heure(creux.fin) }))}
+        </div>
+      )}
       {bascule && (
         <div style={{ marginTop: 6, fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>
           {bascule.versHc ? tr('Heures creuses à partir de {h}', { h: heure(bascule.instant) }) : tr('Heures pleines à partir de {h}', { h: heure(bascule.instant) })}
@@ -271,8 +293,9 @@ export function SectionHistorique({ hass, EN = {}, tour = 0, devise = '€', etr
 
   const aHcHp = !!(EN.consoJourHc && EN.consoJourHp);
   const consoIds = compteursConso(EN);
+  const prodIds = idsDe(EN, 'prodJour');
   // Le coût voyage avec les kWh : une seule requête pour la période entière.
-  const ids = [...consoIds, EN.prodJour, EN.coutJour].filter(Boolean);
+  const ids = [...consoIds, ...prodIds, EN.coutJour].filter(Boolean);
   const facteurs = {};
   ids.forEach(id => { facteurs[id] = id === EN.coutJour ? 1 : facteurKwh(unite(id)); });
   const hist = useStats(hass, ids, periode, recul, tour, facteurs);
@@ -303,7 +326,8 @@ export function SectionHistorique({ hass, EN = {}, tour = 0, devise = '€', etr
     ...(nommes
       ? [une(EN.consoJourHc, tr('Heures creuses'), 'var(--o-ok)'), une(EN.consoJourHp, tr('Heures pleines'), 'var(--o-accent)')]
       : [sommeDe(hist.series, consoIds, tr('Réseau'), 'var(--o-accent)')]),
-    une(EN.prodJour, tr('Solaire'), 'var(--o-gold)'),
+    // Deux onduleurs, une seule courbe : le solaire de la maison.
+    sommeDe(hist.series, prodIds, tr('Solaire'), 'var(--o-gold)'),
   ].filter(Boolean);
   const cmp = comparer ? sommeDe(avant.series, consoIds, '', '') : null;
   const veille = cmp ? cmp.valeurs : null;
@@ -322,7 +346,7 @@ export function SectionHistorique({ hass, EN = {}, tour = 0, devise = '€', etr
     return s;
   };
   const tConso = totalDe(consoIds);
-  const tProd = EN.prodJour ? sommeStat(hist.series[EN.prodJour]) : null;
+  const tProd = totalDe(prodIds);
   const tCout = EN.coutJour ? sommeStat(hist.series[EN.coutJour]) : null;
   const PERIODES = [['jour', tr('Jour')], ['semaine', tr('Semaine')], ['mois', tr('Mois')], ['annee', tr('Année')]];
   /* « Aujourd'hui » et « Hier » sont des MOTS : `libellePeriode` ne rend que des
@@ -476,7 +500,8 @@ function FeuilleJour({ hass, EN = {}, jour, devise = '\u20ac', onClose }) {
   const recul = Math.max(0, Math.round((minuit(new Date()) - minuit(d)) / 864e5));
 
   const consoIds = compteursConso(EN);
-  const ids = [...consoIds, EN.prodJour, EN.coutJour].filter(Boolean);
+  const prodIds = idsDe(EN, 'prodJour');
+  const ids = [...consoIds, ...prodIds, EN.coutJour].filter(Boolean);
   const facteurs = {};
   ids.forEach(id => { facteurs[id] = id === EN.coutJour ? 1 : facteurKwh(unite(id)); });
   const h = useStats(hass, ids, 'jour', recul, 0, facteurs);
@@ -499,17 +524,27 @@ function FeuilleJour({ hass, EN = {}, jour, devise = '\u20ac', onClose }) {
     dispo.forEach(id => h.series[id].forEach((x, i) => { if (x != null && isFinite(x) && i < n) v[i] = (v[i] || 0) + x; }));
     return { nom: tr('Réseau'), couleur: 'var(--o-accent)', valeurs: v };
   };
+  // Le solaire, tous onduleurs réunis en une courbe (chantier G3, D3).
+  const solaire = () => {
+    const dispo = prodIds.filter(id => Array.isArray(h.series[id]));
+    if (!dispo.length) return null;
+    if (dispo.length === 1) return une(dispo[0], tr('Solaire'), 'var(--o-gold)');
+    const n = h.cases.length;
+    const v = Array.from({ length: n }, () => null);
+    dispo.forEach(id => h.series[id].forEach((x, i) => { if (x != null && isFinite(x) && i < n) v[i] = (v[i] || 0) + x; }));
+    return { nom: tr('Solaire'), couleur: 'var(--o-gold)', valeurs: v };
+  };
   const nommes = consoIds.length === 2 && consoIds[0] === EN.consoJourHc && consoIds[1] === EN.consoJourHp;
   const parts = [
     ...(nommes
       ? [une(EN.consoJourHc, tr('Heures creuses'), 'var(--o-ok)'), une(EN.consoJourHp, tr('Heures pleines'), 'var(--o-accent)')]
       : [reunies()]),
-    une(EN.prodJour, tr('Solaire'), 'var(--o-gold)'),
+    solaire(),
   ].filter(Boolean);
 
   const chiffres = [
     { l: tr('Consommation'), v: sommeDe(consoIds), u: 'kWh', d: 1 },
-    { l: tr('Production'), v: EN.prodJour ? sommeStat(h.series[EN.prodJour]) : null, u: 'kWh', d: 1 },
+    { l: tr('Production'), v: sommeDe(prodIds), u: 'kWh', d: 1 },
     { l: tr('Coût'), v: EN.coutJour ? sommeStat(h.series[EN.coutJour]) : null, u: devise, d: 2 },
   ].filter(x => x.v != null);
 
@@ -599,7 +634,7 @@ export function EnergieCalendrier({ hass, EN = {}, tour = 0, devise = '€', etr
   const consoIds = compteursConso(EN);
   const PAR_MESURE = {
     conso: consoIds,
-    prod: [EN.prodJour].filter(Boolean),
+    prod: idsDe(EN, 'prodJour'),
     cout: [EN.coutJour].filter(Boolean),
   };
   const choix = PAR_MESURE[mesure] && PAR_MESURE[mesure].length ? mesure : (PAR_MESURE.conso.length ? 'conso' : null);
@@ -696,7 +731,8 @@ export function BilansEnergie({ hass, EN = {}, tour = 0, devise = '€', etroit 
   const { avail, num, unite, kwh } = lecteurs(hass);
   const dec = (v, d) => nombre(v, d);
   const consoIds = compteursConso(EN);
-  const ids = [...consoIds, EN.prodJour, EN.coutJour].filter(Boolean);
+  const prodIds = idsDe(EN, 'prodJour');
+  const ids = [...consoIds, ...prodIds, EN.coutJour].filter(Boolean);
   const facteurs = {};
   ids.forEach(id => { facteurs[id] = id === EN.coutJour ? 1 : facteurKwh(unite(id)); });
   const an = useStats(hass, ids, 'annee', 0, tour, facteurs);
@@ -723,7 +759,7 @@ export function BilansEnergie({ hass, EN = {}, tour = 0, devise = '€', etroit 
   const ou = (id, calcule) => (avail(id) ? kwh(id) : calcule);
   const consoMois = ou(EN.consoMois, dernierMois(consoIds));
   const consoAn = ou(EN.consoAnnee, total(consoIds));
-  const prodAn = ou(EN.prodAnnee, EN.prodJour ? total([EN.prodJour]) : null);
+  const prodAn = ou(EN.prodAnnee, prodIds.length ? total(prodIds) : null);
   const coutMois = avail(EN.coutMois) ? num(EN.coutMois) : (EN.coutJour ? dernierMois([EN.coutJour]) : null);
   const uniteDe = (id) => unite(id) || devise;
   const eco = avail(EN.ecoMois) ? num(EN.ecoMois) : null;

@@ -6,12 +6,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MONOLITHE, DASHBOARD } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282) ; DASHBOARD : l'Accueil en entier, ses hooks compris (ADR 0283)
 import {
   JOURS_AGENDA, cleJour, jourDeCle, moisPlus, debutDe, finDe, plageSemaine, joursAgenda, toucheJour, traverseJour, bornesDuJour, comptesParJour, evenementsDuJour,
 } from '../src/agenda.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = MONOLITHE;
 /* La carte du rail (agendarail.jsx) et sa feuille, chargée à la demande depuis le chantier Prises
  * (feuilleagenda.jsx) : ce que ce fichier épingle se lit dans les deux. */
 const railEtFeuille = () => readFileSync(join(RACINE, 'src', 'agendarail.jsx'), 'utf8') + readFileSync(join(RACINE, 'src', 'feuilleagenda.jsx'), 'utf8');
@@ -101,7 +102,7 @@ test('le rail : UNE carte Agenda a la place de deux (02/10)', () => {
   assert.ok(src.includes("const ACC_RAIL = ['attention', 'heure', 'meteo', 'co2', 'moment', 'rappels', 'agenda'];"),
     'le calendrier reste une section connue du rail, donc ajoutable');
 
-  const d = bloc('function Dashboard(', NL + '}');
+  const d = DASHBOARD;
   assert.ok(d.includes('const agenda = useAgenda(accueil && accueil.hass, null, plageAgenda);')
     && d.includes('const plageCourte = useMemo(() => plageSemaine(new Date(jourAuj)), [jourAuj]);'),
     'sept jours pour la carte du rail, d’aujourd’hui minuit');

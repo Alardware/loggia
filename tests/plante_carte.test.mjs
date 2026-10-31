@@ -30,6 +30,7 @@ import { maisonPlantes } from './maison_capteurs.mjs';
 import { vuePlante, conseilsPlante, barrePlante, dernierReleve, quandPlante } from '../src/plantes.js';
 import { PLAGES_PLANTE, verdictsPlante } from '../src/objets.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -47,7 +48,7 @@ register('data:text/javascript,' + encodeURIComponent([
 const { setLoggiaState } = await import('../src/state.js');
 const F = await import(new URL('../src/App.jsx?plante', import.meta.url).href);
 const FP = await import('../src/ficheplante.jsx');
-const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+const APP = MONOLITHE;
 
 const MIN = 60000;
 const DRACAENA = { base: 'sensor.dracaena', name: 'Dracaena Marginata', mort: false, muetDepuis: null, img: 'dracaena', room: 'Séjour', hum: 28, lux: 84, temp: 19.5, cond: 784, uniteTemp: 'C', bat: 100,

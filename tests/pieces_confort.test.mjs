@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 /* La langue de la machine ne doit rien changer : « 21,4 °C » s'ecrit « 21.4 °C »
  * sur un runner anglais. Fixee AVANT le premier import (voir systeme_hoas). */
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
@@ -15,7 +16,7 @@ const { MESURES_CONFORT, verdictMesure, scoreMesure, valeurConfort, verdictIndic
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
-const app = lire('src', 'App.jsx');
+const app = MONOLITHE;
 // La fiche de confort d'une pièce est chargée à la demande (chantier Capteurs, tâche 1 : la borne) : elle se lit dans son fichier.
 const ficheConfort = lire('src', 'ficheconfort.jsx');
 const blocFiche = (debut, fin) => { const d = ficheConfort.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = ficheConfort.indexOf(fin, d + 1); return ficheConfort.slice(d, f < 0 ? undefined : f); };
@@ -70,7 +71,8 @@ test('la fiche de confort lit la meme table : ses verdicts sont delegues', () =>
   assert.ok(ficheConfort.includes('const e = echelleMesure(cle);') && ficheConfort.includes("return { min: e.de, max: e.a, grad: 'linear-gradient(90deg,' + e.bandes.map(b => b.c + ' ' + b.de + '% ' + b.a + '%').join(',') + ')',"), 'bornes, couleurs et reperes des cartes');
   // ASSERTION MODIFIÉE (audit du 19/10, H2) : la note et la zone de la table choisissent aussi le conseil.
   // ASSERTION MODIFIÉE (audit des capteurs du 19/10, lot 4) : et le nom et la glyphe du CO₂, ceux de sa carte (`nomMesure`, `iconeMesure`).
-  assert.ok(ficheConfort.includes("import { verdictMesure, zoneMesure, scoreMesure, echelleMesure, indiceConfort, mesuresFiche, nomMesure, iconeMesure } from './confort.js';"));
+  // ASSERTION MODIFIÉE (30/10, G1-D5) : et l'arrondi du chiffre écrit (`arrondiMesure`, `valeurEcrite`), sur lequel la zone se juge.
+  assert.ok(ficheConfort.includes("import { verdictMesure, zoneMesure, scoreMesure, echelleMesure, indiceConfort, mesuresFiche, nomMesure, iconeMesure, arrondiMesure, valeurEcrite } from './confort.js';"));
 });
 
 test('la fiche de confort se dit dans la langue du moment (relecture du 03/10)', () => {

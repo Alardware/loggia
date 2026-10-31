@@ -35,7 +35,8 @@ export function conseilMesure(cle, z) {
   if (!z || z.bon || z.dehors) return null;
   if (cle === 'co2') return z.i === 2 ? tr('Pensez à aérer avant la nuit.') : tr('Ouvrez la fenêtre 10 minutes.');
   if (cle === 'hum') return z.i > 4 ? tr('Aérez : l’air est trop humide.') : tr('L’air est sec.');
-  if (cle === 'pm25' || cle === 'cov') return tr('Aérez 5 minutes.');
+  // Les PM10 et le NO₂ de la maison aussi (chantier G4, A5) ; pas l'ozone, qui vient surtout du dehors.
+  if (cle === 'pm25' || cle === 'cov' || cle === 'pm10' || cle === 'no2') return tr('Aérez 5 minutes.');
   return null;
 }
 
@@ -153,7 +154,7 @@ export function journeeMesure(brut, { cle = null, uniteTable = null, ecrite = ''
   const z = zones[zi] ? { i: zi, bon: zones[zi].bon } : null;
   const courbe = courbeMesure(table, { cle, unite: uniteTable, maintenant: t, zones: !neutre, dehors });
   const depuis = cle && !dehors ? texteDepuis(depuisMesure(table, cle, z, zones), cle, uniteTable, ecrite) : null;
-  const ecrire = (v) => (cle ? chiffreMesure(cle, v) : nombre(v, 1, 0));
+  const ecrire = (v) => (cle ? chiffreMesure(cle, v, uniteTable) : nombre(v, 1, 0));
   const vs = lus.map(p => p.v);
   const minmax = vs.length > 1 ? tr('min {a} · max {b}', { a: ecrire(Math.min(...vs)), b: ecrire(Math.max(...vs)) }) : null;
   return { courbe, depuis, minmax };

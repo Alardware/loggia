@@ -26,8 +26,9 @@ import { sectionTitle } from './styles.js';
 import { versHex } from './contraste.js';
 import { commander, commanderService } from './actions.js';
 import { hueScripts } from './lectures.js';
-import { dimmableLights, ctxLumieres } from './state.js';
+import { dimmableLights, ctxLumieres, LOGGIA_INDEX } from './state.js';
 import { lumieresDe, veilleusesLues, sansEpargnees, capacitesLumiere } from './lumieres.js';
+import { ordresAmbiance, luminositeAmbiance } from './lumieresfiche.js';
 
 /* Le blanc chaud du repli « Blanc chaud » sans script, en kelvins : chaque lampe le borne à son propre blanc — l'ordre part par
  * `commander` (`set_color_temp`), donc par `planAction`, qui le ramène aux `min_` / `max_color_temp_kelvin` de l'ampoule (R7). */
@@ -113,21 +114,19 @@ const HUE_SCENES = {
 };
 const HUE_SCENE_IMG_BASE = '/local/hue_scenes/';
 
-// Appliquer une scène colorée demande un script capable de recevoir plusieurs
-// couleurs : rien de standard dans Home Assistant. Il est donc désigné dans la
-// configuration, et à défaut on n'applique que la luminosité — un geste partiel
-// vaut mieux qu'un bouton qui ne fait rien.
+/* Appliquer une ambiance : le script désigné dans la configuration s'il y en a un (`hueScripts.apply`, il garde la priorité) ;
+ * sinon Loggia la pose LUI-MÊME, lampe par lampe (ADR 0304, `ordresAmbiance` de lumieresfiche.js) — les cinq couleurs aux lampes
+ * couleur, le blanc le plus proche aux blancs réglables, la luminosité aux variateurs. Avant, sans script, seule la luminosité
+ * partait : et celle de « Nightlight », nulle, ÉTEIGNAIT les lampes. */
 const scriptSvc = (id) => (typeof id === 'string' && id.indexOf('script.') === 0) ? id.slice(7) : null;
 
-/* Une FONCTION, pas une table.
- *
- * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
- * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
- * langue. Appelee au rendu, elle se dit dans la langue du moment. */
-const HUE_ROOMS = () => [
-  { id: 'Séjour', label: tr('Séjour'), icon: 'couch' }, { id: 'Chambre', label: tr('Chambre'), icon: 'bed' },
-  { id: 'Chambre enfant', label: tr('Enfant'), icon: 'teddy-bear' }, { id: 'Toute la maison', label: tr('Tout'), icon: 'home' },
-];
+/* Les PIÈCES (ADR 0304) sont les zones de Home Assistant qui ont une lampe d'ambiance, après « Tout » — plus de liste écrite en
+ * dur (`HUE_ROOMS` : Séjour, Chambre, Chambre enfant, Toute la maison, d'une seule installation). Une configuration d'avant y
+ * renvoie encore par un `input_select` désigné (`hueScripts.room`), que son script lit : ses options restent les pièces, et
+ * la pièce choisie le règle comme avant. */
+const TOUTE = '*';
+const sansAccent = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+const zoneDe = (id) => (LOGGIA_INDEX && typeof LOGGIA_INDEX.areaOf === 'function' ? LOGGIA_INDEX.areaOf(id) : null);
 const HUE_CATS = () => Object.entries(HUE_SCENES).map(([id, c]) => ({ id, label: tr(c.label) }));
 // Le nuancier des ambiances Hue garde son nom (ScenesContent n'est pas
 // retouché) ; le calcul est versHex de contraste.js (lot 15 de l'audit du 03/10).
@@ -173,12 +172,28 @@ export default function ScenesContent({ hass }) {
    * lampe (audit du 19/10, B15 — comme la tuile d'une pièce et « Tout éteindre ») ; le module Nuit absent lève l'attente. */
   const { etat: nuitEtat, codeErr: nuitCode } = useEtatServeur(hass, 'loggia/nuit/etat', 60000);
   const veilleuses = veilleusesLues(nuitEtat, nuitCode);
-  const lampesRepli = () => (veilleuses ? sansEpargnees(lumieresDe(S || {}, ctxLumieres()), S || {}, veilleuses) : []);
-  const variablesRepli = () => (veilleuses ? sansEpargnees(dimmableLights(hass), S || {}, veilleuses) : []);
+  /* La pièce : un `input_select` d'avant (`hueScripts.room`) garde ses options ; sinon les zones de Home Assistant qui ont une
+   * lampe d'ambiance (`variables`, veilleuses épargnées), après « Tout ». Dans le premier cas, la zone du même nom ; toute la
+   * maison si aucune ne le porte (« Toute la maison »). */
+  const idPieces = hueScripts().room;
+  const anciennes = S && S[idPieces] && Array.isArray((S[idPieces].attributes || {}).options) ? S[idPieces].attributes.options.filter(o => typeof o === 'string' && o) : null;
+  const variables = veilleuses ? sansEpargnees(dimmableLights(hass), S || {}, veilleuses) : [];
+  const zones = (LOGGIA_INDEX && Array.isArray(LOGGIA_INDEX.areaList) ? LOGGIA_INDEX.areaList : []).filter(z => z && variables.some(id => zoneDe(id) === z.id));
+  const pieces = anciennes ? anciennes.map(o => ({ id: o, label: o })) : [{ id: TOUTE, label: tr('Tout') }, ...zones.map(z => ({ id: z.id, label: z.name || z.id }))];
   const haActive = (S && S[hueScripts().active] && S[hueScripts().active].state) || '';
-  const haRoom = (S && S[hueScripts().room] && S[hueScripts().room].state) || tr('Toute la maison');
+  const haRoom = anciennes ? ((S[idPieces] && S[idPieces].state) || '') : TOUTE;
   // état optimiste : maj instantanée au clic (sinon ça "rame" en attendant le poll HA ~2s)
   const [room, setRoomState] = useState(haRoom);
+  /* Toute la maison : « Tout », ou l'option « Toute la maison » d'un `input_select` d'avant — rien d'autre. Une pièce dont aucune
+   * zone ne porte le nom (« Séjour » face à « Salon »), ou dont la zone n'a qu'une veilleuse, ou un `input_select` muet : RIEN ne
+   * part, et la section le dit (relecture du 31/10) — « Nightlight » allumait à 1 % des lampes éteintes hors de la pièce. */
+  const toute = anciennes ? ['toute la maison', sansAccent(tr('Toute la maison'))].includes(sansAccent(room)) : room === TOUTE;
+  const zonesHA = LOGGIA_INDEX && Array.isArray(LOGGIA_INDEX.areaList) ? LOGGIA_INDEX.areaList : [];
+  const zoneChoisie = toute ? null : anciennes ? ((zonesHA.find(z => z && sansAccent(z.name) === sansAccent(room)) || {}).id || null) : room;
+  const dansLaPiece = (ids) => (toute ? ids : zoneChoisie ? ids.filter(id => zoneDe(id) === zoneChoisie) : []);
+  const nomPiece = (pieces.find(p => p.id === room) || {}).label || room;
+  const lampesRepli = () => (veilleuses ? dansLaPiece(sansEpargnees(lumieresDe(S || {}, ctxLumieres()), S || {}, veilleuses)) : []);
+  const variablesRepli = () => dansLaPiece(variables);
   const [sel, setSel] = useState(haActive);
   useEffect(() => { setRoomState(haRoom); }, [haRoom]);
   useEffect(() => { setSel(haActive); }, [haActive]);
@@ -187,16 +202,17 @@ export default function ScenesContent({ hass }) {
   useEffect(() => { if (selCat) setCat(selCat); }, [selCat]);
 
   const call = (d, s, data) => commanderService(hass, (data || {}).entity_id, d, s, data || {});
-  // Applique une scène : le script configuré s'il existe, sinon la luminosité
-  // seule sur les lampes variables de la maison, veilleuses épargnées.
-  const applyScene = (data) => {
+  /* Applique une ambiance : le script configuré s'il existe — il reçoit l'ambiance entière, comme avant ; sinon chaque lampe
+   * variable de la pièce, veilleuses épargnées, reçoit SON ordre (`ordresAmbiance`) par le moteur : `commander`, donc la
+   * capacité que la lampe déclare et ses bornes, sous le compte de la personne — le carnet des lumières le note à son nom. */
+  const applyScene = (sc, bri) => {
     const svc = scriptSvc(hueScripts().apply);
-    if (svc) { call('script', svc, data); return; }
-    const ids = variablesRepli();
-    if (ids.length && data.brightness_pct != null) call('light', 'turn_on', { entity_id: ids, brightness_pct: data.brightness_pct });
+    if (svc) { call('script', svc, { scene_name: sc.name, color1: sc.colors[0], color2: sc.colors[1], color3: sc.colors[2], color4: sc.colors[3], color5: sc.colors[4], brightness_pct: bri }); return; }
+    const lampes = variablesRepli().map(id => ({ id, a: (S && S[id] && S[id].attributes) || {} }));
+    for (const o of ordresAmbiance(sc, lampes, { bri })) commander(hass, o.id, o.capacite, o.valeur, null, o.options);
   };
-  const pickScene = (sc) => { setSel(sc.name); applyScene({ scene_name: sc.name, color1: sc.colors[0], color2: sc.colors[1], color3: sc.colors[2], color4: sc.colors[3], color5: sc.colors[4], brightness_pct: sc.brightness }); };
-  const pickRoom = (r) => { setRoomState(r); const id = hueScripts().room; if (id) call('input_select', 'select_option', { entity_id: id, option: r }); };
+  const pickScene = (sc) => { setSel(sc.name); setBriOv(null); applyScene(sc, sc.brightness); };
+  const pickRoom = (r) => { setRoomState(r); if (anciennes) call('input_select', 'select_option', { entity_id: idPieces, option: r }); };
   /* Deux gestes sans équivalent standard : on garde le script quand il existe. Sans lui (ADR 0261) :
    *  - « Éteindre » éteint les lumières de la maison, veilleuses épargnées — `light.turn_off` pour un `light.*`,
    *    `homeassistant.turn_off` pour un switch déclaré lumière, jamais `toggle` ;
@@ -247,14 +263,14 @@ export default function ScenesContent({ hass }) {
   const lit = !!selScene;
   const selColor = selScene ? rgbHex(selScene.colors[0]) : '#5f6c87';
 
-  // Luminosité appliquée avec la scène (le script accepte brightness_pct)
+  // Luminosité appliquée avec la scène (le script accepte brightness_pct). Celle de « Nightlight » se dit 1 % : c'est ce qui part.
   const [briOv, setBriOv] = useState(null);
-  const briOfScene = selScene && selScene.brightness != null ? selScene.brightness : 60;
+  const briOfScene = selScene && selScene.brightness != null ? luminositeAmbiance(selScene) : 60;
   const bri = briOv != null ? briOv : briOfScene;
   const setBri = (nv) => {
     const v = Math.max(5, Math.min(100, nv));
     setBriOv(v);
-    if (selScene) applyScene({ scene_name: selScene.name, color1: selScene.colors[0], color2: selScene.colors[1], color3: selScene.colors[2], color4: selScene.colors[3], color5: selScene.colors[4], brightness_pct: v });
+    if (selScene) applyScene(selScene, v);
     else { const ids = variablesRepli(); if (ids.length) call('light', 'turn_on', { entity_id: ids, brightness_pct: v }); }
   };
   const totalScenes = Object.values(HUE_SCENES).reduce((n, c) => n + c.scenes.length, 0);
@@ -279,10 +295,10 @@ export default function ScenesContent({ hass }) {
             <button onClick={allOff} aria-label={tr('Éteindre')} style={miniBtn(false)}><span className="o-qb-ico" aria-hidden="true"><Fi i="power" size={15} /></span><span className="o-qb-txt">{tr('Éteindre')}</span></button>
           </div>
         </QuickBox>
+        {/* Les zones de Home Assistant, en LISTE : il y en a autant que de pièces éclairées, une rangée de puces ne tiendrait pas
+          * au téléphone (ADR 0304). */}
         <QuickBox label={tr('Pièce')} className="o-qb-piece">
-          <div style={{ display: 'flex', gap: 4 }}>
-            {HUE_ROOMS().map(r => <button key={r.id} onClick={() => pickRoom(r.id)} style={miniBtn(room === r.id)}>{r.label}</button>)}
-          </div>
+          <ListeChoix value={room} options={pieces} onChange={pickRoom} label={tr('Pièce')} />
         </QuickBox>
         <QuickBox label={tr('Collection')} className="o-qb-collection">
           <ListeChoix value={cat} options={HUE_CATS()} onChange={setCat} label={tr('Collection de scènes')} />
@@ -305,6 +321,10 @@ export default function ScenesContent({ hass }) {
         </QuickBox>
         <span style={{ flex: 1 }} />
       </div>
+      {/* Une pièce sans lampe d'ambiance (une zone inconnue, une veilleuse seule) : rien ne part, et on le dit, une ligne. */}
+      {!toute && veilleuses && !variablesRepli().length && (
+        <div role="status" style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: -10 }}>{tr('Aucune lampe d’ambiance dans {p}', { p: nomPiece })}</div>
+      )}
 
       {/* carte Appliquer une scène */}
 
@@ -321,7 +341,7 @@ export default function ScenesContent({ hass }) {
                   <span style={{ fontSize: 13, fontWeight: 800, color: on ? 'var(--o-accent-soft)' : 'var(--o-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sc.name}</span>
                   {on && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-accent-fond)', flexShrink: 0 }} />}
                 </span>
-                <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{tr('Luminosité {n} %', { n: sc.brightness })}</span>
+                <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{tr('Luminosité {n} %', { n: luminositeAmbiance(sc) })}</span>
                 <span style={{ display: 'flex', gap: 4, marginTop: 9 }}>
                   {sc.colors.slice(0, 5).map((c, ci) => <span key={ci} style={{ flex: 1, height: 4, borderRadius: 4, background: rgbHex(c) }} />)}
                 </span>

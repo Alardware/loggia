@@ -48,9 +48,10 @@ import {
   ROLES_SCRIPTS, libelleRole, scriptDepartDesigne, scriptVivant, optionsScripts,
 } from './robotsfiche.js';
 import {
-  PETITES_CAPITALES, CHAMP_HEURE, LIGNE, SOUS, filet, BoutonConfirme, PasAPas, PuceJour,
+  PETITES_CAPITALES, CHAMP_HEURE, LIGNE, filet, BoutonConfirme, PasAPas, PuceJour,
   EnteteFiche, FicheOnglets, PanneauOnglet, PageReglagesAppareil, OngletEntretien, focaliser,
 } from './fichecommune.jsx';
+import { CADRE_TUILE, SOUS } from './fichekit.js';
 
 /* Les refus d'un départ (`loggia/robots/lancer`, chantier IoT, I3 A) : un
  * robot muet ou déjà en route, des pièces que son intégration ne sait pas
@@ -66,8 +67,6 @@ const VacPlan = lazyRecharge(() => import('./vacplan.jsx'));
 
 /* Les panneaux de sa maquette (§ 7.5) : `--o-s3`, le liseré du réglage, rayon 18, 12 px entre eux. */
 const PANNEAU = { background: 'var(--o-s3)', border: LISERE, borderRadius: 18, padding: 18, boxSizing: 'border-box', minWidth: 0 };
-/* Le cadre d'une tuile de l'Accueil : celui d'un panneau, sans sa marge — index.css la tient, et la change au téléphone. */
-const CADRE_TUILE = { background: 'var(--o-s3)', border: LISERE, borderRadius: 18, boxSizing: 'border-box', minWidth: 0 };
 // Les puces de 48 px de l'Accueil (§ 7.6) : la principale en accent — le bleu plein et le blanc —, la seconde en gris doux. Leur
 // corps et leur marge vivent dans index.css (`.rb-a-puce`) : au téléphone, la place les change, sans priorité forcée (tâche 13).
 // Le rayon 10, celui de la puce de sa maquette (`ChipButton` ; passe bis du 18/10, point 13).

@@ -38,6 +38,7 @@ import { readFileSync } from 'node:fs';
 
 import { monter, horlogeFausse, documentFaux } from './crochets.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -268,7 +269,7 @@ test('C6 : la fabrique des cartes envoie une mesure de la table à sa carte ; un
 }));
 
 test('C11 : la ligne « Libellé · VERDICT » et la jauge d’avant sont parties', () => {
-  const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  const APP = MONOLITHE;
   assert.ok(!APP.includes('ligneVerdict') && !APP.includes('\nfunction JaugeMesure(') && !APP.includes('TEINTE_PALIER'));
 });
 
@@ -314,7 +315,7 @@ test('correction bis, point 7 : une maison fictive que le relevé vivant ne conn
   d.suivre(() => ({ states: { 'sensor.biblio_co2': capteur('sensor.biblio_co2', 1700, { friendly_name: 'CO₂ séjour', device_class: 'carbon_dioxide', unit_of_measurement: 'ppm' }) } }));
   const vive = monter(F.RoomMesureCard, { id: 'sensor.biblio_co2', hass: biblio, onOpen: () => {} });
   assert.equal(de(vive, 'Surface').props.label, 'CO₂ séjour, 1 700 ppm, Confiné · aérez', 'le relevé vivant d’abord');
-  const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  const APP = MONOLITHE;
   const i = APP.indexOf('\nfunction useVueLumiere(');
   assert.ok(APP.slice(i, APP.indexOf('\n}\n', i)).includes('const H = hassQuiConnait(vivant, hass, id);'), 'les aperçus d’une lumière aussi');
 }));

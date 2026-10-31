@@ -18,6 +18,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { planAction, runAction, availableActions, capaciteDe } from '../src/actions.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const et = (state, attributes = {}) => ({ state: String(state), attributes });
 
 /** Les services de l'installation, tels que la découverte les rend. */
@@ -298,7 +299,7 @@ test('aucun appel de service n’est enveloppé d’un catch qui ne peut rien at
 });
 
 test('le rejet d’une commande atteint le seul canal visible', () => {
-  const app = readFileSync(join(RACINE_SRC, 'App.jsx'), 'utf8');
+  const app = MONOLITHE;
   // L'écoute globale est le seul endroit où un refus devient visible. Sans
   // elle, tous les appels directs échouent en silence.
   assert.match(app, /window\.addEventListener\('unhandledrejection', h\)/,
@@ -338,8 +339,12 @@ test('le rejet d’une commande atteint le seul canal visible', () => {
 
 test('le champ tranche entre deux capacités du même service', () => {
   // `light.turn_on` en sert quatre : sans le champ, on ne saurait pas laquelle.
+  /* ASSERTION MODIFIÉE (30/10, G5-1) : `light.turn_on` prend un fondu (`transition`) avec sa luminosité — la bibliothèque des
+   * ambiances l'envoie à la lampe qui sait fondre, par le moteur (ADR 0304). C'est un champ PRÉVU, plus un champ perdu. */
   assert.deepEqual(capaciteDe('light', 'turn_on', { brightness_pct: 40 }),
-    { capacite: 'set_brightness', champ: 'brightness_pct', accepte: [] });
+    { capacite: 'set_brightness', champ: 'brightness_pct', accepte: ['transition'] });
+  assert.deepEqual(capaciteDe('light', 'turn_on', { hs_color: [30, 80] }),
+    { capacite: 'set_hs', champ: 'hs_color', accepte: ['brightness_pct', 'transition'] });
   assert.deepEqual(capaciteDe('light', 'turn_on', { rgb_color: [1, 2, 3] }),
     { capacite: 'set_color', champ: 'rgb_color', accepte: [] });
   assert.deepEqual(capaciteDe('light', 'turn_on', {}),
@@ -535,7 +540,7 @@ test('les quatre fonctions déplacées sont exportées', () => {
       `${f} n’est plus exporté : la vue qui l’appelle ne le trouvera pas`);
   }
   // Et elles ne doivent pas être restées en double dans App.jsx.
-  const app = readFileSync(join(RACINE_SRC, 'App.jsx'), 'utf8');
+  const app = MONOLITHE;
   assert.ok(!/\nfunction commander\(/.test(app),
     'commander existe de nouveau dans App.jsx : deux versions divergeront');
 });

@@ -26,7 +26,7 @@ from typing import Any, Callable
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
-from . import appareils, profils
+from . import appareils, profils, versions
 from .code_admin import CLE_CLAIR, CLE_HACHE, code_valide, enregistrement_valide, hacher, longueur_de
 from .eau_calcul import garder_fermer_sur_fuite
 from .refus import RefusNomme
@@ -35,6 +35,13 @@ _LOGGER = logging.getLogger(__name__)
 
 STORAGE_KEY = "loggia_dashboard_config"
 STORAGE_VERSION = 1
+# La version des DONNEES, rangee dans le fichier sous `schema` (28/10, ADR
+# 0280). `STORAGE_VERSION` est celle du format de Home Assistant : la changer
+# rendrait le fichier illisible a une version precedente de Loggia. Les
+# reprises d'un fichier ancien se font une fois chacune, dans l'ordre
+# (`_migrer_schema`) ; un fichier sans `schema` les rejoue toutes — elles ne
+# changent rien a un fichier deja a jour.
+SCHEMA = 2
 
 # Nom porte par le fichier avant que le projet ne s'appelle Loggia. Une
 # installation existante a toute sa configuration dedans — pieces, entites,
@@ -249,6 +256,10 @@ class MaisonReserveeError(PermissionError):
     """
 
 
+class MagasinIllisibleError(RuntimeError):
+    """Le fichier de configuration n'a pas pu etre lu, ni mis de cote (ADR 0280)."""
+
+
 class LoggiaStore:
     """Acces au fichier de configuration, avec cache memoire."""
 
@@ -263,6 +274,8 @@ class LoggiaStore:
         self._lock = asyncio.Lock()
         # Pour signaler ce qui change aux ecrans abonnes (ADR 0067).
         self.hass = hass
+        # Les versions precedentes, dans un fichier a part (ADR 0285).
+        self._versions = versions.Versions(Store(hass, versions.STORAGE_VERSION, versions.STORAGE_KEY), hass)
 
     async def _load(self) -> dict[str, Any]:
         if self._data is None:
@@ -276,29 +289,116 @@ class LoggiaStore:
         return self._data
 
     async def _charger_une_fois(self) -> None:
-        if True:
-            raw = await self._store.async_load()
-            renomme = False
-            if not isinstance(raw, dict) or not raw:
-                raw, renomme = await self._reprendre_ancien()
-            if not isinstance(raw, dict):
-                raw = {}
-            raw.setdefault("users", {})
-            if not isinstance(raw["users"], dict):
-                raw["users"] = {}
-            raw.setdefault("shared", {})
-            if not isinstance(raw["shared"], dict):
-                raw["shared"] = {}
-            # ORDRE IMPORTANT : la remontee d'abord, le menage ensuite.
-            # `_migrer` prend la configuration d'un compte pour en faire
-            # celle de la maison ; purger avant elle effacerait la seule
-            # copie existante, et le dashboard repartirait vide.
-            remontee = self._migrer(raw)
-            menage = self._purger_ombres(raw)
-            code = self._migrer_code(raw, await self._hache_a_migrer(raw))
-            if remontee or menage or renomme or code:
-                await self._store.async_save(raw)
-            self._data = raw
+        raw = await self._lire_fichier()
+        renomme = False
+        if raw is not None and (not isinstance(raw, dict) or not raw):
+            raw = None
+        if raw is None and not getattr(self, "_illisible", False):
+            raw, renomme = await self._reprendre_ancien()
+        if not isinstance(raw, dict):
+            raw = {}
+        raw.setdefault("users", {})
+        if not isinstance(raw["users"], dict):
+            raw["users"] = {}
+        raw.setdefault("shared", {})
+        if not isinstance(raw["shared"], dict):
+            raw["shared"] = {}
+        # ORDRE IMPORTANT : la remontee d'abord, le menage ensuite.
+        # `_migrer` prend la configuration d'un compte pour en faire
+        # celle de la maison ; purger avant elle effacerait la seule
+        # copie existante, et le dashboard repartirait vide.
+        repris = await self._migrer_schema(raw)
+        # Un fichier d'une version plus recente (None) n'est pas touche du
+        # tout : ni reprise, ni menage.
+        menage = self._purger_ombres(raw) if repris is not None else False
+        if (repris or menage or renomme) and not getattr(self, "_illisible", False):
+            await self._ecrire(raw)
+        self._data = raw
+
+    async def _lire_fichier(self) -> Any:
+        """Le fichier tel que Home Assistant le lit — ou None, sans jamais le
+        perdre (28/10, ADR 0280).
+
+        Un JSON abime, Home Assistant le met lui-meme de cote (`.corrupt.<date>`)
+        et rend None. Mais une autre panne de lecture — droits, disque, version
+        de format inconnue — levait ici, et toutes les commandes `config/*`
+        echouaient a chaque appel. Desormais le magasin repart VIDE : le fichier
+        illisible est d'abord COPIE a cote (`<fichier>.corrupt.<horodatage>`),
+        jamais deplace. Tant que la copie n'est pas faite, rien ne s'ecrit :
+        la premiere sauvegarde ecraserait la seule version de la configuration.
+        """
+        self._illisible = False
+        try:
+            return await self._store.async_load()
+        except Exception:  # noqa: BLE001 — repartir vide plutot que tout bloquer
+            _LOGGER.exception("Loggia : la configuration n'a pas pu etre lue, le magasin repart vide")
+        copie = await self._mettre_de_cote()
+        if copie is None:
+            self._illisible = True
+            _LOGGER.error("Loggia : le fichier illisible n'a pas pu etre copie : rien ne sera ecrit "
+                          "par-dessus avant le prochain redemarrage")
+        elif copie:
+            _LOGGER.warning("Loggia : le fichier illisible est garde sous %s", copie)
+        return None
+
+    async def _mettre_de_cote(self) -> str | None:
+        """Copie le fichier illisible a cote de lui. Rend son chemin, '' s'il
+        n'y avait pas de fichier a copier, None si la copie a echoue. Le
+        fichier des versions fait de meme (`versions.copier_a_cote`)."""
+        return await versions.copier_a_cote(getattr(self, "hass", None), self._store)
+
+    async def _ecrire(self, contenu: dict[str, Any], *, compte: str | None = None, garder: bool = True) -> None:
+        """La seule porte vers le fichier. Fermee tant qu'un fichier illisible
+        n'a pas ete mis de cote (ADR 0280).
+
+        Avant d'ecrire, ce qui est sur le disque est garde dans les versions
+        precedentes (ADR 0285) - au plus une copie par quart d'heure. Une
+        copie qui echoue ne retient JAMAIS l'ecriture : elle se saute, et le
+        journal le dit. `compte` : le nom Home Assistant de qui ecrit, s'il
+        est connu."""
+        if getattr(self, "_illisible", False):
+            raise MagasinIllisibleError(
+                "configuration illisible et non copiee : rien n'est ecrit avant le prochain redemarrage")
+        if garder:
+            await self._garder_version(compte)
+        await self._store.async_save(contenu)
+
+    async def _garder_version(self, compte: str | None) -> None:
+        """Le cache EST le disque : il n'est remplace qu'une fois l'ecriture
+        faite. Au premier chargement (cache vide), rien a garder."""
+        gardien = getattr(self, "_versions", None)
+        avant = getattr(self, "_data", None)
+        if gardien is None or avant is None:
+            return
+        await gardien.async_garder(avant, compte=compte)
+
+    async def _migrer_schema(self, raw: dict[str, Any]) -> bool | None:
+        """Les reprises d'un fichier ancien, chacune une fois, dans l'ordre
+        (28/10, ADR 0280 — un bloc sans version en tenait lieu).
+
+        1. la remontee d'une configuration de compte vers la maison (`_migrer`) ;
+        2. le code administrateur en clair devenu un hache (`_migrer_code`).
+
+        La version gagnee est notee dans `schema` ; elle part avec la prochaine
+        ecriture, et seule une reprise qui change quelque chose fait ecrire —
+        un fichier deja a jour n'est pas reecrit pour une etiquette. Un
+        fichier d'une version PLUS recente de Loggia (retour arriere) n'est
+        pas touche : ses donnees sont peut-etre d'une forme que ce code ignore
+        (None).
+        """
+        depuis = raw.get("schema")
+        if isinstance(depuis, bool) or not isinstance(depuis, int) or depuis < 0:
+            depuis = 0
+        if depuis > SCHEMA:
+            _LOGGER.warning("Loggia : configuration d'une version plus recente (%d), elle est lue sans reprise", depuis)
+            return None
+        change = False
+        if depuis < 1:
+            change = self._migrer(raw) or change
+        if depuis < 2:
+            change = self._migrer_code(raw, await self._hache_a_migrer(raw)) or change
+        raw["schema"] = SCHEMA
+        return change
 
     async def _reprendre_ancien(self) -> tuple[dict[str, Any], bool]:
         """Reprend la configuration ecrite sous l'ancien nom du projet.
@@ -560,7 +660,7 @@ class LoggiaStore:
                     f"stockage commun trop volumineux ({taille} > {MAX_TOTAL_BYTES} octets)",
                 )
             nouveau = {**data, "shared": commun}
-            await self._store.async_save(nouveau)
+            await self._ecrire(nouveau)
             self._data = nouveau
             return value
 
@@ -580,7 +680,7 @@ class LoggiaStore:
                 if _taille({profils.CLE_PROFILS: liste}) > MAX_VALUE_BYTES:
                     raise RefusNomme("payload_too_large", "trop de profils", profils.CLE_PROFILS)
                 nouveau = {**data, "shared": commun}
-                await self._store.async_save(nouveau)
+                await self._ecrire(nouveau, compte=nom)
                 self._data = nouveau
                 self._signaler(None, communes=[profils.CLE_PROFILS])
             return {"index": index, "profils": liste, "cree": change}
@@ -649,7 +749,7 @@ class LoggiaStore:
         async with self._lock:
             data = await self._load()
             nouveau = {**data, "shared": {**data["shared"], CLE_HACHE: dict(enregistrement)}}
-            await self._store.async_save(nouveau)
+            await self._ecrire(nouveau)
             self._data = nouveau
             # Les ecrans n'apprennent que le fait, jamais le code (ADR 0067).
             self._signaler(None, communes=["loggia_admin_pin_defini", "loggia_admin_pin_longueur"])
@@ -672,7 +772,7 @@ class LoggiaStore:
                     or longueur_de(e) is not None):
                 return False
             nouveau = {**data, "shared": {**data["shared"], CLE_HACHE: {**e, "longueur": longueur}}}
-            await self._store.async_save(nouveau)
+            await self._ecrire(nouveau)
             self._data = nouveau
             self._signaler(None, communes=["loggia_admin_pin_longueur"])
             return True
@@ -684,6 +784,7 @@ class LoggiaStore:
         *,
         replace: bool = False,
         is_admin: bool = False,
+        compte: str | None = None,
     ) -> dict[str, Any]:
         """Fusionne (ou remplace) la configuration d'un utilisateur.
 
@@ -706,9 +807,12 @@ class LoggiaStore:
         Un refus explicite vaut mieux qu'un enregistrement qui ne sert a
         personne : l'appelant apprend que ce reglage appartient a la maison, le
         fichier reste propre, et le meme dashboard s'affiche partout.
+
+        `compte` : le nom Home Assistant de l'appelant, que porte la version
+        precedente gardee avant l'ecriture (ADR 0285). Rien d'autre.
         """
         async with self._lock:
-            return await self._set_locked(user_id, patch, replace=replace, is_admin=is_admin)
+            return await self._set_locked(user_id, patch, replace=replace, is_admin=is_admin, compte=compte)
 
     async def _set_locked(
         self,
@@ -717,6 +821,7 @@ class LoggiaStore:
         *,
         replace: bool,
         is_admin: bool,
+        compte: str | None = None,
     ) -> dict[str, Any]:
         maison = sorted(
             k for k in patch
@@ -817,7 +922,7 @@ class LoggiaStore:
         # configuration jamais enregistree, que TOUTE ecriture suivante
         # retentait en vain (audit 18/09).
         nouveau = {**data, "users": {**data["users"], user_id: perso}, "shared": commun}
-        await self._store.async_save(nouveau)
+        await self._ecrire(nouveau, compte=compte)
         self._data = nouveau
         # Ce qui a VRAIMENT change, pour les autres ecrans (ADR 0067).
         avant_perso = data["users"].get(user_id)
@@ -826,6 +931,56 @@ class LoggiaStore:
                        communes=_cles_changees(data["shared"], commun))
         # La meme vue que la lecture : jamais les secrets (audit du 19/10).
         return self._vue(nouveau, user_id)
+
+    async def async_versions(self) -> list[dict[str, Any]]:
+        """Les versions precedentes, sans leur contenu (ADR 0285)."""
+        async with self._lock:
+            return await self._gardien().async_liste()
+
+    async def async_rendre_version(self, ident: str, *, compte: str | None = None) -> dict[str, Any]:
+        """Remet une version precedente, d'un bloc, sous le verrou (ADR 0285).
+
+        AVANT le remplacement, l'etat actuel est garde - hors de la regle du
+        quart d'heure -, pour qu'on puisse revenir sur le retour ; s'il ne
+        peut pas l'etre, rien ne se remet. Ce qu'un retour laisse tel quel :
+        `versions.GARDEES_AU_RETOUR`, et « Fermer en cas de fuite », qui ne
+        change que par sa commande (`garder_fermer_sur_fuite`). Les ecrans et
+        les modules l'apprennent comme apres une ecriture (`_signaler`)."""
+        async with self._lock:
+            data = await self._load()
+            gardien = self._gardien()
+            copie = await gardien.async_lire(ident)
+            nouveau = versions.rendre(data, copie)
+            commun = nouveau["shared"]
+            if CLE_ALERTES in commun:
+                commun[CLE_ALERTES] = garder_fermer_sur_fuite(data["shared"].get(CLE_ALERTES), commun[CLE_ALERTES])
+            # Les plafonds de `_set_locked` : une copie les a passes le jour ou
+            # elle a ete prise, mais le fichier des versions se lit du disque.
+            for nom, contenu in [("commun", commun), *(("compte", c) for c in nouveau["users"].values())]:
+                taille = _taille(contenu)
+                if len(contenu) > MAX_KEYS_PER_USER or taille > MAX_TOTAL_BYTES:
+                    raise RefusNomme("payload_too_large", f"stockage {nom} trop volumineux ({taille} octets)")
+            if not await gardien.async_garder(data, compte=compte, motif=versions.MOTIF_RETOUR, forcer=True):
+                raise RefusNomme("versions_indisponibles", "la configuration actuelle n'a pas pu etre gardee")
+            await self._ecrire(nouveau, garder=False)
+            self._data = nouveau
+            communes = _cles_changees(data["shared"], commun)
+            self._signaler(None, communes=communes)
+            cles = set(communes)
+            for uid in sorted(set(data["users"]) | set(nouveau["users"])):
+                avant, apres = data["users"].get(uid), nouveau["users"].get(uid)
+                perso = _cles_changees(avant if isinstance(avant, dict) else {}, apres if isinstance(apres, dict) else {})
+                self._signaler(uid, perso=perso)
+                cles.update(perso)
+            # `cles` : ce que l'ecran du retour oublie de son stockage local
+            # avant de se recharger (src/versions.js) - des noms, comme le signal.
+            return {"rendue": ident, "cles": sorted(cles), "versions": await gardien.async_liste()}
+
+    def _gardien(self) -> versions.Versions:
+        gardien = getattr(self, "_versions", None)
+        if gardien is None:
+            raise RefusNomme("versions_indisponibles", "pas de fichier des versions")
+        return gardien
 
     def _signaler(self, user_id: str | None, perso=(), communes=()) -> None:
         """Dit aux ecrans abonnes ce qui vient de changer — les CLES et le
@@ -864,6 +1019,6 @@ class LoggiaStore:
             if user_id in data["users"]:
                 anciennes = data["users"][user_id]
                 nouveau = {**data, "users": {k: v for k, v in data["users"].items() if k != user_id}}
-                await self._store.async_save(nouveau)
+                await self._ecrire(nouveau)
                 self._data = nouveau
                 self._signaler(user_id, perso=sorted(anciennes) if isinstance(anciennes, dict) else [])

@@ -1,9 +1,9 @@
-/* Quatre veilles : l'air, les piles, le tarif, les consommables.
+/* Cinq veilles : l'air, les piles, le tarif, les consommables, la collecte.
  *
- * Elles n'ont qu'une chose à dire, et une seule façon de la dire : le service
- * de notification déjà choisi dans Paramètres › Alertes. La page le vérifie et
- * le signale en tête plutôt que de laisser régler des seuils qui ne
- * préviendront personne.
+ * Elles parlent aux téléphones que le composant trouve seul — ceux des
+ * personnes à la maison (ADR 0301) —, et au service choisi dans Paramètres ›
+ * Alertes en repli. Sans l'un ni l'autre, la page le signale en tête plutôt
+ * que de laisser régler des seuils qui ne préviendront personne.
  */
 import {
   useMemo, useState
@@ -14,6 +14,8 @@ import { niveauPile, couleurNiveau, SEUIL_CO2 } from '../attention.js';
 import { tr, comparerTextes } from '../i18n.js';
 import { raisonEchec } from '../refus.js';
 import { puce } from '../styles.js';
+import { plateformeDe } from '../state.js';
+import { sourcesCollecte } from '../collecte.js';
 
 /* Au niveau du module, et non dans le composant.
  *
@@ -48,6 +50,7 @@ export function VeillesReglages({ hass, cardSt }) {
   const [pliBat, plierBat] = usePli('veilles:piles');
   const [pliCr, plierCr] = usePli('veilles:creuses');
   const [pliConso, plierConso] = usePli('veilles:conso');
+  const [pliCol, plierCol] = usePli('veilles:collecte');
   // Le sélecteur d'entités des consommables, en feuille (ADR 0006).
   const [picker, setPicker] = useState(false);
 
@@ -85,6 +88,20 @@ export function VeillesReglages({ hass, cardSt }) {
       .sort((a, b) => comparerTextes(a.nom, b.nom));
   }, [hass]);
 
+  /* Le rappel de collecte (ADR 0301) : la source que le composant trouverait
+   * seul — la même règle (collecte.js) —, et ce qu'on peut choisir à la place :
+   * tout calendrier, et les capteurs de ramassage trouvés. */
+  const collecteSources = useMemo(() => {
+    const S = (hass && hass.states) || {};
+    const trouve = sourcesCollecte(S, plateformeDe);
+    const auto = trouve.calendriers.length ? [trouve.calendriers[0]] : trouve.capteurs;
+    const calendriers = Object.keys(S).filter(id => id.indexOf('calendar.') === 0);
+    const choix = [...new Set([...calendriers, ...trouve.capteurs])]
+      .map(id => ({ id, nom: cvName(S[id], id) }))
+      .sort((a, b) => comparerTextes(a.nom, b.nom));
+    return { auto, choix };
+  }, [hass]);
+
   const tarifs = useMemo(() => {
     if (!hass || !hass.states) return [];
     return Object.keys(hass.states)
@@ -109,6 +126,8 @@ export function VeillesReglages({ hass, cardSt }) {
   const bat = cfg.batterie || {};
   const cr = cfg.creuses || {};
   const conso = cfg.consommables || {};
+  const col = cfg.collecte || {};
+  const autoCollecte = collecteSources.auto.map(nomDe).join(', ');
   const designes = (conso.capteurs || []).filter(x => typeof x === 'string');
 
   /* Les derniers signalements d'une regle, dans sa carte (maquette du 18/09) :
@@ -152,7 +171,7 @@ export function VeillesReglages({ hass, cardSt }) {
         <div style={{ ...cardSt, background: 'rgba(var(--o-warn2-rgb),.10)', border: 'var(--o-bw,1px) solid rgba(var(--o-warn2-rgb),.30)' }}>
           <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--o-warn2)' }}>{tr('Personne n’écoute')}</div>
           <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 3 }}>
-            {tr('Ces veilles préviennent par le service choisi dans Paramètres › Alertes. Tant qu’aucun n’est choisi, elles ne diront rien à personne.')}
+            {tr('Aucun téléphone trouvé, et aucun repli choisi dans Paramètres › Alertes : ces veilles ne diront rien à personne.')}
           </div>
         </div>
       )}
@@ -287,6 +306,38 @@ export function VeillesReglages({ hass, cardSt }) {
                 <Choix enregistrer={enregistrer} liste={commandables} retenues={cr.prises} champNom="prises" section="creuses" />
               </div>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Le rappel de collecte (chantier G2 ; ADR 0301) ── */}
+      {/* Le SERVEUR l'envoie, écran fermé : la veille au soir, aux personnes à
+        * la maison, avec le bouton « C'est sorti » que le bandeau de l'Accueil
+        * partage. La source se trouve seule ; la choisir ne fait que corriger. */}
+      <div style={cardSt}>
+        <RegleEntete nom={tr('Rappel de collecte')}
+          desc={tr('La veille au soir, un message aux personnes à la maison : ce qui passe demain, et un bouton « C’est sorti » qui fait taire le bandeau sur tous les écrans.')}
+          on={col.actif} cb={() => enregistrer({ collecte: { actif: !col.actif } })} plie={pliCol} onPlier={plierCol} zone="veilles-collecte" />
+        {col.actif && !pliCol && (
+          <div id="veilles-collecte" style={ZONE_REGLAGES}>
+            <div style={ligne}>
+              <span style={{ ...label, minWidth: 140 }}>{tr('Heure du rappel')}</span>
+              <input aria-label={tr('Heure du rappel')} type="time" value={col.heure || '19:00'}
+                onChange={e => { if (e.target.value) enregistrer({ collecte: { heure: e.target.value } }); }}
+                style={{ ...champ, width: 'auto' }} />
+            </div>
+            <div style={ligne}>
+              <span style={{ ...label, minWidth: 140 }}>{tr('Calendrier ou capteurs')}</span>
+              <ListeChoix value={col.source || ''} onChange={v => enregistrer({ collecte: { source: v } })} label={tr('Calendrier ou capteurs')}
+                options={[{ id: '', label: autoCollecte ? tr('Automatique — {nom}', { nom: autoCollecte }) : tr('Automatique') },
+                  ...collecteSources.choix.map(x => ({ id: x.id, label: x.nom, sub: x.id }))]}
+                style={{ ...champ, minWidth: 200, maxWidth: 300 }} />
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginTop: 10 }}>
+              {!autoCollecte && !col.source
+                ? tr('Aucun calendrier de collecte trouvé : choisissez-en un.')
+                : tr('Sauté si le serveur redémarre plus de trois heures après l’heure ; jamais deux fois pour la même collecte.')}
+            </div>
           </div>
         )}
       </div>

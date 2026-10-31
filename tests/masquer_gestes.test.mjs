@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { compteOrdinaire } from '../src/state.js';
 import { composant, rendre } from './rendu.mjs';
 
+import { MONOLITHE, DASHBOARD } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282) ; DASHBOARD : l'Accueil en entier, ses hooks compris (ADR 0283)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const NL = String.fromCharCode(10);
@@ -58,7 +59,7 @@ test('l’assistant : son nom pour tous, le menu pour qui peut l’enregistrer',
 });
 
 test('la fiche d’une carte : la prise ne se declare lumiere que pour qui peut l’enregistrer', () => {
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   const f = bloc(app, 'function CardEditSheet(', NL + '}');
   assert.ok(f.includes('const peutDeclarer = estPrise && !compteOrdinaire(hass);'), 'loggia_switchlights est reservee');
   assert.ok(f.includes('{peutDeclarer' + NL) && f.includes('? <ListeChoix value={domaineChoisi}'), 'le menu du domaine suit ce droit');
@@ -67,8 +68,8 @@ test('la fiche d’une carte : la prise ne se declare lumiere que pour qui peut 
 });
 
 test('l’Accueil en edition : la taille d’une piece a tous, la piece elle-meme aux administrateurs', () => {
-  const app = lire('src', 'App.jsx');
-  const home = bloc(app, 'function Dashboard(', NL + 'function ');
+  const app = MONOLITHE;
+  const home = DASHBOARD;
   assert.ok(home.includes('const ordinaire = compteOrdinaire(dashHass);'));
   assert.ok(home.includes("[p.name]: t === 'c' ? 's' : 'c' } })} reglable={!ordinaire} />"), 'Modifier et Supprimer ecrivent loggia_rooms');
   assert.ok(home.includes('{editMode && !ordinaire && (' + NL + "                <div style={{ gridColumn: piecesApres.c"), '« Ajouter une piece » aussi');
@@ -84,7 +85,7 @@ test('l’Accueil en edition : la taille d’une piece a tous, la piece elle-mem
 });
 
 test('les autres gestes de configuration : masques au meme critere', () => {
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   // ASSERTION MODIFIÉE (boot, 19/10) : la feuille du mois vit dans feuillecalendrier.jsx, chargé à la demande ; son code n'a pas changé.
   const cal = bloc(lire('src', 'feuillecalendrier.jsx'), 'function FeuilleCalendrierContent(', NL + '}');
   assert.ok(cal.includes('const ordinaire = compteOrdinaire(hass);') && cal.includes('{!ordinaire && tousCals.length > 1 && ('),

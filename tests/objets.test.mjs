@@ -8,8 +8,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { filtresObjet, objetActif, statsObjets, pucesObjets, trierObjets, OBJ_ORDRE, DOMAINES_IOT, domaineEdition, identifiantEdition, joursDeReserve, verdictsPlante } from '../src/objets.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + readFileSync(join(RACINE, 'src', 'views', 'voletsplan.jsx'), 'utf8'); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
+const src = MONOLITHE + readFileSync(join(RACINE, 'src', 'views', 'voletsplan.jsx'), 'utf8'); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
 
 test('chaque domaine trouve son filtre ; une prise declaree lumiere est une lumiere', () => {
   const f = (o) => filtresObjet(o);
@@ -36,7 +37,9 @@ test('chaque domaine trouve son filtre ; une prise declaree lumiere est une lumi
   assert.deepEqual(f({ domaine: 'feeder', type: 'feeder' }), ['iot'], '« iot correspond aux appareils, robot, distributeur »');
   assert.deepEqual(f({ domaine: 'lawn_mower' }), ['iot'], 'le robot du jardin est un robot');
   assert.deepEqual(f({ domaine: 'plant', type: 'plant' }), ['capteurs'], 'une plante est un bouquet de capteurs');
-  assert.deepEqual(DOMAINES_IOT, ['vacuum', 'lawn_mower', 'feeder', 'fan', 'humidifier', 'valve'], 'aucune prise parmi les appareils');
+  // ASSERTION MODIFIÉE (30/10, G3-E3) : la borne de recharge trouvée par la découverte (`obj:borne`) est un appareil — pas une prise.
+  assert.deepEqual(DOMAINES_IOT, ['vacuum', 'lawn_mower', 'feeder', 'fan', 'humidifier', 'valve', 'borne'], 'aucune prise parmi les appareils');
+  assert.deepEqual(f({ domaine: 'borne', type: 'borne' }), ['iot'], 'la borne est sous IoT');
   assert.deepEqual(f({ domaine: 'script' }), [], 'un domaine inconnu ne vit que sous Tous');
 });
 
@@ -272,7 +275,8 @@ test('la fiche du distributeur et la fiche de la plante : le squelette commun, e
 
 test('les cartes du distributeur et de la plante : la maquette, au gabarit', () => {
   const f = src.indexOf('function RoomFeederCard(');
-  const carte = src.slice(f, src.indexOf('function RoomPlantCard(', f));
+  // ASSERTION MODIFIÉE (ADR 0283) : la carte du distributeur et celle de la plante vivent dans deux modules ; la tranche s'arrête à la fin de la fonction.
+  const carte = src.slice(f, src.indexOf('\n}\n', f));
   /* ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I8, I10) : sa maquette « Cartes IoT », 1a — UNE puce au pied, « Distribuer 12 g » ;
    * « Rempli » quitte la carte (il vit près du réservoir, dans la popup) ; la patte orange devient la plaque ambre, sans lavis. */
   assert.ok(carte.includes("tr('Distribuer {g} g', { g })") && !carte.includes("tr('Rempli')"), 'Distribuer au pied, Rempli parti');
@@ -407,7 +411,7 @@ test('11 bis, R9 : à 320 px, les libellés des tuiles du haut d’Objets tienne
   const MOTS = { fr: 55.4, en: 64.4, de: 71.6, nl: 76.7, it: 61.3, es: 72, pl: 65.4 };   // « absentes », « connected », « verbundene », « ontbrekende », « dispositivi », « dispositivos », « urządzenia »
   // La tuile : la grille de la page (320 px de téléphone − 2 × 14 px de marge) moins deux écarts de 14 px, en trois ; son liseré d'un pixel.
   const tuile = (grille) => (grille - 2 * 14) / 3;
-  const src12 = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const src12 = MONOLITHE;
   assert.ok(src12.includes("<div className=\"grid-objstats\" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>") && src12.includes("padding: '18px 20px'"), 'les tuiles : 3 colonnes, 14 px d’écart, 18 × 20 px de rembourrage large');
   for (const [lang, large] of Object.entries(MOTS)) {
     // Étroite (320 px : une grille de 292 px, des tuiles de 88 px) : le mot commence à gauche + 1 px, et finit dans sa tuile.

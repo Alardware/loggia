@@ -37,6 +37,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { PIECES_DU_MONOLITHE, MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /* L'inventaire relu le 7 septembre 2026, par fichier et par dépendance.
@@ -175,7 +176,10 @@ async function releve() {
     // de développement le projet s'appelle « OrionV2-source », sur le runner
     // d'intégration « loggia ». Découper sur un nom en dur passait ici et
     // échouait partout ailleurs — c'est exactement ce qui est arrivé.
-    const nom = relative(RACINE, f.filePath).split(ANTISLASH).join('/');
+    // Ce qui sort d'App.jsx garde ses omissions sous le nom du monolithe (ADR
+    // 0282) : un déménagement n'est ni une omission nouvelle, ni une corrigée.
+    const brut = relative(RACINE, f.filePath).split(ANTISLASH).join('/');
+    const nom = PIECES_DU_MONOLITHE.includes(brut.slice(4)) ? 'src/App.jsx' : brut;
     for (const m of f.messages) {
       if (m.ruleId !== 'react-hooks/exhaustive-deps') continue;
       const d = m.message.match(/missing dependenc[a-z]*: (.*?)\. Either/);
@@ -316,6 +320,22 @@ test('le compte d’eslint tient sous le cliquet de la CI, et le cliquet ne remo
   assert.ok(Number(m[1]) <= 48, `le cliquet de la CI est à ${m[1]}, au-dessus des 48 du lot 16 : il ne doit que descendre`);
 });
 
+/** Les dépendances d'un crochet (`useMemo(`, `useEffect(`…), triées : le tableau qui ferme l'appel ouvert à `debut`,
+ *  lu par équilibrage des parenthèses — la mise en forme et l'ordre ne comptent pas. */
+function dependancesDe(src, debut) {
+  const d = src.indexOf(debut);
+  assert.ok(d >= 0, '« ' + debut + ' » a disparu');
+  let i = d + debut.length;
+  for (let n = 1; n > 0; i += 1) {
+    assert.ok(i < src.length, '« ' + debut + ' » ne se referme pas');
+    if (src[i] === '(') n += 1; else if (src[i] === ')') n -= 1;
+  }
+  const appel = src.slice(d, i);
+  const m = appel.match(/,\s*\[([^\]]*)\]\s*\)$/);
+  assert.ok(m, '« ' + debut + ' » n’a plus de tableau de dépendances : il se recalcule à chaque rendu');
+  return m[1].split(',').map(x => x.trim()).filter(Boolean).sort();
+}
+
 test('le chemin chaud ne recalcule plus pour rien', () => {
   // Audit du 27/09, point 7. Trois calculs repartaient à CHAQUE rendu :
   // `deriveAccueil` (cent trente lignes — pièces, lumières, chauffage,
@@ -329,9 +349,13 @@ test('le chemin chaud ne recalcule plus pour rien', () => {
   // mode édition provoquait quatre recalculs complets des trois. Après :
   // zéro, et quatre bascules de lampe en provoquent toujours quatre — le
   // chemin légitime est intact.
-  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const app = MONOLITHE;
   assert.match(app, /const accueil = useMemo\(\(\) => \{/, '`deriveAccueil` est de nouveau appelée dans le rendu');
-  assert.match(app, /\}, \[view, activeRoom, hass, cfg, loggiaRuntime\.resolved, loggiaRuntime\.index\]\);/,
+  /* ASSERTION MODIFIÉE (lot 4 de l'audit du 28/10, ADR 0282) : les dépendances de l'Accueil se comparent comme un
+   * ENSEMBLE, lu dans le tableau qui ferme son `useMemo`. L'épingle d'avant recopiait la ligne entière : un retour à
+   * la ligne, ou deux noms échangés, la cassaient sans que rien ne change. */
+  assert.deepEqual(dependancesDe(app, 'const accueil = useMemo('),
+    ['activeRoom', 'cfg', 'hass', 'loggiaRuntime.index', 'loggiaRuntime.resolved', 'view'],
     'les dépendances de l’Accueil ont changé : vérifier qu’elles restent COMPLÈTES');
   assert.match(app, /const vivantes = useMemo\(\(\) => \{/, '`deriveNotifs` est de nouveau appelée dans le rendu');
   assert.match(app, /const nbAppareils = useMemo\(\(\) => \{/, 'le compte d’appareils reboucle à chaque rendu');

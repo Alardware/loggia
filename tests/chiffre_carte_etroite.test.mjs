@@ -29,9 +29,10 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { register } from 'node:module';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const lire = (chemin) => readFileSync(new URL('../' + chemin, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const CSS = lire('src/index.css');
-const APP = lire('src/App.jsx');
+const APP = MONOLITHE;
 const STYLES = lire('src/styles.js');
 // `emChiffre` vit dans App.jsx, qui n'exporte que l'application : sous `?grille`, un crochet de chargement lui ajoute un export.
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });

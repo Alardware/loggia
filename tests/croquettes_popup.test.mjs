@@ -35,12 +35,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { transformSync } from 'esbuild';
 import { composant } from './rendu.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 // La langue AVANT les imports : i18n et les dates la lisent au chargement.
 if (typeof globalThis.navigator === 'undefined') Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8').replace(/\r\n/g, '\n');
-const APP = lire('src', 'App.jsx');
+const APP = MONOLITHE;
 const CSS = lire('src', 'index.css');
 const VUES = lire('src', 'views.js');
 const SRC_FICHE = lire('src', 'fichedistributeur.jsx');

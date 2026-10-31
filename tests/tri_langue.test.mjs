@@ -17,6 +17,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'pl-PL' }, configurable: true });
 const { langue, comparerTextes } = await import('../src/i18n.js');
 const { devicesByArea } = await import('../src/devices.js');
@@ -74,7 +75,7 @@ test('un seul localeCompare dans src/ : celui de comparerTextes', () => {
 });
 
 test('l’horloge de carte parle la langue de l’écran, pas celle du navigateur', () => {
-  const app = readFileSync(join(SRC, 'App.jsx'), 'utf8');
+  const app = MONOLITHE;
   const horloge = app.slice(app.indexOf('function CvClock()'), app.indexOf('function CvBigSensor('));
   assert.ok(horloge.includes("d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })"), 'l’heure');
   assert.ok(horloge.includes("d.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' })"), 'le jour');

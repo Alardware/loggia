@@ -480,7 +480,7 @@ class LoggiaEnfant:
         if doit_prevenir(etat, "volume", instants, t) and self.regles is not None:
             nom_appareil = self._nom(entite)
             await self.regles.prevenir(MODULE, "plafond", (MSG_VOLUME, {"appareil": nom_appareil}), titre=TITRE,
-                                       simuler=self._simule())
+                                       simuler=self._simule(), pour="admins")
             self.etats[ident] = noter_prevention(self.etats[ident], "volume", t)
         await self._sauver()
 
@@ -561,7 +561,7 @@ class LoggiaEnfant:
         if rallumage and doit_prevenir(etat, "rallumage", etat["rallumages"], t) and self.regles is not None:
             nom_appareil = self._nom(haid)
             await self.regles.prevenir(MODULE, "rallumage", (MSG_RALLUMAGE, {"appareil": nom_appareil}), titre=TITRE,
-                                       simuler=self._simule())
+                                       simuler=self._simule(), pour="admins")
             self.etats[ident] = noter_prevention(self.etats[ident], "rallumage", t)
         await self._sauver()
 
@@ -842,7 +842,7 @@ class LoggiaEnfant:
                                {"action": action_telephone(jeton, False), "title": traduire(BOUTON_REFUSER, langue)}]}
         if self.regles is not None:
             await self.regles.prevenir(MODULE, "demande", (MSG_DEMANDE, {"nom": nom, "appareil": appareil}), titre=TITRE,
-                                       data=boutons, simuler=self._simule())
+                                       data=boutons, simuler=self._simule(), pour="admins")
         await self._noter("demande", "demande", cibles=[ecrans[0]], motif=("{n} min", {"n": 15}))
         await self._sauver()
         return await self.async_etat(user)

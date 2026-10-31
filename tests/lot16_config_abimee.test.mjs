@@ -31,6 +31,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { transformSync } from 'esbuild';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 const { composant, rendre } = await import('./rendu.mjs');
 const { setLoggiaState, switchLightsCfg, medPlayers } = await import('../src/state.js');
@@ -38,7 +39,7 @@ const L = await import('../src/lectures.js');
 const P = await import('../src/views/parametres.jsx');
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const APP = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const APP = MONOLITHE;
 
 /** Serveur joignable : `cfgVal` ne descend pas dans le stockage local. */
 const etat = (cfg = {}, ent = {}) => setLoggiaState({ cfg, ent, server: true });
@@ -98,8 +99,16 @@ test('une caméra null ne fait plus lever les clés de la sécurité, calculées
   }, 'secBaseKeys');
   assert.deepEqual(secBaseKeys(), ['alarm_control_panel.maison', 'camera.entree', 'binary_sensor.entree_mouvement', 'person.camille']);
   // Les clés de l'Accueil lisent `cfg.cams` pour TOUTES les vues : même garde.
-  assert.match(APP, /cams: \(Array\.isArray\(cm\) && cm\.length\) \? cm\.filter\(c => c && typeof c === 'object'\) : \[\],/,
+  /* ASSERTION MODIFIÉE (lot 4 de l'audit du 28/10, ADR 0282) : l'expression de `cfg.cams` est ÉVALUÉE sur des
+   * configurations abîmées, au lieu d'en recopier la ligne. */
+  const exprCams = APP.match(/\bcams: (\([^\n]*\bcm\b[^\n]*?),\s*\n/);
+  assert.ok(exprCams, '`cfg.cams` ne se lit plus dans la configuration');
+  const filtrer = new Function('cm', 'return ' + exprCams[1] + ';');
+  assert.deepEqual(filtrer([null, 'x', 3, { haid: 'camera.entree' }]), [{ haid: 'camera.entree' }],
     '`cfg.cams` garde une caméra null : `c.haid` fait tomber tout l’écran');
+  for (const abime of [null, undefined, {}, 'camera.x', []]) {
+    assert.deepEqual(filtrer(abime), [], '`cfg.cams` d’une liste abîmée (' + JSON.stringify(abime) + ') n’est pas une liste vide');
+  }
 });
 
 test('switchLightsCfg : un objet à la place de la liste rend [], une liste valide ne change pas', () => {

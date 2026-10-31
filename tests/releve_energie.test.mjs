@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import { armerReleve, seriesRelues, GARDE_SERIE } from '../src/releve.js';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const lire = (...p) => readFileSync(new URL('../' + p.join('/'), import.meta.url), 'utf8');
 
@@ -94,7 +94,7 @@ test('seriesRelues : une lecture ratée garde la courbe d’avant, une lecture r
 });
 
 test('la vue Énergie fait avancer ses deux séries au même tour, et coupe le minuteur au démontage', () => {
-  const app = (lire('src', 'App.jsx') + VUES_SORTIES);
+  const app = (MONOLITHE + VUES_SORTIES);
   // ASSERTION MODIFIÉE (ADR 0274) : la vue Énergie, sortie du boot, importe elle-même ce qu'elle seule utilise.
   assert.match(app, /import \{ armerReleve \} from '\.\.\/releve\.js';/);
   const i = app.indexOf('\nfunction EnergieContent(');

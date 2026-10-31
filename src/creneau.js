@@ -64,10 +64,26 @@ const estBinaire = (id) => String(id || '').indexOf('binary_sensor.') === 0;
  * Rend `null` dès qu'il y a un doute : aucun candidat, ou plus d'un.
  */
 export function trouverCreneau(entites) {
-  const bons = (Array.isArray(entites) ? entites : [])
-    .filter(e => e && e.id && !e.desactive && estBinaire(e.id))
-    .filter(e => RACINES.test(String(e.cle || '').toLowerCase()))
-    .map(e => e.id);
+  const vivants = (Array.isArray(entites) ? entites : [])
+    .filter(e => e && e.id && !e.desactive && estBinaire(e.id));
+  const bons = vivants.filter(e => RACINES.test(String(e.cle || '').toLowerCase())).map(e => e.id);
   // Deux candidats, c'est deux contrats ou un faux positif : on se tait.
+  if (bons.length) return bons.length === 1 ? bons[0] : null;
+  /* PAS DE CLÉ DE TRADUCTION : LE RÔLE QUE LE SERVEUR A RECONNU (chantier G3,
+   * E4 ; ADR 0302). `rtetempo` nomme son créneau en dur, sans clé ; son
+   * identifiant stable finit par `_off_peak`, et le serveur — seul à le voir —
+   * pose `tarif: 'creneau'` (tarifs.py, comme la famille d'un fil pilote).
+   * APRÈS la clé : une maison où elle trouvait déjà son créneau ne perd rien.
+   * Et toujours un seul candidat. */
+  const roles = vivants.filter(e => e.tarif === 'creneau').map(e => e.id);
+  return roles.length === 1 ? roles[0] : null;
+}
+
+/** La couleur Tempo du LENDEMAIN : l'`enum` bleu-blanc-rouge que le serveur marque `couleur_demain` (tarifs.py) — un seul, ou null. */
+export function trouverCouleurDemain(entites) {
+  const bons = (Array.isArray(entites) ? entites : [])
+    .filter(e => e && e.id && !e.desactive && e.tarif === 'couleur_demain' && String(e.id).indexOf('sensor.') === 0)
+    .map(e => e.id);
   return bons.length === 1 ? bons[0] : null;
 }
+

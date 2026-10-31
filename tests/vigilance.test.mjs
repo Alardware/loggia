@@ -20,6 +20,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { area, device, entity, state, states, indexOf } from './fixtures.mjs';
 import { estVigilanceMeteoFrance, estVigilance, vueVigilance, niveauDe } from '../src/vigilance.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -36,7 +37,7 @@ register('data:text/javascript,' + encodeURIComponent([
 const { setLoggiaState } = await import('../src/state.js');
 const F = await import(new URL('../src/App.jsx?vigilance', import.meta.url).href);
 const CS = await import('../src/capteurssections.jsx');
-const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+const APP = MONOLITHE;
 
 const MF = 'sensor.paris_weather_alert';
 const MA = 'binary_sensor.meteoalarm';

@@ -8,8 +8,9 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE, DASHBOARD } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282) ; DASHBOARD : l'Accueil en entier, ses hooks compris (ADR 0283)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = MONOLITHE;
 const par = readFileSync(join(RACINE, 'src', 'views', 'parametres.jsx'), 'utf8');
 // ASSERTION MODIFIÉE (audit du 19/10) : la fiche d'une pièce est chargée à la demande — elle vit dans fichepiece.jsx.
 const fp = readFileSync(join(RACINE, 'src', 'fichepiece.jsx'), 'utf8');
@@ -60,7 +61,7 @@ test('la carte d’une piece en edition : meme dessin, taille en coin, Modifier,
 });
 
 test('l’Accueil : la carte d’edition remplace la tuile, la case d’ajout ferme la grille, la fiche s’ouvre', () => {
-  const home = bloc('function Dashboard(', NL + 'function ');
+  const home = DASHBOARD;
   assert.ok(home.includes("<CartePieceEdition p={p} compacte={t === 'c'} onModifier={() => setPieceSheet({ nom: p.name, compacte: t === 'c' })} onSupprimer={() => retirerPiece(p.name)}"), 'la carte d’edition');
   assert.ok(home.includes("[p.name]: t === 'c' ? 's' : 'c'"), 'la taille bascule entre une et deux rangees');
   assert.ok(!home.includes("pointerEvents: 'none', height: '100%'") && !home.includes("tr('Taille de la carte')"), 'plus de tuile inerte ni de barre d’outils');

@@ -653,3 +653,142 @@ def test_ouvrir_ou_fermer_selon_la_position_pas_seulement_l_etat(module):
     fermer = {"famille": "volets", "geste": "fermer", "portee": "maison"}
     assert module.cibles(ouvrir, maison, None) == ["cover.a_30", "cover.b_1", "cover.f_ferme", "cover.g_ferme_perime"]
     assert module.cibles(fermer, maison, None) == ["cover.a_30", "cover.c_100", "cover.d_99", "cover.e_sans_position"]
+
+
+# ── Fondu et blanc dans les scenarios (chantier G5, ADR 0304) ───────────────
+
+class FauxCarnet:
+    """Le carnet des lumieres (`lumieres.py`) : ce qu'on lui annonce."""
+
+    def __init__(self):
+        self.annonces = []
+        self.origines = []
+
+    def annoncer_fondu(self, haids, duree, eteindre, qui=None, origine=None):
+        self.annonces.append((sorted(haids), duree, eteindre, qui))
+        self.origines.append(origine)
+
+
+def etats_fondu():
+    """Le salon : une Hue qui sait fondre et le blanc (2 000 a 6 535 K) ; la
+    chambre : un variateur sans fondu, une ampoule blanche bornee (2 700 a 4 000 K)
+    qui sait fondre ; le jardin : un ruban couleur, sans bornes ; l'interrupteur
+    declare lumiere. Tout est allume."""
+    return {**etats_de_base(),
+            "light.salon": FauxEtat("on", {"supported_features": 44, "supported_color_modes": ["color_temp", "xy"],
+                                           "min_color_temp_kelvin": 2000, "max_color_temp_kelvin": 6535}),
+            "light.chambre": FauxEtat("on", {"supported_color_modes": ["brightness"]}),
+            "light.sdb": FauxEtat("on", {"supported_features": 32, "supported_color_modes": ["color_temp"],
+                                         "min_color_temp_kelvin": 2700, "max_color_temp_kelvin": 4000}),
+            "light.jardin": FauxEtat("on", {"supported_color_modes": ["hs"]}),
+            EXTERIEUR: FauxEtat("on")}
+
+
+def test_une_action_lumieres_prend_un_fondu_et_un_blanc_facultatifs(module):
+    a = module.valider_action({"famille": "lumieres", "geste": "allumer", "valeur": 30, "fondu": 180, "blanc": 2700})
+    assert a == {"famille": "lumieres", "geste": "allumer", "portee": "maison", "valeur": 30, "fondu": 180, "blanc": 2700}
+    # Rien, zero, nul : pas de fondu ni de blanc - un scenario d'avant reste tel quel.
+    for vide in ({}, {"fondu": 0, "blanc": None}, {"fondu": None, "blanc": ""}):
+        assert module.valider_action({"famille": "lumieres", "geste": "allumer", **vide}) == {
+            "famille": "lumieres", "geste": "allumer", "portee": "maison"}
+    # Bornes : une heure de fondu au plus ; un blanc entre 1 500 et 10 000 K.
+    a = module.valider_action({"famille": "lumieres", "geste": "allumer", "fondu": 99999, "blanc": 50000})
+    assert a["fondu"] == 3600 and a["blanc"] == 10000
+    # Une extinction prend un fondu, pas de blanc ; une autre famille, ni l'un ni l'autre.
+    assert module.valider_action({"famille": "lumieres", "geste": "eteindre", "fondu": 10, "blanc": 2700}) == {
+        "famille": "lumieres", "geste": "eteindre", "portee": "maison", "fondu": 10}
+    assert "fondu" not in module.valider_action({"famille": "volets", "geste": "fermer", "fondu": 10})
+    for illisible in ({"fondu": "long"}, {"blanc": "chaud"}, {"fondu": True}):
+        with pytest.raises(ValueError):
+            module.valider_action({"famille": "lumieres", "geste": "allumer", **illisible})
+
+
+def test_les_fondus_des_scenarios_de_loggia(module):
+    """« Bonne nuit » s'eteint en 10 s, « Reveil » monte a 30 % en 3 min,
+    « Cinema » se regle en 3 s ; les autres n'ont pas de fondu."""
+    lum = {s["id"]: next((a for a in s["actions"] if a["famille"] == "lumieres"), None) for s in module.INTEGRES}
+    assert lum["nuit"]["fondu"] == 10 and lum["nuit"]["geste"] == "eteindre"
+    assert (lum["reveil"]["fondu"], lum["reveil"]["valeur"]) == (180, 30)
+    assert lum["cinema"]["fondu"] == 3
+    assert all("fondu" not in a and "blanc" not in a for i, a in lum.items() if i not in ("nuit", "reveil", "cinema") and a)
+    # Chaque action de Loggia passe sa propre validation.
+    for s in module.INTEGRES:
+        for a in s["actions"]:
+            assert module.valider_action(a) == a, (s["id"], a)
+
+
+def test_le_fondu_et_le_blanc_ne_partent_qu_aux_lampes_qui_savent(creer, module):
+    s = creer(etats=etats_fondu(), partage={"loggia_switchlights": [EXTERIEUR]})
+    c = lancer(s._contexte())
+    haids = ["light.chambre", "light.jardin", "light.salon", "light.sdb", EXTERIEUR]
+    allumer = {"famille": "lumieres", "geste": "allumer", "valeur": 60, "fondu": 3, "blanc": 6500}
+    assert module.ordres(allumer, haids, c["maison"]) == [
+        ("light", "turn_on", ["light.chambre"], {"brightness_pct": 60}),
+        ("light", "turn_on", ["light.jardin"], {"brightness_pct": 60, "color_temp_kelvin": 6500}),
+        ("light", "turn_on", ["light.salon"], {"brightness_pct": 60, "transition": 3, "color_temp_kelvin": 6500}),
+        ("light", "turn_on", ["light.sdb"], {"brightness_pct": 60, "transition": 3, "color_temp_kelvin": 4000}),
+        ("homeassistant", "turn_on", [EXTERIEUR], {}),
+    ]
+    eteindre = {"famille": "lumieres", "geste": "eteindre", "fondu": 10}
+    assert module.ordres(eteindre, haids, c["maison"]) == [
+        ("light", "turn_off", ["light.chambre", "light.jardin"], {}),
+        ("light", "turn_off", ["light.salon", "light.sdb"], {"transition": 10}),
+        ("homeassistant", "turn_off", [EXTERIEUR], {}),
+    ]
+    # Sans fondu ni blanc : l'ordre d'avant, un seul appel pour les lampes.
+    assert module.ordres({"famille": "lumieres", "geste": "allumer", "valeur": 40}, haids[:4], c["maison"]) == [
+        ("light", "turn_on", haids[:4], {"brightness_pct": 40})]
+
+
+def test_le_lancement_annonce_le_fondu_au_carnet_avant_l_ordre(creer, module):
+    """Le carnet ne note pas les paliers d'un fondu qu'il sait en cours
+    (lumieres_calcul) : le scenario le lui dit, pour les lampes qui l'ont recu, au
+    nom de qui l'a lance - et rien sans fondu."""
+    s = creer(etats=etats_fondu(), partage=NUIT_LINO)
+    carnet = FauxCarnet()
+    s.hass.data = {"loggia": {"lumieres": carnet}}
+    lancer(s.async_lancer("nuit", user_id="u-papa"))
+    assert carnet.annonces == [(["light.salon", "light.sdb"], 10, True, "u-papa")]
+    # Le contexte de l'ordre, celui que portent ses premiers paliers : le carnet reconnait ainsi le fondu lui-meme.
+    assert carnet.origines == [next(c.id for d, sv, data, c in s.hass.services.appels if d == "light" and data.get("transition"))]
+    par_lot = [(sv, sorted(data["entity_id"]), data.get("transition")) for d, sv, data, _ in s.hass.services.appels if d == "light"]
+    assert ("turn_off", ["light.salon", "light.sdb"], 10) in par_lot
+    carnet.annonces.clear()
+    lancer(s.async_lancer("invites", user_id="u-papa"))
+    assert carnet.annonces == [], "« Invites » n'a pas de fondu"
+    # Sans carnet (le module absent), le scenario part quand meme.
+    s.hass.data = {}
+    assert lancer(s.async_lancer("nuit", user_id="u-papa"))["erreurs"] == 0
+
+
+def test_l_etat_dit_ou_le_fondu_et_le_blanc_sont_possibles(creer):
+    """L'ecran ne montre les puces du fondu et du blanc que si une lampe visee sait
+    le faire : l'etat le dit pour toute la maison, les pieces de vie et chaque piece."""
+    s = creer(etats=etats_fondu())
+    lampes = lancer(s.async_etat())["lampes"]
+    assert lampes["maison"] == {"fondu": True, "blanc": True}
+    assert lampes["pieces"]["Chambre"] == {"fondu": False, "blanc": False}, "un variateur seul"
+    assert lampes["pieces"]["Salle de bain"] == {"fondu": True, "blanc": True}
+    assert lampes["vie"] == {"fondu": True, "blanc": True}, "le salon"
+
+
+def test_seul_l_ordre_du_fondu_porte_le_contexte_annonce_au_carnet(creer):
+    """Contre-relecture du 31/10 (C4) : « eteindre la maison en 10 s », puis « allumer
+    le salon a 20 % » sans fondu. Un seul contexte pour tout le lancement : l'allumage
+    portait l'identifiant annonce au carnet, et, plus bas que le niveau d'avant, il
+    etait avale. Chaque ordre de fondu a desormais SON contexte, enfant de celui du
+    lancement, au nom du meme compte ; seul celui-la est annonce."""
+    perso = {"id": "perso_soiree", "nom": "Soirée", "actions": [
+        {"famille": "lumieres", "geste": "eteindre", "portee": "maison", "fondu": 10},
+        {"famille": "lumieres", "geste": "allumer", "portee": "piece", "piece": "Salon", "valeur": 20}]}
+    s = creer(config={"persos": [perso]}, etats=etats_fondu(), partage=NUIT_LINO)
+    carnet = FauxCarnet()
+    s.hass.data = {"loggia": {"lumieres": carnet}}
+    lancer(s.async_lancer("perso_soiree", user_id="u-papa"))
+    appels = [(sv, sorted(data["entity_id"]), data.get("transition"), c) for d, sv, data, c in s.hass.services.appels if d == "light"]
+    fondu = next(c for sv, ids, tr, c in appels if tr)
+    allumage = next(c for sv, ids, tr, c in appels if sv == "turn_on")
+    lancement = next(c for sv, ids, tr, c in appels if sv == "turn_off" and not tr)
+    assert carnet.origines == [fondu.id]
+    assert allumage.id != fondu.id, "l'allumage n'est pas le fondu : le carnet le note"
+    assert fondu.parent_id == lancement.id and fondu.user_id == "u-papa" == allumage.user_id

@@ -15,6 +15,7 @@ import { indexOf } from './fixtures.mjs';
 import { statsObjets, pucesObjets, compteObjets, poidsObjet, domaineEdition } from '../src/objets.js';
 import { maisonGroupes, maisonPlantes, fusion } from './maison_capteurs.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -34,7 +35,7 @@ const { monter, horlogeFausse, documentFaux } = await import('./crochets.mjs');
 const { setLoggiaState } = await import('../src/state.js');
 const F = await import(new URL('../src/App.jsx?objets_groupes', import.meta.url).href);
 const CS = await import('../src/capteurssections.jsx');
-const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+const APP = MONOLITHE;
 
 const PLANTES = [{ base: 'sensor.ficus', name: 'Ficus lyrata', room: 'Séjour', img: 'dracaena' }, { base: 'sensor.basilic', name: 'Basilic', room: 'Cuisine' }];
 function avecMaison(f, { plantes = PLANTES } = {}) {
@@ -88,7 +89,8 @@ test('C20 : les trois groupes ont leur carte, et les binaires de leurs familles 
   // La vue : l'éditeur nomme et range une clé `groupe:` comme les autres cartes composées — et la grille la passe à la fabrique par sa CLÉ, jamais par
   // son identifiant (nul) : la vue tombait entière (revue de la démo, 16/10).
   const ov = APP.indexOf('\nfunction ObjetsView(');
-  assert.ok(APP.slice(ov, APP.indexOf('\n}\n', ov)).includes("const cle = (o.type === 'feeder' || o.type === 'plant' || o.type === 'groupe') ? o.cle : o.id;"), 'la carte d’un groupe se nomme par sa clé');
+  // ASSERTION MODIFIÉE (30/10, G3-E3) : la borne de recharge aussi se nomme par sa clé.
+  assert.ok(APP.slice(ov, APP.indexOf('\n}\n', ov)).includes("const cle = (o.type === 'feeder' || o.type === 'plant' || o.type === 'groupe' || o.type === 'borne') ? o.cle : o.id;"), 'la carte d’un groupe se nomme par sa clé');
   assert.equal(F.nomDeCle(fx.states, 'groupe:securite'), 'Sécurité');
   assert.equal(domaineEdition('groupe:ouvertures'), 'capteur');
 }));

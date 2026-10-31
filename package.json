@@ -1,8 +1,11 @@
 {
   "name": "loggia",
   "private": true,
-  "version": "3.95.1",
+  "version": "3.96.0",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

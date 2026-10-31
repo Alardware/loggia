@@ -16,12 +16,13 @@ import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 register('./jsx-hooks.mjs', import.meta.url);
 const E = await import(new URL('../src/enteteprises.jsx', import.meta.url).href);
 const P = await import('../src/prises.js');
 const lire = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-const APP = lire('src/App.jsx'), CSS = lire('src/index.css');
+const APP = MONOLITHE, CSS = lire('src/index.css');
 
 const st = (id, state, a = {}) => [id, { entity_id: id, state, attributes: a }];
 const W = (id, w, unite = 'W') => st(id, String(w), { device_class: 'power', unit_of_measurement: unite });

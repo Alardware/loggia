@@ -28,6 +28,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 const parcourir = (dir, sortie = []) => {
@@ -41,7 +42,8 @@ const parcourir = (dir, sortie = []) => {
 
 const FICHIERS = parcourir(join(RACINE, 'src'))
   .map(p => [p.slice(RACINE.length + 1).replace(/\\/g, '/'), readFileSync(p, 'utf8')]);
-const texte = (chemin) => (FICHIERS.find(([c]) => c === chemin) || ['', ''])[1];
+// App.jsx se lit avec ce qui en est sorti (ADR 0282) : un lecteur déménagé reste un lecteur.
+const texte = (chemin) => (chemin === 'src/App.jsx' ? MONOLITHE : (FICHIERS.find(([c]) => c === chemin) || ['', ''])[1]);
 
 /* Les listes qui PORTENT une clé sans la lire : y figurer ne compte pas comme
  * un lecteur. `demo.js` non plus — une maison inventée n'est pas un usage. */

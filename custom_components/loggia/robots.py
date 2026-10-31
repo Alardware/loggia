@@ -70,6 +70,7 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.core import Context, HomeAssistant, callback
 
 from .const import DOMAIN
+from .entites import motif, motif_de
 from .refus import RefusNomme
 from .regles import Regles, demarrer, niveau
 from .robots_carnet import (DEMANDE_S, MUETS, carnet_vide, elaguer, instant, lire_carnet, noter_demande, texte_erreur, voir_arret,
@@ -93,7 +94,7 @@ MAX_SEGMENTS = 20
 
 # Un identifiant se valide EN ENTIER, par `fullmatch` (petit paquet du 25/10) : avec `match`, le `$` de Python accepte un `\n` final,
 # et « script.x\n » passait. Les ancres restent, pour qui relit le motif.
-ROBOT = re.compile(r"^(vacuum|lawn_mower)\.[a-z0-9_]+$")
+ROBOT = motif_de(("vacuum", "lawn_mower"))
 IDENT = re.compile(r"^[a-z0-9_-]{1,40}$")
 AIRE = re.compile(r"(^|_)(zone|area)_")
 
@@ -130,7 +131,7 @@ VOL_MAX_S = float(DEMANDE_S)
 # (`vacuumScripts`, dans la description de la maison `loggia_entities`), par ROLE. Les uns LANCENT un passage, les autres sont les
 # gestes d'un passage en cours — et c'est le role que l'ecran demande qui le dit (passe bis 2 du 18/10, point J).
 CLE_ENTITES = "loggia_entities"
-SCRIPT = re.compile(r"^script\.[a-z0-9_]+$")
+SCRIPT = motif("script")
 SCRIPTS_DEPART = ("nettoyer_tout", "pieces_selectionnees")
 # `localiser` depuis la passe bis du 20/10 : la roue de la popup designe un script par role, celui-la compris.
 SCRIPTS_GESTE = ("pause", "reprendre", "retour_base", "localiser")

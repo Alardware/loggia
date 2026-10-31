@@ -19,6 +19,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const SITE = 'https://alardware.github.io/loggia/';
@@ -124,7 +125,7 @@ test('le site annonce les langues que Loggia parle VRAIMENT — les sept, pas de
 });
 
 test('chaque vue a un titre, et l’Accueil des titres de section', () => {
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   /* Les ambiances Hue — et leur titre de section — vivent depuis le 11/10
    * dans scenes.jsx, chargé à la demande ; le style des titres est partagé
    * par styles.js (tâche 6 bis du chantier Chauffage). Les cinq titres se
@@ -152,7 +153,7 @@ test('aucune image sans texte alternatif, et celles qui disent quelque chose ont
   const cam = lire('src', 'camera.jsx');
   assert.ok(cam.includes("const dit = nom ? tr('Caméra {x}, en direct', { x: nom }) : tr('Flux de la caméra');"));
   assert.ok(cam.includes('<video ref={vidRef} aria-label={dit}') && cam.includes('<img ref={imgRef} alt={dit}') && cam.includes('kind="camera" alt={dit} />'));
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   assert.ok(app.includes('online={c.online} nom={c.label} />') && app.includes('online={online} nom={nom} />'), 'les tuiles ne donnent plus le nom de la caméra');
   // L'icône météo dit la condition — plus « météo », et jamais alt vide + étiquette.
   const wx = lire('src', 'wxutil.jsx');

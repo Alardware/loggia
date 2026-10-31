@@ -21,9 +21,10 @@ Chaque lampe a sa FICHE :
 """
 from __future__ import annotations
 
-import math
 from datetime import datetime, timedelta
 from typing import Any
+
+from .nombres import fini
 
 # Les etats d'une lampe ; un autre ne se note pas.
 ETATS = ("on", "off", "unavailable", "unknown")
@@ -48,17 +49,18 @@ FONDRE_S = 30
 # quelque chose, puis qu'on eteint. Le fondu de cinq minutes de la regle Nuit,
 # s'il remonte ses paliers tout du long, n'y entre pas.
 ECHO_S = 10
+# Un fondu que Loggia a demande (ADR 0304) : la lampe le fait elle-meme
+# (`transition`) et, selon son integration, publie ses paliers - toutes les
+# secondes, toutes les quarante, ou pas du tout. FONDRE_S et ECHO_S ne couvrent
+# pas trois minutes : « Reveil » aurait fait six « Reglee a », « Bonne nuit » une
+# « Reglee a 40 % » avant l'extinction, et la lampe « se serait rallumee a 3 % ».
+# Le scenario l'annonce donc au carnet (`annoncer_fondu`), qui le tient jusqu'a sa
+# fin plus MARGE_FONDU_S - le temps du dernier echo (`_noter`).
+MARGE_FONDU_S = ECHO_S
 
 
-def nombre(x: Any) -> float | None:
-    """Un nombre fini, ou None - un booleen n'en est pas un."""
-    if isinstance(x, bool) or not isinstance(x, (int, float)):
-        return None
-    try:
-        valeur = float(x)
-    except OverflowError:
-        return None
-    return valeur if math.isfinite(valeur) else None
+# Un nombre fini, ou None - un booleen n'en est pas un (nombres.py, lot 8).
+nombre = fini
 
 
 def _table(x: Any) -> dict[str, Any]:
@@ -122,7 +124,7 @@ def _auteur(note: dict[str, Any]) -> tuple:
 
 
 def noter(fiche: dict[str, Any], etat: Any, attributs: Any, t: float, ctx: dict[str, Any],
-          demarrage: bool = False) -> dict[str, Any]:
+          demarrage: bool = False, origine: Any = None) -> dict[str, Any]:
     """La fiche NEUVE d'une lampe, apres un etat vu a l'instant `t` (secondes),
     de contexte `ctx` (`contexte`) ; `demarrage` : la fenetre de demarrage est
     ouverte. Une note par changement :
@@ -168,16 +170,23 @@ def noter(fiche: dict[str, Any], etat: Any, attributs: Any, t: float, ctx: dict[
     rien ne s'est passe -, un autre en fait une, a son heure, avec son niveau et son
     contexte. Encore muette a la fermeture, elle ne repond plus : `clore_demarrage`
     note son silence, a son heure. La fenetre fermee, un doute qui resterait se clot
-    d'abord : hors d'elle, rien ne change."""
+    d'abord : hors d'elle, rien ne change.
+
+    Un fondu annonce (`annoncer_fondu`, ADR 0304) : voir `_noter` ; `origine` est
+    l'identifiant du contexte de l'etat (`Context.id`), qui reconnait les paliers de
+    l'ordre du fondu lui-meme. Fini, il s'oublie au premier etat qui suit."""
+    fondu = fiche.get("fondu")
+    if isinstance(fondu, dict) and t > fondu["jusqu_a"]:
+        fiche = sans_fondu(fiche)
     apres = vue(etat, attributs)
     if apres is None:
         return fiche
     if fiche.get("doute_demarrage") is not None:
         if not demarrage:
-            return noter(clore_demarrage(fiche), etat, attributs, t, ctx)
+            return noter(clore_demarrage(fiche), etat, attributs, t, ctx, origine=origine)
         if apres["state"] in ETATS_DE_LA_LAMPE:
             # Son vrai etat : compare a celui d'avant le silence.
-            return noter(sans_doute_demarrage(fiche), etat, attributs, t, ctx, demarrage)
+            return noter(sans_doute_demarrage(fiche), etat, attributs, t, ctx, demarrage, origine)
         # Toujours muette : `vu` la suit, le doute garde son heure et l'etat d'avant.
         return fiche if apres == fiche["vu"] else dict(fiche, vu=apres)
     if (demarrage and fiche["vu"] is not None and apres["state"] not in ETATS_DE_LA_LAMPE
@@ -185,7 +194,7 @@ def noter(fiche: dict[str, Any], etat: Any, attributs: Any, t: float, ctx: dict[
         # Elle se tait pendant la fenetre : peut-etre son integration qui n'a pas
         # encore parle. Pas de note, un doute.
         return dict(fiche, vu=apres, doute_demarrage={"when": t, "avant": fiche["vu"]})
-    f = _noter(fiche, apres, attributs, t, ctx)
+    f = _noter(fiche, apres, attributs, t, ctx, origine)
     return fiche if f is fiche else _suivre_le_doute(fiche, f, ctx)
 
 
@@ -202,12 +211,34 @@ def _dernier_apres(dernier: Any, attributs: Any) -> dict[str, Any] | None:
 
 
 def _noter(fiche: dict[str, Any], apres: dict[str, Any], attributs: Any, t: float,
-           ctx: dict[str, Any]) -> dict[str, Any]:
+           ctx: dict[str, Any], origine: Any = None) -> dict[str, Any]:
     """Les notes de `noter`, l'echo mis a part (`_suivre_le_doute`) : `apres`
-    est la vue de l'etat (`vue`), deja calculee."""
+    est la vue de l'etat (`vue`), deja calculee.
+
+    Pendant un fondu annonce (ADR 0304), pour un etat SANS compte ou portant le
+    contexte de l'ordre du fondu (`origine`) - le geste d'un compte, meme celui qui
+    a lance le scenario, ne s'efface jamais (relecture du 31/10) :
+      * vers un niveau, un reglage se fond dans la note du fondu - son allumage, ou
+        son premier reglage -, quel que soit l'ecart entre deux paliers ;
+      * vers l'extinction, un `on` STRICTEMENT plus bas qu'avant le fondu - un palier,
+        ou l'echo apres l'extinction - ne fait pas de note et ne change pas le dernier
+        niveau ; un rallumage a son niveau d'avant ou plus haut est un geste ;
+      * une note sans auteur prend celui du fondu, seulement dans le SENS du fondu :
+        un `on` vers un niveau, un `off` vers l'extinction. Un `off` pendant un Reveil,
+        un `on` pendant une extinction ne sont pas a lui."""
     avant = fiche["vu"]
     if avant is None and apres["state"] not in ETATS_DE_LA_LAMPE:
         return fiche
+    fondu = _fondu_de(fiche, t, ctx, origine)
+    if (fondu is not None and fondu["eteindre"] and avant is not None and apres["state"] == "on"
+            and _plus_bas(apres["bri"], fondu["avant"])):
+        if avant["state"] == "on":
+            return dict(fiche, vu=apres)
+        if avant["state"] == "off":
+            return fiche
+    dans_son_sens = fondu is not None and apres["state"] == ("off" if fondu["eteindre"] else "on")
+    if dans_son_sens and _auteur(ctx) == (None, None, None):
+        ctx = contexte(fondu["qui"])
     f = dict(fiche, vu=apres, evenements=list(fiche["evenements"]))
     derniere = f["evenements"][-1] if f["evenements"] else None
     if derniere is not None:
@@ -222,8 +253,9 @@ def _noter(fiche: dict[str, Any], apres: dict[str, Any], attributs: Any, t: floa
         return f
     if apres["state"] != "on" or apres["bri"] is None or apres["bri"] == avant["bri"]:
         return f
+    dans_le_fondu = fondu is not None and not fondu["eteindre"] and derniere is not None and derniere["when"] >= fondu["depuis"]
     if (derniere is not None and derniere["state"] == "on" and f["niveau_a"] is not None
-            and t - f["niveau_a"] < FONDRE_S
+            and (t - f["niveau_a"] < FONDRE_S or dans_le_fondu)
             and _auteur(ctx) in (_auteur(derniere), (None, None, None))):
         f["evenements"][-1] = dict(derniere, bri=apres["bri"])
     else:
@@ -245,6 +277,13 @@ def _pas_plus_haut(bri: Any, dernier: Any) -> bool:
     non."""
     haut = dernier.get("bri") if isinstance(dernier, dict) else None
     return bri is not None and haut is not None and bri <= haut
+
+
+def _plus_bas(bri: Any, dernier: Any) -> bool:
+    """Un niveau STRICTEMENT plus bas que celui de `dernier` : le palier d'un fondu
+    vers l'extinction, ou son echo. Le niveau d'avant lui-meme est un rallumage."""
+    haut = dernier.get("bri") if isinstance(dernier, dict) else None
+    return bri is not None and haut is not None and bri < haut
 
 
 def _suivre_le_doute(avant: dict[str, Any], apres: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
@@ -291,6 +330,42 @@ def sans_rallumage_en_doute(fiche: dict[str, Any], maintenant: float) -> dict[st
     if maintenant - f["evenements"][-1]["when"] >= ECHO_S:
         return f
     return dict(f, vu={"state": "off", "bri": None}, niveau_a=None, dernier=doute, evenements=f["evenements"][:-1])
+
+
+# ── Un fondu que Loggia a demande (ADR 0304) ────────────────────────────────
+
+def annoncer_fondu(fiche: dict[str, Any], t: float, duree: Any, eteindre: bool,
+                   qui: Any = None, origine: Any = None) -> dict[str, Any]:
+    """La fiche d'une lampe a qui Loggia demande, a l'instant `t`, un fondu de
+    `duree` secondes - vers l'extinction (`eteindre`) ou vers un niveau -, au nom
+    du compte `qui` (None : une automatisation, la maison), par l'ordre de contexte
+    `origine` (`Context.id` : ses premiers paliers le portent). Le carnet le tient
+    jusqu'a `t + duree + MARGE_FONDU_S` (`_noter`), avec le dernier niveau
+    d'avant lui. Une duree nulle ou illisible ne change rien."""
+    d = nombre(duree)
+    if d is None or d <= 0:
+        return fiche
+    return dict(fiche, fondu={"depuis": t, "jusqu_a": t + d + MARGE_FONDU_S, "eteindre": bool(eteindre),
+                              "qui": qui if isinstance(qui, str) and qui else None,
+                              "origine": origine if isinstance(origine, str) and origine else None,
+                              "avant": fiche.get("dernier")})
+
+
+def _fondu_de(fiche: dict[str, Any], t: float, ctx: dict[str, Any], origine: Any = None) -> dict[str, Any] | None:
+    """Le fondu en cours a l'instant `t`, si l'etat de contexte `ctx` peut en
+    etre : sans compte, ou portant le contexte de l'ordre du fondu (`origine`).
+    Le geste d'un compte - un autre ordre, un autre contexte - n'en est jamais.
+    None sinon."""
+    fondu = fiche.get("fondu")
+    if not isinstance(fondu, dict) or not fondu["depuis"] - 1 <= t <= fondu["jusqu_a"]:
+        return None
+    du_fondu = fondu.get("origine") is not None and origine == fondu.get("origine")
+    return fondu if ctx["context_user_id"] is None or du_fondu else None
+
+
+def sans_fondu(fiche: dict[str, Any]) -> dict[str, Any]:
+    """La fiche sans fondu : il ne dure que quelques minutes, il ne s'ecrit pas."""
+    return {k: v for k, v in fiche.items() if k != "fondu"} if "fondu" in fiche else fiche
 
 
 # ── La fenetre de demarrage (doute D1, vu chez lui le 16/10) ────────────────

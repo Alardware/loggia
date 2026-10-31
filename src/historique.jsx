@@ -15,6 +15,7 @@ import { tr } from './i18n.js';
 import { dansLaFenetre, heureJournal } from './evenement.js';
 import { coverFerme, positionDe } from './voletecran.js';
 import { seriesRelues, GARDE_SERIE } from './releve.js';
+import { motPresence } from './presence.js';
 
 /* L'heure qui avance, à la minute ronde (audit du 03/10). Un rafraîchissement
  * d'AFFICHAGE, rien d'autre : aucune commande ne part d'ici. Sans lui, un
@@ -115,6 +116,8 @@ const voletBute = (id, st, S, dernier) => {
 export function etatJournal(id, st, S, dernier = false) {
   const dom = id.slice(0, id.indexOf('.'));
   const a = (S && S[id] && S[id].attributes) || {};
+  // Une personne, un traceur (G1-D8) : la zone telle quelle ; muet, « Inconnu » — jamais « Absent » pour tout ce qui n'est pas la maison.
+  if (dom === 'person' || dom === 'device_tracker') return motPresence({ state: st });
   // Un état muet, dans la langue de l'écran — jamais `unavailable` en anglais (19/10).
   if (st === 'unavailable') return tr('Indisponible');
   if (st === 'unknown') return tr('Inconnu');
@@ -133,7 +136,6 @@ export function etatJournal(id, st, S, dernier = false) {
   }
   if (dom === 'climate') return st === 'off' ? tr('Éteint') : st === 'heat' ? tr('CONFORT') : st;
   if (dom === 'vacuum') return st === 'cleaning' ? tr('Nettoyage') : st === 'docked' ? tr('À la base') : st === 'returning' ? tr('Retour base') : st === 'paused' ? tr('En pause') : st;
-  if (dom === 'person') return st === 'home' ? tr('Présent') : tr('Absent');
   return st + (a.unit_of_measurement ? ' ' + a.unit_of_measurement : '');
 }
 

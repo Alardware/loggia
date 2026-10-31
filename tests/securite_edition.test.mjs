@@ -9,10 +9,10 @@ import { fileURLToPath } from 'node:url';
 import { tuileAlarme } from '../src/attention.js';
 import { domaineEdition, identifiantEdition } from '../src/objets.js';
 import { LOGGIA_SYNC_KEYS } from '../src/state.js';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES, DASHBOARD } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274) ; DASHBOARD : l'Accueil en entier, ses hooks compris (ADR 0283)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
+const src = (MONOLITHE + VUES_SORTIES);
 const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
 const en = readFileSync(join(RACINE, 'src', 'langues', 'en.js'), 'utf8');
 const NL = String.fromCharCode(10);
@@ -36,7 +36,7 @@ test('la teinte du verre suit l’etat : vert desarmee, bleu maison, orange abse
 });
 
 test('la tuile Alarme, et elle seule, est en verre', () => {
-  const home = bloc('function Dashboard(', NL + '}');
+  const home = DASHBOARD;
   assert.ok(home.includes("<button type=\"button\" key=\"al\" className=\"o-tuile-hero o-tuile-alarme\"") && home.includes("'--al-rgb': alarmeTuile.rgb })}>"), 'la classe et la teinte, sur la tuile « al »');
   assert.equal(home.split('o-tuile-alarme').length - 1, 1, 'aucune autre tuile ne la porte');
   assert.ok(css.includes('.o-tuile-alarme { background: rgba(var(--al-rgb), .16) !important; -webkit-backdrop-filter: blur(10px) saturate(1.2); backdrop-filter: blur(10px) saturate(1.2);'), 'un fond teinte leger et un flou');

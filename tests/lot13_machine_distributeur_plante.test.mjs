@@ -22,8 +22,9 @@ import { readFileSync } from 'node:fs';
 
 import { composant, rendre } from './rendu.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const NL = String.fromCharCode(10);
-const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+const app = MONOLITHE;
 
 /** Le texte sans ses commentaires : ceux qui racontent l'ancien rôle bouton ne sont pas du code. */
 function sansCommentaires(t) {

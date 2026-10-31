@@ -6,10 +6,11 @@
  * ramenerait le monolithe entier dans ce morceau et annulerait le decoupage.
  */
 import { useState, useEffect, useRef, useMemo, useId } from 'react';
+import { puce } from '../styles.js';
 import { AppareilsReglages } from './appareils.jsx';
 import { appareilsConnus } from '../state.js';
 import {
-  Fi, LOOK_DEF, HIDDEN_VIEWS, readViewsCfg, writeViewsCfg, cl_hexRgb, userBg, userImg, ListeChoix, ChampSuggere, CroixFeuille, NomFeuille
+  Fi, LOOK_DEF, HIDDEN_VIEWS, readViewsCfg, writeViewsCfg, cl_hexRgb, userBg, userImg, ListeChoix, ChampSuggere, CroixFeuille, NomFeuille, alerter
 } from '../ui.jsx';
 import {
   cfgVal, cfgSet, getHass, loggiaEnt, LOGGIA_CFG, LOGGIA_RESOLVED, LOGGIA_INDEX, enHaids, plateformeDe, medCompanion,
@@ -33,6 +34,7 @@ import { sansAccents } from '../outils.js';
 import { croqAncienneListe, plantsCfg } from '../lectures.js';
 import { soeursDistributeur, commandeDistribuer, lireDistributeur, niveauDuBac } from '../distributeur.js';
 import { mesurePortion, scriptsCandidats } from '../distributeurfiche.js';
+import { envoyerFond, retirerFond } from '../fondphoto.js';
 import { BoutonConfirme } from '../fichecommune.jsx';
 import { reposerFocus } from '../focus.js';
 import { useDemandes, enVol } from '../optimiste.js';
@@ -43,14 +45,54 @@ import { PresenceReglages } from './presence.jsx';
 import { NuitReglages } from './nuit.jsx';
 import { VeillesReglages } from './veilles.jsx';
 import { JournalReglages } from './journal.jsx';
+import { VersionsPrecedentes } from './versions.jsx';
 import { weatherEntity } from '../wxutil.jsx';
 import { lireQualiteCiel, ecrireQualiteCiel, niveauCielIci } from '../wxpresets.js';
+import { CLE_VERRE, lireVerre, verreMesure, poserVerre } from '../verre.js';
+import { CLE_NUIT, CLE_ASSOMBRIR, lireNuit, poserNuit, suivreNuit, soleilCouche } from '../nuitecran.js';
+import { coursSoleil } from '../soleilcalc.js';
 import { tr, trN, locale, choixLangue, languesDisponibles, nomProfil, comparerTextes } from '../i18n.js';
 import { raisonEchec, bilanEcritures, texteRefus } from '../refus.js';
 import { commanderChauffage } from '../chauffageetat.js';
 import { poserEtatEnfant } from '../enfantetat.js';
 import { uniteTemp, wattsDe } from '../unites.js';
 import { Panneau, Ligne, Pastille, CAPITALES, MONO, DESC_PANNEAU, FILET, btnPrimaire, btnSecondaire, btnDiscret, btnDanger } from './parcommun.jsx';
+
+/* « Verre des cartes » : l'écriture, ici et pas dans verre.js — le démarrage
+ * n'a besoin que de lire (ADR 0284). La classe suit sur-le-champ. Exportée
+ * pour tests/verre_leger.test.mjs. */
+export function ecrireVerre(q) {
+  try { if (q === 'plein' || q === 'leger') localStorage.setItem(CLE_VERRE, q); else localStorage.removeItem(CLE_VERRE); } catch { /* stockage indisponible */ }
+  poserVerre();
+}
+
+/* « Nuit de l'écran » (ADR 0287) : l'écriture ici aussi, le démarrage ne fait
+ * que lire. Le défaut n'est pas écrit : Non et Moyen effacent leur clé.
+ * Exportées pour tests/nuit_ecran.test.mjs. */
+/** L'intensité : 'peu', 'moyen' (le défaut) ou 'beaucoup'. */
+export const lireAssombrir = () => { let q = null; try { q = localStorage.getItem(CLE_ASSOMBRIR); } catch { /* stockage indisponible */ } return q === 'peu' || q === 'beaucoup' ? q : 'moyen'; };
+export function ecrireNuit(q) {
+  try { if (q === 'soleil') localStorage.setItem(CLE_NUIT, q); else localStorage.removeItem(CLE_NUIT); } catch { /* stockage indisponible */ }
+  suivreNuit();
+}
+export function ecrireAssombrir(q) {
+  try { if (q === 'peu' || q === 'beaucoup') localStorage.setItem(CLE_ASSOMBRIR, q); else localStorage.removeItem(CLE_ASSOMBRIR); } catch { /* stockage indisponible */ }
+  poserNuit();
+}
+/** Ce que la ligne dit : l'heure du prochain coucher (ou du lever, s'il fait
+ *  déjà nuit), lue sur `sun.sun`, sinon calculée ; sans soleil connu, 21 h–7 h. */
+export function descNuit(nuit, hass, date = new Date()) {
+  if (nuit !== 'soleil') return tr('Assombrit cet écran la nuit, pour ne pas éclairer la pièce');
+  const fmt = (d) => d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+  const hm = (h) => { const d = new Date(date); d.setHours(0, Math.round(h * 60), 0, 0); return fmt(d); };
+  const nuitNow = soleilCouche(hass, date);
+  const sol = hass && hass.states && hass.states['sun.sun'];
+  const iso = sol && sol.attributes && Date.parse(nuitNow ? sol.attributes.next_rising : sol.attributes.next_setting);
+  const c = coursSoleil(hass, date);
+  const h = iso > 0 ? fmt(new Date(iso)) : c ? hm(nuitNow ? c.lever : c.coucher) : null;
+  if (h) return nuitNow ? tr('Du coucher au lever du soleil · cette nuit jusqu’à {h}', { h }) : tr('Du coucher au lever du soleil · ce soir dès {h}', { h });
+  return sol ? tr('Du coucher au lever du soleil') : tr('Sans soleil connu : de {debut} à {fin}', { debut: hm(21), fin: hm(7) });
+}
 
 /* ── Les briques d'affichage, au niveau du module ────────────────────────────
  *
@@ -295,6 +337,132 @@ function ChoixEntite({ icone, nom, ident, label, value, onChange, options }) {
   );
 }
 
+/* ════════════ QUI REÇOIT QUOI (chantier G2 ; ADR 0301) ════════════
+ * Le composant suit chaque personne jusqu'à son téléphone (destinataires.py) :
+ * son compte, ses traceurs, l'appareil de l'application compagnon, le service
+ * `notify.mobile_app_*` vérifié. Ici on le LIT — « Camille : Téléphone de
+ * Camille » —, et on CORRIGE : choisir le service d'une personne, ou retirer
+ * un appareil d'un PUBLIC — le mode enfant, les notifications ordinaires. La
+ * SÛRETÉ ne se retire jamais : elle part à tout le monde, et au repli
+ * (relecture du 30/10, point 1). Les corrections vivent dans
+ * `loggia_alertes.personnes` et s'appliquent ici tout de suite, comme le
+ * composant les applique. Administrateurs seulement : la commande le refuse
+ * aux autres, et le panneau se tait alors. */
+const EXCLUABLES = ['admins', 'presents'];
+const exclusDe = (c) => {
+  const e = c && c.exclus;
+  /* La première forme, une liste, vaut pour les deux publics (destinataires.corrections_de). */
+  if (Array.isArray(e)) return { admins: e.slice(), presents: e.slice() };
+  const d = e && typeof e === 'object' ? e : {};
+  return { admins: Array.isArray(d.admins) ? d.admins : [], presents: Array.isArray(d.presents) ? d.presents : [] };
+};
+
+function QuiRecoit({ hass, cfg, save, services }) {
+  const h = hass && typeof hass.callWS === 'function' ? hass : null;
+  const connecte = !!h;
+  /* Lu une fois par connexion : `hass` change à chaque état de la maison, et
+   * la liste des personnes ne se relit pas à chaque lampe allumée. */
+  const hRef = useRef(h);
+  hRef.current = h;
+  const [etat, setEtat] = useState(null);
+  const [refus, setRefus] = useState('');
+  useEffect(() => {
+    const ws = hRef.current;
+    if (!ws) return undefined;
+    let vivant = true;
+    ws.callWS({ type: 'loggia/notifications/destinataires' })
+      .then(r => { if (vivant) setEtat(r && Array.isArray(r.personnes) ? r : { personnes: [] }); })
+      .catch(e => { if (vivant) setRefus((e && e.code) || 'panne'); });
+    return () => { vivant = false; };
+  }, [connecte]);
+  if (refus === 'unknown_command') {
+    return (
+      <Panneau titre={tr('Qui reçoit quoi')} niveau="alerte">
+        <div style={{ padding: '0 22px 18px', fontSize: 12.5, fontWeight: 700, color: 'var(--o-warn)' }}>{tr('Redémarrez Home Assistant pour voir qui reçoit quoi.')}</div>
+      </Panneau>
+    );
+  }
+  if (!etat) return null;
+  const corr = cfg.personnes && typeof cfg.personnes === 'object' ? cfg.personnes : {};
+  const poser = (person, patch) => save({ personnes: { ...corr, [person]: { ...(corr[person] || {}), ...patch } } });
+  const route = (titre, qui) => (
+    <Ligne titre={titre}><span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--o-text2)', textAlign: 'right', maxWidth: 320 }}>{qui}</span></Ligne>
+  );
+  const nomService = (s) => nomTelephone(hass, s) || s;
+  return (
+    <Panneau titre={tr('Qui reçoit quoi')} desc={tr('Chaque personne de Home Assistant, suivie jusqu’à son téléphone — rien à régler ; ici, on corrige.')}
+      pied={<span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>{cfg.service ? tr('Repli : {service} — toujours pour la sûreté ; pour le reste, quand personne n’est trouvé ou qu’un envoi échoue.', { service: 'notify.' + cfg.service }) : tr('Aucun repli : sans téléphone trouvé, rien ne part.')}</span>}>
+      {route(tr('Sûreté'), tr('Tout le monde, et le repli — rien ne l’exclut'))}
+      {route(tr('Mode enfant'), tr('Les administrateurs'))}
+      {route(tr('Machines, collecte, veilles'), tr('Les personnes à la maison — tout le monde s’il n’y a personne'))}
+      {etat.personnes.map((p) => {
+        const c = corr[p.person] || {};
+        const exclus = exclusDe(c);
+        const choisi = typeof c.service === 'string' ? c.service : '';
+        const decouverts = Array.isArray(p.appareils) ? p.appareils : [];
+        /* Ce qui reçoit : le service choisi s'il existe encore, sinon les appareils trouvés (destinataires.personnes). */
+        const absent = !!choisi && (services.length ? services.indexOf(choisi) < 0 : !!p.service_absent);
+        // L'identifiant du service sous le nom : calculé ici, pas écrit dans le rendu.
+        const base = (choisi && !absent ? [{ service: choisi, nom: nomService(choisi) }] : decouverts)
+          .map(a => ({ ...a, ident: 'notify.' + a.service }));
+        const pourEnfant = base.filter(a => exclus.admins.indexOf(a.service) < 0);
+        const svcs = choisi && services.indexOf(choisi) < 0 ? [choisi, ...services] : services;
+        const basculer = (pub, service) => {
+          const l = exclus[pub];
+          poser(p.person, { exclus: { ...exclus, [pub]: l.indexOf(service) < 0 ? [...l, service] : l.filter(x => x !== service) } });
+        };
+        return (
+          <div key={p.person} className="o-optrow" style={{ padding: '12px 22px', borderTop: FILET }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13.5, fontWeight: 800 }}>{p.nom}</span>
+              <Pastille capitales niveau={p.present ? 'ok' : 'neutre'}>{p.present ? tr('À la maison') : tr('Absent')}</Pastille>
+              {p.admin && <Pastille capitales niveau="accent">{tr('Administrateur')}</Pastille>}
+              <span style={{ marginLeft: 'auto' }}>
+                <ListeChoix label={tr('Service de {nom}', { nom: p.nom })} value={choisi} onChange={v => poser(p.person, { service: v })}
+                  options={[{ id: '', label: tr('Automatique') }, ...svcs.map(x => ({ id: x, label: nomService(x), sub: 'notify.' + x }))]}
+                  style={{ padding: '6px 12px', borderRadius: 10, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 12, fontWeight: 700, maxWidth: 220 }} />
+              </span>
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: base.length ? 'var(--o-text2)' : 'var(--o-text3)', marginTop: 3 }}>
+              {base.length ? base.map(a => a.nom).join(', ') : tr('Aucun téléphone trouvé')}
+            </div>
+            {absent && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-warn)', marginTop: 3 }}>{tr('Le service choisi n’existe plus : ses téléphones trouvés prennent le relais.')}</div>}
+            {/* Un administrateur sur plusieurs appareils (relecture du 30/10, point 2) : une tablette d'enfant ou un écran mural ouverts
+              * sous son compte recevraient les demandes de l'enfant, boutons compris. On le DIT ; on ne devine pas lequel. */}
+            {p.admin && pourEnfant.length > 1 && (
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-warn)', marginTop: 4, lineHeight: 1.45 }}>
+                {tr('{nom} reçoit les demandes du mode enfant sur plusieurs appareils : {appareils}. Si l’un d’eux est la tablette d’un enfant ou un écran mural, retirez-lui « Mode enfant ».', { nom: p.nom, appareils: pourEnfant.map(a => a.nom).join(', ') })}
+              </div>
+            )}
+            {base.map(a => (
+              <div key={a.service} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
+                <Fi i="mobile-button" size={13} color="var(--o-text2)" />
+                <span style={{ flex: '1 1 140px', minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nom}</span>
+                  <span style={{ display: 'block', ...MONO, fontSize: 11, color: 'var(--o-text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.ident}</span>
+                </span>
+                <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {/* La sûreté : toujours, et le dire — la puce ne se décoche pas. */}
+                  <button type="button" disabled aria-pressed="true" title={tr('La sûreté ne s’exclut jamais')}
+                    style={{ ...puce(true), cursor: 'default', opacity: .75 }}>{tr('Sûreté')}</button>
+                  {EXCLUABLES.filter(pub => pub !== 'admins' || p.admin).map(pub => {
+                    const on = exclus[pub].indexOf(a.service) < 0;
+                    const nom = pub === 'admins' ? tr('Mode enfant') : tr('Machines, collecte, veilles');
+                    return (
+                      <button key={pub} type="button" aria-pressed={on} onClick={() => basculer(pub, a.service)}
+                        aria-label={tr('{public} sur {appareil}', { public: nom, appareil: a.nom })} style={puce(on)}>{nom}</button>
+                    );
+                  })}
+                </span>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </Panneau>
+  );
+}
+
 function AlertesTele({ hass }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
   const [cfg, setCfg] = useState(null);
@@ -407,7 +575,7 @@ function AlertesTele({ hass }) {
       <Panneau titre={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>{tr('Livraison')}<Pastille capitales niveau={cfg.actif ? 'ok' : 'alerte'}>{cfg.actif ? tr('Actives') : tr('Coupées')}</Pastille></span>}
         desc={tr("Envoyées par le serveur via l'app compagnon Home Assistant.")}
         droite={<Tgl on={!!cfg.actif} cb={() => save({ actif: !cfg.actif })} label={tr('Activer les alertes')} />}>
-        <Ligne titre={tr('Téléphone cible')} desc={tr('Le service notify de l’app compagnon')}>
+        <Ligne titre={tr('Téléphone cible')} desc={tr('Reçoit toujours la sûreté ; le reste, quand aucun téléphone n’est trouvé ou qu’un envoi échoue')}>
           <ChoixEntite icone="mobile-button" label={tr('Téléphone cible')} value={cfg.service || ''} onChange={v => save({ service: v })}
             nom={cfg.service ? nomTelephone(hass, cfg.service) : tr('Aucun téléphone')} ident={cfg.service ? 'notify.' + cfg.service : tr('à choisir')}
             options={[{ id: '', label: tr('Aucun téléphone') }, ...svcs.map(x => ({ id: x, label: nomTelephone(hass, x), sub: 'notify.' + x }))]} />
@@ -430,6 +598,9 @@ function AlertesTele({ hass }) {
           <button onClick={test} disabled={!cfg.service} style={{ ...btnSecondaire, opacity: cfg.service ? 1 : .45, cursor: cfg.service ? 'pointer' : 'not-allowed' }}><Fi i="test-tube" size={13} />{tr('Envoyer un test')}</button>
         </Ligne>
       </Panneau>
+
+      {/* Qui reçoit quoi (ADR 0301) : les téléphones de chaque personne, découverts ; le téléphone cible n'est plus qu'un repli. */}
+      <QuiRecoit hass={hass} cfg={cfg} save={save} services={services} />
 
       {!cfg.actif && (
         <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 18px', borderRadius: 14, background: 'rgba(var(--o-warn-rgb),.10)', border: '1px solid rgba(var(--o-warn-rgb),.45)', color: 'var(--o-warn)', fontSize: 12.5, fontWeight: 700, lineHeight: 1.45 }}>
@@ -625,13 +796,13 @@ function ResetLoggiaBtn() {
       // Sans sauvegarde, pas de remise a zero : l'operation ne se rattrape
       // pas, et un fichier vide aurait l'air d'une sauvegarde (audit 18/09).
       setEtape(null); setArm(false);
-      window.alert(tr('Sauvegarde impossible : la remise à zéro est annulée. Réessayez quand Home Assistant répond.'));
+      alerter({ titre: tr('Réinitialiser Loggia'), texte: tr('Sauvegarde impossible : la remise à zéro est annulée. Réessayez quand Home Assistant répond.') });
       return;
     }
     setEtape('raz');
     try { await resetLoggiaComplet(); } catch {
       setEtape(null); setArm(false);
-      window.alert(tr('Remise à zéro incomplète : Home Assistant a refusé ou n’a pas répondu. La configuration de la maison est inchangée.'));
+      alerter({ titre: tr('Réinitialiser Loggia'), texte: tr('Remise à zéro incomplète : Home Assistant a refusé ou n’a pas répondu. La configuration de la maison est inchangée.') });
       return;
     }
     window.location.reload();
@@ -695,7 +866,7 @@ function ImportConfigBtn() {
     try { setLu(lireConfigImport(await f.text())); } catch (err) {
       setLu(null);
       const motif = err && LECTURE_IMPOSSIBLE[err.code];
-      window.alert(tr('Import impossible : ') + (motif ? motif() : motifEchec(err)));
+      alerter({ titre: tr('Import'), texte: tr('Import impossible : ') + (motif ? motif() : motifEchec(err)) });
     }
   };
 
@@ -706,7 +877,7 @@ function ImportConfigBtn() {
       if (!telechargerConfig(j, 'loggia-avant-import')) throw new Error(PAS_DE_FICHIER);
     } catch {
       setEtape(null); setLu(null);
-      window.alert(tr('Sauvegarde impossible : l’import est annulé. Réessayez quand Home Assistant répond.'));
+      alerter({ titre: tr('Import'), texte: tr('Sauvegarde impossible : l’import est annulé. Réessayez quand Home Assistant répond.') });
       return;
     }
     setEtape('import');
@@ -714,9 +885,9 @@ function ImportConfigBtn() {
       setEtape(null); setLu(null);
       // Un refus de Home Assistant porte un code : rien n'a ete ecrit. Une
       // connexion perdue n'en porte pas — l'envoi a pu passer ou non.
-      window.alert(err && typeof err.code === 'string'
+      alerter({ titre: tr('Import'), texte: err && typeof err.code === 'string'
         ? tr('Import refusé par Home Assistant : {x}. La configuration de la maison n’a pas été touchée.', { x: motifEchec(err) })
-        : tr('Import interrompu : {x}. Rechargez la page pour voir la configuration en place.', { x: motifEchec(err) }));
+        : tr('Import interrompu : {x}. Rechargez la page pour voir la configuration en place.', { x: motifEchec(err) }) });
       return;
     }
     window.location.reload();
@@ -775,7 +946,7 @@ function AdminPinEditor({ hass }) {
         {tr('Code administrateur')}
       </span>}
       desc={<span style={{ display: 'block', paddingLeft: 44 }}>{tr('Requis pour basculer vers un profil Admin, et vérifié par le composant. Haché, jamais affiché — le même sur tous les appareils.')}</span>}
-      droite={defini ? <Pastille niveau="ok" icone="check">{tr('Code défini')}</Pastille> : <Pastille niveau="alerte" icone="triangle-warning">{tr('Encore 0000')}</Pastille>}>
+      droite={defini ? <Pastille niveau="ok" icone="check">{tr('Code défini')}</Pastille> : <Pastille niveau="alerte" icone="triangle-warning">{tr('Pas encore défini')}</Pastille>}>
       <div className="grid-par-pin" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr) auto', gap: 14, alignItems: 'end', padding: '4px 22px 20px' }}>
         <div><div style={champ}>{tr('Nouveau code')}</div><input aria-label={tr('Nouveau code')} value={np} onChange={e => { setNp(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" type="password" autoComplete="new-password" style={inp} /></div>
         <div><div style={champ}>{tr('Confirmer')}</div><input aria-label={tr('Confirmer le nouveau code')} value={cf} onChange={e => { setCf(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" type="password" autoComplete="new-password" style={inp} /></div>
@@ -906,9 +1077,10 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
 /* Vignette « Photo » du fond d'écran : sans photo, le clic ouvre le sélecteur
  * de fichier ; avec, il active le fond. Les deux petits boutons dessous
  * changent ou retirent l'image. La photo est compressée à l'import (1920 px,
- * JPEG) et reste dans le localStorage de CET appareil — rien ne part au
- * serveur. */
-function FondPhotoBtn({ actif, onLook }) {
+ * JPEG), rangée sur Home Assistant sous le compte connecté, et gardée en copie
+ * dans le localStorage (ADR 0289, fondphoto.js). Sa version (`fondV`) part
+ * dans l'apparence : les autres écrans du compte la reprennent. */
+function FondPhotoBtn({ actif, fondV, onLook }) {
   const [, force] = useState(0);
   const fichierRef = useRef(null);
   const photo = lireFondPhoto();
@@ -921,9 +1093,12 @@ function FondPhotoBtn({ actif, onLook }) {
       const data = await compresserImage(f);
       localStorage.setItem(FOND_PHOTO_CLE, data);
       prev();
-      onLook({ fond: 'photo' });
+      // Pas de serveur (démo) ou envoi en échec : la copie locale tient, et
+      // l'écran la rangera à sa prochaine ouverture (`fondV` reste absent).
+      const v = await envoyerFond(data).catch(() => null);
+      onLook({ fond: 'photo', ...(v ? { fondV: v } : {}) });
     } catch (er) {
-      alert(tr("L'image n'a pas pu être utilisée : ") + (er && er.message === 'image trop lourde' ? tr('trop lourde même compressée.') : tr('fichier illisible.')));
+      alerter({ titre: tr('Photo'), texte: tr("L'image n'a pas pu être utilisée : ") + (er && er.message === 'image trop lourde' ? tr('trop lourde même compressée.') : tr('fichier illisible.')) });
     }
   };
   const seg = (on) => ({ padding: '6px 13px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap', background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text2)' });
@@ -932,12 +1107,12 @@ function FondPhotoBtn({ actif, onLook }) {
       <input aria-label={tr('Choisir une image de fond')} ref={fichierRef} type="file" accept="image/*" onChange={choisir} style={{ display: 'none' }} />
       <span style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 12, background: 'var(--o-well)', border: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
         <button onClick={() => onLook({ fond: 'aucun' })} aria-pressed={!actif} style={seg(!actif)}>{tr('Aucun')}</button>
-        <button onClick={() => { if (!photo) { fichierRef.current && fichierRef.current.click(); return; } onLook({ fond: 'photo' }); }} aria-pressed={actif} style={seg(actif)}>{tr('Photo')}</button>
+        <button onClick={() => { if (!photo && !fondV) { fichierRef.current && fichierRef.current.click(); return; } onLook({ fond: 'photo' }); }} aria-pressed={actif} style={seg(actif)}>{tr('Photo')}</button>
       </span>
       {photo && (
         <span style={{ display: 'flex', gap: 10 }}>
           <button onClick={() => fichierRef.current && fichierRef.current.click()} style={{ border: 'none', background: 'transparent', color: 'var(--o-text3)', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>{tr('changer')}</button>
-          <button onClick={() => { try { localStorage.removeItem(FOND_PHOTO_CLE); } catch {} prev(); if (actif) onLook({ fond: 'aucun' }); }} style={{ border: 'none', background: 'transparent', color: 'var(--o-text3)', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>{tr('retirer')}</button>
+          <button onClick={() => { try { localStorage.removeItem(FOND_PHOTO_CLE); } catch {} prev(); retirerFond().catch(() => {}); onLook({ ...(actif ? { fond: 'aucun' } : {}), fondV: null }); }} style={{ border: 'none', background: 'transparent', color: 'var(--o-text3)', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>{tr('retirer')}</button>
         </span>
       )}
     </span>
@@ -1343,7 +1518,7 @@ export function useEntConfig(hass) {
         // l'ancienne liste et les associées, relues ICI, voyagent avec lui.
         loggia_feeder: feederAEcrire(ent, cfgVal('loggia_feeder', null) || loggiaEnt('feeder', null)),
       });
-    } catch { alert(tr('Enregistrement impossible — la configuration n’a pas été appliquée.')); return; }
+    } catch { alerter({ titre: tr('Enregistrer et recharger'), texte: tr('Enregistrement impossible — la configuration n’a pas été appliquée.') }); return; }
     // L'écriture serveur part en arrière-plan : on lui laisse le temps d'aboutir
     // avant de recharger, sinon la page relirait l'ancienne valeur.
     setTimeout(() => window.location.reload(), 700);
@@ -1401,11 +1576,11 @@ function EntSections({ ent, setEnt, entSet, dlists, only = null, hass = null }) 
     /* Des phrases entières (audit du 03/10) : la fin du message était collée
      * en français derrière le compte traduit — « 3 sensors found par le nom ».
      * `trN` : le polonais accorde « czujnik » sur trois formes. */
-    alert(!r.trouves
+    alerter({ titre: tr('Détecter automatiquement'), texte: !r.trouves
       ? tr('Aucun capteur supplémentaire trouvé. Rangez vos capteurs dans une zone Home Assistant : la détection s’appuie dessus en premier.')
       : r.parZone
         ? trN(r.trouves, '{n} capteur détecté ({z} par la zone Home Assistant) — vérifiez puis « Enregistrer et recharger ».', '{n} capteurs détectés ({z} par la zone Home Assistant) — vérifiez puis « Enregistrer et recharger ».', { z: r.parZone })
-        : trN(r.trouves, '{n} capteur détecté par le nom — vérifiez puis « Enregistrer et recharger ».', '{n} capteurs détectés par le nom — vérifiez puis « Enregistrer et recharger ».'));
+        : trN(r.trouves, '{n} capteur détecté par le nom — vérifiez puis « Enregistrer et recharger ».', '{n} capteurs détectés par le nom — vérifiez puis « Enregistrer et recharger ».') });
   };
   return (
     <>
@@ -1835,6 +2010,22 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         : ciIci === 'leger' ? tr('Suit la fluidité de l’appareil · ici : léger')
           : ciIci === 'fixe' ? tr('Suit la fluidité de l’appareil · ici : fixe')
             : tr('Suit la fluidité de l’appareil');
+  /* « Verre des cartes » (ADR 0284) : le même verre, au coût de CET appareil.
+   * « Auto » suit la mesure du ciel — plein donne Plein, léger ou fixe donnent
+   * Léger ; sans mesure en cours, Plein, comme avant. */
+  const [verre, setVerre] = useState(lireVerre);
+  const choisirVerre = (q) => { ecrireVerre(q); setVerre(q); };
+  const veIci = verreMesure();
+  const descVerre = verre === 'plein' ? tr('Flou calculé en direct derrière chaque carte')
+    : verre === 'leger' ? tr('Fond flouté une seule fois, pour les tablettes anciennes')
+      : veIci === 'plein' ? tr('Suit la fluidité de l’appareil · ici : plein')
+        : veIci === 'leger' ? tr('Suit la fluidité de l’appareil · ici : léger')
+          : tr('Suit la fluidité de l’appareil');
+  /* « Nuit de l'écran » (ADR 0287) : sur CET appareil, du coucher au lever. */
+  const [nuit, setNuit] = useState(lireNuit);
+  const [assombrir, setAssombrir] = useState(lireAssombrir);
+  const choisirNuit = (q) => { ecrireNuit(q); setNuit(q); };
+  const choisirAssombrir = (q) => { ecrireAssombrir(q); setAssombrir(q); };
   const [ambPhotos, setAmbPhotos] = useState(() => { try { return localStorage.getItem('loggia-ambphotos') === '1'; } catch { return false; } });
   const toggleAmbPhotos = () => setAmbPhotos(v => { const n = !v; try { localStorage.setItem('loggia-ambphotos', n ? '1' : '0'); } catch {} return n; });
   const [ambMotion, setAmbMotion] = useState(() => { try { return localStorage.getItem('loggia-ambmotion') === '1'; } catch { return false; } });
@@ -2310,6 +2501,22 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 opts={[['auto', tr('Auto')], ['leger', tr('Léger')], ['fixe', tr('Fixe')]]}
                 onPick={choisirQualiteCiel} />
             </OptRow>
+            <OptRow title={tr('Verre des cartes')} desc={descVerre}>
+              <Seg label={tr('Verre des cartes')} value={verre}
+                opts={[['auto', tr('Auto')], ['plein', tr('Plein')], ['leger', tr('Léger')]]}
+                onPick={choisirVerre} />
+            </OptRow>
+            <OptRow title={tr('Nuit de l’écran')} desc={descNuit(nuit, hass)}>
+              <Seg label={tr('Nuit de l’écran')} value={nuit}
+                opts={[['non', tr('Non')], ['soleil', tr('Soleil')]]}
+                onPick={choisirNuit} />
+            </OptRow>
+            {/* Grisée tant que la nuit est sur Non, sans être verrouillée : on peut la préparer avant. */}
+            <OptRow eteint={nuit !== 'soleil'} title={tr('Assombrir')} desc={tr('Un voile sur tout l’écran ; la photo de fond baisse aussi')}>
+              <Seg label={tr('Assombrir')} value={assombrir}
+                opts={[['peu', tr('Un peu')], ['moyen', tr('Moyen')], ['beaucoup', tr('Beaucoup')]]}
+                onPick={choisirAssombrir} />
+            </OptRow>
             <OptRow title={tr('Écran de veille')} desc={tr('Pour une tablette murale : après ce délai sans toucher, heure et météo.')}>
               <Seg label={tr('Écran de veille')} value={String(ambient || 0)}
                 opts={[['0', tr('Off')], ['1', '1 min'], ['2', '2 min'], ['5', '5 min'], ['10', '10 min']]}
@@ -2351,7 +2558,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               <Tgl on={!!look.hairline} cb={() => onLook({ hairline: !look.hairline })} label={tr('Liserés')} />
             </OptRow>
             <OptRow title={tr("Fond d'écran")} desc={tr('Votre photo sous les cartes.')}>
-              <FondPhotoBtn actif={(look.fond || 'aucun') === 'photo'} onLook={onLook} />
+              <FondPhotoBtn actif={(look.fond || 'aucun') === 'photo'} fondV={look.fondV} onLook={onLook} />
             </OptRow>
           </AppCard>
 
@@ -2704,7 +2911,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 try {
                   const j = await exportConfigComplete();
                   if (!telechargerConfig(j, 'loggia-config')) throw new Error(PAS_DE_FICHIER);
-                } catch (err) { window.alert(tr('Export impossible : ') + motifEchec(err)); }
+                } catch (err) { alerter({ titre: tr('Exporter'), texte: tr('Export impossible : ') + motifEchec(err) }); }
               }} style={btnSecondaire}>{tr('Exporter')}</button>
             </>}>
             <Ligne titre={tr('Version')} desc={inst.suiviPar ? tr('Suivie par {x}', { x: inst.suiviPar }) : tr('Lue dans le composant installé')}><span style={valeur}>{inst.version || '—'}</span></Ligne>
@@ -2714,6 +2921,10 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <Ligne titre={tr('Cache local')} desc={tr('États des entités et réglages de cet appareil')}>
               <span style={valeur}>{cacheKb != null ? (cacheKb >= 1024 ? nombre(cacheKb / 1024) + ' ' + tr('Mo') : nombre(cacheKb) + ' ' + tr('Ko')) : '—'}</span>
             </Ligne>
+            {/* Les copies que le composant garde avant les écritures (ADR 0285) :
+              * en remettre une remplace la configuration de toute la maison,
+              * comme l'import — les mêmes comptes, la même garde. */}
+            {isAdmin && <VersionsPrecedentes hass={hass} motif={motifEchec} alerter={alerter} />}
           </Panneau>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12 }}>

@@ -81,6 +81,8 @@ const LIEUX = {
   'Garage': { en: 'Garage', de: 'Garage', nl: 'Garage', it: 'Garage', es: 'Garaje', pl: 'Garaż' },
   'Terrasse': { en: 'Terrace', de: 'Terrasse', nl: 'Terras', it: 'Terrazza', es: 'Terraza', pl: 'Taras' },
   // La zone des deux capteurs de plante (chantier Capteurs, étapes 2 et 3, § 12 ; C29) : une zone d'appareils, pas une pièce de Loggia. Polonais nouveau, à relire par Seba882.
+  // La zone de Home Assistant où est Alex (G1-D8, 30/10) : la carte écrit le NOM de la zone, tel quel. Polonais nouveau.
+  'Travail': { en: 'Work', de: 'Arbeit', nl: 'Werk', it: 'Lavoro', es: 'Trabajo', pl: 'Praca' },
   'Technique': { en: 'Utility room', de: 'Technikraum', nl: 'Technische ruimte', it: 'Locale tecnico', es: 'Cuarto técnico', pl: 'Pomieszczenie techniczne' },
 };
 
@@ -189,6 +191,19 @@ const APPAREILS = {
   // Le motif d'un passage interrompu (chantier IoT, § 10).
   'Bloqué sous le canapé': { en: 'Stuck under the sofa', de: 'Unter dem Sofa festgefahren', nl: 'Vast onder de bank', it: 'Bloccato sotto il divano', es: 'Atascado bajo el sofá', pl: 'Utknął pod kanapą' },
   'Borne de recharge': { en: 'Charging station', de: 'Ladestation', nl: 'Laadpaal', it: 'Stazione di ricarica', es: 'Punto de recarga', pl: 'Stacja ładowania' },
+  // Chantier G3 (ADR 0302) : la borne, ses entités, les deux onduleurs, le chauffe-eau, Tempo, le prix spot.
+  'Borne de recharge branchée': { en: 'Charging station plugged in', de: 'Ladestation eingesteckt', nl: 'Laadpaal aangesloten', it: 'Stazione di ricarica collegata', es: 'Punto de recarga conectado', pl: 'Stacja ładowania podłączona' },
+  'Borne de recharge charge': { en: 'Charging station charging', de: 'Ladestation Laden', nl: 'Laadpaal laden', it: 'Stazione di ricarica carica', es: 'Punto de recarga carga', pl: 'Stacja ładowania ładowanie' },
+  'Borne de recharge courant maximum': { en: 'Charging station maximum current', de: 'Ladestation Maximalstrom', nl: 'Laadpaal maximale stroom', it: 'Stazione di ricarica corrente massima', es: 'Punto de recarga corriente máxima', pl: 'Stacja ładowania prąd maksymalny' },
+  'Borne de recharge énergie': { en: 'Charging station energy', de: 'Ladestation Energie', nl: 'Laadpaal energie', it: 'Stazione di ricarica energia', es: 'Punto de recarga energía', pl: 'Stacja ładowania energia' },
+  'Borne de recharge état': { en: 'Charging station status', de: 'Ladestation Status', nl: 'Laadpaal status', it: 'Stazione di ricarica stato', es: 'Punto de recarga estado', pl: 'Stacja ładowania stan' },
+  'Couleur Tempo du jour': { en: 'Today’s Tempo colour', de: 'Tempo-Farbe heute', nl: 'Tempo-kleur vandaag', it: 'Colore Tempo di oggi', es: 'Color Tempo de hoy', pl: 'Kolor Tempo dzisiaj' },
+  'Couleur Tempo de demain': { en: 'Tomorrow’s Tempo colour', de: 'Tempo-Farbe morgen', nl: 'Tempo-kleur morgen', it: 'Colore Tempo di domani', es: 'Color Tempo de mañana', pl: 'Kolor Tempo jutro' },
+  'Onduleur est': { en: 'East inverter', de: 'Wechselrichter Ost', nl: 'Omvormer oost', it: 'Inverter est', es: 'Inversor este', pl: 'Falownik wschód' },
+  'Onduleur est du jour': { en: 'East inverter today', de: 'Wechselrichter Ost heute', nl: 'Omvormer oost vandaag', it: 'Inverter est oggi', es: 'Inversor este hoy', pl: 'Falownik wschód dzisiaj' },
+  'Onduleur ouest': { en: 'West inverter', de: 'Wechselrichter West', nl: 'Omvormer west', it: 'Inverter ovest', es: 'Inversor oeste', pl: 'Falownik zachód' },
+  'Onduleur ouest du jour': { en: 'West inverter today', de: 'Wechselrichter West heute', nl: 'Omvormer west vandaag', it: 'Inverter ovest oggi', es: 'Inversor oeste hoy', pl: 'Falownik zachód dzisiaj' },
+  'Prix spot': { en: 'Spot price', de: 'Spotpreis', nl: 'Spotprijs', it: 'Prezzo spot', es: 'Precio spot', pl: 'Cena spot' },
   'Bouton Cuisine': { en: 'Kitchen button', de: 'Taster Küche', nl: 'Knop keuken', it: 'Pulsante cucina', es: 'Botón cocina', pl: 'Przycisk kuchnia' },
   'Boîtier TV': { en: 'TV box', de: 'TV-Box', nl: 'Tv-box', it: 'Box TV', es: 'Reproductor de TV', pl: 'Przystawka TV' },
   'Café avec Sam': { en: 'Coffee with Sam', de: 'Kaffee mit Sam', nl: 'Koffie met Sam', it: 'Caffè con Sam', es: 'Café con Sam', pl: 'Kawa z Samem' },
@@ -396,6 +411,7 @@ const APPAREILS = {
   'Ampoule': { en: 'Bulb', de: 'Glühbirne', nl: 'Lamp', it: 'Lampadina', es: 'Bombilla', pl: 'Żarówka' },
   'Veilleuse': { en: 'Night light', de: 'Nachtlicht', nl: 'Nachtlampje', it: 'Luce notturna', es: 'Luz nocturna', pl: 'Lampka nocna' },
   'Applique Extérieur': { en: 'Outdoor wall light', de: 'Außenwandleuchte', nl: 'Buitenwandlamp', it: 'Applique esterna', es: 'Aplique exterior', pl: 'Kinkiet zewnętrzny' },
+  'Ruban LED': { en: 'LED strip', de: 'LED-Streifen', nl: 'LED-strip', it: 'Striscia LED', es: 'Tira LED', pl: 'Taśma LED' },
   'Coucher de Lino': { en: 'Lino’s bedtime', de: 'Linos Schlafenszeit', nl: 'Bedtijd van Lino', it: 'Nanna di Lino', es: 'Hora de dormir de Lino', pl: 'Usypianie Lina' },
   'Coucher du soleil': { en: 'Sunset', de: 'Sonnenuntergang', nl: 'Zonsondergang', it: 'Tramonto', es: 'Puesta de sol', pl: 'Zachód słońca' },
   // Les mesures de sa maquette « Cartes capteurs » et le thermomètre du salon (chantier Capteurs, § 9).
@@ -426,6 +442,12 @@ const APPAREILS = {
   'Capteur CO cuisine': { en: 'Kitchen CO sensor', de: 'CO-Sensor Küche', nl: 'CO-sensor keuken', it: 'Sensore CO cucina', es: 'Sensor CO cocina', pl: 'Czujnik CO kuchnia' },
   'Capteur de monoxyde': { en: 'Carbon monoxide sensor', de: 'Kohlenmonoxidsensor', nl: 'Koolmonoxidesensor', it: 'Sensore di monossido', es: 'Sensor de monóxido', pl: 'Czujnik tlenku węgla' },
   'monoxyde': { en: 'carbon monoxide', de: 'Kohlenmonoxid', nl: 'koolmonoxide', it: 'monossido', es: 'monóxido', pl: 'tlenek węgla' },
+  'Capteur NO₂ cuisine': { en: 'Kitchen NO₂ sensor', de: 'NO₂-Sensor Küche', nl: 'NO₂-sensor keuken', it: 'Sensore NO₂ cucina', es: 'Sensor NO₂ cocina', pl: 'Czujnik NO₂ kuchnia' },
+  'Capteur de dioxyde d’azote': { en: 'Nitrogen dioxide sensor', de: 'Stickstoffdioxidsensor', nl: 'Stikstofdioxidesensor', it: 'Sensore di biossido di azoto', es: 'Sensor de dióxido de nitrógeno', pl: 'Czujnik dwutlenku azotu' },
+  'dioxyde d’azote': { en: 'nitrogen dioxide', de: 'Stickstoffdioxid', nl: 'stikstofdioxide', it: 'biossido di azoto', es: 'dióxido de nitrógeno', pl: 'dwutlenek azotu' },
+  // G1 (30/10) : un monoxyde en µg/m³ (D6) et un chauffe-eau (D7). Polonais nouveau.
+  'Capteur CO bureau': { en: 'Office CO sensor', de: 'CO-Sensor Büro', nl: 'CO-sensor kantoor', it: 'Sensore CO studio', es: 'Sensor CO despacho', pl: 'Czujnik CO biuro' },
+  'Chauffe-eau': { en: 'Water heater', de: 'Warmwasserspeicher', nl: 'Boiler', it: 'Scaldabagno', es: 'Calentador', pl: 'Bojler' },
   'Capteur d’air bureau': { en: 'Office air sensor', de: 'Luftsensor Büro', nl: 'Luchtsensor kantoor', it: 'Sensore aria studio', es: 'Sensor de aire despacho', pl: 'Czujnik powietrza biuro' },
   'Capteur de vibration': { en: 'Vibration sensor', de: 'Vibrationssensor', nl: 'Trillingssensor', it: 'Sensore di vibrazione', es: 'Sensor de vibración', pl: 'Czujnik wibracji' },
   'Lave-linge vibration': { en: 'Washing machine vibration', de: 'Waschmaschine Vibration', nl: 'Wasmachine trilling', it: 'Lavatrice vibrazione', es: 'Lavadora vibración', pl: 'Pralka wibracje' },
@@ -629,9 +651,23 @@ function etatsInitiaux() {
     'sensor.production_annee': s(1386, { friendly_name: etiquette('Production de l’année'), unit_of_measurement: 'kWh', device_class: 'energy' }),
     // De quoi remplir les cartes de la vue Meteo : indice d'air et vigilance.
     'sensor.qualite_air_exterieur': s(62, { friendly_name: "Qualité de l'air", device_class: 'aqi' }),
+    /* Atmo France (chantier G4, A1 et A6 ; ADR 0303), comme l'intégration HACS se déclare : l'indice ATMO du jour SANS classe,
+     * celui du lendemain (son option J+1), l'indice des pollens et deux niveaux de pollen — des `aqi` de 1 à 6, qui ne sont pas
+     * l'air. La fiche météo dit « Moyen », « Demain : Dégradé », et les pollens. L'indice de la station du jardin, lui, ne dit pas
+     * son échelle : il ne fait pas de tuile. */
+    'sensor.qualite_globale_paris': s(2, { friendly_name: 'Qualité globale-Paris', 'Libellé': 'Moyen', 'Type de zone': 'commune', 'Nom de la zone': 'Paris' }),
+    'sensor.qualite_globale_paris_j_1': s(3, { friendly_name: 'Qualité globale-Paris-J+1', 'Libellé': 'Dégradé', 'Type de zone': 'commune', 'Nom de la zone': 'Paris' }),
+    'sensor.qualite_globale_pollen_paris': s(3, { friendly_name: 'Qualité globale Pollen-Paris', 'Libellé': 'Modéré' }),
+    'sensor.niveau_gramine_paris': s(3, { friendly_name: 'Niveau Graminé-Paris', device_class: 'aqi', 'Libellé': 'Modéré' }),
+    'sensor.niveau_ambroisie_paris': s(2, { friendly_name: 'Niveau Ambroisie-Paris', device_class: 'aqi', 'Libellé': 'Faible' }),
     'sensor.vigilance_meteo': s('Jaune', { friendly_name: 'Vigilance météo', vent_violent: 'Jaune', orages: 'Jaune' }),
     'person.camille': s('home', { friendly_name: 'Camille' }),
-    'person.alex': s('not_home', { friendly_name: 'Alex' }),
+    // Alex est dans une ZONE de Home Assistant (G1-D8) : sa carte dit « Travail », plus « Absent ».
+    'person.alex': s(lieu('Travail'), { friendly_name: 'Alex' }),
+    /* Le chauffe-eau (G1-D7) : son mode traduit, la température relevée et la consigne — « Pompe à chaleur · 52,5° → 55° » —,
+     * jamais « heat_pump » ; il ne compte pas « actif » : rien ne dit qu'il chauffe. */
+    'water_heater.ballon': s('heat_pump', { friendly_name: 'Chauffe-eau', current_temperature: 52.5, temperature: 55, min_temp: 40, max_temp: 65,
+      operation_mode: 'heat_pump', operation_list: ['eco', 'heat_pump', 'performance', 'off'], supported_features: 3 }),
     'person.lea': s('home', { friendly_name: 'Léa' }),
     /* Un appareil de streaming, pour que la grille d'applications ait de
      * quoi se montrer. Les valeurs sont celles d'une vraie Apple TV :
@@ -702,8 +738,29 @@ function etatsInitiaux() {
      * ni pastille voiture ni pastille batterie, et il manquait la moitie de ce
      * que la vue Energie sait montrer (02/10). */
     'sensor.borne_recharge': s(0, { friendly_name: 'Borne de recharge', device_class: 'power', unit_of_measurement: 'W' }),
-    'sensor.batterie_maison': s(-310, { friendly_name: 'Batterie maison', device_class: 'power', unit_of_measurement: 'W' }),
+    /* La batterie AU SENS DE HOME ASSISTANT (chantier G3, E1) : son `stat_rate` est positif en DÉCHARGE — elle rend 310 W à la
+     * maison. Le tableau Énergie de la démo la déclare (`energy/get_prefs`, `prefsEnergieDemo`) ; Loggia l'inverse à la lecture. */
+    'sensor.batterie_maison': s(310, { friendly_name: 'Batterie maison', device_class: 'power', unit_of_measurement: 'W' }),
     'sensor.batterie_niveau': s(78, { friendly_name: 'Batterie niveau', device_class: 'battery', unit_of_measurement: '%' }),
+    /* DEUX ONDULEURS (chantier G3, D3) : le tableau Énergie les déclare tous deux — 1 100 + 740 W, 2,61 + 1,71 kWh. La vue
+     * Énergie les additionne : 1 840 W, 4,32 kWh, ce que disait le capteur unique d'avant. */
+    'sensor.solaire_est_puissance': s(1100, { friendly_name: 'Onduleur est', unit_of_measurement: 'W', device_class: 'power' }),
+    'sensor.solaire_ouest_puissance': s(740, { friendly_name: 'Onduleur ouest', unit_of_measurement: 'W', device_class: 'power' }),
+    'sensor.solaire_est_jour': s(2.61, { friendly_name: 'Onduleur est du jour', unit_of_measurement: 'kWh', device_class: 'energy', last_reset: MINUIT }),
+    'sensor.solaire_ouest_jour': s(1.71, { friendly_name: 'Onduleur ouest du jour', unit_of_measurement: 'kWh', device_class: 'energy', last_reset: MINUIT }),
+    /* LA BORNE, trouvée SANS réglage (chantier G3, E3) : sa puissance (`sensor.borne_recharge`), un courant réglable, la prise
+     * branchée, un état `enum` — et une ligne des appareils mesurés du tableau Énergie. La voiture est branchée depuis 18 h 05,
+     * la charge en attente des heures creuses. */
+    'sensor.borne_energie': s(1520.4, { friendly_name: 'Borne de recharge énergie', device_class: 'energy', state_class: 'total_increasing', unit_of_measurement: 'kWh' }),
+    'number.borne_courant_max': s(16, { friendly_name: 'Borne de recharge courant maximum', device_class: 'current', unit_of_measurement: 'A', min: 6, max: 32, step: 1, mode: 'slider' }),
+    // Branchée il y a deux heures et vingt minutes : la popup compte les kWh depuis (son index, `historiqueDemo`).
+    'binary_sensor.borne_branchee': { ...s('on', { friendly_name: 'Borne de recharge branchée', device_class: 'plug' }), last_changed: ilYaMin(140), last_updated: ilYaMin(140) },
+    'sensor.borne_statut': s('connected', { friendly_name: 'Borne de recharge état', device_class: 'enum', options: ['disconnected', 'connected', 'charging', 'error'] }),
+    'switch.borne_charge': s('on', { friendly_name: 'Borne de recharge charge' }),
+    /* TEMPO (chantier G3, E4) : la couleur du jour et celle du lendemain, comme `rtetempo` les publie — un `enum` bleu, blanc,
+     * rouge. Demain est ROUGE : « Demain : jour rouge » dans le rail de l'Accueil. */
+    'sensor.rte_tempo_couleur_actuelle': s('Blanc', { friendly_name: 'Couleur Tempo du jour', device_class: 'enum', options: ['Bleu', 'Blanc', 'Rouge'] }),
+    'sensor.rte_tempo_prochaine_couleur': s('Rouge', { friendly_name: 'Couleur Tempo de demain', device_class: 'enum', options: ['Bleu', 'Blanc', 'Rouge'] }),
     'binary_sensor.porte_entree': s('off', { friendly_name: "Porte d'entrée", device_class: 'door' }),
     // Trois portes de plus (02/10) : a une seule, la vue Securite annoncait
     // « 1/1 fermee » et sa rangee d'ouvrants tenait sur un quart de ligne.
@@ -716,7 +773,8 @@ function etatsInitiaux() {
     'binary_sensor.mouvement_entree': s('off', { friendly_name: 'Mouvement entrée', device_class: 'motion' }),
     'sensor.pile_porte_entree': s(9, { friendly_name: 'Pile porte entrée', device_class: 'battery', unit_of_measurement: '%' }),
     'person.demo': s('home', { friendly_name: 'Démo' }),
-    'person.sam': s('not_home', { friendly_name: 'Sam' }),
+    // Le téléphone de Sam se tait (G1-D8) : « Inconnu », pas « Absent » — un téléphone muet n'est pas une maison vide.
+    'person.sam': s('unknown', { friendly_name: 'Sam' }),
     'binary_sensor.fenetre_chambre': s('on', { friendly_name: 'Fenêtre chambre', device_class: 'window' }),  // ouverte : la carte Chambre le dit
     'binary_sensor.fenetre_salon': s('off', { friendly_name: 'Fenêtre salon', device_class: 'window' }),
     'switch.radiateur_chambre': s('on', { friendly_name: 'Radiateur chambre' }),
@@ -821,6 +879,53 @@ function etatsInitiaux() {
 
 /* La configuration de la maison, servie par le magasin mémoire : le dashboard
  * la lit comme s'il lisait le localStorage. */
+/* La fiche Énergie de la démo (chantier G3) : le réseau, les compteurs, le tarif et les bilans. Le solaire, la batterie et la voiture
+ * viennent du tableau Énergie (`prefsEnergieDemo`). Le prix dynamique (`?demo&tarif=dynamique`) n'a ni heures creuses ni deux prix :
+ * une seule connexion, dont le prix vient d'une entité qui VARIE. */
+function ficheEnergieDemo() {
+  const tarif = VARIANTE_TARIF === 'dynamique' ? {} : { consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp',
+    hcActive: 'binary_sensor.heures_creuses', hcPrice: 'sensor.prix_hc', hpPrice: 'sensor.prix_hp' };
+  return { consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', injectionJour: 'sensor.injection_jour', revenuJour: 'sensor.revente_du_jour', coutJour: 'sensor.cout_du_jour',
+    ...tarif, abonnement: 'sensor.abonnement_mois', coutMois: 'sensor.cout_du_mois', ecoMois: 'sensor.eco_du_mois',
+    consoMois: 'sensor.conso_mois', prodMois: 'sensor.production_mois', consoAnnee: 'sensor.conso_annee', prodAnnee: 'sensor.production_annee' };
+}
+
+/* LE TABLEAU ÉNERGIE DE LA DÉMO (`energy/get_prefs`, chantier G3, ADR 0302) : ce que Home Assistant déclare et que Loggia lit sans
+ * réglage — deux onduleurs (leur `stat_rate`, leur prévision rattachée), la batterie (positive en DÉCHARGE, son niveau, 10 kWh) et
+ * la borne, confirmée par une ligne des appareils mesurés. Le prix dynamique ajoute sa connexion. */
+export function prefsEnergieDemo() {
+  const sources = [
+    { type: 'solar', stat_energy_from: 'sensor.solaire_est_jour', stat_rate: 'sensor.solaire_est_puissance', config_entry_solar_forecast: ['demo_prevision'] },
+    { type: 'solar', stat_energy_from: 'sensor.solaire_ouest_jour', stat_rate: 'sensor.solaire_ouest_puissance', config_entry_solar_forecast: ['demo_prevision'] },
+    { type: 'battery', stat_energy_from: 'sensor.batterie_rendu', stat_energy_to: 'sensor.batterie_stocke', stat_rate: 'sensor.batterie_maison', stat_soc: 'sensor.batterie_niveau', capacity: 10 },
+  ];
+  if (VARIANTE_TARIF === 'dynamique') sources.push({ type: 'grid', stat_energy_from: 'sensor.conso_jour', entity_energy_price: 'sensor.prix_spot' });
+  return { energy_sources: sources, device_consumption: [{ stat_consumption: 'sensor.borne_energie', name: etiquette('Borne de recharge') }] };
+}
+
+/* La production prévue (`energy/solar_forecast`) : une cloche, aujourd'hui 12,4 kWh, demain 9,8 kWh, en Wh par heure. */
+export function previsionSolaireDemo(t = Date.now()) {
+  const wh = {};
+  const jour = (decalage, total) => {
+    const d = new Date(t); d.setDate(d.getDate() + decalage);
+    const cloche = [0.02, 0.05, 0.08, 0.11, 0.13, 0.14, 0.13, 0.11, 0.09, 0.07, 0.04, 0.03];
+    cloche.forEach((part, i) => { const h = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 7 + i); wh[h.toISOString()] = Math.round(total * 1000 * part); });
+  };
+  jour(0, 12.4); jour(1, 9.8);
+  return { demo_prevision: { wh_hours: wh } };
+}
+
+/* Le prix spot de `?demo&tarif=dynamique` : 48 heures, un creux de 13 h à 15 h, et la prévision en attribut (`prices`) —
+ * la forme d'une liste d'objets « début + prix ». */
+function prixSpotDemo(t = Date.now()) {
+  const base = new Date(t); base.setHours(0, 0, 0, 0);
+  const cloche = [0.21, 0.2, 0.19, 0.19, 0.19, 0.2, 0.24, 0.29, 0.31, 0.27, 0.22, 0.17, 0.14, 0.09, 0.1, 0.15, 0.2, 0.27, 0.33, 0.35, 0.31, 0.26, 0.24, 0.22];
+  const prices = [];
+  for (let h = 0; h < 48; h++) prices.push({ time: new Date(base.getTime() + h * 3600000).toISOString(), price: Math.round((cloche[h % 24] + (h >= 24 ? 0.02 : 0)) * 1000) / 1000 });
+  const ici = prices[Math.min(47, Math.max(0, Math.floor((t - base.getTime()) / 3600000)))];
+  return s(ici.price, { friendly_name: 'Prix spot', unit_of_measurement: '€/kWh', device_class: 'monetary', prices });
+}
+
 function configDemo() {
   return {
     /* La demo se donne un assistant, pour que le bouton du bas existe et que
@@ -870,24 +975,17 @@ function configDemo() {
       { name: etiquette('Radiateur chambre'), power: 'sensor.radiateur_chambre_puissance', kwh: 'sensor.radiateur_chambre_jour', art: 'radiator', icon: 'thermometer-half', c: 'var(--o-orange)' },
       { name: etiquette('Box internet'), power: 'sensor.box_internet_puissance', kwh: 'sensor.box_internet_jour', art: null, icon: 'bolt', c: 'var(--o-rose)' },
     ],
-    loggia_energyHaids: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', revenuJour: 'sensor.revente_du_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp', coutJour: 'sensor.cout_du_jour',
-      hcActive: 'binary_sensor.heures_creuses', hcPrice: 'sensor.prix_hc', hpPrice: 'sensor.prix_hp',
-      abonnement: 'sensor.abonnement_mois', coutMois: 'sensor.cout_du_mois', ecoMois: 'sensor.eco_du_mois',
-      consoMois: 'sensor.conso_mois', prodMois: 'sensor.production_mois',
-      consoAnnee: 'sensor.conso_annee', prodAnnee: 'sensor.production_annee',
-      evNow: 'sensor.borne_recharge', batNow: 'sensor.batterie_maison', batSoc: 'sensor.batterie_niveau' },
+    /* Le solaire, sa production du jour, la batterie et la voiture n'y sont PLUS (chantier G3, ADR 0302) : le tableau Énergie de la
+     * démo les déclare (`prefsEnergieDemo`) — deux onduleurs, une batterie au sens de Home Assistant, une borne trouvée sans
+     * réglage. La fiche ne corrige que ce qu'elle nomme. `?demo&tarif=dynamique` : un prix spot, sans heures creuses. */
+    loggia_energyHaids: ficheEnergieDemo(),
     loggia_entities: {
       weather: ['weather.maison', 'sun.sun'],
       alarm: 'alarm_control_panel.maison',
       cameras: CAMERAS(),
       people: [{ name: 'Camille', haid: 'person.camille' }, { name: 'Alex', haid: 'person.alex' },
         { name: 'Léa', haid: 'person.lea' }],
-      energy: { solarOutput: 'sensor.production_solaire', consoNow: 'sensor.reseau', surplusNow: 'sensor.surplus', consoJour: 'sensor.conso_jour', prodJour: 'sensor.production_jour', injectionJour: 'sensor.injection_jour', revenuJour: 'sensor.revente_du_jour', consoJourHc: 'sensor.conso_jour_hc', consoJourHp: 'sensor.conso_jour_hp', coutJour: 'sensor.cout_du_jour',
-      hcActive: 'binary_sensor.heures_creuses', hcPrice: 'sensor.prix_hc', hpPrice: 'sensor.prix_hp',
-      abonnement: 'sensor.abonnement_mois', coutMois: 'sensor.cout_du_mois', ecoMois: 'sensor.eco_du_mois',
-      consoMois: 'sensor.conso_mois', prodMois: 'sensor.production_mois',
-      consoAnnee: 'sensor.conso_annee', prodAnnee: 'sensor.production_annee',
-        evNow: 'sensor.borne_recharge', batNow: 'sensor.batterie_maison', batSoc: 'sensor.batterie_niveau' },
+      energy: ficheEnergieDemo(),
       /* `?demo&robots=scripts` (tranche robots 2, Q1 A) : ses interrupteurs de pièces et son script, qui gardent la main sur les
        * pièces devant les zones de Home Assistant — la maison de la démo les gagne pour cette variante seulement.
        * `scripts-sans-pieces` et `scripts-avec-pieces` (passe bis du 20/10, sa décision « Mon script garde la main ») : SON cas —
@@ -951,11 +1049,12 @@ function configDemo() {
  * enregistre tient le temps de l'onglet. */
 const SCN_A = (famille, geste, portee = 'maison', reste = {}) => ({ famille, geste, portee, ...reste });
 const SCN_INTEGRES = [
-  { id: 'reveil', icone: 'sunrise', teinte: 'ambre', actions: [SCN_A('volets', 'ouvrir'), SCN_A('lumieres', 'allumer', 'maison', { valeur: 30, si: 'nuit' }), SCN_A('chauffage', 'confort')] },
+  // Trois fondus, comme au serveur (ADR 0304) : le Réveil monte en 3 min, Bonne nuit s'éteint en 10 s, Cinéma se règle en 3 s.
+  { id: 'reveil', icone: 'sunrise', teinte: 'ambre', actions: [SCN_A('volets', 'ouvrir'), SCN_A('lumieres', 'allumer', 'maison', { valeur: 30, si: 'nuit', fondu: 180 }), SCN_A('chauffage', 'confort')] },
   { id: 'depart', icone: 'running', teinte: 'bain', actions: [SCN_A('lumieres', 'eteindre'), SCN_A('medias', 'eteindre'), SCN_A('chauffage', 'eco'), SCN_A('alarme', 'absent'), SCN_A('serrures', 'verrouiller')] },
   { id: 'retour', icone: 'home', teinte: 'accent', actions: [SCN_A('lumieres', 'allumer', 'vie', { valeur: 60, si: 'nuit' }), SCN_A('chauffage', 'confort')] },
-  { id: 'nuit', icone: 'moon', teinte: 'chambre', actions: [SCN_A('lumieres', 'eteindre', 'maison'), SCN_A('volets', 'fermer'), SCN_A('medias', 'eteindre'), SCN_A('alarme', 'nuit'), SCN_A('serrures', 'verrouiller')] },
-  { id: 'cinema', icone: 'film', teinte: 'vert', actions: [SCN_A('medias', 'pause'), SCN_A('lumieres', 'allumer', 'piece', { valeur: 10 }), SCN_A('volets', 'fermer', 'piece'), SCN_A('medias', 'allumer_tv', 'piece')] },
+  { id: 'nuit', icone: 'moon', teinte: 'chambre', actions: [SCN_A('lumieres', 'eteindre', 'maison', { fondu: 10 }), SCN_A('volets', 'fermer'), SCN_A('medias', 'eteindre'), SCN_A('alarme', 'nuit'), SCN_A('serrures', 'verrouiller')] },
+  { id: 'cinema', icone: 'film', teinte: 'vert', actions: [SCN_A('medias', 'pause'), SCN_A('lumieres', 'allumer', 'piece', { valeur: 10, fondu: 3 }), SCN_A('volets', 'fermer', 'piece'), SCN_A('medias', 'allumer_tv', 'piece')] },
   { id: 'musique', icone: 'music', teinte: 'tendre', actions: [SCN_A('medias', 'lecture', 'piece'), SCN_A('lumieres', 'allumer', 'piece', { valeur: 50 })] },
   { id: 'invites', icone: 'users', teinte: 'ambre', actions: [SCN_A('lumieres', 'allumer', 'vie', { valeur: 100 }), SCN_A('chauffage', 'confort')] },
   { id: 'tout_eteindre', icone: 'power', teinte: 'gris', actions: [SCN_A('lumieres', 'eteindre'), SCN_A('medias', 'eteindre')] },
@@ -963,7 +1062,7 @@ const SCN_INTEGRES = [
 const SCN_PIECE = {
   'light.salon': 'Salon', 'cover.volet_salon': 'Salon', 'cover.store_banne': 'Salon', 'media_player.salon': 'Salon', 'media_player.tv_salon': 'Salon', 'media_player.enceinte_salon': 'Salon', 'media_player.echo_cuisine': 'Cuisine', 'climate.salon': 'Salon', 'climate.poele': 'Salon',
   'light.cuisine': 'Cuisine', 'cover.volet_cuisine': 'Cuisine',
-  'light.chambre': 'Chambre', 'cover.volet_chambre': 'Chambre', 'cover.rideau_chambre': 'Chambre', 'climate.chambre': 'Chambre',
+  'light.chambre': 'Chambre', 'light.ampoule_chambre': 'Chambre', 'light.ruban_chambre': 'Chambre', 'cover.volet_chambre': 'Chambre', 'cover.rideau_chambre': 'Chambre', 'climate.chambre': 'Chambre',
   'light.bureau': 'Bureau', 'cover.volet_bureau': 'Bureau', 'light.entree': 'Entrée', 'lock.porte_entree': 'Entrée', 'light.sdb': 'Salle de bain',
   'cover.volet_entree': 'Entrée', 'cover.porte_garage': 'Entrée', 'cover.portail': 'Entrée', 'cover.volet_sdb': 'Salle de bain',
 };
@@ -1021,6 +1120,19 @@ function scnCibles(a, states, piece) {
     return true;
   }).sort();
 }
+/* Ce que les lampes savent faire d'un fondu et d'un blanc, par portée (`lampes` de `loggia/scenarios/etat`, ADR 0304) : la fiche
+ * n'offre ces puces qu'où une lampe visée le sait — le bit TRANSITION (32), un blanc réglable ou une couleur. */
+function scnCapacites(states) {
+  const lampes = Object.keys(states).filter(id => id.indexOf('light.') === 0);
+  const sait = (ids) => ({
+    fondu: ids.some(id => ((Number((states[id].attributes || {}).supported_features) || 0) & 32) !== 0),
+    blanc: ids.some(id => ((states[id].attributes || {}).supported_color_modes || []).some(m => ['color_temp', 'hs', 'xy', 'rgb', 'rgbw', 'rgbww'].includes(m))),
+  });
+  const pieceDe = (id) => (SCN_PIECE[id] ? lieu(SCN_PIECE[id]) : null);
+  const pieces = [...new Set(Object.values(SCN_PIECE))].map(lieu);
+  return { maison: sait(lampes), vie: sait(lampes.filter(id => pieceDe(id) && !SCN_INTIME.test(pieceDe(id)))),
+    pieces: Object.fromEntries(pieces.map(p => [p, sait(lampes.filter(id => pieceDe(id) === p))])) };
+}
 const scnPieceDe = (s) => s.piece || ((s.id === 'cinema' || s.id === 'musique') ? lieu('Salon') : null);
 function scenariosDemo(states) {
   const liens = Object.keys(states).filter(id => /^(scene|script)\./.test(id)).sort().map(id => ({ haid: id, nom: (states[id].attributes || {}).friendly_name || id }));
@@ -1031,7 +1143,8 @@ function scenariosDemo(states) {
     const suggestion = s.integre && !s.lien ? ({ retour: 'scene.je_rentre', nuit: 'scene.nuit' }[s.id] || null) : null;
     return { ...s, piece_effective: piece, resume, dernier: SCN_DERNIERS[s.id] || null, suggestion: suggestion && states[suggestion] ? suggestion : null, lien_absent: !!s.lien && !states[s.lien] };
   });
-  return { scenarios, liens, pieces: ['Bureau', 'Chambre', 'Cuisine', 'Entrée', 'Salle de bain', 'Salon'].map(lieu).sort(), alarme: 'alarm_control_panel.maison', journal: [] };
+  return { scenarios, liens, pieces: ['Bureau', 'Chambre', 'Cuisine', 'Entrée', 'Salle de bain', 'Salon'].map(lieu).sort(), alarme: 'alarm_control_panel.maison', journal: [],
+    lampes: scnCapacites(states) };
 }
 function scenariosPatch(patch) {
   const p = patch || {};
@@ -1171,6 +1284,24 @@ const MINUIT = (() => {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
 })();
 
+/* Ce que tirent les radiateurs de la démo (30/10, l'énergie de l'Historique de leur fiche) : leur puissance
+ * moyenne, tranche par tranche — le Confort du matin et du soir, une veille le reste du temps. Seulement des
+ * tranches FINIES, comme Home Assistant, et la même valeur à chaque lecture. */
+const WATTS_RADIATEURS_DEMO = { 'sensor.radiateur_chambre_puissance': 1500, 'sensor.radiateur_bureau_puissance': 1000 };
+function statsRadiateurDemo(id, msg) {
+  const pas = msg.period === '5minute' ? 300e3 : 3600e3;
+  const t1 = Math.min(Date.parse(msg.end_time || new Date().toISOString()), Date.now());
+  const lignes = [];
+  for (let t = Math.floor(Date.parse(msg.start_time) / pas) * pas; t + pas <= t1; t += pas) {
+    const d = new Date(t);
+    const h = d.getHours() + d.getMinutes() / 60;
+    const confort = (h >= 6.5 && h < 8.5) || (h >= 18 && h < 22.5);
+    const alea = hasardStable(Math.floor(t / pas) * 31 + id.length);
+    lignes.push({ start: t, end: t + pas, mean: Math.round(WATTS_RADIATEURS_DEMO[id] * (confort ? 0.55 : 0.08) * (0.7 + 0.6 * alea)) });
+  }
+  return lignes;
+}
+
 function statistiquesDemo(msg) {
   const ids = Array.isArray(msg.statistic_ids) ? msg.statistic_ids : [];
   const t0 = Date.parse(msg.start_time);
@@ -1186,6 +1317,8 @@ function statistiquesDemo(msg) {
     if (STATS_PLANTES_DEMO[id]) { out[id] = statsPlanteDemo(id, msg); continue; }
     /* Une mesure de sa maquette « Cartes capteurs » (chantier Capteurs, § 9) : ses 24 heures sur 5 minutes. Une autre
      * n'en a pas, comme un capteur sans `state_class` chez Home Assistant : la fiche lit alors son histoire. */
+    // La puissance d'un radiateur de la démo (30/10) : l'énergie de l'Historique de sa fiche.
+    if (WATTS_RADIATEURS_DEMO[id]) { out[id] = statsRadiateurDemo(id, msg); continue; }
     if (msg.period === '5minute') { const l = statsMesureDemo(id, msg); if (l) out[id] = l; continue; }
     /* Ce que l'entite MESURE se lit sur son nom : la demo se donne ici le droit
      * de connaitre ses propres capteurs, comme partout ailleurs dans ce
@@ -1331,7 +1464,9 @@ export function historiqueDemo(chemin, states) {
   for (let i = 0; i <= 48; i++) {
     const t = t0 + pas * i;
     let v;
-    if (cumul) { acc += cur * parts[i] / somme; v = acc; }
+    // L'index de la borne (chantier G3, E3) : 6,4 kWh pris depuis le branchement, pas 1 520 kWh depuis minuit.
+    if (cumul && id === 'sensor.borne_energie') v = cur - 6.4 * (1 - i / 48);
+    else if (cumul) { acc += cur * parts[i] / somme; v = acc; }
     else {
       const heure = new Date(t).getHours() + new Date(t).getMinutes() / 60;
       const jour = Math.max(0, Math.sin((heure - 6) / 12 * Math.PI));
@@ -1353,13 +1488,15 @@ export function historiqueDemo(chemin, states) {
 }
 
 /* Prévisions factices, au format du service `weather.get_forecasts` : une
- * journée qui se réchauffe puis retombe, et une semaine qui alterne. */
-function previsionsDemo(type) {
+ * journée qui se réchauffe puis retombe, et une semaine qui alterne. Chaque
+ * heure porte son indice UV (chantier G4, A2) : 6 vers midi, 3 dès 9 h et
+ * jusqu'à 17 h, 0 la nuit. `maintenant` : l'horloge, pour les tests. */
+export function previsionsDemo(type, maintenant = Date.now()) {
   const CONDS = ['partlycloudy', 'sunny', 'cloudy', 'rainy', 'partlycloudy', 'sunny', 'cloudy'];
   const out = [];
   if (type === 'daily') {
     for (let i = 0; i < 7; i++) {
-      const d = new Date(); d.setDate(d.getDate() + i); d.setHours(12, 0, 0, 0);
+      const d = new Date(maintenant); d.setDate(d.getDate() + i); d.setHours(12, 0, 0, 0);
       out.push({ datetime: d.toISOString(), condition: CONDS[i % CONDS.length],
         temperature: 26 - Math.round(Math.abs(Math.sin(i)) * 7), templow: 13 + Math.round(Math.cos(i) * 3),
         precipitation: i === 3 ? 4.2 : 0, precipitation_probability: i === 3 ? 70 : 10 });
@@ -1367,11 +1504,12 @@ function previsionsDemo(type) {
     return out;
   }
   for (let i = 1; i <= 12; i++) {
-    const d = new Date(Date.now() + i * 3600000);
+    const d = new Date(maintenant + i * 3600000);
     const h = d.getHours();
     out.push({ datetime: d.toISOString(), condition: h >= 20 || h <= 6 ? 'clear-night' : CONDS[i % CONDS.length],
       temperature: Math.round(19.5 + 6.5 * Math.sin((h - 10) / 24 * 2 * Math.PI)),
-      precipitation: 0, precipitation_probability: 5 * (i % 4) });
+      precipitation: 0, precipitation_probability: 5 * (i % 4),
+      uv_index: h >= 8 && h <= 18 ? Math.round(6 * Math.sin((h - 7) / 12 * Math.PI)) : 0 });
   }
   return out;
 }
@@ -2047,11 +2185,13 @@ export function maisonPrisesDemo({ quand = null } = {}) {
  * session ; il applique la luminosité, le blanc et la couleur
  * (`gesteLumiereDemo`), et son minuteur éteint aussi les lumières.
  * `maisonLumieresDemo` l'expose à tests/demo_lumieres.test.mjs, son horloge réglée. */
-const LUMIERES_DEMO = ['light.bureau', 'light.ampoule_chambre', 'light.chambre', 'light.veilleuse_chambre_lino', 'light.cuisine', 'switch.applique_exterieur'];
+const LUMIERES_DEMO = ['light.bureau', 'light.ampoule_chambre', 'light.chambre', 'light.veilleuse_chambre_lino', 'light.cuisine', 'switch.applique_exterieur', 'light.ruban_chambre'];
 /* Une lumière de la démo, celles du salon, de l'entrée et de la salle de bain comprises. */
 const lampeDemo = (id) => String(id).indexOf('light.') === 0 || LUMIERES_DEMO.includes(id);
 /* Leur pièce : les trois plafonniers sont déjà dans la leur ; l'applique, faute de jardin, à l'entrée. */
-const PIECES_LUMIERES_DEMO = { 'light.ampoule_chambre': 'chambre', 'light.veilleuse_chambre_lino': 'chambre', 'switch.applique_exterieur': 'entree' };
+/* La chambre porte le cas de la bibliothèque des ambiances sans script (ADR 0304) : une lampe à blanc réglable (l'ampoule), un
+ * variateur (le plafonnier), une lampe COULEUR (le ruban, en `hs`, qui sait fondre) — et la veilleuse, que l'ambiance épargne. */
+const PIECES_LUMIERES_DEMO = { 'light.ampoule_chambre': 'chambre', 'light.veilleuse_chambre_lino': 'chambre', 'switch.applique_exterieur': 'entree', 'light.ruban_chambre': 'chambre' };
 /* Ce que chaque lampe sait faire : ses modes, les bornes de son blanc, et la couleur qu'elle a allumée. */
 const LAMPES_DEMO = {
   'light.bureau': { modes: ['brightness'], allumee: { color_mode: 'brightness' } },
@@ -2060,11 +2200,13 @@ const LAMPES_DEMO = {
   'light.veilleuse_chambre_lino': { modes: ['color_temp', 'xy'], min: 2000, max: 6535, allumee: { color_mode: 'xy', hs_color: [275, 100], rgb_color: [149, 0, 255] } },
   'light.cuisine': { modes: ['brightness'], allumee: { color_mode: 'brightness' } },
   'switch.applique_exterieur': { modes: null, allumee: {} },
+  'light.ruban_chambre': { modes: ['hs'], features: 32, allumee: { color_mode: 'hs', hs_color: [330, 70], rgb_color: [255, 77, 166] } },
 };
 const nomLampeDemo = (id) => ({
   'light.bureau': etiquette('Plafonnier') + ' ' + lieu('Bureau'), 'light.ampoule_chambre': etiquette('Ampoule') + ' ' + lieu('Chambre'),
   'light.chambre': etiquette('Plafonnier') + ' ' + lieu('Chambre'), 'light.veilleuse_chambre_lino': etiquette('Veilleuse') + ' ' + lieu('Chambre') + ' Lino',
   'light.cuisine': etiquette('Plafonnier') + ' ' + lieu('Cuisine'), 'switch.applique_exterieur': etiquette('Applique Extérieur'),
+  'light.ruban_chambre': etiquette('Ruban LED') + ' ' + lieu('Chambre'),
 })[id];
 /* La journée de chaque lampe, celle de sa maquette : [heure, état, luminosité, qui, automatisation]. `qui` :
  * `inter`, l'interrupteur mural (aucun contexte) ; `loggia`, le compte de la démo ; `auto`, une automatisation. */
@@ -2078,6 +2220,8 @@ const JOURNEES_LUMIERES = {
     ['20:30', 'on', 15, 'auto', 'Coucher de Lino']],
   'light.cuisine': [['07:15', 'on', 100, 'inter'], ['08:20', 'off', null, 'inter'], ['19:05', 'on', 100, 'inter'], ['20:20', 'off', null, 'inter']],
   'switch.applique_exterieur': [['20:24', 'on', null, 'auto', 'Coucher du soleil']],
+  // Le ruban ne s'est pas allumé aujourd'hui : une ambiance des Scènes le montre en couleur.
+  'light.ruban_chambre': [],
 };
 // Le minuteur de l'ampoule : posé depuis Loggia quelques secondes après l'avoir allumée, pour une heure.
 const MINUTEUR_LUMIERE_DEMO = { id: 'light.ampoule_chambre', heure: [20, 10], minutes: 60 };
@@ -2128,7 +2272,8 @@ const ETEINTE_DEMO = { brightness: null, color_mode: null, color_temp_kelvin: nu
 const allumeeDemo = (bri, r) => ({ brightness: bri == null ? null : Math.round(bri * 255 / 100), color_temp_kelvin: null, hs_color: null, rgb_color: null, ...r });
 const capacitesDemo = (id) => {
   const l = LAMPES_DEMO[id];
-  return !l || !l.modes ? {} : { supported_color_modes: l.modes, ...(l.min ? { min_color_temp_kelvin: l.min, max_color_temp_kelvin: l.max } : {}) };
+  return !l || !l.modes ? {} : { supported_color_modes: l.modes, ...(l.min ? { min_color_temp_kelvin: l.min, max_color_temp_kelvin: l.max } : {}),
+    ...(l.features ? { supported_features: l.features } : {}) };
 };
 
 /** Les états des six lampes, à l'horloge des lumières : la dernière ligne de leur journée, `last_changed` compris. */
@@ -2360,6 +2505,8 @@ export function maisonLumieresDemo({ quand = null } = {}) {
     regles: () => reglesDemo(states).journal,
     // Les scénarios de la maison, tels que `loggia/scenarios/etat` les rend : leur résumé compte les cibles (`scnCibles`).
     scenarios: () => scenariosDemo(states).scenarios,
+    // L'état entier, `lampes` compris (ce que la fiche des scénarios lit pour ses puces de fondu et de blanc, ADR 0304).
+    etatScenarios: () => scenariosDemo(states),
     // Les cibles d'une action de scénario (`scnCibles`), et le lancement d'un scénario, comme `loggia/scenarios/lancer`.
     cibles: (a) => scnCibles(a, states, null),
     lancerScenario: (id) => scenariosLancer(id, states),
@@ -2518,7 +2665,11 @@ const PIECES_MESURES_DEMO = { 'sensor.chambre_lino_co2': 'chambre', 'sensor.salo
   // Le jardin : une zone de Home Assistant, et une pièce du dehors de la configuration (C17, 16/10).
   'sensor.jardin_temperature': 'jardin', 'sensor.jardin_humidite': 'jardin', 'sensor.jardin_vent': 'jardin', 'sensor.qualite_air_exterieur': 'jardin',
   // Les cas de l'audit du 19/10 (point 15) : le monoxyde de la cuisine, les particules muettes du bureau.
-  'sensor.cuisine_monoxyde': 'cuisine', 'sensor.bureau_particules': 'bureau' };
+  'sensor.cuisine_monoxyde': 'cuisine', 'sensor.bureau_particules': 'bureau',
+  // Le NO₂ de la cuisine (chantier G4, A5) : 14 µg/m³, « Bon », sur les zones de l'UE 2030 et de l'OMS 2021.
+  'sensor.cuisine_no2': 'cuisine',
+  // G1-D6 (30/10) : le monoxyde en µg/m³ du bureau.
+  'sensor.bureau_monoxyde': 'bureau' };
 /* Les appareils des mesures : le thermomètre du salon, la station du jardin, et — passe 1 ter, 16/10 (C16 : une carte de
  * mesure demande un appareil PHYSIQUE) — le capteur de chaque pièce, comme ses capteurs Netatmo et MQTT : la température,
  * l'humidité et le CO₂ ; le CO₂ de Lino a le sien. Sans eux, les mesures des pièces quittaient Objets › Capteurs. Une pièce
@@ -2541,7 +2692,11 @@ const APPAREILS_MESURES_DEMO = {
   station_jardin: ['jardin', 'Station météo', 'Station météo', ['sensor.jardin_temperature', 'sensor.jardin_humidite', 'sensor.jardin_vent', 'sensor.qualite_air_exterieur']],
   // Un monoxyde en ppm (H10) : 2 ppm, « Bon » ; et un capteur de particules MUET, au bureau — une mesure indisponible dans Air.
   capteur_co_cuisine: ['cuisine', 'Capteur CO cuisine', 'Capteur de monoxyde', ['sensor.cuisine_monoxyde']],
+  // Un NO₂ en µg/m³ (chantier G4, A5) : sa jauge, 20 et 50 ; 14, « Bon ».
+  capteur_no2_cuisine: ['cuisine', 'Capteur NO₂ cuisine', 'Capteur de dioxyde d’azote', ['sensor.cuisine_no2']],
   capteur_air_bureau: ['bureau', 'Capteur d’air bureau', 'Capteur', ['sensor.bureau_particules']],
+  // Un monoxyde en µg/m³ (G1-D6), sur son appareil : jugé en ppm, écrit dans son unité.
+  capteur_co_bureau: ['bureau', 'Capteur CO bureau', 'Capteur de monoxyde', ['sensor.bureau_monoxyde']],
   // Le frigo (C17, 16/10) : un appareil SANS zone, comme son « Capteur Frigo » — sa carte entre dans Capteurs, neutre.
   capteur_frigo: [null, 'Capteur Frigo', 'Capteur', ['sensor.capteur_frigo_temperature']],
 };
@@ -2592,7 +2747,11 @@ function etatsMesuresDemo(states) {
     'sensor.jardin_vent': s(9, { friendly_name: lieu('Jardin') + ' ' + etiquette('vent'), unit_of_measurement: 'km/h', device_class: 'wind_speed', state_class: 'measurement' }),
     // Le monoxyde de la cuisine (audit du 19/10, H10) : 2 ppm, « Bon » ; et les particules du bureau, muettes — « Indisponible » dans Air.
     'sensor.cuisine_monoxyde': s(2, { friendly_name: lieu('Cuisine') + ' ' + etiquette('monoxyde'), unit_of_measurement: 'ppm', device_class: 'carbon_monoxide', state_class: 'measurement' }),
+    // Un monoxyde en µg/m³ (G1-D6) : jugé en ppm (0,28 ppm, « Bon »), écrit dans son unité, les repères de sa barre aussi.
+    'sensor.bureau_monoxyde': s(320, { friendly_name: lieu('Bureau') + ' ' + etiquette('monoxyde'), unit_of_measurement: 'µg/m³', device_class: 'carbon_monoxide', state_class: 'measurement' }),
     'sensor.bureau_particules': s('unavailable', { friendly_name: lieu('Bureau') + ' ' + etiquette('particules'), unit_of_measurement: 'µg/m³', device_class: 'pm25' }),
+    // Le NO₂ de la cuisine (chantier G4, A5) : 14 µg/m³, « Bon » — sous la valeur limite annuelle de l'UE pour 2030.
+    'sensor.cuisine_no2': s(14, { friendly_name: lieu('Cuisine') + ' ' + etiquette('dioxyde d’azote'), unit_of_measurement: 'µg/m³', device_class: 'nitrogen_dioxide', state_class: 'measurement' }),
     // Le frigo (C17, 16/10) : sans zone, sa carte est neutre — le chiffre, la courbe, le dernier signal.
     'sensor.capteur_frigo_temperature': s(4.2, { friendly_name: etiquette('Capteur Frigo'), unit_of_measurement: '°C', device_class: 'temperature', state_class: 'measurement' }),
   };
@@ -2663,6 +2822,8 @@ const metaCapteurDemo = (id) => { const d = appareilCapteurDemo(id); return d ? 
 const SANS_APPAREIL_DEMO = { 'binary_sensor.basilic_besoin_eau': 'template', 'binary_sensor.meteoalarm': 'meteoalarm', 'sensor.paris_weather_alert': 'meteo_france',
   // Un planning de scheduler-component (26/10) : sa plateforme, `scheduler`, est ce qui le reconnaît.
   'switch.schedule_radiateur_bureau': 'scheduler' };
+// Atmo France (chantier G4, ADR 0303) : les entités de son SERVICE, sans pièce — sa plateforme, `atmofrance`, dit l'échelle.
+const ATMO_DEMO = ['sensor.qualite_globale_paris', 'sensor.qualite_globale_paris_j_1', 'sensor.qualite_globale_pollen_paris', 'sensor.niveau_gramine_paris', 'sensor.niveau_ambroisie_paris'];
 // Les binaires dont la démo tient l'histoire du jour : ceux de ces appareils, et le mouvement de la caméra.
 const CAPTEURS_DEMO = new Set([...Object.keys(APPAREILS_CAPTEURS_DEMO).flatMap(d => APPAREILS_CAPTEURS_DEMO[d][3]).filter(id => id.indexOf('binary_sensor.') === 0), 'binary_sensor.camera_entree_mouvement']);
 
@@ -3108,15 +3269,22 @@ function enfantPatch(patch) {
 // Une ligne du journal de la maison, avec les mots du serveur (`enfant.py`) : la règle, ce qui est fait, les cibles, le motif en parties.
 const noterEnfantDemo = (regle, quoi, cibles, motif = '', detail = '') => ENFANT_JOURNAL.push(ligneJournal({ module: 'enfant', regle, quoi, cibles, n: cibles.length, motif, detail, simule: false, ts: horlogeMedias() / 1000 }));
 /* Le code de la maison (ADR 0045) : vérifié « par le serveur », les essais comptés ; un code juste vaut laissez-passer cinq minutes
- * (ADR 0080) — c'est lui qui ouvre les réglages du mode enfant à un compte ordinaire (E2 B). */
-function repondrePinDemo(msg) {
+ * (ADR 0080) — c'est lui qui ouvre les réglages du mode enfant à un compte ordinaire (E2 B). Jamais défini, AUCUN code n'ouvre
+ * rien et le refus se nomme (audit du 28/10, ADR 0279) ; un code redéfini referme les laissez-passer et oublie les ratés.
+ * `ecrireCfg(cle, valeur)` : où la configuration commune apprend qu'un code existe, et sa longueur. */
+function repondrePinDemo(msg, { ecrireCfg = null } = {}) {
   if (!msg) return null;
   if (msg.type === 'loggia/pin/verifier') {
+    if (PIN_DEMO.code == null) return Promise.reject(refusDemo('code_non_defini', "aucun code administrateur n'est defini : un administrateur de Home Assistant doit le creer"));
     if (String(msg.pin) === PIN_DEMO.code) { PIN_DEMO.rates = 0; PIN_DEMO.passe = horlogeMedias() + 300000; return Promise.resolve({ ok: true }); }
     PIN_DEMO.rates += 1;
     return Promise.resolve({ ok: false, bloque: PIN_DEMO.rates >= 5 ? 60 : 0 });
   }
-  if (msg.type === 'loggia/pin/definir') { PIN_DEMO.code = String(msg.pin); return Promise.resolve({ defini: true }); }
+  if (msg.type === 'loggia/pin/definir') {
+    PIN_DEMO.code = String(msg.pin); PIN_DEMO.rates = 0; PIN_DEMO.passe = 0;
+    if (ecrireCfg) { ecrireCfg('loggia_admin_pin_defini', true); ecrireCfg('loggia_admin_pin_longueur', PIN_DEMO.code.length); }
+    return Promise.resolve({ defini: true });
+  }
   return null;
 }
 /* Les six commandes du mode enfant, la forme exacte du serveur et ses refus. `ordinaire` : le compte n'est pas administrateur ;
@@ -3213,6 +3381,7 @@ function remettreEnfantDemo() {
   ENFANT_CFG = ENFANT_CFG_DEFAUT();
   ENFANT_ETAT = ENFANT_ETAT_DEFAUT();
   ENFANT_JOURNAL.length = 0;
+  PIN_DEMO.code = null;
   PIN_DEMO.rates = 0;
   PIN_DEMO.passe = 0;
 }
@@ -3266,8 +3435,10 @@ function indexDemo(states) {
     entree: ['light.entree', 'sensor.entree_temperature', 'binary_sensor.porte_entree', 'binary_sensor.detecteur_fumee_entree', 'binary_sensor.mouvement_entree', 'lock.porte_entree', 'siren.interieure',
              'camera.entree', 'switch.camera_entree_detection_mouvement', 'switch.camera_entree_suivi', 'switch.camera_entree_pleurs',
              'switch.camera_entree_prive', 'switch.camera_entree_voyant', 'binary_sensor.camera_entree_mouvement', 'binary_sensor.camera_entree_personne',
-             'cover.volet_entree', 'cover.porte_garage', 'cover.portail'],
-    sdb: ['light.sdb', 'sensor.sdb_temperature', 'cover.volet_sdb'],
+             'cover.volet_entree', 'cover.porte_garage', 'cover.portail',
+             // La borne de recharge (chantier G3, E3) : un appareil devant le garage.
+             'sensor.borne_recharge', 'sensor.borne_energie', 'number.borne_courant_max', 'binary_sensor.borne_branchee', 'sensor.borne_statut', 'switch.borne_charge'],
+    sdb: ['light.sdb', 'sensor.sdb_temperature', 'cover.volet_sdb', 'water_heater.ballon'],
     jardin: [],
     technique: [],
   };
@@ -3275,7 +3446,8 @@ function indexDemo(states) {
   // que la fiche retrouve les interrupteurs d'une camera. Un module fil pilote
   // aussi : son `select`, son interrupteur et sa puissance (planning de chauffe).
   const APPAREIL_DE = (id) => appareilChauffageDemo(id) || appareilPriseDemo(id) || appareilMesureDemo(id) || appareilCapteurDemo(id) || appareilMediaDemo(id) || (
-    /^(media_player|remote)\.tv_salon$/.test(id) ? 'tv_salon'
+    /^(sensor\.borne_|number\.borne_|binary_sensor\.borne_|switch\.borne_)/.test(id) ? 'borne'
+    : /^(media_player|remote)\.tv_salon$/.test(id) ? 'tv_salon'
     : /^(camera\.entree$|switch\.camera_entree_|binary_sensor\.camera_entree_)/.test(id) ? 'cam_entree' : null);
   // Les prises de la démo, leurs capteurs et la sirène de l'alarme : chacune dans sa pièce (chantier Prises, § 10).
   PRISES_DEMO.forEach(id => ZONE_DE[PIECES_PRISES_DEMO[id]].push(id, capteursPriseDemo(id).power, capteursPriseDemo(id).energy));
@@ -3308,10 +3480,21 @@ function indexDemo(states) {
     const at = states[id].attributes || {};
     entities.push({ id, name: at.friendly_name || id, device: d, area: null, ...metaCapteurDemo(id), ...metaMediaDemo(id), device_class: at.device_class || null, unit: at.unit_of_measurement || null, hidden: false });
   }));
+  /* Tempo (chantier G3, E4) : sans appareil, comme `rtetempo` ; le rôle que le composant pose dans l'index (`tarifs.py`) — la couleur
+   * du lendemain se reconnaît à sa forme et à son identifiant stable, que l'écran ne voit jamais. */
+  [['sensor.rte_tempo_couleur_actuelle', 'couleur'], ['sensor.rte_tempo_prochaine_couleur', 'couleur_demain']].forEach(([id, tarif]) => {
+    if (!states[id]) return;
+    entities.push({ id, name: states[id].attributes.friendly_name, device: null, area: null, platform: 'rtetempo', category: null, device_class: 'enum', unit: null, hidden: false, tarif });
+  });
   Object.keys(SANS_APPAREIL_DEMO).forEach(id => {
     if (!states[id]) return;
     const at = states[id].attributes || {};
     entities.push({ id, name: at.friendly_name || id, device: null, area: null, platform: SANS_APPAREIL_DEMO[id], category: null, device_class: at.device_class || null, unit: at.unit_of_measurement || null, hidden: false });
+  });
+  ATMO_DEMO.forEach(id => {
+    if (!states[id]) return;
+    const at = states[id].attributes || {};
+    entities.push({ id, name: at.friendly_name || id, device: 'atmo_paris', area: null, platform: 'atmofrance', category: null, device_class: at.device_class || null, unit: null, hidden: false });
   });
   Object.keys(ZONE_DE).forEach(zone => {
     ZONE_DE[zone].forEach(id => {
@@ -3412,6 +3595,7 @@ function indexDemo(states) {
         ...(APPAREILS_MEDIAS_DEMO[id][5] ? { empreintes: APPAREILS_MEDIAS_DEMO[id][5] } : {}) })),
       { id: 'cam_entree', name: etiquette('Caméra entrée'), area: 'entree', manufacturer: 'Démo', model: etiquette('Caméra'), firmware: null, via: null, entry_type: null, integration: 'demo' },
       { id: 'sysmon', name: 'System Monitor', area: null, manufacturer: 'Démo', model: 'System Monitor', firmware: null, via: null, entry_type: 'service', integration: 'systemmonitor' },
+      { id: 'atmo_paris', name: 'Atmo France', area: null, manufacturer: 'Atmo France', model: 'Atmo France API', firmware: null, via: null, entry_type: 'service', integration: 'atmofrance' },
       { id: 'robot_aspirateur', name: etiquette('Aspirateur'), area: null, manufacturer: 'Démo', model: 'Orbit V3', firmware: null, via: null, entry_type: null, integration: 'ecovacs' },
       { id: 'robot_tondeuse', name: etiquette('Tondeuse'), area: null, manufacturer: 'Démo', model: 'Meadow M2', firmware: null, via: null, entry_type: null, integration: 'mammotion' },
       // Les appareils du planning de chauffe : deux modules fil pilote, le poêle du salon.
@@ -3423,6 +3607,8 @@ function indexDemo(states) {
       ...PRISES_DEMO.map(id => ({ id: appareilPriseDemo(id), name: etiquette(NOMS_PRISES_DEMO[id]), area: PIECES_PRISES_DEMO[id], manufacturer: 'Démo', model: etiquette('Prise connectée'),
         firmware: null, via: 'pont_z2m', entry_type: null, integration: 'mqtt' })),
       { id: 'alarme_sirene', name: etiquette('Alarme sirène'), area: 'entree', manufacturer: 'Démo', model: etiquette('Sirène'), firmware: null, via: 'pont_z2m', entry_type: null, integration: 'mqtt' },
+      // La borne de recharge (chantier G3, E3).
+      { id: 'borne', name: etiquette('Borne de recharge'), area: 'entree', manufacturer: 'Démo', model: etiquette('Borne de recharge'), firmware: null, via: null, entry_type: null, integration: 'demo' },
       /* Les appareils des mesures (chantier Capteurs, § 9 ; C14, C16) : chacun PHYSIQUE, dans sa pièce — le thermomètre du salon, sa
        * température, son hygromètre et sa pile ; le capteur de chaque pièce ; la station du jardin, dans sa pièce du dehors (C17). */
       ...Object.keys(APPAREILS_MESURES_DEMO).map(id => ({ id, name: etiquette(APPAREILS_MESURES_DEMO[id][1]), area: APPAREILS_MESURES_DEMO[id][0], manufacturer: 'Démo',
@@ -3537,6 +3723,8 @@ const VEI_CFG = {
   co2: { actif: true, seuil: 1400, capteurs: [], ventilation: [] },
   batterie: { actif: true, seuil: 15 },
   creuses: { actif: false, entite: '', valeur: '', prises: [] },
+  // Le rappel de collecte (chantier G2 ; ADR 0301) : allumé dans la démo, pour qu'on voie la carte et son heure.
+  collecte: { actif: true, heure: '19:00', source: '' },
   // « Observer sans agir » (audit du 19/10, H3) : le drapeau du vrai composant, que l'interrupteur des Règles pose avec les autres.
   simulation: { actif: false },
 };
@@ -3588,6 +3776,33 @@ export function reglesDemo(states) {
   };
 }
 
+/* Qui reçoit quoi (chantier G2 ; ADR 0301) : la forme de `loggia/notifications/destinataires`. Camille a
+ * l'application compagnon — son traceur porte le nom du téléphone — et administre la maison, comme le compte
+ * « Démo » ; les autres personnes n'ont pas de téléphone relié. Les corrections sont celles de `loggia_alertes`. */
+function destinatairesDemo(states, alertes) {
+  const corr = (alertes && alertes.personnes) || {};
+  const tel = (states['device_tracker.telephone_de_camille'] || {}).attributes || {};
+  const personnes = Object.keys(states).filter(id => id.indexOf('person.') === 0).sort().map((id) => {
+    const st = states[id];
+    const appareils = id === 'person.camille' ? [{ service: 'mobile_app_telephone_de_camille', nom: tel.friendly_name || 'Camille' }] : [];
+    const c = corr[id] || {};
+    // Les exclusions par public (relecture du 30/10) : la sûreté n'en a jamais.
+    const brut = c.exclus;
+    const liste = (l) => (Array.isArray(l) ? l.filter(x => typeof x === 'string') : []);
+    const exclus = Array.isArray(brut) ? { admins: liste(brut), presents: liste(brut) }
+      : { admins: liste((brut || {}).admins), presents: liste((brut || {}).presents) };
+    const service = typeof c.service === 'string' ? c.service : '';
+    const base = service ? [service] : appareils.map(a => a.service);
+    return { person: id, nom: (st.attributes || {}).friendly_name || id, present: st.state === 'home',
+      admin: id === 'person.camille' || id === 'person.demo', appareils, service, service_absent: false, exclus,
+      recoit: { tous: base, admins: base.filter(s => exclus.admins.indexOf(s) < 0), presents: base.filter(s => exclus.presents.indexOf(s) < 0) } };
+  });
+  const recoivent = (l, pub) => [...new Set(l.flatMap(p => p.recoit[pub]))];
+  const presents = personnes.filter(p => p.present && p.recoit.presents.length);
+  return { personnes, repli: (alertes && alertes.service) || '',
+    routes: { tous: recoivent(personnes, 'tous'), admins: recoivent(personnes.filter(p => p.admin), 'admins'), presents: recoivent(presents.length ? presents : personnes, 'presents') } };
+}
+
 function veillesDemo(states) {
   const classe = (c) => Object.keys(states)
     .filter(id => (id.startsWith('sensor.') || id.startsWith('binary_sensor.'))
@@ -3598,6 +3813,7 @@ function veillesDemo(states) {
     capteurs_batterie: classe('battery'),
     notification: true,
     signales: [],
+    collecte: { sorti: '', rappele: '' },
     // Le gabarit de veilles.py ; le capteur porte le nom de son état, traduit comme lui.
     journal: [ligneJournal({ module: 'veilles', regle: 'co2', quoi: 'prevenir', cibles: [], n: 1, motif: [['{v} ppm', { v: 1310 }]], detail: [['{nom} : {v} ppm, il faut aerer', { nom: lieu('Chambre') + ' CO2', v: 1310 }]], simule: false, ts: Date.now() / 1000 - 9000 })],
   };
@@ -3614,7 +3830,8 @@ function veillesPatch(patch) {
  * tondeuse de la démo a son capteur de pluie : c'est lui que l'onglet montre. */
 /* Le code administrateur de la demo : verifie « par le serveur », comme en vrai. */
 // `passe` (chantier Mode enfant, E2 B) : jusqu'à quand un code juste vaut laissez-passer — cinq minutes, pour les réglages du parent.
-const PIN_DEMO = { code: '0000', rates: 0, passe: 0 };
+// Jamais défini au départ, comme une maison neuve (ADR 0279) : le profil Admin propose de le créer.
+const PIN_DEMO = { code: null, rates: 0, passe: 0 };
 
 /* Paresseux, comme `SCN_CFG()` (audit du 03/10) : la zone de la tondeuse porte
  * le nom de son interrupteur, et la langue de la maison n'est connue qu'à
@@ -4753,15 +4970,18 @@ const FROID_CHA = ['cool', 'dry', 'fan_only'];
 function refroiditCha(famille, etat) {
   return (famille === 'thermostat' || famille === 'vtherm') && FROID_CHA.includes(String(etat));
 }
-function lireAppareilCha(famille, etat, attributs) {
+/* Le décalage du capteur d'un thermostat (`_decalage`, 30/10) : ce que le moteur ajoute à la consigne de la pièce. */
+const decalageCha = (c) => (c && c.famille === 'thermostat' && typeof c.decalage === 'number' ? c.decalage : 0);
+function lireAppareilCha(famille, etat, attributs, decalage = 0) {
   const s = String(etat == null ? '' : etat);
   if (muetCha(s)) return { mode: null, temperature: null, signature: null };
   if (famille === 'fil_pilote') return { mode: modeOptionCha(s), temperature: null, signature: [s] };
   const t = typeof (attributs || {}).temperature === 'number' ? attributs.temperature : null;
-  return { mode: s === 'off' ? 'arret' : null, temperature: s === 'off' || t === null ? null : Math.round(t * 10) / 10, signature: [s, t] };
+  // La température de la PIÈCE : celle de l'appareil, moins son décalage ; la signature garde ce qu'il publie.
+  return { mode: s === 'off' ? 'arret' : null, temperature: s === 'off' || t === null ? null : Math.round((t - decalage) * 10) / 10, signature: [s, t] };
 }
 /** L'appareil est-il DÉJÀ dans `cible` ? On ne commande que s'il diffère (`deja`). */
-function dejaCha(famille, cible, etat, attributs, temperatures) {
+function dejaCha(famille, cible, etat, attributs, temperatures, decalage = 0) {
   const s = String(etat == null ? '' : etat);
   const a = attributs || {};
   if (muetCha(s)) return false;
@@ -4772,7 +4992,7 @@ function dejaCha(famille, cible, etat, attributs, temperatures) {
   if (chauffe && s !== chauffe) return false;
   const t = typeof cible.temperature === 'number' ? cible.temperature : temperatureDuModeCha(cible.mode, temperatures);
   if (t === null || typeof a.temperature !== 'number') return false;
-  return Math.abs(a.temperature - consigneCha(t, a)) <= Math.max(pasCha(a), 0.1) / 2;
+  return Math.abs(a.temperature - consigneCha(t + decalage, a)) <= Math.max(pasCha(a), 0.1) / 2;
 }
 
 /* L'heure de la maison : [jour (0 = lundi), minute]. */
@@ -4852,7 +5072,9 @@ function configDepartCha() {
   const bureau = { ...chauffageDefautCha(MODULES_CHA[1].select, 'fil_pilote'), planning: true, semaine: semaineCha(SEMAINE_BUREAU_CHA, []) };
   const grenier = chauffageDefautCha(GRENIER_CHA, 'fil_pilote');
   return { version: 1, chauffages: { [chambre.entite]: chambre, [bureau.entite]: bureau, [grenier.entite]: grenier },
-    maison: { mode: 'planning', vacances_fin: null, absence: 'eco', vacances: 'hors_gel' }, simulation: { actif: false } };
+    maison: { mode: 'planning', vacances_fin: null, absence: 'eco', vacances: 'hors_gel' }, simulation: { actif: false },
+    // Le mode absence des chauffe-eau pendant les Vacances (chantier G3, E2 ; `eau_chaude.py`) : décoché par défaut.
+    eau_chaude: { absence: false } };
 }
 
 /* La mémoire du moteur : sa configuration, les reprises en main, son journal,
@@ -5076,6 +5298,7 @@ function motifCha(c, entite, voulu, quand, faits) {
 function evaluerCha(ctx, raison) {
   const quand = ctx.horloge();
   finDesVacancesCha(ctx, quand);
+  eauChaudeCha(ctx, quand);
   const { connus, index } = candidatsCha(ctx.states);
   const faits = fenetresCha(ctx.states, connus, index);
   Object.keys(CHA_.cfg.chauffages).forEach(cle => {
@@ -5084,6 +5307,29 @@ function evaluerCha(ctx, raison) {
     else delete CHA_.vus[cle];
   });
   puissancesCha(ctx, quand);
+}
+/* L'eau chaude des Vacances (`_eau_chaude`, eau_chaude.py) : l'option cochée et la maison en Vacances, chaque chauffe-eau qui sait le
+ * faire passe en mode absence, et le quitte douze heures avant la fin. La démo ne lève que ce qu'elle a posé ; en observation, rien. */
+function eauChaudeCha(ctx, quand) {
+  const maison = CHA_.cfg.maison;
+  const fin = lireInstantCha(maison.vacances_fin);
+  const voulu = !!(CHA_.cfg.eau_chaude && CHA_.cfg.eau_chaude.absence) && maison.mode === 'vacances' && (!fin || quand.getTime() < fin.getTime() - 12 * 3600000);
+  if (CHA_.cfg.simulation.actif) return;
+  CHA_.eauPoses = CHA_.eauPoses || [];
+  // Remis à la main pendant les Vacances (relecture du 30/10, point 5) : laissé tranquille jusqu'à leur fin.
+  CHA_.eauLaisses = voulu ? (CHA_.eauLaisses || []) : [];
+  // Un « off » n'est un geste qu'après avoir été VU en absence (contre-relecture du 30/10, `vus` d'eau_chaude.py).
+  CHA_.eauVus = voulu ? (CHA_.eauVus || []) : [];
+  Object.keys(ctx.states).filter(id => id.indexOf('water_heater.') === 0).sort().forEach((id) => {
+    const st = ctx.states[id];
+    const a = (st && st.attributes) || {};
+    if (!st || st.state === 'unavailable' || st.state === 'unknown' || !((Number(a.supported_features) || 0) & 4)) return;
+    if (voulu && CHA_.eauPoses.indexOf(id) >= 0 && a.away_mode === 'on' && CHA_.eauVus.indexOf(id) < 0) CHA_.eauVus.push(id);
+    if (voulu && a.away_mode === 'off' && CHA_.eauLaisses.indexOf(id) < 0) {
+      if (CHA_.eauPoses.indexOf(id) < 0) { ctx.ecrire(id, null, { away_mode: 'on' }); CHA_.eauPoses.push(id); }
+      else if (CHA_.eauVus.indexOf(id) >= 0) { CHA_.eauPoses = CHA_.eauPoses.filter(x => x !== id); CHA_.eauVus = CHA_.eauVus.filter(x => x !== id); CHA_.eauLaisses.push(id); }
+    } else if (!voulu && CHA_.eauPoses.indexOf(id) >= 0) { if (a.away_mode === 'on') ctx.ecrire(id, null, { away_mode: 'off' }); CHA_.eauPoses = CHA_.eauPoses.filter(x => x !== id); }
+  });
 }
 function finDesVacancesCha(ctx, quand) {
   const maison = CHA_.cfg.maison;
@@ -5113,9 +5359,12 @@ function evaluerUnCha(ctx, cle, c, quand, faits, raison) {
     CHA_.vus[cle] = JSON.stringify(lireAppareilCha(c.famille, st.state, st.attributes).signature);
     return;
   }
-  const lu = lireAppareilCha(c.famille, st.state, st.attributes);
+  const lu = lireAppareilCha(c.famille, st.state, st.attributes, decalageCha(c));
   const vu = JSON.stringify(lu.signature);
-  if (CHA_.vus[cle] != null && CHA_.vus[cle] !== vu) {
+  // Son propre programme allumé (le Timer du poêle, 30/10) : ce qu'il change n'est pas un geste, et rien ne part, sauf l'Arrêt.
+  const { connus, index } = candidatsCha(ctx.states);
+  const programme = programmeAllumeCha(ctx, index, connus.get(cle) || null);
+  if (CHA_.vus[cle] != null && CHA_.vus[cle] !== vu && !programme) {
     const fin = finParDefautCha(c, quand);
     CHA_.reprises[cle] = nouvelleRepriseCha(lu.mode, lu.temperature, fin, quand, (ctx.utilisateur || {}).id);
     noterCha(ctx, { regle: 'main', quoi: 'reprise en main', cibles: [entite], n: 0, motif: motifFinCha(fin), detail: 'geste fait ailleurs' });
@@ -5134,7 +5383,15 @@ function evaluerUnCha(ctx, cle, c, quand, faits, raison) {
     }
   }
   if (cible.mode == null && cible.temperature == null) return;
-  if (dejaCha(c.famille, cible, st.state, st.attributes, c.temperatures)) { delete CHA_.notes[cle]; return; }
+  if (programme && cible.mode !== 'arret') {
+    const note = JSON.stringify(['programme', programme]);
+    if (CHA_.notes[cle] !== note) {
+      CHA_.notes[cle] = note;
+      noterCha(ctx, { regle: voulu.source, quoi: 'retenu', cibles: [entite], n: 0, motif: motifCha(c, entite, voulu, quand, faits), detail: 'son programme commande' });
+    }
+    return;
+  }
+  if (dejaCha(c.famille, cible, st.state, st.attributes, c.temperatures, decalageCha(c))) { delete CHA_.notes[cle]; return; }
   const quoi = possedeCha(MOTS_CHA, cible.mode) ? MOTS_CHA[cible.mode] : [['{t} °C', { t: nombreCha(cible.temperature) }]];
   const motif = voulu.source === 'main' ? motifFinCha(lireInstantCha((r || {}).fin)) : motifCha(c, entite, voulu, quand, faits);
   const detail = raison === 'redemarrage' ? 'rattrapage au redémarrage' : '';
@@ -5147,7 +5404,7 @@ function evaluerUnCha(ctx, cle, c, quand, faits, raison) {
     }
     return;
   }
-  appliquerCha(ctx, c.famille, entite, cible, st, c.temperatures);
+  appliquerCha(ctx, c.famille, entite, cible, st, c.temperatures, decalageCha(c));
   st = ctx.states[entite];
   CHA_.vus[cle] = JSON.stringify(lireAppareilCha(c.famille, st.state, st.attributes).signature);
   delete CHA_.notes[cle];
@@ -5156,7 +5413,7 @@ function evaluerUnCha(ctx, cle, c, quand, faits, raison) {
 /* L'ordre, dans l'état de l'appareil (`commande`) : l'option du module, telle
  * qu'il l'écrit ; pour un thermostat, le mode qui chauffe et la consigne du
  * mode — ou l'arrêt. */
-function appliquerCha(ctx, famille, entite, cible, st, temperatures) {
+function appliquerCha(ctx, famille, entite, cible, st, temperatures, decalage = 0) {
   const a = st.attributes || {};
   if (famille === 'fil_pilote') {
     const options = optionsDuModuleCha(a.options);
@@ -5166,7 +5423,7 @@ function appliquerCha(ctx, famille, entite, cible, st, temperatures) {
   if (cible.mode === 'arret') { ctx.ecrire(entite, 'off', { hvac_action: 'off' }); return; }
   const t = typeof cible.temperature === 'number' ? cible.temperature : temperatureDuModeCha(cible.mode, temperatures);
   if (t === null) return;
-  const consigne = consigneCha(t, a);
+  const consigne = consigneCha(t + decalage, a);
   const piece = typeof a.current_temperature === 'number' ? a.current_temperature : null;
   ctx.ecrire(entite, modeChauffeCha(a) || st.state, { temperature: consigne, hvac_action: piece !== null && piece >= consigne ? 'idle' : 'heating' });
 }
@@ -5198,6 +5455,8 @@ function etatCha(ctx) {
   return copieCha({
     chauffages: cles.map(cle => etatUnCha(ctx, cle, chauffageCha(cle), connus.get(cle) || null, quand, faits, index, suivis)),
     maison: CHA_.cfg.maison, simulation: !!CHA_.cfg.simulation.actif,
+    // L'option de l'eau chaude des Vacances (chantier G3, E2) : la popup du chauffe-eau la lit.
+    eau_chaude: { absence: !!(CHA_.cfg.eau_chaude && CHA_.cfg.eau_chaude.absence) },
     // La règle des fenêtres de la démo en « Observer sans agir » : son drapeau, que l'interrupteur des Règles pose.
     fenetres_observe: !!FEN_CFG().simulation,
     maintenant: isoCha(quand), minute: muraleCha(quand),
@@ -5258,6 +5517,8 @@ function etatUnCha(ctx, cle, c, info, quand, faits, index, suivis = null) {
     semaine: c ? c.semaine : null, temperatures: c ? c.temperatures : null, avertissements,
     // Le `switch` du programme de l'appareil, allumé, et les programmes d'ailleurs qui le commandent : la fiche les nomme.
     programme, concurrents,
+    // Le décalage de son capteur (°C, 30/10) : l'écran montre et règle la consigne de la pièce.
+    decalage: decalageCha(c),
     options: famille === 'fil_pilote' && entite ? optionsDuModuleCha(attrs.options) : null, jour: null,
   };
   if (!c) return sortie;
@@ -5402,7 +5663,7 @@ function configCha(msg, ctx) {
 }
 /** Le patch, posé sur `cfg` — ou un refus qui NOMME la clé (`poser_patch`). */
 function poserPatchCha(cfg, patch, connus) {
-  const inconnues = Object.keys(patch).filter(k => !['chauffages', 'maison', 'simulation'].includes(k)).sort();
+  const inconnues = Object.keys(patch).filter(k => !['chauffages', 'maison', 'simulation', 'eau_chaude'].includes(k)).sort();
   if (inconnues.length) throw invalideCha('cle inconnue : ' + inconnues.join(', '));
   const chauffages = 'chauffages' in patch ? patch.chauffages : {};
   if (!estObjetCha(chauffages)) throw invalideCha('chauffages : un objet par chauffage');
@@ -5427,11 +5688,16 @@ function poserPatchCha(cfg, patch, connus) {
     if (!estObjetCha(patch.simulation) || typeof patch.simulation.actif !== 'boolean') throw invalideCha('simulation : {actif: vrai ou faux}');
     cfg.simulation = { actif: patch.simulation.actif };
   }
+  if ('eau_chaude' in patch) {
+    const e = patch.eau_chaude;
+    if (!estObjetCha(e) || Object.keys(e).join(',') !== 'absence' || typeof e.absence !== 'boolean') throw invalideCha('eau_chaude : {absence: vrai ou faux}');
+    cfg.eau_chaude = { absence: e.absence };
+  }
 }
-/** Un chauffage modifié : `planning`, `semaine`, `temperatures`, `fenetre` (`valider_chauffage`). */
+/** Un chauffage modifié : `planning`, `semaine`, `temperatures`, `fenetre`, `decalage` (`valider_chauffage`). */
 function validerChauffageCha(brut, actuel, permis) {
   if (!estObjetCha(brut)) throw invalideCha('chauffage : un objet');
-  const inconnues = Object.keys(brut).filter(k => !['planning', 'semaine', 'temperatures', 'fenetre'].includes(k)).sort();
+  const inconnues = Object.keys(brut).filter(k => !['planning', 'semaine', 'temperatures', 'fenetre', 'decalage'].includes(k)).sort();
   if (inconnues.length) throw invalideCha('champ inconnu : ' + inconnues.join(', '));
   const neuf = copieCha(actuel);
   if ('planning' in brut) {
@@ -5444,6 +5710,15 @@ function validerChauffageCha(brut, actuel, permis) {
     if (!['arret', 'eco', 'rien'].includes(brut.fenetre)) throw invalideCha('fenetre : arret, eco ou rien');
     if (brut.fenetre === 'eco' && permis && !permis.includes('eco')) throw refusDemo('chauffage_mode_inconnu', 'mode eco inconnu de ce chauffage : fenetre');
     neuf.fenetre = brut.fenetre;
+  }
+  if ('decalage' in brut) {
+    // Un thermostat seulement, de −5 à +5 °C au demi-degré ; 0 le retire (30/10).
+    const v = brut.decalage;
+    if (neuf.famille !== 'thermostat') throw invalideCha('decalage : un thermostat seulement');
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < -5 || v > 5) throw refusDemo('chauffage_decalage_hors_bornes', ['decalage hors bornes (-5 a +5 °C)', 'decalage'].join(' : '));
+    const r = Math.round(v * 2) / 2 || 0;
+    if (r) neuf.decalage = r;
+    else delete neuf.decalage;
   }
   return neuf;
 }
@@ -5939,6 +6214,10 @@ let numeroMessageDemo = 0;
  * trois secondes : « Ouverture… », puis l'état ; un appareil muet reste muet. */
 const VARIANTES_EAU = ['fuite', 'mouillee', 'fermee', 'plusieurs', 'prise', 'gaz', 'muet'];
 let VARIANTE_EAU = null;
+/* `tarif=dynamique` (chantier G3, D4 et E5) : une seule connexion, un prix spot qui varie et sa prévision — « Prix du moment » et
+ * « Le moins cher : 13:00–15:00 ». */
+const VARIANTES_TARIF = ['dynamique'];
+let VARIANTE_TARIF = null;
 const PRISE_EAU_DEMO = 'switch.prise_arrivee_eau';
 let CARNET_EAU = { vannes: {}, detecteurs: {}, journal: [] };
 const sensEauDemo = (id, etat) => (id.indexOf('switch.') === 0 ? (etat === 'off' ? 'fermee' : etat === 'on' ? 'ouverte' : null)
@@ -6018,6 +6297,20 @@ export function maisonDeLEauDemo({ variante = null, quand = null } = {}) {
   return { states, index: () => indexDemo(states), cfg: () => configDemo().loggia_alertes, etat: (cfg = configDemo().loggia_alertes, a = t) => eauEtatDemo(states, cfg, a) };
 }
 
+/* Les versions précédentes de la configuration (ADR 0285) : trois copies
+ * inventées, comme `loggia/versions/liste` les rend — la date en UTC, le compte,
+ * la taille, jamais le contenu. La plus récente il y a deux heures, une avant
+ * un retour en arrière la veille, une sans compte (un module du serveur) il y
+ * a trois jours. */
+export function versionsDemo(maintenant = Date.now()) {
+  const ilYA = (h) => new Date(maintenant - h * 3600000).toISOString().replace(/\.\d{3}Z$/, '+00:00');
+  return { versions: [
+    { id: 'demo-v3', date: ilYA(2), compte: 'Démo', taille: 71240, motif: 'ecriture' },
+    { id: 'demo-v2', date: ilYA(26), compte: 'Démo', taille: 70815, motif: 'retour' },
+    { id: 'demo-v1', date: ilYA(74), compte: null, taille: 69902, motif: 'ecriture' },
+  ] };
+}
+
 export function installerDemo(langue) {
   /* La langue de la maison factice. Elle est lue par l'appelant AVANT que le
    * magasin memoire ne remplace `localStorage` : le `?lang=` de l'URL n'y est
@@ -6040,6 +6333,7 @@ export function installerDemo(langue) {
     if (VARIANTES_ROBOTS.indexOf(q.get('robots')) >= 0) VARIANTE_ROBOTS = q.get('robots');
     // `eau=fuite|mouillee|fermee|plusieurs|prise|gaz|muet` (chantier IoT, étape 3 ; § 10) : l'arrivée d'eau, cas par cas.
     if (VARIANTES_EAU.indexOf(q.get('eau')) >= 0) VARIANTE_EAU = q.get('eau');
+    if (VARIANTES_TARIF.indexOf(q.get('tarif')) >= 0) VARIANTE_TARIF = q.get('tarif');
     ordinaire = q.get('compte') === 'ordinaire';
     /* `heure=HH:MM` (chantier Mode enfant, § 10) : l'horloge des médias figée à cette heure du jour — les trois situations du mode
      * enfant se regardent l'une après l'autre (`?demo&heure=18:20`, `?demo&heure=21:30`) sans attendre l'heure. */
@@ -6067,6 +6361,10 @@ export function installerDemo(langue) {
   const states = etatsInitiaux();
   varianteRobots(states);
   CARNET_EAU = maisonEauDemo(states, VARIANTE_EAU);
+  if (VARIANTE_TARIF === 'dynamique') states['sensor.prix_spot'] = prixSpotDemo();
+  /* Le chauffe-eau de G1 sait aussi le mode absence et l'arrêt (chantier G3, E2) : l'option du mode absence pendant les Vacances
+   * se montre dans sa popup. */
+  if (states['water_heater.ballon']) states['water_heater.ballon'] = { ...states['water_heater.ballon'], attributes: { ...states['water_heater.ballon'].attributes, supported_features: 7, away_mode: 'off' } };
   /* Le planning de chauffe : le faux moteur règle les radiateurs sur ce qui est
    * en vigueur AVANT le premier rendu — la carte ne passe pas d'un mode à
    * l'autre sous les yeux à l'ouverture. */
@@ -6193,6 +6491,18 @@ export function installerDemo(langue) {
       [].concat(id || []).forEach(x => gestePriseDemo(x));
     } else if (domaine === 'number' || domaine === 'input_number') {
       if (service === 'set_value') toucher(id, data.value);
+    } else if (domaine === 'water_heater') {
+      // Le chauffe-eau (chantier G3, E2) : la consigne, le mode, l'absence, marche et arrêt. Un appareil muet ne répond pas.
+      [].concat(id || []).forEach((x) => {
+        const cur = states[x];
+        if (!cur || cur.state === 'unavailable' || cur.state === 'unknown') return;
+        const d = data || {};
+        if (service === 'set_temperature' && Number.isFinite(Number(d.temperature))) toucher(x, null, { temperature: Number(d.temperature) });
+        else if (service === 'set_operation_mode' && d.operation_mode) toucher(x, d.operation_mode, { operation_mode: d.operation_mode });
+        else if (service === 'set_away_mode') toucher(x, null, { away_mode: d.away_mode ? 'on' : 'off' });
+        else if (service === 'turn_off') toucher(x, 'off', { operation_mode: 'off' });
+        else if (service === 'turn_on') toucher(x, 'heat_pump', { operation_mode: 'heat_pump' });
+      });
     } else if (domaine === 'cover') {
       [].concat(id || []).forEach(x => moteurVolet(x, service, data));
     } else if (domaine === 'climate') {
@@ -6393,6 +6703,19 @@ export function installerDemo(langue) {
         faux.setItem('loggia_alertes', JSON.stringify({ ...avant, actions: { ...actions, vanne: { ...(actions.vanne || {}), actif: !!msg.actif } } }));
         return Promise.resolve(eauEtatDemo(states, lireCfgDemo('loggia_alertes')));
       }
+      /* Qui reçoit quoi (chantier G2 ; ADR 0301) : aux administrateurs, comme le vrai composant. */
+      if (msg && msg.type === 'loggia/notifications/destinataires') {
+        if (ordinaire) return Promise.reject({ code: 'unauthorized', message: 'Unauthorized' });
+        return Promise.resolve(destinatairesDemo(states, lireCfgDemo('loggia_alertes')));
+      }
+      /* « C'est sorti » (chantier G2 ; ADR 0301) : rangé dans la configuration de la démo, comme le composant le
+       * range dans la partie commune ; ouvert à tout compte. */
+      if (msg && msg.type === 'loggia/collecte/sorti') {
+        const avant = lireCfgDemo('loggia_collecte') || {};
+        const etat = { sorti: msg.sorti ? msg.date : (avant.sorti === msg.date ? '' : (avant.sorti || '')), rappele: avant.rappele || '' };
+        faux.setItem('loggia_collecte', JSON.stringify(etat));
+        return Promise.resolve(etat);
+      }
       // Les services notify : ceux que la section Alertes propose comme cible.
       if (msg && msg.type === 'get_services') return Promise.resolve({ notify: { mobile_app_telephone_de_camille: {}, notify: {}, persistent_notification: {} } });
       if (msg && msg.type === 'loggia/fenetres/etat') return Promise.resolve(fenetresDemo());
@@ -6414,7 +6737,7 @@ export function installerDemo(langue) {
       const enfant = repondreEnfantDemo(msg, states, { ordinaire, ecrireCfg: (c) => faux.setItem('loggia_enfant', JSON.stringify(c)), toucher });
       if (enfant) return enfant;
       // Le code de la maison : vérifié ici, les essais comptés ; un code juste vaut laissez-passer cinq minutes (E2 B).
-      const pin = repondrePinDemo(msg);
+      const pin = repondrePinDemo(msg, { ecrireCfg: (k, v) => faux.setItem(k, JSON.stringify(v)) });
       if (pin) return pin;
       /* Les minuteurs d'extinction, comme le vrai composant (`minuteurs.py`) :
        * une heure de fin par appareil, et l'heure du serveur pour le décompte. */
@@ -6519,6 +6842,15 @@ export function installerDemo(langue) {
         }), 600));
       }
       if (msg && msg.type === 'loggia/discovery') return Promise.resolve({ index: indexDemo(states) });
+      // Le tableau Énergie de Home Assistant, et sa prévision solaire (chantier G3, ADR 0302).
+      if (msg && msg.type === 'energy/get_prefs') return Promise.resolve(prefsEnergieDemo());
+      if (msg && msg.type === 'energy/solar_forecast') return Promise.resolve(previsionSolaireDemo());
+      /* Les versions précédentes (ADR 0285) : la liste, pour voir la ligne de
+       * Paramètres › À propos. Rendre en est une ÉCRITURE de la configuration,
+       * et la démo n'en a pas de composant : elle répond ce qu'elle répond à
+       * `loggia/config/set`, le refus final ci-dessous. */
+      if (msg && msg.type === 'loggia/versions/liste') return Promise.resolve(versionsDemo());
+      if (msg && msg.type === 'loggia/versions/rendre') return Promise.reject(new Error('démonstration : pas de composant serveur'));
       /* La vue Systeme (ADR 0037) : sans ces reponses elle ne montrerait que
        * ses tuiles, alors que les versions, les modules et le journal sont
        * justement ce qu'il y a a voir. */

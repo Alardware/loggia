@@ -277,6 +277,24 @@ def test_lire_l_appareil_separe_un_geste_d_un_attribut_qui_bouge(fam):
     assert fam.lire_appareil("fil_pilote", "unavailable", {})["signature"] is None
 
 
+def test_le_decalage_d_un_thermostat(fam):
+    """30/10 : un poele qui lit 1,5 °C de moins que la piece (decalage -1,5) recoit 18,5
+    pour un Confort a 20 ; il est « deja » a 18,5 ; un geste a 21,5 sur l'appareil se
+    relit 23 pour la piece. Sans decalage, rien ne change."""
+    temps = {"confort": 20, "eco": 17, "hors_gel": 7}
+    assert fam.commande("thermostat", {"mode": "confort"}, "heat", POELE, temps, "C", -1.5) == [
+        ("climate", "set_temperature", {"temperature": 18.5})]
+    assert fam.commande("thermostat", {"mode": None, "temperature": 21}, "heat", POELE, temps, "C", -1.5) == [
+        ("climate", "set_temperature", {"temperature": 19.5})]
+    assert fam.deja("thermostat", {"mode": "confort"}, "heat", {**POELE, "temperature": 18.5}, temps, "C", -1.5)
+    assert not fam.deja("thermostat", {"mode": "confort"}, "heat", {**POELE, "temperature": 20}, temps, "C", -1.5)
+    lu = fam.lire_appareil("thermostat", "heat", {**POELE, "temperature": 21.5}, "C", -1.5)
+    assert lu["temperature"] == 23.0
+    assert lu["signature"] == fam.lire_appareil("thermostat", "heat", {**POELE, "temperature": 21.5})["signature"]
+    assert fam.commande("thermostat", {"mode": "confort"}, "heat", POELE, temps) == [
+        ("climate", "set_temperature", {"temperature": 20.0})]
+
+
 def test_l_interrupteur_du_module_est_trouve_jamais_commande(fam):
     E = types.SimpleNamespace
     entrees = [E(entity_id="switch.module", device_id="d1", disabled_by=None, entity_category=None),
@@ -500,6 +518,17 @@ def test_le_programme_de_l_appareil_est_trouve_par_son_identifiant_ou_son_nom_d_
     # Le nom AFFICHE ne compte pas : l'utilisateur le renomme.
     assert fam.programmes_de_l_appareil([e("switch.planning_maison", unique_id="u1", original_name="Lampe")],
                                         "d1") == []
+
+
+@pytest.mark.parametrize("envoye,lue,attendu", [
+    (17.5, 17, 1.0), (17.5, 18, 1.0),          # au degre : il tronque, ou il arrondit
+    (17.5, 17.5, None),                         # il a pris la demi
+    (18, 18, None), (18, 17, None),             # une consigne entiere ne revele rien
+    (17.5, 19, None),                           # trop loin : son programme, pas son pas
+    (None, 17, None), (17.5, None, None), ("x", 17, None),
+])
+def test_le_pas_qu_un_appareil_revele(fam, envoye, lue, attendu):
+    assert fam.pas_revele(envoye, lue) == attendu
 
 
 def test_vers_celsius_est_l_inverse_de_depuis_celsius():

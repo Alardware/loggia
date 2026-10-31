@@ -18,6 +18,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, relative, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { PIECES_DU_MONOLITHE, MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(RACINE, 'src');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
@@ -59,9 +60,11 @@ test('l’exception de health.js : les Paramètres de Home Assistant, lus dans l
   assert.match(h, /entités sans définition — anciennes configurations /);
   assert.match(h, /dont seule l’entrée de registre subsiste, à supprimer dans '\s*\+ 'Paramètres → Entités'/,
     'le diagnostic a changé : revoir si l’exception tient encore');
-  const appelants = fichiers.filter(f => nom(f) !== 'health.js' && /healthText\(/.test(readFileSync(f, 'utf8'))).map(nom);
+  // Le monolithe compte pour un (ADR 0282) : un appel déménagé hors d'App.jsx n'est pas un nouveau lecteur.
+  const appelants = [...new Set(fichiers.filter(f => nom(f) !== 'health.js' && /healthText\(/.test(readFileSync(f, 'utf8')))
+    .map(nom).map(n => (PIECES_DU_MONOLITHE.includes(n) ? 'App.jsx' : n)))];
   assert.deepEqual(appelants, ['App.jsx'], 'healthText a un nouveau lecteur');
-  assert.match(lire('src', 'App.jsx'), /healthText: \(\) => \{[^\n]*console\.log\(t\)/,
+  assert.match(MONOLITHE, /healthText: \(\) => \{[^\n]*console\.log\(t\)/,
     'healthText s’affiche ailleurs que dans la console : son chemin doit alors nommer Home Assistant');
 });
 
@@ -69,7 +72,7 @@ test('le chemin donné est le nom du bouton, tel qu’il s’affiche dans chaque
   /* Renommer le bouton sans ces textes referait la même faute : ils citent son
    * libellé, et chaque traduction doit citer la traduction du libellé. */
   const LIBELLE = 'Entités de la vue';
-  assert.ok(lire('src', 'App.jsx').includes("{entLabel || tr('" + LIBELLE + "')}"), 'le bouton du bandeau a changé de nom');
+  assert.ok(MONOLITHE.includes("{entLabel || tr('" + LIBELLE + "')}"), 'le bouton du bandeau a changé de nom');
   const charger = async (code) => (await import(pathToFileURL(join(SRC, 'langues', code + '.js')).href)).default;
   const en = await charger('en');
   const citent = Object.keys(en).filter(k => k.includes('« ' + LIBELLE + ' »'));

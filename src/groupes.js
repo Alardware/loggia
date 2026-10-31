@@ -33,6 +33,7 @@
 import { tr, trN } from './i18n.js';
 import { motsSurete, ICONES_ATTENTION, CLASSES_OUVRANT, CLASSES_SURETE, CLASSES_MOUVEMENT } from './attention.js';
 import { coDanger } from './confort.js';
+import { uniteCo } from './unites.js';
 
 export const GROUPES = ['ouvertures', 'securite', 'presence'];
 // Les familles, tirées de LA table des classes (attention.js) : le sabotage (`tamper`) n'est d'aucun groupe.
@@ -62,8 +63,9 @@ function membrePossible(id, ctx) {
   return !m.hidden && !m.disabled && !m.category && !!m.deviceId && !!ctx.physique(m.deviceId);
 }
 
-/** Un capteur de monoxyde en ppm : un `sensor` de classe `carbon_monoxide` (audit du 19/10, H10). */
-const coPpm = (id, a) => id.indexOf('sensor.') === 0 && a.device_class === 'carbon_monoxide';
+/** Un capteur de monoxyde CHIFFRÉ : un `sensor` de classe `carbon_monoxide` (audit du 19/10, H10), en ppm ou dans une unité qui
+ *  s'y ramène — mg/m³, µg/m³, ppb (G1-D6, 30/10 ; `uniteCo`). Dans une autre, rien ne dit des ppm : il n'entre pas. */
+const coPpm = (id, a) => id.indexOf('sensor.') === 0 && a.device_class === 'carbon_monoxide' && !!uniteCo(a.unit_of_measurement);
 
 /** Les membres de chaque groupe, rangés par identifiant : `{ ouvertures: [id…], securite: [id…], presence: [id…] }`. */
 export function membresGroupes(S, ctx) {
@@ -98,8 +100,8 @@ export const estMuet = (st) => !st || st.state === 'unavailable' || st.state ===
  *  de sa G6 Entry. La clé est la même dans toutes les langues ; jamais le nom. Sans elle, rien n'est deviné. */
 export const estSonnette = (id, S, ctx) => id.indexOf('binary_sensor.') === 0 && attrs(S, id).device_class === 'occupancy'
   && !!ctx && (ctx.meta(id) || {}).translationKey === 'doorbell';
-/** Un membre qui sonne : un binaire allumé, ou un monoxyde en ppm au palier Danger (H10). */
-export const sonne = (S, id) => !estMuet(S[id]) && (coPpm(id, attrs(S, id)) ? coDanger(S[id].state) : S[id].state === 'on');
+/** Un membre qui sonne : un binaire allumé, ou un monoxyde chiffré au palier Danger (H10), ramené au ppm (G1-D6). */
+export const sonne = (S, id) => !estMuet(S[id]) && (coPpm(id, attrs(S, id)) ? coDanger(S[id].state, attrs(S, id).unit_of_measurement) : S[id].state === 'on');
 
 /**
  * Ouvertures (C22, § 3.1) : « {n} ouverte(s) sur {total} » en ambre dès qu'une est ouverte, de jour comme de nuit ; sinon

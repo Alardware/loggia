@@ -17,10 +17,10 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cleCamera } from '../src/present.js';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
+const src = (MONOLITHE + VUES_SORTIES);
 
 test('une caméra sans entité reçoit quand même une clé', () => {
   // Le cas de la démo, et de toute caméra déclarée par son nom seul.
@@ -197,5 +197,8 @@ test('« Absent » se traduit, comme « Présent » juste à côté', () => {
    * traduit, le second en clair. Le filet i18n ne les voyait pas — ce sont des
    * expressions, pas des noeuds de texte JSX (audit du 29/09). */
   assert.ok(!/tr\('Présent'\)\s*:\s*'Absent'/.test(src), 'un « Absent » est reste en clair');
-  assert.equal((src.match(/tr\('Absent'\)/g) || []).length >= 4, true, 'les quatre « Absent » ne passent plus par tr()');
+  /* ASSERTION MODIFIÉE (30/10, G1-D8) : les quatre endroits disent l'état d'une personne par `motPresence` (presence.js) — la zone
+   * telle quelle, « Inconnu » pour un traceur muet —, qui écrit, lui, `tr('Absent')`. */
+  assert.equal((src.match(/motPresence\(/g) || []).length >= 4, true, 'les quatre « Absent » ne passent plus par motPresence()');
+  assert.ok(/tr\('Absent'\)/.test(readFileSync(new URL('../src/presence.js', import.meta.url), 'utf8')), '« Absent » passe par tr()');
 });
