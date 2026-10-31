@@ -7,7 +7,9 @@ Quatre chantiers, nés d'une comparaison avec deux autres tableaux de bord —
 [`dwains-dashboard-next`](https://github.com/dwainscheeren/dwains-dashboard-next)
 (MIT) et [`oikos`](https://github.com/Bobsilvio/oikos) (propriétaire, dont on
 n'a repris aucun code, seulement une idée). Le détail de ce qui a été écarté, et
-pourquoi, vit dans `docs/chantier-etages-cartes-veille.md`.
+pourquoi, vivait dans le plan du chantier, `docs/chantier-etages-cartes-veille.md`.
+Un plan de chantier est une note de travail : il a quitté le dépôt le 28/10
+(ADR 0281), et cette ADR garde ce qui a été décidé.
 
 Trois d'entre eux ont la **même histoire** : la donnée était déjà calculée, elle
 traversait tout le système, et personne ne la montrait.

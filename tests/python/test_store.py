@@ -562,10 +562,15 @@ def test_les_commandes_de_module_relaient_le_refus():
     from pathlib import Path
     src = Path(__file__).resolve().parents[2] / "custom_components" / "loggia" / "websocket_api.py"
     texte = src.read_text(encoding="utf-8")
-    for var in ("volets", "fen", "pre", "nuit", "vei"):
-        bloc = texte[texte.index("await %s.async_enregistrer" % var) - 400:]
-        bloc = bloc[:bloc.index("send_result") + 40]
-        assert "except ValueError" in bloc,             "la commande de %s ne relaie pas le refus du plafond" % var
+    from conftest import declaration
+
+    # ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : les commandes `config` des modules passent
+    # toutes par le gestionnaire commun `_config`, qui relaie le refus.
+    commun = texte[texte.index("def _config("):texte.index("# ── La configuration")]
+    assert "except ValueError as err:" in commun and "_relayer(connection, msg, err)" in commun
+    for c in ("WS_VOL_CONFIG", "WS_FEN_CONFIG", "WS_PRE_CONFIG", "WS_NUI_CONFIG", "WS_VEI_CONFIG"):
+        assert "_config(" in declaration(texte, "Commande(%s," % c), \
+            "la commande %s ne relaie pas le refus du plafond" % c
     i = texte.index("await interrupteurs.async_affecter")
     assert "except ValueError" in texte[i - 200:i + 400],         "l'affectation des interrupteurs ne relaie pas le refus"
 

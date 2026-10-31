@@ -30,13 +30,15 @@ import { join, dirname, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as espree from 'espree';
 
+import { PIECES_DU_MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(RACINE, 'src');
 const lire = (...p) => readFileSync(join(SRC, ...p), 'utf8');
 
 /* `App.jsx` et `views.js` ont leur propre lot dans l'audit du 03/10 : ils
  * rejoindront ce filet quand il sera livré — il suffira de les retirer d'ici. */
-const AILLEURS = new Set(['App.jsx', 'views.js']);
+// App.jsx et tout ce qui en sort (ADR 0282) : un déménagement ne fait pas entrer le monolithe dans ce filet.
+const AILLEURS = new Set([...PIECES_DU_MONOLITHE, 'views.js']);
 
 const fichiers = [];
 (function walk(d) {

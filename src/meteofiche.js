@@ -43,11 +43,43 @@ export const zoneUV = (uv) => (uv <= 2 ? 0 : uv <= 5 ? 1 : uv <= 7 ? 2 : uv <= 1
 const MOTS_UV = () => [tr('Faible'), tr('Modéré'), tr('Élevé'), tr('Très élevé'), tr('Extrême')];
 const DIRECTIONS = () => [tr('Du nord'), tr('Du nord-est'), tr('De l’est'), tr('Du sud-est'), tr('Du sud'), tr('Du sud-ouest'), tr('De l’ouest'), tr('Du nord-ouest')];
 
+/* L'UV du jour (chantier G4, A2 ; ADR 0303) : le plus fort `uv_index` des heures qui restent aujourd'hui dans la prévision
+ * horaire — l'heure en cours comprise —, et les heures où il faut se protéger : dès la zone « Modéré » de la tuile, l'indice 3,
+ * le seuil où l'OMS demande une protection (« Global Solar UV Index : A Practical Guide », OMS, 2002). L'indice se juge ARRONDI,
+ * comme il s'écrit (relecture G4, point 1) : 2,3 est « Max 2 », sans protection. Seule la PREMIÈRE plage continue s'annonce
+ * (point 2) : de sa première heure à la fin de la dernière heure qui la suit sans trou. `{ max, de, a, deja }` — `de` et `a` en
+ * millisecondes ; `deja` quand l'heure en cours y est. null sans UV dans la prévision, ou avec un maximum nul (la nuit). */
+export function uvDuJour(heures, maintenant = Date.now()) {
+  const uv = (heures || []).map(p => ({ t: lectureDate(p), v: nombreOuNull(p && p.uv_index) }))
+    .filter(x => !isNaN(x.t) && x.v != null && memeJourQue(x.t, maintenant) && x.t + 3600000 > maintenant).sort((a, b) => a.t - b.t);
+  if (!uv.length) return null;
+  const max = Math.round(Math.max(...uv.map(x => x.v)));
+  if (max < 1) return null;
+  const forte = (x) => zoneUV(Math.round(x.v)) >= 1;
+  const k = uv.findIndex(forte);
+  if (k < 0) return { max, de: null, a: null, deja: false };
+  let fin = k;
+  while (fin + 1 < uv.length && forte(uv[fin + 1]) && uv[fin + 1].t === uv[fin].t + 3600000) fin++;
+  return { max, de: uv[k].t, a: uv[fin].t + 3600000, deja: uv[k].t <= maintenant };
+}
+
+/* La ligne de l'UV du jour : « Max 6 · protection de 12 h à 16 h », « Max 6 · protection jusqu'à 16 h », « Max 2 ». */
+function ligneUV(j) {
+  if (!j) return null;
+  const protection = j.de == null ? null : j.deja ? tr('protection jusqu’à {b}', { b: heureRonde(j.a) }) : tr('protection de {a} à {b}', { a: heureRonde(j.de), b: heureRonde(j.a) });
+  return [tr('Max {n}', { n: j.max }), protection].filter(Boolean).join(' · ');
+}
+
 /* Les six tuiles de la popup — vent, humidité, UV, nuages, pluie du jour,
  * soleil — chacune seulement si l'entité la donne. La flèche du vent pointe
  * là où il va (bearing + 180). La pluie du jour dit ses heures quand la
- * prévision horaire les connaît. */
-export function tuilesMeteo({ attributs = {}, jours = null, heures = null, maintenant = Date.now(), soleil = null } = {}) {
+ * prévision horaire les connaît ; l'UV, son maximum du jour (A2).
+ * À leur suite (chantier G4, A1 et A6), la qualité de l'air du dehors et les
+ * pollens, lus à part (`airDuDehors`, `pollensDuDehors`, airdehors.js) :
+ * seulement quand leur échelle est connue. Des informations — le chiffre, le
+ * mot de son rang, le lendemain, une barre des rangs aux jetons du thème —,
+ * jamais une alerte : ni ton, ni lavis. */
+export function tuilesMeteo({ attributs = {}, jours = null, heures = null, maintenant = Date.now(), soleil = null, air = null, pollens = null } = {}) {
   const a = attributs || {};
   const out = [];
   const vent = nombreOuNull(a.wind_speed);
@@ -60,7 +92,11 @@ export function tuilesMeteo({ attributs = {}, jours = null, heures = null, maint
   const hum = nombreOuNull(a.humidity);
   if (hum != null) out.push({ cle: 'humidite', titre: tr('Humidité'), valeur: Math.round(hum) + ' %', sous: null });
   const uv = nombreOuNull(a.uv_index);
-  if (uv != null) { const z = zoneUV(uv); out.push({ cle: 'uv', titre: tr('UV'), valeur: String(Math.round(uv * 10) / 10), sous: MOTS_UV()[z], uv: { zone: z, position: Math.min(1, (uv + 0.5) / 13) } }); }
+  if (uv != null) {
+    const z = zoneUV(uv);
+    const ligne = ligneUV(uvDuJour(heures, maintenant));
+    out.push({ cle: 'uv', titre: tr('UV'), valeur: String(Math.round(uv * 10) / 10), sous: MOTS_UV()[z], ...(ligne ? { ligne } : {}), uv: { zone: z, position: Math.min(1, (uv + 0.5) / 13) } });
+  }
   const nuages = nombreOuNull(a.cloud_coverage);
   if (nuages != null) out.push({ cle: 'nuages', titre: tr('Nuages'), valeur: Math.round(nuages) + ' %', sous: motNuages(nuages) });
   const auj = (jours || []).find(p => { const t = lectureDate(p); return !isNaN(t) && memeJourQue(t, maintenant); });
@@ -72,6 +108,13 @@ export function tuilesMeteo({ attributs = {}, jours = null, heures = null, maint
   }
   const s = soleilMeteo(maintenant, soleil);
   if (s) out.push({ cle: 'soleil', titre: tr('Soleil'), valeur: s.heure, sous: s.jour ? tr('Coucher · lever à {h}', { h: s.autre }) : tr('Lever · coucher à {h}', { h: s.autre }) });
+  if (air && air.rang) {
+    out.push({ cle: 'air', titre: tr("Qualité de l'air"), valeur: air.valeur, sous: air.valeur === air.rang.t ? null : air.rang.t,
+      ligne: air.demain ? tr('Demain : {mot}', { mot: air.demain.t }) : null, rangs: { i: air.rang.i, couleurs: air.rang.couleurs } });
+  }
+  if (pollens && pollens.rang) {
+    out.push({ cle: 'pollens', titre: tr('Pollens'), valeur: pollens.rang.t, sous: (pollens.plantes || []).join(', ') || null, ligne: null, rangs: { i: pollens.rang.i, couleurs: pollens.rang.couleurs } });
+  }
   return out;
 }
 

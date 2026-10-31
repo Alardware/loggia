@@ -11,6 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 const { setLoggiaState } = await import('../src/state.js');
 const A = await import('../src/actions.js');
@@ -55,7 +56,7 @@ test('point 9 : `turn_on` sur la prise-vanne ne part pas — ni par `commanderSe
 });
 
 test('point 9 : l’en-tête de chaque vue s’inscrit, et ouvre la popup de la vanne SUR sa question — la recherche aussi', () => {
-  const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  const APP = MONOLITHE;
   // Monté, il s'inscrit ; démonté, il se retire (passe bis 2 : tests/vanne_garde_trous.test.mjs).
   assert.ok(APP.includes('useEffect(() => surVanne(setFichePrise), []);'), 'l’en-tête s’inscrit');
   // La fiche d'une prise-vanne montre la popup de la vanne, sur sa question (ficheprise.jsx, après ses crochets).

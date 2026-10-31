@@ -116,3 +116,26 @@ test('une entité sans appareil garde son intégration', () => {
   assert.equal(integrationDe('media_player.inconnue', index), null);
   assert.equal(integrationDe('media_player.tv', null), null);
 });
+
+test('G1-D1 : la Lecture d’une Android TV en ADB est le keycode 85, pas le réveil', () => {
+  /* Dans `androidtv.constants.KEYS`, `RESUME` vaut 224 — KEYCODE_WAKEUP : le bouton réveillait la box au lieu de lancer la
+   * lecture. `KEYS` n'a ni PLAY ni PLAY_PAUSE ; une commande qu'il ne connaît pas, Home Assistant la passe TELLE QUELLE au
+   * shell ADB (`remote.send_command` de l'intégration androidtv) : `input keyevent 85` est KEYCODE_MEDIA_PLAY_PAUSE. */
+  assert.equal(TOUCHES_TV.androidtv.lecture, 'input keyevent 85');
+  assert.deepEqual(appelPourTouche('androidtv', 'lecture', { telecommande: 'remote.box' }),
+    { domaine: 'remote', service: 'send_command', data: { entity_id: 'remote.box', command: 'input keyevent 85' } });
+  for (const g of GESTES_TV) assert.notEqual(TOUCHES_TV.androidtv[g], 'RESUME', g + ' : RESUME est le réveil (224)');
+});
+
+test('G1-D1 : précédent et suivant ne sont pas dessinés — la piste se change par le lecteur', async () => {
+  /* REWIND / FAST_FORWARD (keycodes 89 / 90), `skip_backward` / `skip_forward` de pyatv, `reverse` / `forward` de Roku,
+   * REWIND / FASTFORWARD de LG : ils AVANCENT dans la vidéo, ils ne changent pas de piste. Le pavé de la télécommande ne les
+   * dessine pas — la piste précédente et la suivante passent par le lecteur (`media_previous_track`, `media_next_track`).
+   * Le jour où le pavé les dessinerait, le commentaire de `TOUCHES_TV` dit quoi corriger : ce filet le rappelle. */
+  const { readFileSync } = await import('node:fs');
+  const fiche = readFileSync(new URL('../src/fichemedia.jsx', import.meta.url), 'utf8');
+  assert.ok(fiche.includes("{['retour', 'accueil', 'lecture'].filter(sait)"), 'les touches du pavé ont changé : revoir précédent / suivant');
+  assert.ok(!/fleche\('(precedent|suivant)'|toucher\('(precedent|suivant)'\)/.test(fiche), 'précédent / suivant dessinés : leurs valeurs avancent dans la vidéo');
+  const source = readFileSync(new URL('../src/telecommande.js', import.meta.url), 'utf8');
+  assert.ok(source.includes('ne sont PAS dessinés'), 'le commentaire de précédent / suivant');
+});

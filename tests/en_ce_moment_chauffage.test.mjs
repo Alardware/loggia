@@ -23,6 +23,7 @@ import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { transformSync } from 'esbuild';
 
+import { MONOLITHE, DASHBOARD } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282) ; DASHBOARD : l'Accueil en entier, ses hooks compris (ADR 0283)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -43,10 +44,10 @@ const { poserEtatChauffage, reglerChauffageEtat } = await import('../src/chauffa
 const { setLoggiaState } = await import('../src/state.js');
 const Fiche = (await import(new URL('../src/fichechauffage.jsx', import.meta.url).href)).default;
 
-const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const APP = MONOLITHE.replace(/\r\n/g, '\n');
 const NL = String.fromCharCode(10);
 const bloc = (debut, fin) => { const d = APP.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = APP.indexOf(fin, d + 1); return APP.slice(d, f < 0 ? undefined : f); };
-const home = bloc('function Dashboard(', NL + '}');
+const home = DASHBOARD;
 
 /* ── Les lignes, dans le Dashboard ───────────────────────────────────────── */
 

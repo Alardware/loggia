@@ -10,6 +10,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const lire = (f) => readFileSync(new URL('../src/' + f, import.meta.url), 'utf8');
 
 test('au réveil, une vignette tient la place du direct qui se renégocie', () => {
@@ -23,7 +24,7 @@ test('au réveil, une vignette tient la place du direct qui se renégocie', () =
 });
 
 test('la barre latérale dit « Connexion… » partout pendant l’attente, jamais « En ligne »', () => {
-  const app = lire('App.jsx');
+  const app = MONOLITHE;
   const debut = app.indexOf('function Sidebar(');
   const corps = app.slice(debut, app.indexOf('\nfunction ', debut + 1));
   // Sans `ha`, « ha && !ha.online » est faux : il tombait sur le VERT et sur « En ligne ».

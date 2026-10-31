@@ -417,7 +417,7 @@ class LoggiaPrises:
         if evenement["quoi"] == "fin" and self.regles is not None and doit_dire_la_fin(self.cfg, haid):
             nom = (self.prises.get(haid) or {}).get("nom") or haid
             texte = kwh_ecrit(kwh, langue_rendue(MSG_FIN, langue_serveur(self.hass)))
-            await self.regles.prevenir(MODULE, "cycle", (MSG_FIN, {"nom": nom, "h": heure, "kwh": texte}))
+            await self.regles.prevenir(MODULE, "cycle", (MSG_FIN, {"nom": nom, "h": heure, "kwh": texte}), pour="presents")
 
     async def _async_kwh(self, haid: str, cycle: dict[str, Any]) -> float:
         """L'energie du cycle (spec 5) : le compteur `energy` de la prise, lu dans
@@ -530,9 +530,11 @@ class LoggiaPrises:
             "maintenant": instant_iso(maintenant.timestamp(), fuseau),
             "config": self.cfg,
             "prises": prises,
-            # Un telephone choisi dans Parametres > Alertes : sans lui, « Prevenir a
-            # la fin du cycle » n'a personne a qui parler (spec 3.8).
-            "notifier": bool(str((alertes if isinstance(alertes, dict) else {}).get("service") or "").strip()),
+            # Un telephone trouve chez qui est a la maison, ou le repli de
+            # Parametres > Alertes : sans eux, « Prevenir a la fin du cycle » n'a
+            # personne a qui parler (spec 3.8 ; ADR 0301, relecture du 30/10).
+            "notifier": (await self.regles.a_qui_parler("presents")) if getattr(self, "regles", None) is not None
+            else bool(str((alertes if isinstance(alertes, dict) else {}).get("service") or "").strip()),
         }
 
     async def async_enregistrer(self, patch: dict[str, Any]) -> dict[str, Any]:

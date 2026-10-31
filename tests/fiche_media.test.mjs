@@ -25,6 +25,7 @@ import { readFileSync } from 'node:fs';
 
 import { monter, horlogeFausse, documentFaux, texteDe } from './crochets.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -47,7 +48,7 @@ const { buildIndex, capabilities } = await import('../src/discovery.js');
 const { resolveMedia } = await import('../src/resolve.js');
 const { marqueDe } = await import('../src/marques.js');
 const lire = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-const APP = lire('src/App.jsx');
+const APP = MONOLITHE;
 const MEDIA = lire('src/fichemedia.jsx');
 
 const NBSP = String.fromCharCode(160);

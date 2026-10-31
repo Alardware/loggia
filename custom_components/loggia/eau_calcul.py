@@ -21,9 +21,10 @@ Le carnet NOTE des faits ; il ne commande rien.
 from __future__ import annotations
 
 import copy
-import math
 from datetime import datetime
 from typing import Any
+
+from .nombres import fini
 
 # Une fermeture annoncee par la regle de fuite vaut deux minutes : une vanne
 # motorisee tourne en 5 a 20 s, une integration en nuage repond parfois en dix.
@@ -39,11 +40,8 @@ CAUSES = ("fuite", "automatisme", "personne", "appareil")
 SENS = ("ouverte", "fermee")
 
 
-def _nombre(x: Any) -> float | None:
-    if isinstance(x, bool) or not isinstance(x, (int, float)):
-        return None
-    v = float(x)
-    return v if math.isfinite(v) else None
+# Un nombre fini, ou None (nombres.py, lot 8).
+_nombre = fini
 
 
 def _texte(x: Any) -> str | None:

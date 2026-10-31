@@ -29,6 +29,7 @@ import { useOptimiste } from './optimiste.js';
 import { petitesCapitales, LISERE } from './styles.js';
 import { ongletVoisin } from './choix.js';
 import { nomJour, heureValide } from './robots.js';
+import { SOUS } from './fichekit.js';
 
 /* ════════════ Les styles (copies de ficherobot.jsx) ════════════ */
 
@@ -47,7 +48,6 @@ const BOUTON_DOUX = { padding: '9px 14px', borderRadius: 12, border: 'none', cur
 export const CHAMP_HEURE = { padding: '9px 12px', borderRadius: 12, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontSize: 15, fontWeight: 700, fontFamily: 'inherit', fontVariantNumeric: 'tabular-nums', colorScheme: 'inherit' };
 // Une ligne de liste dans un panneau : le filet du dessus sauf pour la première.
 export const LIGNE = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, padding: '13px 18px' };
-export const SOUS = { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 };
 export const filet = (i) => (i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none');
 
 /* ════════════ Les briques ════════════ */

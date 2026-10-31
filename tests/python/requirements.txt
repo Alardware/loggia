@@ -1,0 +1,7 @@
+# Ce que la CI installe pour la suite Python (validate.yml, travail « python »).
+# Tout est epingle (28/10, ADR 0281) : une version nouvelle ne change plus la
+# suite sans qu'un commit le dise. Les tests posent leurs propres doublures de
+# Home Assistant ; le vrai Home Assistant, c'est tests/ha_reel/.
+pytest==9.1.1
+voluptuous==0.15.2
+ruff==0.16.10

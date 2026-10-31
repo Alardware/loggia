@@ -22,6 +22,7 @@ Installation :
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
@@ -62,6 +63,95 @@ MODULES_VIVANTS = (
     "rechargement",
     "alertes", "chauffage", "distributeurs", "eau", "enfant", "fenetres", "interrupteurs", "lumieres", "minuteurs",
     "nuit", "presence", "prises", "robots", "scenarios", "sirene", "veilles", "volets", "regles",
+)
+
+
+@dataclass(frozen=True)
+class Module:
+    """Un module que `_async_setup_common` cree (lot 8, audit du 28/10, M12).
+
+    `classe` vit dans `.<cle>` ; elle recoit `hass` puis `arguments`, lus dans
+    `hass.data[DOMAIN]` (`"data"` : le dictionnaire lui-meme). Elle ne nait que
+    si chaque cle de `requis` y est deja. `panne` : ce que dit le journal si
+    elle ne nait pas.
+    """
+
+    cle: str
+    classe: str
+    requis: tuple[str, ...]
+    arguments: tuple[str, ...]
+    panne: str
+
+
+_REGLES = ("store", "regles")
+
+# L'ORDRE COMPTE : un module nait apres ceux qu'il recoit.
+MODULES = (
+    # Le socle commun des regles : journal unifie et respect du geste manuel.
+    # Il vient AVANT les modules de regles — chacun le recoit et lui confie
+    # ses commandes. Sans lui, chaque module reecrivait sa propre plomberie,
+    # et cinq journaux en memoire repartaient a zero a chaque redemarrage.
+    Module("regles", "Regles", ("store",), ("store",), "socle des regles indisponible"),
+    # Alertes de surete poussees sur telephone.
+    Module("alertes", "LoggiaAlertes", _REGLES, _REGLES, "alertes de sûreté indisponibles"),
+    # Interrupteurs sans fil : Zigbee2MQTT, ZHA, deCONZ. Une installation sans
+    # interrupteur ne doit pas s'en trouver genee.
+    Module("interrupteurs", "LoggiaInterrupteurs", _REGLES, _REGLES, "interrupteurs sans fil indisponibles"),
+    # Regles de volets : planning du soleil, protection solaire, mise a l'abri.
+    # Une maison sans volet ne doit pas s'en trouver genee.
+    Module("volets", "LoggiaVolets", _REGLES, _REGLES, "regles de volets indisponibles"),
+    # Le chauffage (chantier Chauffage) : un seul chef par chauffage au
+    # planning allume. AVANT les fenetres et la presence, qui lui donnent leurs
+    # faits — elles le cherchent au moment de servir, mais autant qu'il soit la.
+    Module("chauffage", "LoggiaChauffage", _REGLES, _REGLES, "moteur du chauffage indisponible"),
+    # Fenetre ouverte, chauffage coupe.
+    Module("fenetres", "LoggiaFenetres", _REGLES, _REGLES, "regle des fenetres indisponible"),
+    # Depart et retour : la maison se met en veille quand elle se vide.
+    Module("presence", "LoggiaPresence", _REGLES, _REGLES, "regle de presence indisponible"),
+    # La nuit : veilleuse a minuterie, et extinction des lampes oubliees.
+    Module("nuit", "LoggiaNuit", _REGLES, _REGLES, "regles de nuit indisponibles"),
+    # Trois veilles : l'air, les piles, le tarif. Elles parlent par le service
+    # de notification deja choisi dans Alertes.
+    Module("veilles", "LoggiaVeilles", _REGLES, _REGLES, "veilles indisponibles"),
+    # Le planning des robots : l'aspirateur et la tondeuse partent a l'heure
+    # dite (ADR 0043).
+    Module("robots", "LoggiaRobots", _REGLES, _REGLES, "planning des robots indisponible"),
+    # Le distributeur de croquettes (05/10, ADR 0155) : ses sources de repas
+    # (programme de l'appareil, automatisations qui le commandent) et le
+    # planning de Loggia, qui part meme ecran ferme. Apres les robots, dont il
+    # reprend le format.
+    Module("distributeurs", "LoggiaDistributeurs", _REGLES, _REGLES, "distributeur de croquettes indisponible"),
+    # Les minuteurs d'extinction : « eteindre dans 30 min », tenus ICI et non
+    # plus dans l'onglet du navigateur (21/09).
+    Module("minuteurs", "LoggiaMinuteurs", _REGLES, _REGLES, "minuteurs d'extinction indisponibles"),
+    # Le test d'une sirene : « sonner trois secondes », tenu ICI et non plus
+    # dans l'onglet (22/09, ADR 0065).
+    Module("sirene", "LoggiaSirene", _REGLES, _REGLES, "test de sirene indisponible"),
+    # Les prises (chantier Prises) : leur configuration, et le cycle de
+    # l'electromenager suivi meme ecran ferme.
+    Module("prises", "LoggiaPrises", _REGLES, _REGLES, "prises indisponibles"),
+    # Le carnet des lumieres (chantier Lumieres, L1) : chaque allumage,
+    # extinction et reglage, avec son niveau et son contexte, note ecran
+    # ferme. Il ne commande rien : le magasin lui suffit.
+    Module("lumieres", "LoggiaLumieres", ("store",), ("store",), "carnet des lumieres indisponible"),
+    # Le carnet de l'eau (chantier IoT, etape 3 ; I28, ADR 0217) : pourquoi une
+    # vanne d'eau est fermee, ses detecteurs, le journal du jour, notes ecran
+    # ferme. Il ne commande rien : le magasin lui suffit. La regle de fuite
+    # (alertes.py) le trouve ici au moment d'agir, et lui dit la cause avant.
+    Module("eau", "LoggiaEau", ("store",), ("store",), "carnet de l'eau indisponible"),
+    # Le mode enfant (chantier Mode enfant) : les profils par piece, le plafond
+    # de volume, le temps d'ecran et le coucher tenus ecran ferme, la demande
+    # de l'enfant au telephone. Il previent par les regles, il n'agit jamais
+    # par `agir` (E11).
+    Module("enfant", "LoggiaEnfant", _REGLES, _REGLES, "mode enfant indisponible"),
+    # Un import ou une remise a zero ecrit la configuration des modules par la
+    # configuration generale : ils la reprennent tout de suite, au lieu
+    # d'attendre le prochain redemarrage (relecture du lot 1, audit du 03/10).
+    Module("rechargement", "LoggiaRechargement", ("store",), ("data",), "rechargement des modules indisponible"),
+    # Les scenarios : ce que la maison fait d'un seul geste (ADR 0027). Ils
+    # ne posent aucun abonnement — seul le magasin leur est necessaire ; le
+    # socle, s'il est la.
+    Module("scenarios", "LoggiaScenarios", ("store",), _REGLES, "scenarios indisponibles"),
 )
 
 
@@ -122,29 +212,12 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
 
             store = LoggiaStore(hass)
             data["store"] = store
-            # Acces PARESSEUX a l'ecoute des interrupteurs : les commandes
-            # WebSocket ne s'enregistrent qu'une fois pour la vie du process,
-            # et l'ecoute nait quelques lignes plus bas. Passer la valeur ici
-            # aurait fige un `None` que plus aucun rechargement n'aurait
-            # rattrape.
-            async_register_ws(hass, store,
-                              lambda: hass.data.get(DOMAIN, {}).get("interrupteurs"),
-                              lambda: hass.data.get(DOMAIN, {}).get("volets"),
-                              lambda: hass.data.get(DOMAIN, {}).get("fenetres"),
-                              lambda: hass.data.get(DOMAIN, {}).get("presence"),
-                              lambda: hass.data.get(DOMAIN, {}).get("nuit"),
-                              lambda: hass.data.get(DOMAIN, {}).get("veilles"),
-                              acces_regles=lambda: hass.data.get(DOMAIN, {}).get("regles"),
-                              acces_scenarios=lambda: hass.data.get(DOMAIN, {}).get("scenarios"),
-                              acces_robots=lambda: hass.data.get(DOMAIN, {}).get("robots"),
-                              acces_minuteurs=lambda: hass.data.get(DOMAIN, {}).get("minuteurs"),
-                              acces_sirene=lambda: hass.data.get(DOMAIN, {}).get("sirene"),
-                              acces_distributeurs=lambda: hass.data.get(DOMAIN, {}).get("distributeurs"),
-                              acces_chauffage=lambda: hass.data.get(DOMAIN, {}).get("chauffage"),
-                              acces_prises=lambda: hass.data.get(DOMAIN, {}).get("prises"),
-                              acces_lumieres=lambda: hass.data.get(DOMAIN, {}).get("lumieres"),
-                              acces_enfant=lambda: hass.data.get(DOMAIN, {}).get("enfant"),
-                              acces_eau=lambda: hass.data.get(DOMAIN, {}).get("eau"))
+            # Acces PARESSEUX aux modules : les commandes WebSocket ne
+            # s'enregistrent qu'une fois pour la vie du process, et les modules
+            # naissent quelques lignes plus bas - et renaissent a chaque
+            # rechargement. Passer les objets ici aurait fige des `None` que
+            # plus aucun rechargement n'aurait rattrapes.
+            async_register_ws(hass, store, lambda nom: hass.data.get(DOMAIN, {}).get(nom))
             data["ws"] = True
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : configuration utilisateur indisponible")
@@ -161,207 +234,32 @@ async def _async_setup_common(hass: HomeAssistant) -> None:
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia : plan 3D indisponible")
 
-    # Le socle commun des regles : journal unifie et respect du geste manuel.
-    # Il vient AVANT les modules de regles — chacun le recoit et lui confie
-    # ses commandes. Sans lui, chaque module reecrivait sa propre plomberie,
-    # et cinq journaux en memoire repartaient a zero a chaque redemarrage.
-    if not data.get("regles") and data.get("store"):
+    # La photo de fond d'un compte (ADR 0289) : meme regime que le plan 3D, une
+    # vue authentifiee hors de /config/www/, chacun ne touchant qu'a la sienne.
+    if not data.get("fond"):
         try:
-            from .regles import Regles
+            from .fond import async_register_fond
 
-            data["regles"] = Regles(hass, data["store"])
+            async_register_fond(hass)
+            data["fond"] = True
         except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia : socle des regles indisponible")
+            _LOGGER.exception("Loggia : photo de fond indisponible")
 
-    # Alertes de surete poussees sur telephone. Meme regime que le WebSocket :
-    # le listener vit jusqu'a l'arret du process, on ne l'enregistre qu'une fois,
-    # et son absence ne doit pas empecher le reste de fonctionner.
-    if not data.get("alertes") and data.get("store") and data.get("regles"):
+    # Les modules, dans l'ordre de MODULES : chacun nait s'il manque et si ce
+    # dont il a besoin est la. Meme regime que le WebSocket : ses abonnements
+    # vivent jusqu'a l'arret du process (ou jusqu'au dechargement, qui les
+    # fait taire), et son echec ne gene rien d'autre - il le dit au journal.
+    for module in MODULES:
+        if data.get(module.cle) or not all(data.get(r) for r in module.requis):
+            continue
         try:
-            from .alertes import LoggiaAlertes
-
-            data["alertes"] = LoggiaAlertes(hass, data["store"], data["regles"])
+            # `from .<cle> import <classe>`, tel quel : `importlib.import_module`
+            # dans la boucle ferait crier la garde des appels bloquants de Home
+            # Assistant (« Detected blocking call to import_module »).
+            classe = getattr(__import__(module.cle, globals(), None, [module.classe], 1), module.classe)
+            data[module.cle] = classe(hass, *(data if a == "data" else data.get(a) for a in module.arguments))
         except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia : alertes de sûreté indisponibles")
-
-    # Interrupteurs sans fil : Zigbee2MQTT, ZHA, deCONZ. Meme regime encore —
-    # les abonnements vivent jusqu'a l'arret du process, et une installation
-    # sans interrupteur ne doit pas s'en trouver genee.
-    if not data.get("interrupteurs") and data.get("store") and data.get("regles"):
-        try:
-            from .interrupteurs import LoggiaInterrupteurs
-
-            data["interrupteurs"] = LoggiaInterrupteurs(hass, data["store"], data.get("regles"))
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia : interrupteurs sans fil indisponibles")
-
-    # Regles de volets : planning du soleil, protection solaire, mise a l'abri.
-    # Meme regime : les abonnements vivent jusqu'a l'arret du process, et une
-    # maison sans volet ne doit pas s'en trouver genee.
-    if not data.get("volets") and data.get("store") and data.get("regles"):
-        try:
-            from .volets import LoggiaVolets
-
-            data["volets"] = LoggiaVolets(hass, data["store"], data.get("regles"))
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia : regles de volets indisponibles")
-
-    # Le chauffage (chantier Chauffage) : un seul chef par chauffage au
-    # planning allume. AVANT les fenetres et la presence, qui lui donnent leurs
-    # faits — elles le cherchent au moment de servir, mais autant qu'il soit
-    # la. Meme regime que les regles ci-dessus.
-    if not data.get("chauffage") and data.get("store") and data.get("regles"):
-        try:
-            from .chauffage import LoggiaChauffage
-
-            data["chauffage"] = LoggiaChauffage(hass, data["store"], data.get("regles"))
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia : moteur du chauffage indisponible")
-
-    # Fenetre ouverte, chauffage coupe. Meme regime que les regles ci-dessus.
-    if not data.get("fenetres") and data.get("store") and data.get("regles"):
-        try:
-            from .fenetres import LoggiaFenetres
-
-            data["fenetres"] = LoggiaFenetres(hass, data["store"], data.get("regles"))
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia : regle des fenetres indisponible")
-
-    # Depart et retour : la maison se met en veille quand elle se vide.
-    if not data.get("presence") and data.get("store") and data.get("regles"):
-        try:
-            from .presence import LoggiaPresence
-
-            data["presence"] = LoggiaPresence(hass, data["store"], data.get("regles"))
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia : regle de presence indisponible")
-
-    # La nuit : veilleuse a minuterie, et extinction des lampes oubliees.
-    if not data.get("nuit") and data.get("store") and data.get("regles"):
-        try:
-            from .nuit import LoggiaNuit
-
-            data["nuit"] = LoggiaNuit(hass, data["store"], data.get("regles"))
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia : regles de nuit indisponibles")
-
-    # Trois veilles : l'air, les piles, le tarif. Elles parlent par le service
-    # de notification deja choisi dans Alertes.
-    if not data.get("veilles") and data.get("store") and data.get("regles"):
-        try:
-            from .veilles import LoggiaVeilles
-
-            data["veilles"] = LoggiaVeilles(hass, data["store"], data.get("regles"))
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia : veilles indisponibles")
-
-    # Le planning des robots : l'aspirateur et la tondeuse partent a l'heure
-    # dite (ADR 0043). Meme regime que les regles ci-dessus.
-    if not data.get("robots") and data.get("store") and data.get("regles"):
-        try:
-            from .robots import LoggiaRobots
-
-            data["robots"] = LoggiaRobots(hass, data["store"], data.get("regles"))
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia : planning des robots indisponible")
-
-    # Le distributeur de croquettes (05/10, ADR 0155) : ses sources de repas
-    # (programme de l'appareil, automatisations qui le commandent) et le
-    # planning de Loggia, qui part meme ecran ferme. Apres les robots, dont il
-    # reprend le format. Meme regime que les regles ci-dessus.
-    if not data.get("distributeurs") and data.get("store") and data.get("regles"):
-        try:
-            from .distributeurs import LoggiaDistributeurs
-
-            data["distributeurs"] = LoggiaDistributeurs(hass, data["store"], data.get("regles"))
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia : distributeur de croquettes indisponible")
-
-    # Les minuteurs d'extinction : « eteindre dans 30 min », tenus ICI et non
-    # plus dans l'onglet du navigateur (21/09). Meme regime que les regles.
-    if not data.get("minuteurs") and data.get("store") and data.get("regles"):
-        try:
-            from .minuteurs import LoggiaMinuteurs
-
-            data["minuteurs"] = LoggiaMinuteurs(hass, data["store"], data.get("regles"))
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia : minuteurs d'extinction indisponibles")
-
-    # Le test d'une sirene : « sonner trois secondes », tenu ICI et non plus
-    # dans l'onglet (22/09, ADR 0065). Meme regime que les minuteurs.
-    if not data.get("sirene") and data.get("store") and data.get("regles"):
-        try:
-            from .sirene import LoggiaSirene
-
-            data["sirene"] = LoggiaSirene(hass, data["store"], data.get("regles"))
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia : test de sirene indisponible")
-
-    # Les prises (chantier Prises) : leur configuration, et le cycle de
-    # l'electromenager suivi meme ecran ferme. Meme regime que les regles.
-    if not data.get("prises") and data.get("store") and data.get("regles"):
-        try:
-            from .prises import LoggiaPrises
-
-            data["prises"] = LoggiaPrises(hass, data["store"], data.get("regles"))
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia : prises indisponibles")
-
-    # Le carnet des lumieres (chantier Lumieres, L1) : chaque allumage,
-    # extinction et reglage, avec son niveau et son contexte, note ecran
-    # ferme. Il ne commande rien : le magasin lui suffit.
-    if not data.get("lumieres") and data.get("store"):
-        try:
-            from .lumieres import LoggiaLumieres
-
-            data["lumieres"] = LoggiaLumieres(hass, data["store"])
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia : carnet des lumieres indisponible")
-
-    # Le carnet de l'eau (chantier IoT, etape 3 ; I28, ADR 0217) : pourquoi une
-    # vanne d'eau est fermee, ses detecteurs, le journal du jour, notes ecran
-    # ferme. Il ne commande rien : le magasin lui suffit. La regle de fuite
-    # (alertes.py) le trouve ici au moment d'agir, et lui dit la cause avant.
-    if not data.get("eau") and data.get("store"):
-        try:
-            from .eau import LoggiaEau
-
-            data["eau"] = LoggiaEau(hass, data["store"])
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia : carnet de l'eau indisponible")
-
-    # Le mode enfant (chantier Mode enfant) : les profils par piece, le plafond
-    # de volume, le temps d'ecran et le coucher tenus ecran ferme, la demande
-    # de l'enfant au telephone. Meme regime que les regles : il previent par
-    # elles, il n'agit jamais par `agir` (E11).
-    if not data.get("enfant") and data.get("store") and data.get("regles"):
-        try:
-            from .enfant import LoggiaEnfant
-
-            data["enfant"] = LoggiaEnfant(hass, data["store"], data.get("regles"))
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia : mode enfant indisponible")
-
-    # Un import ou une remise a zero ecrit la configuration des modules par la
-    # configuration generale : ils la reprennent tout de suite, au lieu
-    # d'attendre le prochain redemarrage (relecture du lot 1, audit du 03/10).
-    if not data.get("rechargement") and data.get("store"):
-        try:
-            from .rechargement import LoggiaRechargement
-
-            data["rechargement"] = LoggiaRechargement(hass, data)
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia : rechargement des modules indisponible")
-
-    # Les scenarios : ce que la maison fait d'un seul geste (ADR 0027). Ils
-    # ne posent aucun abonnement — seul le magasin leur est necessaire.
-    if not data.get("scenarios") and data.get("store"):
-        try:
-            from .scenarios import LoggiaScenarios
-
-            data["scenarios"] = LoggiaScenarios(hass, data["store"], data.get("regles"))
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia : scenarios indisponibles")
+            _LOGGER.exception("Loggia : %s", module.panne)
 
     # Le service `loggia.scenario` : une automatisation, l'assistant vocal ou
     # un interrupteur sans fil lance un scenario comme la carte le fait. Un

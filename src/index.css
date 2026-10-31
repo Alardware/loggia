@@ -109,7 +109,7 @@ button:active, .o-nav-item:active, .o-piece:active, .o-light-card:active, .o-sce
   --o-lampe:#ffce73; --o-lampe-rgb:255,206,115; --o-lampe-b:#f59e0b; --o-orange:#ff8a4c; --o-orange-rgb:255,138,76; --o-rose:#ff4d8c; --o-rose-rgb:255,77,140;
   --o-rose-fond:#ff377e; --o-purple-fond:#9574f9;
   --o-piste:var(--o-s1);
-  --o-flux-solaire:#fbbf24; --o-flux-maison:#ec4899; --o-flux-reseau:#a855f7; --o-flux-ve:#38bdf8; --o-flux-batterie:#4ade80;
+  --o-flux-solaire:#fbbf24; --o-flux-panneau:#ffa63c; --o-flux-maison:#ec4899; --o-flux-reseau:#a855f7; --o-flux-ve:#38bdf8; --o-flux-batterie:#4ade80;
   --o-gold:#ffd166; --o-gold-rgb:255,209,102; --o-purple:#a88dfa; --o-purple-rgb:168,141,250; --o-cyan:#54c8f0; --o-cyan-rgb:84,200,240;
   /* Profondeur — un filet de lumière en haut de la carte, deux ombres courtes ; au survol, un cran à peine. */
   --o-shadow:inset 0 1px 0 rgba(255,255,255,.035), 0 1px 2px rgba(0,0,0,.22), 0 6px 16px -8px rgba(0,0,0,.42);
@@ -200,6 +200,54 @@ html.loggia-frosted body [style*="--o-surfA"] [style*="--o-surfA"] { -webkit-bac
  * change pas — `--o-surfA` posee sur une base pleine donne exactement la
  * teinte qu'elle avait sur fond sombre —, seule la transparence part. */
 html.loggia-frosted .o-sheet-opaque { -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+/* « Verre des cartes » LÉGER (ADR 0284, Paramètres > Effets) : le même verre,
+ * pas une seconde matière (décision du 29/08) — seul le coût change. Posée sur
+ * la racine par `verre.js` avant le premier rendu.
+ *
+ * Plus aucune carte ne recalcule de flou d'arrière-plan : c'est lui qui se
+ * refaisait, carte par carte, à chaque image du défilement. La tuile de
+ * l'alarme portait le sien. Ce qui flotte garde son flou : les menus
+ * (`ListeChoix`, celui de l'en-tête), le bandeau d'erreur, les deux barres —
+ * l'en-tête du PC, la barre du bas du téléphone. Un ou deux éléments, que rien
+ * ne fait défiler sous eux, sauf les barres, mesurées sans coût visible. */
+html.loggia-verre-leger [style*="--o-surfA"]:not([style*="position: fixed"]), html.loggia-verre-leger .o-tuile-alarme { -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* La feuille glisse à l'ouverture, souvent au-dessus du ciel animé : son flou
+ * se recalculait à chaque image. Elle devient pleine, de la teinte que le
+ * flou lui donnait : sa surface sur le fond du thème assombri par le voile
+ * (la même ombre que le voile, `rgba(0,0,0,.32)`, ui.jsx). Sans cette ombre,
+ * elle sortait blanche en clair, là où le Plein la montre grisée. Le voile,
+ * un flou plein écran, garde son ombre seule. */
+html.loggia-verre-leger .o-sheet:not(.o-sheet-opaque) { -webkit-backdrop-filter: none; backdrop-filter: none; background: linear-gradient(var(--o-surfA), var(--o-surfA)), linear-gradient(rgba(0,0,0,.32), rgba(0,0,0,.32)), var(--o-bg) !important; }
+html.loggia-verre-leger .o-voile { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+/* La photo de fond, floutée UNE fois : un calque fixe qui ne bouge jamais, que
+ * le compositeur garde en cache. Le flou et la saturation sont ceux des cartes
+ * en Plein ; le calque déborde de 40 px de chaque côté pour que le bord flou
+ * (transparent) reste hors de l'écran. Les cartes, posées dessus, montrent ce
+ * qu'elles montraient ; entre elles, la photo est floue elle aussi. */
+html.loggia-verre-leger .o-fond-photo { inset: -40px !important; filter: blur(16px) saturate(1.35); }
+
+/* « Nuit de l'écran » (ADR 0287, Paramètres > Effets) : posées sur la racine
+ * par `nuitecran.js`, avant le premier rendu. `loggia-nuit-sol` dit que cet
+ * appareil suit le soleil (et arme les transitions), `loggia-nuit` qu'il fait
+ * nuit, `data-nuit` l'intensité.
+ *
+ * Un voile noir par-dessus tout, qui laisse passer les clics, et la photo de
+ * fond plus sombre. Le passage dure 4 s, jamais un saut. Le voile ne couvre
+ * pas l'écran de veille, qui a le sien (ecranveille.jsx, le seul îlot sombre
+ * posé en `position: fixed`) : il y disparaît sans
+ * transition, et revient de même au réveil — pas d'écran clair qui s'éteint
+ * peu à peu sous le doigt. Mesuré sur le thème par défaut, le texte principal
+ * garde au moins 5:1 à 45 % ; le texte secondaire passe sous 3:1. */
+html[data-nuit="peu"] { --o-nuit-voile: .15; --o-nuit-photo: .85; }
+html[data-nuit="moyen"] { --o-nuit-voile: .3; --o-nuit-photo: .7; }
+html[data-nuit="beaucoup"] { --o-nuit-voile: .45; --o-nuit-photo: .55; }
+html.loggia-nuit-sol body::after { content: ''; position: fixed; inset: 0; z-index: 2147483646; pointer-events: none; background: #000; opacity: 0; transition: opacity 4s ease; }
+html.loggia-nuit body::after { opacity: var(--o-nuit-voile, .3); }
+html.loggia-nuit-sol body:has(.o-sombre[style*="position: fixed"])::after { content: none; }
+html.loggia-nuit-sol .o-fond-photo { transition: filter 4s ease; }
+html.loggia-nuit .o-fond-photo { filter: brightness(var(--o-nuit-photo, .7)); }
+html.loggia-nuit.loggia-verre-leger .o-fond-photo { filter: blur(16px) saturate(1.35) brightness(var(--o-nuit-photo, .7)); }
 
 /* Contraste renforcé : les tokens sont posés en inline par applyLook() — une règle de
    classe ne battrait pas le style inline du preset. La classe ne sert que de marqueur. */
@@ -533,6 +581,15 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
   animation: o-tour 3.4s linear infinite; }
+/* Le souffle anime la carte à chaque image, et Chrome recalcule alors aussi
+   chaque enfant qui hérite explicitement d'elle (`inherit` sur une propriété
+   qui ne s'hérite pas). Le bouton de surface (`Surface`, ui.jsx) prend ainsi
+   l'arrondi de la carte : mesuré dans Objets au repos (démo, 1440 px, deux
+   cartes muettes à l'écran), 300 à 360 ms de styles par seconde, 180 sans
+   cet héritage (29/10). Sur une carte de la grille, l'arrondi est TOUJOURS
+   `--o-radius` (RM_CARD, et `.o-light-card` au téléphone) : même valeur,
+   donnée sans `inherit`. Rien ne bouge à l'œil, l'anneau de focus compris. */
+.o-rmcard.o-panne > .o-surface { border-radius: var(--o-radius, 18px) !important; }
 @media (prefers-reduced-motion: reduce) { .o-panne, .o-panne::before { animation: none; } }
 /* La tuile caméra clippe son image aux coins : le liseré se dessine juste
    dedans, sinon `overflow: visible` laisserait les coins carrés de la vidéo. */
@@ -609,8 +666,10 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
   .o-bar-scenes > .o-qb-direct { order: 1; }
   .o-bar-scenes .o-qb { padding: 4px 5px !important; }
   .o-bar-scenes .o-qb-lbl { display: none; }
-  .o-bar-scenes .o-qb-piece > div { flex: 1; }
-  .o-bar-scenes .o-qb-piece > div > button { flex: 1; }
+  /* la pièce est une liste (les zones de Home Assistant, ADR 0304) : comme la collection, elle prend toute sa rangée */
+  .o-bar-scenes .o-qb-piece > span { flex: 1; }
+  .o-bar-scenes .o-qb-piece button { flex: 1; min-width: 0; justify-content: space-between; padding: 5px 8px !important; gap: 6px !important; }
+  .o-bar-scenes .o-qb-piece button > span:first-child { flex: 1 1 auto !important; }
   /* le nom de la collection garde le plus de place possible : « Fêtes d'hiver »
    * tient dès 360 px de large, tous les noms dès 375 */
   .o-bar-scenes .o-qb-collection > span { flex: 1; }
@@ -2017,4 +2076,50 @@ html.loggia-light .o-vacances { color-scheme: light; }
 .o-ico-fige svg *, .o-ico-fige * { animation: none !important; }
 @media (prefers-reduced-motion: reduce) {
   [style*="animation:o-ic-"] { animation: none !important; }
+}
+
+/* ── Lot 7 de l'audit du 28/10 : finitions au téléphone (ADR 0290) ──────────
+ * V1. La barre du bas sous 360 px : le bouton de l'assistant rend 8 px aux
+ * libellés (navmobile.jsx, `marge`). Son carré fait 48 px ; son anneau, de la
+ * couleur de la barre, déborde de 2 px sur la case voisine, sous son icône. */
+@media (max-width: 360px) { .o-nav-assist { width: 54px !important; } }
+/* V2. Le héros du téléphone suit son contenu : 40 px de ciel vide restaient
+ * entre la rangée de chiffres et les points des pages (14 de rembourrage, 24
+ * d'écart de section). Il en reste 22. */
+@media (max-width: 560px) {
+  .o-banniere { padding-bottom: 4px !important; }
+  .o-pages-points { margin-top: -8px; }
+}
+/* À 320 px, le premier anneau des personnes touchait le nom : sous 340 px, les
+ * avatars passent à 30 px, 6 px d'écart (28 px rendus au nom). */
+@media (max-width: 340px) {
+  .o-avatars { gap: 6px !important; }
+  .o-avatarin { width: 30px !important; height: 30px !important; }
+}
+/* V3. Thème clair sur un ciel clair : le texte du héros ne tenait que par le
+ * halo de son ombre. Un voile du FOND DU THÈME passe derrière lui, flou, sans
+ * bord. La bannière ne le rogne pas : sous le ciel, elle n'a pas de décor à
+ * rogner (`WeatherFx` ne vient que sans lui). Il déborde de 8 px sur les côtés,
+ * moins que la marge de la page : rien ne défile. Pas sous un ciel sombre, où le
+ * texte est blanc. */
+@supports (background: color-mix(in srgb, red 50%, transparent)) {
+  html.loggia-light main:has(.o-wx3d):not(:has(.o-wx3d-sombre)) .o-banniere { isolation: isolate; overflow: visible !important; }
+  html.loggia-light main:has(.o-wx3d):not(:has(.o-wx3d-sombre)) .o-banniere::before {
+    content: ''; position: absolute; inset: -6px -8px 6px; z-index: -1; pointer-events: none; border-radius: 28px;
+    background: color-mix(in srgb, var(--o-bg) 40%, transparent); filter: blur(14px);
+  }
+}
+/* V6. L'état d'une pièce compacte se coupait à 320 px (« 22,8° · Tout est ét… »,
+ * 10 px de trop) : sous 340 px, la ligne passe à 11 px et la carte serre ses
+ * bords de 3 px. */
+@media (max-width: 340px) {
+  .o-piecechip { padding-left: 11px !important; padding-right: 11px !important; }
+  .o-chip-etat { font-size: 11px !important; }
+}
+/* La recherche de l'en-tête : le libellé long ne tient qu'au-delà de 1 200 px
+ * d'en-tête (l'espagnol, le plus long, y compris). En deçà, le court. */
+.o-recherche-court { display: none; }
+@container (max-width: 1200px) {
+  .o-recherche-long { display: none; }
+  .o-recherche-court { display: block; }
 }

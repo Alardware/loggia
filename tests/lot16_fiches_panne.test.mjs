@@ -36,6 +36,7 @@ import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -102,7 +103,7 @@ const commandes = (html) => [
   // La balise ouvrante, puis le texte entre les balises — lu, pas nettoyé par
   // remplacement (CodeQL, 05/10).
   ...(html.match(/<button\b[^>]*>.*?<\/button>/g) || []).map(b => b.match(/^<button\b[^>]*>/)[0] + [...b.matchAll(/>([^<]*)</g)].map(m => m[1]).join(''))
-    .filter(b => !/^<button\b[^>]*disabled=""/.test(b) && !/^<button\b[^>]*(title|aria-label)="(Épingler sur la carte|Désépingler|Fermer)"/.test(b)),
+    .filter(b => !/^<button\b[^>]*disabled=""/.test(b) && !/^<button\b[^>]*(title|aria-label)="(Épingler sur la carte|Désépingler|Fermer|Fermer la fiche)"/.test(b)),
   ...(html.match(/role="(switch|slider)"/g) || []),
 ];
 // Le sous-arbre de l'élément qui porte le liseré, équilibré sur ses <div>.
@@ -315,7 +316,7 @@ test('lecteur mort : ni pochette ni fond flouté, et « Indisponible » en text3
  * par « Cette vue n'a pas pu s'afficher ». Avec la feuille dans la coquille et la frontière DEDANS, la barrière de la feuille (`Barriere`,
  * ui.jsx) attrape l'échec : la panne se dit dans la feuille, avec « Réessayer » et « Recharger ». */
 test('lecteur : la coquille garde la feuille et pose la frontière Suspense DEDANS — un morceau qui ne charge pas se dit dans la feuille, jamais à la place de la vue', async () => {
-  const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+  const APP = MONOLITHE.replace(/\r\n/g, '\n');
   const i = APP.indexOf('\nfunction FicheMedia(');
   assert.ok(i >= 0, 'la coquille d’un lecteur a disparu d’App.jsx');
   const coquille = APP.slice(i, APP.indexOf('\n}\n', i));
@@ -365,7 +366,7 @@ test('lecteur : la coquille garde la feuille et pose la frontière Suspense DEDA
  * vue d'une pièce — une régression, ces fiches étaient au démarrage. La coquille garde la feuille, la frontière est DEDANS, le module n'exporte que des
  * contenus, sans `BottomSheet`. */
 test('capteurs : les trois coquilles gardent la feuille et posent la frontière Suspense DEDANS — un morceau qui ne charge pas se dit dans la feuille', async () => {
-  const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+  const APP = MONOLITHE.replace(/\r\n/g, '\n');
   for (const [nom, signature, contenu] of [
     ['FicheCapteur', 'function FicheCapteur({ id, hass, onClose }) {', '<FicheCapteurContent id={id} vue={vue}'],
     // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 4 ; C26) : la coquille passe le `hass` vivant, la pièce, la famille, l'épingle et L'appareil.
@@ -404,13 +405,13 @@ test('capteurs : les trois coquilles gardent la feuille et posent la frontière 
   rendre(F.RoomComfortModal, { piece, hass: hassDe() });
   await new Promise(r => setTimeout(r, 50));
   const confort = rendre(F.RoomComfortModal, { piece, hass: hassDe() });
-  assert.ok(confort.includes('role="dialog"') && confort.indexOf('role="dialog"') < confort.indexOf('Salon') && confort.includes('aria-label="Fermer"'), 'la fiche de confort, sa croix, dans sa feuille');
+  assert.ok(confort.includes('role="dialog"') && confort.indexOf('role="dialog"') < confort.indexOf('Salon') && confort.includes('aria-label="Fermer la fiche"'), 'la fiche de confort, sa croix, dans sa feuille'); // ASSERTION MODIFIÉE (lot 7 de l'audit du 28/10, V7) : la croix commune se nomme « Fermer la fiche ».
 });
 
 test('minuteur et code d’alarme : rien ne se programme vers un appareil mort', () => {
   /* La rangée du minuteur lit le composant par un effet : le rendu serveur ne
    * la montre pas. On lit donc la source — minuteur.test épingle le reste. */
-  const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  const APP = MONOLITHE;
   const bloc = (nom) => { const d = APP.indexOf('function ' + nom + '('); assert.ok(d >= 0, nom); return APP.slice(d, APP.indexOf('\n}\n', d)); };
   // ASSERTION MODIFIÉE (audit des prises, 19/10) : la rangée du minuteur et la feuille d'un switch vivent dans ficheswitch.jsx.
   const SW = readFileSync(new URL('../src/ficheswitch.jsx', import.meta.url), 'utf8');

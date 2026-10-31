@@ -14,6 +14,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { monter } from './crochets.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -28,7 +29,7 @@ register('data:text/javascript,' + encodeURIComponent([
   '}',
 ].join('\n')));
 const { RmJauge } = await import(new URL('../src/App.jsx?jauge_lumiere', import.meta.url).href);
-const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const APP = MONOLITHE.replace(/\r\n/g, '\n');
 
 const rendre = (props) => renderToStaticMarkup(createElement(RmJauge, { label: 'Luminosité Lampe', onCommit: () => {}, couleur: 'rgb(255,169,87)', ...props }));
 const largeur = (html) => (html.match(/data-fill="true" style="[^"]*width:([^;"]*)/) || [])[1];

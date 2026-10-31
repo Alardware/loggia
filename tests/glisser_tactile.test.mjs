@@ -21,8 +21,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pasDefilement, conteneurDefilant, bloquerDefilement, defileurAuto } from '../src/glisser.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const APP = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const APP = MONOLITHE;
 
 /* Une fenêtre de 0 à 800 px de haut. */
 const HAUT = 0, BAS = 800;

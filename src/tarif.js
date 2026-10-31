@@ -179,3 +179,116 @@ export function coutHoraire(kwhParHeure, connexions) {
   if (!prix) return null;
   return (Array.isArray(kwhParHeure) ? kwhParHeure : []).reduce((s, x) => (x && Number(x.kwh) > 0 ? s + Number(x.kwh) * prix(Number(x.debut)) : s), 0);
 }
+
+/* ── Le prix qui VARIE, et sa prévision (chantier G3, D4 et E5 ; ADR 0302) ────
+ *
+ * Un prix spot ou horaire (une bourse de l'électricité, un fournisseur à tarif
+ * dynamique) n'est pas un « tarif unique » : c'est le prix du moment. Quand
+ * l'entité qui le publie porte aussi sa PRÉVISION en attribut, la carte dit où
+ * se trouve le creux.
+ *
+ * La prévision se reconnaît à sa FORME, jamais au nom de l'intégration : une
+ * liste d'objets qui portent chacun un INSTANT (une date avec l'heure) et un
+ * NOMBRE. Le début est le plus tôt des instants de l'objet, la fin le plus tard
+ * — sinon le début du suivant. Le prix est le nombre dont le nom dit un prix
+ * (`per_kwh`, `price`, `value`, `total`…) — ou le seul nombre de l'objet. Les
+ * listes de plusieurs attributs (aujourd'hui, demain) se fondent en une.
+ *
+ * Ce que ces règles ne lisent pas : les intégrations qui ne publient leur
+ * prévision que par une ACTION à elles (Nord Pool officielle, Tibber). Leur
+ * prix reste « du moment », sans fenêtre.
+ */
+const INSTANT = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/;
+const CLES_PRIX = ['per_kwh', 'price', 'value', 'total'];
+const NOM_PRIX = /price|prix|preis|prezzo|precio|cena|prijs|per_kwh|tarif|cost/i;
+
+/** Un instant lu dans une valeur d'attribut (millisecondes), ou null : une date SANS heure n'en est pas un. */
+function instantDe(v) {
+  if (typeof v !== 'string' || !INSTANT.test(v)) return null;
+  const t = Date.parse(v);
+  return Number.isFinite(t) ? t : null;
+}
+
+/** Le nom du champ prix d'un objet de prévision, ou null. */
+function champPrix(o) {
+  const nombres = Object.keys(o).filter(k => typeof o[k] === 'number' && Number.isFinite(o[k]));
+  for (const k of CLES_PRIX) if (nombres.indexOf(k) >= 0) return k;
+  const nommes = nombres.filter(k => NOM_PRIX.test(k) && !/spot/i.test(k)).sort();
+  if (nommes.length) return nommes[0];
+  return nombres.length === 1 ? nombres[0] : null;
+}
+
+/** Un point de prévision `{ debut, fin, prix }` (fin `null` si l'objet ne la dit pas), ou null. */
+function pointDe(o) {
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+  const instants = Object.keys(o).map(k => instantDe(o[k])).filter(t => t != null);
+  const cle = champPrix(o);
+  if (!instants.length || !cle) return null;
+  const debut = Math.min(...instants), fin = Math.max(...instants);
+  return { debut, fin: fin > debut ? fin : null, prix: o[cle] };
+}
+
+/**
+ * La prévision d'un prix, lue dans les attributs de son entité :
+ * `[{ debut, fin, prix }]`, triée, sans doublon. Vide quand rien n'a la forme
+ * d'une prévision.
+ */
+export function lirePrevision(attributs) {
+  if (!attributs || typeof attributs !== 'object') return [];
+  const parDebut = new Map();
+  for (const v of Object.values(attributs)) {
+    if (!Array.isArray(v) || v.length < 2) continue;
+    const pts = v.map(pointDe);
+    if (pts.some(p => p == null)) continue;           // une liste où un objet n'a pas la forme n'en est pas une
+    for (const p of pts) if (!parDebut.has(p.debut)) parDebut.set(p.debut, p);
+  }
+  const liste = [...parDebut.values()].sort((a, b) => a.debut - b.debut);
+  // La fin manquante : le début du suivant ; pour le dernier, la durée de son voisin.
+  return liste.map((p, i) => {
+    if (p.fin != null) return p;
+    const suivant = liste[i + 1];
+    const precedent = liste[i - 1];
+    const pas = suivant ? suivant.debut - p.debut : (precedent ? p.debut - (precedent.debut) : null);
+    return pas > 0 ? { ...p, fin: p.debut + pas } : null;
+  }).filter(Boolean);
+}
+
+/** Le prix varie-t-il ? Sa prévision en a plusieurs, ou sa journée en a connu plusieurs (`[{ state }]`, l'historique). */
+export function prixVarie(points, historique) {
+  if (new Set((points || []).map(p => p && p.prix).filter(v => typeof v === 'number' && Number.isFinite(v))).size > 1) return true;
+  const vus = new Set((Array.isArray(historique) ? historique : [])
+    .map(e => parseFloat(e && e.state)).filter(Number.isFinite));
+  return vus.size > 1;
+}
+
+/**
+ * La fenêtre CONTINUE la moins chère à venir, d'au moins `dureeMin` minutes
+ * (deux heures par défaut) : `{ debut, fin, prix }` — le prix moyen, pondéré
+ * par la durée de chaque tranche —, ou null.
+ *
+ * L'heure en cours compte (on peut encore s'en servir) ; ce qui est passé, non.
+ * Un trou dans la prévision coupe la continuité. À égalité, la plus tôt. Des
+ * prix tous égaux ne désignent rien : il n'y a pas de creux.
+ */
+export function fenetreMoinsChere(points, maintenant, dureeMin = 120) {
+  const pts = (Array.isArray(points) ? points : [])
+    .filter(p => p && Number.isFinite(p.debut) && Number.isFinite(p.fin) && p.fin > p.debut && typeof p.prix === 'number' && Number.isFinite(p.prix) && p.fin > maintenant)
+    .sort((a, b) => a.debut - b.debut);
+  if (pts.length < 2 || new Set(pts.map(p => p.prix)).size < 2) return null;
+  const voulu = dureeMin * 60e3;
+  const JEU = 60e3;
+  let meilleur = null;
+  for (let i = 0; i < pts.length; i++) {
+    let duree = 0, somme = 0, fin = pts[i].debut;
+    let j = i;
+    for (; j < pts.length && duree < voulu; j++) {
+      if (j > i && Math.abs(pts[j].debut - fin) > JEU) break;
+      const d = pts[j].fin - pts[j].debut;
+      duree += d; somme += pts[j].prix * d; fin = pts[j].fin;
+    }
+    if (duree < voulu) continue;
+    const moyen = somme / duree;
+    if (!meilleur || moyen < meilleur.prix - 1e-12) meilleur = { debut: pts[i].debut, fin, prix: moyen };
+  }
+  return meilleur;
+}

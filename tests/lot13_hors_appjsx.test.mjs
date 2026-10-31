@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 
 import { composant, rendre } from './rendu.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 
@@ -116,7 +117,7 @@ test('les jours de l’agenda : le nom commence par ce que le bouton affiche', a
 });
 
 test('le champ de recherche de l’en-tête : nommé par ce qu’il affiche', () => {
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   const i = app.indexOf('<div className="o-hdr-search"');
   assert.ok(i > 0, 'le champ de recherche n’est plus lu');
   const balise = app.slice(i, app.indexOf('\n', i));
@@ -128,7 +129,7 @@ test('le champ de recherche de l’en-tête : nommé par ce qu’il affiche', ()
 });
 
 test('les cartes de pièce : l’anneau de focus de leur surface se trace en dedans', () => {
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   const piece = app.slice(app.indexOf('function PieceCard('), app.indexOf('\n}\n', app.indexOf('function PieceCard(')));
   assert.equal(piece.split('<button type="button" className="o-surface" onClick={onOpen}').length - 1, 2, 'la compacte et la standard');
   assert.ok(lire('src', 'index.css').includes('.o-surface:focus-visible { outline-offset: -2px; }'));

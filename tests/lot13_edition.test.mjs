@@ -22,7 +22,8 @@ import { readFileSync } from 'node:fs';
 
 import { composant, rendre } from './rendu.mjs';
 
-const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+import { MONOLITHE, DASHBOARD } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282) ; DASHBOARD : l'Accueil en entier, ses hooks compris (ADR 0283)
+const app = MONOLITHE;
 const css = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
 const NL = '\n';
 const bloc = (debut) => { const i = app.indexOf(debut); assert.ok(i >= 0, debut + ' introuvable'); return app.slice(i, app.indexOf(NL + 'function ', i + 1)); };
@@ -59,7 +60,7 @@ test('la carte du kit d’édition n’est plus un bouton : sa surface, sœur de
 });
 
 test('la section et la tuile de pièce de l’Accueil : une surface en édition, et l’appui sur elle saisit toujours', () => {
-  const d = bloc('function Dashboard(');
+  const d = DASHBOARD;
   assert.ok(!d.includes("role={editMode ? 'button' : undefined}") && !d.includes('tabIndex={editMode ? 0 : undefined}'), 'une enveloppe redevient un bouton en édition');
   assert.ok(d.includes("label={nomCarte(ACC_NOMS()[id] || id, cache ? (estOption(id) ? tr('en option') : tr('masquée')) : null, tr('Déplacer avec les flèches'))}"), 'la section : son nom, « masquée » s’il le faut, le geste');
   assert.ok(d.includes("label={nomCarte(p.name, tr('Déplacer avec les flèches'))}"), 'la tuile : son nom, le geste');

@@ -30,6 +30,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { usersSig, estPersonnelle } from '../src/state.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 
@@ -141,7 +142,7 @@ test('le profil ACTIF, lui, décrit un écran — des deux côtés (10/10)', () 
 // ─────────────────────────────────────────────────────────────────────────────
 
 test('aucune écriture automatique de la maison depuis un compte ordinaire', () => {
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   // La liaison profil ↔ compte Home Assistant se déclenche au chargement, sans
   // que personne ne clique. C'est elle qui semait l'ombre sur la tablette.
   // ASSERTION MODIFIEE (ADR 0276, 27/10) : la liaison profil ↔ compte ne

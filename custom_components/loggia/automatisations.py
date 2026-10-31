@@ -54,6 +54,8 @@ import re
 from collections.abc import Callable, Iterable
 from typing import Any
 
+from .entites import motif
+
 _LOGGER = logging.getLogger(__name__)
 
 # Une device action ne vaut commande, quand son entite ne se resout pas, que
@@ -84,7 +86,7 @@ OCCURRENCES_MAX = 24
 
 _HEURE = re.compile(r"^\s*(\d{1,2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?\s*$")
 _DECALAGE = re.compile(r"^\s*([+-])?(\d{1,3}):(\d{2})(?::(\d{2})(?:\.\d+)?)?\s*$")
-_ENTITE = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
+_ENTITE = motif("[a-z_]+")
 _GABARIT = object()  # une valeur en gabarit : portions inconnues
 
 

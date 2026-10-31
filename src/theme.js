@@ -28,6 +28,15 @@
 import { garde, JETONS_GARDE } from './contraste.js';
 import { cfgVal, apparence } from './state.js';
 import { LOOK_DEF } from './ui.jsx';
+import { poserVerre } from './verre.js';
+import { suivreNuit } from './nuitecran.js';
+
+/* « Verre des cartes » (ADR 0284) : la classe se pose à l'import, donc avant
+ * le premier rendu — un saut de Plein à Léger se verrait sur chaque carte. */
+poserVerre();
+/* « Nuit de l'écran » (ADR 0287), de même : une tablette rechargée la nuit ne
+ * s'allume pas d'abord. Le suivi de la minute ne part que sur Soleil. */
+suivreNuit();
 
 // "couleur CSS (hex/rgb) → 'r,g,b'" pour alimenter les tokens rgba(var(--o-accent-rgb),...)
 function cssToRgb(c) {

@@ -19,6 +19,11 @@ Ce qui se passe quand...
     pendant l'arret s'execute au demarrage — « eteindre dans 30 min » voulait
     dire « eteinte a telle heure », et cette heure est passee ;
   * l'appareil est deja eteint a l'heure dite : rien a faire, rien au journal ;
+  * l'appareil ne repond pas a l'heure dite (« unavailable », « unknown », ou
+    pas encore recree au demarrage) : l'extinction ATTEND son retour, au plus
+    `ATTENTE_MAX` (24 h) apres l'heure — revenu allume, il s'eteint ; revenu
+    eteint, il n'y a plus rien a faire ; muet au-dela, on renonce (28/10,
+    ADR 0280) ;
   * on le pose sur un appareil deja eteint : il est refuse (`minuteur_deja_eteint`) —
     garde, il couperait l'appareil une fois rallume, a l'heure d'un geste
     oublie (audit du 19/10).
@@ -31,13 +36,14 @@ Assistant ferait d'un appel direct n'a donc pas lieu (audit 18/09).
 """
 from __future__ import annotations
 
+import copy
 import logging
-import re
 import time
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import Context, HomeAssistant, callback
 
+from .entites import motif_de
 from .refus import RefusNomme
 from .regles import demarrer
 
@@ -52,18 +58,24 @@ MODULE = "minuteurs"
 # Ce qu'un minuteur sait eteindre : ce que les fiches proposent, et ce que
 # `homeassistant.turn_off` eteint sans ambiguite.
 DOMAINES = ("light", "switch", "fan", "input_boolean", "media_player")
-ENTITE = re.compile(r"^(%s)\.[a-z0-9_]+$" % "|".join(DOMAINES))
+ENTITE = motif_de(DOMAINES)
 
 MAX_MINUTEURS = 50
 PAS_MAX = 24 * 60            # un appui ajoute au plus une journee
 TOTAL_MAX = 24 * 3600        # et un minuteur ne va jamais au-dela de 24 h
 
 # Ce qui compte pour « deja eteint » : l'extinction n'a alors plus d'objet.
-ETEINT = {"off", "unavailable", "unknown", "standby"}
-# Ce qui refuse la POSE : un appareil coupe. Un appareil qui ne repond plus
-# (« unavailable », « unknown ») garde le droit au minuteur : il revient
-# souvent allume, et doit s'eteindre a l'heure.
+# Ce qui refuse aussi la POSE : un appareil coupe.
 COUPE = {"off", "standby"}
+# Un appareil qui ne repond plus (« unavailable », « unknown ») garde le droit
+# au minuteur : il revient souvent allume, et doit s'eteindre. Jusqu'au 28/10,
+# l'echeance le prenait pour eteint et abandonnait — la lampe revenue allumee
+# le restait. Desormais l'extinction l'attend, au plus `ATTENTE_MAX` apres
+# l'heure : un appareil parti pour de bon ne garde pas un rendez-vous eternel,
+# et une lampe qui reviendrait trois jours plus tard ne s'eteint pas sur un
+# geste oublie (ADR 0280).
+MUET = {"unavailable", "unknown"}
+ATTENTE_MAX = 24 * 3600
 
 
 # ── Ce qui se calcule, sans Home Assistant ──────────────────────────────────
@@ -182,8 +194,14 @@ class LoggiaMinuteurs:
     async def _async_rattraper(self, _hass=None) -> None:
         self._au_demarrage = None
         maintenant = time.time()
+        # Un minuteur qui leve ne coupe plus ceux qui suivent (28/10, ADR 0280) :
+        # l'exception interrompait la boucle, et les autres n'etaient ni
+        # executes, ni rearmes, ni reecoutes jusqu'au redemarrage suivant.
         for haid in echus(self.table, maintenant):
-            await self._async_echoir(haid, rattrape=True)
+            try:
+                await self._async_echoir(haid, rattrape=True)
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Loggia minuteurs : le rattrapage de %s a echoue", haid)
         for haid in list(self.table):
             self._armer(haid)
         self._reecouter()
@@ -203,7 +221,12 @@ class LoggiaMinuteurs:
             self._rdv.pop(haid, None)
             self.hass.async_create_task(self._async_echoir(haid))
 
-        self._rdv[haid] = async_call_later(self.hass, max(0.0, e["fin"] - time.time()), echu)
+        maintenant = time.time()
+        # Echu et en attente d'un appareil muet : le rendez-vous est celui du
+        # renoncement, `ATTENTE_MAX` apres l'heure. Son retour, lui, passe par
+        # l'ecoute des etats (`_sur_etat`).
+        quand = e["fin"] if e["fin"] > maintenant else e["fin"] + ATTENTE_MAX
+        self._rdv[haid] = async_call_later(self.hass, max(0.0, quand - maintenant), echu)
 
     def _desarmer(self, haid: str) -> None:
         annule = self._rdv.pop(haid, None)
@@ -235,33 +258,60 @@ class LoggiaMinuteurs:
         neuf = d.get("new_state")
         # « off » seulement : une lampe Zigbee qui decroche une minute n'a pas
         # ete eteinte, son minuteur doit tenir.
-        if haid in self.table and neuf is not None and str(neuf.state).lower() == "off":
+        if haid not in self.table or neuf is None:
+            return
+        etat = str(neuf.state).lower()
+        if etat == "off":
             self.hass.async_create_task(self.async_annuler(haid))
+        elif etat not in MUET and self.table[haid]["fin"] <= time.time():
+            # Echu pendant son absence : il revient, l'extinction part (ADR 0280).
+            self.hass.async_create_task(self._async_echoir(haid))
 
     # ── L'extinction ───────────────────────────────────────────────────────
     async def _async_echoir(self, haid: str, rattrape: bool = False) -> None:
-        entree = self.table.pop(haid, None)
+        """L'heure est venue : eteindre D'ABORD, sauvegarder ensuite (28/10,
+        ADR 0280). La sauvegarde passait avant l'extinction et sans garde : une
+        ecriture refusee (plafond du magasin, disque) laissait l'appareil
+        allume. Ecrite apres, une sauvegarde ratee laisse au pire une entree
+        sur le disque, que le prochain demarrage trouve eteinte et efface."""
+        entree = self.table.get(haid)
         self._desarmer(haid)
-        await self._sauver()
-        self._reecouter()
         if entree is None:
             return
         st = self.hass.states.get(haid)
-        if st is None or str(st.state).lower() in ETEINT:
+        etat = str(st.state).lower() if st is not None else None
+        if (etat is None or etat in MUET) and time.time() - entree["fin"] < ATTENTE_MAX:
+            # Il ne repond pas : l'extinction l'attend (son retour passe par
+            # `_sur_etat`), et le renoncement est arme.
+            self._armer(haid)
             return
-        ctx = Context(user_id=entree["par"]) if entree.get("par") else Context()
+        self.table.pop(haid, None)
+        eteint = False
+        if etat is not None and etat not in MUET and etat not in COUPE:
+            ctx = Context(user_id=entree["par"]) if entree.get("par") else Context()
+            try:
+                await self.hass.services.async_call("homeassistant", "turn_off", {"entity_id": [haid]},
+                                                    blocking=False, context=ctx)
+                eteint = True
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Loggia minuteurs : l'extinction de %s a echoue", haid)
+        elif etat is None or etat in MUET:
+            _LOGGER.info("Loggia minuteurs : %s n'est pas revenu dans les %d h, l'extinction est abandonnee",
+                         haid, ATTENTE_MAX // 3600)
         try:
-            await self.hass.services.async_call("homeassistant", "turn_off", {"entity_id": [haid]},
-                                                blocking=False, context=ctx)
+            await self._sauver()
         except Exception:  # noqa: BLE001
-            _LOGGER.exception("Loggia minuteurs : l'extinction de %s a echoue", haid)
-            return
-        if self.regles is not None:
+            _LOGGER.exception("Loggia minuteurs : la table n'a pas pu etre sauvegardee apres %s", haid)
+        self._reecouter()
+        if eteint and self.regles is not None:
             await self.regles.noter(MODULE, "minuteur", "eteindre", cibles=[haid], n=1,
                                     motif=motif(entree, rattrape))
 
     async def _sauver(self) -> None:
-        await self.store.async_set_shared(CLE, self.table)
+        # Une COPIE au magasin (28/10, ADR 0280) : la table vivante, rangee
+        # telle quelle dans son cache, etait ensuite modifiee avant l'ecriture —
+        # un refus de plafond laissait le cache different du disque.
+        await self.store.async_set_shared(CLE, copy.deepcopy(self.table))
 
     # ── Ce que l'interface lit et ecrit ────────────────────────────────────
     def async_etat(self, controle: Any = None) -> dict[str, Any]:

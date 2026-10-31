@@ -70,7 +70,42 @@ def poser_demarrage() -> None:
                 empty_config_schema=lambda domaine: (lambda config: config), string=str)
     sys.modules["homeassistant.helpers"].config_validation = cv
     module("homeassistant.helpers.typing", ConfigType=dict)
-    module("homeassistant.config_entries", ConfigEntry=object)
+    class AbortFlow(Exception):
+        """Comme la vraie (data_entry_flow) : la raison de l'abandon."""
+
+        def __init__(self, reason):
+            super().__init__(reason)
+            self.reason = reason
+
+    class ConfigFlow:
+        """Le parcours d'ajout, ce que `config_flow.py` en utilise (28/10, ADR
+        0281). `deja` : les identifiants uniques deja configures — la vraie
+        classe les lit dans les entrees de Home Assistant. Le vrai parcours,
+        contre un vrai Home Assistant, vit dans tests/ha_reel/."""
+
+        def __init_subclass__(cls, domain=None, **kwargs):
+            super().__init_subclass__(**kwargs)
+            cls.domaine = domain
+
+        def __init__(self, deja=()):
+            self.unique_id = None
+            self.deja = set(deja)
+
+        async def async_set_unique_id(self, unique_id):
+            self.unique_id = unique_id
+
+        def _abort_if_unique_id_configured(self):
+            if self.unique_id in self.deja:
+                raise AbortFlow("already_configured")
+
+        def async_show_form(self, step_id, **kwargs):
+            return {"type": "form", "step_id": step_id, **kwargs}
+
+        def async_create_entry(self, title, data):
+            return {"type": "create_entry", "title": title, "data": data}
+
+    module("homeassistant.config_entries", ConfigEntry=object, ConfigFlow=ConfigFlow, ConfigFlowResult=dict,
+           AbortFlow=AbortFlow)
 
     class ServiceValidationError(Exception):
         """Comme la vraie : une cle de traduction et ses valeurs."""

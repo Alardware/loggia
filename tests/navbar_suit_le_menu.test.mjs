@@ -22,8 +22,9 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const APP = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8').replace(/\r\n/g, '\n');
+const APP = MONOLITHE.replace(/\r\n/g, '\n');
 
 /** Le corps de `MobileNav`, jusqu'à sa liste d'entrées. */
 const corpsNav = () => {

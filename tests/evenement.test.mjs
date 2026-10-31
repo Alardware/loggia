@@ -7,14 +7,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES, DASHBOARD } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274) ; DASHBOARD : l'Accueil en entier, ses hooks compris (ADR 0283)
 import {
   ACTIFS_DETECTION, GENRES_DETECTION, ICONES_DETECTION, FENETRE_EVENEMENT,
   libelleDetection, detecteursDe, instantDe, reduireDerniers, evenementCamera, depuis,
 } from '../src/evenement.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
+const src = (MONOLITHE + VUES_SORTIES);
 const histo = readFileSync(join(RACINE, 'src', 'historique.jsx'), 'utf8');
 const demo = readFileSync(join(RACINE, 'src', 'demo.js'), 'utf8');
 const en = readFileSync(join(RACINE, 'src', 'langues', 'en.js'), 'utf8');
@@ -121,7 +121,7 @@ test('la tuile : hors ligne, en cours, dernier evenement, sinon Direct — le me
 });
 
 test('l’Accueil et la vue Securite lisent la resolution et le journal — jamais last_changed', () => {
-  const d = bloc('function Dashboard(', NL + '}');
+  const d = DASHBOARD;
   assert.ok(d.includes('const camsResolues = (LOGGIA_RESOLVED && LOGGIA_RESOLVED.cameras && LOGGIA_RESOLVED.cameras.list) || [];'), 'les cameras resolues, avec leurs detecteurs');
   assert.ok(d.includes('const derniersCams = useDerniersEvenements(a && a.hass, camsResolues.flatMap(c => detecteursDe(c).map(d => d.id)), reduireDerniers);'), 'le journal des detecteurs');
   assert.ok(d.includes('return rc ? evenementCamera(rc, (a && a.hass && a.hass.states) || {}, derniersCams) : null;') && d.includes('a.cams.map((cam, i) => tuileCamera({ ...cam, evenement: evenementDe(cam.haid) }, i, a.hass))'), 'chaque tuile recoit son evenement');

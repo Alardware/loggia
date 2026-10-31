@@ -11,6 +11,12 @@ __pycache__/
 # des prenoms. Rien de tout cela n'a sa place dans un depot public.
 HANDOFF.md
 
+# Les plans de chantier et les audits : des notes de travail, jamais dans le
+# depot (28/10, ADR 0281). `tests/depot_propre.test.mjs` refuse qu'un de ces
+# fichiers entre dans l'index, meme force par `git add -f`.
+docs/chantier-*
+docs/audit-*
+
 # Sauvegardes de travail
 src/*.avant-*
 

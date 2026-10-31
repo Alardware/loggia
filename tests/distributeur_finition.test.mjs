@@ -29,6 +29,7 @@ import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { transformSync } from 'esbuild';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 // La langue AVANT les imports : i18n et les dates la lisent au chargement.
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
@@ -39,7 +40,7 @@ register('./jsx-hooks.mjs', import.meta.url);
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8').replace(/\r\n/g, '\n');
-const APP = lire('src', 'App.jsx');
+const APP = MONOLITHE;
 
 const { tr, locale } = await import(new URL('../src/i18n.js', import.meta.url));
 const D = await import(new URL('../src/distributeur.js', import.meta.url));

@@ -69,6 +69,15 @@ def _horodatage(quand: Any) -> float | None:
         return None
 
 
+@callback
+def etat_ecoute(data: Any) -> bool:
+    """Ce que l'eau ecoute : vannes, prises et binaires — ceux que `_suivi`
+    trie ensuite. Le reste de la maison ne reveille plus `_sur_etat` (28/10,
+    ADR 0280)."""
+    haid = data.get("entity_id") if isinstance(data, dict) else None
+    return isinstance(haid, str) and haid.startswith(("valve.", "switch.", "binary_sensor."))
+
+
 class LoggiaEau:
     """Le carnet des vannes d'eau et des detecteurs de fuite."""
 
@@ -92,7 +101,9 @@ class LoggiaEau:
         self._maintenant = time.time
         bus = getattr(hass, "bus", None)
         if bus is not None:
-            self._defait.append(bus.async_listen("state_changed", self._sur_etat))
+            # Filtree AVANT le rappel (28/10, ADR 0280) : vannes, prises et
+            # binaires seulement — le reste de la maison ne reveille plus `_sur_etat`.
+            self._defait.append(bus.async_listen("state_changed", self._sur_etat, event_filter=etat_ecoute))
             for nom in AUTOMATISMES:
                 self._defait.append(bus.async_listen(nom, self._sur_automatisme))
             self._defait.append(bus.async_listen_once("homeassistant_stop", self._sur_arret))

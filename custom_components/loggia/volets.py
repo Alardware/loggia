@@ -45,7 +45,6 @@ from __future__ import annotations
 
 import copy
 import logging
-import math
 import re
 import time
 from datetime import datetime, timedelta, timezone
@@ -53,6 +52,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
 
+from .nombres import fini, lu
 from .refus import RefusNomme
 from .regles import MAX_JOURNAL, demarrer, niveau
 from .textes import joindre
@@ -202,8 +202,8 @@ def decalage_valide(brut, nom: str):
 def seuil_vent_valide(brut):
     """Le seuil du vent : un nombre fini, plus grand que zero. Nul, il mettait la
     maison a l'abri pour toujours - tout vent est >= 0 (audit du 19/10)."""
-    if (isinstance(brut, bool) or not isinstance(brut, (int, float))
-            or not math.isfinite(brut) or brut <= 0):
+    valeur = fini(brut)
+    if valeur is None or valeur <= 0:
         raise RefusNomme("volets_seuil_vent", "seuil de vent illisible ou nul", "vent.seuil")
     return brut
 
@@ -456,13 +456,8 @@ def jour_actif(jours, quand) -> bool:
 def degres(valeur) -> int | None:
     """Une orientation lisible, ramenee de 0 a 359 ; None sinon. Le moteur la
     lit par `float` (`au_soleil`) : « 225 » ecrit en chaine compte aussi."""
-    if isinstance(valeur, bool) or valeur in (None, ""):
-        return None
-    try:
-        v = float(valeur)
-    except (TypeError, ValueError):
-        return None
-    return int(v) % 360 if math.isfinite(v) else None
+    v = lu(valeur)
+    return int(v) % 360 if v is not None else None
 
 
 def instant_de(horodatage, fuseau) -> str | None:
@@ -1440,10 +1435,10 @@ class LoggiaVolets:
         st = self.hass.states.get(haid)
         if st is None:
             return None
-        try:
-            return float(st.state)
-        except (TypeError, ValueError):
-            return None
+        # « nan », « inf » se lisent en float (28/10, ADR 0280) : un vent a
+        # « nan » rendait `valeur >= seuil` toujours faux, et la mise a l'abri
+        # ne partait jamais. Un nombre qui n'en est pas un ne se lit pas.
+        return lu(st.state)
 
     def _position_actuelle(self, haid: str):
         """Ou en est ce volet : 0 ferme, 100 ouvert, None si l'on ne sait pas.

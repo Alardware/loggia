@@ -21,10 +21,11 @@ import { fileURLToPath } from 'node:url';
 import { filtrerChoix, blocsChoix, placerMenu, SEUIL_RECHERCHE, LARGEUR_MENU, HAUTEUR_MENU } from '../src/choix.js';
 import { sansAccents } from '../src/outils.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const UI = lire('src', 'ui.jsx');
-const APP = lire('src', 'App.jsx');
+const APP = MONOLITHE;
 const PAR = lire('src', 'views', 'parametres.jsx');
 // La section des listes : du repère de largeur jusqu'à la fin des deux composants.
 const LISTES = UI.slice(UI.indexOf("// La largeur utile de l'écran"), UI.indexOf('\nexport const CV_DOM_ICON'));

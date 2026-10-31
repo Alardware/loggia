@@ -19,9 +19,10 @@ import { fileURLToPath } from 'node:url';
 import { rangerScenarios } from '../src/scenarios.js';
 import { texteRefus } from '../src/refus.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
-const app = lire('src', 'App.jsx');
+const app = MONOLITHE;
 const demo = lire('src', 'demo.js');
 const fonction = (nom) => { const d = app.indexOf('function ' + nom + '('); return app.slice(d, app.indexOf('\n}\n', d)); };
 

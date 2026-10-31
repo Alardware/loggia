@@ -159,11 +159,62 @@ def test_le_gestionnaire_garde_bien_le_passage():
     """La regle est branchee, et un administrateur Home Assistant la saute :
     il peut deja tout ailleurs, lui demander le code n'ajoute rien."""
     src = (RACINE / "custom_components" / "loggia" / "websocket_api.py").read_text(encoding="utf-8")
-    assert "refus = await _refus_profil_admin(patch, connection)" in src
-    corps = src.split("async def _refus_profil_admin")[1].split("@websocket_api")[0]
+    # ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : le contexte des gestionnaires (`ctx`) porte
+    # le laissez-passer et le magasin.
+    assert "refus = await _refus_profil_admin(ctx, patch, connection)" in src
+    corps = src.split("async def _refus_profil_admin")[1].split("async def handle_set")[0]
     assert "if connection.user.is_admin:" in corps
     assert "laissez_passer.valide(connection.user.id)" in corps
     assert "passage_admin(patch, profils)" in corps
     # Une verification reussie l'accorde.
     assert "laissez_passer.accorder(uid)" in src
 
+
+
+# TEST AJOUTE (audit du 28/10 ; ADR 0279) : il n'y a plus de code par defaut. `0000` ouvrait le laissez-passer tant que
+# personne n'avait defini de code ; la constante partie, aucun module ne peut plus s'en servir.
+def test_il_n_y_a_plus_de_code_par_defaut(module):
+    assert not hasattr(module, "CODE_DEFAUT")
+
+
+# TEST AJOUTE (audit du 28/10, B4 ; ADR 0279) : un code redefini referme tous les laissez-passer et oublie tous les rates.
+def test_un_code_redefini_referme_tout_et_oublie_les_rates(module):
+    t = [0.0]
+    lp = module.LaissezPasser(horloge=lambda: t[0])
+    lp.accorder("a")
+    lp.accorder("b")
+    lp.tout_retirer()
+    assert lp.valide("a") is False and lp.valide("b") is False
+    lim = module.Limiteur(horloge=lambda: t[0])
+    for _ in range(module.ESSAIS_LIBRES):
+        lim.rate("a")
+    assert lim.bloque_pendant("a") > 0
+    lim.tout_oublier()
+    assert lim.bloque_pendant("a") == 0
+    assert lim.rate("a") == 0, "les rates d'avant comptent encore"
+
+
+# TEST AJOUTE (audit du 28/10, B4 ; ADR 0279) : le verrou d'un compte s'en va quand plus personne ne l'attend - le
+# dictionnaire grandissait jusqu'au redemarrage -, sans jamais laisser deux verifications du meme compte passer ensemble.
+def test_les_verrous_par_compte_se_purgent_sans_laisser_passer_deux_essais(module):
+    import asyncio
+
+    verrous = module.VerrousParCompte()
+    dedans = []
+    ensemble = []
+
+    async def essai(cle, n):
+        async with verrous.de(cle):
+            dedans.append(cle)
+            ensemble.append(dedans.count(cle))
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            dedans.remove(cle)
+        return n
+
+    async def scenario():
+        await asyncio.gather(*(essai("u-lea", i) for i in range(5)), essai("u-max", 9))
+        return len(verrous)
+
+    assert asyncio.run(scenario()) == 0, "un verrou reste apres le dernier essai"
+    assert max(ensemble) == 1, "deux essais du meme compte sont passes ensemble"

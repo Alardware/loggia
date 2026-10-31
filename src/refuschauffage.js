@@ -62,6 +62,8 @@ export const REFUS_CHAUFFAGE = {
     return ou ? tr('Température hors bornes ({ou}) : de 5 à 30 °C.', { ou }) : tr('Température hors bornes : de 5 à 30 °C.');
   },
   chauffage_temperatures_desordre: () => tr('Les températures doivent rester dans l’ordre : Hors-gel sous Éco, Éco au plus Confort.'),
+  // Le décalage du capteur d'un thermostat (30/10) : de −5 à +5 °C, comme le serveur (DECALAGE_MAX).
+  chauffage_decalage_hors_bornes: () => tr('Correction hors bornes : de −5 à +5 °C.'),
   chauffage_trop_de_chauffages: (k, n) => (typeof n === 'number' ? trN(n, '{n} chauffage au plus.', '{n} chauffages au plus.') : null),
   chauffage_date_illisible: () => tr('Date de retour illisible ou déjà passée.'),
   // Le serveur nomme le `switch` du programme ; la fiche, elle, le dit par son nom (Avertissements).

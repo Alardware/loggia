@@ -16,6 +16,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 // La langue de la machine ne doit rien changer (garde-fou de la CI) : fixée AVANT l'import.
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 const { moyenneTemperatures } = await import('../src/unites.js');
@@ -70,7 +71,7 @@ test('moyenneTemperatures : rien de lisible, rien d’inventé (ADR 0030)', () =
 
 // ASSERTIONS MODIFIÉES (chantier Capteurs, tâche 4) : la carte d'une mesure passe l'unité de son capteur à sa barre (`barreMesure`), qui écrit `t`.
 test('la carte capteur passe l’unité de son capteur à la jauge, qui écrit `t`', () => {
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   // ASSERTION MODIFIÉE (passe 1 ter, 16/10 ; C15 révisé) : la barre d'une mesure du dehors se lit sur les zones du dehors (`dehors`).
   assert.ok(app.includes('barre: zone ? barreMesure(cle, v, uniteTable, dehors) : null,') && app.includes("const uniteTable = cle === 'temp' ? uT : a.unit_of_measurement;"), 'l’unité repart avec la barre');
   // TEST AJOUTÉ (passe 1 ter) : dehors, les seuils se convertissent comme à l'intérieur — 0, 10, 17, 25 et 32 °C.
@@ -78,14 +79,15 @@ test('la carte capteur passe l’unité de son capteur à la jauge, qui écrit `
   assert.deepEqual(echelleMesure('temp', 'F', true).reperes.map(r => r.v), [0, 10, 17, 25, 32], 'la table du dehors reste en Celsius');
   // ASSERTION MODIFIÉE (correction bis, point 13) : l'aller vers le repère de la table vit dans confort.js (`versRepere`) — la fiche le relit sans la carte.
   assert.ok(app.includes('const versTable = (x) => versRepere(cle, x, uniteTable);'), 'la zone se lit en Celsius et en km/h');
-  assert.ok(lire('src', 'confort.js').includes("export const versRepere = (cle, v, unite) => (cle === 'temp' ? versCelsius(v, unite) : cle === 'vent' ? versKmh(v, unite) : v);"), 'le Celsius et le km/h');
+  // ASSERTION MODIFIÉE (30/10, G1-D6) : et le ppm d'un monoxyde en mg/m³, en µg/m³ ou en ppb (`versCo`).
+  assert.ok(lire('src', 'confort.js').includes("export const versRepere = (cle, v, unite) => (cle === 'temp' ? versCelsius(v, unite) : cle === 'vent' ? versKmh(v, unite) : cle === 'co' && v != null ? versCo(v, unite) : v);"), 'le Celsius et le km/h');
   const i = app.indexOf('\nfunction BarreMesure(');
   const j = app.slice(i, app.indexOf('\n}\n', i));
   assert.ok(j.includes('>{r.t}</span>') && !j.includes('>{r.v}</span>'), 'le chiffre écrit est celui de l’unité du capteur');
 });
 
 test('la salutation de l’Accueil dit l’unité de la maison, pas « °C » en dur', () => {
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   assert.ok(!app.includes('a.inTemp.toFixed(1)}°C'), 'le « °C » en dur est revenu dans la salutation');
   assert.ok(app.includes("{a && a.inTemp != null ? ` · ${dec(a.inTemp, 1)} °${a.inTempUnite}` : ''}"), 'la salutation lit l’unité calculée avec la moyenne');
   assert.ok(app.includes('const inTempUnite = uniteTemp(null, hass);') && app.includes('const inTemp = moyenneTemperatures(indoor.map(r => ({ v: r.temp, unite: uniteTemp(r.tempId && S[r.tempId] ? S[r.tempId].attributes : null, hass) })), inTempUnite);'), 'chaque pièce passe par le Celsius avant la moyenne');

@@ -18,7 +18,6 @@
 import { tr, trN, locale } from './i18n.js';
 import { Fi, useEtatServeur } from './ui.jsx';
 import { EnteteFiche, filet } from './fichecommune.jsx';
-import { LISERE } from './styles.js';
 import { relTime, nombre } from './format.js';
 import { dernierSignal } from './mesuresfiche.js';
 import { motsSurete, ICONES_ATTENTION, couleurPile, seuilsPile } from './attention.js';
@@ -26,11 +25,11 @@ import { glyphePile, vuePiles } from './piles.js';
 import { quandPlante } from './plantes.js';
 import { useJournee, bandesDuJour, depuisQuand, dernierPassage, resumeJour, heure, BandeJour } from './journee.jsx';
 import { vueOuvertures, vuePresence, vueSecurite, delaiCourt, estMuet, estSonnette, sonne as sonneMembre } from './groupes.js';
+import { PANNEAU, SOUS } from './fichekit.js';
+import { chiffreMesure } from './confort.js';
 
-const PANNEAU = { background: 'var(--o-s3)', border: LISERE, borderRadius: 'var(--o-radius,18px)', boxSizing: 'border-box', minWidth: 0 };
 const RANGEE = { display: 'flex', flexDirection: 'column', width: '100%', boxSizing: 'border-box', padding: '12px 14px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', color: 'var(--o-text)', textAlign: 'left' };
 const NOM = { display: 'block', fontSize: 14, fontWeight: 700, overflowWrap: 'anywhere' };
-const SOUS = { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 };
 const ENCRES = { warn: 'var(--o-warn)', bad: 'var(--o-bad)', accent: 'var(--o-accent-soft)' };
 const TEINTES = { warn: 'var(--o-warn-rgb)', bad: 'var(--o-bad-rgb)' };
 /* Un capteur MUET, une seule règle (C26, audit du 19/10, lot 4 ; ADR 0252) : son état, « Indisponible », en rouge — dans sa fiche
@@ -197,7 +196,9 @@ export function Securite({ ids, S, noms, briques, journee, onMembre }) {
         const pile = pileDe(S, id);
         const signal = dernierSignal(S, [id, ...soeursDe(id)]);
         const sous = [signal != null ? tr('Signal {quand}', { quand: enPhrase(relTime(new Date(signal).toISOString())) }) : null, pile != null ? tr('pile {n}', { n: pile + '\u00a0%' }) : null].filter(Boolean).join(' · ');
-        const etat = muet ? tr('Indisponible') : sonne ? e[0] : chiffre ? nombre(st.state, 0) + '\u00a0ppm' : e[1];
+        // Le chiffre dans l'unit\u00e9 du capteur (G1-D6) : \u00ab 300 \u00b5g/m\u00b3 \u00bb, plus \u00ab 300 ppm \u00bb ; arrondi comme sa carte l'\u00e9crit.
+        const unite = (st && st.attributes && st.attributes.unit_of_measurement) || 'ppm';
+        const etat = muet ? tr('Indisponible') : sonne ? e[0] : chiffre ? chiffreMesure('co', st.state, unite) + '\u00a0' + unite : e[1];
         return (
           /* Sans bande du jour, la rangée est la ligne elle-même : ce que le bouton dit se lit à deux niveaux (jsx-a11y). */
           <button key={id} type="button" onClick={() => onMembre(id)} style={{ ...RANGEE, flexDirection: 'row', alignItems: 'center', gap: 12, borderTop: filet(i) }}>

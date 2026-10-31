@@ -23,9 +23,10 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LOGGIA_CONFIG_KEYS, LOGGIA_SYNC_KEYS, estPersonnelle } from '../src/state.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
-const app = lire('src', 'App.jsx');
+const app = MONOLITHE;
 
 test('le moteur reçoit toutes les clés qu’il lit', () => {
   // Extraites des sources, pas recopiées : une clé ajoutée au moteur sans être

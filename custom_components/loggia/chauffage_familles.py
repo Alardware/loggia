@@ -33,6 +33,7 @@ import unicodedata
 from typing import Any
 
 from .chauffage_calcul import MODES
+from .nombres import fini
 from .unites import depuis_celsius, vers_celsius
 
 # Les quatre ordres sans lesquels un `select` n'est pas un fil pilote.
@@ -231,11 +232,8 @@ def temperature_du_mode(mode: str, temperatures: Any) -> float | None:
     return None
 
 
-def _nombre(valeur: Any) -> float | None:
-    """Un nombre fini, ou None : un booleen n'en est pas un, ni un texte."""
-    if isinstance(valeur, (int, float)) and not isinstance(valeur, bool) and math.isfinite(valeur):
-        return float(valeur)
-    return None
+# Un nombre fini, ou None : un booleen n'en est pas un, ni un texte (nombres.py, lot 8).
+_nombre = fini
 
 
 def pas_de_consigne(attributs: Any, unite: str) -> float:
@@ -325,14 +323,16 @@ def _etat_lu(fam: str, etat: Any, attributs: Any) -> str:
 
 
 def commande(fam: str, cible: dict, etat: Any, attributs: Any, temperatures: Any,
-             unite: str = "C") -> list[tuple[str, str, dict]]:
+             unite: str = "C", decalage: float = 0.0) -> list[tuple[str, str, dict]]:
     """Les appels qui mettent l'appareil dans `cible` ({"mode", "temperature"
     en °C}) : [(domaine, service, donnees)] dans l'ordre ou ils partent, sans
     `entity_id` — le moteur l'ajoute. [] si l'appareil ne sait pas le faire.
 
     Allumer et regler sont deux appels, dans cet ordre : Home Assistant ne
     tient aucun compte d'un `hvac_mode` passe a `set_temperature` (c'est
-    l'affaire de l'integration, et certaines l'ignorent)."""
+    l'affaire de l'integration, et certaines l'ignorent). `decalage` (°C) : ce
+    que le capteur d'un thermostat lit de plus que la piece — la consigne de la
+    piece, plus lui, est celle qui part (30/10)."""
     attrs = attributs if isinstance(attributs, dict) else {}
     mode, temperature = cible.get("mode"), cible.get("temperature")
     if fam == "fil_pilote":
@@ -344,7 +344,7 @@ def commande(fam: str, cible: dict, etat: Any, attributs: Any, temperatures: Any
         t = temperature if isinstance(temperature, (int, float)) else temperature_du_mode(mode, temperatures)
         if t is None:
             return []
-        reglage = ("climate", "set_temperature", {"temperature": consigne_en_unite(float(t), attrs, unite)})
+        reglage = ("climate", "set_temperature", {"temperature": consigne_en_unite(float(t) + decalage, attrs, unite)})
         chauffe = mode_chauffe(attrs)
         if chauffe and _etat_lu(fam, etat, attrs) != chauffe:
             return [("climate", "set_hvac_mode", {"hvac_mode": chauffe}), reglage]
@@ -362,8 +362,10 @@ def commande(fam: str, cible: dict, etat: Any, attributs: Any, temperatures: Any
     return []
 
 
-def lire_appareil(fam: str, etat: Any, attributs: Any, unite: str = "C") -> dict[str, Any]:
+def lire_appareil(fam: str, etat: Any, attributs: Any, unite: str = "C", decalage: float = 0.0) -> dict[str, Any]:
     """Ce que l'appareil dit faire : {"mode", "temperature" (°C), "signature"}.
+    La temperature est celle de la PIECE : la consigne de l'appareil, moins son
+    `decalage` (30/10) ; la signature garde ce que l'appareil publie.
 
     `signature` change quand le MODE change, pas quand la piece se rechauffe :
     c'est elle qui separe un geste d'un attribut qui bouge. None : un etat muet."""
@@ -380,7 +382,7 @@ def lire_appareil(fam: str, etat: Any, attributs: Any, unite: str = "C") -> dict
         return {"mode": mode, "temperature": None, "signature": (s, preset)}
     t = attrs.get("temperature")
     t = float(t) if isinstance(t, (int, float)) and not isinstance(t, bool) else None
-    celsius = round(vers_celsius(t, unite), 1) if t is not None else None
+    celsius = round(vers_celsius(t, unite) - decalage, 1) if t is not None else None
     if s == "auto" and mode_chauffe(attrs) not in (None, "auto"):
         # Il suit SON programme (Tado, Netatmo : `heat` est leur manuel, souvent
         # temporaire). Ce n'est pas une consigne a tenir, et ce que son programme
@@ -392,7 +394,7 @@ def lire_appareil(fam: str, etat: Any, attributs: Any, unite: str = "C") -> dict
 
 
 def deja(fam: str, cible: dict, etat: Any, attributs: Any, temperatures: Any,
-         unite: str = "C") -> bool:
+         unite: str = "C", decalage: float = 0.0) -> bool:
     """L'appareil est-il DEJA dans `cible` ? On n'envoie un ordre que s'il differe.
 
     Un thermostat se compare a la consigne qu'on enverrait (au pas et dans les
@@ -422,7 +424,18 @@ def deja(fam: str, cible: dict, etat: Any, attributs: Any, temperatures: Any,
     if t is None or actuelle is None:
         return False
     tolerance = max(pas_de_consigne(attrs, unite), 1.0 if unite == "F" else 0.1) / 2
-    return abs(actuelle - consigne_en_unite(float(t), attrs, unite)) <= tolerance
+    return abs(actuelle - consigne_en_unite(float(t) + decalage, attrs, unite)) <= tolerance
+
+
+def pas_revele(envoye: Any, lue: Any) -> float | None:
+    """Le pas qu'un appareil REVELE en prenant une consigne a sa facon (30/10) : un
+    poele MCZ n'annonce pas `target_temp_step`, et 17,5 °C envoyes lui font 17. Une
+    consigne ENTIERE lue a moins d'un degre d'une consigne envoyee qui ne l'etait
+    pas : il est au degre (1.0). None sinon — rien d'appris."""
+    e, lu = _nombre(envoye), _nombre(lue)
+    if e is None or lu is None or float(e).is_integer() or not float(lu).is_integer():
+        return None
+    return 1.0 if abs(lu - e) < 1 else None
 
 
 def sous_jacents_vtherm(attributs: Any) -> list[str]:

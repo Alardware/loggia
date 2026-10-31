@@ -18,6 +18,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
 
 /** Tous les .js / .jsx de src/, sous-dossiers compris. */
@@ -61,7 +62,7 @@ test('tous les groupes de puces segmentées se creusent dans le même puits', ()
 });
 
 test('le composant commun porte bien le puits, et la puce choisie le bleu plein', () => {
-  const app = readFileSync(join(SRC, 'App.jsx'), 'utf8');
+  const app = MONOLITHE;
   const i = app.indexOf('function Segment({ value, options, onChange');
   assert.ok(i > 0, 'Segment a disparu');
   const corps = app.slice(i, app.indexOf('\n}\n', i));

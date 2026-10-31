@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { focusPerdu, titreDeVue, poserFocus, reposerFocus } from '../src/focus.js';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES, DASHBOARD } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
@@ -147,7 +147,7 @@ test('annuler : la vue quittée ne vole pas le focus de la suivante', async () =
 });
 
 test('App : le titre de la vue reçoit le focus après un changement de vue', () => {
-  const app = (lire('src', 'App.jsx') + lire('src', 'views', 'voletsplan.jsx') + VUES_SORTIES);
+  const app = (MONOLITHE + lire('src', 'views', 'voletsplan.jsx') + VUES_SORTIES);
   assert.match(app, /import \{ reposerFocus, titreDeVue \} from '\.\/focus\.js';/);
   assert.ok(app.includes('<div key={view} ref={vueRef} className="o-view"'), 'le conteneur de la vue est la racine où chercher le titre');
   const eff = bloc(app, 'const vueFocus = useRef(view);', '}, [view]);');
@@ -159,12 +159,13 @@ test('App : le titre de la vue reçoit le focus après un changement de vue', ()
 });
 
 test('chaque vue a un titre où poser le focus', () => {
-  const app = (lire('src', 'App.jsx') + lire('src', 'views', 'voletsplan.jsx') + VUES_SORTIES);
+  const app = (MONOLITHE + lire('src', 'views', 'voletsplan.jsx') + VUES_SORTIES);
   const VUES = ['function RoomView(', 'function ObjetsView(', 'function Dashboard(', 'function ScenariosView(',
     'function VoletsContent(', 'function EnergieContent(', 'function ViewEmpty(',
     'function SecuriteContent(', 'function BiblioView(', 'function CustomView('];
   for (const debut of VUES) {
-    const vue = bloc(app, debut, NL + 'function ');
+    // ASSERTION MODIFIÉE (ADR 0283) : le titre de l'Accueil vit dans sa bannière (`BanniereAccueil`) ; on lit l'Accueil entier.
+    const vue = debut === 'function Dashboard(' ? DASHBOARD : bloc(app, debut, NL + 'function ');
     assert.ok(vue.includes('<h1') || vue.includes('<ViewHead'), debut + ' : pas de titre, le focus retomberait sur <body>');
   }
   assert.ok(bloc(app, 'function ViewHead(', NL + 'function ').includes('<h1'), 'ViewHead porte le titre des Volets');

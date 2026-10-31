@@ -17,6 +17,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { plageDeLaSemaine, cleJour } from '../src/agenda.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (f) => readFileSync(join(RACINE, 'src', f), 'utf8');
 
@@ -58,7 +59,7 @@ test('les flèches de l’agenda ne suivent plus la largeur du titre', () => {
 });
 
 test('le bouton clair / sombre montre le mode où l’on est', () => {
-  const c = lire('App.jsx');
+  const c = MONOLITHE;
   assert.ok(!c.includes('<Ico name="brightness" size={18} /></button>'), 'plus de soleil figé');
   assert.ok(c.includes("<Ico name={ctx.light ? 'sun' : 'moon'} size={18} />"), 'soleil en clair, lune en sombre');
 });

@@ -23,7 +23,7 @@ import { register } from 'node:module';
 import { readFileSync } from 'node:fs';
 
 import { area, device, entity, state, states, ctxOf } from './fixtures.mjs';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
@@ -52,7 +52,7 @@ const HA = await import('../src/horsair.js');
 const U = await import('../src/unites.js');
 const FIX = await import('./fixtures.mjs');
 const lire = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
-const APP = (lire('src/App.jsx') + VUES_SORTIES);
+const APP = (MONOLITHE + VUES_SORTIES);
 
 const mesure = (id, dev, classe, opt = {}) => ({ ...entity(id, { device: dev, ...opt }), device_class: classe });
 const m = (id, v, nom, classe, unite, plus = {}) => state(id, v, { friendly_name: nom, device_class: classe, ...(unite ? { unit_of_measurement: unite } : {}), state_class: 'measurement', ...plus });
@@ -148,7 +148,9 @@ test('H8 (D5) : une mesure qui n’est pas l’air de la pièce reste visible, n
 });
 
 test('H10, M7 : le monoxyde en ppm est une famille de la table, en alerte dans la carte Sécurité au palier Danger ; les autres familles d’air entrent, neutres', () => {
-  assert.equal(C.cleMesure('carbon_monoxide'), 'co');
+  // ASSERTION MODIFIÉE (30/10, G1-D6) : la famille `co` demande des ppm, ou une unité qui s'y ramène ; sans unité, rien ne dit des ppm.
+  assert.equal(C.cleMesure('carbon_monoxide', 'ppm'), 'co');
+  assert.equal(C.cleMesure('carbon_monoxide'), null);
   // ASSERTION MODIFIÉE (relecture du lot 3, point 6) : « jusqu'à 35 » est Moyen, le Danger commence AU-DELÀ.
   assert.deepEqual([2, 9, 20, 35, 35.1, 200].map(v => C.zoneMesure('co', v).t), ['Bon', 'Moyen', 'Moyen', 'Moyen', 'Danger', 'Danger']);
   assert.deepEqual([C.coDanger('34'), C.coDanger('35'), C.coDanger('35,1'), C.coDanger('unavailable')], [false, false, true, false]);

@@ -24,6 +24,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8').replace(/\r\n/g, '\n');
 
@@ -100,7 +101,7 @@ test('le menu se relit quand la configuration arrive', () => {
   /* La barre lit les vues UNE fois, au montage. La réponse du composant arrive
    * après : sans ce signal, il faudrait recharger la page pour voir le menu
    * d'un changement fait ailleurs. */
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   assert.ok(app.includes('const sigVues = JSON.stringify(['), 'la signature des vues a disparu');
   for (const k of CLES) {
     assert.ok(new RegExp('sigVues[^;]*' + k, 's').test(app), k + ' ne déclenche plus la relecture du menu');
@@ -131,7 +132,7 @@ test('le menu se relit quand la configuration arrive', () => {
  * Une clé qui change remonte le sous-arbre, et tout se relit — une seule fois,
  * jamais le retour : une coupure réseau ne doit pas rejeter l'écran. */
 test('l’écran se relit à la première réponse du composant', () => {
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   assert.ok(app.includes('const [servi, setServi] = useState(false);'),
     'le drapeau de première réponse a disparu');
   assert.match(app, /useEffect\(\(\) => \{ if \(serverOk\) setServi\(true\); \}, \[serverOk\]\);/,

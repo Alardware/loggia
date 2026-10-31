@@ -19,6 +19,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 const R = await import('../src/robotsfiche.js');
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -191,7 +192,7 @@ test('R6 : la teinte et l’icône choisies d’une pièce de Loggia du même no
   assert.deepEqual(R.piecesDeLaVue(PIECES, [], renommees).map(z => z.couleur), [R.COULEURS_ZONES[0], R.COULEURS_ZONES[1], R.COULEURS_ZONES[2]], 'sans index : par le nom seul');
   assert.deepEqual(R.piecesDeLaVue(PIECES, [], renommees, { areaOf: 'x' }).map(z => z.couleur), [R.COULEURS_ZONES[0], R.COULEURS_ZONES[1], R.COULEURS_ZONES[2]], 'un index sans `areaOf` : le nom seul');
   // La table des teintes est celle des pièces (`TEINTES_PIECE`, App.jsx) : les mêmes identifiants, les mêmes jetons — tenus ensemble.
-  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const app = MONOLITHE;
   const bloc = /const TEINTES_PIECE = \[([\s\S]*?)\n\];/.exec(app);
   assert.ok(bloc, 'TEINTES_PIECE introuvable dans App.jsx');
   const table = Object.fromEntries([...bloc[1].matchAll(/id: '([a-z]+)'[^}]*col: '([^']+)'/g)].map(m => [m[1], m[2]]));

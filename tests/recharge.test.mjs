@@ -22,6 +22,7 @@ import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { creerRecharge, CLE_RECHARGE, FENETRE_RECHARGE } from '../src/recharge.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const NL = String.fromCharCode(10);
@@ -183,7 +184,7 @@ test('aucun lazy nu dans src : tout module à la demande passe par lazyRecharge'
 });
 
 test('les modules à la demande : chacun derrière le rechargement, les décors sans écran d’erreur', () => {
-  const app = lire('src', 'App.jsx').split(NL);
+  const app = MONOLITHE.split(NL);
   const MODULES = [
     ['WeatherGL', './wx3d.jsx', true],
     ['SystemeContent', './views/systeme.jsx', false],

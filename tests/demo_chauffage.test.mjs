@@ -60,7 +60,8 @@ const JOUR_BUREAU_LUNDI = [{ de: 0, a: 450, mode: 'hors_gel' }, { de: 450, a: 81
  * la perdent aussi ; la reprise elle-même se lit toujours (`reprise`, `fin`). */
 /* ASSERTION MODIFIÉE (26/10) : `programme` et `concurrents`, le programme de l'appareil allumé et ceux d'ailleurs
  * qui le commandent, comme le serveur (tests/demo_chauffage_concurrents.test.mjs). */
-const CLES_CHAUFFAGE = ['applique', 'avertissements', 'cle', 'concurrents', 'entite', 'famille', 'fenetre', 'fenetre_mode', 'fenetre_ouverte', 'fin',
+// ASSERTION MODIFIÉE (30/10) : `decalage`, celui du capteur d'un thermostat, comme le serveur.
+const CLES_CHAUFFAGE = ['applique', 'avertissements', 'cle', 'concurrents', 'decalage', 'entite', 'famille', 'fenetre', 'fenetre_mode', 'fenetre_ouverte', 'fin',
   'jour', 'mode', 'modes', 'nom', 'options', 'ouvrant_ouvert', 'planning', 'programme', 'puis', 'reprise', 'semaine', 'source', 'temperatures'];
 
 const par = (etat, cle) => etat.chauffages.find((c) => c.cle === cle);
@@ -80,8 +81,11 @@ test('l’état a la forme exacte de loggia/chauffage/etat', async () => {
   const e = await etat(m);
   /* ASSERTION MODIFIÉE (relecture du 12/10, point 2) : `fenetres_observe`, la
    * règle des fenêtres en « Observer sans agir », à la racine comme `simulation`. */
-  assert.deepEqual(Object.keys(e).sort(), ['chauffages', 'demarrage', 'fenetres_observe', 'journal', 'maintenant', 'maison', 'minute',
+  /* ASSERTION MODIFIÉE (30/10, G3-E2) : `eau_chaude`, l'option du mode absence des chauffe-eau pendant les Vacances, que le
+   * serveur publie à la racine (chauffage.py, `async_etat`) — décochée au départ. */
+  assert.deepEqual(Object.keys(e).sort(), ['chauffages', 'demarrage', 'eau_chaude', 'fenetres_observe', 'journal', 'maintenant', 'maison', 'minute',
     'plannings_allumes', 'simulation']);
+  assert.deepEqual(e.eau_chaude, { absence: false });
   assert.deepEqual(e.maison, { mode: 'planning', vacances_fin: null, absence: 'eco', vacances: 'hors_gel' });
   assert.equal(e.simulation, false, 'l’observation est coupée au départ');
   assert.equal(e.fenetres_observe, false, 'celle de la règle des fenêtres aussi');
@@ -160,6 +164,22 @@ test('un module fil pilote se nomme comme son appareil, un thermostat garde son 
   assert.equal(par(e, CHAMBRE).nom, m.index.devices.find((d) => d.id === 'radiateur_chambre').name);
   assert.equal(par(e, BUREAU).nom, 'Radiateur bureau');
   assert.equal(par(e, POELE).nom, 'Poêle du séjour', 'un thermostat garde son nom affiché');
+});
+
+test('le décalage d’un thermostat passe dans ce que reçoit l’appareil, comme sur le serveur (30/10)', async () => {
+  const m = maisonChauffageDemo({ quand: LUNDI_10H });
+  const SALON = 'climate.salon';
+  const r = await m.ws({ type: 'loggia/chauffage/config', patch: { chauffages: { [SALON]: { planning: true, decalage: -1.5 } } } });
+  assert.equal(r.config.chauffages[SALON].decalage, -1.5);
+  assert.equal(par(r.etat, SALON).decalage, -1.5);
+  assert.equal(m.states[SALON].attributes.temperature, 15.5, 'Éco 17 pour la pièce : 15,5 pour l’appareil');
+  await assert.rejects(m.ws({ type: 'loggia/chauffage/config', patch: { chauffages: { [SALON]: { decalage: 6 } } } }),
+    (e) => e.code === 'chauffage_decalage_hors_bornes' && /: decalage$/.test(e.message));
+  await assert.rejects(m.ws({ type: 'loggia/chauffage/config', patch: { chauffages: { [CHAMBRE]: { decalage: 1 } } } }), 'un module n’a pas de consigne');
+  const zero = await m.ws({ type: 'loggia/chauffage/config', patch: { chauffages: { [SALON]: { decalage: 0 } } } });
+  assert.ok(!('decalage' in zero.config.chauffages[SALON]), '0 : la configuration n’en garde rien');
+  assert.equal(par(zero.etat, SALON).decalage, 0);
+  assert.equal(m.states[SALON].attributes.temperature, 17);
 });
 
 test('l’état dit si un planning tourne, compté sur toute la configuration', async () => {

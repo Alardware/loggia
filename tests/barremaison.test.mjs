@@ -37,6 +37,7 @@ import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { transformSync } from 'esbuild';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 register('./jsx-hooks.mjs', import.meta.url);
 const M = await import(new URL('../src/barremaison.jsx', import.meta.url).href);
 const Barre = M.default;
@@ -46,7 +47,7 @@ const { reglerChauffageEtat } = await import('../src/chauffageetat.js');
 
 const lire = (chemin) => readFileSync(new URL('../' + chemin, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const SOURCE = lire('src/barremaison.jsx');
-const APP = lire('src/App.jsx');
+const APP = MONOLITHE;
 const CSS = lire('src/index.css');
 const SCENES = lire('src/scenes.jsx');
 

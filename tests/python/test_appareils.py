@@ -198,8 +198,12 @@ def test_passer_un_ecran_sur_un_profil_admin_demande_le_code(banc):
                                    "config": {"loggia_appareils": {TABLETTE: {"profil": "1"}}}}))
     assert len(cx.erreurs) == 1, cx.erreurs
     assert lancer(banc.store._load())["shared"]["loggia_appareils"][TABLETTE]["profil"] == "1"
-    # Le code verifie ouvre le passage, comme pour `loggia_active_user`.
-    lancer(envoyer(banc.hass, cx, {"id": 3, "type": "loggia/pin/verifier", "pin": "0000"}))
+    # Le code verifie ouvre le passage, comme pour `loggia_active_user`. Un administrateur l'a pose : jamais defini, aucun
+    # code n'ouvre plus rien (audit du 28/10, ADR 0279).
+    admin = Connexion(uid="u-papa", admin=True)
+    lancer(envoyer(banc.hass, admin, {"id": 30, "type": "loggia/pin/definir", "pin": "4321"}))
+    assert admin.erreurs == [], admin.erreurs
+    lancer(envoyer(banc.hass, cx, {"id": 3, "type": "loggia/pin/verifier", "pin": "4321"}))
     lancer(envoyer(banc.hass, cx, {**vers_papa, "id": 4}))
     assert len(cx.erreurs) == 1, cx.erreurs
 

@@ -31,9 +31,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { transformSync } from 'esbuild';
 import { composant, rendre } from './rendu.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
-const src = lire('src', 'App.jsx');
+const src = MONOLITHE;
 
 /** Un morceau d'App.jsx, de `debut` jusqu'à `fin` compris. */
 function morceau(debut, fin, dans = src) {
@@ -193,7 +194,7 @@ test('le micro de l’assistant : sa place, le temps de la première réponse', 
   assert.ok(src.includes('const { cle: assistantNs, attente: assistantAttendu } = useAssistant(hass);'));
   assert.ok(src.includes('{!onAssistant && ctx.assistantAttendu && <span className="o-hdr-assist" aria-hidden="true" style={{ width: 42, height: 42, flexShrink: 0 }} />}'),
     'l’en-tête : 42 px, la classe du micro (le tactile la retire comme lui)');
-  assert.ok(src.includes("{!onAssistant && assistantAttendu && i === Math.ceil(items.length / 2) && <span aria-hidden=\"true\" style={{ flex: '0 0 62px' }} />}"),
-    'la barre du bas : 62 px au milieu, la place du bouton');
+  assert.ok(src.includes("{!onAssistant && assistantAttendu && i === Math.ceil(items.length / 2) && <span aria-hidden=\"true\" className=\"o-nav-assist\" style={{ flex: '0 0 auto', width: 62 }} />}"),
+    'la barre du bas : 62 px au milieu, la place du bouton (54 sous 360 px, par sa classe)');
   assert.ok(src.includes('menuOuvert={navOpen} assistantAttendu={assistantAttendu} onAssistant='), 'la barre du bas ne reçoit pas l’attente');
 });

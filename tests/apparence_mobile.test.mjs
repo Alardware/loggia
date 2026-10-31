@@ -18,12 +18,13 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8').replace(/\r\n/g, '\n');
 const PAR = lire('src', 'views', 'parametres.jsx');
 /* Le theme est sorti dans `src/theme.js` (27/09, audit point 9) : on relit
  * donc le monolithe ET ce qui en est parti. */
-const APP = ['App.jsx', 'theme.js'].map(f => lire('src', f)).join(String.fromCharCode(10));
+const APP = [MONOLITHE, lire('src', 'theme.js')].join(String.fromCharCode(10));
 const CSS = lire('src', 'index.css');
 const fonction = (src, nom) => {
   /* `export` tolere : le theme est sorti dans `src/theme.js` le 27/09, et ses

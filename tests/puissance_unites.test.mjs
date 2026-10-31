@@ -15,11 +15,11 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { wattsDe, kwhDe, facteurWatts, facteurKwh } from '../src/unites.js';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8').replace(/\r\n/g, '\n');
-const APP = (lire('src', 'App.jsx') + VUES_SORTIES);
+const APP = (MONOLITHE + VUES_SORTIES);
 const capteur = (state, unite, dc = 'power') => ({
   state: String(state),
   attributes: unite == null ? { device_class: dc } : { device_class: dc, unit_of_measurement: unite },
@@ -119,16 +119,22 @@ test('la vue Énergie lit ses puissances en watts et ses énergies en kWh', () =
 test('l’Accueil, la carte Énergie, les points d’attention et l’aperçu lisent en watts', () => {
   const acc = sansCommentaires(corps('deriveAccueil'));
   // ASSERTION MODIFIÉE (25/10) : l'Accueil lit aussi les noms de la fiche (gridNow, injectionNow, solarNow), toujours en watts.
-  assert.ok(acc.includes('const numW = (id) => (id && S[id] ? wattsDe(S[id]) : null);') && acc.includes('const solarW = ou(E.solarNow, E.solarOutput), netW = numW(E.consoNow), surplusRaw = ou(E.surplusNow, E.injectionNow);'),
+  /* ASSERTION MODIFIÉE (30/10, G3-D3) : deux onduleurs — le solaire et le flux net se lisent par leurs PARTS (`idsDe`,
+   * `sommeLue`), chacune toujours en watts par `numW`. */
+  assert.ok(acc.includes('const numW = (id) => (id && S[id] ? wattsDe(S[id]) : null);') && acc.includes("const solarParts = sommeLue(idsDe(E, 'solarNow'), numW);")
+    && acc.includes("netW = sommeLue(idsDe(E, 'consoNow'), numW), surplusRaw = ou(E.surplusNow, E.injectionNow);"),
     'le bandeau de l’Accueil relit ses puissances brutes : « ↓ 1 W »');
   assert.ok(acc.includes('const power = numW(notifIds().dishwasher) || 0;'), 'le lave-vaisselle compare encore des kW à des seuils en watts');
   const cv = sansCommentaires(corps('CvEnergie'));
-  assert.ok(cv.includes('const sol = lit(EN.solarNow, wattsDe), grid = lit(EN.gridNow, wattsDe);') && cv.includes('const jour = lit(EN.consoJour, kwhDe);'),
+  // ASSERTION MODIFIÉE (30/10, G3-D3) : tous les onduleurs, et le flux net nommé d'abord — toujours par `wattsDe`.
+  assert.ok(cv.includes("const sol = sommeLue(idsDe(EN, 'solarNow'), (id) => lit(id, wattsDe));") && cv.includes('const grid = net != null ? net : lit(EN.gridNow, wattsDe);') && cv.includes('const jour = lit(EN.consoJour, kwhDe);'),
     'la carte Énergie maison relit ses capteurs bruts');
   const notifs = sansCommentaires(corps('deriveNotifs'));
   assert.ok(!notifs.includes('numOf('), 'un seuil en watts lit encore la valeur brute');
   // Le surplus : une puissance seulement, jamais l'index cumulé (relecture du 03/10).
   assert.ok(notifs.includes('const sur = net != null ? Math.max(0, -net) : wattsOf(EH.injectionNow || EH.surplusNow);') && notifs.includes('const lv = wattsOf(notifIds().dishwasher);'));
+  // ASSERTION AJOUTÉE (30/10, G3-D3) : le flux net se lit par ses parts, en watts.
+  assert.ok(notifs.includes("const net = sommeLue(idsDe(ficheEnergie(), 'consoNow'), wattsOf);"));
   assert.ok(sansCommentaires(corps('useHass')).includes('const n = wattsDe(s);'),
     'la signature des capteurs bruyants arrondit encore des kW à 10 : l’écran ne bouge plus sous 5 kW');
   assert.ok(lire('src', 'views', 'parametres.jsx').includes('wattsDe(S[en.consoNow])'), 'l’aperçu des Paramètres relit la consommation brute');

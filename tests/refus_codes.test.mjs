@@ -18,6 +18,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 // La langue de la machine ne doit pas changer le résultat (garde-fou de la CI).
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 const { texteRefus, raisonEchec, enregistrerRefus } = await import('../src/refus.js');
@@ -32,6 +33,12 @@ enregistrerRefus((await import('../src/refuschauffage.js')).REFUS_CHAUFFAGE);
  * départ de robot (`loggia/robots/lancer`) se chargent à la demande, au
  * premier refus (refusrobots.js) ; enregistrés ici comme l'écran le fait. */
 enregistrerRefus((await import('../src/refusrobots.js')).REFUS_ROBOTS);
+/* ASSERTION MODIFIÉE (29/10, versions ; ADR 0285) : les refus des versions
+ * précédentes (`loggia/versions/*`) se disent dans Paramètres, chargé à la
+ * demande, par leur propre table (versions.js, `texteVersion`) — sans
+ * `enregistrerRefus`, que le démarrage aurait dû exporter de plus. La table
+ * est versée ici pour que ce test la confronte aux codes du composant. */
+enregistrerRefus((await import('../src/versions.js')).REFUS_VERSIONS);
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8').replace(/\r\n/g, '\n');
@@ -111,7 +118,7 @@ test('chaque code que le composant envoie, l’écran sait le dire', () => {
 });
 
 test('le câblage : plus de motif brut à l’écran, plus d’expression sur le français', () => {
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   assert.ok(!app.includes('/code administrateur/i'), 'le toast relit de nouveau le motif français du composant');
   assert.ok(app.includes(": texteRefus(r) || tr('Commande non exécutée — Home Assistant a refusé ou n’a pas répondu');"),
     'les refus prévisibles ne passent plus par la table au toast');

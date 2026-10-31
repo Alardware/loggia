@@ -42,7 +42,7 @@ import {
   semaineAdaptee, heureDecalee, heureAuMilieu, modesAppliques, TEMPERATURES_DEFAUT, temperaturesDe, temperatureDuMode, pasTemperature, consigneEnUnite,
   plageVoisine, estMuet, modesHvac, modeDeChauffe, PRESETS_VTHERM,
   REPLIS, modeApplicable, modeApplique, PERIODES, echantillons, courbe, chauffeAppliquee, tempsParMode, tempsDeChauffe, placeBande,
-  dater, actionDite, bandesAppliquees,
+  dater, actionDite, bandesAppliquees, ecartMesure,
 } from '../src/chauffageplanning.js';
 import { JOURS, FROID } from '../src/chauffage.js';
 
@@ -902,4 +902,22 @@ test('l’appareil a-t-il dit ce qu’il faisait (`actionDite`) ? Sans un seul `
   assert.equal(actionDite([pt(-30, 'heat', { hvac_action: 'heating' }), pt(-2, 'heat')], MAINTENANT), false, 'avant la période seulement : il ne l’a pas dit sur elle');
   assert.equal(actionDite([pt(-30, 'heat', { hvac_action: 'heating' }), pt(-2, 'heat')], MAINTENANT, { jours: 7 }), true, 'sur 7 jours, si');
   assert.equal(actionDite(null, MAINTENANT), false);
+});
+
+test('l’écart entre le capteur d’un thermostat et la pièce : la médiane, les trames fausses écartées, rien sans assez de relevés (30/10)', () => {
+  // Un relevé toutes les 10 min pendant 12 h : l'appareil lit 1,5 de moins que la pièce, à 0,3 près ; une trame fausse à 0.
+  const t0 = Date.parse('2026-10-20T00:00:00Z');
+  const quand = (k) => new Date(t0 + k * 600000).toISOString();
+  const piece = Array.from({ length: 72 }, (_, k) => ({ state: String(20 + (k % 3) * 0.1), last_changed: quand(k) }));
+  const appareil = Array.from({ length: 72 }, (_, k) => ({ state: 'heat', last_updated: quand(k) + '',
+    attributes: { current_temperature: 18.5 + (k % 3) * 0.1 + (k % 2 ? 0.3 : -0.3) } }));
+  appareil.push({ state: 'heat', last_updated: quand(72), attributes: { current_temperature: 0 } });
+  const m = ecartMesure(appareil, piece);
+  assert.deepEqual(m, { ecart: -1.5, n: 72 }, JSON.stringify(m));
+  // La sonde lue dans un attribut ; des relevés de la pièce trop vieux (plus de 30 min) ne comptent pas.
+  const parAttribut = piece.map(p => ({ state: 'x', last_changed: p.last_changed, attributes: { temperature: Number(p.state) } }));
+  assert.deepEqual(ecartMesure(appareil, parAttribut, 'temperature'), { ecart: -1.5, n: 72 });
+  assert.equal(ecartMesure(appareil, piece.slice(0, 1)), null, 'une seule mesure de la pièce, il y a 12 h');
+  assert.equal(ecartMesure(appareil.slice(0, 40), piece), null, 'moins de 48 relevés : pas de quoi proposer');
+  assert.equal(ecartMesure(null, piece), null);
 });

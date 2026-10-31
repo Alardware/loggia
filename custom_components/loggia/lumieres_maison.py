@@ -29,6 +29,8 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
+from .nombres import fini
+
 # Les interrupteurs declares lumieres (Parametres > Entites), et le repli
 # herite : `switchLights` de la description de la maison.
 CLE_INTERRUPTEURS = "loggia_switchlights"
@@ -117,6 +119,47 @@ def a_epargner(attributs: dict[str, Any], veilleuses: Iterable[str]) -> set[str]
                 epargnees.add(haid)
                 encore = True
     return epargnees
+
+
+# Le bit TRANSITION de LightEntityFeature : une lampe qui ne l'a pas ne sait pas
+# fondre, et le lui demander ne ferait rien de bon (la veilleuse de la Nuit, les
+# scenarios - ADR 0304).
+LIGHT_TRANSITION = 32
+# Les modes ou une lampe recoit un blanc (`color_temp_kelvin`) : le sien, ou la
+# couleur de ce blanc - Home Assistant convertit pour une lampe en couleur.
+MODES_DU_BLANC = ("color_temp", "hs", "xy", "rgb", "rgbw", "rgbww")
+
+
+def sait_fondre(attributs: Any) -> bool:
+    """La lampe sait-elle fondre (`transition`) ? Le bit TRANSITION de son
+    `supported_features`. Sorti de `nuit.py` (ADR 0304) : la veilleuse et les
+    scenarios le lisent ici."""
+    f = (attributs.get("supported_features") if isinstance(attributs, dict) else None) or 0
+    try:
+        return bool(int(f) & LIGHT_TRANSITION)
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
+def sait_le_blanc(attributs: Any) -> bool:
+    """La lampe prend-elle un blanc (`color_temp_kelvin`) ? Un blanc reglable, ou
+    une couleur. Un variateur, un interrupteur : non."""
+    modes = attributs.get("supported_color_modes") if isinstance(attributs, dict) else None
+    return isinstance(modes, (list, tuple, set)) and any(m in MODES_DU_BLANC for m in modes)
+
+
+def blanc_borne(attributs: Any, kelvin: float) -> int:
+    """`kelvin` ramene aux bornes du blanc de la lampe (`min_` et
+    `max_color_temp_kelvin`), quand elle les publie ; tel quel sinon - Home
+    Assistant le convertit pour une lampe en couleur."""
+    a = attributs if isinstance(attributs, dict) else {}
+    k = float(kelvin)
+    bas, haut = fini(a.get("min_color_temp_kelvin")), fini(a.get("max_color_temp_kelvin"))
+    if bas is not None and bas > 0:
+        k = max(bas, k)
+    if haut is not None and haut > 0:
+        k = min(haut, k)
+    return int(round(k))
 
 
 def service_de(haid: str, allumer: bool) -> tuple[str, str]:

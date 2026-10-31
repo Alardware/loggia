@@ -23,6 +23,7 @@ import { readFileSync } from 'node:fs';
 
 import { monter, horlogeFausse, documentFaux } from './crochets.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -41,7 +42,7 @@ const { setLoggiaState } = await import('../src/state.js');
 const F = await import(new URL('../src/App.jsx?carte_robot', import.meta.url).href);
 const RE = await import('../src/robotsetat.js');
 const { texteRefus } = await import('../src/refus.js');
-const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const APP = MONOLITHE.replace(/\r\n/g, '\n');
 const CSS = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
 const T = new Date(2026, 9, 17, 18, 20).getTime();

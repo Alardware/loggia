@@ -22,7 +22,8 @@ import { readFileSync } from 'node:fs';
 import { resolveClimate, interrupteurDeModule, modulesHorsSaisie } from '../src/resolve.js';
 import { area, device, entity, state, states, ctxOf, indexOf } from './fixtures.mjs';
 
-const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
+const APP = MONOLITHE;
 
 // Les options du NodOn SIN-4-FP-21, telles que zigbee2mqtt les publie.
 const NODON = ['comfort', 'eco', 'frost_protection', 'off', 'comfort_-1', 'comfort_-2'];

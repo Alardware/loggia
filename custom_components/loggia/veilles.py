@@ -53,13 +53,28 @@ Audit des capteurs du 19/10 (ADR 0250)
 Le monoxyde de carbone chiffre (ADR 0251, lot 3 ; decision du 19/10 :
 « Telephone, sans reaction »)
 ──────────────────────────────────────────────────────────────────────
-  Un capteur de classe `carbon_monoxide` en ppm, sur un appareil physique, au-
+  Un capteur de classe `carbon_monoxide` en ppm (ou en mg/m3, ug/m3, ppb,
+  ramenes au ppm : G1-D6, ADR 0300), sur un appareil physique, au-
   dela du palier Danger de la table de l'ecran (SEUIL_CO) : UNE notification,
   par le canal critique — elle passe les heures calmes, comme la surete —,
   jusqu'a son retour franchement sous le seuil. La maison ne reagit pas : ni
   lumieres, ni volets (alertes.py, qui garde les binaires, n'en sait rien).
   Toujours suivi, sans reglage ; la categorie « co » decochee dans
   Parametres > Alertes le tait. « Observer sans agir » le simule.
+
+Le rappel de collecte (chantier G2, S2 ; ADR 0301)
+──────────────────────────────────────────────────
+  La veille au soir, a l'heure reglee (19:00), « Demain : Verre, Recyclables »
+  part aux personnes a la maison, avec un bouton « C'est sorti ». Le calendrier
+  ou les capteurs se trouvent seuls (collecte.py) ; un choix dans Parametres
+  ne fait que corriger. Ce qui a ete dit et ce qui est sorti vivent dans la
+  partie COMMUNE du magasin (`loggia_collecte`) : jamais deux fois, meme apres
+  un redemarrage, et le bandeau se tait sur tous les ecrans. Un demarrage plus
+  de trois heures apres l'heure saute le rappel. Eteint par defaut ;
+  « Observer sans agir » le simule.
+
+A qui (ADR 0301) : les veilles ordinaires et la collecte vont aux personnes a
+la maison ; le monoxyde, a tout le monde (`regles.prevenir`, `pour=`).
 """
 from __future__ import annotations
 
@@ -69,7 +84,11 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
 
+from . import collecte
+from .nombres import lu
 from .regles import demarrer, entites_propres, est_entite, niveau
+from .textes import langue_serveur, traduire
+from .unites import unite_co, vers_ppm_co
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
@@ -114,6 +133,10 @@ MSG_CREUSES = "Heures creuses : c’est le moment de lancer les machines"
 # Le monoxyde de carbone au palier Danger (ADR 0251) : critique, sous le titre de la surete.
 MSG_CO = "{nom} : monoxyde de carbone à {v} ppm, aérez et sortez"
 TITRE = "Loggia — sûreté"
+# Le rappel de collecte (ADR 0301) : ce qui passe demain, et le bouton de la
+# notification — une cle de CLES_VOIX, comme les boutons du mode enfant.
+MSG_COLLECTE = "Demain : {types}"
+BOUTON_SORTI = "C’est sorti"
 
 # Le palier Danger du monoxyde, en ppm : AU-DELA de 35 (« jusqu'a 35 » est
 # Moyen). UNE source : la table de l'ecran, `PALIERS.co` de src/confort.js —
@@ -133,6 +156,9 @@ DEFAUT: dict[str, Any] = {
     "creuses": {"actif": False, "entite": "", "valeur": "", "prises": []},
     # Les consommables : des capteurs DESIGNES, jamais devines (ADR 0006).
     "consommables": {"actif": False, "seuil": 10, "capteurs": []},
+    # Le rappel de collecte (ADR 0301) : eteint, 19:00, la source decouverte.
+    # `source` ne sert qu'a CORRIGER la decouverte (un calendrier, un capteur).
+    "collecte": {"actif": False, "heure": collecte.HEURE_DEFAUT, "source": ""},
     # Observer sans agir (ADR 0004 ; audit du 19/10, H3) : le drapeau des
     # autres modules, que l'interrupteur des Regles pose avec eux.
     "simulation": {"actif": False},
@@ -151,12 +177,8 @@ def nombre(etat):
     brut = str(getattr(etat, "state", "")).lower()
     if brut in MUETS:
         return None
-    try:
-        valeur = float(brut)
-    except (TypeError, ValueError):
-        return None
     # « nan », « inf » : pas un nombre, comme une valeur muette (contre-relecture du lot 3).
-    return valeur if math.isfinite(valeur) else None
+    return lu(brut)
 
 
 def capteurs_de(etats: dict, classe: str) -> list:
@@ -229,6 +251,16 @@ class LoggiaVeilles:
     _reabonnement = None
     _horaire = None
     _arrete = False
+    # Le rappel de collecte : son rendez-vous du soir, et l'ecoute du bouton.
+    _rdv_collecte = None
+    _defait_action = None
+    # Un seul rappel a la fois (relecture du 30/10, point 5) : le rendez-vous
+    # de 19 h et le rattrapage du demarrage peuvent tomber ensemble. Cree a la
+    # demande — les tests batissent l'instance sans `__init__`.
+    _verrou_collecte = None
+    # Les rappels SIMULES de ce processus : jamais ecrits au magasin, ils ne
+    # bloquent pas le vrai rappel si l'observation est coupee le meme soir.
+    _collecte_simulee = None
 
     def __init__(self, hass: HomeAssistant, store: "LoggiaStore", regles=None) -> None:
         self.hass = hass
@@ -246,6 +278,10 @@ class LoggiaVeilles:
     async def _async_demarrer(self) -> None:
         self.cfg = await self.async_config()
         await self._async_lire_etat()
+        # Le bouton « C'est sorti » de la notification revient en evenement.
+        bus = getattr(self.hass, "bus", None)
+        if bus is not None and self._defait_action is None:
+            self._defait_action = bus.async_listen("mobile_app_notification_action", self._sur_action)
         await self._async_reabonner()
         # Le suivi se repose quand Home Assistant a FINI de demarrer (audit du
         # 19/10, M4) : avant, une integration n'a peut-etre pas encore cree ses
@@ -267,6 +303,8 @@ class LoggiaVeilles:
             self._defait_registre = bus.async_listen("entity_registry_updated", self._sur_registre)
         await self._async_reabonner()
         await self._async_horaire()
+        # Un redemarrage dans les trois heures qui suivent l'heure du rappel.
+        await self._async_collecte(rattrapage=True)
 
     @callback
     def _sur_registre(self, event) -> None:
@@ -335,6 +373,7 @@ class LoggiaVeilles:
             except Exception:  # noqa: BLE001
                 _LOGGER.debug("Loggia veilles : passage horaire deja retire")
             self._horaire = None
+        self._poser_collecte()
         # En debug (point 7) : un reabonnement par rafale du registre.
         _LOGGER.debug("Loggia veilles : %d entites suivies", len(set(suivis)))
 
@@ -539,15 +578,19 @@ class LoggiaVeilles:
             from homeassistant.helpers import entity_registry as er
 
             reg = er.async_get(self.hass)
-            compteurs = [s.get(k) for s in (prefs.get("energy_sources") or [])
-                         if isinstance(s, dict) and s.get("type") == "battery"
-                         for k in ("stat_energy_from", "stat_energy_to")]
+            sources = [s for s in (prefs.get("energy_sources") or [])
+                       if isinstance(s, dict) and s.get("type") == "battery"]
+            # Le niveau que Home Assistant NOMME (`stat_soc`, chantier G3, ADR 0302) : l'ecran le
+            # prend avant le voisin — il est a l'energie, ou que soit son appareil.
+            nommes = {s.get("stat_soc") for s in sources if est_entite(s.get("stat_soc"))}
+            compteurs = [s.get(k) for s in sources
+                         for k in ("stat_energy_from", "stat_energy_to", "stat_rate", "stat_soc")]
             appareils = {getattr(reg.async_get(c), "device_id", None) for c in compteurs if isinstance(c, str)}
             appareils.discard(None)
             if not appareils:
-                return set()
-            return {h for h in capteurs_de(etats, "battery")
-                    if getattr(reg.async_get(h), "device_id", None) in appareils}
+                return nommes
+            return nommes | {h for h in capteurs_de(etats, "battery")
+                             if getattr(reg.async_get(h), "device_id", None) in appareils}
         except Exception:  # noqa: BLE001
             # Pas de tableau Energie (ou illisible) : pas de batterie de la maison.
             return set()
@@ -611,11 +654,13 @@ class LoggiaVeilles:
 
     # ── Le monoxyde de carbone chiffre (ADR 0251) ──────────────────────────
     def _capteurs_co(self, etats: dict) -> list:
-        """Les capteurs de monoxyde en ppm, sur un appareil PHYSIQUE (C16) :
-        ni un modele, ni un service. Un registre illisible les garde tous :
-        mieux vaut un capteur de trop qu'un danger tu."""
+        """Les capteurs de monoxyde CHIFFRES, sur un appareil PHYSIQUE (C16) :
+        ni un modele, ni un service. En ppm, ou dans une unite qui s'y ramene —
+        mg/m3, ug/m3, ppb (G1-D6, ADR 0300 ; `unite_co`, la regle de l'ecran) ;
+        dans une autre, rien ne dit des ppm. Un registre illisible les garde
+        tous : mieux vaut un capteur de trop qu'un danger tu."""
         cibles = [h for h in capteurs_de(etats, "carbon_monoxide") if h.startswith("sensor.")
-                  and str((getattr(etats.get(h), "attributes", None) or {}).get("unit_of_measurement") or "").lower() == "ppm"]
+                  and unite_co((getattr(etats.get(h), "attributes", None) or {}).get("unit_of_measurement")) is not None]
         if not cibles:
             return []
         try:
@@ -654,7 +699,9 @@ class LoggiaVeilles:
         self._purger("co:")
         tait = await self._co_tait()
         for haid in cibles:
-            valeur = nombre(etats.get(haid))
+            # En ppm, quelle que soit l'unite du capteur (G1-D6) : le seuil et le message parlent en ppm.
+            st = etats.get(haid)
+            valeur = vers_ppm_co(nombre(st), (getattr(st, "attributes", None) or {}).get("unit_of_measurement"))
             if valeur is None:
                 # Muet : ni alerte ni rearmement.
                 continue
@@ -666,12 +713,182 @@ class LoggiaVeilles:
                 v = math.ceil(valeur)
                 if not deja and not tait and await self.regles.prevenir(
                         "veilles", "co", (MSG_CO, {"nom": self._nom(haid, etats), "v": v}),
-                        titre=TITRE, critique=True, motif=("{v} ppm", {"v": v}), simuler=self._simule()):
+                        titre=TITRE, critique=True, motif=("{v} ppm", {"v": v}), simuler=self._simule(),
+                        pour="tous"):
                     self.signales.add(cle)
             elif deja:
                 self.signales.discard(cle)
         if self.signales != avant:
             await self._async_garder()
+
+    # ── Le rappel de collecte (ADR 0301) ───────────────────────────────────
+    def _maintenant(self):
+        from homeassistant.util import dt as dt_util
+
+        return dt_util.now()
+
+    def _poser_collecte(self) -> None:
+        """Le rendez-vous du soir, repose a chaque reabonnement : l'heure a pu
+        changer, le rappel a pu s'eteindre."""
+        if self._rdv_collecte is not None:
+            try:
+                self._rdv_collecte()
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug("Loggia veilles : rendez-vous de la collecte deja retire")
+            self._rdv_collecte = None
+        c = self.cfg.get("collecte") or {}
+        if self._arrete or not c.get("actif"):
+            return
+        from homeassistant.helpers.event import async_track_time_change
+
+        hhmm = collecte.heure_de(c.get("heure")) or collecte.HEURE_DEFAUT
+        self._rdv_collecte = async_track_time_change(self.hass, self._sur_heure_collecte,
+                                                     hour=int(hhmm[:2]), minute=int(hhmm[3:]), second=0)
+
+    @callback
+    def _sur_heure_collecte(self, _now) -> None:
+        self.hass.async_create_task(self._async_collecte())
+
+    async def _async_collecte(self, rattrapage: bool = False) -> bool:
+        """La veille au soir : ce qui passe demain, aux personnes a la maison.
+        Jamais deux fois ; rien si c'est deja sorti ; au demarrage, seulement
+        dans les trois heures qui suivent l'heure."""
+        c = self.cfg.get("collecte") or {}
+        if self._arrete or not c.get("actif"):
+            return False
+        if self._verrou_collecte is None:
+            import asyncio
+
+            self._verrou_collecte = asyncio.Lock()
+        async with self._verrou_collecte:
+            return await self._async_collecte_seul(c, rattrapage)
+
+    async def _async_collecte_seul(self, c: dict[str, Any], rattrapage: bool) -> bool:
+        """Le corps du rappel, sous le verrou."""
+        from datetime import timedelta
+
+        maintenant = self._maintenant()
+        if rattrapage and not collecte.dans_la_fenetre(maintenant, c.get("heure")):
+            return False
+        demain = (maintenant + timedelta(days=1)).date()
+        cle = demain.isoformat()
+        etat = collecte.etat_de(await self.store.async_get_shared(collecte.CLE_ETAT, None))
+        if cle in (etat["rappele"], etat["sorti"]):
+            return False
+        if self._simule() and cle in (self._collecte_simulee or set()):
+            return False
+        types = await self._types_collecte(maintenant, demain, c.get("source"))
+        if not types:
+            return False
+        return await self._async_rappel_collecte(types, cle)
+
+    async def _async_rappel_collecte(self, types: str, cle: str) -> bool:
+        """L'envoi, avec son bouton ; retenu (persiste) seulement s'il est parti."""
+        boutons = {"actions": [{"action": collecte.action_sorti(cle),
+                                "title": traduire(BOUTON_SORTI, langue_serveur(self.hass))}]}
+        simule = self._simule()
+        parti = await self.regles.prevenir("veilles", "collecte", (MSG_COLLECTE, {"types": types}), motif=cle,
+                                           data=boutons, simuler=simule, pour="presents")
+        if parti and simule:
+            # Observer sans agir : retenu en memoire seulement (relecture du
+            # 30/10, point 4) — le vrai rappel reste possible ce soir.
+            self._collecte_simulee = (self._collecte_simulee or set()) | {cle}
+        elif parti:
+            await self._ecrire_collecte(lambda brut: collecte.poser_rappel(brut, cle))
+        return parti
+
+    def _plateformes(self):
+        """`plateforme(entity_id)` d'apres le registre ; un registre illisible
+        ne connait aucune plateforme, et le nom prend le relais."""
+        try:
+            from homeassistant.helpers import entity_registry as er
+
+            registre = er.async_get(self.hass)
+            registre.async_get("sensor.loggia")  # lisible ?
+        except Exception:  # noqa: BLE001
+            return lambda _h: None
+
+        def plateforme(haid: str):
+            e = registre.async_get(haid)
+            return getattr(e, "platform", None) if e is not None else None
+        return plateforme
+
+    def _sources_collecte(self, source: Any) -> tuple[str | None, list[str]]:
+        """(calendrier, capteurs) : la source choisie dans Parametres si elle
+        existe, sinon la decouverte — un calendrier d'abord."""
+        if isinstance(source, str) and source and self.hass.states.get(source) is not None:
+            return (source, []) if source.startswith("calendar.") else (None, [source])
+        plateforme = self._plateformes()
+        entrees = []
+        try:
+            for domaine in ("calendar", "sensor"):
+                for haid in self.hass.states.async_entity_ids(domaine):
+                    st = self.hass.states.get(haid)
+                    attrs = getattr(st, "attributes", None) or {}
+                    entrees.append((haid, attrs.get("friendly_name"), plateforme(haid), attrs,
+                                    getattr(st, "state", None)))
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Loggia veilles : etats illisibles pour la collecte", exc_info=True)
+            return None, []
+        return collecte.source(collecte.sources(entrees))
+
+    async def _types_collecte(self, maintenant, demain, source: Any) -> str:
+        """Ce qui passe demain, en texte : « Verre, Recyclables » ; '' sinon."""
+        calendrier, capteurs = self._sources_collecte(source)
+        noms: list[str] = []
+        if calendrier:
+            from datetime import datetime, time as heure, timedelta
+
+            # La journee de demain, dans le fuseau de la maison.
+            debut = datetime.combine(demain, heure.min, tzinfo=maintenant.tzinfo)
+            try:
+                rep = await self.hass.services.async_call(
+                    "calendar", "get_events",
+                    {"entity_id": calendrier, "start_date_time": debut.isoformat(),
+                     "end_date_time": (debut + timedelta(days=1)).isoformat()},
+                    blocking=True, return_response=True)
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug("Loggia veilles : %s illisible pour la collecte", calendrier, exc_info=True)
+                return ""
+            evenements = ((rep or {}).get(calendrier) or {}).get("events") if isinstance(rep, dict) else None
+            noms = collecte.types_du_jour(evenements, demain)
+        elif capteurs:
+            lus = []
+            for haid in capteurs:
+                st = self.hass.states.get(haid)
+                if st is None:
+                    continue
+                lus.append((self._nom(haid, {haid: st}),
+                            collecte.lire_capteur(getattr(st, "state", None), getattr(st, "attributes", None) or {},
+                                                  maintenant.date())))
+            # Les capteurs dont le passage tombe DEMAIN (relecture du 30/10,
+            # point 3) : le verre d'aujourd'hui ne cache pas le papier de demain.
+            noms = collecte.types_des_capteurs(lus, demain)
+        return ", ".join(noms)
+
+    async def _ecrire_collecte(self, changer) -> dict[str, str]:
+        """La partie commune, sous le verrou du magasin ; les ecrans relisent."""
+        etat = await self.store.async_modifier_shared(collecte.CLE_ETAT, changer)
+        signaler = getattr(self.store, "signaler_communes", None)
+        if callable(signaler):
+            signaler([collecte.CLE_ETAT])
+        return etat
+
+    async def async_sorti(self, jour: Any, sorti: Any) -> dict[str, str]:
+        """« C'est sorti », du bandeau de l'Accueil (`loggia/collecte/sorti`,
+        ouvert a tout compte : sortir les bacs n'est pas un privilege) ou du
+        bouton de la notification. Le meme endroit pour les deux."""
+        cle = collecte.date_iso(jour)
+        if cle is None:
+            raise ValueError("date : AAAA-MM-JJ")
+        return await self._ecrire_collecte(lambda brut: collecte.poser_sorti(brut, cle, bool(sorti)))
+
+    async def _sur_action(self, event) -> None:
+        """Le bouton de la notification : il porte le jour du ramassage."""
+        cle = collecte.lire_action((getattr(event, "data", None) or {}).get("action"))
+        if cle is None or self._arrete:
+            return
+        await self.async_sorti(cle, True)
 
     # ── Outils ─────────────────────────────────────────────────────────────
     def _nom(self, haid: str, etats: dict) -> str:
@@ -680,10 +897,12 @@ class LoggiaVeilles:
         return str(attrs.get("friendly_name") or haid)
 
     async def _async_prevenir(self, regle: str, message: str, motif: str = "") -> bool:
-        """Par le socle : le telephone choisi dans Parametres > Alertes, et les
-        heures calmes — ces veilles ne reveillent personne, elles attendent.
-        En observation, le telephone aussi se simule (ADR 0004)."""
-        return await self.regles.prevenir("veilles", regle, message, motif=motif, simuler=self._simule())
+        """Par le socle : les telephones des personnes a la maison (ADR 0301),
+        le service de Parametres > Alertes en repli, et les heures calmes — ces
+        veilles ne reveillent personne, elles attendent. En observation, le
+        telephone aussi se simule (ADR 0004)."""
+        return await self.regles.prevenir("veilles", regle, message, motif=motif, simuler=self._simule(),
+                                          pour="presents")
 
     async def _async_service(self, domaine: str, service: str, cibles: list, *,
                              regle: str = "", quoi: str = "", motif: str = "") -> list:
@@ -731,6 +950,7 @@ class LoggiaVeilles:
         au reel, on doit pouvoir la dire pour de vrai."""
         self.signales = set()
         self.creuses_en_cours = False
+        self._collecte_simulee = None
         self.regles.relacher("veilles")
 
     # ── Ce qui a ete signale, sur le disque (audit du 19/10, M2) ───────────
@@ -794,6 +1014,13 @@ class LoggiaVeilles:
         entite = cfg["creuses"].get("entite")
         cfg["creuses"]["entite"] = entite if est_entite(entite) else ""
         cfg["simulation"] = {"actif": cfg["simulation"].get("actif") is True}
+        c = cfg["collecte"]
+        source = c.get("source")
+        cfg["collecte"] = {
+            "actif": c.get("actif") is True,
+            "heure": collecte.heure_de(c.get("heure")) or collecte.HEURE_DEFAUT,
+            "source": source if est_entite(source) and source.startswith(("calendar.", "sensor.")) else "",
+        }
 
     async def async_etat(self) -> dict[str, Any]:
         etats = self._tous_les_etats()
@@ -803,9 +1030,13 @@ class LoggiaVeilles:
             # Ce que la decouverte propose, pour que l'interface n'ait rien a deviner.
             "capteurs_co2": capteurs_de(etats, "carbon_dioxide"),
             "capteurs_batterie": capteurs_de(etats, "battery"),
-            # Sans service de notification, ces veilles n'ont personne a qui parler.
-            "notification": bool(str((alertes or {}).get("service") or "").strip()),
+            # Sans telephone decouvert ni service de repli, ces veilles n'ont
+            # personne a qui parler (ADR 0301).
+            "notification": bool(str((alertes or {}).get("service") or "").strip())
+            or await self.regles.a_qui_parler("presents"),
             "signales": sorted(self.signales),
+            # Le rappel de collecte : ce qui a ete dit, ce qui est sorti.
+            "collecte": collecte.etat_de(await self.store.async_get_shared(collecte.CLE_ETAT, None)),
             "journal": await self.regles.journal(limite=40, module="veilles"),
         }
 
@@ -842,11 +1073,13 @@ class LoggiaVeilles:
         # D'un seul tenant, sous le verrou du magasin (lot 15 de l'audit du
         # 03/10 ; voir store.async_modifier_shared).
         simulait = False
+        collectait = False
 
         def changer(brut: Any) -> dict[str, Any]:
-            nonlocal simulait
+            nonlocal simulait, collectait
             cfg = self._config_de(brut)
             simulait = cfg["simulation"]["actif"]
+            collectait = cfg["collecte"]["actif"]
             self._poser_patch(cfg, patch)
             return cfg
 
@@ -860,6 +1093,9 @@ class LoggiaVeilles:
         if repart:
             # Revenu au reel, un monoxyde deja dangereux se dit tout de suite.
             await self._async_co()
+        if cfg["collecte"]["actif"] and not collectait:
+            # Allume a 19:30 : le rappel de ce soir part quand meme.
+            await self._async_collecte(rattrapage=True)
         return cfg
 
     @callback
@@ -868,7 +1104,8 @@ class LoggiaVeilles:
         # attente partent avec le reste (audit du 19/10, M4) : sans eux, une
         # instance retiree se reabonnerait encore.
         self._arrete = True
-        for nom in ("_au_demarrage", "_defait_registre", "_reabonnement", "_horaire"):
+        for nom in ("_au_demarrage", "_defait_registre", "_reabonnement", "_horaire", "_rdv_collecte",
+                    "_defait_action"):
             defaire = getattr(self, nom, None)
             if defaire is not None:
                 try:

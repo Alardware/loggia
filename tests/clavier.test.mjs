@@ -19,6 +19,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Les sources JSX du produit — et elles seules : `src/` garde des copies de
@@ -47,7 +48,7 @@ test('aucun titre ne porte de clic', () => {
 });
 
 test('le renommage d’une vue passe par un vrai bouton', () => {
-  const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const src = MONOLITHE;
   const i = src.indexOf('setRenaming(true)');
   assert.notEqual(i, -1, 'le renommage d’une vue personnalisée a disparu');
   // On remonte à la balise qui le porte : ce doit être un <button>, pas un
@@ -58,7 +59,7 @@ test('le renommage d’une vue passe par un vrai bouton', () => {
 });
 
 test('le bouton de renommage dit ce qu’il fait', () => {
-  const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const src = MONOLITHE;
   const i = src.indexOf('setRenaming(true)');
   const balise = src.slice(src.lastIndexOf('<', i), src.indexOf('>', i));
   // Son contenu est le nom de la vue : sans étiquette, une synthèse vocale
@@ -68,7 +69,7 @@ test('le bouton de renommage dit ce qu’il fait', () => {
 });
 
 test('les étiquettes de la feuille d’édition désignent un champ existant', () => {
-  const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const src = MONOLITHE;
   const cibles = (src.match(/htmlFor=\{([A-Za-z0-9_]+)\}/g) || []).map(m => m.match(/\{(\w+)\}/)[1]);
   assert.ok(cibles.length >= 2, `seulement ${cibles.length} étiquette(s) reliée(s) : « NOM » et « ENTITÉ » l’étaient`);
   for (const c of cibles) {
@@ -158,7 +159,7 @@ test('une feuille dit son nom', () => {
   // passait un `title` ; les autres bâtissent leur en-tête avec `TitreFeuille`
   // ou `FicheEntete`. C'est donc la ligne de titre qui nomme.
   const ui = readFileSync(join(RACINE, 'src', 'ui.jsx'), 'utf8');
-  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const app = MONOLITHE;
   assert.match(ui, /aria-labelledby=\{idTitre\}/, 'la feuille ne se nomme plus par sa ligne de titre');
   assert.match(ui, /export function useIdTitreFeuille\(\)/, 'le crochet du nom a disparu');
   assert.match(ui, /prendre: \(jeton\) =>/,
@@ -172,7 +173,7 @@ test('le tiroir hors écran sort du parcours, le rail de l’ordinateur y reste'
   // `display: flex`, et ses onze boutons restaient tabulables et lisibles à
   // l'aveugle. Sur ORDINATEUR, `is-closed` n'est qu'un rail de 72 px, bien
   // visible et bien utile — on n'y touche pas.
-  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const app = MONOLITHE;
   assert.match(app, /inert=\{tactile && !open \? '' : undefined\}/,
     'le tiroir fermé n’est plus retiré du parcours, ou il l’est aussi sur ordinateur');
   const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
@@ -184,13 +185,13 @@ test('rien ne se vise sous 24 px', () => {
   // WCAG 2.5.8. Sur une tablette murale, une main qui tremble ne vise pas un
   // point de 8 px — et ces points-là changent de page. Mesuré après
   // correction : zéro cible sous 24 px sur six vues, à 390 comme à 1280.
-  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const app = MONOLITHE;
   /* Les points de page des grilles d'icones ont disparu le 29/09 : la grille
    * cherche et se range par famille, elle ne se feuillette plus. Ce qui reste
    * a verifier, c'est qu'aucun point de 8 px ne revienne a decouvert. */
   assert.ok(!/width: 8, height: 8, padding: 0, borderRadius: 4/.test(app), 'un point de 8 px est revenu à découvert');
-  // Les deux points de page de l'Accueil : gabarit 24, rangée toujours à 6.
-  assert.match(app, /minWidth: 24, height: 24, margin: '-9px 0'/, 'les points de l’Accueil ont reperdu leur zone');
+  // Les deux points de page de l'Accueil : gabarit 44 depuis le lot 7 de l'audit du 28/10 (V5), rangée toujours à 6.
+  assert.match(app, /minWidth: 44, height: 44, margin: '-19px 0'/, 'les points de l’Accueil ont reperdu leur zone');
   // L'interrupteur d'une tuile pièce : zone de 24, pastille de 21.
   assert.match(app, /alignItems: 'center', height: 24, cursor: 'pointer', flexShrink: 0, margin: '-1\.5px 0'/,
     'l’interrupteur d’une tuile pièce a reperdu sa zone de 24');
@@ -349,7 +350,7 @@ test('Entrée sur un bouton d’une carte n’ouvre pas la carte', () => {
 test('le lecteur de la garde distingue un conteneur d’une feuille', () => {
   // Un lecteur qui ne trouverait plus rien laisserait tout passer : zéro
   // faute, faute de gestionnaire lu. On le vérifie sur trois cas connus.
-  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const app = MONOLITHE;
   const lus = gestionnaires(app).filter(g => g.active && !g.objet).map(g => {
     const b = porteur(app, g.i);
     return { g, balise: b ? app.slice(b.debut, b.fin + 1) : '', dedans: (b && contenu(app, b)) || '' };

@@ -15,6 +15,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 // ASSERTION MODIFIÉE (audit du 19/10, point 14) : `jaugeMesure` (code mort) et `barresPile` (une seconde règle des piles) sont partis.
 const { echelleMesure, barreMesure, cleMesure, verdictMesure } = await import('../src/confort.js');
@@ -22,7 +23,7 @@ const { SEUIL_CO2 } = await import('../src/attention.js');
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8').replace(/\r\n/g, '\n');
-const APP = lire('src', 'App.jsx');
+const APP = MONOLITHE;
 const fonction = (nom) => {
   const i = APP.indexOf('\nfunction ' + nom + '(');
   return APP.slice(i, APP.indexOf('\n}\n', i) + 3);
@@ -115,7 +116,8 @@ test('une seule table : « Élevé » commence à 1 400 ppm partout', () => {
   assert.equal(verdictMesure('co2', SEUIL_CO2).t, 'Élevé', 'le point « À surveiller » tombe au début de « Élevé »');
   assert.equal(verdictMesure('co2', SEUIL_CO2 - 1).t, 'Moyen');
   // ASSERTION MODIFIÉE (audit du 19/10, M16) : la bannière et le badge lisent la table elle-même — plus de paliers à part.
-  assert.ok(!APP.includes('function airPalier') && APP.includes("const zoneCo2 = (co2) => (co2 == null ? null : zoneMesure('co2', co2));"), 'la bannière et le badge');
+  // ASSERTION MODIFIÉE (30/10, G1-D5) : sur le chiffre écrit, arrondi à l'unité — 1 149,6 ppm s'écrit « 1 150 » et se dit « Moyen ».
+  assert.ok(!APP.includes('function airPalier') && APP.includes("const zoneCo2 = (co2) => (co2 == null ? null : zoneMesure('co2', arrondiMesure('co2', co2)));"), 'la bannière et le badge');
   assert.ok(fonction('CvAir').includes("const vAir = air.co2V == null ? null : verdictMesure('co2', air.co2V);"), 'la carte « Qualité air » du catalogue');
   assert.ok(!APP.includes("tr('Mauvais'), 'var(--o-bad)'"), 'plus de seconde échelle 800 / 1200 dans la carte « Qualité air »');
   const py = lire('custom_components', 'loggia', 'veilles.py');

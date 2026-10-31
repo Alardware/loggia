@@ -10,8 +10,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { decalageServeur, resteMinuteur, decompte } from '../src/minuteur.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = MONOLITHE;
 const demo = readFileSync(join(RACINE, 'src', 'demo.js'), 'utf8');
 const en = readFileSync(join(RACINE, 'src', 'langues', 'en.js'), 'utf8');
 

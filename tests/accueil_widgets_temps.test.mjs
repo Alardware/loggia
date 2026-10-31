@@ -15,6 +15,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE, DASHBOARD } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282) ; DASHBOARD : l'Accueil en entier, ses hooks compris (ADR 0283)
 // La langue de la machine ne doit pas changer le résultat (garde-fou de la CI).
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 const {
@@ -23,7 +24,7 @@ const {
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
-const app = lire('src', 'App.jsx');
+const app = MONOLITHE;
 const vue = lire('src', 'widgetsrail.jsx');
 const css = lire('src', 'index.css');
 const NL = String.fromCharCode(10);
@@ -83,7 +84,7 @@ test('l’Accueil : des sections en option, présentes par défaut, que la croix
    * au CO₂ sans rien entre les deux. La carte `CvCalendrier`, posable sur une
    * vue, garde le sien — c'est un AUTRE objet, et il reste. */
   assert.ok(!/const ACC_NOMS[^;]*calendrier/.test(app), 'le widget retiré ne laisse pas son nom parmi ceux du rail');
-  const d = bloc(app, 'function Dashboard(', NL + 'function ');
+  const d = DASHBOARD;
   assert.ok(d.includes("ajoutees: Array.isArray(v.ajoutees) ? v.ajoutees : [...ACC_AJOUTEES_DEFAUT], styles: (v.styles && typeof v.styles === 'object') ? v.styles : {},"), 'l’agencement relu garde les ajouts et les styles — sinon ils se perdaient au rechargement');
   assert.ok(d.includes('const estOption = (id) => WIDGETS_OPTION.indexOf(id) >= 0;'));
   // Une seule règle, `sectionMasquee` (ticket #34) : la carte ET la ligne sous le prénom la lisent.
@@ -94,7 +95,7 @@ test('l’Accueil : des sections en option, présentes par défaut, que la croix
 });
 
 test('le style se choisit en édition, sur sa propre ligne', () => {
-  const d = bloc(app, 'function Dashboard(', NL + 'function ');
+  const d = DASHBOARD;
   assert.ok(d.includes('{editMode && STYLES_WIDGETS[id] && (') && d.includes('onClick={() => choisirStyle(id, st)} aria-pressed={on}'), 'deux puces, l’active marquée');
   assert.ok(d.includes('const choisirStyle = (id, style) => saveGrille({ styles: { ...(grille.styles || {}), [id]: style } });'));
   assert.ok(d.includes("heure: <HorlogeRail style={styleDe(grille.styles, 'heure')} hass={dashHass} />,"));

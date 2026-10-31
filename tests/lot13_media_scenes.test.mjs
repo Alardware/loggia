@@ -24,9 +24,10 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { composant, rendre } from './rendu.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8').replace(/\r\n/g, '\n');
-const APP = lire('src', 'App.jsx');
+const APP = MONOLITHE;
 const SCENES_JSX = lire('src', 'scenes.jsx');
 
 /** Le source d'une fonction de premier niveau d'App.jsx, jusqu'à la suivante. */

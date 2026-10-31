@@ -35,6 +35,7 @@ import { readFileSync } from 'node:fs';
 
 import { monter, horlogeFausse, documentFaux } from './crochets.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -298,7 +299,7 @@ test('L’appareil ouvre la fiche universelle ; la coquille passe la vue de la c
   const bouton = m.trouver(e => e.type === 'button' && typeof e.props.onClick === 'function')[0];
   m.appuyer(bouton);
   assert.deepEqual(ouvertes, ['sensor.chambre_co2']);
-  const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  const app = MONOLITHE;
   const i = app.indexOf('\nfunction FicheCapteur(');
   const coquille = app.slice(i, app.indexOf('\n}\n', i));
   assert.ok(coquille.includes('const vue = useVueMesure(hass, id);') && coquille.includes('<FicheCapteurContent id={id} vue={vue}') && coquille.includes('<FicheAppareil id={fiche}'));

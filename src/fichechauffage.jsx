@@ -72,7 +72,7 @@
 import { useState, useEffect, useRef, useId, useMemo } from 'react';
 import { tr, trN, trHA, locale } from './i18n.js';
 import { Fi, Bascule } from './ui.jsx';
-import { compteOrdinaire } from './state.js';
+import { compteOrdinaire, enHaids, enPrix } from './state.js';
 import { commander, commanderService, planAction, actionCtx } from './actions.js';
 import { useOptimiste } from './optimiste.js';
 import { raisonEchec, enregistrerRefus } from './refus.js';
@@ -85,7 +85,7 @@ import { ordreJours, nomJour, dureeLisible } from './robots.js';
 import { commanderChauffage, refroidit } from './chauffageetat.js';
 import {
   ORDRE_MODES, couleurMode, encreMode, motMode, modeDuModule, consigneVoisine, finMurale, jourEnPhrase, plaqueMode, enChauffe,
-  consigneAtteinte, mesureLisible, moduleMuet,
+  consigneAtteinte, mesureLisible, moduleMuet, decalageEn,
 } from './chauffageecran.js';
 import { ecrireHeure, lireHeure, modePlanning } from './chauffage.js';
 import {
@@ -93,12 +93,18 @@ import {
   modePropose, ajouterChangement, retirerChangement, changerHeure, changerMode, copierJour, semaineAdaptee, heureDecalee,
   estMuet, PRESETS_VTHERM, modesHvac, modeDeChauffe, modesAppliques, temperaturesDe, temperatureDuMode, pasTemperature, plageVoisine,
   modeApplique, PERIODES, echantillons, courbe, chauffeAppliquee, tempsParMode, tempsDeChauffe, placeBande, dater, actionDite, bandesAppliquees,
+  ecartMesure,
 } from './chauffageplanning.js';
 import {
   PETITES_CAPITALES, filet, BoutonConfirme, ChampHeure, EnteteFiche, FicheOnglets, PanneauOnglet, focaliser, useHistoriquePeriode,
   useHistoriqueClimat, JOURS_DERNIERS,
 } from './fichecommune.jsx';
-import { LISERE, petitesCapitales } from './styles.js';
+import { petitesCapitales } from './styles.js';
+import { tarifsMaison, connexionsHeures, enDevise } from './prisesfiche.js';
+import { coutHoraire } from './tarif.js';
+import { kwhPrise } from './prises.js';
+import { useStatsEnergie, tranchesKwh, bilanEnergie } from './chauffageenergie.js';
+import { ALERTE, PANNEAU, TITRE, SOUS } from './fichekit.js';
 
 /* Les refus de la configuration n'arrivent qu'à la fiche et à la barre
  * « Maison », chargées à la demande : enregistrés à leur chargement — le
@@ -114,19 +120,16 @@ const DELESTAGE_VTHERM = 'power';
 // La commande de la reprise en main, et de son retour au planning.
 const TYPE_MAIN = 'loggia/chauffage/main';
 const MOT = { fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)', lineHeight: 1.5 };
-const ALERTE = { fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)' };
 // Les hachures d'un mode « à la main » dans l'Historique : sa bande, sa part du temps, son point.
 const hachures = (c) => 'repeating-linear-gradient(135deg, ' + c + ' 0 5px, color-mix(in srgb, ' + c + ' 55%, transparent) 5px 10px)';
 
 /* Les panneaux de la fiche au dessin de sa maquette (tâche 10 bis B pour
- * l'Accueil, cadres 3b et 3e ; 10 bis C pour le Planning, 3c et 3f) : le gris
- * --o-s3, l'arrondi du thème, sans ombre — et la bordure du réglage
- * « Liserés » (LISERE), qui vaut pour tous les panneaux. Le haut de l'Accueil
- * se rembourre de 18 px ; une liste, sans rembourrage, coupe ce qui déborde de
+ * l'Accueil, cadres 3b et 3e ; 10 bis C pour le Planning, 3c et 3f) : celui
+ * du kit des fiches (`PANNEAU`, fichekit.js). Le haut de l'Accueil se
+ * rembourre de 18 px ; une liste, sans rembourrage, coupe ce qui déborde de
  * ses coins. */
-const PANNEAU_FICHE = { background: 'var(--o-s3)', border: LISERE, borderRadius: 'var(--o-radius,18px)', boxSizing: 'border-box', minWidth: 0 };
-const PANNEAU_HAUT = { ...PANNEAU_FICHE, padding: 18 };
-const PANNEAU_LISTE = { ...PANNEAU_FICHE, overflow: 'hidden' };
+const PANNEAU_HAUT = { ...PANNEAU, padding: 18 };
+const PANNEAU_LISTE = { ...PANNEAU, overflow: 'hidden' };
 /* Une rangée de la liste, aux rembourrages de la maquette : fixe, 14 px et
  * 18 px ; un bouton d'une ligne, 14 px — 14 à droite, pour son chevron ; une
  * rangée de deux lignes (un sous-titre, ou les − / + de 44 px), 12 px. */
@@ -136,8 +139,6 @@ const RANGEE_DOUBLE = { ...RANGEE, padding: '12px 14px 12px 18px' };
 const EN_BOUTON = { width: '100%', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', color: 'inherit', textAlign: 'left' };
 const RANGEE_BOUTON = { ...RANGEE, ...EN_BOUTON, padding: '14px 14px 14px 18px' };
 const RANGEE_BOUTON_DOUBLE = { ...RANGEE_DOUBLE, ...EN_BOUTON };
-const TITRE_RANGEE = { display: 'block', fontSize: 14, fontWeight: 700 };
-const SOUS_RANGEE = { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 };
 const VALEUR_RANGEE = { fontSize: 13, fontWeight: 800 };
 // « Reprendre le planning » : un bouton doux, à l'accent, sur toute la largeur — plus le rouge d'avant.
 const BOUTON_REPRENDRE = { width: '100%', minHeight: 44, marginTop: 8, padding: '0 12px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
@@ -531,6 +532,8 @@ function Avertissements({ ch, st, etats = {}, rate = false }) {
         { noms: (Array.isArray(ch.concurrents) ? ch.concurrents : []).map(c => '« ' + (c && c.nom) + ' »').join(', ') })],
     av.includes('programme_appareil') && ['programme_appareil', 'calendar-clock',
       tr('Son programme « {nom} » est allumé : il change les réglages lui-même. Coupez-le pour que le planning commande seul.', { nom: nomProg })],
+    // Son dernier ordre perdu deux fois (30/10) : le moteur réessaie au prochain changement, ou au prochain événement.
+    av.includes('ordre_defait') && ['ordre_defait', 'triangle-warning', tr('Il n’a pas gardé le dernier ordre de Loggia, qui réessaiera au prochain changement.')],
     SECURITE_VTHERM.includes(preset) && ['securite', 'shield-exclamation', tr('Sécurité : la sonde de température ne répond plus, VTherm chauffe seul.')],
     preset === DELESTAGE_VTHERM && ['delestage', 'bolt', tr('Délestage : la maison consomme trop, VTherm suspend la chauffe.')],
   ].filter(Boolean);
@@ -579,6 +582,8 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
   const consigneLue = ch.famille === 'thermostat' ? consigneClimat(a) : null;
   const [ovT, poserOvT] = useOptimiste(consigneLue);
   const consigne = ovT != null ? ovT : consigneLue;
+  // Le décalage de son capteur (30/10) : au planning, la fiche dit et règle la consigne de la PIÈCE.
+  const decPiece = auPlanning ? decalageEn(ch, uT) : 0;
   /* Son mode `hvac`, hors du planning : sa marche, et le mode choisi d'un
    * appareil qui sait autre chose que chauffer. */
   const etatLu = st ? st.state : null;
@@ -635,7 +640,7 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
       const p = vise != null && planAction(ch.entite, 'set_temperature', vise, actionCtx(hass));
       if (!p || !p.ok || p.data.temperature === consigne) return;
       poserOvT(p.data.temperature);
-      auMoteur(messageMain(ch, { temperature: versCelsius(p.data.temperature, uT), fin: 'prochain' }), () => poserOvT(null));
+      auMoteur(messageMain(ch, { temperature: Math.round((versCelsius(p.data.temperature, uT) - decalageEn(ch, 'C')) * 10) / 10, fin: 'prochain' }), () => poserOvT(null));
       return;
     }
     // Un vrai cran du pas de l'appareil : ± 0,5 arrondi au degré retombait sur la même consigne (audit du 19/10).
@@ -726,7 +731,7 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
     else if (chauffe || action === 'cooling') {
       grand = chauffe ? tr('Chauffe') : tr('Refroidit');
       encre = chauffe ? 'var(--o-warn2)' : 'var(--o-cold)';
-      sous = consigne != null ? tr('Vers {t}°', { t: nombre(consigne, 1) }) : null;
+      sous = consigne != null ? tr('Vers {t}°', { t: nombre(consigne - decPiece, 1) }) : null;
     } else {
       grand = tr('Au repos');
       encre = 'var(--o-text)';
@@ -841,8 +846,8 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
   // Le titre de la rangée, et ce qu'elle fait à l'ouverture quand il y a quelque chose à promettre.
   const titreFenetre = (id) => (
     <span style={{ minWidth: 0 }}>
-      <span id={id} style={TITRE_RANGEE}>{tr('Fenêtre')}</span>
-      {sousFenetre && <span style={SOUS_RANGEE}>{sousFenetre}</span>}
+      <span id={id} style={TITRE}>{tr('Fenêtre')}</span>
+      {sousFenetre && <span style={SOUS}>{sousFenetre}</span>}
     </span>
   );
   // Une rangée, son filet au-dessus (`f`) : aucun pour la première.
@@ -850,8 +855,8 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
     if (cle === 'consigne') {
       return (
         <div key={cle} data-rangee={cle} style={{ ...RANGEE_DOUBLE, borderTop: f }}>
-          <span style={TITRE_RANGEE}>{tr('Consigne')}</span>
-          <PasCarre nom={tr('Consigne')} valeur={consigne != null ? nombre(consigne, 1) + '°' : '—'} eteint={!marche}
+          <span style={TITRE}>{tr('Consigne')}</span>
+          <PasCarre nom={tr('Consigne')} valeur={consigne != null ? nombre(consigne - decPiece, 1) + '°' : '—'} eteint={!marche}
             peutMoins={peutBaisser} peutPlus={peutMonter} moins={() => regler(-1)} plus={() => regler(1)} />
         </div>
       );
@@ -860,8 +865,8 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
       return (
         <div key={cle} data-rangee={cle} style={{ ...RANGEE_FIXE, borderTop: f }}>
           <span style={{ minWidth: 0 }}>
-            <span style={TITRE_RANGEE}>{tr('En marche')}</span>
-            <span style={SOUS_RANGEE}>{tr('Coupe la zone sans toucher à la consigne')}</span>
+            <span style={TITRE}>{tr('En marche')}</span>
+            <span style={SOUS}>{tr('Coupe la zone sans toucher à la consigne')}</span>
           </span>
           <Bascule on={marche} nom={tr('En marche')} cb={basculer} />
         </div>
@@ -870,7 +875,7 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
     if (cle === 'prochain') {
       return (
         <button key={cle} type="button" data-rangee={cle} onClick={versPlanning} style={{ ...RANGEE_BOUTON, borderTop: f }}>
-          <span style={TITRE_RANGEE}>{tr('Prochain changement')}</span>
+          <span style={TITRE}>{tr('Prochain changement')}</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, minWidth: 0, fontSize: 13, fontWeight: 800, textAlign: 'right' }}>
             <Point mode={modeProchain} />
             <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{tr('{quand} · {mode}', { quand: capitale(quand), mode: motMode(modeProchain) || '—' })}</span>
@@ -901,7 +906,7 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
           {deplie && (
             <div id={idBase + '-fenetre-reglage'} style={{ padding: '0 18px 14px' }}>
               <Puces idNom={idBase + '-fenetre'} options={choixFenetre} choisi={choisiFenetre} onChoisir={choisirFenetre} />
-              {conseil && <div style={{ ...SOUS_RANGEE, marginTop: 8 }}>{tr('Éco conseillé pour un poêle à granulés : pas d’extinction pour une aération')}</div>}
+              {conseil && <div style={{ ...SOUS, marginTop: 8 }}>{tr('Éco conseillé pour un poêle à granulés : pas d’extinction pour une aération')}</div>}
             </div>
           )}
         </div>
@@ -910,7 +915,7 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
     if (cle === 'maison') {
       return (
         <div key={cle} data-rangee={cle} style={{ ...RANGEE_FIXE, borderTop: f }}>
-          <span style={TITRE_RANGEE}>{tr('Mode de la maison')}</span>
+          <span style={TITRE}>{tr('Mode de la maison')}</span>
           <span style={{ ...VALEUR_RANGEE, textAlign: 'right', minWidth: 0, overflowWrap: 'anywhere' }}>{motMaison(etat && etat.maison)}</span>
         </div>
       );
@@ -918,7 +923,7 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
     if (cle === 'planning') {
       return (
         <button key={cle} type="button" data-rangee={cle} onClick={versPlanning} style={{ ...RANGEE_BOUTON, borderTop: f }}>
-          <span style={TITRE_RANGEE}>{tr('Planning')}</span>
+          <span style={TITRE}>{tr('Planning')}</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 800, color: 'var(--o-text2)' }}>
             {valeurPlanning}
             <Fi i="angle-small-right" size={16} color="var(--o-text3)" />
@@ -932,8 +937,8 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
     return (
       <button key={cle} type="button" data-rangee={cle} onClick={() => onFiche(ch.entite)} style={{ ...RANGEE_BOUTON_DOUBLE, borderTop: f }}>
         <span style={{ minWidth: 0 }}>
-          <span style={TITRE_RANGEE}>{tr('L’appareil')}</span>
-          <span style={SOUS_RANGEE}>{tr('L’épingle, les commandes et toutes ses entités')}</span>
+          <span style={TITRE}>{tr('L’appareil')}</span>
+          <span style={SOUS}>{tr('L’épingle, les commandes et toutes ses entités')}</span>
         </span>
         <Fi i="angle-small-right" size={16} color="var(--o-text3)" />
       </button>
@@ -987,7 +992,7 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
           )}
           {montrerPlage && [['bas', tr('Consigne basse')], ['haut', tr('Consigne haute')]].map(([bord, nom], i) => (
             <div key={bord} data-plage={bord} style={{ ...RANGEE, marginTop: i || montrerHvac || presets.length > 0 ? 12 : 0 }}>
-              <span style={TITRE_RANGEE}>{nom}</span>
+              <span style={TITRE}>{nom}</span>
               <PasCarre nom={nom} valeur={nombre(plage[bord], 1) + '°'}
                 peutMoins={!!plageVoisine(plage, bord, -1, a, uT)} peutPlus={!!plageVoisine(plage, bord, 1, a, uT)}
                 moins={() => reglerPlage(bord, -1)} plus={() => reglerPlage(bord, 1)} />
@@ -1008,7 +1013,7 @@ const pc = (m) => Math.round(Math.max(0, Math.min(1440, m)) / 1440 * 1e6) / 1e4;
 
 /* Le Planning de sa maquette (tâche 10 bis C, cadres 3c et 3f) : ses rangées
  * et ses boutons aux tailles, graisses, couleurs et écarts de la maquette,
- * tels quels ; ses panneaux, ceux de l'Accueil (`PANNEAU_FICHE`). Un bouton de
+ * tels quels ; ses panneaux, ceux de l'Accueil (`PANNEAU`). Un bouton de
  * la maquette (sa « ChipButton ») : arrondi 10, 700, le gris doux sans
  * bordure ; choisi, le bleu plein et le texte blanc. */
 // Le filet entre deux rangées d'un panneau (`filet`), pour une rangée qui n'est jamais la première.
@@ -1116,7 +1121,7 @@ function Heures({ ordre }) {
  * se règle encore. */
 function SemaineDuPlanning({ bandes, ordre, aujourdhui, maintenant, jour, onJour, attenuee }) {
   return (
-    <div data-panneau="semaine" style={{ ...PANNEAU_FICHE, marginTop: 12, padding: 12, opacity: attenuee ? 0.4 : 1 }}>
+    <div data-panneau="semaine" style={{ ...PANNEAU, marginTop: 12, padding: 12, opacity: attenuee ? 0.4 : 1 }}>
       {ordre.map(j => (
         <button key={j} type="button" data-jour={j} data-aujourdhui={j === aujourdhui ? '' : undefined} aria-pressed={j === jour}
           aria-label={j === aujourdhui ? tr('{jour} · aujourd’hui', { jour: nomJour(j, locale(), 'long') }) : nomJour(j, locale(), 'long')}
@@ -1250,7 +1255,7 @@ function phraseSansPlanning(ch, st) {
 function SansPlanning({ idBase, hass, ch, ordinaire, comprend = true, onCreer }) {
   const st = ch.entite && hass && hass.states ? hass.states[ch.entite] || null : null;
   return (
-    <div data-panneau="sans-planning" style={{ ...PANNEAU_FICHE, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10, padding: '22px 18px' }}>
+    <div data-panneau="sans-planning" style={{ ...PANNEAU, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10, padding: '22px 18px' }}>
       <span aria-hidden="true" style={{ width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text2)' }}>
         <Fi i="calendar-clock" size={17} />
       </span>
@@ -1362,7 +1367,7 @@ function LigneChangement({ id, i, c, liste, ouverte, edite, modes, refus, onBasc
  * refus local se dit sur place, celui du serveur retire l'avance et se dit
  * sous ce qu'il touche (`raisonEchec`) : `err`, `{ ou, texte }`.
  */
-function OngletPlanning({ idBase, hass, ch, etat, minute, ordinaire }) {
+function OngletPlanning({ idBase, hass, ch, etat, minute, ordinaire, sonde = null }) {
   const vivant = useVivant();
   const [jour, setJour] = useState(minute[0]);
   // La rangée dépliée (son index dans le jour), une seule à la fois.
@@ -1469,10 +1474,10 @@ function OngletPlanning({ idBase, hass, ch, etat, minute, ordinaire }) {
   const nomDuJour = nomJour(jour, locale(), 'long');
   return (
     <div className="rb-planning" style={{ gap: 0 }}>
-      <div data-panneau="suivre" style={{ ...PANNEAU_FICHE, display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px' }}>
+      <div data-panneau="suivre" style={{ ...PANNEAU, display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <span style={TITRE_RANGEE}>{tr('Suivre le planning')}</span>
-          <span style={SOUS_RANGEE}>{tr('Loggia le commande selon sa semaine, même écran fermé.')}</span>
+          <span style={TITRE}>{tr('Suivre le planning')}</span>
+          <span style={SOUS}>{tr('Loggia le commande selon sa semaine, même écran fermé.')}</span>
         </div>
         {ordinaire
           ? <span style={{ ...VALEUR_RANGEE, flexShrink: 0, color: 'var(--o-text2)' }}>{allume ? tr('Activé') : tr('Désactivé')}</span>
@@ -1487,7 +1492,7 @@ function OngletPlanning({ idBase, hass, ch, etat, minute, ordinaire }) {
         <div style={{ fontSize: 15, fontWeight: 800 }}>{jour === minute[0] ? tr('{jour} · aujourd’hui', { jour: nomDuJour }) : nomDuJour}</div>
         {liste.length > 0 && <div style={{ fontSize: 12, color: 'var(--o-text3)' }}>{trN(liste.length, '{n} changement', '{n} changements')}</div>}
       </div>
-      <div data-panneau="changements" style={{ ...PANNEAU_FICHE, marginTop: 10, overflow: 'hidden' }}>
+      <div data-panneau="changements" style={{ ...PANNEAU, marginTop: 10, overflow: 'hidden' }}>
         <div data-rangee="minuit" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 18px' }}>
           <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: 'var(--o-text3)' }}>{tr('Depuis minuit')}</span>
           {minuit && <Point mode={minuit} />}
@@ -1517,6 +1522,7 @@ function OngletPlanning({ idBase, hass, ch, etat, minute, ordinaire }) {
       {alerte('semaine')}
 
       {ch.famille === 'thermostat' && <TemperaturesDesModes idBase={idBase} hass={hass} ch={ch} ordinaire={ordinaire} />}
+      {ch.famille === 'thermostat' && <CorrectionSonde idBase={idBase} hass={hass} ch={ch} sonde={sonde} ordinaire={ordinaire} />}
       {suppression}
     </div>
   );
@@ -1526,7 +1532,7 @@ function OngletPlanning({ idBase, hass, ch, etat, minute, ordinaire }) {
  *
  * L'Historique de sa maquette : les tailles, graisses, couleurs, écarts et
  * textes de son script (`chart`, `series`, `fmtDur`), tels quels ; ses
- * panneaux, ceux du reste de la fiche (`PANNEAU_FICHE` : --o-s3, l'arrondi du
+ * panneaux, ceux du reste de la fiche (`PANNEAU` : --o-s3, l'arrondi du
  * thème, sans ombre, le liseré du réglage « Liserés »). Ce qui se calcule —
  * l'escalier, l'échelle, les tracés, les bandes, les temps — vit dans
  * `chauffageplanning.js`. */
@@ -1558,13 +1564,13 @@ function jourDuMilieu(minute) {
  * journée d'avant sous les mots de 7 jours (relecture de la partie D). Les
  * Puces, elles, restent montées : le focus y reste.
  */
-function OngletHistorique({ hass, ch, sonde = null, minute = [0, 0], periode = '24h', onPeriode = null, t }) {
+function OngletHistorique({ hass, ch, sonde = null, minute = [0, 0], periode = '24h', onPeriode = null, t, compteurs = null }) {
   const p = PERIODES[periode] ? periode : '24h';
   return (
     <div className="rb-histo" style={{ gap: 12 }}>
       <Puces nom={tr('Période')} options={[{ id: '24h', label: tr('{n} h', { n: 24 }) }, { id: '7j', label: tr('7 jours') }]} choisi={p}
         onChoisir={(x) => { if (onPeriode) onPeriode(x); }} />
-      <DonneesHistorique key={p} hass={hass} ch={ch} sonde={sonde} minute={minute} periode={p} t={t} />
+      <DonneesHistorique key={p} hass={hass} ch={ch} sonde={sonde} minute={minute} periode={p} t={t} compteurs={compteurs} />
     </div>
   );
 }
@@ -1631,7 +1637,7 @@ function calculHistorique({ dateesSonde, dateesAppareil, fin, jours, pas, attrib
  * sur 7 jours, jamais : des milliers de lignes, et l'état vivant ferme déjà
  * la période.
  */
-function DonneesHistorique({ hass, ch, sonde = null, minute = [0, 0], periode = '24h', t }) {
+function DonneesHistorique({ hass, ch, sonde = null, minute = [0, 0], periode = '24h', t, compteurs = null }) {
   const p = PERIODES[periode] ? periode : '24h';
   const { jours, pas } = PERIODES[p];
   const S = (hass && hass.states) || {};
@@ -1690,7 +1696,7 @@ function DonneesHistorique({ hass, ch, sonde = null, minute = [0, 0], periode = 
 
   return (
     <>
-      <div data-panneau="courbe" style={{ ...PANNEAU_FICHE, padding: '16px 16px 14px' }}>
+      <div data-panneau="courbe" style={{ ...PANNEAU, padding: '16px 16px 14px' }}>
         <div style={TETE_HISTO}>
           <div style={PETITES_CAPITALES}>{tr('Température')}</div>
           {c && <div style={VALEUR_HISTO}>{tr('min {a} · max {b}', { a: nombre(c.mn, 1) + '°', b: nombre(c.mx, 1) + '°' })}</div>}
@@ -1722,7 +1728,7 @@ function DonneesHistorique({ hass, ch, sonde = null, minute = [0, 0], periode = 
         </div>
       </div>
       {(compte || echecAppareil) && (
-        <div data-panneau="temps" style={{ ...PANNEAU_FICHE, padding: '16px 18px' }}>
+        <div data-panneau="temps" style={{ ...PANNEAU, padding: '16px 18px' }}>
           <div style={TETE_HISTO}>
             <div style={PETITES_CAPITALES}>{thermostat ? tr('Temps de chauffe') : tr('Temps par mode')}</div>
             {compte && <div style={VALEUR_HISTO}>{sur}</div>}
@@ -1743,7 +1749,63 @@ function DonneesHistorique({ hass, ch, sonde = null, minute = [0, 0], periode = 
           </>) : <div style={{ ...MOT, marginTop: 12 }}>{tr('Historique indisponible pour le moment')}</div>}
         </div>
       )}
+      {compteurs && (compteurs.energie || compteurs.puissance) && <PanneauEnergie hass={hass} compteurs={compteurs} jours={jours} t={t} reperesX={reperesX} />}
     </>
+  );
+}
+
+/* L'énergie (30/10 ; l'idée vient d'une intégration Adax pour Gladys) : aujourd'hui et hier, en kWh et dans la
+ * devise de la maison au prix de chaque heure (`coutHoraire`, comme la fiche d'une prise), puis les barres de la
+ * période — une par heure sur 24 h, une par jour sur 7 jours. Le compteur de l'appareil, sinon sa puissance
+ * moyenne : « Estimée d'après sa puissance ». Un chauffage sans l'un ni l'autre n'a pas ce panneau (`compteurs`
+ * nul). Rien d'inventé : le chargement, l'échec et une lecture vide se disent. */
+function PanneauEnergie({ hass, compteurs, jours, t, reperesX }) {
+  const S = (hass && hass.states) || {};
+  const num = (x) => { const s = x && S[x]; const n = s ? parseFloat(s.state) : NaN; return Number.isFinite(n) ? n : null; };
+  const tarifs = tarifsMaison(enHaids(), enPrix(), num);
+  const lu = useStatsEnergie(hass, [compteurs.energie, compteurs.puissance, ...tarifs.map(x => x.compteur)], jours);
+  const pret = !!lu && typeof lu === 'object';
+  const { tranches, estime } = pret ? tranchesKwh(lu, compteurs.energie, compteurs.puissance) : { tranches: [], estime: false };
+  const b = bilanEnergie(tranches, { maintenant: t, jours });
+  const connexions = connexionsHeures(tarifs, pret ? lu : {});
+  const devise = (hass && hass.config && hass.config.currency) || 'EUR';
+  const cout = (l) => { const v = coutHoraire(l, connexions); return v == null ? null : enDevise(v, devise); };
+  const max = Math.max(0, ...b.barres.map(x => x.kwh));
+  const vide = lu === null ? tr('Chargement…') : !pret ? tr('Historique indisponible pour le moment')
+    : b.total == null ? tr('Pas de mesure d’énergie sur cette période') : null;
+  const colonnes = [['aujourdhui', tr('Aujourd’hui'), b.aujourdhui, b.trancheJour], ['hier', tr('Hier'), b.hier, b.trancheHier]];
+  const largeur = 400 / b.barres.length;
+  return (
+    <div data-panneau="energie" style={{ ...PANNEAU, padding: '16px 18px' }}>
+      <div style={TETE_HISTO}>
+        <div style={PETITES_CAPITALES}>{tr('Énergie')}</div>
+        {!vide && <div style={VALEUR_HISTO}>{jours > 1 ? tr('{kwh} sur 7 jours', { kwh: kwhPrise(b.total) }) : tr('{kwh} sur 24 h', { kwh: kwhPrise(b.total) })}</div>}
+      </div>
+      {vide ? <div data-vide="" style={{ ...MOT, marginTop: 12 }}>{vide}</div> : (<>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px 18px', marginTop: 12 }}>
+          {colonnes.map(([cle, mot, kwh, l]) => {
+            const euros = cout(l);
+            return (
+              <div key={cle} data-energie={cle} style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--o-text2)' }}>{mot}</div>
+                <div style={{ fontSize: 20, fontWeight: 800, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{kwhPrise(kwh)}</div>
+                {euros && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>{euros}</div>}
+              </div>
+            );
+          })}
+        </div>
+        <svg aria-hidden="true" viewBox="0 0 400 56" preserveAspectRatio="none" style={{ display: 'block', width: '100%', height: 56, marginTop: 14 }}>
+          {b.barres.map((x, i) => {
+            const h = max > 0 ? Math.max(x.kwh > 0 ? 2 : 0, x.kwh / max * 56) : 0;
+            return h > 0 ? <rect key={x.debut} data-barre="" x={i * largeur + 1} y={56 - h} width={Math.max(1, largeur - 2)} height={h} style={{ fill: 'var(--o-warn2)' }} /> : null;
+          })}
+        </svg>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 11, fontWeight: 700, color: 'var(--o-text3)' }}>
+          {reperesX.map((x, i) => <span key={i}>{x}</span>)}
+        </div>
+        {estime && <div style={{ ...MOT, marginTop: 10 }}>{tr('Estimée d’après sa puissance')}</div>}
+      </>)}
+    </div>
   );
 }
 
@@ -1765,13 +1827,18 @@ export function messageFenetre(ch, reglage) {
   return messageConfig({ [ch.cle]: { fenetre: reglage } });
 }
 
+/** Le décalage du capteur d'un thermostat, en °C (30/10) : 0 le retire. */
+export function messageDecalage(ch, decalage) {
+  return messageConfig({ [ch.cle]: { decalage } });
+}
+
 /** Le planning d'un chauffage introuvable, retiré de la configuration (spec § 10). */
 export function messageSuppression(ch) {
   return messageConfig({ [ch.cle]: null });
 }
 
 // Le titre d'une rangée précédé du point de son mode.
-const TITRE_MODE = { ...TITRE_RANGEE, display: 'inline-flex', alignItems: 'center', gap: 7, minWidth: 0, overflowWrap: 'anywhere' };
+const TITRE_MODE = { ...TITRE, display: 'inline-flex', alignItems: 'center', gap: 7, minWidth: 0, overflowWrap: 'anywhere' };
 // Une température en lecture : dans la colonne des valeurs des − / + (`PasCarre`).
 const VALEUR_TEMPERATURE = { minWidth: 64, textAlign: 'center', fontSize: 17, fontWeight: 800, whiteSpace: 'nowrap', flexShrink: 0 };
 // Le − et l'écart qui suivent la valeur d'un `PasCarre` : une valeur lue s'aligne sur la sienne.
@@ -1819,7 +1886,7 @@ function TemperaturesDesModes({ idBase, hass, ch, ordinaire }) {
   return (
     <div style={{ marginTop: 18 }}>
       <div id={id} style={PETITES_CAPITALES}>{tr('Températures des modes')}</div>
-      <div role="group" aria-labelledby={id} data-panneau="temperatures" style={{ ...PANNEAU_FICHE, marginTop: 10, overflow: 'hidden' }}>
+      <div role="group" aria-labelledby={id} data-panneau="temperatures" style={{ ...PANNEAU, marginTop: 10, overflow: 'hidden' }}>
         {reglees.map(([cle, nom], i) => (
           <div key={cle} data-temperature={cle} style={{ ...RANGEE_DOUBLE, borderTop: filet(i) }}>
             <span style={TITRE_MODE}><Point mode={cle} />{nom}</span>
@@ -1832,13 +1899,107 @@ function TemperaturesDesModes({ idBase, hass, ch, ordinaire }) {
           <div key={m} data-deduite={m} style={{ ...RANGEE_DOUBLE, borderTop: FILET }}>
             <span style={{ minWidth: 0 }}>
               <span style={TITRE_MODE}><Point mode={m} />{motMode(m)}</span>
-              <span style={SOUS_RANGEE}>{tr('Déduite du Confort, jamais sous l’Éco')}</span>
+              <span style={SOUS}>{tr('Déduite du Confort, jamais sous l’Éco')}</span>
             </span>
             <span style={ordinaire ? VALEUR_TEMPERATURE : { ...VALEUR_TEMPERATURE, marginRight: SOUS_LES_PAS }}>{enUnite(temperatureDuMode(m, temps), uMaison)}</span>
           </div>
         ))}
       </div>
       {ordre && <div role="alert" style={{ ...ALERTE, marginTop: 8 }}>{ordre}</div>}
+      {err && <div role="alert" style={{ ...ALERTE, marginTop: 8 }}>{err}</div>}
+    </div>
+  );
+}
+
+// Les bornes du décalage, celles du serveur (DECALAGE_MAX) ; son pas, le demi-degré qu'il garde.
+const DECALAGE_MAX = 5;
+/* Un écart de température, signé, dans l'unité de la maison : « −1,5 °C », « +0,9 °F », « 0,0 °C ».
+ * Un ÉCART, pas une température : en °F, ×1,8 sans les 32. */
+function ecartLisible(celsius, unite) {
+  const v = unite === 'F' ? celsius * 1.8 : celsius;
+  return (v > 0 ? '+' : v < 0 ? '−' : '') + nombre(Math.abs(v), 1) + ' °' + unite;
+}
+
+/**
+ * La correction du capteur d'un thermostat (30/10), sous les températures des
+ * modes : ce que son capteur lit de plus que la pièce. `sonde` : le capteur de
+ * la PIÈCE (`sondePieceDuChauffage`), pas celui qu'on affiche — pour un
+ * thermostat, c'est lui-même. Le moteur l'ajoute à
+ * chaque consigne qu'il envoie — un poêle qui lit 1,5 °C de moins reçoit 18,5
+ * pour 20 —, et la carte dit la consigne de la PIÈCE. Un demi-degré à la fois,
+ * de −5 à +5 °C, montré d'avance, retiré au refus. « Mesurer » compare son
+ * capteur à la sonde de la pièce sur 7 jours (`ecartMesure`) et propose la
+ * valeur ; « Appliquer » la pose. Sans sonde de la pièce — l'appareil se mesure
+ * lui-même —, rien à comparer. Un compte ordinaire lit la valeur.
+ */
+function CorrectionSonde({ idBase, hass, ch, sonde = null, ordinaire = false }) {
+  const vivant = useVivant();
+  const [err, setErr] = useState('');
+  const lu = typeof ch.decalage === 'number' && Number.isFinite(ch.decalage) ? ch.decalage : 0;
+  const [ov, poserOv] = useOptimiste(lu);
+  const d = ov != null ? ov : lu;
+  // null, 'calcul', { ecart, n } (en °C), 'peu' ou 'erreur'.
+  const [mesure, setMesure] = useState(null);
+  const uMaison = uniteTemp(null, hass);
+  const poser = (v) => {
+    const r = Math.round(v * 2) / 2 || 0;
+    if (r < -DECALAGE_MAX || r > DECALAGE_MAX || r === d) return;
+    setErr('');
+    poserOv(r);
+    commanderChauffage(hass, messageDecalage(ch, r)).catch((e) => { poserOv(null); if (vivant.current) setErr(raisonEchec(e)); });
+  };
+  const mesurable = !ordinaire && !!(sonde && sonde.id && sonde.id !== ch.entite && ch.entite);
+  /* Sept jours : l'appareil par le résumé du serveur (`loggia/chauffage/historique`),
+   * sinon `history/period` avec ses attributs ; la sonde, minimale sauf si elle
+   * se lit dans un attribut. Un écart en °F redevient des °C, que le serveur garde. */
+  const mesurer = () => {
+    setMesure('calcul');
+    const debut = new Date(Date.now() - 7 * 86400000).toISOString();
+    const fin = encodeURIComponent(new Date().toISOString());
+    const periode = (id, attributs) => hass.callApi('GET', 'history/period/' + debut + '?filter_entity_id=' + encodeURIComponent(id) + '&end_time=' + fin
+      + (attributs ? '' : '&minimal_response&no_attributes')).then(premiere);
+    const appareil = Promise.resolve().then(() => hass.callWS({ type: 'loggia/chauffage/historique', chauffage: ch.cle, jours: 7 }))
+      .then(r => (r && Array.isArray(r.points) ? r.points : Promise.reject(new Error('repli'))))
+      .catch(() => periode(ch.entite, true));
+    Promise.all([appareil, periode(sonde.id, !!sonde.attribut)])
+      .then(([a, p]) => {
+        if (!vivant.current) return;
+        const m = ecartMesure(a, p, sonde.attribut || null);
+        setMesure(m ? { ecart: Math.round((uMaison === 'F' ? m.ecart / 1.8 : m.ecart) * 2) / 2 || 0, n: m.n } : 'peu');
+      })
+      .catch(() => { if (vivant.current) setMesure('erreur'); });
+  };
+  const propose = mesure && typeof mesure === 'object' ? mesure.ecart : null;
+  const motMesure = mesure === null ? tr('Comparez son capteur à celui de la pièce sur 7 jours.')
+    : mesure === 'calcul' ? tr('Mesure en cours…')
+      : mesure === 'peu' ? tr('Pas assez de relevés pour mesurer l’écart.')
+        : mesure === 'erreur' ? tr('Historique indisponible pour le moment')
+          : tr('Écart mesuré sur 7 jours : {ecart}', { ecart: ecartLisible(propose, uMaison) });
+  const id = idBase + '-correction';
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div id={id} style={PETITES_CAPITALES}>{tr('Correction de température')}</div>
+      <div role="group" aria-labelledby={id} data-panneau="correction" style={{ ...PANNEAU, marginTop: 10, overflow: 'hidden' }}>
+        <div data-rangee="decalage" style={RANGEE_DOUBLE}>
+          <span style={{ minWidth: 0 }}>
+            <span style={TITRE}>{tr('Écart de son capteur')}</span>
+            <span style={SOUS}>{tr('Ce que son capteur lit de plus que la pièce : Loggia en corrige chaque consigne envoyée.')}</span>
+          </span>
+          {ordinaire
+            ? <span style={VALEUR_TEMPERATURE}>{ecartLisible(d, uMaison)}</span>
+            : <PasCarre nom={tr('Écart de son capteur')} valeur={ecartLisible(d, uMaison)} peutMoins={d > -DECALAGE_MAX} peutPlus={d < DECALAGE_MAX}
+              moins={() => poser(d - 0.5)} plus={() => poser(d + 0.5)} />}
+        </div>
+        {mesurable && (
+          <div data-rangee="mesure" style={{ ...RANGEE_DOUBLE, borderTop: FILET }}>
+            <span role="status" style={{ ...SOUS, marginTop: 0, minWidth: 0 }}>{motMesure}</span>
+            {mesure === null || mesure === 'peu' || mesure === 'erreur'
+              ? <button type="button" onClick={mesurer} style={BOUTON_COPIE}>{tr('Mesurer')}</button>
+              : propose != null && propose !== d
+                ? <button type="button" onClick={() => poser(propose)} style={BOUTON_COPIE}>{tr('Appliquer')}</button> : null}
+          </div>
+        )}
+      </div>
       {err && <div role="alert" style={{ ...ALERTE, marginTop: 8 }}>{err}</div>}
     </div>
   );
@@ -1856,10 +2017,10 @@ function SupprimerSonPlanning({ hass, ch }) {
   };
   return (
     <div style={{ marginTop: 12 }}>
-      <div data-panneau="suppression" style={{ ...PANNEAU_FICHE, ...RANGEE_DOUBLE }}>
+      <div data-panneau="suppression" style={{ ...PANNEAU, ...RANGEE_DOUBLE }}>
         <span style={{ minWidth: 0 }}>
-          <span style={TITRE_RANGEE}>{tr('Supprimer son planning')}</span>
-          <span style={SOUS_RANGEE}>{tr('Introuvable dans Home Assistant : renommé ou retiré ?')}</span>
+          <span style={TITRE}>{tr('Supprimer son planning')}</span>
+          <span style={SOUS}>{tr('Introuvable dans Home Assistant : renommé ou retiré ?')}</span>
         </span>
         <BoutonConfirme libelle={tr('Supprimer')} onConfirme={supprimer} />
       </div>
@@ -1886,7 +2047,7 @@ function SupprimerSonPlanning({ hass, ch }) {
  * tests.
  */
 export default function FicheChauffageContent({ hass, ch, etat = null, epingle = null, sonde = null, onFiche = null, motHvac = undefined,
-  piece = null, puissance = null, glyphe = null, ongletDepart = 'accueil', maintenant = null }) {
+  piece = null, puissance = null, glyphe = null, ongletDepart = 'accueil', maintenant = null, sondePiece = null, compteurs = null }) {
   /* Ce qui relie chaque onglet à son panneau (motif ARIA du robot), AVANT tout
    * retour : un crochet ne se saute jamais. La période de l'Historique (24 h
    * ou 7 jours) se garde ici, tant que la fiche est ouverte : l'onglet, lui,
@@ -1920,8 +2081,9 @@ export default function FicheChauffageContent({ hass, ch, etat = null, epingle =
       <PanneauOnglet idBase={idOnglets} actuel={actuel} avecOnglets>
         {actuel === 'accueil' && <OngletAccueil idBase={idOnglets} hass={hass} ch={ch} etat={etat} sonde={sonde} onFiche={onFiche} onOnglet={versOnglet} ordinaire={ordinaire}
           simulation={simulation} minute={minute} t={t} motHvac={motHvac} />}
-        {actuel === 'planning' && <OngletPlanning idBase={idOnglets} hass={hass} ch={ch} etat={etat} minute={minute} ordinaire={ordinaire} />}
-        {actuel === 'historique' && <OngletHistorique hass={hass} ch={ch} sonde={sonde} minute={minute} periode={periode} onPeriode={setPeriode} t={t} />}
+        {actuel === 'planning' && <OngletPlanning idBase={idOnglets} hass={hass} ch={ch} etat={etat} minute={minute} ordinaire={ordinaire} sonde={sondePiece} />}
+        {actuel === 'historique' && <OngletHistorique hass={hass} ch={ch} sonde={sonde} minute={minute} periode={periode} onPeriode={setPeriode} t={t}
+          compteurs={compteurs} />}
       </PanneauOnglet>
     </div>
   );

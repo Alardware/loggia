@@ -10,8 +10,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { tr } from './i18n.js';
 import { NomFeuille, CroixFeuille, Fi } from './ui.jsx';
-import { verdictMesure, zoneMesure, scoreMesure, echelleMesure, indiceConfort, mesuresFiche, nomMesure, iconeMesure } from './confort.js';
-import { uniteTemp, versCelsius, deCelsius, signeTemp } from './unites.js';
+import { verdictMesure, zoneMesure, scoreMesure, echelleMesure, indiceConfort, mesuresFiche, nomMesure, iconeMesure, arrondiMesure, valeurEcrite } from './confort.js';
+import { uniteTemp, deCelsius, signeTemp } from './unites.js';
 import { nombre } from './format.js';
 import { LISERE } from './styles.js';
 
@@ -89,12 +89,14 @@ export default function RoomComfortModal({ piece, hass, bruitId = null, briques 
   // qu'à l'écran d'avant la connexion (`mesuresFiche`, audit du 03/10).
   const mesures = mesuresFiche(live, piece);
   const uniteT = uniteTemp(live && live.tempId && hass && hass.states && hass.states[live.tempId] ? hass.states[live.tempId].attributes : null, hass);
+  /* Chaque valeur est ARRONDIE comme son chiffre s'écrit, avant d'être jugée, notée et écrite (G1-D5, ADR 0300) : 39,6 %
+   * s'écrivait « 40 % » sous « Bon », quand 40 est « Idéal » sur la barre. La température s'arrondit dans son unité. */
   const vals = {
-    temp: versCelsius(mesures.temp, uniteT),
-    hum: mesures.hum,
-    co2: mesures.co2,
+    temp: valeurEcrite('temp', mesures.temp, uniteT),
+    hum: arrondiMesure('hum', mesures.hum),
+    co2: arrondiMesure('co2', mesures.co2),
     // Le bruit ne vit pas dans la configuration des pièces : la vue le trouve dans la zone (ADR 0039).
-    bruit: bruitId && hass && hass.states && hass.states[bruitId] ? parseNum(hass.states[bruitId].state) : null,
+    bruit: bruitId && hass && hass.states && hass.states[bruitId] ? arrondiMesure('bruit', parseNum(hass.states[bruitId].state)) : null,
   };
   const ids = { temp: live && live.tempId, hum: live && live.humId, co2: live && live.co2Id, bruit: bruitId };
   const table = FICHE_CONFORT();

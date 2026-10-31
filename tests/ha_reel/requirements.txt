@@ -1,0 +1,14 @@
+# Le banc « vrai Home Assistant » (28/10, ADR 0281) : workflow ha-reel.yml.
+#
+# `pytest-homeassistant-custom-component` epingle la version de Home Assistant
+# qu'il embarque. 0.13.144 = homeassistant 2024.7.0, le minimum que hacs.json
+# annonce : c'est cette version-la que les tests de fumee demarrent. Relever le
+# minimum de hacs.json, c'est relever cette ligne avec lui.
+pytest-homeassistant-custom-component==0.13.144
+# Le panneau : `frontend`, dont Loggia depend, demande l'interface de Home
+# Assistant. La version est celle que homeassistant 2024.7.0 exige
+# (components/frontend/manifest.json).
+home-assistant-frontend==20240703.0
+# Une dependance indirecte qui a derive depuis 2024 : josepy 2 a retire ce
+# qu'`acme` (via hass-nabucasa) importe, et Home Assistant ne demarre plus.
+josepy==1.15.0

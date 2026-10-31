@@ -261,15 +261,18 @@ def test_au_demarrage_un_test_en_cours_est_eteint_aussitot(creer, rdv):
 # ── Le cablage ──────────────────────────────────────────────────────────────
 
 def test_le_composant_cree_le_module_et_ouvre_sa_commande():
+    from conftest import declaration
+
     init = (COMPOSANT / "__init__.py").read_text(encoding="utf-8")
-    assert 'data["sirene"] = LoggiaSirene(hass, data["store"], data.get("regles"))' in init
-    assert 'acces_sirene=lambda: hass.data.get(DOMAIN, {}).get("sirene")' in init
+    # ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : le module nait d'une ligne de `MODULES`, sa
+    # commande est une ligne de `COMMANDES`.
+    assert 'Module("sirene", "LoggiaSirene", _REGLES, _REGLES,' in init
+    assert "async_register_ws(hass, store, lambda nom: hass.data.get(DOMAIN, {}).get(nom))" in init
     ws = (COMPOSANT / "websocket_api.py").read_text(encoding="utf-8")
     assert "loggia/sirene/tester" in ws
-    assert "websocket_api.async_register_command(hass, handle_sir_tester)" in ws
-    i = ws.index("async def handle_sir_tester")
+    ligne = declaration(ws, "Commande(WS_SIR_TESTER, handle_sir_tester,")
     # Le geste d'une carte : ouvert a tout compte connecte...
-    assert "require_admin" not in ws[i - 300:i]
+    assert "acces=" not in ligne and 'module="sirene"' in ligne
     # ... mais sur ce qu'il a le droit de PILOTER, et c'est lui qui teste.
     assert "await sirene.async_tester(msg[\"entity_id\"], par=connection.user.id," in ws
 
@@ -298,3 +301,54 @@ def test_a_l_echeance_une_sirene_deja_eteinte_ne_recoit_rien(creer, rdv):
     assert m.hass.services.appels == [], "la sirene etait deja eteinte"
     assert m.table == {}, "la table est nettoyee"
     assert [j for j in journal(m) if j[0] == "eteindre"] == []
+
+
+
+# ── Robustesse (audit du 28/10, lot 2 ; ADR 0280) ───────────────────────────
+
+async def _refuser(*_a, **_k):
+    raise OSError("disque plein")
+
+
+# TEST AJOUTE (M1) : une sauvegarde refusee avant l'extinction laissait la sirene de test allumee.
+def test_une_sauvegarde_ratee_n_empeche_pas_d_eteindre_la_sirene(creer, rdv):
+    m = creer({"switch.s": "off"})
+    lancer(m.async_tester("switch.s", par="u1"))
+    m.hass.states.table["switch.s"] = FauxEtat("on")
+    m.store.async_set_shared = _refuser
+    (_, rappel), = rdv_du_module(rdv)
+    rappel(None)
+    lancer(m.hass.taches.pop())
+    assert m.hass.services.appels[-1] == ("switch", "turn_off", {"entity_id": ["switch.s"]}, "u1")
+    assert m.table == {}
+
+
+# TEST AJOUTE (M1) : une sirene qui leve au rattrapage ne coupe plus les suivantes.
+def test_une_sirene_qui_leve_au_rattrapage_ne_coupe_pas_les_suivantes(creer, rdv):
+    m = creer({"switch.a": "on", "switch.b": "on"},
+              depart={"switch.a": {"fin": 1.0, "par": "u1"}, "switch.b": {"fin": 1.0, "par": "u2"}})
+    vrai_get = m.hass.states.get
+
+    def get(haid):
+        if haid == "switch.a":
+            raise RuntimeError("registre casse")
+        return vrai_get(haid)
+
+    m.hass.states.get = get
+    lancer(m._async_demarrer())
+    while m.hass.taches:
+        lancer(m.hass.taches.pop(0))
+    assert m.hass.services.appels == [("switch", "turn_off", {"entity_id": ["switch.b"]}, "u2")]
+
+
+# TEST AJOUTE (M4) : le magasin recoit une COPIE de la table.
+def test_le_magasin_recoit_une_copie_de_la_table_des_tests(creer, rdv):
+    m = creer({"switch.s": "off"})
+    recus = []
+
+    async def garder(cle, valeur):
+        recus.append(valeur)
+
+    m.store.async_set_shared = garder
+    lancer(m.async_tester("switch.s"))
+    assert recus and recus[-1] == m.table and recus[-1] is not m.table

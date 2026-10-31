@@ -12,6 +12,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 // La langue de la machine ne doit pas changer le résultat (garde-fou de la CI).
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 /* ASSERTION MODIFIÉE (chantier IoT, tâche 1, 18/10 ; § 12) : ce que la popup seule calcule — les sœurs, l'entretien, les sessions,
@@ -320,7 +321,7 @@ test('la fiche technique : ce que l’appareil dit de lui, rien de plus', () => 
 });
 
 test('la fiche : une feuille pour les deux robots, ouverte depuis leur carte — partout, le même rendu', () => {
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   assert.ok(app.includes("const FicheRobotContent = lazyRecharge(() => import('./ficherobot.jsx'));"), 'chargée à la demande, derrière le rechargement unique (audit du 03/10)');
   assert.ok(!existsSync(join(RACINE, 'src', 'views', 'robot.jsx')) && !existsSync(join(RACINE, 'src', 'views', 'aspirateur.jsx')), 'plus de vue : une fiche, comme les autres appareils (18/09)');
   const f = bloc(app, 'function FicheRobot(', NL + '}');

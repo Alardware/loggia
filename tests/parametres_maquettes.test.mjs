@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 // La langue avant l'import : `tr` lit celle du navigateur au premier appel.
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
@@ -27,7 +27,7 @@ const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const PAR = lire('src', 'views', 'parametres.jsx');
 const INTER = lire('src', 'views', 'interrupteurs.jsx');
 const COMMUN = lire('src', 'views', 'parcommun.jsx');
-const APP = (lire('src', 'App.jsx') + VUES_SORTIES);
+const APP = (MONOLITHE + VUES_SORTIES);
 // Les ambiances Hue, chargées à la demande depuis le 11/10 (tâche 6 bis du chantier Chauffage).
 const SCENES = lire('src', 'scenes.jsx');
 const DEMO = lire('src', 'demo.js');
@@ -305,7 +305,8 @@ test('la consigne se lit entre les deux boutons des cartes climat', () => {
   assert.ok(!APP.includes("<span aria-label={tr('Consigne')}"), 'la consigne cache de nouveau son chiffre sous un aria-label');
   // Sans consigne lisible : « — », jamais un 20 ou un 19 inventé (audit du 03/10).
   // Écrite à une décimale, suivie de « ° » : « 20,0° » (cartes 1a, tâche 10 bis A du chantier Chauffage).
-  assert.equal((APP.match(/const consigne = target != null \? nombre\(Number\(target\), 1\) \+ '°' : '—';/g) || []).length, 2);
+  // ASSERTION MODIFIÉE (30/10) : au planning, la carte du thermostat écrit la consigne de la PIÈCE (`- dec`, le décalage de son capteur).
+  assert.equal((APP.match(/const consigne = target != null \? nombre\(Number\(target\)(?: - dec)?, 1\) \+ '°' : '—';/g) || []).length, 2);
   // Le sous-titre dit l'état ; il ne répète plus la valeur.
   assert.ok(!APP.includes("tr('Chauffe') + ' · ' + consigne"), 'la consigne est dite deux fois');
 });

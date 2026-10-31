@@ -25,6 +25,7 @@ import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -35,7 +36,7 @@ const Fiche = (await import(new URL('../src/ficheprise.jsx', import.meta.url).hr
 const E = await import('../src/prisesetat.js');
 const { setLoggiaState } = await import('../src/state.js');
 const lire = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-const APP = lire('src/App.jsx'), FICHE = lire('src/ficheprise.jsx');
+const APP = MONOLITHE, FICHE = lire('src/ficheprise.jsx');
 
 const a = (h, m) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.toISOString(); };
 const NAS = 'switch.prise_nas', PC = 'switch.prise_pc', LV = 'switch.prise_lv';

@@ -43,7 +43,7 @@ const isLoggiaKey = (k) => typeof k === 'string' && KEY_PREFIXES.some(p => k.ind
  * qu'un reglage nouveau soit sauvegarde sans qu'on y pense (24/09). Le revers :
  * tout ce que le navigateur range sous ce prefixe partait dans le fichier, puis
  * dans la configuration COMMUNE au premier import. La photo de fond surtout —
- * « jamais envoyee au serveur », dit `ui.jsx` — qui peut depasser les 256 Kio
+ * une COPIE locale de celle que le compte range au serveur (ADR 0289) — qui peut depasser les 256 Kio
  * qu'il accepte par valeur : l'import etait refuse, et une sauvegarde faite
  * avant une remise a zero ne se restaurait plus.
  *
@@ -90,6 +90,8 @@ const CLES_SERVEUR = new Set([
   'loggia_appareils',
   'loggia_admin_pin_defini', 'loggia_admin_pin_longueur', 'loggia_admin_pin', 'loggia_admin_pin_hache',
   'loggia_minuteurs', 'loggia_sirene_test',
+  // Le rappel de collecte (ADR 0301) : ce qui a été dit, ce qui est sorti.
+  'loggia_collecte',
 ]);
 
 /** Une cle que le serveur calcule ou tient pour lui : jamais dans un fichier, jamais purgee par un import. */

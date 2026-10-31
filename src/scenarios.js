@@ -170,6 +170,9 @@ export function versEnregistrement(s) {
       if (b.portee === 'piece' && a.piece) b.piece = a.piece;
       if (a.valeur != null && (a.famille === 'lumieres' || a.famille === 'chauffage')) b.valeur = a.valeur;
       if (a.si === 'nuit' || a.si === 'jour') b.si = a.si;
+      // Le fondu (s) et le blanc (K) d'une action lumières, facultatifs : le blanc, pour un allumage seulement (ADR 0304).
+      if (a.famille === 'lumieres' && Number(a.fondu) > 0) b.fondu = Number(a.fondu);
+      if (a.famille === 'lumieres' && a.geste === 'allumer' && Number(a.blanc) > 0) b.blanc = Number(a.blanc);
       return b;
     }),
   };

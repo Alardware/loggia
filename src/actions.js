@@ -42,14 +42,23 @@ import { domaineDe } from './outils.js';
 //   list     où lire les valeurs permises, pour `option`
 // ─────────────────────────────────────────────────────────────────────────────
 
+/* `light.turn_on` prend une durée de fondu (`transition`, en secondes) avec tout réglage : Home Assistant la retire lui-même
+ * pour une lampe qui n'a pas le bit TRANSITION. Une couleur ou un blanc d'ambiance part AVEC sa luminosité, dans le même appel
+ * (la bibliothèque des ambiances sans script, ADR 0304) : deux appels feraient passer la lampe par un état intermédiaire. */
+const FONDU = ['transition'];
+const AMBIANCE = ['brightness_pct', 'transition'];
 const PLANS = {
   light: {
-    set_brightness: { service: 'turn_on', field: 'brightness_pct', kind: 'pct' },
+    set_brightness: { service: 'turn_on', field: 'brightness_pct', kind: 'pct', accepte: FONDU },
     set_color_temp: {
       service: 'turn_on', field: 'color_temp_kelvin', kind: 'range',
-      bounds: { min: 'min_color_temp_kelvin', max: 'max_color_temp_kelvin' },
+      bounds: { min: 'min_color_temp_kelvin', max: 'max_color_temp_kelvin' }, accepte: AMBIANCE,
     },
     set_color: { service: 'turn_on', field: 'rgb_color', kind: 'rgb' },
+    /* Une couleur dans l'espace que la lampe parle (ADR 0304) : `xy` pour une lampe `xy` (une Hue), `hs` sinon — Home Assistant
+     * convertit pour tout mode couleur, comme il le fait de `rgb_color`. */
+    set_hs: { service: 'turn_on', field: 'hs_color', kind: 'hs', accepte: AMBIANCE },
+    set_xy: { service: 'turn_on', field: 'xy_color', kind: 'xy', accepte: AMBIANCE },
     set_effect: { service: 'turn_on', field: 'effect', kind: 'option', list: 'effect_list' },
     /* Le mode `white` d'un ruban `hs + white` (audit du 19/10, B6) : `light.turn_on` avec `white: <luminosité 0-255>` — le
      * schéma de Home Assistant accepte `true` ou un entier de 0 à 255 ; l'entier passe partout depuis 2021.4, `true` seulement
@@ -309,6 +318,18 @@ function valeur(plan, brute, attrs) {
       return { ok: false, reason: 'couleur attendue sous forme [r, v, b] entre 0 et 255' };
     }
     return { ok: true, v: t.map(x => Math.round(x)) };
+  }
+
+  /* Une teinte et sa saturation (`hs`, 0–360 et 0–100), ou un point du diagramme de chromaticité (`xy`, 0–1 et 0–1) : deux
+   * nombres, chacun dans son domaine — hors de lui, la couleur demandée n'existe pas, on ne la ramène pas à une autre. */
+  if (plan.kind === 'hs' || plan.kind === 'xy') {
+    const t = Array.isArray(brute) ? brute.map(nombre) : null;
+    const haut = plan.kind === 'hs' ? [360, 100] : [1, 1];
+    if (!t || t.length !== 2 || t.some((x, i) => !(isFinite(x) && x >= 0 && x <= haut[i]))) {
+      return { ok: false, reason: plan.kind === 'hs' ? 'couleur attendue sous forme [teinte 0–360, saturation 0–100]' : 'couleur attendue sous forme [x 0–1, y 0–1]' };
+    }
+    const dec = plan.kind === 'hs' ? 10 : 1000;
+    return { ok: true, v: t.map(x => Math.round(x * dec) / dec) };
   }
 
   if (plan.kind === 'raw') {

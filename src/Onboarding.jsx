@@ -60,7 +60,7 @@ function Check({ on, onT, name, sub }) {
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onT(); } }}
       style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 13px', borderRadius: 14, cursor: 'pointer', border: '1px solid ' + (on ? 'rgba(var(--o-accent-rgb),.4)' : 'var(--o-bd3)'), background: on ? 'rgba(var(--o-accent-rgb),.1)' : 'var(--o-s2)' }}>
       <span style={{ width: 20, height: 20, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'var(--o-accent-fond)' : 'transparent', border: on ? 'none' : '1.5px solid var(--o-bd1)' }}>
-        {on && <Fi i="check" size={11} color="#06121f" />}
+        {on && <Fi i="check" size={11} color="#fff" />}
       </span>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 700 }}>{name}</div>

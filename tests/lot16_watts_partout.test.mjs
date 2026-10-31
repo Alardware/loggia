@@ -31,7 +31,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 const { nombre } = await import('../src/format.js');
@@ -39,7 +39,7 @@ const { locale } = await import('../src/i18n.js');
 const dec = (n, d) => nombre(n, d);
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
+const src = (MONOLITHE + VUES_SORTIES);
 
 /** La flèche `const <nom> = …;` telle qu'écrite, rendue exécutable. */
 function formateur(nom) {

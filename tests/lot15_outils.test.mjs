@@ -20,6 +20,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = fileURLToPath(new URL('..', import.meta.url));
 const parcourir = (dir, out = []) => {
   for (const n of readdirSync(dir)) {
@@ -129,7 +130,8 @@ test('cleJour : agenda.js fait foi, et App.jsx l’importe au lieu de la réécr
   for (const d of [new Date(2026, 0, 1), new Date(2026, 9, 25, 23, 30), new Date(2027, 11, 31, 0, 0)]) {
     assert.equal(cleJour(d), ANCIEN.cleJour(d));
   }
-  assert.match(lire('src/App.jsx'), /^import \{[^}]*\bcleJour\b[^}]*\} from '\.\/agenda\.js';$/m, 'App.jsx ne prend pas cleJour à agenda.js');
+  // Le monolithe, App.jsx et ce qui en sort (ADR 0282) : un module rangé dans un dossier l'importe de `../agenda.js`.
+  assert.match(MONOLITHE, /^import \{[^}]*\bcleJour\b[^}]*\} from '(?:\.\.?\/)+agenda\.js';$/m, 'le monolithe réécrit cleJour au lieu de la prendre à agenda.js');
 });
 
 test('Fi : le premier lancement prend l’icône de ui.jsx', () => {

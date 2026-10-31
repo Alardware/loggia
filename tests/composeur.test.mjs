@@ -7,10 +7,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + readFileSync(join(RACINE, 'src', 'views', 'voletsplan.jsx'), 'utf8') + VUES_SORTIES); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
+const src = (MONOLITHE + readFileSync(join(RACINE, 'src', 'views', 'voletsplan.jsx'), 'utf8') + VUES_SORTIES); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
 const en = readFileSync(join(RACINE, 'src', 'langues', 'en.js'), 'utf8');
 const NL = String.fromCharCode(10);
 const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = src.indexOf(fin, d + 1); return src.slice(d, f < 0 ? undefined : f); };
@@ -23,7 +23,8 @@ test('la fabrique rend toute cle : entite, zone, distributeur, plante — et por
   assert.ok(dc.includes("<CarteDistributeur chip={chip} hass={hass} nom={label || tr('Distributeur')}") && dc.includes('<RoomPlantCard chip={chip} pl={pl} nom={label || pl.name}'), 'les cartes du distributeur et de la plante, compactes ou non');
   assert.ok(bloc('function CarteDistributeur(', NL + '}').includes('<RoomFeederCard v={useVueDistributeur(hass, nom)} chip={chip} onOpen={onOpen} />'), 'la carte du distributeur, compacte ou non');
   assert.ok(dc.includes('{feederPop && <FicheDistributeur hass={hass} onClose={() => setFeederPop(false)} />}') && dc.includes('{plantPop && <FichePlante pl={plantPop}'), 'leurs fiches voyagent avec la fabrique');
-  assert.ok(dc.includes('setFeederPop(false); setPlantPop(null); };'), 'fermer les ferme aussi');
+  // ASSERTION MODIFIÉE (30/10, G3-E2/E3) : les popups du chauffe-eau et de la borne se ferment avec les autres.
+  assert.ok(dc.includes('setFeederPop(false); setPlantPop(null); setEauPop(null); setBornePop(false); };'), 'fermer les ferme aussi');
   assert.ok(dc.includes('const nom = (k) => nomDeCle(S, k);'), 'et elle sait nommer une cle');
   const n = bloc('function nomDeCle(', NL + '}');
   assert.ok(n.includes("if (s === 'obj:feeder') return tr('Distributeur');") && n.includes("if (s.indexOf('plant:') === 0)") && n.includes("if (s.indexOf('zone:') === 0)") && n.includes('return cvName(S && S[s], s);'), 'distributeur, plante, zone, sinon l’entite');
@@ -34,7 +35,8 @@ test('Objets ne compose plus rien : il demande ses cartes a la fabrique', () => 
   assert.ok(!v.includes('croqHaids()') && !v.includes('plantsCfg()') && !v.includes('setSheet(') && !v.includes('<FicheDistributeur') && !v.includes('<FichePlante'), 'plus de distributeur ni de plante calcules ici');
   // ASSERTION MODIFIÉE (chantier Capteurs, tâche 7) : la carte standard d'une mesure porte le nom de sa pièce, que l'objet lui donne (C13).
   // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 9 ; C20) : une carte de groupe se nomme par sa clé, comme le distributeur et la plante.
-  assert.ok(v.includes("const cle = (o.type === 'feeder' || o.type === 'plant' || o.type === 'groupe') ? o.cle : o.id;") && v.includes('return compacte ? dc.compact(cle, ed.labelOf(o.cle) || null) : dc.card(cle, ed.labelOf(o.cle) || o.nomCarte || null);'), 'la fabrique, pour tout');
+  // ASSERTION MODIFIÉE (30/10, G3-E3) : la borne de recharge aussi se nomme par sa clé (`obj:borne`).
+  assert.ok(v.includes("const cle = (o.type === 'feeder' || o.type === 'plant' || o.type === 'groupe' || o.type === 'borne') ? o.cle : o.id;") && v.includes('return compacte ? dc.compact(cle, ed.labelOf(o.cle) || null) : dc.card(cle, ed.labelOf(o.cle) || o.nomCarte || null);'), 'la fabrique, pour tout');
 });
 
 test('le composeur : cartes de Loggia d’abord, appareils par piece, puces, recherche qui cherche tout', () => {

@@ -40,15 +40,21 @@ export function HaImage({ hass, haid, refreshMs = 2000, kind = 'camera', fit = '
   useEffect(() => {
     if (!haid || !authentifie) { setSrc(null); return; }
     if (!regardee) return;
-    let alive = true, tour = 0;
+    let alive = true, tour = 0, enVol = null;
     const endpoint = kind === 'image' ? 'image_proxy' : 'camera_proxy';
     const fetchSnap = async () => {
       /* Chaque appel porte son numero. Sur une camera lente, la reponse d'un
        * tour ancien arrivait apres une plus recente et remontait une image
        * perimee a l'ecran ; les vignettes semblaient reculer dans le temps. */
       const mien = ++tour;
+      /* Cette réponse-là serait jetée de toute façon (`mien !== tour`) : la
+       * requête d'avant, pas encore revenue, est abandonnée. Sur une caméra
+       * lente, les requêtes ne s'empilent plus (audit de consolidation du
+       * 28/10, B7). */
+      if (enVol) enVol.abort();
+      const ctrl = enVol = new AbortController();
       try {
-        const res = await fetch(`/api/${endpoint}/${haid}`, { headers: { Authorization: `Bearer ${jeton.current}` } });
+        const res = await fetch(`/api/${endpoint}/${haid}`, { headers: { Authorization: `Bearer ${jeton.current}` }, signal: ctrl.signal });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const blob = await res.blob();
         if (!alive || mien !== tour) return;
@@ -57,7 +63,7 @@ export function HaImage({ hass, haid, refreshMs = 2000, kind = 'camera', fit = '
     };
     fetchSnap();
     const id = setInterval(fetchSnap, refreshMs);
-    return () => { alive = false; clearInterval(id); };
+    return () => { alive = false; clearInterval(id); if (enVol) enVol.abort(); };
   }, [haid, authentifie, refreshMs, kind, regardee]);
   /* Une image se libère quand la suivante l'a remplacée, ou au démontage —
    * plus au nettoyage de la boucle : la pause l'aurait révoquée sous l'image

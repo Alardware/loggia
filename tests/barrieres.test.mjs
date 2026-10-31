@@ -25,6 +25,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { composant } from './rendu.mjs';
 import { parDebut, evenementsDuJour, lireCalendriers } from '../src/agenda.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const Barriere = await composant('ui.jsx', 'Barriere');
@@ -123,7 +124,7 @@ test('une feuille qui casse garde son nom et sa croix — une seule, et pas de b
 });
 
 test('chaque vue et chaque feuille passent par une barrière ; la racine garde la sienne', () => {
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   assert.match(app, /import \{[^}]*\bBarriere\b[^}]*\} from '\.\/ui\.jsx';/, 'App n’importe plus la barrière');
   const debut = app.indexOf('<div key={view} ref={vueRef} className="o-view"');
   assert.ok(debut > 0, 'le conteneur de vue a disparu');

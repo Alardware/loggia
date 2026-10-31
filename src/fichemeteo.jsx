@@ -17,8 +17,11 @@
  *  - « 7 jours » : une barre par jour entre son minimum et son maximum sur
  *    l'échelle de la semaine, froid → chaud, le repère d'aujourd'hui ;
  *  - six tuiles, deux par rangée : vent (flèche), humidité, UV (barre des
- *    zones), nuages, pluie du jour, soleil — chacune seulement si l'entité la
- *    donne ;
+ *    zones, et son maximum du jour), nuages, pluie du jour, soleil — chacune
+ *    seulement si l'entité la donne ; puis la qualité de l'air du dehors et les
+ *    pollens (chantier G4, ADR 0303), au même dessin, seulement quand leur
+ *    échelle est connue : le chiffre, le mot du rang, le lendemain, une barre
+ *    des rangs — une information, sans lavis ;
  *  - « Risques » : pluie, neige, gel sur les prochaines heures ;
  *  - « Vigilance » : chaque phénomène du capteur et son niveau, en vert au
  *    calme ; sans capteur, rien ;
@@ -34,16 +37,13 @@ import { Fi } from './ui.jsx';
 import { WeatherIco, haWeatherLabel } from './wxutil.jsx';
 import { typesPrevision, degres, estNuit, modeMeteo, heuresMeteo, extremesDuJour, nomVille, phraseMeteo, vigilanceWidget } from './meteo.js';
 import { semaineMeteo, tuilesMeteo, risquesMeteo } from './meteofiche.js';
+import { airDuDehors, pollensDuDehors } from './airdehors.js';
+import { LOGGIA_INDEX } from './state.js';
 import { usePrevisions, fondTeinte, RGB_TON, ENCRE_TON } from './cartemeteo.jsx';
 import { capteurVigilance, niveauDe } from './vigilance.js';
 import { EnteteFiche, PETITES_CAPITALES, filet } from './fichecommune.jsx';
-import { LISERE } from './styles.js';
+import { PANNEAU, RANGEE_SERREE, EN_BOUTON, TITRE, SOUS } from './fichekit.js';
 
-const PANNEAU = { background: 'var(--o-s3)', border: LISERE, borderRadius: 'var(--o-radius,18px)', boxSizing: 'border-box', minWidth: 0 };
-const RANGEE = { display: 'flex', alignItems: 'center', gap: 12, width: '100%', boxSizing: 'border-box', padding: '12px 14px 12px 16px' };
-const EN_BOUTON = { border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', color: 'var(--o-text)', textAlign: 'left' };
-const TITRE = { display: 'block', fontSize: 14, fontWeight: 700 };
-const SOUS = { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 };
 const PETIT = { fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-text3)' };
 /* Les cinq zones UV de l'OMS, leur largeur sur la barre (0-2, 3-5, 6-7, 8-10, 11+) et leur jeton. */
 const ZONES_UV = [[3, 'var(--o-ok-rgb)'], [3, 'var(--o-gold-rgb)'], [2, 'var(--o-warn-rgb)'], [3, 'var(--o-bad-rgb)'], [2, 'var(--o-purple-rgb)']];
@@ -89,6 +89,14 @@ export default function FicheMeteoContenu({ id, hass, epingle = null, onFiche = 
   /* La phrase et le conseil ; une vigilance orange ou rouge prend la phrase, comme sur le widget. */
   const phrase = muette ? null : vigilance && vigilance.widget ? { texte: vigilance.texte, conseil: null, ton: vigilance.ton } : phraseMeteo({ heures: parHeure, jours: parJour, maintenant: t, soleil, etat: st });
   const ton = (phrase && phrase.ton) || null;
+  /* L'air et les pollens du dehors (chantier G4, A1 et A6) : ce que l'index sait de chaque entité — sa plateforme, son appareil —
+   * dit si leur échelle est connue ; sans index, rien. */
+  const etats = hass ? hass.states : null;
+  const { air, pollens } = useMemo(() => {
+    const em = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta;
+    const meta = (x) => (em ? em.get(x) || null : null);
+    return { air: airDuDehors(etats || {}, meta), pollens: pollensDuDehors(etats || {}, meta) };
+  }, [etats]);
   const { heures, semaine, tuiles, risques } = useMemo(() => ({
     heures: heuresMeteo({ etat: st, previsions: parHeure, maintenant: t, soleil, n: 8 }).map(h => {
       const p = (parHeure || []).find(x => String(Date.parse((x && x.datetime) || '')) === h.cle);
@@ -96,9 +104,9 @@ export default function FicheMeteoContenu({ id, hass, epingle = null, onFiche = 
       return { ...h, pluie: !isNaN(proba) && proba >= 20 ? Math.round(proba) + ' %' : null, forte: !isNaN(proba) && proba >= 50 };
     }),
     semaine: semaineMeteo(parJour, a.temperature, t, soleil),
-    tuiles: muette ? [] : tuilesMeteo({ attributs: a, jours: parJour, heures: parHeure, maintenant: t, soleil }),
+    tuiles: muette ? [] : tuilesMeteo({ attributs: a, jours: parJour, heures: parHeure, maintenant: t, soleil, air, pollens }),
     risques: risquesMeteo(parHeure, t),
-  }), [st, muette, parHeure, parJour, t, soleil, a]);
+  }), [st, muette, parHeure, parJour, t, soleil, a, air, pollens]);
   const avecPluie = heures.some(h => h.pluie);
   /* Le capteur de Météo-France : chaque phénomène et son niveau ; MeteoAlarm : l'événement seul. */
   const phenomenes = useMemo(() => {
@@ -181,6 +189,12 @@ export default function FicheMeteoContenu({ id, hass, epingle = null, onFiche = 
                 {tl.fleche != null && <span aria-hidden="true" style={{ display: 'inline-flex', color: 'var(--o-text2)', transform: 'rotate(' + tl.fleche + 'deg)' }}><Fi i="arrow-small-up" size={16} /></span>}
               </div>
               {tl.sous && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}>{tl.sous}</div>}
+              {tl.ligne && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 }}>{tl.ligne}</div>}
+              {tl.rangs && (
+                <div aria-hidden="true" style={{ display: 'flex', gap: 2, height: 6, marginTop: 10 }}>
+                  {tl.rangs.couleurs.map((rgb, i) => <span key={i} style={{ flex: 1, borderRadius: 3, background: `rgba(${rgb},${i === tl.rangs.i ? 1 : 0.28})` }} />)}
+                </div>
+              )}
               {tl.uv && (
                 <div aria-hidden="true" style={{ position: 'relative', marginTop: 10, paddingTop: 4 }}>
                   <div style={{ display: 'flex', gap: 2, height: 6 }}>
@@ -195,7 +209,7 @@ export default function FicheMeteoContenu({ id, hass, epingle = null, onFiche = 
       )}
 
       {risques.length > 0 && (
-        <div style={{ ...PANNEAU, ...RANGEE, padding: '12px 14px', borderRadius: 16 }}>
+        <div style={{ ...PANNEAU, ...RANGEE_SERREE, padding: '12px 14px', borderRadius: 16 }}>
           <div style={{ flex: 1, minWidth: 0 }}><div style={PETIT}>{tr('Risques')}</div><div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}>{tr('Sur les prochaines heures')}</div></div>
           {risques.map(r => (
             <div key={r.cle} style={{ minWidth: 52, textAlign: 'center' }}>
@@ -213,7 +227,7 @@ export default function FicheMeteoContenu({ id, hass, epingle = null, onFiche = 
             {attribution && <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{attribution}</span>}
           </div>
           {phenomenes.map(p => (
-            <div key={p.nom} style={{ ...RANGEE, padding: '10px 16px', borderTop: filet(1) }}>
+            <div key={p.nom} style={{ ...RANGEE_SERREE, padding: '10px 16px', borderTop: filet(1) }}>
               <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', flexShrink: 0, background: NIVEAUX[p.niveau].encre }} />
               <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 700, overflowWrap: 'break-word' }}>{p.nom}</span>
               <span style={{ fontSize: 13, fontWeight: 800, color: p.niveau === 'vert' ? 'var(--o-text1)' : NIVEAUX[p.niveau].encre }}>{NIVEAUX[p.niveau].mot()}</span>
@@ -224,7 +238,7 @@ export default function FicheMeteoContenu({ id, hass, epingle = null, onFiche = 
 
       {onFiche && (
         <div style={{ ...PANNEAU, overflow: 'hidden' }}>
-          <button type="button" onClick={() => onFiche(id)} style={{ ...RANGEE, ...EN_BOUTON }}>
+          <button type="button" onClick={() => onFiche(id)} style={{ ...RANGEE_SERREE, ...EN_BOUTON }}>
             <span style={{ flex: 1, minWidth: 0 }}><span style={TITRE}>{tr('L’appareil')}</span><span style={SOUS}>{tr('Toutes ses entités, l’épingle')}</span></span>
             <Fi i="angle-small-right" size={16} color="var(--o-text3)" />
           </button>

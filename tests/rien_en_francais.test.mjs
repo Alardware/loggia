@@ -173,7 +173,9 @@ test('aucun texte écrit en clair dans le JSX', () => {
  *      `{on ? 'Pause' : tr('Lecture')}` : la moitié traduite cachait l'autre ;
  *   3. les attributs que l'on lit ou que l'on entend — `title`, `aria-label`,
  *      `placeholder`, `alt` ;
- *   4. les boîtes du navigateur — `alert()`, `confirm()`, `prompt()`.
+ *   4. les boîtes du navigateur — `alert()`, `confirm()`, `prompt()` —, et la
+ *      feuille d'alerte qui les remplace (`alerter`, ui.jsx) : son titre, son
+ *      texte et le libellé de son bouton.
  *
  * Ici le source est PARSÉ : ni faux nœud ouvert par un `>` de comparaison, ni
  * commentaire à blanchir. Un appel n'est jamais ouvert — ce qui passe par `tr`
@@ -250,6 +252,15 @@ function relever(source) {
       const c = n.callee;
       const qui = c.type === 'Identifier' ? c.name : c.type === 'MemberExpression' && !c.computed ? c.property.name : null;
       if (BOITES.has(qui)) for (const [m, t] of rendus(n.arguments[0])) voir(qui + '()', m, t);
+      if (qui === 'alerter' && n.arguments[0] && n.arguments[0].type === 'ObjectExpression') {
+        for (const p of n.arguments[0].properties) {
+          const cle = p.type === 'Property' && p.key && (p.key.name || p.key.value);
+          if (cle === 'titre' || cle === 'texte') for (const [m, t] of rendus(p.value)) voir('alerter()', m, t);
+          if (cle === 'action' && p.value.type === 'ObjectExpression') {
+            for (const q of p.value.properties) if (q.type === 'Property' && q.key && q.key.name === 'libelle') for (const [m, t] of rendus(q.value)) voir('alerter()', m, t);
+          }
+        }
+      }
     }
     for (const k in n) {
       const v = n[k];
@@ -269,10 +280,12 @@ test('le second filet voit les quatre formes, et laisse passer ce qui est tradui
     "  <i>{n + ' ms'}</i><b>{trN(n, '{n} repas', '{n} repas')}{n > 1 ? 's' : ''}</b></div>;",
     "alert(ok ? tr('Fait') : 'Échec de l’envoi');",
     "window.confirm(err || 'Tout effacer ?');",
+    "alerter({ titre: 'Import', texte: tr('Fait'), action: { libelle: 'Effacer', faire } });",
   ].join('\n')).map(x => x.forme + ' ' + x.texte);
   assert.deepEqual(vus, [
     'title Fermer la fiche', 'texte actuel', 'rendu Pause', 'rendu s',
     'alert() Échec de l’envoi', 'confirm() Tout effacer ?',
+    'alerter() Import', 'alerter() Effacer',
   ]);
 });
 

@@ -7,10 +7,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES, DASHBOARD } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274) ; DASHBOARD : l'Accueil en entier, ses hooks compris (ADR 0283)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + readFileSync(join(RACINE, 'src', 'views', 'voletsplan.jsx'), 'utf8') + VUES_SORTIES); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
+const src = (MONOLITHE + readFileSync(join(RACINE, 'src', 'views', 'voletsplan.jsx'), 'utf8') + VUES_SORTIES); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
 const NL = String.fromCharCode(10);
 const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = src.indexOf(fin, d + 1); return src.slice(d, f < 0 ? undefined : f); };
 
@@ -111,7 +111,7 @@ test('des couleurs dans la fiche : l’icone porte la teinte du domaine, la piec
 });
 
 test('Accueil et Energie ont le meme bandeau, et la carte suit le doigt partout', () => {
-  const home = bloc('function Dashboard(', NL + 'function ');
+  const home = DASHBOARD;
   assert.ok(home.includes('<BandeauEdition extra={<>'), 'l’Accueil a le bandeau');
   assert.ok(home.includes('poserFantome(hote,'), 'les sections et les pieces suivent le doigt');
   assert.ok(!src.includes('}, 380);'), 'plus d’appui long de 380 ms nulle part');
@@ -135,7 +135,8 @@ test('la taille : compacte (une rangee de 88 px) ou standard (deux), rangee dans
   // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 5 ; C20) : une carte de groupe prend sa compacte aussi, dans la fabrique commune.
   // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 8 ; C28) : la vigilance météo aussi.
   // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 11 ; C32) : et la carte Piles.
-  assert.equal((bloc('function useDomainCards(', NL + '}').match(/chip=\{chip\}/g) || []).length, 5, 'distributeur, plantes, piles, groupes et vigilance prennent leur compacte, dans la fabrique commune');
+  // ASSERTION MODIFIÉE (30/10, G3-E3) : la borne de recharge aussi.
+  assert.equal((bloc('function useDomainCards(', NL + '}').match(/chip=\{chip\}/g) || []).length, 6, 'distributeur, plantes, piles, groupes, vigilance et borne prennent leur compacte, dans la fabrique commune');
   assert.ok(obj.includes('className="grid-objets grid-dense"') && obj.includes("(ed.estCompact(o.cle) ? 'o-cvrow1' : '')"), 'la grille d’Objets est dense, la compacte y prend une rangee');
   const en = bloc('function EnergieContent(', NL + 'function ');
   assert.ok(en.includes('taille={false}'), 'les postes d’Energie n’ont pas de compacte');

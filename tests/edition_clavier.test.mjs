@@ -7,7 +7,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+import { MONOLITHE, DASHBOARD } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282) ; DASHBOARD : l'Accueil en entier, ses hooks compris (ADR 0283)
+const app = MONOLITHE;
 const NL = '\n';
 const bloc = (debut) => { const i = app.indexOf(debut); assert.ok(i >= 0, debut + ' introuvable'); return app.slice(i, app.indexOf(NL + 'function ', i + 1)); };
 
@@ -20,7 +21,7 @@ test('le kit commun : la carte au focus se deplace aux fleches, Entree ouvre sa 
 });
 
 test('les sections de l’Accueil et les tuiles des pieces : focus en edition, fleches, un cran, l’ordre de la souris', () => {
-  const d = bloc('function Dashboard(');
+  const d = DASHBOARD;
   for (const nom of ['deplacerSec', 'clavierSec', 'deplacerPiece', 'clavierPiece']) assert.ok(d.includes('const ' + nom + ' = '), nom);
   assert.ok(d.includes("saveGrille({ [zone]: a });"), 'les sections gardent leur ordre');
   /* Depuis le 23/09 une pièce n'a plus un rang mais une CELLULE : la flèche la

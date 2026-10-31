@@ -40,11 +40,13 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import Event, HomeAssistant, callback
 
+from .refus import RefusNomme
 from .regles import demarrer, est_entite, est_ouvrant
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
@@ -99,6 +101,63 @@ GESTES_REFUSES = frozenset({
     "lock.open",
     "alarm_control_panel.alarm_disarm",
 })
+
+# CE QU'UN BOUTON SANS FIL PEUT APPELER : une liste blanche de domaines (lot 8
+# de l'audit du 28/10, B3). Trois services refuses ne faisaient pas une
+# barriere : le « Service libre » de l'ecran acceptait `shell_command.*`,
+# `hassio.*`, `recorder.purge`… Un bouton fait desormais les gestes de la
+# maison - allumer, eteindre, une scene, un script, un volet, un lecteur - et
+# rien d'autre ; `GESTES_REFUSES` reste ote, dans ces domaines, de ce qui
+# OUVRE la maison. Les gestes de l'ecran (src/views/interrupteurs.jsx) y sont
+# tous, et ceux de la maison au 30/10 aussi : `light.turn_on`,
+# `homeassistant.turn_on`, `homeassistant.turn_off`.
+DOMAINES_PERMIS = frozenset({
+    "homeassistant", "light", "switch", "fan", "cover", "scene", "script", "automation",
+    "input_boolean", "input_button", "button", "input_select", "select", "input_number", "number",
+    "media_player", "remote", "climate", "water_heater", "humidifier", "valve",
+    "vacuum", "lawn_mower", "lock", "alarm_control_panel", "siren", "notify", "counter", "timer",
+    "input_text", "input_datetime", "text", "tts", "persistent_notification",
+    # Le service `loggia.scenario` : un bouton lance un scenario comme la carte.
+    "loggia",
+})
+# `homeassistant` porte aussi `restart`, `stop` et les rechargements : seuls
+# ses gestes generiques, ceux de l'ecran, et la relecture d'une entite sont a
+# un bouton.
+SERVICES_HOMEASSISTANT = frozenset({"turn_on", "turn_off", "toggle", "update_entity"})
+# Un service tel que Home Assistant l'ecrit : `domaine.service`.
+FORME_SERVICE = re.compile(r"[a-z0-9_]+\.[a-z0-9_]+")
+# Ce qu'un geste porte : son service, et ses donnees.
+CLES_GESTE = frozenset({"service", "data"})
+
+
+def service_permis(service: str) -> bool:
+    """Un service qu'un bouton sans fil peut appeler. Casse ignoree : Home
+    Assistant met le service en minuscules avant de l'appeler."""
+    if not isinstance(service, str):
+        return False
+    service = service.lower()
+    if not FORME_SERVICE.fullmatch(service) or service in GESTES_REFUSES:
+        return False
+    domaine, nom = service.split(".", 1)
+    return domaine in DOMAINES_PERMIS and (domaine != "homeassistant" or nom in SERVICES_HOMEASSISTANT)
+
+
+def valider_gestes(gestes: Any) -> list[dict[str, Any]]:
+    """Les gestes d'un bouton, verifies a l'ecriture (lot 8, B3) - ou un refus nomme.
+
+    `interrupteurs/affecter` les gardait tels que le message les donnait :
+    n'importe quel dictionnaire, n'importe quel service. Un geste est un
+    dictionnaire `{service, data?}`, `data` un dictionnaire, et le service doit
+    etre permis (`service_permis`). Rien ne s'ecrit si un seul ne l'est pas."""
+    if not isinstance(gestes, list):
+        raise RefusNomme("interrupteur_geste_illisible", "les gestes sont une liste")
+    for geste in gestes:
+        if (not isinstance(geste, dict) or not set(geste) <= CLES_GESTE or not isinstance(geste.get("service"), str)
+                or not isinstance(geste.get("data", {}), dict)):
+            raise RefusNomme("interrupteur_geste_illisible", "geste mal forme")
+        if not service_permis(geste["service"]):
+            raise RefusNomme("interrupteur_service_refuse", "service refuse a un bouton sans fil", geste["service"])
+    return gestes
 
 
 def _cle_appareil(source: str, identifiant: str) -> str:
@@ -394,13 +453,21 @@ class LoggiaInterrupteurs:
                 )
                 continue
             domaine, nom_service = service.split(".", 1)
-            if service in GESTES_REFUSES:
+            if service.lower() in GESTES_REFUSES:
                 # Un appui venu du broker n'ouvre pas la maison (audit du
                 # 29/09/2026). Le refus est trace : sinon un bouton reste muet
                 # sans qu'on sache pourquoi.
                 _LOGGER.warning(
                     "Loggia : %s refuse pour %s / %s — un bouton sans fil "
                     "n'ouvre ni une serrure ni une alarme", service, cle, action
+                )
+                continue
+            if not service_permis(service):
+                # Hors des domaines d'un bouton (lot 8, B3) : une affectation
+                # ecrite avant la liste blanche, ou a la main dans le fichier.
+                _LOGGER.warning(
+                    "Loggia : %s refuse pour %s / %s — hors des gestes qu'un "
+                    "bouton sans fil peut appeler", service, cle, action
                 )
                 continue
             data = geste.get("data")
@@ -495,7 +562,11 @@ class LoggiaInterrupteurs:
 
         Lue, changee et ecrite d'un seul tenant, sous le verrou du magasin
         (lot 15 de l'audit du 03/10) : deux boutons affectes coup sur coup
-        partaient de la meme table, et le second effacait le premier."""
+        partaient de la meme table, et le second effacait le premier.
+
+        Chaque geste est verifie AVANT (lot 8, B3) : un refus nomme, et rien
+        ne s'ecrit."""
+        valider_gestes(gestes)
         return await self.store.async_modifier_shared(
             CLE, lambda brut: self._affecter_dans(brut, cle, action, gestes, nom))
 

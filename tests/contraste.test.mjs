@@ -8,10 +8,11 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { lireCouleur, contraste, composer, ajuster, garde, versHex, SEUILS, JETONS_GARDE, LAVIS, LAVIS_DENSE } from '../src/contraste.js';
 
+import { MONOLITHE, importsDe } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 /* Le theme est sorti dans `src/theme.js` (27/09, audit point 9) : on relit
  * donc le monolithe ET ce qui en est parti. */
-const src = ['App.jsx', 'theme.js'].map(f => readFileSync(join(RACINE, 'src', f), 'utf8')).join(String.fromCharCode(10));
+const src = [MONOLITHE, readFileSync(join(RACINE, 'src', 'theme.js'), 'utf8')].join(String.fromCharCode(10));
 const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
 
 // Les jetons d'un thème, tels que `getComputedStyle` les rendrait.
@@ -174,9 +175,10 @@ test('la garde est branchée, purgée, et les thèmes sans ombre gardent un file
    * où les cartes l'appellent. Les deux moitiés se vérifient séparément —
    * `src` est la concaténation des deux fichiers, une seule recherche ne dirait
    * pas laquelle porte quoi. */
-  const appSeul = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const appSeul = MONOLITHE;
   const themeSeul = readFileSync(join(RACINE, 'src', 'theme.js'), 'utf8');
-  assert.ok(appSeul.includes("import { lisibleSurLavis, versHex } from './contraste.js';"),
+  // ASSERTION MODIFIÉE (ADR 0283) : les cartes sorties d'App.jsx importent elles-mêmes ce qu'elles lisent ; la ligne recopiée se lit par ses noms (`importsDe`).
+  assert.ok(['lisibleSurLavis', 'versHex'].every(n => importsDe(appSeul, './contraste.js').has(n)),
     'App.jsx n’importe plus la lisibilité sur lavis, dont ses cartes se servent');
   assert.ok(themeSeul.includes("import { garde, JETONS_GARDE } from './contraste.js';"),
     'le thème n’importe plus la garde de contraste ni les jetons qu’elle pose');

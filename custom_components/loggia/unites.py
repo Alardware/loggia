@@ -38,6 +38,36 @@ def depuis_celsius(valeur: float, unite: str) -> float:
     return valeur
 
 
+# Le monoxyde de carbone (G1-D6, 30/10 ; ADR 0300) : la table de l'ecran
+# (`VERS_PPM_CO`, src/unites.js), a 25 °C et 1 atm — mg/m3 x 24,45 / 28,01,
+# ug/m3 mille fois moins, ppb / 1000. Les cles s'ecrivent comme Home Assistant :
+# l'exposant ³ et le signe micro (U+00B5).
+UNITES_CO = {"ppm": 1.0, "ppb": 0.001, "mg/m\u00b3": 24.45 / 28.01, "\u00b5g/m\u00b3": 24.45 / 28010}
+
+
+def unite_co(unite: Any) -> str | None:
+    """L'unite d'un monoxyde ramenee a l'ecriture de Home Assistant — « PPM »,
+    « ug/m3 », le mu grec (U+03BC) au lieu du signe micro —, ou None si la
+    table ne sait pas la convertir. La meme regle que `uniteCo` (unites.js)."""
+    if unite is None:
+        return None
+    u = str(unite).strip().lower().replace("\u03bc", "\u00b5")
+    if u.startswith("ug/"):
+        u = "\u00b5g/" + u[3:]
+    if u.endswith("/m3"):
+        u = u[:-3] + "/m\u00b3"
+    return u if u in UNITES_CO else None
+
+
+def vers_ppm_co(valeur: float | None, unite: Any) -> float | None:
+    """Une valeur de monoxyde en ppm ; None dans une unite inconnue : rien ne
+    dit des ppm, on ne devine pas."""
+    u = unite_co(unite)
+    if valeur is None or u is None:
+        return None
+    return valeur * UNITES_CO[u]
+
+
 def vers_celsius(valeur: float, unite: str) -> float:
     """L'inverse de `depuis_celsius` : une valeur dans l'unite de
     l'installation, ramenee en Celsius. Le chauffage garde ses consignes en °C

@@ -114,6 +114,7 @@ export const ICONES_ATTENTION = {
   alarme: 'bell-ring', smoke: 'fire-smoke', carbon_monoxide: 'flame', gas: 'flame',
   moisture: 'water', safety: 'shield-exclamation', tamper: 'shield-exclamation', meteo: 'umbrella',
   ouvrant: 'door-open', co2: 'wind', camera: 'camera', chauffage: 'flame', pile: 'battery-quarter', sante: 'exclamation',
+  tempo: 'bolt',
 };
 
 /* Une entité muette ne dit rien : elle ne compte ni fermée ni ouverte. Sans
@@ -477,6 +478,17 @@ export function pointsAttention(ctx) {
     }
   });
 
+  /* 9. DEMAIN, JOUR ROUGE (chantier G3, E4 ; ADR 0302). Le contrat à couleurs
+   * annonce la veille un jour où le kilowattheure coûte plusieurs fois le
+   * prix d'un jour bleu. C'est rare (une vingtaine de jours par hiver) et
+   * actionnable : on décale le lave-linge, on baisse le chauffage d'avance.
+   * Seulement ROUGE : un jour blanc n'est pas un point d'attention. La couleur
+   * du lendemain est celle que la résolution désigne (`tempoDemain`). */
+  const td = typeof c.tempoDemain === 'string' ? c.tempoDemain : null;
+  if (td && estObjet(S[td]) && jourRouge(S[td].state)) {
+    ajouter('tempo:' + td, 'info', tr('Demain : jour rouge'), tr('Décalez ce qui peut attendre'), 'energie', td);
+  }
+
   /* Du plus grave au plus doux, puis par titre — puis par sous-titre et clé :
    * un ordre entièrement déterminé, pour que la liste ne saute pas d'un rendu
    * à l'autre quand Home Assistant réordonne ses états. Les textes se rangent
@@ -485,6 +497,12 @@ export function pointsAttention(ctx) {
   const cmp = (a, b) => comparerTextes(String(a), String(b));
   out.sort((a, b) => (rang(a.niveau) - rang(b.niveau)) || cmp(a.titre, b.titre) || cmp(a.sous, b.sous) || cmp(a.cle, b.cle));
   return out;
+}
+
+/** Un état Tempo dit-il ROUGE ? « Rouge », « red », « TEMPO_ROUGE » — mot par mot, accents et casse ignorés (les mots de tarifs.py). */
+export function jourRouge(etat) {
+  const mots = String(etat == null ? '' : etat).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^a-z0-9]+/);
+  return mots.indexOf('rouge') >= 0 || mots.indexOf('red') >= 0;
 }
 
 /** Le niveau d'une pile d'après sa charge, ou null si elle tient. */

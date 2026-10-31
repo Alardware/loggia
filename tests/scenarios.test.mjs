@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 import {
   GESTES_SCENARIO, FAMILLES, IDS_INTEGRES, TEINTES_SCENARIO, ICONES_SCENARIO,
   nomScenario, teinteScenario, libelleAction, resumeScenario, nombreActions, nombreCibles,
@@ -130,7 +131,7 @@ test('ce que la fiche envoie : le scenario sans ce qu’il a calcule', () => {
    * (plan M1). Ce que ce fichier verifie n'a pas bouge, seulement son
    * adresse — on relit donc le monolithe ET ce qui en est sorti. Les
    * ambiances Hue en sont sorties le 11/10 (scenes.jsx, chargé à la demande). */
-const app = ['App.jsx', 'ecranveille.jsx', 'pinmodal.jsx', 'scenes.jsx'].map(f => readFileSync(join(RACINE, 'src', f), 'utf8')).join(String.fromCharCode(10));
+const app = [MONOLITHE, ...['ecranveille.jsx', 'pinmodal.jsx', 'scenes.jsx'].map(f => readFileSync(join(RACINE, 'src', f), 'utf8'))].join(String.fromCharCode(10));
 const NL = String.fromCharCode(10);
 const bloc = (debut, fin) => { const d = app.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = app.indexOf(fin, d + 1); return app.slice(d, f < 0 ? undefined : f); };
 
@@ -234,7 +235,10 @@ test('la bibliothèque Hue, chargée à la demande, garde ses 55 ambiances', () 
   assert.equal(noms.length, 55, 'une ambiance a perdu ses cinq couleurs, sa luminosité ou son image');
   assert.equal(new Set(noms).size, 55, 'deux ambiances portent le même nom : la scène active ne se retrouverait plus');
   // Le dégradé dessiné, et la luminosité qui part avec la scène.
-  assert.ok(src.includes('const sceneGradient = (colors) => {') && src.includes('brightness_pct: sc.brightness });'),
+  /* ASSERTION MODIFIÉE (30/10, G5-1) : la luminosité part avec l'ambiance — au script désigné dans sa charge (`brightness_pct:
+   * bri`), sinon lampe par lampe (`ordresAmbiance`, ADR 0304) ; choisir une ambiance l'applique à SA luminosité. */
+  assert.ok(src.includes('const sceneGradient = (colors) => {') && src.includes('applyScene(sc, sc.brightness)')
+    && src.includes('brightness_pct: bri });') && src.includes('ordresAmbiance(sc, lampes, { bri })'),
     'le dégradé ou la luminosité d’une ambiance s’est perdu en route');
 });
 

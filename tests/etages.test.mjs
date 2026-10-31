@@ -14,6 +14,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 const { etagesDe, etageDuNom, etagesDesPieces, piecesDeLEtage } = await import('../src/etages.js');
 
@@ -103,7 +104,7 @@ test('le module calcule, il n’écrit rien à l’écran', () => {
 });
 
 test('le branchement : un filtre, et surtout PAS un découpage de la grille', () => {
-  const APP = lire('src', 'App.jsx');
+  const APP = MONOLITHE;
   assert.ok(APP.includes("import { etagesDesPieces, piecesDeLEtage } from './etages.js';"), 'les calculs viennent du module testé à sec');
   assert.ok(APP.includes('const infosEtages = etagesDesPieces(LOGGIA_INDEX, inner.map(p => p.name));'));
   /* La grille garde son placement libre, ses tailles par carte et son
@@ -124,7 +125,8 @@ test('le branchement : un filtre, et surtout PAS un découpage de la grille', ()
   assert.ok(APP.includes('const piecesNoms = ordrePieces(piecesVues.map(p => p.name));'),
     'le placement se calcule sur les pieces VISIBLES, pas sur toutes');
   // La puce choisie se remplit d'accent, comme toutes les puces de Loggia.
-  assert.ok(APP.includes("background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text1)' }}>{etroitPieces ? e.court : e.nom}</button>"),
+  // ASSERTION MODIFIÉE (lot 7 de l'audit du 28/10, V5) : la pastille est le contenu du bouton, qui fait 44 de haut au doigt.
+  assert.ok(APP.includes("background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text1)' }}>{etroitPieces ? e.court : e.nom}</span>"),
     'puce choisie = accent plein, texte blanc');
 });
 

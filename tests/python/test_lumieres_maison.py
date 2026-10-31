@@ -180,3 +180,29 @@ def test_le_module_est_pur():
     assert not re.search(r"^\s*(from|import) homeassistant", tete, re.M), "rien de Home Assistant avant le temps reel"
     assert not re.search(r"^(from|import) homeassistant", texte, re.M), "l'import du registre vit dans sa fonction"
     assert "async_call" not in texte, "il ne commande rien"
+
+
+# ── Ce qu'une lampe sait faire d'un fondu et d'un blanc (chantier G5, ADR 0304) ──
+
+def test_savoir_fondre_se_lit_sur_le_bit_transition_partage_par_la_nuit_et_les_scenarios(maison):
+    """Le test de `nuit.py` (`_sait_fondre`) sort ici, pour que les scenarios le
+    partagent : le bit TRANSITION (32) de `supported_features`, rien d'autre."""
+    assert maison.sait_fondre({"supported_features": 32}) is True
+    assert maison.sait_fondre({"supported_features": 44}) is True
+    for non in ({"supported_features": 12}, {"supported_features": 0}, {}, None, {"supported_features": "beaucoup"},
+                {"supported_features": True}, {"supported_features": float("nan")}):
+        assert maison.sait_fondre(non) is False, non
+
+
+def test_le_blanc_se_lit_sur_les_modes_et_se_borne_a_la_lampe(maison):
+    """Un blanc (`color_temp_kelvin`) : une lampe a blanc reglable, ou en couleur -
+    Home Assistant convertit. Borne a `min_` / `max_color_temp_kelvin` quand la
+    lampe les publie ; un variateur, un interrupteur n'en ont pas."""
+    blanc = {"supported_color_modes": ["color_temp"], "min_color_temp_kelvin": 2200, "max_color_temp_kelvin": 4000}
+    assert maison.sait_le_blanc(blanc) and maison.sait_le_blanc({"supported_color_modes": ["hs"]})
+    assert maison.sait_le_blanc({"supported_color_modes": ["xy", "color_temp"]})
+    for non in ({"supported_color_modes": ["brightness"]}, {"supported_color_modes": ["onoff"]}, {}, None):
+        assert not maison.sait_le_blanc(non), non
+    assert maison.blanc_borne(blanc, 6500) == 4000 and maison.blanc_borne(blanc, 2000) == 2200
+    assert maison.blanc_borne(blanc, 2700) == 2700
+    assert maison.blanc_borne({"supported_color_modes": ["hs"]}, 6500) == 6500, "sans bornes publiees : tel quel"

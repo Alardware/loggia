@@ -18,9 +18,10 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { viewAvailability, VIEW_IDS } from '../src/views.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
-const APP = lire('src', 'App.jsx');
+const APP = MONOLITHE;
 const EN = (await import(pathToFileURL(join(RACINE, 'src', 'langues', 'en.js')).href)).default;
 
 test('les onze motifs d’une vue vide sont des clés du catalogue', () => {

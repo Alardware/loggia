@@ -17,8 +17,9 @@ import { readFileSync } from 'node:fs';
 import { resolveClimate } from '../src/resolve.js';
 import { area, device, entity, state, states, ctxOf } from './fixtures.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
-const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const APP = MONOLITHE.replace(/\r\n/g, '\n');
 
 /* Sa maison, telle que l'inventaire du 13/10 la décrit : trois prises Zigbee
  * qui mesurent (NAS, PC, lave-vaisselle), le poêle posé sur l'appareil qui

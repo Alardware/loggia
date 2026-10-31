@@ -6,7 +6,8 @@
  * tete et l'ordre de la grille. Pas de React, pas de Home Assistant : le
  * dashboard lui passe des objets deja lus, les tests aussi. */
 
-import { comparerTextes } from './i18n.js';
+import { comparerTextes, tr } from './i18n.js';
+import { nombre } from './format.js';
 import { coverActif } from './voletecran.js';
 
 /** Les filtres, dans l'ordre des puces — « Tous » et « Favoris » a part.
@@ -22,7 +23,7 @@ export const OBJ_ORDRE = ['lumieres', 'volets', 'chauffage', 'prises', 'multimed
 /** « IoT » = les APPAREILS : ce qui travaille seul — robot aspirateur, tondeuse,
  * distributeur, ventilateur, humidificateur, vanne. Pas les prises : « une
  * prise c'est une prise » (retour user du 17/09). */
-export const DOMAINES_IOT = ['vacuum', 'lawn_mower', 'feeder', 'fan', 'humidifier', 'valve'];
+export const DOMAINES_IOT = ['vacuum', 'lawn_mower', 'feeder', 'fan', 'humidifier', 'valve', 'borne'];
 
 /** Les classes de capteur binaire qui disent une presence : la fiche d'edition
  * les nomme ; sous les filtres, ce sont des capteurs comme les autres. */
@@ -71,7 +72,9 @@ export function objetActif({ domaine, etat, attributs = {} }) {
   if (!s || s === 'unavailable' || s === 'unknown') return false;
   const dom = String(domaine || '');
   if (dom === 'media_player') return s === 'playing';
-  if (dom === 'climate' || dom === 'water_heater') {
+  // Un chauffe-eau : son état est un MODE, pas une marche (G1-D7) — actif seulement si un attribut connu dit qu'il chauffe.
+  if (dom === 'water_heater') return s !== 'off' && chauffeEauEnChauffe(attributs);
+  if (dom === 'climate') {
     const action = String(attributs.hvac_action || '').toLowerCase();
     if (action) return action !== 'off' && action !== 'idle';
     return s !== 'off';
@@ -83,6 +86,42 @@ export function objetActif({ domaine, etat, attributs = {} }) {
   if (dom === 'valve') return s === 'open';
   if (dom === 'lock' || dom === 'camera' || dom === 'alarm_control_panel') return false;
   return s === 'on';
+}
+
+/* ── Le chauffe-eau sur la carte générique (G1-D7, 30/10 ; ADR 0300) ─────────
+ *
+ * L'état d'un `water_heater` est son MODE de fonctionnement : la carte l'écrivait
+ * brut, « eco » dans les sept langues, et Objets le comptait « actif » faute de
+ * `hvac_action`. Les sept modes standard de Home Assistant se traduisent ; un mode
+ * propre au fabricant (« Boost 2h ») reste tel quel : c'est le nom que son
+ * intégration lui donne. La carte « Eau chaude » complète est un autre chantier. */
+const MODES_CHAUFFE_EAU = () => ({ eco: tr('Éco'), electric: tr('Électrique'), gas: tr('Gaz'), heat_pump: tr('Pompe à chaleur'),
+  high_demand: tr('Forte demande'), performance: tr('Performance'), off: tr('Arrêt') });
+
+/** Le mot d'un mode de chauffe-eau : traduit s'il est standard, tel quel sinon. */
+export function modeChauffeEau(etat) {
+  const s = etat == null ? '' : String(etat);
+  const m = MODES_CHAUFFE_EAU();
+  return Object.prototype.hasOwnProperty.call(m, s) ? m[s] : s;
+}
+
+/** La phrase d'un chauffe-eau : son mode, puis la température relevée et la consigne quand elles existent, comme un climat —
+ *  « Éco · 52° → 55° ». Arrêté, la consigne se tait. */
+export function phraseChauffeEau(st) {
+  const a = (st && st.attributes) || {};
+  const s = st && st.state != null ? String(st.state) : '';
+  const lu = (x) => (x == null || x === '' || !Number.isFinite(Number(x)) ? null : nombre(Number(x), 1, 0) + '°');
+  const actuel = lu(a.current_temperature);
+  const consigne = s === 'off' ? null : lu(a.temperature);
+  const temp = consigne ? (actuel || '—') + ' → ' + consigne : actuel;
+  return [modeChauffeEau(s), temp].filter(Boolean).join(' · ');
+}
+
+/** Un chauffe-eau EN CHAUFFE, d'après un attribut connu : `hvac_action` à `heating` ou `preheating`. Home Assistant n'en publie
+ *  aucun pour un `water_heater` ; sans lui, jamais — plutôt que de compter chaque ballon en mode « Éco » comme un appareil qui chauffe. */
+export function chauffeEauEnChauffe(attributs) {
+  const action = String((attributs && attributs.hvac_action) || '').toLowerCase();
+  return action === 'heating' || action === 'preheating';
 }
 
 /* Ce qui « tourne », pour l'en-tête d'Objets › IoT (chantier IoT, I14 ; passe bis du 18/10, point 9) : une liste FERMÉE — un robot

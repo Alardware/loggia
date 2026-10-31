@@ -25,10 +25,19 @@ on:
 permissions:
   contents: read
 
+# Un seul run par branche ou par PR (28/10, ADR 0281). Sur une PR, un nouveau
+# push ANNULE le run devenu inutile ; sur une branche, le run hebdomadaire ou
+# une relance attendent leur tour au lieu de couper celui qui tourne.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   hassfest:
     name: hassfest (Home Assistant)
     runs-on: ubuntu-latest
+    # Un travail bloque ne tient plus la file six heures (le defaut de GitHub).
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Branche flottante A DESSEIN, et la seule exception avec HACS ci-dessous.
@@ -42,6 +51,7 @@ jobs:
   hacs:
     name: HACS
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Meme raison : HACS publie ses regles de validation sur `main`. Un SHA
@@ -53,11 +63,15 @@ jobs:
   python:
     name: Composant Python (pytest)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
+          # Le cache suit le fichier des versions : une version changee le refait.
+          cache: pip
+          cache-dependency-path: tests/python/requirements.txt
       # Les tests posent leurs propres doublures de Home Assistant : inutile de
       # l'installer, et la suite ne se fige pas sur une version.
       #
@@ -66,19 +80,26 @@ jobs:
       # sont sautes, et c'est en les executant que l'on a vu la collision `id`
       # du lancement de scenario. `ruff --select F` : les noms non definis et
       # les imports morts, que seule l'execution revelait jusqu'ici.
-      - run: pip install pytest voluptuous==0.15.2 ruff==0.16.10
+      #
+      # Toutes les versions sont epinglees dans tests/python/requirements.txt
+      # (28/10, ADR 0281) : `pytest` ne l'etait pas, et une version nouvelle
+      # pouvait changer la suite un lundi sans qu'aucun commit n'y touche.
+      - run: pip install -r tests/python/requirements.txt
       - run: ruff check --select F custom_components
       - run: python -m pytest tests/python -q
 
   paquet:
     name: Paquet embarque = build du commit
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+          # Le cache de npm suit package-lock.json (28/10, ADR 0281).
+          cache: npm
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - run: npm ci
@@ -97,14 +118,17 @@ jobs:
   frontend:
     name: Frontend (lint, tests, donnees personnelles)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           # Node 20 est deprecie, et surtout : il ne developpe pas les motifs
           # glob de `--test`. La suite est desormais lancee par decouverte
-          # automatique, mais autant tourner sur une version soutenue.
+          # automatique, mais autant tourner sur une version soutenue. La meme
+          # que `engines.node` de package.json (28/10, ADR 0281).
           node-version: "22"
+          cache: npm
       - run: npm ci
       # Le cliquet des avertissements (lot 15 de l'audit du 03/10). `npm run
       # lint` passe `--quiet` : les avertissements n'y etaient ni montres ni

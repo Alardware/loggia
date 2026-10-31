@@ -13,7 +13,9 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const APP = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'App.jsx'), 'utf8');
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
+import { idsDe, sommeLue } from '../src/energieparts.js';
+const APP = MONOLITHE;
 const debut = APP.indexOf('function deriveAccueil(');
 const i = APP.indexOf('  const numW = ', debut);
 const j = APP.indexOf('\n', APP.indexOf('  const consoW = ', i));
@@ -21,8 +23,10 @@ const morceau = APP.slice(i, j);
 const lire = (E, etats) => {
   const S = Object.fromEntries(Object.entries(etats).map(([k, v]) => [k, { state: String(v) }]));
   const wattsDe = (st) => { const n = Number(st.state); return Number.isFinite(n) ? n : null; };
+  /* ASSERTION MODIFIÉE (30/10, G3-D3) : le morceau lit le solaire et le flux net par leurs PARTS (deux onduleurs) —
+   * `idsDe` et `sommeLue` (energieparts.js) ; le banc les lui passe comme `wattsDe`. */
   // eslint-disable-next-line no-new-func
-  return new Function('S', 'E', 'wattsDe', morceau + '\nreturn { consoW, exporting, gridVal };')(S, E, wattsDe);
+  return new Function('S', 'E', 'wattsDe', 'idsDe', 'sommeLue', morceau + '\nreturn { consoW, exporting, gridVal };')(S, E, wattsDe, idsDe, sommeLue);
 };
 
 test('la fiche Énergie (gridNow, consoMaison) allume la tuile', () => {
@@ -54,4 +58,9 @@ test('la tuile se place entre l’alarme et l’air, et mène à l’Énergie', 
   assert.ok(al > 0 && al < ex && ex < air, 'ordre alarme, conso, air');
   assert.ok(APP.includes("ex: () => onNav && onNav('energie'),"), 'un appui ouvre la vue Énergie');
   assert.ok(APP.includes('if (!a || a.metricConso) cases.push('), 'sans compteur, la tuile part');
+});
+
+test('deux onduleurs : la maison compte leurs DEUX productions (chantier G3, D3)', () => {
+  const r = lire({ consoNow: 'sensor.n', solarNowParts: ['sensor.est', 'sensor.ouest'] }, { 'sensor.n': -200, 'sensor.est': 600, 'sensor.ouest': 400 });
+  assert.equal(r.consoW, 800);
 });

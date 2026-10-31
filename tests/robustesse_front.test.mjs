@@ -18,6 +18,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const compter = (s, motif) => s.split(motif).length - 1;
@@ -25,7 +26,7 @@ const compter = (s, motif) => s.split(motif).length - 1;
   /* + l'ecran de veille et la modale du code : sortis d'App.jsx le 23/09
    * (plan M1). Ce que ce fichier verifie n'a pas bouge, seulement son
    * adresse — on relit donc le monolithe ET ce qui en est sorti. */
-const app = ['App.jsx', 'ecranveille.jsx', 'pinmodal.jsx'].map(f => lire('src', f)).join(String.fromCharCode(10));
+const app = [MONOLITHE, ...['ecranveille.jsx', 'pinmodal.jsx'].map(f => lire('src', f))].join(String.fromCharCode(10));
 const ui = lire('src', 'ui.jsx');
 const parametres = lire('src', 'views', 'parametres.jsx');
 const state = lire('src', 'state.js');
@@ -56,12 +57,12 @@ test('les réglages de sûreté : une lecture ratée ne charge PAS les valeurs p
 test('la remise à zéro s’annule quand la sauvegarde préalable est impossible', () => {
   const debut = parametres.indexOf('const doReset = async () => {');
   const corps = parametres.slice(debut, parametres.indexOf('\n  };', debut));
-  const alerte = corps.indexOf("window.alert(tr('Sauvegarde impossible");
+  const alerte = corps.indexOf("texte: tr('Sauvegarde impossible");
   assert.ok(alerte > 0);
   assert.ok(corps.indexOf('return;', alerte) < corps.indexOf('resetLoggiaComplet()'), 'on sort AVANT de remettre à zéro');
   // Et si le serveur refuse la remise à zéro elle-même, on ne recharge pas
   // comme si de rien n'était : la maison se serait resynchronisée intacte.
-  assert.ok(corps.includes("window.alert(tr('Remise à zéro incomplète"));
+  assert.ok(corps.includes("texte: tr('Remise à zéro incomplète"));
   assert.ok(!state.includes("catch { /* on vide au moins l'appareil */ }"));
   assert.ok(!state.includes("h.callWS({ type: 'loggia/config/delete' }).catch"));
 });
@@ -123,7 +124,7 @@ test('les heures du journal et des règles suivent la langue choisie, pas celle 
   assert.ok(fiche.includes("const heureDe = (t) => new Date(t).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });") && fiche.includes('const heure = heureDe(s.debut);'), 'robotsfiche.js : l’heure d’un passage');
   assert.ok(lire('src', 'ficherobot.jsx').includes('const rangees = rangeesHistorique(sept.sessions, { domaine, maintenant, loc: locale() });'), 'ficherobot.jsx : le jour d’un passage');
   for (const f of fichiers) {
-    const s = lire(...f.split('/'));
+    const s = f === 'src/App.jsx' ? MONOLITHE : lire(...f.split('/'));
     const appels = s.match(/toLocaleTimeString\([^)]*\)/g) || [];
     assert.ok(appels.length > 0, f + ' formate au moins une heure');
     for (const a of appels) assert.ok(a.startsWith('toLocaleTimeString(locale()'), f + ' : ' + a);

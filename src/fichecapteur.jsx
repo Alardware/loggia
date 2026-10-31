@@ -40,16 +40,10 @@ import { lireStats, conseilMesure, journeeMesure, motsBarre, dernierSignal } fro
 import { EnteteFiche, PETITES_CAPITALES, filet } from './fichecommune.jsx';
 import { useJournee, bandesDuJour, depuisDuJour, resumeJour, heure, BandeJour } from './journee.jsx';
 import { CLASSES_MOUVEMENT, couleurPile } from './attention.js';
-import { LISERE } from './styles.js';
 import { cfgSet } from './state.js';
 import { CLE_NON_JUGEES } from './horsair.js';
+import { PANNEAU, RANGEE_SERREE, EN_BOUTON, TITRE, SOUS } from './fichekit.js';
 
-/* Les panneaux de sa maquette : le gris --o-s3, l'arrondi du thème, sans ombre, et le liseré du réglage « Liserés ». */
-const PANNEAU = { background: 'var(--o-s3)', border: LISERE, borderRadius: 'var(--o-radius,18px)', boxSizing: 'border-box', minWidth: 0 };
-const RANGEE = { display: 'flex', alignItems: 'center', gap: 12, width: '100%', boxSizing: 'border-box', padding: '12px 14px 12px 16px' };
-const EN_BOUTON = { border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', color: 'var(--o-text)', textAlign: 'left' };
-const TITRE = { display: 'block', fontSize: 14, fontWeight: 700 };
-const SOUS = { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 };
 const VALEUR = { fontSize: 13, fontWeight: 800, color: 'var(--o-text1)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' };
 const ECHELLE = { fontSize: 11, fontWeight: 700, color: 'var(--o-text3)' };
 
@@ -222,25 +216,25 @@ export default function FicheCapteurContent({ id, vue, piece = null, epingle = n
       </div>
 
       <div style={{ ...PANNEAU, overflow: 'hidden' }}>
-        <div style={RANGEE}>
+        <div style={RANGEE_SERREE}>
           <span style={{ ...TITRE, flex: 1, minWidth: 0 }}>{tr('Dernier signal')}</span>
           <span style={VALEUR}>{dernier == null ? '—' : relTime(new Date(dernier).toISOString())}</span>
         </div>
         {pile != null && (
-          <div style={{ ...RANGEE, borderTop: filet(1) }}>
+          <div style={{ ...RANGEE_SERREE, borderTop: filet(1) }}>
             <span style={{ ...TITRE, flex: 1, minWidth: 0 }}>{tr('Pile')}</span>
             <span style={{ ...VALEUR, color: couleurPile(pile, 'var(--o-text1)') }}>{pile + '\u00a0%'}</span>
           </div>
         )}
         {onFiche && (
-          <button type="button" onClick={() => onFiche(id)} style={{ ...RANGEE, ...EN_BOUTON, borderTop: filet(1) }}>
+          <button type="button" onClick={() => onFiche(id)} style={{ ...RANGEE_SERREE, ...EN_BOUTON, borderTop: filet(1) }}>
             <span style={{ flex: 1, minWidth: 0 }}><span style={TITRE}>{tr('L’appareil')}</span><span style={SOUS}>{tr('L’épingle, les commandes et toutes ses entités')}</span></span>
             <Fi i="angle-small-right" size={16} color="var(--o-text3)" />
           </button>
         )}
         {/* La correction, en dernier : un réglage rare, sous les faits. */}
         {j && j.possible && j.reglable && (
-          <button type="button" role="switch" aria-checked={nonJugee} aria-label={tr('Ne pas juger cette mesure')} onClick={basculerJugement} style={{ ...RANGEE, ...EN_BOUTON, borderTop: filet(1) }}>
+          <button type="button" role="switch" aria-checked={nonJugee} aria-label={tr('Ne pas juger cette mesure')} onClick={basculerJugement} style={{ ...RANGEE_SERREE, ...EN_BOUTON, borderTop: filet(1) }}>
             <span style={{ flex: 1, minWidth: 0 }}><span style={TITRE}>{tr('Ne pas juger cette mesure')}</span><span style={SOUS}>{tr('Un frigo, la sonde d’un appareil : le chiffre et la courbe, sans zone ni alerte.')}</span></span>
             <span aria-hidden="true" style={{ width: 42, height: 24, borderRadius: 14, flexShrink: 0, position: 'relative', background: nonJugee ? 'var(--o-accent-fond)' : 'var(--o-bd1)' }}>
               <span style={{ position: 'absolute', top: 3, left: nonJugee ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff' }} /></span>
@@ -293,18 +287,18 @@ export function RoomBinarySheet({ id, hass, briques, piece = null, famille = nul
       </div>
 
       <div style={{ ...PANNEAU, overflow: 'hidden' }}>
-        <div style={RANGEE}>
+        <div style={RANGEE_SERREE}>
           <span style={{ ...TITRE, flex: 1, minWidth: 0 }}>{tr('Dernier signal')}</span>
           <span style={VALEUR}>{dernier == null ? '—' : relTime(new Date(dernier).toISOString())}</span>
         </div>
         {pile != null && (
-          <div style={{ ...RANGEE, borderTop: filet(1) }}>
+          <div style={{ ...RANGEE_SERREE, borderTop: filet(1) }}>
             <span style={{ ...TITRE, flex: 1, minWidth: 0 }}>{tr('Pile')}</span>
             <span style={{ ...VALEUR, color: couleurPile(pile, 'var(--o-text1)') }}>{pile + '\u00a0%'}</span>
           </div>
         )}
         {onFiche && (
-          <button type="button" onClick={() => onFiche(id)} style={{ ...RANGEE, ...EN_BOUTON, borderTop: filet(1) }}>
+          <button type="button" onClick={() => onFiche(id)} style={{ ...RANGEE_SERREE, ...EN_BOUTON, borderTop: filet(1) }}>
             <span style={{ flex: 1, minWidth: 0 }}><span style={TITRE}>{tr('L’appareil')}</span><span style={SOUS}>{tr('L’épingle, les commandes et toutes ses entités')}</span></span>
             <Fi i="angle-small-right" size={16} color="var(--o-text3)" />
           </button>

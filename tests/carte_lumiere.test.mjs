@@ -24,6 +24,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { monter, horlogeFausse, documentFaux } from './crochets.mjs';
 import { THEMES, fondGlyphe, fondRepere, teinteDe } from './jetons_loggia.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -45,7 +46,7 @@ const L = await import('../src/lumieresetat.js');
 const { lisibleSurLavis, lireCouleur, contraste } = await import('../src/contraste.js');
 const P = await import('../src/lumieres.js');
 
-const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const APP = MONOLITHE.replace(/\r\n/g, '\n');
 const aujourdhui = (h, m) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.getTime(); };
 const iso = (h, m) => new Date(aujourdhui(h, m)).toISOString();
 const lampe = (id, state, attributes, depuis = iso(18, 5)) => ({ entity_id: id, state, last_changed: depuis, last_updated: depuis, attributes });

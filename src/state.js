@@ -1084,13 +1084,17 @@ export const medCompanion = (haid) => {
  *
  * Des que la fiche DECLARE une cle d'une famille — meme vide, c'est un choix —
  * elle decide pour la famille entiere. Partout ailleurs, les deux se marient. */
+/* Les PARTS (`solarNowParts`…) et la puissance au sens de Home Assistant
+ * (`batRate`) sont de la famille de leur grandeur (chantier G3, ADR 0302) : une
+ * fiche qui nomme son onduleur ou sa batterie les écarte avec le reste. */
 const FAM_SCHEMA = [
-  ['consoNow', 'gridNow'],
+  ['consoNow', 'gridNow', 'consoNowParts'],
   ['surplusNow', 'injectionNow'],
-  ['solarOutput', 'solarNow'],
+  ['solarOutput', 'solarNow', 'solarNowParts'],
   ['evNow'],
-  ['batNow', 'batSoc', 'batChargeNow', 'batDechargeNow'],
+  ['batNow', 'batSoc', 'batChargeNow', 'batDechargeNow', 'batRate', 'batRateParts', 'batSocParts', 'batNowParts'],
 ];
+const FAM_BATTERIE = FAM_SCHEMA[4];
 
 /**
  * Les capteurs d'energie : CE QUE LA FICHE DIT, COMPLETE PAR LE TABLEAU.
@@ -1139,6 +1143,31 @@ export function enHaids() {
 export function enPrix() {
   const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.energy;
   return (r && Array.isArray(r.prix)) ? r.prix : [];
+}
+
+/**
+ * Les batteries de la maison que le tableau de bord Énergie déclare, `[{ soc, capacite }]`
+ * (chantier G3, E6) : le niveau de chacune et sa capacité en kWh. Vide dès que la fiche nomme
+ * la famille de la batterie — la capacité déclarée vaut pour la batterie de Home Assistant, pas
+ * pour celle que la fiche désigne.
+ */
+export function enBatteries() {
+  const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.energy;
+  const cfg = loggiaEnt('energy', null);
+  if (cfg && typeof cfg === 'object' && FAM_BATTERIE.some(k => Object.prototype.hasOwnProperty.call(cfg, k))) return [];
+  return (r && Array.isArray(r.batteries)) ? r.batteries.filter(b => b && typeof b === 'object') : [];
+}
+
+/** La borne de recharge que la découverte a trouvée (chantier G3, E3) : `{ appareil, puissance, courant, prise, statut, interrupteur, energie }`, ou null. */
+export function enBorne() {
+  const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.energy;
+  return (r && r.borne && typeof r.borne === 'object') ? r.borne : null;
+}
+
+/** Les entrées de prévision solaire (Forecast.Solar, Solcast…) que le tableau Énergie rattache aux onduleurs (E7). */
+export function enPrevisionSolaire() {
+  const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.energy;
+  return (r && Array.isArray(r.previsionSolaire)) ? r.previsionSolaire.filter(x => typeof x === 'string' && x) : [];
 }
 
 /** Le prix de REVENTE du kilowattheure, meme forme que celui d'achat. Vide

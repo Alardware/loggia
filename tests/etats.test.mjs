@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SEUILS_PILE, SEUIL_CO2, niveauPile, niveauCo2, animationNiveau, couleurNiveau } from '../src/attention.js';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES, importsDe } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
@@ -23,7 +23,7 @@ const compter = (s, motif) => s.split(motif).length - 1;
   /* + l'ecran de veille et la modale du code : sortis d'App.jsx le 23/09
    * (plan M1). Ce que ce fichier verifie n'a pas bouge, seulement son
    * adresse — on relit donc le monolithe ET ce qui en est sorti. */
-const app = (['App.jsx', 'ecranveille.jsx', 'pinmodal.jsx', 'theme.js'].map(f => lire('src', f)).join(String.fromCharCode(10)) + VUES_SORTIES);
+const app = ([MONOLITHE, ...['ecranveille.jsx', 'pinmodal.jsx', 'theme.js'].map(f => lire('src', f))].join(String.fromCharCode(10)) + VUES_SORTIES);
 
 /* ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 11 ; C32, § 19.8) : UN seul seuil, celui de la veille des piles — 15 % par défaut, relu
  * avec les veilles (`reglerSeuilPile`) ; le critique ne bouge pas. */
@@ -72,7 +72,8 @@ test('les piles de l’écran passent par la même table', () => {
   // ASSERTION MODIFIÉE (chantier IoT, tâche 6, 18/10 ; I8, I12) : la batterie de la carte d'un robot et de sa compacte suit la même règle.
   // ASSERTION MODIFIÉE (audit du 19/10, point 13) : les cinq barres d'une pile prennent elles aussi `couleurPile` (`barresPile` est parti).
   assert.equal(compter(app, 'couleurPile('), 8, 'l’aspirateur, la tondeuse, le coin d’un capteur, les barres d’une pile, la rangée Pile, la fiche universelle, la carte d’un robot et sa compacte');
-  assert.ok(app.includes("couleurPile, reglerSeuilPile,") && !app.includes('const couleurPile ='), 'la règle vient d’attention.js');
+  // ASSERTION MODIFIÉE (ADR 0283) : les cartes sorties d'App.jsx importent elles-mêmes ce qu'elles lisent ; la ligne recopiée se lit par ses noms (`importsDe`).
+  assert.ok(['couleurPile', 'reglerSeuilPile'].every(n => importsDe(app, './attention.js').has(n)) && !app.includes('const couleurPile ='), 'la règle vient d’attention.js');
   assert.deepEqual(couleurNiveau('danger'), { col: 'var(--o-bad)', rgb: 'var(--o-bad-rgb)' });
 });
 

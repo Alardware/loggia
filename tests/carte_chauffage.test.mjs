@@ -36,6 +36,7 @@ import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -59,7 +60,7 @@ const { setLoggiaState } = await import('../src/state.js');
 const { resolveClimate } = await import('../src/resolve.js');
 const { area, device, entity, state, states, ctxOf } = await import('./fixtures.mjs');
 
-const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const APP = MONOLITHE.replace(/\r\n/g, '\n');
 const corps = (nom) => {
   const i = APP.indexOf('\nfunction ' + nom + '(');
   assert.ok(i >= 0, nom + ' a disparu');
@@ -108,6 +109,17 @@ const hassPoele = (attrs = {}, etat = 'heat') => ({
   callService: () => { throw new Error('rien ne doit partir'); },
 });
 const thermostat = (hass) => renderToStaticMarkup(createElement(RoomClimateCard, { id: POELE, hass, onOpen: () => {} }));
+
+test('au planning, la carte d’un thermostat dit et règle la consigne de la PIÈCE : celle de l’appareil, moins son décalage (30/10)', () => {
+  const hass = hassPoele({ temperature: 18.5 });
+  poser(chauffage({ cle: POELE, entite: POELE, nom: 'Poêle', famille: 'thermostat', decalage: -1.5 }));
+  assert.ok(thermostat(hass).includes('20,0°'), 'le poêle reçoit 18,5 pour une pièce à 20');
+  poser(chauffage({ cle: POELE, entite: POELE, nom: 'Poêle', famille: 'thermostat', decalage: -1.5, planning: false }));
+  assert.ok(thermostat(hass).includes('18,5°'), 'planning éteint, la carte commande l’appareil : sa consigne à lui');
+  poser(chauffage({ cle: POELE, entite: POELE, nom: 'Poêle', famille: 'thermostat' }));
+  assert.ok(thermostat(hass).includes('18,5°'), 'sans décalage, rien ne change');
+  vider();
+});
 
 const SEL = 'select.radiateur_chambre_pilot_wire_mode';
 const PUI = 'sensor.radiateur_chambre_power';
@@ -1026,7 +1038,9 @@ test('les gestes au planning : une reprise en main, jusqu’au prochain changeme
   assert.ok(t.includes('const vise = consigneVoisine(target, d, a, uT);'), '± 0,5 se perdait au pas d’un appareil au degré, ou en °F');
   assert.ok(t.includes("const p = vise != null && actionsPlan(id, 'set_temperature', vise, actionCtx(hass));"));
   assert.ok(t.includes('if (!p || !p.ok || p.data.temperature === target) return;'), 'une consigne qui ne bouge pas (une borne) poserait une reprise en main pour rien');
-  assert.ok(t.includes('reprendreLaMain(hass, ch, { temperature: versCelsius(p.data.temperature, uT) }, () => setOv(null));'),
+  /* ASSERTION MODIFIÉE (30/10) : la consigne de la PIÈCE part, celle de l'appareil moins le décalage de son
+   * capteur (`decalageEn(ch, 'C')`, 0 sans décalage), au dixième. */
+  assert.ok(t.includes("reprendreLaMain(hass, ch, { temperature: Math.round((versCelsius(p.data.temperature, uT) - decalageEn(ch, 'C')) * 10) / 10 }, () => setOv(null));"),
     'la consigne partirait dans l’unité de la maison, ou l’avance resterait au refus');
   /* ASSERTION MODIFIÉE (relecture de la partie B, point c, prise à la tâche
    * 10 bis D) : − / + d'un VTherm partent du mode APPLIQUÉ — celui que la

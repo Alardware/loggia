@@ -80,10 +80,16 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
   // Assistant, et l'URL objet est liberee au demontage.
   useEffect(() => {
     if (!haid || !token) { setSrc(null); return undefined; }
-    let vivant = true, precedent = null;
+    let vivant = true, precedent = null, enVol = null;
     const charger = async () => {
+      /* Une carte qui tarde : tant que la requête d'avant n'est pas revenue,
+       * aucune autre ne part derrière elle — elles s'empilaient (audit de
+       * consolidation du 28/10, B7). Elle n'est pas abandonnée : sa réponse,
+       * même lente, reste la plus récente. Le démontage, lui, l'abandonne. */
+      if (enVol) return;
+      const ctrl = enVol = new AbortController();
       try {
-        const res = await fetch(`/api/image_proxy/${haid}`, { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch(`/api/image_proxy/${haid}`, { headers: { Authorization: `Bearer ${token}` }, signal: ctrl.signal });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const blob = await res.blob();
         if (!vivant) return;
@@ -92,12 +98,13 @@ export default function VacPlan({ hass, haid, zones = [], selection = {}, onTogg
         if (precedent) URL.revokeObjectURL(precedent);
         precedent = url;
       } catch { /* carte momentanement indisponible : on garde la precedente */ }
+      finally { if (enVol === ctrl) enVol = null; }
     };
     charger();
     // La carte bouge lentement : dix secondes suffisent, et l'analyse des
     // pixels n'est pas gratuite.
     const iv = setInterval(charger, 10000);
-    return () => { vivant = false; clearInterval(iv); if (precedent) URL.revokeObjectURL(precedent); };
+    return () => { vivant = false; clearInterval(iv); if (enVol) enVol.abort(); if (precedent) URL.revokeObjectURL(precedent); };
   }, [haid, token]);
 
   // Le robot a pu recartographier : on relit quand sa liste change.

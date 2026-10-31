@@ -61,7 +61,14 @@ class Bus:
     def __init__(self):
         self.ecoutes = {}
 
-    def async_listen(self, nom, f):
+    def async_listen(self, nom, f, event_filter=None):
+        # Le filtre passe AVANT le rappel, comme dans Home Assistant (ADR 0280).
+        if event_filter is not None:
+            rappel = f
+
+            def f(event, _rappel=rappel):
+                if event_filter(getattr(event, "data", None) or {}):
+                    _rappel(event)
         self.ecoutes.setdefault(nom, []).append(f)
         return lambda: self.ecoutes[nom].remove(f)
 

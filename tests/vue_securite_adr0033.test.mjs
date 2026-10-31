@@ -8,10 +8,10 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resumeSecurite, comptesSecurite } from '../src/attention.js';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES, DASHBOARD } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274) ; DASHBOARD : l'Accueil en entier, ses hooks compris (ADR 0283)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
+const src = (MONOLITHE + VUES_SORTIES);
 const en = readFileSync(join(RACINE, 'src', 'langues', 'en.js'), 'utf8');
 const NL = String.fromCharCode(10);
 const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = src.indexOf(fin, d + 1); return src.slice(d, f < 0 ? undefined : f); };
@@ -31,7 +31,7 @@ test('la sous-ligne de la securite : securise, sinon ce qui ne l’est pas — l
 test('la rangee de tuiles est UN composant, partage par l’Accueil et la vue', () => {
   const t = bloc('function TuilesSecurite(', NL + '}');
   assert.ok(t.includes('if (!tuiles || !tuiles.length) return null;') && t.includes("onClick={() => onTuile && onTuile(t)}") && t.includes('className="sec-tuile"'), 'le composant, avec ses classes du telephone');
-  const home = bloc('function Dashboard(', NL + '}');
+  const home = DASHBOARD;
   // Depuis l'ADR 0035, l'Accueil n'a plus de carte Securite : la rangee ne vit
   // que dans la vue, et la banniere mene a la vue par sa tuile Alarme.
   assert.ok(!home.includes('<TuilesSecurite') && !home.includes('sousSecurite') && !home.includes('ouvertsSec'), 'l’Accueil ne dessine plus la rangee');
@@ -42,7 +42,7 @@ test('la rangee de tuiles est UN composant, partage par l’Accueil et la vue', 
 });
 
 test('l’Accueil mene a la vue par la tuile Alarme de la banniere, plus par une carte', () => {
-  const home = bloc('function Dashboard(', NL + '}');
+  const home = DASHBOARD;
   // ADR 0035 : la carte Securite de l'Accueil, ses boutons d'armement et la
   // glissiere de serrure ont disparu ; la tuile « al » de la banniere mene a la vue.
   assert.ok(!home.includes("aria-label={tr('Ouvrir la vue Sécurité')}") && !home.includes('<RailArm') && !home.includes('<RailSerrure'), 'plus de carte, plus de boutons, plus de glissiere');

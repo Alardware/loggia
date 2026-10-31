@@ -28,6 +28,7 @@ import { minutesDepuisHeure } from '../src/format.js';
 import { tr } from '../src/i18n.js';
 import { composant } from './rendu.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 test('le fuseau de Paris est bien en place (sinon les tests suivants ne prouvent rien)', () => {
@@ -104,7 +105,7 @@ test('aujourd’hui, demain : des jours de calendrier', () => {
 });
 
 test('« Demain » ne se calcule plus en heures dans jourAgenda', () => {
-  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const app = MONOLITHE;
   const debut = app.indexOf('function jourAgenda(e)');
   const corps = app.slice(debut, app.indexOf('\n}\n', debut));
   assert.ok(corps.includes('ecartJours(new Date(), d)'), 'jourAgenda ne compte plus en jours de calendrier');
@@ -116,7 +117,7 @@ test('aucun jour de calendrier compté en 24 h dans l’agenda et la feuille Cal
   // un historique) reste en millisecondes, et c'est juste.
   const agenda = readFileSync(join(RACINE, 'src', 'agenda.js'), 'utf8');
   assert.ok(!/getTime\(\) \+ (n \* )?864e5/.test(agenda), 'agenda.js ajoute encore 24 h à un minuit');
-  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const app = MONOLITHE;
   // ASSERTION MODIFIÉE (boot, 19/10) : la feuille du mois vit dans feuillecalendrier.jsx, chargé à la demande ; son code n'a pas changé.
   const feuille = readFileSync(join(RACINE, 'src', 'feuillecalendrier.jsx'), 'utf8');
   assert.ok(feuille.includes('function FeuilleCalendrierContent('), 'la feuille Calendrier a quitté son module');
@@ -150,7 +151,7 @@ test('un horodatage complet (date et heure) se lit tel quel', () => {
 });
 
 test('la ligne Lave-vaisselle passe par minutesDepuisHeure', () => {
-  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const app = MONOLITHE;
   assert.ok(app.includes('const elapsedMin = minutesDepuisHeure(ts);'));
   assert.ok(!app.includes('todayStart + ts'), 'le calcul qui donnait « 0min » après minuit est revenu');
 });

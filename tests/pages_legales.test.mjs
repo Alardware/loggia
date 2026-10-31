@@ -22,6 +22,7 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 
@@ -98,7 +99,7 @@ test('la politique des cookies dit vrai : aucun cookie, et chaque clé de sessio
   }
   // Deux clés passent par une constante : on tient la constante ET sa valeur.
   // + l'ecran de veille, sorti d'App.jsx le 23/09 (plan M1).
-  const app = ['App.jsx', 'ecranveille.jsx'].map(f => lire('src', f)).join(String.fromCharCode(10));
+  const app = [MONOLITHE, lire('src', 'ecranveille.jsx')].join(String.fromCharCode(10));
   assert.ok(app.includes("const ONGLET_CLE = 'loggia-accueil-onglet';"));
   assert.ok(app.includes("const cle = 'loggia-defilement';"));
   cles.add('loggia-accueil-onglet');

@@ -13,10 +13,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const app = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
+const app = (MONOLITHE + VUES_SORTIES);
 const etat = readFileSync(join(RACINE, 'src', 'state.js'), 'utf8');
 
 test('le choix se range dans la maison, et voyage avec elle', () => {

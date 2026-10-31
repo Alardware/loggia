@@ -20,8 +20,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { lireCalendriers, garderDansFenetre } from '../src/agenda.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = MONOLITHE;
 
 /** Le corps d'une fonction nommée, jusqu'à la suivante. */
 function corps(entete) {

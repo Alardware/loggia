@@ -25,6 +25,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { composant, rendre } from './rendu.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const { dansLaFenetre, heureJournal, FENETRE_EVENEMENT } = await import('../src/evenement.js');
 const { tr } = await import('../src/i18n.js');
 const grouperJournal = await composant('historique.jsx', 'grouperJournal');
@@ -116,7 +117,7 @@ test('les deux cartes passent par la fenêtre et par heureJournal', () => {
   const carte = h.slice(h.indexOf('export function RoomActivityCard('), h.indexOf('export function useSysHist('));
   assert.ok(carte.includes('{heureJournal(e.when)}'), 'la carte « 24 h » date de nouveau à l’heure seule');
   assert.ok(!h.includes('toLocaleTimeString'), 'historique.jsx formate de nouveau une heure à la main');
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   const d = app.indexOf('function CvJournal(');
   assert.ok(d >= 0, 'la carte Journal a disparu');
   const cv = app.slice(d, app.indexOf(NL + '}', d));

@@ -381,11 +381,12 @@ def test_le_composant_transmet_le_socle_aux_veilles_et_aux_alertes():
     from conftest import COMPOSANT
 
     texte = (COMPOSANT / '__init__.py').read_text(encoding='utf-8')
-    assert 'data["veilles"] = LoggiaVeilles(hass, data["store"], data.get("regles"))' in texte
-    assert 'data["alertes"] = LoggiaAlertes(hass, data["store"], data["regles"])' in texte
-    # Et ni l'un ni l'autre ne naissent sans lui.
-    assert 'if not data.get("veilles") and data.get("store") and data.get("regles"):' in texte
-    assert 'if not data.get("alertes") and data.get("store") and data.get("regles"):' in texte
+    # ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : une ligne de `MODULES` : `_REGLES` en requis
+    # (ni l'un ni l'autre ne naissent sans le socle) et en arguments (ils le recoivent).
+    assert '_REGLES = ("store", "regles")' in texte
+    assert 'Module("veilles", "LoggiaVeilles", _REGLES, _REGLES,' in texte
+    assert 'Module("alertes", "LoggiaAlertes", _REGLES, _REGLES,' in texte
+    assert "if data.get(module.cle) or not all(data.get(r) for r in module.requis):" in texte
 
 
 # ── Les consommables (ADR 0006) ─────────────────────────────────────────────

@@ -15,6 +15,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 process.env.TZ = 'Europe/Paris';
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 const { composant, rendre } = await import('./rendu.mjs');
@@ -111,7 +112,7 @@ test('« L’appareil » ouvre la fiche universelle ; sans ouverture, pas de lig
 });
 
 test('la fiche se charge à la demande, et n’importe jamais App.jsx', () => {
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   const fiche = lire('src', 'fichemeteo.jsx');
   assert.ok(app.includes("const FicheMeteoContenu = lazyRecharge(() => import('./fichemeteo.jsx'));"), 'la fiche entre dans le démarrage : le boot grossit');
   assert.ok(!/from ['"]\.\/App\.jsx['"]/.test(fiche), 'un morceau à la demande qui importe App.jsx l’emporte avec lui');

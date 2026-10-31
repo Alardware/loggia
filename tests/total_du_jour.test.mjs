@@ -21,10 +21,10 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { minuitLocal, compteurDuJour, requeteJour, totauxRelus } from '../src/jourstat.js';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const APP = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
+const APP = (MONOLITHE + VUES_SORTIES);
 
 const LE_7_A_14H = new Date(2026, 9, 7, 14, 30, 0).getTime();
 const MINUIT_DU_7 = new Date(2026, 9, 7, 0, 0, 0).getTime();
@@ -117,7 +117,8 @@ test('l’aperçu ne lit plus l’état brut pour ce qui se compte par jour', ()
   // ASSERTION MODIFIÉE (ADR 0274) : la vue Énergie, sortie du boot, importe elle-même ce qu'elle seule utilise.
   assert.ok(APP.includes("import { minuitLocal } from './jourstat.js';") && APP.includes("import { compteurDuJour, useTotauxJour } from '../jourstat.js';"),
     'App.jsx n’importe plus le lecteur du jour');
-  assert.ok(APP.includes('const prodJour = kwhJour(EN.prodJour);'), 'la production du jour');
+  // ASSERTION MODIFIÉE (30/10, G3-D3) : la production du jour de TOUS les onduleurs — chaque compteur par `kwhJour`.
+  assert.ok(APP.includes("const prodJour = sommeLue(idsDe(EN, 'prodJour'), kwhJour);"), 'la production du jour');
   assert.ok(APP.includes('const injJour = kwhJour(EN.injectionJour);'), 'l’injection du jour');
   assert.ok(APP.includes('const coutJour = euroJour(EN.coutJour);'), 'le coût du jour');
   assert.ok(APP.includes('jour: kwhJour(EN.consoJour)'), 'le total du jour');

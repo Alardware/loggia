@@ -16,6 +16,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const E = await import('../src/distributeuretat.js');
 
 /* Une horloge à la main : on voit chaque minuteur posé, on le déclenche. */
@@ -145,7 +146,7 @@ test('le crochet : abonné tant que monté et configuré, jamais depuis la racin
   const src = readFileSync(new URL('../src/distributeuretat.js', import.meta.url), 'utf8');
   assert.ok(src.includes('useEffect(() => (actif ? abonnerDistributeur({ detail }) : undefined), [actif, detail]);'), 'le crochet s’abonne au montage et se désabonne au démontage');
   assert.ok(src.includes('return useSyncExternalStore(ecouterEtatDistributeur, lireEtatDistributeur, lireEtatDistributeur);'));
-  const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  const app = MONOLITHE;
   // Deux abonnés seulement : la carte et la fiche, et aucun ailleurs.
   assert.equal((app.match(/useEtatDistributeur\(/g) || []).length, 2, 'un abonné de plus : le serveur serait interrogé hors de la carte et de la fiche');
   assert.ok(app.includes('useEtatDistributeur(distributeurConfigure());'), 'la carte, tant qu’elle est montée et le distributeur configuré');

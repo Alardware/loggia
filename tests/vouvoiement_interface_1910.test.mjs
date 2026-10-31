@@ -15,9 +15,12 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const CATALOGUES = ['en', 'de', 'es', 'it', 'nl', 'pl'];
+// App.jsx se lit avec ce qui en sort (ADR 0282) : un texte déménagé reste gardé.
+const lireFichier = (p) => (p.join('/') === 'src/App.jsx' ? MONOLITHE : lire(...p));
 
 const FICHIERS = [['src', 'App.jsx'], ['src', 'views', 'parametres.jsx'], ['src', 'pinmodal.jsx'],
   ['src', 'views', 'assistant.jsx'], ['src', 'voix.js'], ['src', 'views', 'systeme.jsx'], ['src', 'views', 'appareils.jsx'],
@@ -40,7 +43,7 @@ const IMPERATIF = new RegExp('(^|[.:!?—,]\\s|\\bou\\s|\\bpuis\\s)(' + VERBES +
 const PRONOM = /(^|[\s(«—])(tu|toi|tes|ta)(?=[\s,.!?»)])|(^|[\s(«—])t’|-toi\b|\bton (téléphone|code|compte|écran)\b/i;
 
 test('les textes français de l’interface générale vouvoient', () => {
-  const textes = FICHIERS.flatMap((p) => [...lire(...p).matchAll(TEXTES)].map(m => [p.join('/'), m[1] ?? m[2]]));
+  const textes = FICHIERS.flatMap((p) => [...lireFichier(p).matchAll(TEXTES)].map(m => [p.join('/'), m[1] ?? m[2]]));
   assert.ok(textes.length > 1500, 'les textes ne sont plus lus : ' + textes.length);
   const tutoie = textes.filter(([, t]) => !AUTRES_SEANCES.has(t) && (IMPERATIF.test(t) || PRONOM.test(t)));
   assert.deepEqual(tutoie, [], 'tutoiement');
@@ -79,7 +82,7 @@ test('l’Énergie vouvoie aussi : « …que si vous les renseignez. »', () => 
 });
 
 test('chaque clé renommée l’est dans les six catalogues, valeur gardée', () => {
-  const sources = FICHIERS.map(p => lire(...p)).join('\n');
+  const sources = FICHIERS.map(lireFichier).join('\n');
   for (const [vieux, neuf] of RENOMMEES) {
     assert.ok(!sources.includes("'" + vieux + "'"), 'ancienne clé encore appelée : ' + vieux);
     assert.ok(sources.includes("tr('" + neuf + "'"), 'nouvelle clé absente des sources : ' + neuf);

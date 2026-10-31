@@ -274,6 +274,32 @@ def test_la_batterie_du_tableau_energie_reste_a_l_energie(creer, monkeypatch):
     assert notifications(v) == []
 
 
+def test_le_niveau_que_le_tableau_energie_nomme_reste_a_l_energie(creer, monkeypatch):
+    """Chantier G3 (ADR 0302) : Home Assistant nomme le niveau de la batterie
+    (`stat_soc`) — l'ecran le prend avant le voisin, le serveur aussi, meme
+    pose sur un AUTRE appareil que les compteurs ; et toutes les batteries
+    comptent, pas seulement la premiere."""
+    registre(monkeypatch, [Entree("sensor.b1_energie", device_id="b1"), Entree("sensor.b2_energie", device_id="b2"),
+                           Entree("sensor.b2_niveau", device_id="b2"), Entree("sensor.soc_onduleur", device_id="ond"),
+                           Entree("sensor.porte", device_id="d1")])
+    prefs = {"energy_sources": [
+        {"type": "battery", "stat_energy_from": "sensor.b1_energie", "stat_soc": "sensor.soc_onduleur"},
+        {"type": "battery", "stat_energy_from": "sensor.b2_energie"}]}
+
+    async def gestionnaire(_hass):
+        return types.SimpleNamespace(data=prefs)
+
+    energy = types.ModuleType("homeassistant.components.energy.data")
+    energy.async_get_manager = gestionnaire
+    monkeypatch.setitem(sys.modules, "homeassistant.components", types.ModuleType("homeassistant.components"))
+    monkeypatch.setitem(sys.modules, "homeassistant.components.energy", types.ModuleType("homeassistant.components.energy"))
+    monkeypatch.setitem(sys.modules, "homeassistant.components.energy.data", energy)
+    v = creer({"batterie": {"actif": True, "seuil": 15}},
+              {"sensor.soc_onduleur": pile(8, "Onduleur"), "sensor.b2_niveau": pile(7, "B2"), "sensor.porte": pile(9, "Porte")})
+    lancer(v._async_batteries())
+    assert [c["message"] for _, _, c in notifications(v)] == ["Porte : pile a 9 %"]
+
+
 def test_le_premier_passage_a_lieu_au_demarrage_complet(creer):
     """Un passage par heure, mais le premier quand Home Assistant a fini de
     demarrer — pas une heure apres."""

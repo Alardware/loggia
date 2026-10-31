@@ -8,8 +8,9 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE, DASHBOARD } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282) ; DASHBOARD : l'Accueil en entier, ses hooks compris (ADR 0283)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = MONOLITHE;
 const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
 const en = readFileSync(join(RACINE, 'src', 'langues', 'en.js'), 'utf8');
 const NL = String.fromCharCode(10);
@@ -30,7 +31,7 @@ test('le hero est plus bas : marges et corps resserres, le fond meteo, les avata
 });
 
 test('les tuiles de la banniere sont des boutons qui menent la ou l’on agit', () => {
-  const d = bloc('function Dashboard(', NL + '}');
+  const d = DASHBOARD;
   const c = d.slice(d.indexOf('const clics = {'), d.indexOf('const cases = [];'));
   assert.ok(c.includes("ex: () => onNav && onNav('energie'),") && c.includes("ouv: () => onNav && onNav('securite'),") && c.includes("lum: () => onNav && onNav('lumieres'),") && c.includes("med: () => onNav && onNav('medias'),") && c.includes('app: voirMoment,'), 'energie, securite, lumieres, medias, en ce moment');
   assert.ok(c.includes("air: () => { if (pieceCo2Max && onOpenRoom) onOpenRoom(pieceCo2Max); else if (onNav) onNav('objets'); },"), 'l’air ouvre la piece la plus chargee');
@@ -44,7 +45,7 @@ test('les tuiles de la banniere sont des boutons qui menent la ou l’on agit', 
 });
 
 test('« appareils actifs » mene a En ce moment : le rail sur PC, la seconde page sur telephone', () => {
-  const d = bloc('function Dashboard(', NL + '}');
+  const d = DASHBOARD;
   assert.ok(d.includes("const el = document.querySelector('[data-sec=\"moment\"]');") && d.includes("el.scrollIntoView({ behavior: REDUCE_MOTION ? 'auto' : 'smooth', block: 'start' })"), 'sur PC, le panneau du rail');
   assert.ok(d.includes('setPageDemandee(1);') && d.includes('const [pageDemandee, setPageDemandee] = useState(null);'), 'sur telephone, la seconde page');
   const o = bloc('function OngletsAccueil(', NL + '}');

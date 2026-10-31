@@ -14,7 +14,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+import { MONOLITHE, DASHBOARD } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282) ; DASHBOARD : l'Accueil en entier, ses hooks compris (ADR 0283)
+const app = MONOLITHE;
 const NL = '\n';
 const bloc = (debut) => { const i = app.indexOf(debut); assert.ok(i >= 0, debut + ' introuvable'); return app.slice(i, app.indexOf(NL + 'function ', i + 1)); };
 // La balise du bouton de taille : du `<button` qui précède l'icône `resize` jusqu'à elle.
@@ -31,7 +32,7 @@ test('la carte d’Objets : la bascule de taille garde un nom, et « enfoncé »
 });
 
 test('la tuile de pièce de l’Accueil : la même bascule, dans le même sens', () => {
-  assert.ok(bloc('function Dashboard(').includes("<CartePieceEdition p={p} compacte={t === 'c'}"), '`compacte` vrai, c’est la tuile d’une rangée');
+  assert.ok(DASHBOARD.includes("<CartePieceEdition p={p} compacte={t === 'c'}"), '`compacte` vrai, c’est la tuile d’une rangée');
   const b = bouton(bloc('function CartePieceEdition('));
   assert.ok(b.includes('aria-pressed={compacte}') && !b.includes('aria-pressed={!compacte}'), 'l’état est inversé par rapport à la carte d’Objets');
   assert.ok(b.includes("aria-label={tr('Une rangée') + ' · ' + p.name}"), 'une pièce en deux rangées s’annonce « Une rangée, enfoncé »');

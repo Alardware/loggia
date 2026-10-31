@@ -12,7 +12,7 @@ import { tr, locale } from './i18n.js';
 import { nombre } from './format.js';
 import { insecable, dureePrise, decompte } from './prises.js';
 import { ajuster, versHex, SEUILS } from './contraste.js';
-import { MODES_COULEUR, rgbDuBlanc, rgbDeLaTeinte, quandLumiere, kelvinDe, estBlanche } from './lumieres.js';
+import { MODES_COULEUR, rgbDuBlanc, rgbDeLaTeinte, quandLumiere, kelvinDe, estBlanche, capacitesLumiere } from './lumieres.js';
 
 /* ── Les blancs et les couleurs nommés (L9) ────────────────────────────────── */
 
@@ -211,4 +211,107 @@ export function fonduDe(etat) {
   const v = etat && etat.config && etat.config.veilleuse;
   const n = v ? Number(v.fondu) : 0;
   return n > 0 ? n : 0;
+}
+
+/* ── La bibliothèque des ambiances, sans script (ADR 0304) ─────────────────────
+ *
+ * Chargé avec les Scènes (scenes.jsx, à la demande), jamais au démarrage. Une ambiance de `HUE_SCENES` — cinq couleurs et
+ * une luminosité — devient un ordre par lampe, que scenes.jsx envoie par `commander` : la capacité déclarée par la lampe, ses
+ * bornes, et le carnet des lumières qui note le geste sous le compte de la personne. */
+
+/* Le bit TRANSITION de `supported_features` : la lampe sait fondre, elle reçoit `transition` (le même bit que `nuit.py`). */
+const BIT_TRANSITION = 32;
+/** La lampe sait-elle fondre ? */
+export const saitFondre = (a) => ((Number((a || {}).supported_features) || 0) & BIT_TRANSITION) !== 0;
+/** Le fondu d'une ambiance, en secondes : court — on voit la pièce changer, on n'attend pas. */
+const FONDU_AMBIANCE = 1;
+
+/** `[teinte 0–360, saturation 0–100]` d'un `[r, v, b]`, au dixième — le `color_RGB_to_hs` de Home Assistant (HSV). */
+export function hsDeRgb(rgb) {
+  const [r, g, b] = (rgb || []).map(x => Math.max(0, Math.min(255, Number(x) || 0)) / 255);
+  const max = Math.max(r, g, b), d = max - Math.min(r, g, b);
+  let h = 0;
+  if (d > 0) h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  const dixieme = (x) => Math.round(x * 10) / 10;
+  return [dixieme(((h * 60) + 360) % 360), dixieme(max > 0 ? d / max * 100 : 0)];
+}
+
+/** `[x, y]` d'un `[r, v, b]`, au millième — le `color_RGB_to_xy` de Home Assistant (gamma sRGB, matrice « Wide RGB D65 »). */
+export function xyDeRgb(rgb) {
+  const [r, g, b] = (rgb || []).map(x => Math.max(0, Math.min(255, Number(x) || 0)) / 255)
+    .map(c => (c > 0.04045 ? Math.pow((c + 0.055) / 1.055, 2.4) : c / 12.92));
+  const X = r * 0.664511 + g * 0.154324 + b * 0.162028;
+  const Y = r * 0.283881 + g * 0.668433 + b * 0.047685;
+  const Z = r * 0.000088 + g * 0.072310 + b * 0.986039;
+  const somme = X + Y + Z;
+  return somme > 0 ? [Math.round(X / somme * 1000) / 1000, Math.round(Y / somme * 1000) / 1000] : [0, 0];
+}
+
+/**
+ * Le blanc le plus proche d'une couleur, en kelvins, dans les bornes `{ min, max }` d'une ampoule (`bornesBlanc`) : celui dont
+ * la couleur (`rgbDuBlanc`, la table de la carte) ressemble le plus à la sienne, ramenées toutes deux à la même intensité. Un
+ * orange donne le plus chaud de la lampe, un blanc bleuté le plus froid ; par pas de 50 K.
+ */
+export function blancDeRgb(rgb, b = { min: 2200, max: 6500 }) {
+  const norme = (c) => { const m = Math.max(1, ...c); return c.map(x => x / m); };
+  const cible = norme((rgb || [255, 255, 255]).map(x => Math.max(0, Number(x) || 0)));
+  let meilleur = b.min, ecart = Infinity;
+  for (let k = b.min; k <= b.max + 49; k += 50) {
+    const kk = Math.min(k, b.max);
+    const e = norme(rgbDuBlanc(kk)).reduce((s, x, i) => s + (x - cible[i]) * (x - cible[i]), 0);
+    if (e < ecart - 1e-9) { meilleur = kk; ecart = e; }
+  }
+  return Math.round(meilleur);
+}
+
+/** Ce qu'une lampe fait d'une ambiance : `couleur`, `blanc` (réglable), `variateur`, ou null — elle ne fait que s'allumer. */
+export function genreAmbiance(id, a) {
+  const c = capacitesLumiere(id, a);
+  return c.couleurs ? 'couleur' : c.blancs ? 'blanc' : c.variable ? 'variateur' : null;
+}
+
+/** La luminosité d'une ambiance, de 1 à 100 : « Nightlight » vaut 0 dans la bibliothèque, et une luminosité nulle ÉTEINT une
+ * lampe chez Home Assistant (`light.turn_on` avec `brightness_pct: 0`) — 1 %, la veilleuse, jamais le noir. */
+export const luminositeAmbiance = (scene) => Math.max(1, Math.min(100, Math.round(Number(scene && scene.brightness) || 0)));
+
+/* Laquelle des `m` couleurs pour la `i`-ième de `n` lampes couleur : jusqu'à `m` lampes, réparties sur toute l'ambiance (deux
+ * lampes : la première et la troisième) ; au-delà, on recommence. */
+const rangCouleur = (i, n, m) => (n <= m ? Math.floor(i * m / n) : i % m);
+
+/**
+ * Les ordres d'une ambiance (`scene` : `{ colors, brightness }`) pour `lampes` (`[{ id, a }]`, `a` ses attributs) :
+ * `[{ id, capacite, valeur, options }]`, pour `commander(hass, id, capacite, valeur, null, options)`. Dans l'ordre des noms :
+ *  - une lampe COULEUR prend une des cinq couleurs, réparties sur les lampes couleur — en `xy` si elle parle `xy`, sinon en `hs` ;
+ *  - une lampe à BLANC réglable prend le blanc le plus proche de la moyenne de l'ambiance, dans ses bornes ;
+ *  - un VARIATEUR prend la luminosité seule ; une lampe qui ne fait que s'allumer, rien ;
+ *  - une ambiance de luminosité nulle (« Nightlight ») : 1 % au blanc le plus chaud que la lampe sait faire — une lampe
+ *    couleur sans blanc prend la couleur de ce blanc ;
+ *  - `brightness_pct` : `bri` (le curseur des Scènes), sinon celle de l'ambiance, de 1 à 100 ; `transition` d'une seconde à
+ *    la lampe qui sait fondre.
+ */
+export function ordresAmbiance(scene, lampes, { bri = null } = {}) {
+  const couleurs = (scene && Array.isArray(scene.colors) ? scene.colors : []).filter(c => Array.isArray(c) && c.length === 3);
+  const nuit = !(Number(scene && scene.brightness) > 0);
+  const pct = bri != null && Number(bri) > 0 ? Math.max(1, Math.min(100, Math.round(Number(bri)))) : luminositeAmbiance(scene);
+  const moyenne = couleurs.length ? [0, 1, 2].map(i => couleurs.reduce((s, c) => s + (Number(c[i]) || 0), 0) / couleurs.length) : null;
+  const triees = (lampes || []).filter(l => l && typeof l.id === 'string').sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+  const enCouleur = triees.filter(l => genreAmbiance(l.id, l.a) === 'couleur');
+  const out = [];
+  for (const l of triees) {
+    const a = l.a || {};
+    const genre = genreAmbiance(l.id, a);
+    if (!genre) continue;
+    const fondu = saitFondre(a) ? { transition: FONDU_AMBIANCE } : {};
+    if (genre === 'variateur' || (!moyenne && !nuit)) { out.push({ id: l.id, capacite: 'set_brightness', valeur: pct, options: fondu }); continue; }
+    const options = { brightness_pct: pct, ...fondu };
+    const b = bornesBlanc(a);
+    if (genre === 'blanc' || (nuit && capacitesLumiere(l.id, a).blancs)) {
+      out.push({ id: l.id, capacite: 'set_color_temp', valeur: nuit ? b.min : blancDeRgb(moyenne, b), options });
+      continue;
+    }
+    const rgb = nuit ? rgbDuBlanc(b.min) : couleurs[rangCouleur(enCouleur.indexOf(l), enCouleur.length, couleurs.length)];
+    const xy = Array.isArray(a.supported_color_modes) && a.supported_color_modes.includes('xy');
+    out.push({ id: l.id, capacite: xy ? 'set_xy' : 'set_hs', valeur: xy ? xyDeRgb(rgb) : hsDeRgb(rgb), options });
+  }
+  return out;
 }

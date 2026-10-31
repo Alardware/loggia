@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 const E = await import('../src/voletecran.js');
 
@@ -37,7 +38,7 @@ test('une autre icône choisie reste, un volet muet garde la sienne', () => {
 });
 
 test('la carte, la compacte et la fiche passent l’icône choisie par l’état', () => {
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   assert.ok(app.includes("const GlypheCarte = ({ id, size = 19, anime = false, selon = null, children }) => {"), 'GlypheCarte accepte `selon`');
   assert.ok(app.includes('<GlypheCarte id={id} size={17} selon={(n) => iconeSelonEtat(n, vue)}><Fi i={vue.glyphe} size={17} /></GlypheCarte>'), 'la carte du volet');
   assert.ok(app.includes('<Ico name={vue ? iconeSelonEtat(ico, vue) : ico} size={dense ? 15 : 17} />'), 'la compacte');

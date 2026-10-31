@@ -15,7 +15,7 @@
  * (tests/pieces_confort.test.mjs).
  */
 import { tr, trSens, locale } from './i18n.js';
-import { deCelsius, deKmh, versCelsius, versKmh, signeTemp } from './unites.js';
+import { deCelsius, deKmh, versCelsius, versKmh, signeTemp, uniteCo, versPpmCo, dePpmCo } from './unites.js';
 
 const OK = 'var(--o-ok)', DOUX = 'var(--o-accent-soft)', BLEU = 'var(--o-cold)';
 const AMBRE = 'var(--o-warn)', ORANGE = 'var(--o-warn2)', ROUGE = 'var(--o-bad)';
@@ -54,10 +54,21 @@ const PALIERS = {
   pm25: () => [[10, trSens('Bon · air'), OK], [25, trSens('Moyen · air'), AMBRE], [null, trSens('Mauvais · air'), ROUGE]],
   cov: () => [[150, trSens('Bon · air'), OK], [250, trSens('Moyen · air'), AMBRE], [null, trSens('Mauvais · air'), ROUGE]],
   vent: () => [[20, tr('Calme'), OK], [50, tr('Venteux'), BLEU], [null, tr('Fort'), ROUGE]],
-  /* Le monoxyde de carbone en ppm (audit du 19/10, H10) : sous 9 ppm, la valeur guide de l'OMS sur huit heures, l'air est bon ;
-   * jusqu'à 35 ppm COMPRIS, celle d'une heure, il faut aérer ; AU-DELÀ, un danger — la carte Sécurité de Maison le dit aussi
-   * (`coDanger`), et la veille du serveur prévient le téléphone au même chiffre (`SEUIL_CO`, veilles.py). */
+  /* Le monoxyde de carbone en ppm (audit du 19/10, H10) : sous 9 ppm, la norme de l'EPA sur huit heures, l'air est bon ;
+   * jusqu'à 35 ppm COMPRIS, sa norme d'une heure, il faut aérer ; AU-DELÀ, un danger — la carte Sécurité de Maison le dit aussi
+   * (`coDanger`), et la veille du serveur prévient le téléphone au même chiffre (`SEUIL_CO`, veilles.py). Ce sont les normes
+   * américaines (NAAQS) ; l'OMS, elle, dit 10 mg/m³ sur 8 h et 35 mg/m³ sur 1 h — environ 9 et 31 ppm (G1-D6, 30/10 : le
+   * commentaire les attribuait à l'OMS ; les seuils ne changent pas). Un capteur en mg/m³, en µg/m³ ou en ppb se ramène au
+   * ppm avant d'être jugé (`versRepere`, unites.js) ; dans une autre unité, il n'est pas de la famille (`cleMesure`). */
   co: () => [[9, trSens('Bon · air'), OK], [35, trSens('Moyen · air'), AMBRE, true], [null, tr('Danger'), ROUGE]],
+  /* Les PM10, le dioxyde d'azote et l'ozone d'un capteur de la MAISON (chantier G4, A5 ; ADR 0303), en µg/m³, sur le patron des
+   * PM2,5 : en dessous de la valeur limite annuelle de l'UE pour 2030, l'air est bon (directive (UE) 2024/2881 : PM10 20, NO₂ 20) ;
+   * au-delà de la ligne directrice de l'OMS sur 24 h (OMS 2021 : PM10 45), ou de la valeur limite journalière de l'UE pour 2030
+   * (NO₂ 50), il est mauvais. L'ozone n'a qu'un seuil : la ligne directrice de l'OMS sur 8 h, 100 µg/m³ (OMS 2021). Dehors, rien
+   * de cela n'est jugé (`JUGEES_DEHORS`). */
+  pm10: () => [[20, trSens('Bon · air'), OK], [45, trSens('Moyen · air'), AMBRE], [null, trSens('Mauvais · air'), ROUGE]],
+  no2: () => [[20, trSens('Bon · air'), OK], [50, trSens('Moyen · air'), AMBRE], [null, trSens('Mauvais · air'), ROUGE]],
+  o3: () => [[100, trSens('Bon · air'), OK], [null, trSens('Mauvais · air'), ROUGE]],
 };
 
 /* Dehors a ses propres zones (C15, révisé le 16/10 — « les capteur exterieur il manque les jauges ») : la température et
@@ -92,12 +103,18 @@ const HABILLAGE = {
   cov: () => ({ nom: tr('Indice COV'), icone: 'smog' }),
   vent: () => ({ nom: tr('Vent'), icone: 'wind' }),
   co: () => ({ nom: 'CO', icone: 'flame' }),
+  // Les noms d'avant (chantier G4, A5) : la famille change, pas ce qu'écrit la carte.
+  pm10: () => ({ nom: tr('Particules'), icone: 'smog' }),
+  no2: () => ({ nom: 'NO₂', icone: 'smog' }),
+  o3: () => ({ nom: 'O₃', icone: 'smog' }),
 };
 /* Le nom d'une mesure SANS table, par sa classe Home Assistant (audit du 19/10 : UNE source de noms, ici, avec celle des familles) —
  * ce que dit le sous-titre de sa carte et le nom de sa famille. Une pression, un indice, une puissance : un nom, jamais un jugement. */
 const NOMS_CLASSES = () => ({ pm10: tr('Particules'), pm1: 'PM1', aqi: tr("Qualité de l'air"), nitrogen_dioxide: 'NO₂', ozone: 'O₃', volatile_organic_compounds: tr('COV'),
   volatile_organic_compounds_parts: tr('COV'), power: tr('Puissance'), energy: tr('Énergie'), voltage: tr('Tension'), current: tr('Courant'), pressure: tr('Pression'),
-  atmospheric_pressure: tr('Pression'), battery: tr('Pile'), signal_strength: tr('Signal'), moisture: tr('Humidité du sol'), precipitation: tr('Précipitations'), gas: tr('Gaz'), water: tr('Eau') });
+  atmospheric_pressure: tr('Pression'), battery: tr('Pile'), signal_strength: tr('Signal'), moisture: tr('Humidité du sol'), precipitation: tr('Précipitations'), gas: tr('Gaz'), water: tr('Eau'),
+  // Un monoxyde dans une unité que la table ne sait pas convertir (G1-D6) : hors de la famille, il garde son nom.
+  carbon_monoxide: 'CO' });
 /** Le nom d'une mesure par sa classe (et son unité, pour un COV) : celui de sa famille si la table la lit, sinon celui de sa classe ; '' sinon. */
 export function nomClasse(deviceClass, unite = null) {
   const cle = cleMesure(deviceClass, unite);
@@ -159,10 +176,71 @@ export function zoneMesure(cle, v, dehors = false) {
   return { i, t, c, rgb: c.replace(/\)$/, '-rgb)'), bon: bonne(cle, c, dehors), dehors: !!dehors };
 }
 
-/** Un monoxyde en ppm au palier Danger de la table (audit du 19/10, H10) : la carte Sécurité de Maison le dit. */
-export function coDanger(v) {
+/* ── Les INDICES du dehors (chantier G4, A1 et A6 ; ADR 0303) ─────────────────────────────────────────────────────────────────
+ *
+ * Un `aqi` de Home Assistant ne dit pas son échelle : 62 est « Modéré » pour l'EPA, hors de l'indice ATMO (de 1 à 6), et
+ * « Bon » pour l'indice universel de Google, qui va à l'envers (100 = le meilleur). La fiche météo ne lit donc un indice que
+ * si son échelle est CONNUE (airdehors.js) ; les échelles vivent ici, avec les autres jauges. Un rang : `[borne, mot, couleur]`,
+ * la borne COMPRISE (« 0 à 50 : bon ») ; le dernier n'en a pas. Une échelle à choix (`choix`) range les états d'un capteur
+ * `enum`, du meilleur au pire. Les couleurs : le jeton du thème le plus proche de la couleur officielle, dans l'ordre de
+ * gravité — le bordeaux de l'EPA n'en a pas, il reprend le violet. Une information, jamais une alerte : ni lavis, ni « aérez ».
+ */
+const rangsDe = (mots, couleurs, bornes = []) => () => mots().map((t, k) => [k < bornes.length ? bornes[k] : null, t, couleurs[k]]);
+const MOTS_ATMO = () => [trSens('Bon · air'), trSens('Moyen · air'), trSens('Dégradé · air'), trSens('Mauvais · air'), trSens('Très mauvais · air'), trSens('Extrêmement mauvais · air')];
+const MOTS_EPA = () => [trSens('Bon · air'), trSens('Modéré · air'), trSens('Mauvais pour les sensibles · air'), trSens('Mauvais · air'), trSens('Très mauvais · air'), trSens('Dangereux · air')];
+const SIX = [CYAN, OK, AMBRE, ORANGE, ROUGE, VIOLET];
+const INDICES = {
+  // L'indice ATMO (arrêté du 10 juillet 2020) : un entier de 1 à 6 ; Atmo France écrit 0 (indisponible) et 7 (évènement) à côté.
+  atmo: { de: 1, a: 6, entier: true, rangs: rangsDe(() => MOTS_ATMO(), SIX, [1, 2, 3, 4, 5]) },
+  // L'AQI de l'EPA (États-Unis ; AirNow, Ambient Weather, AirVisual « U.S. ») : 0–50, 51–100, 101–150, 151–200, 201–300, au-delà.
+  epa: { de: 0, rangs: rangsDe(() => MOTS_EPA(), [OK, AMBRE, ORANGE, ROUGE, VIOLET, VIOLET], [50, 100, 150, 200, 300]) },
+  // Le CAQI européen (Airly) : 0–25, 25–50, 50–75, 75–100, au-delà.
+  caqi: { de: 0, rangs: rangsDe(() => [trSens('Excellent · air'), trSens('Bon · air'), trSens('Moyen · air'), trSens('Mauvais · air'), trSens('Très mauvais · air')], [CYAN, OK, AMBRE, ORANGE, ROUGE], [25, 50, 75, 100]) },
+  // Les choix d'un capteur `enum` : AirVisual (les six catégories de l'EPA), AccuWeather (cinq), l'indice universel de Google.
+  epa_choix: { air: true, choix: ['good', 'moderate', 'unhealthy_sensitive', 'unhealthy', 'very_unhealthy', 'hazardous'], rangs: rangsDe(() => MOTS_EPA(), [OK, AMBRE, ORANGE, ROUGE, VIOLET, VIOLET]) },
+  accuweather: { air: true, choix: ['good', 'moderate', 'unhealthy', 'very_unhealthy', 'hazardous'],
+    rangs: rangsDe(() => [trSens('Bon · air'), trSens('Modéré · air'), trSens('Mauvais · air'), trSens('Très mauvais · air'), trSens('Dangereux · air')], [OK, AMBRE, ORANGE, ROUGE, VIOLET]) },
+  uaqi: { air: true, choix: ['excellent_air_quality', 'good_air_quality', 'moderate_air_quality', 'low_air_quality', 'poor_air_quality'],
+    rangs: rangsDe(() => [trSens('Excellent · air'), trSens('Bon · air'), trSens('Modéré · air'), trSens('Médiocre · air'), trSens('Mauvais · air')], [CYAN, OK, AMBRE, ORANGE, ROUGE]) },
+  // Les pollens (A6) : Atmo France, de 1 (très faible) à 6 (extrêmement élevé) ; le niveau (`level`) d'AccuWeather.
+  pollen_atmo: { de: 1, a: 6, entier: true, rangs: rangsDe(() => [tr('Très faible'), tr('Faible'), tr('Modéré'), tr('Élevé'), tr('Très élevé'), tr('Extrêmement élevé')], SIX, [1, 2, 3, 4, 5]) },
+  pollen_choix: { choix: ['low', 'moderate', 'high', 'very_high', 'extreme'], rangs: rangsDe(() => [tr('Faible'), tr('Modéré'), tr('Élevé'), tr('Très élevé'), tr('Extrême')], [OK, AMBRE, ORANGE, ROUGE, VIOLET]) },
+};
+const enRgb = (c) => c.replace(/\)$/, '-rgb)');
+
+/** Le rang d'une valeur sur une échelle connue : `{ i, n, t, c, rgb, couleurs }` — son rang et leur nombre, son mot, sa couleur, et
+ *  les compagnons « r,g,b » de tous les rangs (la barre de la tuile) ; null hors de l'échelle, ou pour une échelle inconnue. */
+export function rangIndice(echelle, v) {
+  const E = INDICES[echelle];
+  if (!E) return null;
+  const rangs = E.rangs();
+  const brut = String(v == null ? '' : v).trim();
+  let i = -1;
+  if (E.choix) i = E.choix.indexOf(brut.toLowerCase());
+  else if (/^\d+(\.\d+)?$/.test(brut)) {
+    // Un indice se juge ARRONDI, comme la tuile l'écrit (relecture G4, point 5) : 50,4 s'écrit « 50 », il est « Bon ». L'ATMO,
+    // entier, ne s'arrondit pas : 2,5 n'est pas un rang.
+    const n = E.entier ? Number(brut) : Math.round(Number(brut));
+    if (n >= E.de && (E.a == null || n <= E.a) && (!E.entier || n === Math.round(n))) i = rangs.findIndex(([b]) => b == null || n <= b);
+  }
+  if (i < 0) return null;
+  const c = rangs[i][2];
+  return { i, n: rangs.length, t: rangs[i][1], c, rgb: enRgb(c), couleurs: rangs.map(r => enRgb(r[2])) };
+}
+
+/** L'échelle de l'air dont un capteur `enum` porte EXACTEMENT les options, dans n'importe quel ordre ; null sinon. */
+export function indiceDesChoix(options) {
+  if (!Array.isArray(options) || !options.length) return null;
+  const o = options.map(x => String(x).toLowerCase()).sort().join('|');
+  return Object.keys(INDICES).find(k => INDICES[k].air && INDICES[k].choix.slice().sort().join('|') === o) || null;
+}
+
+/** Un monoxyde au palier Danger de la table (audit du 19/10, H10) : la carte Sécurité de Maison le dit. `unite` : celle du
+ *  capteur, ramenée au ppm (G1-D6) ; une unité inconnue n'est jamais un danger chiffré. Jugé sur la valeur LUE, au-delà de
+ *  35 ppm, comme le serveur (`au_dessus`, veilles.py) : le chiffre écrit, arrondi vers le haut, dit la même chose. */
+export function coDanger(v, unite = 'ppm') {
   const t = String(v == null ? '' : v).trim().replace(',', '.');
-  const z = t === '' ? null : zoneMesure('co', Number(t));
+  const z = t === '' ? null : zoneMesure('co', versPpmCo(Number(t), unite));
   return !!z && z.i === 2;
 }
 
@@ -188,16 +266,23 @@ const ECHELLES = {
   cov: { de: 0, a: 500, reperes: [150, 250] },
   vent: { de: 0, a: 80, reperes: [20, 50] },
   co: { de: 0, a: 100, reperes: [9, 35] },
+  pm10: { de: 0, a: 80, reperes: [20, 45] },
+  no2: { de: 0, a: 100, reperes: [20, 50] },
+  o3: { de: 0, a: 200, reperes: [100] },
 };
 // Les échelles du dehors (C15, révisé le 16/10) : de −10 à 40 °C, de 10 à 100 %.
 const ECHELLES_DEHORS = { temp: { de: -10, a: 40, reperes: [0, 10, 17, 25, 32] }, hum: { de: 10, a: 100, reperes: [30, 70, 85] } };
 const echelleDe = (cle, d) => (d && ECHELLES_DEHORS[cle]) || ECHELLES[cle];
 const axe = (e, x) => (e.log ? Math.log10(Math.max(1, x)) : x);
 const position = (e, x) => Math.round(Math.max(0, Math.min(100, (axe(e, x) - axe(e, e.de)) / (axe(e, e.a) - axe(e, e.de)) * 100)) * 10) / 10;
-/** Le chiffre d'un repère dans l'unité du capteur : des °F, des m/s — et le seuil de « depuis » dans la fiche d'une mesure (C9). */
-export const repereDans = (cle, v, unite) => (cle === 'temp' ? Math.round(deCelsius(v, unite)) : cle === 'vent' ? Math.round(deKmh(v, unite)) : v);
-/** L'inverse : une valeur du capteur ramenée au repère de la table — le Celsius, le km/h (`unite` : 'C' ou 'F', l'unité d'un vent). */
-export const versRepere = (cle, v, unite) => (cle === 'temp' ? versCelsius(v, unite) : cle === 'vent' ? versKmh(v, unite) : v);
+/* Le monoxyde, du ppm de la table à l'unité du capteur et retour (G1-D6) : une unité qui n'est pas celle d'un monoxyde — le
+ * 'C' par défaut d'un appel sans unité — laisse la valeur en ppm. */
+const deCo = (v, unite) => (uniteCo(unite) ? dePpmCo(v, unite) : v);
+const versCo = (v, unite) => (uniteCo(unite) ? versPpmCo(v, unite) : v);
+/** Le chiffre d'un repère dans l'unité du capteur : des °F, des m/s, des mg/m³ — et le seuil de « depuis » dans la fiche d'une mesure (C9). */
+export const repereDans = (cle, v, unite) => (cle === 'temp' ? Math.round(deCelsius(v, unite)) : cle === 'vent' ? Math.round(deKmh(v, unite)) : cle === 'co' ? Math.round(deCo(v, unite)) : v);
+/** L'inverse : une valeur du capteur ramenée au repère de la table — le Celsius, le km/h, le ppm (`unite` : 'C' ou 'F', l'unité d'un vent, d'un monoxyde). */
+export const versRepere = (cle, v, unite) => (cle === 'temp' ? versCelsius(v, unite) : cle === 'vent' ? versKmh(v, unite) : cle === 'co' && v != null ? versCo(v, unite) : v);
 
 /** L'échelle d'une mesure : { de, a, log, bandes: [{de, a, c}], reperes: [{v, pos, t}] }, ou null — `log` : l'échelle logarithmique de la luminosité.
  * `v` et `pos` restent dans le repère de la table — le Celsius pour `temp` ;
@@ -223,10 +308,19 @@ export function echelleMesure(cle, uniteT = 'C', dehors = false) {
 /* La mesure d'un capteur Home Assistant, lue à sa classe. Un COV se lit aussi à
  * son UNITÉ (chantier Capteurs, § 6) : la table compte un indice, sans unité —
  * celui des capteurs Sensirion, de 0 à 500 ; des µg/m³ ou des ppb ne se lisent
- * pas sur ses bornes, et gardent la carte d'une mesure sans table. */
-const CLES = { temperature: 'temp', humidity: 'hum', carbon_dioxide: 'co2', carbon_monoxide: 'co', sound_pressure: 'bruit', illuminance: 'lux', pm25: 'pm25', wind_speed: 'vent' };
+ * pas sur ses bornes, et gardent la carte d'une mesure sans table. Un monoxyde
+ * aussi (G1-D6, 30/10) : des ppm, ou une unité qui s'y ramène (`uniteCo`) ;
+ * sans unité ou dans une autre, rien ne dit des ppm — il garde la carte d'une
+ * mesure sans table. */
+const CLES = { temperature: 'temp', humidity: 'hum', carbon_dioxide: 'co2', carbon_monoxide: 'co', sound_pressure: 'bruit', illuminance: 'lux', pm25: 'pm25', wind_speed: 'vent', pm10: 'pm10' };
+/* Le NO₂ et l'ozone (chantier G4, A5) ne se lisent qu'en µg/m³ — le « µ » micro ou le « μ » grec : des ppb ou des ppm ne se
+ * lisent pas sur des bornes en µg/m³, et gardent la carte d'une mesure sans table. */
+const EN_UG = { nitrogen_dioxide: 'no2', ozone: 'o3' };
+const ugM3 = (u) => /^[µμu]g\/m(³|3)$/.test(String(u == null ? '' : u).trim());
 export function cleMesure(deviceClass, unite = null) {
   if (deviceClass === 'volatile_organic_compounds' || deviceClass === 'volatile_organic_compounds_parts') return unite ? null : 'cov';
+  if (deviceClass === 'carbon_monoxide') return uniteCo(unite) ? 'co' : null;
+  if (EN_UG[deviceClass]) return ugM3(unite) ? EN_UG[deviceClass] : null;
   return CLES[deviceClass] || null;
 }
 
@@ -271,8 +365,10 @@ export function zonesMesure(cle, dehors = false) {
 }
 
 /* Les zones qui demandent d'aérer (C8) : le CO₂ moyen et au-delà, l'humidité
- * trop haute, les particules, les COV et le monoxyde hors du bon. */
-const AERER = { co2: [2, 3, 4], hum: [6, 7, 8], pm25: [1, 2], cov: [1, 2], co: [1, 2] };
+ * trop haute, les particules, les COV et le monoxyde hors du bon ; le NO₂ aussi
+ * (une cuisson au gaz). Pas l'ozone (chantier G4, A5) : dans la maison, il vient
+ * surtout du dehors. */
+const AERER = { co2: [2, 3, 4], hum: [6, 7, 8], pm25: [1, 2], cov: [1, 2], co: [1, 2], pm10: [1, 2], no2: [1, 2] };
 
 /**
  * La phrase d'une carte (C8) : le mot de la zone, « · aérez » quand la zone le
@@ -296,10 +392,71 @@ export function phraseMesure(cle, z, humidite = null, repli = false) {
   return morceaux.join(' · ');
 }
 
-/** Le chiffre d'une carte : une décimale pour une température, aucune ailleurs ; les milliers à la manière de la langue. */
-export function chiffreMesure(cle, v) {
-  const d = cle === 'temp' ? 1 : 0;
-  return Number(v).toLocaleString(locale(), { minimumFractionDigits: d, maximumFractionDigits: d });
+/* ── Le chiffre ÉCRIT, et la zone qu'il dit (G1-D5, 30/10 ; ADR 0300) ─────────
+ *
+ * La zone se jugeait sur la valeur brute, le chiffre s'écrivait arrondi :
+ * 39,6 % s'affichait « 40 % · Bon » quand 40 est « Idéal » sur la jauge. Partout
+ * où un chiffre et son mot s'affichent ensemble — la carte d'une mesure, sa
+ * compacte, sa fiche, la fiche de confort d'une pièce et sa barre, le CO₂ de
+ * l'Accueil —, la zone se juge sur le chiffre TEL QU'IL S'ÉCRIT : arrondi à la
+ * précision affichée, dans l'unité du capteur, avant `zoneMesure`. L'arrondi est
+ * celui de l'écriture (`Intl` : la moitié s'éloigne de zéro, comme
+ * `toLocaleString`). `zoneMesure` reste un juge exact des valeurs qu'on lui donne.
+ *
+ * Le monoxyde s'arrondit VERS LE HAUT, comme le message de la veille du serveur
+ * (`math.ceil`, veilles.py) : 35,4 ppm est un danger, « 35 ppm · Moyen » ne le
+ * dirait pas. Il se JUGE sur son ppm arrondi vers le haut, quelle que soit l'unité
+ * du capteur (`valeurEcrite`) : la zone dit « Danger » exactement quand la valeur
+ * lue dépasse 35 ppm — l'écran, la carte Sécurité et le téléphone disent la même
+ * chose. */
+const ARRONDIS = new Map();
+function arrondisseur(d) {
+  if (!ARRONDIS.has(d)) ARRONDIS.set(d, new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: d, useGrouping: false }));
+  return ARRONDIS.get(d);
+}
+/* Les décimales du chiffre d'une famille : une pour une température — et pour un monoxyde en mg/m³, qui tient sous 1 —, aucune ailleurs. */
+function decimalesMesure(cle, unite = null) {
+  return cle === 'temp' || (cle === 'co' && uniteCo(unite) === 'mg/m³') ? 1 : 0;
+}
+/** La valeur `v`, dans l'unité du capteur (`unite`), arrondie comme son chiffre s'écrit ; null si elle n'est pas un nombre. */
+export function arrondiMesure(cle, v, unite = null) {
+  if (!lisible(v) || String(v).trim() === '') return null;
+  const n = Number(v), d = decimalesMesure(cle, unite);
+  const f = 10 ** d;
+  // Vers le haut pour le monoxyde ; `toFixed(6)` efface le bruit binaire (0,3 × 10 = 3,0000000000000004 ne monte pas à 4).
+  const x = cle === 'co' ? Math.ceil(Number((n * f).toFixed(6))) / f : Number(arrondisseur(d).format(n));
+  return x === 0 ? 0 : x; // jamais « -0 »
+}
+
+/** Le chiffre d'une carte : une décimale pour une température, aucune ailleurs ; les milliers à la manière de la langue.
+ *  `unite` : celle du capteur, qui décide des décimales d'un monoxyde (G1-D6). */
+export function chiffreMesure(cle, v, unite = null) {
+  const d = decimalesMesure(cle, unite);
+  const x = arrondiMesure(cle, v, unite);
+  return Number(x == null ? v : x).toLocaleString(locale(), { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+
+/** La valeur `n` du capteur, dans son unité, telle que son chiffre l'écrit, ramenée au repère de la table : CE QUI SE JUGE (D5).
+ *  Le bruit binaire de la conversion s'efface : 73,4 °F valent 23 °C — « Idéal » —, pas 23,000000000000004 — « Bon ». */
+export function valeurEcrite(cle, n, unite = null) {
+  /* Le monoxyde se juge sur le ppm arrondi VERS LE HAUT, quelle que soit l'unité du capteur (relecture de G1) : l'arrondi dans
+   * l'unité faisait de 40,01 mg/m³ (34,92 ppm) un « 40,1 » — 35,003 ppm, « Danger » — quand la carte Sécurité et le serveur se
+   * taisaient. `ceil(ppm) > 35` exactement quand la valeur lue dépasse 35 ppm : les trois disent la même chose. Le chiffre, lui,
+   * reste écrit dans l'unité du capteur (`chiffreMesure`). */
+  if (cle === 'co') {
+    if (!lisible(n) || String(n).trim() === '') return null;
+    const ppm = versCo(Number(n), unite);
+    return ppm == null ? null : Math.ceil(Number(ppm.toFixed(6)));
+  }
+  const x = arrondiMesure(cle, n, unite);
+  const r = x == null ? null : versRepere(cle, x, unite);
+  return r == null ? null : Math.round(r * 1e9) / 1e9;
+}
+
+/* Une valeur du REPÈRE de la table — le Celsius d'une température —, telle que son chiffre l'écrit dans l'unité `unite`, ramenée
+ * au repère : ce que la fiche de confort et sa barre jugent, notent et écrivent (D5). */
+function ecriteDansRepere(cle, v, unite = 'C') {
+  return cle === 'temp' ? valeurEcrite('temp', deCelsius(Number(v), unite), unite) : valeurEcrite(cle, v);
 }
 
 export function scoreMesure(cle, v) {
@@ -341,11 +498,15 @@ export function verdictIndice(indice) {
 
 /* L'INDICE : la moyenne des notes, tirée vers le bas par la pire. Une pièce à
  * 21 °C n'est pas confortable si l'air y est confiné : la moyenne seule le
- * cacherait, la pire note seule ignorerait tout le reste. */
+ * cacherait, la pire note seule ignorerait tout le reste. Chaque mesure se juge,
+ * se note et s'écrit sur la même valeur : son chiffre tel qu'il s'écrit (G1-D5). */
 export function indiceConfort(valeurs, uniteT = 'C') {
   const mesures = MESURES_CONFORT
-    .filter(cle => valeurs && lisible(valeurs[cle]))
-    .map(cle => ({ cle, ...HABILLAGE[cle](), valeur: valeurConfort(cle, valeurs[cle], uniteT), verdict: verdictMesure(cle, valeurs[cle]), score: scoreMesure(cle, valeurs[cle]) }));
+    .filter(cle => valeurs && lisible(valeurs[cle]) && String(valeurs[cle]).trim() !== '')
+    .map(cle => {
+      const v = ecriteDansRepere(cle, valeurs[cle], uniteT);
+      return { cle, ...HABILLAGE[cle](), valeur: valeurConfort(cle, v, uniteT), verdict: verdictMesure(cle, v), score: scoreMesure(cle, v) };
+    });
   if (!mesures.length) return null;
   const notes = mesures.map(m => m.score);
   const moyenne = notes.reduce((a, n) => a + n, 0) / notes.length;

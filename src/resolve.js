@@ -14,7 +14,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { siblingsOf, pickSibling } from './discovery.js';
-import { trouverCreneau } from './creneau.js';
+import { trouverCreneau, trouverCouleurDemain } from './creneau.js';
+import { trouverBorne } from './borne.js';
 // L'appariement d'une Echo exposée deux fois (chantier Médias, M1, M14) : la jumelle que `cibleAlexa` retrouve, et ce que chaque intégration sait.
 import { cibleAlexa, estEcho } from './favlecture.js';
 import { integrationDe } from './telecommande.js';
@@ -27,7 +28,7 @@ function listeEntites(index) {
   const table = index && index.entityMeta;
   if (!table || typeof table.forEach !== 'function') return [];
   const out = [];
-  table.forEach((m, id) => out.push({ id, cle: (m && m.translationKey) || '', desactive: !!(m && m.disabled) }));
+  table.forEach((m, id) => out.push({ id, cle: (m && m.translationKey) || '', desactive: !!(m && m.disabled), tarif: (m && m.tarif) || null }));
   return out;
 }
 import { mergedProfile, primaryEntity } from './profiles.js';
@@ -595,10 +596,14 @@ export function resolveEnergy({ index, states = {}, energyPrefs = null, userCfg 
    * marie les deux — la fiche d'abord, le tableau pour tout ce qu'elle ne dit
    * pas. Le garde du 02/10 (un capteur retire de la fiche ne doit pas revenir
    * par le tableau) y vit aussi, par FAMILLE de capteurs. */
+  /* LA COULEUR DU LENDEMAIN (chantier G3, E4) : elle décrit le CONTRAT, pas
+   * le tableau Énergie — elle se trouve avec ou sans lui. */
+  const tempoDemain = trouverCouleurDemain(listeEntites(index));
   if (!src) {
+    const haids = tempoDemain ? { tempoDemain } : {};
     return cfg
-      ? { available: true, source: 'utilisateur', haids: {}, devices: [], prix: [], prixVente: [] }
-      : { available: false, reason: 'tableau de bord Energie non configure', haids: {}, devices: [], prix: [], prixVente: [] };
+      ? { available: true, source: 'utilisateur', haids, devices: [], prix: [], prixVente: [] }
+      : { available: false, reason: 'tableau de bord Energie non configure', haids, devices: [], prix: [], prixVente: [] };
   }
 
   /* LE TABLEAU DE BORD ÉNERGIE A DEUX FORMATS, et on ne lisait que l'ancien.
@@ -623,7 +628,12 @@ export function resolveEnergy({ index, states = {}, energyPrefs = null, userCfg 
     for (const f of froms) if (f && f.stat_energy_from) imports.push({ src: g, flux: f });
     for (const t of tos) if (t && t.stat_energy_to) exports_.push({ src: g, flux: t });
   }
-  const solar = src.filter(x => x && x.type === 'solar').map(x => x.stat_energy_from).filter(Boolean);
+  /* TOUTES LES SOURCES SOLAIRES (chantier G3, D3 ; ADR 0302). On ne lisait que
+   * `solar[0]` : deux onduleurs, la moitié de la production. Chaque source
+   * garde son compteur ; sa puissance est celle que Home Assistant NOMME
+   * (`stat_rate`), sinon celle de son appareil, comme avant. */
+  const sourcesSolaires = src.filter(x => x && x.type === 'solar' && x.stat_energy_from);
+  const solar = sourcesSolaires.map(x => x.stat_energy_from);
   /* LA BATTERIE DOMESTIQUE. Le tableau de bord Energie la declare comme une
    * source a part entiere, avec deux compteurs : `stat_energy_from` est ce
    * qu'elle REND a la maison, `stat_energy_to` ce qu'elle STOCKE. On ne lisait
@@ -700,14 +710,58 @@ export function resolveEnergy({ index, states = {}, energyPrefs = null, userCfg 
    * tout, et mieux vaut ne rien désigner que d'en élire un au hasard — les
    * parts restent à côté, pour qui sait les additionner (ADR 0030). */
   const seul = (a) => (a.length === 1 ? a[0] : null);
+  const plusieurs = (a) => (a.length > 1 ? a : null);
+  const distincts = (a) => a.filter((x, i) => typeof x === 'string' && x && a.indexOf(x) === i);
   const gridStat = seul(partsImport);
-  const solarStat = solar[0] || null;
+  const solarStat = seul(solar);
+  /* LES PUISSANCES QUE HOME ASSISTANT NOMME (`stat_rate`, ADR 0302). Elles
+   * passent AVANT la déduction par voisinage : la configuration dit ce que
+   * l'on infère. Trois formes, selon la version :
+   *   — `stat_rate` sur la source (une source par connexion, une batterie, un
+   *     onduleur) — un capteur d'origine, ou celui que Home Assistant fabrique
+   *     quand on lui a donné un capteur inversé ou deux capteurs ;
+   *   — `power: [{ stat_rate }]` sur l'ancienne source réseau unique (2025.12) ;
+   *   — `power_config.stat_rate`, la forme d'origine, quand le capteur fabriqué
+   *     manque. */
+  const rateDe = (x) => (x && typeof x.stat_rate === 'string' && x.stat_rate)
+    || (x && x.power_config && typeof x.power_config.stat_rate === 'string' && x.power_config.stat_rate) || null;
+  // Le RÉSEAU : positif en import, la convention de `consoNow`. Deux connexions sur le même compteur n'en font qu'une.
+  const ratesReseau = distincts(grids.flatMap(g => [rateDe(g), ...(Array.isArray(g.power) ? g.power.map(rateDe) : [])]));
+  /* Le SOLAIRE : une puissance par onduleur — la nommée, sinon celle de son
+   * appareil, mais seulement si c'est la SEULE (relecture du 30/10, point 3).
+   * Un micro-onduleur à batterie porte trois puissances (deux panneaux et la
+   * batterie) : la première venue était la batterie, à −300 W. Plusieurs : on
+   * ne sait pas laquelle, rien pour cette source. UN SEUL onduleur garde la
+   * règle d'avant (`powerOf`, la première puissance de l'appareil) : un
+   * onduleur qui publie son AC et son DC ne perd pas son solaire du moment
+   * (contre-relecture du 30/10). */
+  const seulePuissance = (id) => {
+    const p = siblingsOf(index, id).filter(x => x.indexOf('sensor.') === 0 && states[x] && states[x].attributes && states[x].attributes.device_class === 'power');
+    return p.length === 1 ? p[0] : null;
+  };
+  const voisine = sourcesSolaires.length > 1 ? seulePuissance : powerOf;
+  const solaireNow = sourcesSolaires.map(s => rateDe(s) || voisine(s.stat_energy_from)).filter(Boolean);
+  /* LA BATTERIE, chacune : sa puissance au sens de Home Assistant (positive en
+   * DÉCHARGE — l'inverse de `batNow`, `energiebatterie.js` l'inverse à la
+   * lecture), son niveau (`stat_soc`, avant le voisin) et sa capacité. */
+  const ratesBatterie = batteries.map(rateDe).filter(Boolean);
+  // La puissance « inversée » de `power_config` est positive en charge : déjà au sens de Loggia.
+  const inverseeBatterie = batteries.map(b => (!rateDe(b) && b.power_config && typeof b.power_config.stat_rate_inverted === 'string' && b.power_config.stat_rate_inverted) || null).filter(Boolean);
+  const socDe = (b) => (typeof b.stat_soc === 'string' && b.stat_soc) || null;
+  const socsBatterie = batteries.map(socDe).filter(Boolean);
+  const socVoisin = batCle && !socsBatterie.length ? pickSibling(index, states, batCle, { domain: 'sensor', deviceClass: 'battery' }) : null;
+  const batNomme = ratesBatterie.length > 0 || inverseeBatterie.length > 0;
+  /* LA BORNE DE RECHARGE (chantier G3, E3) : trouvée par famille, confirmée
+   * par une ligne des appareils mesurés — un seul candidat (borne.js). Elle
+   * remplit `evNow`, que seul un réglage remplissait. */
+  const borne = trouverBorne({ index, states, energyPrefs });
 
   const devices = ((energyPrefs && energyPrefs.device_consumption) || [])
     .map(d => d && d.stat_consumption ? {
       name: d.name || (index && index.nameOf ? index.nameOf(d.stat_consumption) : d.stat_consumption),
       kwh: d.stat_consumption,
-      power: powerOf(d.stat_consumption),
+      // La puissance que Home Assistant nomme pour l'appareil (`stat_rate`), sinon celle de son appareil.
+      power: (typeof d.stat_rate === 'string' && d.stat_rate) || powerOf(d.stat_consumption),
     } : null)
     .filter(Boolean);
 
@@ -719,16 +773,30 @@ export function resolveEnergy({ index, states = {}, energyPrefs = null, userCfg 
       coutJour: seul(couts),
       injectionJour: seul(partsExport),
       prodJour: solarStat,
+      /* Le flux NET du réseau que Home Assistant nomme : positif en import,
+       * négatif à l'injection — `consoNow`, que la vue lit d'abord. Sans lui,
+       * l'ancien chemin : le soutirage nommé dans `power_config`, sinon la
+       * puissance voisine du compteur. */
+      consoNow: seul(ratesReseau),
+      consoNowParts: plusieurs(ratesReseau),
       gridNow: rate(imports, 'stat_rate_from') || powerOf(gridStat),
-      solarNow: powerOf(solarStat),
+      solarNow: seul(solaireNow),
+      solarNowParts: plusieurs(solaireNow),
       injectionNow: rate(exports_, 'stat_rate_to') || null,
-      /* La batterie : une puissance SIGNEE si l'appareil en publie une, sinon
-       * les deux sens separement — la vue fait la difference. Le niveau se
-       * cherche sur le meme appareil que le compteur. */
-      batNow: batCle ? powerOf(batCle) : null,
-      batChargeNow: batRate('stat_rate_to'),
-      batDechargeNow: batRate('stat_rate_from'),
-      batSoc: batCle ? pickSibling(index, states, batCle, { domain: 'sensor', deviceClass: 'battery' }) : null,
+      evNow: borne ? borne.puissance : null,
+      /* La batterie. Ce que Home Assistant nomme d'abord (`batRate`, positif en
+       * DÉCHARGE). Sinon l'ancien chemin : une puissance SIGNEE voisine du
+       * compteur, ou les deux sens séparément — la vue fait la différence. */
+      batRate: seul(ratesBatterie),
+      batRateParts: plusieurs(ratesBatterie),
+      /* Au sens de Loggia : chaque puissance « inversée » (une part par batterie), sinon le voisin de l'ancien chemin. Elles
+       * s'ajoutent aux `batRate` — deux conventions dans la même maison se somment (relecture du 30/10, point 4). */
+      batNow: inverseeBatterie.length ? seul(inverseeBatterie) : (!batNomme && batCle ? powerOf(batCle) : null),
+      batNowParts: plusieurs(inverseeBatterie),
+      batChargeNow: batNomme ? null : batRate('stat_rate_to'),
+      batDechargeNow: batNomme ? null : batRate('stat_rate_from'),
+      batSoc: socsBatterie.length ? seul(socsBatterie) : socVoisin,
+      batSocParts: plusieurs(socsBatterie),
       /* LE CRÉNEAU TARIFAIRE EN COURS (09/10). Home Assistant ne lui donne ni
        * `device_class` ni rôle dans le tableau de bord : il n'existait que
        * désigné à la main, partout, ce qui contredit « tout opérationnel sans
@@ -740,6 +808,8 @@ export function resolveEnergy({ index, states = {}, energyPrefs = null, userCfg 
        * deux intégrations différentes. C'est la clé de traduction qui le
        * désigne, et l'unicité qui le garantit (creneau.js). */
       hcActive: trouverCreneau(listeEntites(index)),
+      // Demain, quelle couleur (« Demain : jour rouge » dans le rail de l'Accueil, E4).
+      tempoDemain,
       // Ce que l'injection a rapporte, quand Home Assistant le tient.
       revenuJour: seul(compensations),
       /* Les PARTS, quand le contrat en compte plusieurs : l'historique les
@@ -762,6 +832,16 @@ export function resolveEnergy({ index, states = {}, energyPrefs = null, userCfg 
     /* Le prix de REVENTE, a cote de celui d'achat : meme forme, meme raison —
      * une valeur, ou l'entite qui la publie, jamais un identifiant seul. */
     prixVente,
+    /* LES BATTERIES, une par source : son niveau et sa capacité (kWh), quand
+     * Home Assistant la déclare (`capacity`). Une VALEUR, comme un prix :
+     * l'autonomie de la vue Énergie s'en sert (E6). */
+    batteries: batteries.map(b => ({ soc: socDe(b), capacite: typeof b.capacity === 'number' && isFinite(b.capacity) && b.capacity > 0 ? b.capacity : null })),
+    /* La prévision solaire (E7) : les entrées de configuration que le tableau
+     * Énergie rattache aux onduleurs (Forecast.Solar, Solcast…). La vue les
+     * interroge par `energy/solar_forecast`, que Home Assistant tient. */
+    // La borne trouvée, ses entités : sa carte et sa popup les lisent (`enBorne`, state.js).
+    borne,
+    previsionSolaire: distincts(sourcesSolaires.flatMap(s => (Array.isArray(s.config_entry_solar_forecast) ? s.config_entry_solar_forecast : []))),
   };
 }
 

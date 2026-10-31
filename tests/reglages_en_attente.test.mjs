@@ -18,6 +18,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /* Un stockage d'appareil, en mémoire. Le module ne connaît que `window` : il
@@ -160,7 +161,7 @@ test('un carnet d’avant le 03/10, rangé sans auteur, se lit vide', () => {
 });
 
 test('le câblage dans App, et la clé qui ne doit pas voyager', () => {
-  const app = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+  const app = MONOLITHE;
   assert.ok(app.includes("import { compteDe, poserEnAttente, purgerEnAttente, renvoyerEnAttente } from './enattente.js';"), 'App n’importe plus le carnet');
   assert.ok(app.includes('const compte = compteDe(h);\n    const marques = poserEnAttente(patch, compte, cfgServeurRef.current);'),
     'le lot doit être inscrit AVANT l’envoi, sous le compte qui écrit — sinon actualiser pendant l’aller-retour le perd');

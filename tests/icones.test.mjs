@@ -18,11 +18,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 /* `Ico`, `CUSTOM_SVG` et `FI_MAP` ont quitte App.jsx le 23/09 (plan M1) :
  * un ecran sorti du monolithe ne pouvait plus appeler l'icone. Les noms
  * d'icones, eux, sont cites des deux cotes — on relit donc les deux. */
-const src = ['icones.jsx', 'App.jsx'].map(x => readFileSync(join(RACINE, 'src', x), 'utf8')).join(String.fromCharCode(10));
+const src = [readFileSync(join(RACINE, 'src', 'icones.jsx'), 'utf8'), MONOLITHE].join(String.fromCharCode(10));
 const css = readFileSync(join(RACINE, 'public', 'fonts', 'uicons-regular-rounded.css'), 'utf8');
 
 /** Le contenu d'un objet littéral nommé, sans l'évaluer.

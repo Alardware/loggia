@@ -16,8 +16,9 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = MONOLITHE;
 const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
 const NL = String.fromCharCode(10);
 const bloc = (debut, fin) => {

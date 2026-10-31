@@ -23,6 +23,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const LANGUES = ['en', 'de', 'nl', 'it', 'es', 'pl'];
@@ -47,7 +48,7 @@ const sources = [];
   }
 })(join(RACINE, 'src'));
 const SRC = sources.join('\n');
-const APP = lire('src', 'App.jsx');
+const APP = MONOLITHE;
 const PUR = lire('src', 'confort.js');
 
 test('en allemand, la jauge dit ce qu’on ressent : « Kalt » sous 16 °C, « Trocken » sous 30 %', () => {

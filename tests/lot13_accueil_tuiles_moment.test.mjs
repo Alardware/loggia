@@ -25,10 +25,10 @@ import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { transformSync } from 'esbuild';
 import { composant } from './rendu.mjs';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES, DASHBOARD } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
+const src = (MONOLITHE + VUES_SORTIES);
 const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
 const Surface = await composant('ui.jsx', 'Surface');
 const nomCarte = await composant('ui.jsx', 'nomCarte');
@@ -88,7 +88,8 @@ test('une ligne qui mène à une vue ne promet pas de fiche ; une ligne inerte n
 });
 
 test('les lignes qui ouvrent une fiche le disent, celles qui changent de vue non', () => {
-  const d = morceau('function Dashboard(', '\n}');
+  // ASSERTION MODIFIÉE (ADR 0283) : « En ce moment » vit dans un hook de l'Accueil (`useMomentAccueil`) : on lit l'Accueil entier.
+  const d = DASHBOARD;
   const lignes = [...d.matchAll(/momentRows\.push\(<LigneMoment [\s\S]*?\/>\)/g)].map(m => m[0]);
   /* ASSERTION MODIFIÉE (tâche 12 du chantier Chauffage) : six poussées au
    * lieu de cinq — les lignes du planning de chauffe (`lignesMoment`), entre

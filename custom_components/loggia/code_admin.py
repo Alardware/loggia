@@ -15,11 +15,15 @@ Desormais :
     limitation d'essais par compte — quatre chiffres se devinent en dix mille
     coups sans elle ;
   * seul un administrateur Home Assistant le definit (commande a part) ;
+  * tant qu'il ne l'a pas fait, AUCUN code n'ouvre rien (28/10, ADR 0279) :
+    jusque-la, `0000` ouvrait le laissez-passer a tout compte connecte ;
   * il vit dans le magasin du composant, donc il est LE MEME sur chaque
     appareil et par chaque acces (local, distant) : c'est le code de la maison.
 """
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import hashlib
 import hmac
 import os
@@ -30,7 +34,6 @@ from typing import Any
 CLE_HACHE = "loggia_admin_pin_hache"
 # L'ancienne cle, en clair : migree puis effacee. Restee refusee a l'ecriture.
 CLE_CLAIR = "loggia_admin_pin"
-CODE_DEFAUT = "0000"
 ITERATIONS = 100_000
 # `fullmatch`, pas `$` : ce dernier laisse passer un retour a la ligne final.
 FORME = re.compile(r"[0-9]{4,8}")
@@ -153,6 +156,11 @@ class LaissezPasser:
     def retirer(self, cle: str) -> None:
         self._jusqua.pop(cle, None)
 
+    def tout_retirer(self) -> None:
+        """Un code redefini (28/10, ADR 0279) : ce que l'ancien avait ouvert se
+        referme, pour tous les comptes."""
+        self._jusqua.clear()
+
 
 class Limiteur:
     """Les essais rates, par compte : au-dela de `ESSAIS_LIBRES` dans la fenetre,
@@ -195,3 +203,39 @@ class Limiteur:
         self._rates.pop(cle, None)
         self._verrous.pop(cle, None)
         self._paliers.pop(cle, None)
+
+    def tout_oublier(self) -> None:
+        """Un code redefini (28/10, ADR 0279) : les rates comptaient contre
+        l'ancien, le nouveau repart de zero."""
+        self._rates.clear()
+        self._verrous.clear()
+        self._paliers.clear()
+
+
+class VerrousParCompte:
+    """Un verrou par compte, qui s'en va quand plus personne ne l'attend
+    (28/10, ADR 0279).
+
+    Le dictionnaire `verrous_pin` gardait un verrou pour chaque compte qui
+    avait un jour tape le code, jusqu'au redemarrage. Ici chaque entree compte
+    qui la tient ou l'attend : la derniere a sortir la retire. Retirer un
+    verrou encore attendu en ferait naitre un second pour le meme compte, et
+    deux verifications passeraient ensemble — ce que le verrou empeche."""
+
+    def __init__(self) -> None:
+        self._v: dict[str, list] = {}
+
+    @contextlib.asynccontextmanager
+    async def de(self, cle: str):
+        entree = self._v.setdefault(cle, [asyncio.Lock(), 0])
+        entree[1] += 1
+        try:
+            async with entree[0]:
+                yield
+        finally:
+            entree[1] -= 1
+            if entree[1] == 0 and self._v.get(cle) is entree:
+                del self._v[cle]
+
+    def __len__(self) -> int:
+        return len(self._v)

@@ -102,7 +102,7 @@ def banc(creer_store):
     magasin = creer_store({"users": {}, "migrated": True, "shared": {"loggia_users": PROFILS, "loggia_rooms": ["Salon"]}})
     hass = Hass()
     scenarios = Scenarios()
-    module.async_register(hass, magasin, acces_scenarios=lambda: scenarios)
+    module.async_register(hass, magasin, lambda nom: {"scenarios": scenarios}.get(nom))
     return types.SimpleNamespace(hass=hass, store=magasin, scenarios=scenarios, module=module)
 
 
@@ -122,7 +122,9 @@ def test_toutes_les_commandes_sont_enregistrees(banc):
     # envoie le role seul, le serveur le fond dans la description de la maison.
     # ASSERTION MODIFIEE (etape 3 IoT, 25/10 ; I28, I29) : 52 -> 54, `loggia/eau/etat` (ouverte) et `loggia/eau/regle` (admin).
     # 55 avec le profil du compte connecte (ADR 0276, 27/10).
-    assert len(banc.hass.commandes) == 55, sorted(banc.hass.commandes)
+    # ASSERTION MODIFIEE (29/10, versions) : 55 -> 57
+    # ASSERTION MODIFIÉE (30/10, G2-1 ; ADR 0301) : 57 -> 59, `loggia/collecte/sorti` et `loggia/notifications/destinataires`.
+    assert len(banc.hass.commandes) == 59, sorted(banc.hass.commandes)
 
 
 def test_aucune_commande_ne_declare_id(banc):
@@ -205,7 +207,7 @@ def banc_scenarios(creer_store, monkeypatch):
     hass.states = types.SimpleNamespace(get=lambda haid: None, async_entity_ids=lambda domaine=None: [])
     s = scn.LoggiaScenarios.__new__(scn.LoggiaScenarios)
     s.hass, s.store, s.regles, s._derniers = hass, magasin, None, {}
-    module.async_register(hass, magasin, acces_scenarios=lambda: s)
+    module.async_register(hass, magasin, lambda nom: {"scenarios": s}.get(nom))
     return types.SimpleNamespace(hass=hass, store=magasin)
 
 
@@ -264,8 +266,17 @@ def test_ce_qu_on_range_est_borne(banc_scenarios, ordre):
 
 # ── Le code administrateur ──────────────────────────────────────────────────
 
+def _definir(hass, pin="4321", mid=29):
+    """Le code de la maison, pose par un administrateur. Jamais defini, aucun
+    code n'ouvre plus rien (28/10, ADR 0279)."""
+    admin = Connexion(uid="u-papa", admin=True)
+    lancer(envoyer(hass, admin, {"id": mid, "type": "loggia/pin/definir", "pin": pin}))
+    assert admin.resultats == [(mid, {"defini": True})], admin.erreurs
+
+
 def test_un_mauvais_code_ne_passe_pas_et_finit_par_bloquer(banc):
     code_admin = charger("code_admin")
+    _definir(banc.hass)
     cx = Connexion(admin=False)
     reponses = []
     for i in range(code_admin.ESSAIS_LIBRES + 1):
@@ -285,8 +296,9 @@ def test_le_bon_code_ouvre_le_passage_vers_un_profil_admin(banc):
     lancer(envoyer(banc.hass, cx, vers_papa))
     assert [e[1] for e in cx.erreurs] == ["code_admin_requis"], cx.erreurs
     assert "code administrateur" in cx.erreurs[0][2]
-    # Le code par defaut (jamais defini), puis le meme passage : accepte.
-    lancer(envoyer(banc.hass, cx, {"id": 41, "type": "loggia/pin/verifier", "pin": "0000"}))
+    # Le code de la maison, puis le meme passage : accepte.
+    _definir(banc.hass)
+    lancer(envoyer(banc.hass, cx, {"id": 41, "type": "loggia/pin/verifier", "pin": "4321"}))
     assert cx.resultats[-1] == (41, {"ok": True})
     lancer(envoyer(banc.hass, cx, {**vers_papa, "id": 42}))
     assert len(cx.erreurs) == 1, cx.erreurs
@@ -294,6 +306,44 @@ def test_le_bon_code_ouvre_le_passage_vers_un_profil_admin(banc):
     autre = Connexion(uid="u-invite", admin=False)
     lancer(envoyer(banc.hass, autre, {**vers_papa, "id": 43}))
     assert [e[1] for e in autre.erreurs] == ["code_admin_requis"]
+
+
+# TEST AJOUTE (audit du 28/10, H1 ; ADR 0279) : jamais defini, le code etait `0000`, et `0000` ouvrait le laissez-passer a tout
+# compte connecte - les reglages du mode enfant compris, dont la phrase que l'Echo execute. Desormais rien ne passe, le refus
+# se nomme, et ce n'est pas un essai rate : un compte qui insiste n'est pas bloque.
+def test_jamais_defini_aucun_code_n_ouvre_rien_et_le_refus_se_nomme(banc):
+    code_admin = charger("code_admin")
+    cx = Connexion(admin=False)
+    for i, pin in enumerate(["0000"] * (code_admin.ESSAIS_LIBRES + 2) + ["1234"]):
+        lancer(envoyer(banc.hass, cx, {"id": 70 + i, "type": "loggia/pin/verifier", "pin": pin}))
+    assert cx.resultats == [], "un code jamais defini a ete accepte ou compte"
+    assert {e[1] for e in cx.erreurs} == {"code_non_defini"}, cx.erreurs
+    assert "administrateur" in cx.erreurs[0][2]
+    lancer(envoyer(banc.hass, cx, {"id": 90, "type": "loggia/config/set", "config": {"loggia_active_user": 0}}))
+    assert cx.erreurs[-1][1] == "code_admin_requis", "aucun laissez-passer n'a ete donne"
+    # Defini, le code passe aussitot : les refus d'avant n'ont rien bloque.
+    _definir(banc.hass, "2580")
+    lancer(envoyer(banc.hass, cx, {"id": 91, "type": "loggia/pin/verifier", "pin": "2580"}))
+    assert cx.resultats == [(91, {"ok": True})]
+
+
+# TEST AJOUTE (audit du 28/10, B4 ; ADR 0279) : un code redefini ferme ce que l'ancien avait ouvert, pour tous les comptes,
+# et les rates comptes contre l'ancien ne bloquent plus le nouveau.
+def test_redefinir_le_code_retire_les_laissez_passer_et_remet_le_limiteur_a_zero(banc):
+    code_admin = charger("code_admin")
+    _definir(banc.hass, "4321")
+    tablette = Connexion(uid="u-tablette", admin=False)
+    lancer(envoyer(banc.hass, tablette, {"id": 100, "type": "loggia/pin/verifier", "pin": "4321"}))
+    assert tablette.resultats[-1] == (100, {"ok": True})
+    bloque = Connexion(uid="u-max", admin=False)
+    for i in range(code_admin.ESSAIS_LIBRES):
+        lancer(envoyer(banc.hass, bloque, {"id": 110 + i, "type": "loggia/pin/verifier", "pin": "9999"}))
+    assert bloque.resultats[-1][1]["bloque"] > 0, "le compte n'a pas ete bloque"
+    _definir(banc.hass, "8642", mid=120)
+    lancer(envoyer(banc.hass, tablette, {"id": 121, "type": "loggia/config/set", "config": {"loggia_active_user": 0}}))
+    assert [e[1] for e in tablette.erreurs] == ["code_admin_requis"], "le laissez-passer de l'ancien code tient encore"
+    lancer(envoyer(banc.hass, bloque, {"id": 122, "type": "loggia/pin/verifier", "pin": "8642"}))
+    assert bloque.resultats[-1] == (122, {"ok": True}), "le blocage de l'ancien code pese sur le nouveau"
 
 
 def test_un_code_defini_se_verifie_et_l_ancien_ne_passe_plus(banc):
@@ -429,7 +479,7 @@ def test_un_plafond_de_module_se_dit_et_une_valeur_illisible_n_en_est_pas_un(cre
             return {}
 
     hass = Hass()
-    module.async_register(hass, magasin, acces_volets=lambda: Volets())
+    module.async_register(hass, magasin, lambda nom: {"volets": Volets()}.get(nom))
     cx = Connexion(uid="u-papa", admin=True)
     lancer(envoyer(hass, cx, {"id": 74, "type": "loggia/volets/config", "patch": {"planning": {}}}))
     lancer(envoyer(hass, cx, {"id": 75, "type": "loggia/volets/config", "patch": {"verification": {"tentatives": 9}}}))
@@ -448,8 +498,7 @@ def test_un_planning_de_trop_se_refuse_par_son_code(creer_store):
             raise refus.RefusNomme("trop_de_plannings", "trop de plannings, au plus", 24)
 
     hass = Hass()
-    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}),
-                          acces_robots=lambda: Robots())
+    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}), lambda nom: {"robots": Robots()}.get(nom))
     cx = Connexion(uid="u-papa", admin=True)
     lancer(envoyer(hass, cx, {"id": 76, "type": "loggia/robots/config", "patch": {"plannings": []}}))
     assert cx.erreurs == [(76, "trop_de_plannings", "trop de plannings, au plus : 24")], cx.erreurs
@@ -476,7 +525,7 @@ def test_le_depart_d_un_robot_passe_par_les_droits_du_compte(creer_store):
 
     robots = Robots()
     hass = Hass()
-    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}), acces_robots=lambda: robots)
+    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}), lambda nom: {"robots": robots}.get(nom))
     lea = Connexion(uid="u-lea")
     salon = [{"id": "seg:1", "nom": "Salon", "segments": [1]}]
     lancer(envoyer(hass, lea, {"id": 80, "type": "loggia/robots/lancer", "robot": "vacuum.salon"}))
@@ -512,7 +561,7 @@ def test_le_script_maison_d_un_robot_passe_par_lancer(creer_store):
 
     robots = Robots()
     hass = Hass()
-    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}), acces_robots=lambda: robots)
+    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}), lambda nom: {"robots": robots}.get(nom))
     lea = Connexion(uid="u-lea")
     lancer(envoyer(hass, lea, {"id": 90, "type": "loggia/robots/lancer", "robot": "vacuum.salon", "script": "script.nettoyer_buanderie",
                                "role": "nettoyer_tout"}))
@@ -552,8 +601,7 @@ def banc_distributeurs(creer_store):
     module = charger("websocket_api")
     hass = Hass()
     dis = Distributeurs()
-    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}),
-                          acces_distributeurs=lambda: dis)
+    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}), lambda nom: {"distributeurs": dis}.get(nom))
     return types.SimpleNamespace(hass=hass, dis=dis)
 
 
@@ -650,8 +698,7 @@ def banc_chauffage(creer_store):
     module = charger("websocket_api")
     hass = Hass()
     cha = Chauffage()
-    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}),
-                          acces_chauffage=lambda: cha)
+    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}), lambda nom: {"chauffage": cha}.get(nom))
     return types.SimpleNamespace(hass=hass, cha=cha)
 
 
@@ -766,8 +813,7 @@ def banc_volets(creer_store):
     module = charger("websocket_api")
     hass = Hass()
     volets = Volets()
-    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}),
-                          acces_volets=lambda: volets)
+    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}), lambda nom: {"volets": volets}.get(nom))
     return types.SimpleNamespace(hass=hass, volets=volets)
 
 
@@ -831,8 +877,7 @@ def banc_prises(creer_store):
     module = charger("websocket_api")
     hass = Hass()
     prises = Prises()
-    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}),
-                          acces_prises=lambda: prises)
+    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}), lambda nom: {"prises": prises}.get(nom))
     return types.SimpleNamespace(hass=hass, prises=prises)
 
 
@@ -901,8 +946,7 @@ def banc_lumieres(creer_store):
     module = charger("websocket_api")
     hass = Hass()
     lumieres = Lumieres()
-    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}),
-                          acces_lumieres=lambda: lumieres)
+    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}), lambda nom: {"lumieres": lumieres}.get(nom))
     return types.SimpleNamespace(hass=hass, lumieres=lumieres)
 
 
@@ -955,7 +999,7 @@ def banc_eau(creer_store):
     module = charger("websocket_api")
     hass = Hass()
     e = Eau()
-    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}), acces_eau=lambda: e)
+    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}), lambda nom: {"eau": e}.get(nom))
     return types.SimpleNamespace(hass=hass, eau=e)
 
 
@@ -1010,8 +1054,8 @@ def test_sans_carnet_les_lumieres_le_disent(creer_store):
 # bornes a ce que le compte PILOTE. Les reglages, la levee des limites et la
 # reponse a une demande sont les gestes du PARENT (E2 B) : le code de la maison
 # les ouvre cinq minutes - le meme laissez-passer que le passage vers un profil
-# Admin -, un administrateur s'en passe. Ici le vrai code administrateur (celui
-# par defaut, jamais defini) et une doublure du module qui retient qui demande
+# Admin -, un administrateur s'en passe. Ici le vrai code administrateur (pose
+# par un administrateur : 4321) et une doublure du module qui retient qui demande
 # quoi, pour quel compte.
 
 ETAT_ENFANT = {"maintenant": 1.0, "demarre": True, "simulation": False, "profils": {}, "lecteurs": {}}
@@ -1061,8 +1105,9 @@ def banc_enfant(creer_store):
     module = charger("websocket_api")
     hass = Hass()
     enfant = Enfant()
-    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}),
-                          acces_enfant=lambda: enfant)
+    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}), lambda nom: {"enfant": enfant}.get(nom))
+    # Le code de la maison est pose : jamais defini, il n'ouvre plus rien (ADR 0279).
+    _definir(hass, "4321")
     return types.SimpleNamespace(hass=hass, enfant=enfant)
 
 
@@ -1097,11 +1142,11 @@ def test_les_gestes_du_parent_veulent_le_code_ou_un_administrateur(banc_enfant):
 
 def test_le_code_de_la_maison_ouvre_les_gestes_du_parent_a_ce_compte(banc_enfant):
     """E2 B : la tablette de famille porte un compte ordinaire ; le parent tape
-    le code de la maison (jamais defini : celui par defaut) et la commande
+    le code de la maison (4321, pose par un administrateur) et la commande
     passe - pour CE compte. Un autre compte, ou un code faux, reste dehors."""
     b = banc_enfant
     cx = Connexion(uid="u-tablette", admin=False)
-    lancer(envoyer(b.hass, cx, {"id": 140, "type": "loggia/pin/verifier", "pin": "0000"}))
+    lancer(envoyer(b.hass, cx, {"id": 140, "type": "loggia/pin/verifier", "pin": "4321"}))
     assert cx.resultats == [(140, {"ok": True})]
     lancer(envoyer(b.hass, cx, {"id": 141, "type": "loggia/enfant/lever", "profil": "chambre_lino", "minutes": 30}))
     assert cx.erreurs == [], cx.erreurs
@@ -1119,7 +1164,7 @@ def test_le_code_de_la_maison_ouvre_les_gestes_du_parent_a_ce_compte(banc_enfant
 def test_le_laissez_passer_n_ouvre_pas_observer_sans_agir_ni_une_autre_cle(banc_enfant):
     b = banc_enfant
     cx = Connexion(uid="u-tablette", admin=False)
-    lancer(envoyer(b.hass, cx, {"id": 180, "type": "loggia/pin/verifier", "pin": "0000"}))
+    lancer(envoyer(b.hass, cx, {"id": 180, "type": "loggia/pin/verifier", "pin": "4321"}))
     assert cx.resultats == [(180, {"ok": True})]
     lancer(envoyer(b.hass, cx, {"id": 181, "type": "loggia/enfant/config", "patch": {"simulation": {"actif": True}}}))
     lancer(envoyer(b.hass, cx, {"id": 182, "type": "loggia/enfant/config", "patch": {"profils": {}, "simulation": {"actif": True}}}))
@@ -1213,7 +1258,44 @@ def test_l_etat_de_la_nuit_porte_le_compte_de_la_session(creer_store):
     module = charger("websocket_api")
     hass = Hass()
     nuit = Nuit()
-    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}), acces_nuit=lambda: nuit)
+    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}), lambda nom: {"nuit": nuit}.get(nom))
     cx = Connexion(admin=False)
     lancer(envoyer(hass, cx, {"id": 47, "type": "loggia/nuit/etat"}))
     assert cx.erreurs == [] and nuit.lus == ["u-lea"], "le compte vient de la session, jamais du message"
+
+
+# TEST AJOUTE (audit du 28/10, M5 ; ADR 0279) : `regles/etat` nommait toutes les entites de la maison a tout compte. Sous les
+# droits de LECTURE du compte, il ne rend que ce qu'il peut lire - journal, gels, tenues, ordres en attente -, et rend tout a
+# un compte sans restriction.
+class ReglesJournal:
+    async def journal(self, limite=200, module=None):
+        return [{"module": "volets", "cibles": ["cover.salon", "cover.bureau"], "n": 2},
+                {"module": "chauffage", "cibles": ["climate.bureau"], "n": 1, "detail": "u-papa"}]
+
+    def gels(self):
+        return {"cover.bureau": 40, "cover.salon": 12}
+
+    def tenues_toutes(self):
+        return {"climate.bureau": {"module": "fenetres", "regle": "ouverte"}}
+
+    async def calme(self):
+        return False
+
+
+def test_le_journal_des_regles_se_lit_sous_les_droits_du_compte(creer_store):
+    module = charger("websocket_api")
+    hass = Hass()
+    volets = types.SimpleNamespace(attente={"cover.bureau": {"position": 0}, "cover.salon": {"position": 100}})
+    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}), lambda nom: {"regles": ReglesJournal(), "volets": volets}.get(nom))
+    restreint = Connexion(uid="u-invite", admin=False)
+    restreint.user.permissions = types.SimpleNamespace(check_entity=lambda h, _quoi: "bureau" not in h)
+    lancer(envoyer(hass, restreint, {"id": 300, "type": "loggia/regles/etat"}))
+    assert restreint.erreurs == [], restreint.erreurs
+    vu = restreint.resultats[-1][1]
+    assert vu["journal"] == [{"module": "volets", "cibles": ["cover.salon"], "n": 2}]
+    assert vu["gels"] == {"cover.salon": 12}
+    assert vu["tenues"] == {}
+    assert vu["attentes"] == {"cover.salon": {"position": 100}}
+    libre = Connexion(uid="u-lea", admin=False)
+    lancer(envoyer(hass, libre, {"id": 301, "type": "loggia/regles/etat"}))
+    assert len(libre.resultats[-1][1]["journal"]) == 2, "un compte sans restriction voit tout"

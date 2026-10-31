@@ -16,6 +16,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (f) => readFileSync(join(RACINE, 'src', f), 'utf8');
 const css = lire('index.css');
@@ -36,7 +37,7 @@ test('toutes les rangées de titre d’Objets ont 40 px, titre centré', () => {
 });
 
 test('chaque titre de filtre est posé dans une de ces rangées', () => {
-  const app = lire('App.jsx');
+  const app = MONOLITHE;
   const titres = [...app.matchAll(/\{titreFiltre\}<\/h2>/g)].map(m => m.index);
   assert.ok(titres.length >= 10, 'le balayage voit les titres (' + titres.length + ')');
   for (const i of titres) {

@@ -39,6 +39,7 @@ import { register } from 'node:module';
 import { area, device, entity, state, states, ctxOf } from './fixtures.mjs';
 import { monter, horlogeFausse, documentFaux, texteDe } from './crochets.mjs';
 
+import { MONOLITHE, DASHBOARD } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -957,7 +958,7 @@ test('A5 : le composeur range les prises sous Prises, comme Objets — les autre
 
 // ── Audit de l'écran des prises (19/10) ─────────────────────────────────────
 
-const APP_SRC = (await import('node:fs')).readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const APP_SRC = MONOLITHE.replace(/\r\n/g, '\n');
 const corpsDe = (debut) => { const i = APP_SRC.indexOf(debut); return APP_SRC.slice(i, APP_SRC.indexOf('\n}\n', i)); };
 
 test('audit, point 3 : une prise `unknown` ne se commande ni du gros interrupteur, ni de sa ligne épinglée, ni de la recherche', () => dans(() => {
@@ -1020,7 +1021,8 @@ test('audit, point 2 : les notifications disent les cycles que le serveur suit ;
   assert.deepEqual(c.map(x => [x.k, x.t, x.m]), [['cycle:switch.lv:2026-10-13T20:10:00+02:00', 'Lave-vaisselle', 'Cycle en cours']]);
   assert.ok(!n.some(x => x.k === 'lv:cycle'), 'l’ancien seuil se tait');
   assert.deepEqual(F.deriveNotifs({ states: S }, []).filter(x => /cycle/.test(x.k)), [], 'suivi, au repos : rien');
-  const accueil = APP_SRC.slice(APP_SRC.indexOf('function Dashboard('), APP_SRC.indexOf('const nEnCours = momentRows.length;'));
+  // ASSERTION MODIFIÉE (ADR 0283) : « En ce moment » vit dans un hook posé devant `Dashboard` ; on lit l'Accueil jusqu'à son compte.
+  const accueil = DASHBOARD.slice(0, DASHBOARD.indexOf('const nEnCours = momentRows.length;'));
   assert.ok(accueil.includes('if (cyclesPrises) cyclesPrises.forEach(') && accueil.includes('else if (mLv && mLv.active'), '« En ce moment » : le serveur d’abord, l’ancien chemin en repli');
   assert.ok(APP_SRC.includes('cyclesPrises={cyclesPrises} />}') && APP_SRC.includes('const lecturePrises = useLecturePrises(!!hass);'), 'App les lit une fois, et les passe à l’Accueil');
   assert.ok(!APP_SRC.includes("+ 'min'; };"), 'la durée « 1h05min », non traduite, est partie');

@@ -291,11 +291,13 @@ function NouveauRappel({ listes = [], onAjouter = null, onClose = null }) {
  * Il ne restait donc que le BANDEAU, et sa place est juste au-dessus d'elle :
  * un point d'attention doit être actionnable et rare.
  *
- * `onSorti` le fait taire jusqu'à la collecte suivante. Les couleurs viennent
+ * `onSorti` le fait taire jusqu'à la collecte suivante — sur TOUS les écrans :
+ * l'Accueil le range au serveur, avec le bouton de la notification (ADR 0301).
+ * Les couleurs viennent
  * de `familleCollecte` : les familles répandues sont reconnues à leur nom,
  * dans les sept langues, et un nom inconnu prend la couleur suivante.
  */
-export function BandeauCollecte({ prochain = null, heureSortie = '20:00', sorti = false, onSorti = null }) {
+export function BandeauCollecte({ prochain = null, heureSortie = null, sorti = false, onSorti = null }) {
   if (!prochain || !prochain.types.length) return null;
   const auj = prochain.jour === 0;
   const veille = prochain.jour === 1;
@@ -306,7 +308,10 @@ export function BandeauCollecte({ prochain = null, heureSortie = '20:00', sorti 
   /* L'échéance reste écrite même une fois le bac sorti : c'est le BOUTON qui
    * porte l'état, plein et coché. Le sous-titre la répétait, et « C'est sorti »
    * s'affichait alors deux fois sur la même ligne. */
-  const quand = auj ? tr('À sortir ce matin') : tr('À sortir ce soir avant {h}', { h: heureSortie });
+  /* « avant 20:00 » etait une heure inventee (chantier G2, D2) : sans heure
+   * reglee, « ce soir », et c'est tout. */
+  const quand = auj ? tr('À sortir ce matin')
+    : heureSortie ? tr('À sortir ce soir avant {h}', { h: heureSortie }) : tr('À sortir ce soir');
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 14, marginBottom: 12,

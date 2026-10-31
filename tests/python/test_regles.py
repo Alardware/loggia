@@ -622,10 +622,16 @@ def test_le_composant_transmet_le_socle_aux_quatre_modules_migres():
     from conftest import COMPOSANT
 
     texte = (COMPOSANT / "__init__.py").read_text(encoding="utf-8")
+    # ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : une ligne de `MODULES` dit ce que le module
+    # requiert et recoit (`_REGLES` : le magasin et le socle), et la boucle les lui passe.
+    assert '_REGLES = ("store", "regles")' in texte
+    assert "if data.get(module.cle) or not all(data.get(r) for r in module.requis):" in texte
+    assert 'data[module.cle] = classe(hass, *(data if a == "data" else data.get(a) for a in module.arguments))' in texte
+    # `importlib.import_module` dans la boucle : Home Assistant le signale comme un appel bloquant (relecture du lot 8).
+    assert "import_module(" not in texte and "import importlib" not in texte
     for nom, classe in (("fenetres", "LoggiaFenetres"), ("presence", "LoggiaPresence"),
                         ("nuit", "LoggiaNuit"), ("interrupteurs", "LoggiaInterrupteurs")):
-        assert 'data["%s"] = %s(hass, data["store"], data.get("regles"))' % (nom, classe) in texte, nom
-        assert 'if not data.get("%s") and data.get("store") and data.get("regles"):' % nom in texte, nom
+        assert 'Module("%s", "%s", _REGLES, _REGLES,' % (nom, classe) in texte, nom
 
 def test_un_gel_expire_ne_se_lit_plus(socle):
     """L'ecran ne doit pas montrer une main qui n'y est plus."""
@@ -655,19 +661,21 @@ def test_le_journal_a_ses_deux_commandes():
     texte = (COMPOSANT / "websocket_api.py").read_text(encoding="utf-8")
     assert 'WS_REG_ETAT = "loggia/regles/etat"' in texte
     assert 'WS_REG_DEGELER = "loggia/regles/degeler"' in texte
-    assert "websocket_api.async_register_command(hass, handle_reg_etat)" in texte
-    assert "websocket_api.async_register_command(hass, handle_reg_degeler)" in texte
+    from conftest import declaration
+
+    # ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : les commandes sont des lignes de `COMMANDES`.
+    assert 'module="regles"' in declaration(texte, "Commande(WS_REG_ETAT, handle_reg_etat,")
     # Rendre la main est un geste d'administrateur : c'est defaire ce que
     # quelqu'un a fait a la main.
-    i = texte.index("async def handle_reg_degeler")
-    assert "@websocket_api.require_admin" in texte[i - 300:i], "n'importe quel compte pourrait rendre la main"
+    assert "acces=ADMIN" in declaration(texte, "Commande(WS_REG_DEGELER, handle_reg_degeler,"), \
+        "n'importe quel compte pourrait rendre la main"
     # Et il se voit au journal.
     assert 'await regles.noter("regles", "main", "rendre la main"' in texte
     # L'etat rend tout ce que la section « en ce moment » montre.
     for cle in ('"journal":', '"gels":', '"tenues":', '"attentes":', '"calme":'):
         assert cle in texte, cle
     init = (COMPOSANT / "__init__.py").read_text(encoding="utf-8")
-    assert 'acces_regles=lambda: hass.data.get(DOMAIN, {}).get("regles")' in init
+    assert "async_register_ws(hass, store, lambda nom: hass.data.get(DOMAIN, {}).get(nom))" in init
 
 
 def test_les_alertes_n_ont_plus_de_journal_a_part():
@@ -860,3 +868,25 @@ def test_une_ecriture_du_journal_deja_partie_a_l_arret_se_depose_aussi(socle, mo
         assert r._depot.ecritures == 1
     finally:
         ev.async_call_later = vrai
+
+
+# TEST AJOUTE (audit du 28/10, M5 ; ADR 0279) : le journal se lit sous les droits de LECTURE du compte, comme les lumieres,
+# le chauffage et le mode enfant. Une ligne garde les cibles lisibles, disparait si elle n'en a plus, reste si elle n'en
+# avait aucune ; le journal lui-meme ne bouge pas.
+def test_le_journal_se_lit_sous_les_droits_du_compte(module):
+    lignes = [
+        {"module": "volets", "cibles": ["cover.salon", "cover.bureau"], "n": 2},
+        {"module": "chauffage", "cibles": ["climate.bureau"], "n": 1},
+        {"module": "alertes", "cibles": [], "n": 0},
+        {"module": "nuit", "cibles": ["light.salon"], "n": 1},
+    ]
+    avant = [dict(l, cibles=list(l["cibles"])) for l in lignes]
+    lit = lambda h: "bureau" not in h  # noqa: E731
+    vu = module.journal_lisible(lignes, lit)
+    assert [l["module"] for l in vu] == ["volets", "alertes", "nuit"]
+    assert vu[0]["cibles"] == ["cover.salon"]
+    assert lignes == avant, "le journal a ete modifie"
+    assert module.journal_lisible(lignes, None) == lignes, "sans restriction, tout passe"
+    assert module.cles_lisibles({"cover.salon": 30, "cover.bureau": 12}, lit) == {"cover.salon": 30}
+    assert module.cles_lisibles({"cover.bureau": 12}, None) == {"cover.bureau": 12}
+    assert module.cles_lisibles(None, lit) == {}

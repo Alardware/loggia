@@ -20,12 +20,13 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
 import re
 import struct
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from .fichiers import ecrire_d_un_tenant
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -91,9 +92,9 @@ def ecrire_plan(dossier: Path, etage: str, octets: bytes) -> str:
     verifier_glb(octets)
     cible = chemin_plan(dossier, etage)
     dossier.mkdir(parents=True, exist_ok=True)
-    temporaire = cible.with_suffix(".glb.tmp")
-    temporaire.write_bytes(octets)
-    os.replace(temporaire, cible)
+    # Un temporaire par envoi (lot 8, B5) : deux envois du meme etage ne
+    # partagent plus le leur.
+    ecrire_d_un_tenant(cible, octets)
     return empreinte(octets)
 
 

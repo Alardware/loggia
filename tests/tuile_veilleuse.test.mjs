@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs';
 
 import { monter, horlogeFausse, documentFaux } from './crochets.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -28,7 +29,7 @@ register('data:text/javascript,' + encodeURIComponent([
 ].join('\n')));
 const { setLoggiaState } = await import('../src/state.js');
 const F = await import(new URL('../src/App.jsx?tuile_veilleuse', import.meta.url).href);
-const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const APP = MONOLITHE.replace(/\r\n/g, '\n');
 
 async function dans(fn) {
   const h = horlogeFausse(), d = documentFaux();

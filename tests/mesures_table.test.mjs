@@ -90,8 +90,9 @@ test('le vent en m/s, en nœuds ou en mph : la table compte en km/h, les chiffre
 });
 
 test('la famille d’un capteur, lue à sa classe ; un COV ne se lit qu’en INDICE, sans unité', () => {
+  // ASSERTION MODIFIÉE (30/10, G4-A5) : les PM10 ont leurs zones (UE 2030, OMS 2021) — `pm10`, plus `null`.
   assert.deepEqual(['temperature', 'humidity', 'carbon_dioxide', 'sound_pressure', 'illuminance', 'pm25', 'wind_speed', 'battery', 'pressure', 'pm10'].map(dc => C.cleMesure(dc)),
-    ['temp', 'hum', 'co2', 'bruit', 'lux', 'pm25', 'vent', null, null, null]);
+    ['temp', 'hum', 'co2', 'bruit', 'lux', 'pm25', 'vent', null, null, 'pm10']);
   assert.equal(C.cleMesure('volatile_organic_compounds', ''), 'cov', 'l’indice d’un capteur Sensirion, de 0 à 500');
   assert.equal(C.cleMesure('volatile_organic_compounds_parts', undefined), 'cov');
   assert.equal(C.cleMesure('volatile_organic_compounds', 'µg/m³'), null, 'des µg/m³ ne se lisent pas sur l’échelle d’un indice');

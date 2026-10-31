@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 /* La langue de la machine ne doit rien changer au resultat : « 16,2° » s'ecrit
  * « 16.2° » sur un runner anglais. Elle est fixee AVANT le premier import (voir
  * tests/systeme_hoas.test.mjs). */
@@ -16,7 +17,7 @@ const { typesPrevision, degres, estNuit, modeMeteo, heuresMeteo, extremesDuJour,
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
-const app = lire('src', 'App.jsx');
+const app = MONOLITHE;
 const carte = lire('src', 'cartemeteo.jsx');
 const wxutil = lire('src', 'wxutil.jsx');
 const css = lire('src', 'index.css');

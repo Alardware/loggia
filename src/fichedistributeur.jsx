@@ -53,7 +53,6 @@ import { Fi, Bascule, ListeChoix, cvName } from './ui.jsx';
 import { LOGGIA_INDEX, loggiaEnt, cfgVal, cfgSet, compteOrdinaire } from './state.js';
 import { commanderService } from './actions.js';
 import { premierJourSemaine } from './horloge.js';
-import { LISERE } from './styles.js';
 import { useOptimiste, useDemandes, enVol } from './optimiste.js';
 import { estRefus, raisonEchec } from './refus.js';
 import { ordreJours, heureValide } from './robots.js';
@@ -65,9 +64,10 @@ import {
   consommablesDistributeur, reglagesDistributeur, selectMode, niveauConsommable,
 } from './distributeurfiche.js';
 import {
-  PANNEAU, PETITES_CAPITALES, LIGNE, SOUS, filet, BoutonConfirme, PasAPas, PuceJour, ChampHeure,
+  PANNEAU, PETITES_CAPITALES, LIGNE, filet, BoutonConfirme, PasAPas, PuceJour, ChampHeure,
   useHistoriquePeriode, EnteteFiche, FicheOnglets, PanneauOnglet, PageReglagesAppareil, OngletEntretien, focaliser,
 } from './fichecommune.jsx';
+import { CADRE_TUILE, SOUS } from './fichekit.js';
 
 const JOURS_HISTORIQUE = 10;      // la purge par défaut de Home Assistant
 const PORTIONS_MAX = 20;          // comme `distributeurs.py`
@@ -118,8 +118,6 @@ export function heureLibre(repas) {
 
 /* Les panneaux de sa maquette (§ 7.5) : `--o-s3`, le liseré, le rayon 18 — le panneau du socle, sans son dégradé ni son ombre. */
 const CADRE = { ...PANNEAU, background: 'var(--o-s3)', boxShadow: 'none', borderRadius: 18, padding: '16px 18px' };
-// Le cadre d'une tuile : celui d'un panneau ; sa marge (14 × 16, 14 × 12 sous 290 px de tuiles) est celle des tuiles du robot (`rb-a-tuile`).
-const CADRE_TUILE = { background: 'var(--o-s3)', border: LISERE, borderRadius: 18, boxSizing: 'border-box', minWidth: 0 };
 // Deux lignes au plus, coupées entre deux mots, puis « … » : « Mahlzeiten: 1 · 12 g », « Harmonogram Loggii » au téléphone (05/10).
 const DEUX_LIGNES = { overflow: 'hidden', overflowWrap: 'anywhere', hyphens: 'auto', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' };
 /* Les puces de sa maquette (`ChipButton`) : 40 px, le rayon 10, le gris doux ; d'accent — « Oui, 100 % », « Distribuer » —, le bleu

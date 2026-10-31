@@ -49,7 +49,9 @@ const APPAREILS = table('APPAREILS');
  * anglais même chez un Français. Ajouter un nom ici, c'est affirmer qu'il se
  * lit pareil en polonais. */
 const TELS_QUELS = new Set(['Camille', 'Alex', 'Léa', 'Sam', 'Démo', 'Orbit V3', 'Meadow M2']);
-const INTEGRATION = /^(System Monitor|Home Assistant|ESPHome|Zigbee2MQTT|Mosquitto broker|MariaDB|Samba share|Studio Code Server)( |$)|^homeassistant\./;
+/* ASSERTION MODIFIÉE (30/10, G4-A1) : Atmo France (HACS) écrit ses noms en dur, en français, dans toutes les langues de Home
+ * Assistant — son service, son modèle (« Atmo France API »), « Qualité globale-<ville> », « Niveau <plante>-<ville> ». */
+const INTEGRATION = /^(System Monitor|Home Assistant|ESPHome|Zigbee2MQTT|Mosquitto broker|MariaDB|Samba share|Studio Code Server|Atmo France)( |$)|^homeassistant\.|^(Qualité globale|Niveau [^-]+)(-| Pollen-)/;
 const telQuel = (n) => TELS_QUELS.has(n) || INTEGRATION.test(n);
 const litteraux = (avant) => [...demo.matchAll(new RegExp(avant + LIT, 'g'))].map(m => m[1] ?? m[2]);
 

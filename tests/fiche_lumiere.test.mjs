@@ -22,6 +22,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { monter, horlogeFausse, documentFaux, texteDe } from './crochets.mjs';
 import { teinteDe } from './jetons_loggia.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -45,7 +46,7 @@ const P = await import('../src/prisesetat.js');
 const LU = await import('../src/lumieres.js');
 const { lireCouleur } = await import('../src/contraste.js');
 const lire = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-const APP = lire('src/App.jsx');
+const APP = MONOLITHE;
 
 const NBSP = '\u00a0';
 const FINE = '\u202f';   // le séparateur des milliers en français (Intl)

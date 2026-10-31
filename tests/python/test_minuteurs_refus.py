@@ -27,8 +27,7 @@ class Minuteurs:
 def poser(creer_store, refus):
     module = charger("websocket_api")
     hass = Hass()
-    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}),
-                          acces_minuteurs=lambda: Minuteurs(refus))
+    module.async_register(hass, creer_store({"users": {}, "migrated": True, "shared": {}}), lambda nom: {"minuteurs": Minuteurs(refus)}.get(nom))
     cx = Connexion()
     lancer(envoyer(hass, cx, {"id": 7, "type": "loggia/minuteurs/poser", "entity_id": "switch.prise_cafe",
                               "minutes": 30}))

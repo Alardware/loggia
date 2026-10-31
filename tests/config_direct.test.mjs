@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 
 import { doitRelire } from '../src/config.js';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const lire = (f) => readFileSync(new URL('../' + f, import.meta.url), 'utf8');
 
 test('doitRelire : les cles communes concernent tout le monde, les personnelles le seul compte qui les a ecrites', () => {
@@ -23,7 +24,7 @@ test('doitRelire : les cles communes concernent tout le monde, les personnelles 
 });
 
 test('App : l’ecran s’abonne au flux, relit groupe, et jamais pendant l’edition', () => {
-  const app = lire('src/App.jsx');
+  const app = MONOLITHE;
   assert.ok(/import \{[^}]*doitRelire[^}]*\} from '\.\/config\.js';/.test(app), 'importe de config.js');
   assert.ok(app.includes("h.connection.subscribeMessage((chg) => { if (alive && doitRelire(chg, { userId: monId })) relire(); }, { type: 'loggia/config/suivre' })"), 'l’abonnement, filtre par doitRelire');
   assert.ok(app.includes("if (editRef.current) { enAttenteRef.current = true; return; }") && app.includes('}, 300);'), 'en edition on attend ; sinon relecture groupee');

@@ -19,6 +19,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE, importsDe } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 const { nombre } = await import('../src/format.js');
 const { tr, langue, preparerLangue } = await import('../src/i18n.js');
@@ -27,7 +28,7 @@ const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(RACINE, 'src');
 const NL = String.fromCharCode(10);
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
-const app = lire('src', 'App.jsx');
+const app = MONOLITHE;
 
 test('nombre() en français : la virgule, les décimales demandées, jamais « -0 »', () => {
   assert.equal(langue(), 'fr');
@@ -45,7 +46,8 @@ test('nombre() en français : la virgule, les décimales demandées, jamais « -
 });
 
 test('l’écran passe par nombre() : dec et decMax d’App.jsx, la pluie de la carte météo', () => {
-  assert.ok(app.includes("import { fmtWatts, relTime, minutesDepuisHeure, nombre } from './format.js';"), 'App.jsx n’importe pas nombre');
+  // ASSERTION MODIFIÉE (ADR 0283) : la ligne d'import se répartit entre App.jsx et ses modules ; on lit ses noms.
+  assert.ok(importsDe(app, './format.js').has('nombre'), 'App.jsx n’importe pas nombre');
   assert.ok(app.includes('const dec = (n, d) => nombre(n, d);') && app.includes('const decMax = (n, d) => nombre(n, d, 0);'), 'App.jsx formate encore les nombres à sa façon');
   assert.ok(app.includes('{target != null ? <>{dec(target, 1)}<span'), 'le cadran du fil pilote');
   assert.ok(app.includes("{tr('actuel {n}°', { n: decMax(z.current, 1) })}"), 'la mesure sous le cadran : traduite, et dans la convention de la langue');

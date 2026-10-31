@@ -28,9 +28,10 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8').replace(/\r\n/g, '\n');
-const APP = lire('src', 'App.jsx') + lire('src', 'views', 'voletsplan.jsx'); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
+const APP = MONOLITHE + lire('src', 'views', 'voletsplan.jsx'); // App.jsx + la vue « modes et planning », chargée à la demande depuis le 19/10 (borne du boot).
 const VOL = lire('src', 'views', 'volets.jsx');
 const PAR = lire('src', 'views', 'parametres.jsx');
 const OPT = lire('src', 'optimiste.js');

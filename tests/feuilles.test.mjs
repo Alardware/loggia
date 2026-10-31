@@ -17,10 +17,11 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const UI = lire('src', 'ui.jsx');
-const APP = lire('src', 'App.jsx');
+const APP = MONOLITHE;
 const sources = () => {
   const fichiers = [];
   const parcourir = (d) => readdirSync(join(RACINE, d), { withFileTypes: true }).forEach(e => {
@@ -76,11 +77,15 @@ test('chaque feuille porte la croix sur sa ligne d’en-tête', () => {
       // ASSERTION MODIFIÉE (boot, 19/10) : la feuille du Calendrier garde sa coquille (App.jsx) ; son contenu, chargé à la demande
       // (feuillecalendrier.jsx), porte sa croix (`CroixFeuille`, en dernier sur sa ligne d'en-tête), lue DANS son module, plus bas.
       // ASSERTION MODIFIÉE (étape 3 IoT, 25/10 ; I27) : la popup d'une vanne : son contenu (`ContenuVanne`, fichevanne.jsx) porte l'en-tête commun — sa croix et son nom (`EnteteFiche`).
-      if (!/<CroixFeuille|<TitreFeuille|<FicheEntete|<ContenuEnfant|<FicheRobotContent|<FicheDistributeurContent|<FicheChauffageContent|<FicheVoletContent|<FichePriseContent|<FicheLumiereContent|<FicheMediaContent|<FicheMeteoContenu|<FicheCapteurContent|<FicheBinaireContent|<FicheConfortContent|<FichePlanteContent|<FicheGroupeContent|<FicheSwitchContent|<FeuilleCalendrierContent|<ContenuVanne/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
+      /* ASSERTION MODIFIÉE (30/10, G3-E2/E3) : les popups du chauffe-eau et de la borne : leurs contenus (`FicheEauContent`, ficheeau.jsx ;
+       * `FicheBorneContent`, ficheborne.jsx), chargés à la demande, portent l'en-tête commun — sa croix et son nom (`EnteteFiche`), vérifié plus bas. */
+      if (!/<CroixFeuille|<TitreFeuille|<FicheEntete|<ContenuEnfant|<FicheRobotContent|<FicheDistributeurContent|<FicheChauffageContent|<FicheVoletContent|<FichePriseContent|<FicheLumiereContent|<FicheMediaContent|<FicheMeteoContenu|<FicheCapteurContent|<FicheBinaireContent|<FicheConfortContent|<FichePlanteContent|<FicheGroupeContent|<FicheSwitchContent|<FeuilleCalendrierContent|<ContenuVanne|<FicheEauContent|<FicheBorneContent/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
       i = s.indexOf('<BottomSheet', i + 1);
     }
   }
   assert.deepEqual(sans, [], 'une feuille n’a plus de croix');
+  // Chantier G3 : le chauffe-eau et la borne portent l'en-tête commun, sa croix et son nom.
+  assert.ok(lire('src', 'ficheeau.jsx').includes('<EnteteFiche nom={v.nom}') && lire('src', 'ficheborne.jsx').includes('<EnteteFiche nom={v.nom}'), 'la popup du chauffe-eau ou de la borne a perdu l’en-tête commun');
   // L'en-tête des fiches : l'épingle, puis la croix.
   const e = fonction(APP, 'FicheEntete');
   assert.ok(e.indexOf('<BoutonEpingle id={id} />') >= 0 && e.indexOf('<BoutonEpingle id={id} />') < e.indexOf('<CroixFeuille />'), 'la croix n’est plus en dernier');
@@ -144,7 +149,9 @@ test('aucune autre croix : la commune, la commande d’un volet, le formulaire d
    * plus la forme d'une croix. Elle reste épinglée plus bas ; App.jsx, lui,
    * n'a plus aucune croix à part. */
   // ASSERTION MODIFIÉE (chantier Prises, tâche 2) : la croix de la fiche d'un événement a suivi la feuille dans son fichier.
-  assert.deepEqual(croix.sort(), ['src/feuilleagenda.jsx × 1', 'src/formevenement.jsx × 1', 'src/rappelsrail.jsx × 1', 'src/ui.jsx × 1']);
+  // ASSERTION MODIFIÉE (lot 7 de l'audit du 28/10, V7) : la croix commune (`CroixFeuille`, ui.jsx) se nomme « Fermer la fiche ».
+  assert.deepEqual(croix.sort(), ['src/feuilleagenda.jsx × 1', 'src/formevenement.jsx × 1', 'src/rappelsrail.jsx × 1']);
+  assert.equal((lire('src', 'ui.jsx').match(/aria-label=\{tr\('Fermer la fiche'\)\}/g) || []).length, 1, 'la croix commune');
   const rap = readFileSync(join(RACINE, 'src', 'rappelsrail.jsx'), 'utf8');
   assert.ok(rap.includes("<button onClick={onClose} aria-label={tr('Fermer')}"), 'la croix du formulaire de rappel');
   // ASSERTION MODIFIÉE (19/10) : la commande suit ce que le cover accepte (`gestesCover`) ; son nom dit toujours le volet.
@@ -245,7 +252,9 @@ test('chaque feuille dit son nom : sa ligne de titre, ou NomFeuille posé sur le
       // ASSERTION MODIFIÉE (boot, 19/10) : la feuille du Calendrier garde sa coquille (App.jsx) ; son contenu, chargé à la demande
       // (feuillecalendrier.jsx), porte son nom (`NomFeuille` sur le mois), lu DANS son module, plus bas.
       // ASSERTION MODIFIÉE (étape 3 IoT, 25/10 ; I27) : la popup d'une vanne : son contenu (`ContenuVanne`, fichevanne.jsx) porte l'en-tête commun — sa croix et son nom (`EnteteFiche`).
-      if (!/<TitreFeuille|<FicheEntete|<NomFeuille|<ContenuEnfant|<FicheRobotContent|<FicheDistributeurContent|<FicheChauffageContent|<FicheVoletContent|<FichePriseContent|<FicheLumiereContent|<FicheMediaContent|<FicheMeteoContenu|<FicheCapteurContent|<FicheBinaireContent|<FicheConfortContent|<FichePlanteContent|<FicheGroupeContent|<FicheSwitchContent|<FeuilleCalendrierContent|<ContenuVanne/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
+      /* ASSERTION MODIFIÉE (30/10, G3-E2/E3) : les popups du chauffe-eau et de la borne : leurs contenus (`FicheEauContent`, ficheeau.jsx ;
+       * `FicheBorneContent`, ficheborne.jsx), chargés à la demande, portent l'en-tête commun — sa croix et son nom (`EnteteFiche`), vérifié plus bas. */
+      if (!/<TitreFeuille|<FicheEntete|<NomFeuille|<ContenuEnfant|<FicheRobotContent|<FicheDistributeurContent|<FicheChauffageContent|<FicheVoletContent|<FichePriseContent|<FicheLumiereContent|<FicheMediaContent|<FicheMeteoContenu|<FicheCapteurContent|<FicheBinaireContent|<FicheConfortContent|<FichePlanteContent|<FicheGroupeContent|<FicheSwitchContent|<FeuilleCalendrierContent|<ContenuVanne|<FicheEauContent|<FicheBorneContent/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
       i = s.indexOf('<BottomSheet', i + 1);
     }
   }
@@ -298,7 +307,8 @@ test('NomFeuille pose l’id sur le titre existant, et ne dessine rien', async (
     const k = (s.match(/useIdTitreFeuille\(\)/g) || []).length;
     if (k) appels.push(f + ' × ' + k);
   }
-  assert.deepEqual(appels.sort(), ['src/App.jsx × 1', 'src/ui.jsx × 3'],
+  // ASSERTION MODIFIÉE (ADR 0283) : `FicheEntete` est sortie d'App.jsx avec les fiches.
+  assert.deepEqual(appels.sort(), ['src/appareils/fiches.jsx × 1', 'src/ui.jsx × 3'],
     'le crochet du nom est appelé ailleurs que dans TitreFeuille, FicheEntete et NomFeuille');
   // Une ligne de titre qui s'en va rend l'id : celle qui la remplace le reprend.
   assert.ok(UI.includes('rendre: (jeton) => { if (prisPar.current === jeton) prisPar.current = null; },')

@@ -12,11 +12,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
-const APP = (lire('src', 'App.jsx') + VUES_SORTIES);
+const APP = (MONOLITHE + VUES_SORTIES);
 const RES = lire('src', 'resolve.js');
 
 test('le coût vient du tableau de bord Énergie, pas d’un calcul maison', () => {

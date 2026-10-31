@@ -30,6 +30,7 @@ import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -49,7 +50,7 @@ register(EXPOSE);
 const { __RoomGenericCard: RoomGenericCard, __RoomMesureCard: RoomMesureCard } = await import(new URL('../src/App.jsx?l16vl', import.meta.url).href);
 
 const NL = String.fromCharCode(10);
-const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+const APP = MONOLITHE;
 function fonction(nom) {
   const d = APP.indexOf(NL + 'function ' + nom + '(');
   assert.ok(d >= 0, nom + ' introuvable');

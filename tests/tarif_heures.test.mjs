@@ -249,10 +249,12 @@ test('le créneau trouvé complète la fiche, il ne la remplace pas', () => {
    * fiche decide quand elle nomme. `enHaids` fusionne deja ainsi — il suffit
    * que `resolveEnergy` publie le role. */
   const r = readFileSync(join(RACINE, 'src', 'resolve.js'), 'utf8');
-  assert.ok(r.includes("import { trouverCreneau } from './creneau.js';"), 'la decouverte n’est plus branchee');
+  // ASSERTION MODIFIÉE (30/10, G3-E4) : `creneau.js` donne aussi la couleur Tempo du lendemain.
+  assert.ok(r.includes("import { trouverCreneau, trouverCouleurDemain } from './creneau.js';"), 'la decouverte n’est plus branchee');
   assert.ok(r.includes('hcActive: trouverCreneau(listeEntites(index)),'),
     'le creneau ne se cherche plus dans toute la maison');
   // Il passe par le registre : cle de traduction et entite desactivee.
-  assert.ok(r.includes("out.push({ id, cle: (m && m.translationKey) || '', desactive: !!(m && m.disabled) })"),
+  // ASSERTION MODIFIÉE (30/10, G3-E4) : l'entrée porte aussi le rôle que le serveur pose (`tarif`, tarifs.py).
+  assert.ok(r.includes("out.push({ id, cle: (m && m.translationKey) || '', desactive: !!(m && m.disabled), tarif: (m && m.tarif) || null })"),
     'la decouverte ne lit plus la cle de traduction, ou ignore les entites desactivees');
 });

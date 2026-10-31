@@ -12,11 +12,12 @@ import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 register('./jsx-hooks.mjs', import.meta.url);
 const E = await import(new URL('../src/enteteiot.jsx', import.meta.url).href);
 const lire = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-const APP = lire('src/App.jsx'), CSS = lire('src/index.css');
+const APP = MONOLITHE, CSS = lire('src/index.css');
 
 const st = (id, state) => [id, { entity_id: id, state, attributes: {} }];
 const S = Object.fromEntries([st('vacuum.aspirateur', 'cleaning'), st('lawn_mower.tondeuse', 'docked'), st('fan.salon', 'on'),

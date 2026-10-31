@@ -174,8 +174,14 @@ test('la page LIVRÉE précharge son boot et ses polices, aux bonnes adresses', 
  * le choix des agendas, que seule la carte du rail ouvre — quitte le boot pour
  * `feuillecalendrier.jsx`, chargé à la demande : 1 102 358 → 1 093 023 octets.
  * La borne ne descend pas d'autant : cette place est celle des corrections
- * des lumières (ADR 0260 à 0262). */
-const BUDGET_BOOT = 1_100_000;
+ * des lumières (ADR 0260 à 0262).
+ *
+ * Le 29/10 (lot 5 de l'audit de consolidation, étape b ; ADR 0283), l'édition
+ * — la feuille d'une carte, le composeur, l'historique des mises en page, la
+ * Bibliothèque — et les vues personnalisées quittent le boot, chargées à la
+ * demande : 1 055 710 → 1 020 585 octets. La borne descend d'autant, de
+ * 1 100 000 à 1 065 000 : la marge reste celle d'avant, environ 44 Ko. */
+const BUDGET_BOOT = 1_065_000;
 
 /* TEST AJOUTÉ (chantier IoT, tâche 10, 18/10) : le budget mesure TOUT ce que le démarrage charge. Un module du démarrage importé
  * aussi par un morceau à la demande — la démo important `phaseRobot` de robots.js — sortait du boot dans un morceau PARTAGÉ, que

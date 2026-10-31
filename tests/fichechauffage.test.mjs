@@ -83,6 +83,7 @@ import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { transformSync } from 'esbuild';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 // La langue AVANT l'import : i18n et les dates la lisent au chargement.
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
@@ -92,7 +93,7 @@ if (typeof globalThis.requestAnimationFrame !== 'function') {
 register('./jsx-hooks.mjs', import.meta.url);
 const M = await import(new URL('../src/fichechauffage.jsx', import.meta.url).href);
 const Fiche = M.default;
-const { ordreDuMode, messageDeFin, messagePlanning, gesteSemaine, messageSemaine, messageTemperatures, messageFenetre, messageSuppression } = M;
+const { ordreDuMode, messageDeFin, messagePlanning, gesteSemaine, messageSemaine, messageTemperatures, messageFenetre, messageSuppression, messageDecalage } = M;
 const SOURCE = readFileSync(new URL('../src/fichechauffage.jsx', import.meta.url), 'utf8');
 const { JOURS } = await import('../src/chauffage.js');
 const PLAN = await import('../src/chauffageplanning.js');
@@ -320,7 +321,8 @@ test('un thermostat, planning éteint : pas de puces de modes, sa consigne et sa
   // Le pas d'une reprise en température : celui de l'appareil, et rien à une borne (comme la carte).
   assert.ok(SOURCE.includes('const vise = consigneVoisine(consigne, sens, a, uT);'));
   assert.ok(SOURCE.includes('if (!p || !p.ok || p.data.temperature === consigne) return;'));
-  assert.ok(SOURCE.includes("auMoteur(messageMain(ch, { temperature: versCelsius(p.data.temperature, uT), fin: 'prochain' }), () => poserOvT(null));"),
+  // ASSERTION MODIFIÉE (30/10) : la consigne de la PIÈCE part, celle de l'appareil moins le décalage de son capteur.
+  assert.ok(SOURCE.includes("auMoteur(messageMain(ch, { temperature: Math.round((versCelsius(p.data.temperature, uT) - decalageEn(ch, 'C')) * 10) / 10, fin: 'prochain' }), () => poserOvT(null));"),
     'la consigne part en °C, et l’avance se retire au refus');
   // Muet hors du planning : rien à commander en direct.
   const mort = rendre({ ch: poele() }, maison({ states: [st(POELE, 'unavailable', { friendly_name: 'Poêle' })] }));
@@ -529,7 +531,7 @@ test('une pompe à chaleur qui refroidit : le planning attend, la fiche le dit (
   assert.ok(html.includes('>Il refroidit : le planning de chauffe attend qu’il repasse en chauffe.<'));
   // Elle commande alors l'appareil, comme planning éteint : la carte comme la fiche.
   assert.ok(SOURCE.includes('const auPlanning = ch.planning === true && !simulation && !refroidit(ch);'));
-  const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  const app = MONOLITHE;
   assert.ok(app.includes('const auPlanning = !!(ch && ch.planning && !etat.simulation && !refroidit(ch));'), 'la carte du thermostat');
 });
 
@@ -629,7 +631,7 @@ test('Historique : la fiche dessine sa courbe — la coquille ne la passe plus, 
   assert.ok(!/from '\.\/App\.jsx'/.test(SOURCE));
   assert.ok(!/\bhistorique\b[=,}]/.test(SOURCE.slice(SOURCE.indexOf('export default function FicheChauffageContent('))), 'la fiche attend encore `historique`');
   // App.jsx relu ici : `APP`, plus bas dans ce fichier, n'est pas encore lu quand ce test tourne.
-  const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+  const app = MONOLITHE.replace(/\r\n/g, '\n');
   const coquille = app.slice(app.indexOf('\nfunction FicheChauffage('), app.indexOf('\nfunction FeuilleChauffage('));
   assert.ok(coquille.length > 500, 'la coquille introuvable');
   assert.ok(!coquille.includes('historique=') && !coquille.includes('useHistorique24') && !coquille.includes('<Courbe24'), 'la coquille dessine encore la courbe');
@@ -946,7 +948,7 @@ function groupe(html, suffixe) {
  * la fiche, chargée à la demande, n'importe jamais App.jsx, et n'en recopie
  * pas la table : `tr('Froid')` et `tr('Sec')` n'ont qu'un appel
  * (tests/froid_sec_deux_sens.test.mjs). */
-const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const APP = MONOLITHE.replace(/\r\n/g, '\n');
 const I18N = await import('../src/i18n.js');
 const motModeClimat = (() => {
   const i = APP.indexOf('\nfunction motModeClimat(');
@@ -1580,8 +1582,9 @@ test('les couleurs : plus de rouge dans l’Accueil hors des alertes ; .rb-chauf
   const accueilSource = SOURCE.slice(SOURCE.indexOf('function OngletAccueil('), SOURCE.indexOf('/* ════════════ Le planning ════════════ */'));
   assert.ok(accueilSource.length > 1000, 'OngletAccueil introuvable');
   assert.ok(!accueilSource.includes('--o-bad') && !accueilSource.includes('--rb-fond'), 'le rouge revient dans l’Accueil');
-  // Une alerte reste rouge.
-  assert.ok(SOURCE.includes("const ALERTE = { fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)' };"));
+  // Une alerte reste rouge : celle du kit des fiches (lot 6 de l'audit du 28/10).
+  const KIT = readFileSync(new URL('../src/fichekit.js', import.meta.url), 'utf8');
+  assert.ok(/^import \{[^}]*\bALERTE\b[^}]*\} from '\.\/fichekit\.js';\r?$/m.test(SOURCE) && KIT.includes("export const ALERTE = { fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)' };"), 'l’alerte rouge du kit');
   const ouverte = rendre({ ch: radiateur({ fenetre_ouverte: true }) });
   assert.ok(!ouverte.includes('--o-bad'), 'une fenêtre ouverte n’est pas une alerte');
   const CSS = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
@@ -1628,6 +1631,37 @@ function panneau(html, nom) {
 }
 // Le dessin des panneaux de la maquette : le gris --o-s3, l'arrondi du thème, sans ombre, le liseré du réglage.
 const PANNEAU_MAQUETTE = { background: 'var(--o-s3)', border: LISERE_ATTENDU, 'border-radius': 'var(--o-radius,18px)', 'box-sizing': 'border-box', 'min-width': '0' };
+
+test('la correction du capteur d’un thermostat : sous les températures, signée, mesurable avec une sonde de la pièce (30/10)', () => {
+  const sonde = { id: 'sensor.salon_temperature', attribut: null };
+  // La sonde de la PIÈCE (`sondePiece`), pas celle qu'on affiche : celle d'un thermostat, c'est lui-même.
+  const html = rendre({ ongletDepart: 'planning', ch: poele({ planning: true, semaine: SEMAINE, decalage: -1.5 }), sondePiece: sonde });
+  const p = panneau(html, 'correction');
+  assert.ok(p, 'le panneau de la correction');
+  assert.ok(html.indexOf('data-panneau="temperatures"') < html.indexOf('data-panneau="correction"'), 'sous les températures des modes');
+  assert.ok(texte(p.corps).includes('−1,5 °C'), texte(p.corps));
+  assert.ok(texte(p.corps).includes('Mesurer'), 'une sonde de la pièce : on peut mesurer');
+  // L'appareil qui se mesure lui-même : rien à comparer.
+  const seul = rendre({ ongletDepart: 'planning', ch: poele({ planning: true, semaine: SEMAINE }), sonde: { id: POELE, attribut: 'current_temperature' } });
+  assert.ok(!texte(panneau(seul, 'correction').corps).includes('Mesurer'), 'sans capteur de la pièce, rien à comparer');
+  assert.ok(texte(panneau(seul, 'correction').corps).includes('0,0 °C'), 'sans décalage : 0,0 °C');
+  const lui = rendre({ ongletDepart: 'planning', ch: poele({ planning: true, semaine: SEMAINE }), sondePiece: { id: POELE, attribut: 'current_temperature' } });
+  assert.ok(!texte(panneau(lui, 'correction').corps).includes('Mesurer'), 'lui-même : rien à comparer');
+  // Un compte ordinaire lit ; un module n'en a pas.
+  const lu = rendre({ ongletDepart: 'planning', ch: poele({ planning: true, semaine: SEMAINE, decalage: 1 }), sondePiece: sonde }, maison({ admin: false }));
+  assert.ok(texte(panneau(lu, 'correction').corps).includes('+1,0 °C') && !texte(panneau(lu, 'correction').corps).includes('Mesurer'));
+  assert.equal(panneau(rendre({ ongletDepart: 'planning', ch: radiateur(), sonde }), 'correction'), null);
+  // Le message : celui d'un réglage de fenêtre, le décalage à la place.
+  const f = JSON.stringify(messageFenetre(poele(), 'eco'));
+  assert.equal(JSON.stringify(messageDecalage(poele(), -1.5)), f.replace('"fenetre":"eco"', '"decalage":-1.5'));
+});
+
+test('au planning, l’Accueil de la fiche dit la consigne de la PIÈCE (30/10)', () => {
+  // Le poêle de la maison des essais est à 20,5 : décalé de −1,5, la pièce est visée à 22.
+  const html = rendre({ ch: poele({ planning: true, semaine: SEMAINE, mode: 'confort', source: 'planning', decalage: -1.5 }) });
+  assert.ok(texte(html).includes('22,0°'), 'la consigne de la pièce');
+  assert.ok(!texte(rendre({ ch: poele({ planning: false, decalage: -1.5 }) })).includes('22,0°'), 'planning éteint : celle de l’appareil');
+});
 
 test('l’onglet Planning, dans l’ordre de sa maquette : Suivre le planning, la semaine, le jour, ses changements — puis les températures et la suppression', () => {
   const perdu = poele({ semaine: SEMAINE, avertissements: ['introuvable'] });
@@ -2400,7 +2434,8 @@ test('Historique (3d) : « 24 h » · « 7 jours », les Puces de la fiche dans 
   const f = SOURCE.slice(SOURCE.indexOf('export default function FicheChauffageContent('));
   const i = f.indexOf("const [periode, setPeriode] = useState('24h');");
   assert.ok(i > 0 && i < f.indexOf('if (!ch) return null;'), 'gardé par la fiche, avant tout retour');
-  assert.ok(f.includes('<OngletHistorique hass={hass} ch={ch} sonde={sonde} minute={minute} periode={periode} onPeriode={setPeriode} t={t} />'));
+  // ASSERTION MODIFIÉE (30/10) : l'onglet reçoit aussi les compteurs de l'appareil (son panneau Énergie).
+  assert.ok(f.includes('<OngletHistorique hass={hass} ch={ch} sonde={sonde} minute={minute} periode={periode} onPeriode={setPeriode} t={t}\n          compteurs={compteurs} />'));
   /* Joué : un appui change la période ; la lecture suit. ASSERTIONS MODIFIÉES
    * (relecture de la partie D, point 2) : l'onglet ne lit plus lui-même —
    * ses données, un enfant gardé par la période (`DonneesHistorique`), si :
@@ -2781,4 +2816,53 @@ test('un thermostat qui ne dit jamais ce qu’il fait (`hvac_action`) : pas de t
   // Une seule fois sur la période suffit : le panneau revient.
   const uneFois = [[...silencieux[0], pt(2, 'heat', { temperature: 20.5, current_temperature: 19.9, hvac_action: 'idle' })]];
   assert.ok(rendreHistorique(parLecture([], uneFois), props, h).html.includes('data-panneau="temps"'));
+});
+
+/* ── L'énergie dans l'Historique (30/10) ─────────────────────────────────────
+ * L'idée de l'intégration Adax pour Gladys : aujourd'hui, hier, et les barres
+ * de la période. Les statistiques sont doublées (`useStatsEnergie`) : ce que
+ * rendrait Home Assistant, à l'heure de la maison. */
+function rendreEnergie(lu, props = {}, h = maison()) {
+  const lectures = [];
+  const { OngletHistorique } = FICHE({ useHistoriquePeriode: () => null, useHistoriqueClimat: () => 'repli',
+    useStatsEnergie: (hh, ids, jours) => { lectures.push({ ids, jours }); return lu; } }, '{ OngletHistorique }');
+  const html = renderToStaticMarkup(createElement(OngletHistorique, { hass: h, ch: radiateur(), sonde: SONDE, minute: [0, 1140], periode: '24h', t: MAINTENANT,
+    compteurs: { energie: 'sensor.radiateur_chambre_energy', puissance: 'sensor.radiateur_chambre_power' }, ...props }));
+  return { html, lectures, energie: panneau(html, 'energie') };
+}
+
+test('Historique : l’énergie du chauffage — aujourd’hui, hier, les barres des 24 h (30/10)', () => {
+  const minuit = new Date(new Date(MAINTENANT).setHours(0, 0, 0, 0)).getTime();
+  const H = 3600000;
+  const ligne = (debut, change) => ({ start: debut, end: debut + H, change });
+  const stats = { 'sensor.radiateur_chambre_energy': [ligne(minuit - 4 * H, 0.5), ligne(minuit - 3 * H, 0.5),
+    ligne(minuit + 8 * H, 1), ligne(minuit + 9 * H, 1), ligne(minuit + 10 * H, 1)] };
+  const { energie, lectures } = rendreEnergie(stats);
+  assert.ok(energie, 'le panneau, sous la courbe');
+  assert.deepEqual(lectures[0], { ids: ['sensor.radiateur_chambre_energy', 'sensor.radiateur_chambre_power'], jours: 1 }, 'le compteur et la puissance');
+  const t = texte(energie.corps);
+  assert.ok(t.includes('Énergie') && t.includes('4,00 kWh sur 24 h'), t);
+  assert.ok(t.includes('Aujourd’hui3,00 kWh') && t.includes('Hier1,00 kWh'), t);
+  assert.equal((energie.corps.match(/data-barre=""/g) || []).length, 5, 'une barre par heure qui a chauffé');
+  assert.ok(!t.includes('Estimée'), 'le compteur a compté');
+  assert.ok(t.includes('il y a 24 h') && t.includes('maintenant'), 'les repères de la courbe');
+});
+
+test('Historique : l’énergie estimée d’après la puissance, sur 7 jours (30/10)', () => {
+  const minuit = new Date(new Date(MAINTENANT).setHours(0, 0, 0, 0)).getTime();
+  const stats = { 'sensor.radiateur_chambre_power': [{ start: minuit + 3600000, end: minuit + 7200000, mean: 1500 }] };
+  const { energie, lectures } = rendreEnergie(stats, { periode: '7j' });
+  assert.equal(lectures[0].jours, 7);
+  const t = texte(energie.corps);
+  assert.ok(t.includes('1,50 kWh sur 7 jours') && t.includes('Estimée d’après sa puissance'), t);
+  assert.equal((energie.corps.match(/data-barre=""/g) || []).length, 1);
+});
+
+test('Historique : l’énergie qui se lit, qui échoue, qui est vide — et le chauffage sans compteur (30/10)', () => {
+  assert.ok(texte(rendreEnergie(null).energie.corps).includes('Chargement…'));
+  assert.ok(texte(rendreEnergie('erreur').energie.corps).includes('Historique indisponible pour le moment'));
+  const vide = texte(rendreEnergie({}).energie.corps);
+  assert.ok(vide.includes('Pas de mesure d’énergie sur cette période') && !vide.includes('kWh'), 'rien lu n’est pas « 0 kWh »');
+  assert.equal(rendreEnergie({}, { compteurs: null }).energie, null, 'un poêle sans compteur n’a pas ce panneau');
+  assert.equal(rendreEnergie({}, { compteurs: { energie: null, puissance: null } }).energie, null);
 });

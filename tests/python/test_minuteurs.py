@@ -314,18 +314,21 @@ def test_annuler_efface_et_desarme(creer, evenements):
 # ── Le cablage ──────────────────────────────────────────────────────────────
 
 def test_le_composant_cree_le_module_et_ouvre_ses_trois_commandes():
+    from conftest import declaration
+
     init = (COMPOSANT / "__init__.py").read_text(encoding="utf-8")
-    assert 'data["minuteurs"] = LoggiaMinuteurs(hass, data["store"], data.get("regles"))' in init
-    assert 'acces_minuteurs=lambda: hass.data.get(DOMAIN, {}).get("minuteurs")' in init
+    # ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : le module nait d'une ligne de `MODULES`, ses
+    # commandes sont des lignes de `COMMANDES` ; leur niveau d'acces est epingle par test_websocket_registre.py.
+    assert 'Module("minuteurs", "LoggiaMinuteurs", _REGLES, _REGLES,' in init
+    assert "async_register_ws(hass, store, lambda nom: hass.data.get(DOMAIN, {}).get(nom))" in init
     ws = (COMPOSANT / "websocket_api.py").read_text(encoding="utf-8")
-    for commande, nom in (("loggia/minuteurs/etat", "handle_min_etat"),
-                          ("loggia/minuteurs/poser", "handle_min_poser"),
-                          ("loggia/minuteurs/annuler", "handle_min_annuler")):
+    for commande, constante, nom in (("loggia/minuteurs/etat", "WS_MIN_ETAT", "handle_min_etat"),
+                                     ("loggia/minuteurs/poser", "WS_MIN_POSER", "handle_min_poser"),
+                                     ("loggia/minuteurs/annuler", "WS_MIN_ANNULER", "handle_min_annuler")):
         assert commande in ws, commande
-        assert "websocket_api.async_register_command(hass, %s)" % nom in ws, nom
-        i = ws.index("async def %s" % nom)
+        ligne = declaration(ws, "Commande(%s, %s," % (constante, nom))
         # Le geste d'une fiche de lampe : ouvert a tout compte connecte...
-        assert "require_admin" not in ws[i - 300:i], nom + " ne doit pas exiger un administrateur"
+        assert "acces=" not in ligne and 'module="minuteurs"' in ligne, nom + " ne doit pas exiger un administrateur"
     # ... mais sur ce qu'il a le droit de PILOTER, et c'est lui qui le pose.
     assert "par=connection.user.id" in ws
     assert ws.count("controle=controle_de(connection.user)") >= 3
@@ -405,3 +408,126 @@ def test_une_pose_refusee_ne_se_note_pas(creer):
     with pytest.raises(ValueError):
         lancer(m.async_poser("light.inconnue", 30))
     assert journal(m) == []
+
+
+
+# ── Robustesse (audit du 28/10, lot 2 ; ADR 0280) ───────────────────────────
+
+class EvEtat:
+    def __init__(self, haid, etat):
+        self.data = {"entity_id": haid, "new_state": FauxEtat(etat)}
+
+
+async def _refuser(*_a, **_k):
+    raise OSError("disque plein")
+
+
+# TEST AJOUTE (M1) : la sauvegarde passait AVANT l'extinction, sans garde - une ecriture refusee laissait la lampe allumee.
+def test_une_sauvegarde_ratee_n_empeche_pas_l_extinction(creer, evenements):
+    rdv, _ = evenements
+    m = creer({"light.a": "on"})
+    lancer(m.async_poser("light.a", 30, par="u1"))
+    m.store.async_set_shared = _refuser
+    (_, rappel), = rdv.poses.values()
+    rappel(None)
+    lancer(m.hass.taches.pop())
+    assert m.hass.services.appels == [("homeassistant", "turn_off", {"entity_id": ["light.a"]}, "u1")]
+    assert m.table == {}
+    assert journal(m)[0] == ("eteindre", "minuteur de 30 min", ["light.a"])
+
+
+# TEST AJOUTE (M1) : un minuteur qui leve au rattrapage coupait la boucle - les suivants n'etaient ni executes, ni rearmes.
+def test_un_minuteur_qui_leve_au_rattrapage_ne_coupe_pas_les_suivants(creer, evenements, monkeypatch, module):
+    rdv, ecoutes = evenements
+    monkeypatch.setattr(module.time, "time", lambda: 10_000.0)
+    m = creer({"light.a": "on", "light.b": "on", "light.c": "on"},
+              depart={"light.a": {"fin": 9_000.0, "duree": 30, "par": "u1"},
+                      "light.b": {"fin": 9_500.0, "duree": 30, "par": "u2"},
+                      "light.c": {"fin": 12_000.0, "duree": 60, "par": "u3"}})
+    vrai_get = m.hass.states.get
+
+    def get(haid):
+        if haid == "light.a":
+            raise RuntimeError("registre casse")
+        return vrai_get(haid)
+
+    m.hass.states.get = get
+    lancer(m._async_demarrer())
+    while m.hass.taches:
+        lancer(m.hass.taches.pop(0))
+    assert ("homeassistant", "turn_off", {"entity_id": ["light.b"]}, "u2") in m.hass.services.appels
+    assert "light.c" in m._rdv, "le minuteur suivant n'a pas ete rearme"
+    assert ecoutes, "les etats ne sont plus ecoutes"
+
+
+# TEST AJOUTE (M2) : un appareil muet a l'heure dite garde son extinction ; il s'eteint a son retour.
+def test_muet_a_l_heure_dite_il_s_eteint_a_son_retour(creer, evenements, monkeypatch, module):
+    rdv, ecoutes = evenements
+    t = [10_000.0]
+    monkeypatch.setattr(module.time, "time", lambda: t[0])
+    m = creer({"light.a": "on"})
+    lancer(m.async_poser("light.a", 30, par="u1"))
+    m.hass.states.table["light.a"] = FauxEtat("unavailable")
+    t[0] = 11_900.0
+    lancer(m._async_echoir("light.a"))
+    assert m.hass.services.appels == [] and "light.a" in m.table, "l'extinction a ete abandonnee"
+    assert 11_800.0 + module.ATTENTE_MAX - 11_900.0 in [d for d, _ in rdv.poses.values()], "le renoncement n'est pas arme"
+    _, sur_etat = ecoutes[-1]
+    sur_etat(EvEtat("light.a", "unknown"))
+    assert m.hass.taches == [], "toujours muet : rien ne part"
+    m.hass.states.table["light.a"] = FauxEtat("on")
+    sur_etat(EvEtat("light.a", "on"))
+    lancer(m.hass.taches.pop())
+    assert m.hass.services.appels == [("homeassistant", "turn_off", {"entity_id": ["light.a"]}, "u1")]
+    assert m.table == {}
+
+
+def test_muet_puis_revenu_eteint_il_n_y_a_plus_rien_a_faire(creer, evenements, monkeypatch, module):
+    _, ecoutes = evenements
+    t = [10_000.0]
+    monkeypatch.setattr(module.time, "time", lambda: t[0])
+    m = creer({"light.a": "on"})
+    lancer(m.async_poser("light.a", 30))
+    m.hass.states.table["light.a"] = FauxEtat("unavailable")
+    t[0] = 12_000.0
+    lancer(m._async_echoir("light.a"))
+    _, sur_etat = ecoutes[-1]
+    sur_etat(EvEtat("light.a", "off"))
+    lancer(m.hass.taches.pop())
+    assert m.hass.services.appels == [] and m.table == {}
+
+
+def test_muet_au_dela_de_24_h_l_extinction_est_abandonnee(creer, monkeypatch, module):
+    t = [10_000.0]
+    monkeypatch.setattr(module.time, "time", lambda: t[0])
+    m = creer({"light.a": "on"})
+    lancer(m.async_poser("light.a", 30))
+    m.hass.states.table["light.a"] = FauxEtat("unavailable")
+    t[0] = 11_800.0 + module.ATTENTE_MAX + 1
+    lancer(m._async_echoir("light.a"))
+    assert m.hass.services.appels == [] and m.table == {}
+    assert lancer(m.store.async_get_shared("loggia_minuteurs")) == {}
+    assert [q for q, _, _ in journal(m)] == ["poser"], "rien d'eteint : rien au journal"
+
+
+def test_en_cours_un_retour_d_etat_n_eteint_rien(creer, evenements):
+    _, ecoutes = evenements
+    m = creer({"light.a": "on"})
+    lancer(m.async_poser("light.a", 30))
+    _, sur_etat = ecoutes[-1]
+    sur_etat(EvEtat("light.a", "on"))
+    assert m.hass.taches == [] and "light.a" in m.table
+
+
+# TEST AJOUTE (M4) : le magasin recoit une COPIE - la table vivante, rangee dans son cache, etait modifiee avant l'ecriture.
+def test_le_magasin_recoit_une_copie_de_la_table(creer):
+    m = creer({"light.a": "on"})
+    recus = []
+
+    async def garder(cle, valeur):
+        recus.append(valeur)
+
+    m.store.async_set_shared = garder
+    lancer(m.async_poser("light.a", 30))
+    assert recus and recus[-1] == m.table and recus[-1] is not m.table
+    assert recus[-1]["light.a"] is not m.table["light.a"]

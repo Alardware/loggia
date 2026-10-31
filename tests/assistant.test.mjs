@@ -39,8 +39,9 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
-const APP = readFileSync(join(SRC, 'App.jsx'), 'utf8');
+const APP = MONOLITHE;
 const CSS = readFileSync(join(SRC, 'index.css'), 'utf8');
 
 /** Le corps de `BoutonAssistant`, par équilibrage des accolades.
@@ -110,8 +111,21 @@ test('un début de défilement n’appelle pas la voix', () => {
 test('la miniature sort du bon côté', () => {
   // Au-dessus quand le bouton est en bas de l'écran, au-dessous quand il est
   // dans l'en-tête. À contresens, elle sortirait de l'écran.
-  assert.match(BOUTON, /bottom: sens === 'haut' \? '100%' : 'auto'/);
-  assert.match(BOUTON, /top: sens === 'haut' \? 'auto' : '100%'/);
+  /* ASSERTION MODIFIÉE (lot 4 de l'audit du 28/10, ADR 0282) : le style de la miniature est ÉVALUÉ pour les deux
+   * sens, au lieu d'en recopier la syntaxe. La miniature ne paraît qu'à l'appui : un rendu statique ne la voit pas. */
+  const styleMiniature = (sens) => {
+    const d = BOUTON.indexOf('const miniature =');
+    assert.ok(d >= 0, 'la miniature a disparu du bouton');
+    const s = BOUTON.indexOf('style={{', d);
+    assert.ok(s >= 0, 'la miniature n’a plus de style');
+    let i = s + 'style={'.length;
+    for (let n = 1; n > 0; i += 1) { if (BOUTON[i] === '{') n += 1; else if (BOUTON[i] === '}') n -= 1; }
+    return new Function('sens', 'return ' + BOUTON.slice(s + 'style={'.length, i - 1) + ';')(sens);
+  };
+  const haut = styleMiniature('haut');
+  const bas = styleMiniature('bas');
+  assert.deepEqual([haut.bottom, haut.top], ['100%', 'auto'], 'bouton en bas de l’écran : la miniature sort par le bas, hors de l’écran');
+  assert.deepEqual([bas.bottom, bas.top], ['auto', '100%'], 'bouton dans l’en-tête : la miniature sort par le haut, hors de l’écran');
 });
 
 test('l’orbe n’est demandée qu’à l’appui', () => {
@@ -333,8 +347,12 @@ test('le micro se referme toujours', () => {
   // Un micro laissé ouvert allume la pastille rouge de l'onglet, et l'y laisse.
   // La forme du nettoyage a change quand la voix s'y est ajoutee : on vise ce
   // qu'il FAIT, pas comment il est ecrit sur une ligne ou sur quatre.
-  assert.match(FEUILLE, /if \(sessionRef\.current\) \{ try \{ sessionRef\.current\.annuler\(\); \}/);
-  assert.match(BOUTON, /if \(session\.current\) \{ try \{ session\.current\.annuler\(\); \}/);
+  /* ASSERTION MODIFIÉE (lot 4 de l'audit du 28/10, ADR 0282) : ce qu'il FAIT — la session ouverte est annulée, sous
+   * garde —, plus la ponctuation exacte de la ligne. */
+  assert.match(FEUILLE, /if \(\s*sessionRef\.current\s*\)\s*\{\s*try\s*\{\s*sessionRef\.current\.annuler\(\)/,
+    'la feuille de l’assistant ne referme plus le micro : la pastille rouge de l’onglet reste allumée');
+  assert.match(BOUTON, /if \(\s*session\.current\s*\)\s*\{\s*try\s*\{\s*session\.current\.annuler\(\)/,
+    'le bouton de l’assistant ne referme plus le micro : la pastille rouge de l’onglet reste allumée');
   /* DEUX fois, et il faut les compter.
    *
    * `ranger()` libère quand tout se termine, `arreter()` quand on coupe court

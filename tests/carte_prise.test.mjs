@@ -38,6 +38,7 @@ import { area, device, entity, state, states, ctxOf } from './fixtures.mjs';
 // ASSERTION MODIFIÉE (passe téléphone, corrections bis 2, point 1) : la demande d'une carte se joue sur la VRAIE carte (le test « défaire la demande »).
 import { monter, horlogeFausse, documentFaux } from './crochets.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -57,7 +58,7 @@ const { setLoggiaState } = await import('../src/state.js');
 const F = await import(new URL('../src/App.jsx?carteprise', import.meta.url).href);
 const E = await import('../src/prisesetat.js');
 const { Surface } = await import('../src/ui.jsx');   // le bouton que la carte pose sur elle-même, pour s'ouvrir : le test « défaire la demande » le cherche dans l'arbre
-const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const APP = MONOLITHE.replace(/\r\n/g, '\n');
 
 // Aujourd'hui à hh:mm, à l'heure de la maison ; et dix jours plus tôt, que la phrase écrit en date.
 const a = (h, m) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.toISOString(); };

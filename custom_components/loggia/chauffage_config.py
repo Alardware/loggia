@@ -103,7 +103,26 @@ def config_defaut() -> dict[str, Any]:
                        # L'Absence posee par la PRESENCE (et non a la main) : apres un
                        # redemarrage, elle seule se leve au retour (audit du 19/10).
                        "par_presence": False},
-            "simulation": {"actif": False}}
+            "simulation": {"actif": False},
+            # Le mode absence des chauffe-eau pendant les Vacances (chantier G3, E2 ;
+            # eau_chaude.py) : une option, DECOCHEE par defaut.
+            "eau_chaude": {"absence": False}}
+
+
+# Le decalage d'un thermostat (30/10) : ce que son capteur lit de plus (ou de moins)
+# que la piece. Le moteur envoie la consigne de la piece PLUS lui — un poele qui lit
+# 1,5 °C de moins (decalage -1,5) recoit 18,5 pour 20 —, et relit un geste fait sur
+# l'appareil dans l'autre sens. Au demi-degre, de -5 a +5 °C ; absent vaut 0, et
+# seul un thermostat en porte un (un module ou un VTherm n'a pas de consigne).
+DECALAGE_MAX = 5.0
+
+
+def lire_decalage(brut: Any, fam: Any) -> float:
+    """Le decalage relu : 0 pour ce qui n'est pas un thermostat, l'illisible ou le hors bornes."""
+    if fam != "thermostat" or not isinstance(brut, (int, float)) or isinstance(brut, bool):
+        return 0.0
+    v = round(float(brut) * 2) / 2
+    return v if -DECALAGE_MAX <= v <= DECALAGE_MAX else 0.0
 
 
 def chauffage_defaut(entite: str, fam: str, permis: Any = None) -> dict[str, Any]:
@@ -201,6 +220,9 @@ def lire_config(brut: Any) -> dict[str, Any]:
             "entite": c["entite"], "famille": c["famille"], "planning": c.get("planning") is True,
             "semaine": lire_semaine(c.get("semaine")), "temperatures": lire_temperatures(c.get("temperatures")),
             "fenetre": c.get("fenetre") if c.get("fenetre") in REGLAGES_FENETRE else "arret"}
+        decalage = lire_decalage(c.get("decalage"), c["famille"])
+        if decalage:
+            cfg["chauffages"][cle]["decalage"] = decalage
     maison = brut.get("maison") if isinstance(brut.get("maison"), dict) else {}
     if maison.get("mode") in MAISONS:
         cfg["maison"]["mode"] = maison["mode"]
@@ -212,6 +234,8 @@ def lire_config(brut: Any) -> dict[str, Any]:
             cfg["maison"][cle] = maison[cle]
     simulation = brut.get("simulation")
     cfg["simulation"]["actif"] = isinstance(simulation, dict) and simulation.get("actif") is True
+    eau = brut.get("eau_chaude")
+    cfg["eau_chaude"]["absence"] = isinstance(eau, dict) and eau.get("absence") is True
     return cfg
 
 
@@ -312,11 +336,12 @@ def valider_temperatures(brut: Any, actuelles: dict[str, float]) -> dict[str, fl
 
 
 def valider_chauffage(brut: Any, actuel: dict[str, Any], permis: list[str] | None = None) -> dict[str, Any]:
-    """Un chauffage modifie : `planning`, `semaine`, `temperatures`, `fenetre`.
-    `entite` et `famille` ne viennent jamais de l'ecran : le serveur les lit."""
+    """Un chauffage modifie : `planning`, `semaine`, `temperatures`, `fenetre`,
+    `decalage` (un thermostat). `entite` et `famille` ne viennent jamais de
+    l'ecran : le serveur les lit."""
     if not isinstance(brut, dict):
         raise ValueError("chauffage : un objet")
-    inconnues = sorted(str(k) for k in brut if k not in ("planning", "semaine", "temperatures", "fenetre"))
+    inconnues = sorted(str(k) for k in brut if k not in ("planning", "semaine", "temperatures", "fenetre", "decalage"))
     if inconnues:
         raise ValueError("champ inconnu : %s" % ", ".join(inconnues))
     neuf = copy.deepcopy(actuel)
@@ -335,6 +360,17 @@ def valider_chauffage(brut: Any, actuel: dict[str, Any], permis: list[str] | Non
         if reglage == "eco" and permis is not None and "eco" not in permis:
             raise RefusNomme("chauffage_mode_inconnu", "mode eco inconnu de ce chauffage", "fenetre")
         neuf["fenetre"] = reglage
+    if "decalage" in brut:
+        v = brut["decalage"]
+        if neuf.get("famille") != "thermostat":
+            raise ValueError("decalage : un thermostat seulement")
+        if not isinstance(v, (int, float)) or isinstance(v, bool) or not -DECALAGE_MAX <= v <= DECALAGE_MAX:
+            raise RefusNomme("chauffage_decalage_hors_bornes", "decalage hors bornes (-5 a +5 °C)", "decalage")
+        v = round(float(v) * 2) / 2
+        if v:
+            neuf["decalage"] = v
+        else:
+            neuf.pop("decalage", None)                  # 0 : la configuration n'en garde rien
     return neuf
 
 
@@ -345,7 +381,7 @@ def poser_patch(cfg: dict[str, Any], patch: Any, connus: dict[str, dict[str, Any
     sous le verrou du magasin (`async_modifier_shared`)."""
     if not isinstance(patch, dict):
         raise ValueError("patch : un objet")
-    inconnues = sorted(str(k) for k in patch if k not in ("chauffages", "maison", "simulation"))
+    inconnues = sorted(str(k) for k in patch if k not in ("chauffages", "maison", "simulation", "eau_chaude"))
     if inconnues:
         raise ValueError("cle inconnue : %s" % ", ".join(inconnues))
     chauffages = patch.get("chauffages", {})
@@ -380,6 +416,11 @@ def poser_patch(cfg: dict[str, Any], patch: Any, connus: dict[str, dict[str, Any
         if not isinstance(simulation, dict) or not isinstance(simulation.get("actif"), bool):
             raise ValueError("simulation : {actif: vrai ou faux}")
         cfg["simulation"] = {"actif": simulation["actif"]}
+    if "eau_chaude" in patch:
+        eau = patch["eau_chaude"]
+        if not isinstance(eau, dict) or set(eau) != {"absence"} or not isinstance(eau.get("absence"), bool):
+            raise ValueError("eau_chaude : {absence: vrai ou faux}")
+        cfg["eau_chaude"] = {"absence": eau["absence"]}
 
 
 def poser_maison(cfg: dict[str, Any], mode: Any, fin: Any, maintenant: datetime,

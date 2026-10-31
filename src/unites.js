@@ -82,6 +82,40 @@ export function deKmh(valeur, unite) {
   return valeur / (VERS_KMH[unite] || 1);
 }
 
+/* ── Le monoxyde de carbone : le ppm (G1-D6, 30/10 ; ADR 0300) ───────────────
+ *
+ * La table juge le monoxyde en ppm (`PALIERS.co`, confort.js), mais Home
+ * Assistant accepte aussi des mg/m³, des µg/m³ (Airly) et des ppb : 300 µg/m³,
+ * un air sain, se lisait « 300 ppm · Danger ». Comme pour la température, c'est
+ * la VALEUR qui se ramène au ppm, à 25 °C et 1 atm (volume molaire 24,45 L,
+ * masse molaire du CO 28,01 g/mol) : mg/m³ × 24,45 / 28,01 ≈ 0,873, µg/m³ mille
+ * fois moins, ppb ÷ 1000. Une unité absente ou inconnue ne se devine PAS : rien
+ * ne dit des ppm, et la mesure reste hors de la table. Le serveur lit la même
+ * table (`unites.py`, `UNITES_CO`). */
+const VERS_PPM_CO = { ppm: 1, ppb: 0.001, 'mg/m³': 24.45 / 28.01, 'µg/m³': 24.45 / 28010 };
+
+/** L'unité d'un monoxyde, ramenée à son écriture de Home Assistant — « PPM », « ug/m3 », le mu grec (μ) au lieu du micro (µ) —,
+ *  ou null si la table ne sait pas la convertir. */
+export function uniteCo(unite) {
+  if (unite == null) return null;
+  const u = String(unite).trim().toLowerCase().replace(/μ/g, 'µ').replace(/^ug\//, 'µg/').replace(/\/m3$/, '/m³');
+  return Object.prototype.hasOwnProperty.call(VERS_PPM_CO, u) ? u : null;
+}
+
+/** Une valeur de monoxyde, en ppm ; null dans une unité que la table ne connaît pas. */
+export function versPpmCo(valeur, unite) {
+  const u = uniteCo(unite);
+  if (valeur == null || !u) return null;
+  return valeur * VERS_PPM_CO[u];
+}
+
+/** L'inverse : des ppm redits dans l'unité du capteur (les chiffres sous la barre d'une carte). */
+export function dePpmCo(valeur, unite) {
+  const u = uniteCo(unite);
+  if (valeur == null || !u) return null;
+  return valeur / VERS_PPM_CO[u];
+}
+
 /* ── Puissance et énergie : le watt et le kilowattheure (audit du 03/10) ────
  *
  * Même principe que la température : l'affichage et les seuils de Loggia

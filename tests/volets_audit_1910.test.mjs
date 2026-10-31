@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 const A = await import('../src/air.js');
 
@@ -38,14 +39,14 @@ function corps(src, debut) {
 }
 
 test('un seul filtre pour les commandes groupées : la classe du volet', () => {
-  const app = (lire('src', 'App.jsx') + lire('src', 'views', 'voletsplan.jsx'));
+  const app = (MONOLITHE + lire('src', 'views', 'voletsplan.jsx'));
   const f = corps(app, 'function voletsCommandables(S)');
   assert.ok(f.includes('estVolet('), 'le filtre lit la classe, comme le serveur');
   assert.ok(f.includes('voletCovers(S)'), 'il part de la liste configurée ou découverte');
 });
 
 test('la vue « modes et planning » : Ouvrir, Stop et Fermer ne visent que les volets', () => {
-  const v = corps((lire('src', 'App.jsx') + lire('src', 'views', 'voletsplan.jsx')), 'function VoletsContent(');
+  const v = corps((MONOLITHE + lire('src', 'views', 'voletsplan.jsx')), 'function VoletsContent(');
   const ouvrir = v.slice(v.indexOf('const allOpen'), v.indexOf('\n', v.indexOf('const allOpen')));
   const fermer = v.slice(v.indexOf('const allClose'), v.indexOf('\n', v.indexOf('const allClose')));
   /* ASSERTION MODIFIÉE (19/10) : Ouvrir, Fermer et Stop passent par `chaqueVolet` — un ordre par volet, celui qu'il accepte
@@ -58,7 +59,7 @@ test('la vue « modes et planning » : Ouvrir, Stop et Fermer ne visent que les 
 });
 
 test('la vue « modes et planning » compte les volets, et un volet muet n’est pas « ouvert »', () => {
-  const v = corps((lire('src', 'App.jsx') + lire('src', 'views', 'voletsplan.jsx')), 'function VoletsContent(');
+  const v = corps((MONOLITHE + lire('src', 'views', 'voletsplan.jsx')), 'function VoletsContent(');
   const l = v.slice(v.indexOf('const volets = covers'), v.indexOf('\n', v.indexOf('const openCount')));
   assert.ok(l.includes('estVolet('), l);
   assert.ok(/const openCount = volets\.filter\(c => !estMuetVolet\(/.test(l), l);
@@ -66,7 +67,7 @@ test('la vue « modes et planning » compte les volets, et un volet muet n’est
 });
 
 test('le bouton de pièce de l’Accueil ne commande que les volets de la pièce', () => {
-  const app = (lire('src', 'App.jsx') + lire('src', 'views', 'voletsplan.jsx'));
+  const app = (MONOLITHE + lire('src', 'views', 'voletsplan.jsx'));
   const i = app.indexOf('const roomExtras = useMemo(');
   const bloc = app.slice(i, app.indexOf('}, [dashHass, a]);', i));
   assert.ok(bloc.includes('voletsCommandables(S)'), 'la pastille ne prend plus le garage ou le portail de la pièce');
@@ -83,7 +84,7 @@ test('Paramètres dit le mode sans le commander, et relit le cache des cartes', 
   assert.ok(v.includes("tr('Mode : {mode}. Il se choisit dans la popup d’un volet, ou dans Volets › modes et planning.'"));
   const e = v.slice(v.indexOf('const enregistrer = async'), v.indexOf('} catch (e) {', v.indexOf('const enregistrer = async')));
   assert.ok(e.includes('rafraichirVolets()'), e);
-  const app = (lire('src', 'App.jsx') + lire('src', 'views', 'voletsplan.jsx'));
+  const app = (MONOLITHE + lire('src', 'views', 'voletsplan.jsx'));
   const p = app.slice(app.indexOf('const pickModeLoggia'), app.indexOf('};', app.indexOf('const pickModeLoggia')));
   assert.ok(p.includes('rafraichirVolets()'), p);
   assert.ok(lire('src', 'fichevolet.jsx').includes("tr('Mode de la maison')"), 'la popup garde le mode');
@@ -106,7 +107,7 @@ test('l’avertissement « sans classe » ne dépend plus du pli ni du planning'
 //    soleil » (le planning ne le pilote pas) ; sans classe, elle dit pourquoi.
 
 test('la fiche d’un garage ou d’un ouvrant sans classe ne ment plus sur le planning', () => {
-  const app = (lire('src', 'App.jsx') + lire('src', 'views', 'voletsplan.jsx'));
+  const app = (MONOLITHE + lire('src', 'views', 'voletsplan.jsx'));
   const f = app.slice(app.indexOf('function RoomCoverSheet('), app.indexOf('function RoomClimateSheet('));
   assert.ok(!f.includes("'loggia/volets/etat'"), 'plus de lecture du planning');
   assert.ok(!f.includes("'loggia/volets/config'"), 'plus d’écriture du planning');
@@ -126,7 +127,7 @@ test('les textes français des volets vouvoient', () => {
   const tutoie = textes.filter(([, t]) => /(^|[.:!?]\s)(Clique|Touche|Appuie|Sélectionne|Choisis|Glisse|Ajoute|Tape|Fais|Va|Donne|Règle|Mets|Garde)\b/.test(t)
     || /\b(tu|ton|ta|tes|toi|te)\b/i.test(t) || /Donne-(lui|leur)/.test(t));
   assert.deepEqual(tutoie, [], 'tutoiement');
-  assert.ok(lire('src', 'App.jsx').includes("tr('Il n’a pas de classe dans Home Assistant. Donnez-lui la classe Volet ou Store pour qu’il suive le planning.')"));
+  assert.ok(MONOLITHE.includes("tr('Il n’a pas de classe dans Home Assistant. Donnez-lui la classe Volet ou Store pour qu’il suive le planning.')"));
 });
 
 // 5. Le store banne au soleil (sa demande du 25/10) : la protection le DÉPLOIE

@@ -18,6 +18,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 
@@ -43,7 +44,7 @@ test('le journal d’activité se dédoublonne', () => {
 });
 
 test('« current » remplace les notifications au lieu de s’y ajouter', () => {
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   const i = app.indexOf("{ type: 'persistent_notification/subscribe' }");
   const rappel = app.slice(app.lastIndexOf('conn.subscribeMessage((msg) => {', i), i);
   assert.ok(rappel.includes("if (msg.type === 'current') table.clear();"));

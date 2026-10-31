@@ -18,8 +18,9 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8');
+const src = MONOLITHE;
 /* ASSERTION MODIFIÉE (boot, 19/10) : la feuille du mois a quitté App.jsx pour
  * feuillecalendrier.jsx, chargé à la demande (la borne du démarrage,
  * tests/lot14_chargement.test.mjs) ; son code n'a pas changé. Ce qu'elle

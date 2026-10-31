@@ -13,11 +13,12 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 const { WIDGETS_OPTION, STYLES_WIDGETS, styleDe } = await import('../src/horloge.js');
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const APP = readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8').replace(/\r\n/g, '\n');
+const APP = MONOLITHE.replace(/\r\n/g, '\n');
 const liste = (nom) => {
   const m = APP.match(new RegExp('\\nconst ' + nom + ' = (\\[[^\\]]*\\]);'));
   assert.ok(m, nom + ' introuvable');

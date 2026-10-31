@@ -29,9 +29,11 @@ from __future__ import annotations
 
 import copy
 import datetime as dt
-import math
 import re
 from typing import Any
+
+from .entites import motif_de
+from .nombres import lu
 
 VERSION = 1
 # Un depart demande vaut pour le passage qui commence dans les deux minutes.
@@ -47,7 +49,7 @@ MAX_ZONES = 30
 ISSUES = ("termine", "interrompu", "erreur")
 SOURCES = ("loggia", "planning", "appareil")
 PHASES = ("travail", "pause", "retour")
-ROBOT = re.compile(r"^(vacuum|lawn_mower)\.[a-z0-9_]+$")
+ROBOT = motif_de(("vacuum", "lawn_mower"))
 # Ce qu'un capteur d'erreur publie quand tout va bien : ce n'est pas un motif.
 SANS_ERREUR = {"", "none", "null", "0", "ok", "no_error", "noerror", "no error", "normal", "idle"}
 # Ce qu'un capteur publie quand il ne dit RIEN — une coupure Bluetooth, un redemarrage (passe bis du 18/10, point 3) : ni
@@ -63,14 +65,8 @@ def carnet_vide() -> dict[str, Any]:
     return {"version": VERSION, "passages": [], "en_cours": {}, "demandes": {}, "erreurs": {}}
 
 
-def _nombre(v: Any) -> float | None:
-    if isinstance(v, bool):
-        return None
-    try:
-        n = float(v)
-    except (TypeError, ValueError):
-        return None
-    return n if math.isfinite(n) else None
+# Ce qui se lit comme un nombre fini, ou None (nombres.py, lot 8).
+_nombre = lu
 
 
 def _zones(brut: Any) -> list[dict[str, str]]:

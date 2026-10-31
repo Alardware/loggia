@@ -237,6 +237,8 @@ def creer(module, store_module, regles_module):
         m._pilotes, m._ordres, m._miens, m._notes, m._relances = {}, {}, [], {}, {}
         # La verification de chaque ordre parti (relecture finale du 12/10, point 1).
         m._verifications = {}
+        # Le pas revele, les ordres defaits, les programmes ecoutes (30/10).
+        m._pas, m._defaits, m._programmes = {}, {}, {}
         m._minuteur = m._ecoute = m._au_demarrage = None
         m._arrete = False
         m._depot = FauxStore(None)
@@ -987,6 +989,130 @@ def test_reprendre_le_planning_avant_l_heure(creer):
     lancer(m.async_rendre_au_planning("id-rad"))
     assert m.reprises == {} and m._depot.contenu == {}
     assert m.hass.services.appels == [("select", "select_option", {"entity_id": [RAD], "option": "comfort"})]
+
+
+# ── Le decalage du capteur d'un thermostat (30/10) ─────────────────────────
+# Chez lui, le poele lit en moyenne 1,5 °C de moins que le capteur du sejour (7
+# jours, 842 releves) : Confort 20 donnait une piece a 21,5.
+
+def test_le_decalage_corrige_ce_qui_part_et_ce_qui_se_relit(creer):
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat", decalage=-1.5))), etats(poele_t=17))
+    lancer(m.async_evaluer())
+    assert m.hass.services.appels == [("climate", "set_temperature", {"entity_id": [POELE], "temperature": 18.5})], \
+        "Confort 20 pour la piece : 18,5 pour le poele"
+    poele = next(c for c in lancer(m.async_etat())["chauffages"] if c["cle"] == "id-poele")
+    assert poele["decalage"] == -1.5, "l'ecran montre la consigne de la piece"
+    # Le poele prend l'ordre : 18,5 confirme le Confort (le decalage compte aussi la).
+    m.hass.services.appels.clear()
+    avant = FauxEtat("heat", {**ATTRS_POELE, "temperature": 17})
+    pris = FauxEtat("heat", {**ATTRS_POELE, "temperature": 18.5})
+    m.hass.states.table[POELE] = pris
+    m._sur_etat(Evenement(POELE, avant, pris))
+    m.hass.executer()
+    assert m.reprises == {} and m.hass.services.appels == [], "son ordre confirme n'est pas un geste"
+    # Puis un geste sur le poele, a 21,5 : 23 pour la piece, et rien ne repart.
+    vieux = FauxEtat("heat", {**ATTRS_POELE, "temperature": 18.5})
+    neuf = FauxEtat("heat", {**ATTRS_POELE, "temperature": 21.5})
+    m.hass.states.table[POELE] = neuf
+    m._sur_etat(Evenement(POELE, vieux, neuf))
+    m.hass.executer()
+    assert m.reprises["id-poele"]["temperature"] == 23.0
+    assert m.hass.services.appels == [], "l'appareil est deja ou la personne l'a mis"
+    # Une consigne demandee a Loggia, pour la piece : 21 → 19,5 pour le poele.
+    lancer(m.async_reprendre_la_main("id-poele", temperature=21))
+    assert m.hass.services.appels[-1] == ("climate", "set_temperature", {"entity_id": [POELE], "temperature": 19.5})
+
+
+# ── Un ordre qui tient (30/10) ──────────────────────────────────────────────
+# Chez lui, le 30/10 : 17,5 °C envoyes au poele (Confort 19, decalage -1,5), 17 lus —
+# le MCZ est au degre sans le dire —, puis 19 trente secondes plus tard, remis par le
+# Timer du poele. Loggia relancait, perdait encore, et ne disait rien a l'ecran.
+
+def test_un_poele_au_degre_revele_son_pas_et_l_ordre_suivant_le_respecte(creer):
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat", decalage=-1.5))), etats(poele_t=17))
+    lancer(m.async_evaluer())
+    assert m.hass.services.appels[-1][2]["temperature"] == 18.5
+    assert m._ordres["id-poele"]["envoye"] == 18.5, "la consigne partie est retenue"
+    avant, pris = FauxEtat("heat", {**ATTRS_POELE, "temperature": 17}), FauxEtat("heat", {**ATTRS_POELE, "temperature": 18})
+    m.hass.states.table[POELE] = pris
+    m._sur_etat(Evenement(POELE, avant, pris))
+    m.hass.executer()
+    assert m._pas == {POELE: 1.0} and m._ordres["id-poele"]["vu"] is True, "pris a son pas : confirme"
+    assert m.reprises == {}, "pas un geste"
+    # L'ordre suivant part au degre (18,5 arrondi vers le haut), et se confirme.
+    m.hass.services.appels.clear()
+    m._ordres.clear()
+    lancer(m.async_evaluer())
+    assert m.hass.services.appels == [("climate", "set_temperature", {"entity_id": [POELE], "temperature": 19.0})]
+    m.hass.states.table[POELE] = FauxEtat("heat", {**ATTRS_POELE, "temperature": 19})
+    lancer(m.async_evaluer())
+    assert len(m.hass.services.appels) == 1, "deja a 19 : rien ne repart"
+
+
+def test_un_appareil_qui_annonce_son_pas_n_apprend_rien(creer):
+    attrs = {**ATTRS_POELE, "target_temp_step": 0.5}
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat", decalage=-1.5))),
+              {**etats(), POELE: FauxEtat("heat", {**attrs, "temperature": 17})})
+    lancer(m.async_evaluer())
+    assert m._avec_pas(POELE, attrs) == attrs and m._pas == {}
+
+
+def test_avec_son_programme_allume_le_moteur_se_retient_et_reprend_quand_il_s_eteint(creer):
+    table = etats(poele_t=17)
+    table["switch.poele_timer"] = FauxEtat("on")
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat"))), table, registre=REGISTRE_TIMER)
+    assert m._programmes == {"switch.poele_timer": "id-poele"}, "son Timer est ecoute"
+    lancer(m.async_evaluer())
+    lancer(m.async_evaluer())
+    assert m.hass.services.appels == [], "chaque ordre serait defait : rien ne part"
+    assert [x[:2] + x[3:] for x in lignes_de(m)] == [("planning", "retenu", "son programme commande", False)], \
+        "dit une fois"
+    # Son programme change la consigne : ce n'est pas un geste.
+    vieux, neuf = FauxEtat("heat", {**ATTRS_POELE, "temperature": 17}), FauxEtat("heat", {**ATTRS_POELE, "temperature": 19})
+    m.hass.states.table[POELE] = neuf
+    m._sur_etat(Evenement(POELE, vieux, neuf))
+    m.hass.executer()
+    assert m.reprises == {} and m.hass.services.appels == []
+    # Le Timer s'eteint : le planning reprend tout de suite.
+    m.hass.states.table["switch.poele_timer"] = FauxEtat("off")
+    m._sur_etat(Evenement("switch.poele_timer", FauxEtat("on"), FauxEtat("off")))
+    m.hass.executer()
+    assert m.hass.services.appels == [("climate", "set_temperature", {"entity_id": [POELE], "temperature": 20})]
+    assert all(a[0] != "switch" for a in m.hass.services.appels), "son programme n'est jamais commande"
+
+
+def test_avec_son_programme_allume_l_arret_passe_encore(creer):
+    """La fenetre ouverte, l'Ete : l'Arret part, son programme ou pas."""
+    table = etats(poele_t=17)
+    table["switch.poele_timer"] = FauxEtat("on")
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat")), maison={"mode": "ete"}), table,
+              registre=REGISTRE_TIMER)
+    lancer(m.async_evaluer())
+    assert m.hass.services.appels == [("climate", "set_hvac_mode", {"entity_id": [POELE], "hvac_mode": "off"})]
+
+
+def test_un_ordre_perdu_deux_fois_se_dit_jusqu_a_ce_qu_un_ordre_tienne(creer, rdv):
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat"))), etats(poele_t=17))
+    lancer(m.async_evaluer())
+    for i in (0, 1):
+        m.horloge += timedelta(seconds=95)
+        verifications(rdv)[i](None)
+        m.hass.executer()
+    poele = next(c for c in lancer(m.async_etat())["chauffages"] if c["cle"] == "id-poele")
+    assert "ordre_defait" in poele["avertissements"]
+    assert (poele["defait"]["mode"], poele["defait"]["temperature"]) == (None, 17.0), "il est reste a 17"
+    # Il prend enfin l'ordre : plus rien a dire.
+    vieux, pris = FauxEtat("heat", {**ATTRS_POELE, "temperature": 17}), FauxEtat("heat", {**ATTRS_POELE, "temperature": 20})
+    m.hass.states.table[POELE] = pris
+    m._sur_etat(Evenement(POELE, vieux, pris))
+    poele = next(c for c in lancer(m.async_etat())["chauffages"] if c["cle"] == "id-poele")
+    assert "ordre_defait" not in poele["avertissements"] and poele["defait"] is None
+
+
+def test_sans_decalage_l_etat_dit_zero(creer):
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat")), ("id-rad", chauffage(RAD, "fil_pilote"))))
+    etat = {c["cle"]: c for c in lancer(m.async_etat())["chauffages"]}
+    assert (etat["id-poele"]["decalage"], etat["id-rad"]["decalage"]) == (0.0, 0.0)
 
 
 def test_une_consigne_a_la_main_pour_le_poele(creer):
@@ -2566,16 +2692,20 @@ def test_une_configuration_arretee_en_pleine_ecriture_ecrit_quand_meme_la_purge_
 def test_le_moteur_est_branche_dans_le_composant():
     from conftest import COMPOSANT
 
+    from conftest import declaration
+
     init = (COMPOSANT / "__init__.py").read_text(encoding="utf-8")
-    assert 'data["chauffage"] = LoggiaChauffage(hass, data["store"], data.get("regles"))' in init
-    assert 'acces_chauffage=lambda: hass.data.get(DOMAIN, {}).get("chauffage")' in init
-    assert init.index('data["chauffage"] =') < init.index('data["fenetres"] ='), \
+    # ASSERTION MODIFIEE (lot 8, 30/10 ; ADR 0291) : les modules naissent d'une table (`MODULES`),
+    # les commandes sont des lignes de `COMMANDES`, et un seul `acces(nom)` amene les modules au WebSocket.
+    assert 'Module("chauffage", "LoggiaChauffage", _REGLES, _REGLES,' in init
+    assert "async_register_ws(hass, store, lambda nom: hass.data.get(DOMAIN, {}).get(nom))" in init
+    assert init.index('Module("chauffage",') < init.index('Module("fenetres",'), \
         "le moteur nait avant les regles qui lui donnent leurs faits"
     bloc = init.split("MODULES_VIVANTS = (")[1].split(")")[0]
     assert '"chauffage"' in bloc and bloc.rstrip().endswith('"regles",'), "regles reste le dernier a s'arreter"
     ws = (COMPOSANT / "websocket_api.py").read_text(encoding="utf-8")
-    for nom in ("handle_cha_etat", "handle_cha_main", "handle_cha_maison", "handle_cha_config"):
-        assert f"websocket_api.async_register_command(hass, {nom})" in ws, nom
+    for c in ("WS_CHA_ETAT", "WS_CHA_MAIN", "WS_CHA_MAISON", "WS_CHA_CONFIG"):
+        assert 'module="chauffage"' in declaration(ws, "Commande(%s," % c), c
 
 
 # -- L'observation laisse la main a la fenetre et a la presence ---------------

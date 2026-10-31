@@ -22,6 +22,7 @@ import { readFileSync } from 'node:fs';
 
 import { monter, horlogeFausse, documentFaux, texteDe } from './crochets.mjs';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 if (typeof globalThis.requestAnimationFrame !== 'function') {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
@@ -70,7 +71,7 @@ const plaque = (m) => m.trouver(e => e.props && e.props.style && e.props.style.w
 const carte = (w, props = {}) => monter(C.default, { id: VANNE, hass: w.hass, nom: null, chip: false, onOpen: () => {}, ...props });
 
 test('le gabarit des cartes IoT, recopié d’App.jsx, reste le sien', () => {
-  const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  const APP = MONOLITHE;
   // Les définitions d'App.jsx que la carte recopie : si l'une change, la copie de cartevanne.jsx (`GABARIT`) change avec elle.
   for (const ligne of [
     "const RM_CARD = { ...CARTE_MAISON, transition: 'all .3s' };",

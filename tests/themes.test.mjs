@@ -20,12 +20,13 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE, importsDe } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 
 /* Le theme est sorti dans `src/theme.js` (27/09, audit point 9) : on relit
  * donc le monolithe ET ce qui en est parti. */
-const app = ['App.jsx', 'theme.js'].map(f => lire('src', f)).join(String.fromCharCode(10));
+const app = [MONOLITHE, lire('src', 'theme.js')].join(String.fromCharCode(10));
 const par = lire('src', 'views', 'parametres.jsx');
 
 /* Saphir, Acier et Givre vivent dans `themes-bleus.js`, chargé à la demande
@@ -219,7 +220,7 @@ test('le theme vit dans son fichier, et n’est plus un morceau du monolithe', (
   // composant, aucune n'appelle un hook, aucune ne rend de JSX. C'est ce qui
   // en faisait le premier morceau à sortir, et c'est ce que ce test tient.
   const theme = lire('src', 'theme.js');
-  const appSeul = lire('src', 'App.jsx');
+  const appSeul = MONOLITHE;
 
   // Ce qui doit y vivre, et qui n'est plus dans le monolithe.
   for (const [quoi, motif] of [
@@ -255,7 +256,8 @@ test('le theme vit dans son fichier, et n’est plus un morceau du monolithe', (
   /* App.jsx n'en importe que ce qu'il LIT. `lum` et `cssToRgb` sont restés
    * internes : une porte publique sans personne derrière est une dette, et
    * `exports_sans_client.test.mjs` la refuse. */
-  assert.ok(appSeul.includes("import { LAVIS, SAFE_NOLOOK, applyTheme, lav, readLook, signatureHaTheme } from './theme.js';"),
+  // ASSERTION MODIFIÉE (ADR 0283) : App.jsx et les modules qui en sont sortis importent, ENSEMBLE, exactement ce qu'ils lisent.
+  assert.deepEqual([...importsDe(appSeul, './theme.js')].sort(), ['LAVIS', 'SAFE_NOLOOK', 'applyTheme', 'lav', 'readLook', 'signatureHaTheme'].sort(),
     'App.jsx n’importe plus du thème exactement ce qu’il lit');
   assert.ok(!/^export function lum\(/m.test(theme), '`lum` est exporté sans client : il ne sert qu’au thème');
   assert.ok(!/^export function cssToRgb\(/m.test(theme), '`cssToRgb` est exporté sans client');

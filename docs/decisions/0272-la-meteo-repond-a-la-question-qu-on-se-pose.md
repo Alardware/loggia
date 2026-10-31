@@ -2,6 +2,8 @@
 
 *20 octobre 2026 — accepté (sa maquette « Cartes météo », cadres 1a et 1b)*
 
+*Complétée par l'ADR [0303](0303-l-air-et-les-uv-dans-la-meteo.md) (30/10) : l'air, les pollens et l'UV du jour dans la fiche.*
+
 ## Le problème
 
 Le widget météo du rail disait le temps qu'il fait : le lieu tel que

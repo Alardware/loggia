@@ -7,10 +7,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { VUES_SORTIES } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274)
+import { MONOLITHE, VUES_SORTIES, importsDe, DASHBOARD } from './monolithe.mjs'; // App.jsx + les vues sorties du boot (ADR 0274) ; DASHBOARD : l'Accueil en entier, ses hooks compris (ADR 0283)
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = (readFileSync(join(RACINE, 'src', 'App.jsx'), 'utf8') + VUES_SORTIES);
+const src = (MONOLITHE + VUES_SORTIES);
 const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
 const en = readFileSync(join(RACINE, 'src', 'langues', 'en.js'), 'utf8');
 const demo = readFileSync(join(RACINE, 'src', 'demo.js'), 'utf8');
@@ -42,7 +42,7 @@ test('la banniere porte la couleur du pire point, et se tait quand il n’y en a
 });
 
 test('les points viennent des etats, des cameras, du CO2 des pieces, du diagnostic en direct et du serveur', () => {
-  const d = bloc('function Dashboard(', NL + '}');
+  const d = DASHBOARD;
   assert.ok(d.includes("const veillesEtat = useEtatServeur(dashHass, 'loggia/veilles/etat', 30000, '').etat;") && d.includes("const fenetresEtat = useEtatServeur(dashHass, 'loggia/fenetres/etat', 30000, '').etat;"), 'les veilles et les fenetres du serveur, toutes les 30 s');
   assert.ok(d.includes('const points = pointsAttention({'), 'comptes et points');
   // ASSERTION MODIFIÉE (audit du 19/10, H7) : chaque pièce apporte aussi son seuil CO₂.
@@ -54,7 +54,7 @@ test('les points viennent des etats, des cameras, du CO2 des pieces, du diagnost
 });
 
 test('la carte Securite : une sous-ligne verte ou ambre, la ligne d’etat, les boutons d’armement gardes', () => {
-  const home = bloc('function Dashboard(', NL + '}');
+  const home = DASHBOARD;
   assert.ok(!home.includes('sousSecurite') && src.includes('resumeSecurite(comptesSecVue)'), '« Tout est securise » : la phrase vit dans la vue Securite (ADR 0035)');
   assert.ok(src.includes("color: comptesSecVue.ok ? 'var(--o-ok)' : 'var(--o-warn)'"), 'verte ou ambre — dans la vue');
   // Depuis l'ADR 0033, la rangee est un composant partage avec la vue Securite.
@@ -79,7 +79,9 @@ test('l’accueil surveille ce que la carte Securite et « A surveiller » lisen
   // ASSERTION MODIFIÉE (relecture de la passe bis du 17/10) : la racine part du seuil en vigueur (`seuilsPile`) avant le premier relevé.
   // ASSERTION MODIFIÉE (audit des capteurs du 19/10, lot 4) : et les mots d'un danger — `motsSurete`, la table que deriveNotifs ne recopie plus.
   // ASSERTION MODIFIÉE (ADR 0274) : la vue Sécurité, sortie du boot, importe elle-même ce qu'elle seule utilise.
-  assert.ok(src.includes("import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, estSirene, pointsAttention } from '../attention.js';") && src.includes("import { tuileAlarme, estSirene, ICONES_ARMEMENT, pointsAttention, niveauMax, resumeAttention, couleurNiveau, niveauPile, couleurPile, reglerSeuilPile, seuilsPile, fuiteCalculee, animationNiveau, CLASSES_MOUVEMENT, CLASSES_SURETE, CLASSES_OUVRANT, motsSurete } from './attention.js';"), 'une seule source pour les classes');
+  // ASSERTION MODIFIÉE (ADR 0283) : les cartes sorties d'App.jsx importent elles-mêmes ce qu'elles lisent ; la ligne recopiée se lit par ses noms (`importsDe`).
+  const deAttention = importsDe(src, './attention.js');
+  assert.ok(src.includes("import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, estSirene, pointsAttention } from '../attention.js';") && ['tuileAlarme', 'estSirene', 'ICONES_ARMEMENT', 'pointsAttention', 'niveauMax', 'resumeAttention', 'couleurNiveau', 'niveauPile', 'couleurPile', 'reglerSeuilPile', 'seuilsPile', 'fuiteCalculee', 'animationNiveau', 'CLASSES_MOUVEMENT', 'CLASSES_SURETE', 'CLASSES_OUVRANT', 'motsSurete'].every(n => deAttention.has(n)), 'une seule source pour les classes');
   // ASSERTION AJOUTÉE (audit du 19/10, point 14) : les ouvrants aussi — `OUVRANT_DCS` n'est plus une copie.
   assert.ok(src.includes('const OUVRANT_DCS = CLASSES_OUVRANT;'), 'les ouvrants viennent de la table');
 });

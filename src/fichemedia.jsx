@@ -59,6 +59,7 @@ import NavigateurMedias, { favorisLecture, noterFavori, MEDIA_ICONES } from './n
 import { genreLecteur, glypheLecteur, posLecteur, fmtTemps, pourcentTexte, etatVolume, nomLecteur } from './lecteur.js';
 import { EnteteFiche, PETITES_CAPITALES, filet } from './fichecommune.jsx';
 import { LISERE } from './styles.js';
+import { PANNEAU, RANGEE, TITRE, SOUS } from './fichekit.js';
 
 /* La feuille « Réglages parent » du mode enfant (chantier Mode enfant, E19) : la seconde feuille de cette fiche, montée après son
  * contenu, chargée à l'ouverture seulement — le motif du plan du robot (ficherobot.jsx). Son contenu seul est à la demande
@@ -81,12 +82,7 @@ function FicheEnfant({ onClose, ...props }) {
   );
 }
 
-/* Les panneaux de sa maquette : le gris --o-s3, l'arrondi du thème, sans ombre, et le liseré du réglage « Liserés ». */
-const PANNEAU = { background: 'var(--o-s3)', border: LISERE, borderRadius: 'var(--o-radius,18px)', boxSizing: 'border-box', minWidth: 0 };
-const RANGEE = { display: 'flex', alignItems: 'center', gap: 12, width: '100%', boxSizing: 'border-box', padding: '12px 14px 12px 18px' };
 const EN_BOUTON = { background: 'none', cursor: 'pointer', fontFamily: 'inherit', color: 'var(--o-text)', textAlign: 'left' };
-const TITRE = { display: 'block', fontSize: 14, fontWeight: 700 };
-const SOUS = { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 };
 const NOTE = { fontSize: 11.5, fontWeight: 700, color: 'var(--o-text3)' };
 const GRAND = { fontSize: 24, fontWeight: 800, lineHeight: 1.15 };
 /* Une puce de sa maquette (`ChipButton`) : le gris doux, sans bordure ; choisie, le bleu plein et le blanc (la règle des puces) ;

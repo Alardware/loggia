@@ -23,6 +23,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 // La langue AVANT l'import, comme les autres suites qui chargent src/.
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR' }, configurable: true });
 const S = await import('../src/state.js');
@@ -147,7 +148,7 @@ test('changer de profil relit les réglages', () => {
    * changé : huit réglages resteraient sur la part de l'ancien. La racine du
    * rendu porte donc le profil, comme elle porte déjà la première réponse du
    * serveur (ADR 0184). */
-  const app = lire('src', 'App.jsx');
+  const app = MONOLITHE;
   assert.ok(app.includes("<div key={(servi ? 'srv' : 'local') + ':' + userIdx}"),
     'la racine ne porte plus le profil : les réglages lus au montage resteraient sur la part de l’ancien profil');
 });
