@@ -156,15 +156,17 @@ test('le fond de la démo en ligne : OpenStreetMap, attribué, jamais au-delà d
   assert.equal(osm.options.token, undefined, 'le jeton du relais ne part pas chez un tiers');
   for (const k of ['referrerPolicy', 'crossOrigin', 'keepBuffer']) assert.ok(!(k in osm.options), k + ' : le Referer part, ni préchargement ni réglage à nous');
   const feuille = lire('src/feuillecarte.jsx');
+  // Une recherche dans du TEXTE (le source, le paquet), pas le contrôle d'une adresse : une expression, que CodeQL ne prend pas pour un filtre d'URL incomplet.
+  const OSM = /tile\.openstreetmap\.org/;
   // L'adresse ne vit QUE derrière la condition que la construction remplace : le paquet de HA ne la contient pas.
-  const lignes = feuille.split('\n').filter((l) => l.includes('tile.openstreetmap.org'));
+  const lignes = feuille.split('\n').filter((l) => OSM.test(l));
   assert.deepEqual(lignes, ["const FOND_DEMO = import.meta.env.MODE === 'demo' ? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png' : null;"]);
   assert.ok(!/referrerPolicy|prefetch|caches\.open|localStorage/.test(feuille), 'pas de cache, pas de préchargement, le Referer par défaut');
   // Le paquet servi par Home Assistant (construit en « production ») : aucune adresse d'OpenStreetMap à charger.
   const dossier = new URL('../custom_components/loggia/frontend/assets/', import.meta.url);
   const morceaux = readdirSync(dossier).filter((n) => n.endsWith('.js'));
   assert.ok(morceaux.length > 10, 'le paquet est introuvable');
-  for (const n of morceaux) assert.ok(!readFileSync(new URL(n, dossier), 'utf8').includes('tile.openstreetmap.org'), n + ' : le paquet de HA demanderait ses tuiles à un tiers');
+  for (const n of morceaux) assert.ok(!OSM.test(readFileSync(new URL(n, dossier), 'utf8')), n + ' : le paquet de HA demanderait ses tuiles à un tiers');
 });
 
 test('le mode sombre : les tuiles s’inversent par le filtre de HA, sauf quand Loggia est en clair', () => {
