@@ -1,5 +1,7 @@
 {
   "name": "Loggia Dashboard",
   "homeassistant": "2024.7.0",
-  "render_readme": true
+  "render_readme": true,
+  "zip_release": true,
+  "filename": "loggia.zip"
 }
