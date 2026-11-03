@@ -22,6 +22,7 @@ import { tr } from './i18n.js';
 import { nombre } from './format.js';
 import { signeTemp } from './unites.js';
 import { verdictsPlante, PLAGES_PLANTE } from './objets.js';
+import { figeeDe, texteFigee } from './fraicheur.js';
 
 // Les capteurs d'une plante : leur classe, et l'unité qui les reconnaît à défaut. La pile, à sa classe seule : un sol se mesure aussi en %.
 const CLASSES = { hum: ['moisture', null], cond: ['conductivity', 'µS/cm'], lux: ['illuminance', 'lx'], temp: ['temperature', null], bat: ['battery', null] };
@@ -109,18 +110,20 @@ export function vuePlante(pl, { quand = null, deCelsius = (x) => x } = {}) {
   const p = pl || {};
   const v = verdictsPlante(p);
   const M = motsPlante();
-  const presse = v.presse.slice(0, 2).map(x => M.presse[x]);
   const muette = !!p.mort;
+  // Son sol figé au jugement du serveur (ADR 0311) : son dernier relevé, et rien ne presse sur une valeur d'hier.
+  const figee = p.ids ? figeeDe(p.ids.hum) : null;
+  const presse = figee ? [] : v.presse.slice(0, 2).map(x => M.presse[x]);
   const uT = p.uniteTemp || 'C';
   const phrase = muette ? (p.muetDepuis != null && quand ? tr('Indisponible depuis {h}', { h: quand(p.muetDepuis) }) : tr('Indisponible'))
-    : presse.length ? presse.map(majuscule).join(' · ') : v.hum ? (v.hum === 'humide' ? M.humide : M.ok) : tr('Mesure absente');
+    : figee ? texteFigee(figee) : presse.length ? presse.map(majuscule).join(' · ') : v.hum ? (v.hum === 'humide' ? M.humide : M.ok) : tr('Mesure absente');
   const valeur = { hum: p.hum == null ? null : nombre(p.hum, 0) + '\u00a0%', lux: p.lux == null ? null : nombre(p.lux, 0) + '\u00a0lx',
     temp: p.temp == null ? null : nombre(deCelsius(p.temp, uT), 1, 0) + '\u00a0' + signeTemp(uT), cond: p.cond == null ? null : nombre(p.cond, 0) + '\u00a0µS/cm' };
   const pressant = { hum: v.hum === 'sec', lux: v.lux === 'faible', temp: v.temp === 'froid' || v.temp === 'chaud', cond: false };
   const sol = muette || p.hum == null ? null : Math.round(p.hum);
   return {
     phrase, ton: muette ? 'bad' : presse.length ? 'warn' : null, sol, chiffre: sol == null ? '\u2014' : nombre(sol, 0) + '\u00a0%',
-    mesures: MESURES_PLANTE.map(([cle, glyphe]) => ({ cle, glyphe, valeur: muette ? null : valeur[cle], presse: !muette && pressant[cle] })),
+    mesures: MESURES_PLANTE.map(([cle, glyphe]) => ({ cle, glyphe, valeur: muette ? null : valeur[cle], presse: !muette && !figee && pressant[cle] })),
     presse: v.presse, regarder: muette || presse.length > 0, jugee: muette || p.hum != null, muette,
   };
 }

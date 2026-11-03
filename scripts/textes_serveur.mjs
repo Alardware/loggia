@@ -37,6 +37,10 @@ export const CLES_TELEPHONE = [
   'Détecteur muet, à vérifier : {nom}',
   /* Plusieurs détecteurs muets ensemble, une seule notification (relecture du lot 2, point 8). */
   'Détecteurs muets, à vérifier : {nom}',
+  /* Une alarme qu'une caméra entend : le téléphone, jamais la maison (ADR 0305). */
+  'Alarme entendue par une caméra : {nom}',
+  /* Un sabotage pendant que l'alarme est armée (ADR 0307). */
+  'Sabotage pendant que l’alarme est armée : {nom}',
   '{nom} : {reste} restant, a remplacer',
   'Heures creuses : c’est le moment de lancer les machines',
   /* La fin d'un cycle d'electromenager (chantier Prises, P6). */

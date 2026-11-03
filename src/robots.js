@@ -148,6 +148,14 @@ export function dureeLisible(min) {
   return r ? tr('{h} h {m}', { h, m: String(r).padStart(2, '0') }) : tr('{h} h', { h });
 }
 
+/** L'avance d'une tonte (lot 9 Gladys, ADR 0313) : « 45 % · 20 min restantes », d'après les ÉTATS des capteurs de progression et de
+ *  temps restant de son appareil (clés `progress` et `left_time`) ; le second en minutes, ou converti depuis l'heure ou la seconde
+ *  que l'on a choisie dans Home Assistant. Ce qui ne se lit pas part ; rien de lisible : null. */
+export function avanceTonte(p, r) {
+  const pct = parseFloat(p && p.state), m = parseFloat(r && r.state) * ((r && { h: 60, s: 1 / 60 }[(r.attributes || 0).unit_of_measurement]) || 1);
+  return [pct >= 0 && pct <= 100 ? Math.round(pct) + ' %' : '', m >= 1 ? tr('{t} restantes', { t: dureeLisible(m) }) : ''].filter(Boolean).join(' · ') || null;
+}
+
 /* ════════════ Le planning (ADR 0043) ════════════
  *
  * Aucun robot ne publie son planning : c'est Loggia qui le tient, côté serveur
@@ -174,17 +182,6 @@ export function nomJour(j, loc = 'fr-FR', forme = 'narrow') {
 
 export const heureValide = (hhmm) => /^([01]?\d|2[0-3]):[0-5]\d$/.test(String(hhmm == null ? '' : hhmm));
 const minutesDe = (hhmm) => { if (!heureValide(hhmm)) return null; const [h, m] = String(hhmm).split(':').map(Number); return h * 60 + m; };
-
-/** « Tous les jours », « En semaine », « Le week-end », sinon les jours courts dans l'ordre de la langue. */
-export function resumeJours(jours, premier = 1, loc = 'fr-FR') {
-  const retenus = new Set((jours || []).filter(j => Number.isInteger(j) && j >= 0 && j <= 6));
-  if (!retenus.size) return tr('Aucun jour');
-  if (retenus.size === 7) return tr('Tous les jours');
-  const cle = [...retenus].sort().join('');
-  if (cle === '01234') return tr('En semaine');
-  if (cle === '56') return tr('Le week-end');
-  return ordreJours(premier).filter(j => retenus.has(j)).map(j => nomJour(j, loc, 'short')).join(' · ');
-}
 
 /** Le prochain départ d'un robot : la première échéance STRICTEMENT après maintenant — d'un passage qui
  *  PARTIRA (I18). `calme`, la plage « Ne pas déranger » du robot : le serveur retient tout passage dont
@@ -244,7 +241,8 @@ export function piecesDites(domaine, pieces, tout = false) {
  *  2. « Il bipe : suivez le son », trois secondes après un `locate` accepté, dans l'onglet qui l'a envoyé ;
  *  3. en erreur : « En erreur · {message de l'appareil} », ou « En erreur », en rouge ;
  *  4. au travail : « Nettoie · Salon, Cuisine », « Tond · Pelouse arrière », « Nettoie · tout le logement » — ce que le
- *     carnet du serveur sait du passage ; sans lui, « Nettoyage en cours », « Tonte en cours » —, dans la teinte du robot ;
+ *     carnet du serveur sait du passage ; sans lui, « Nettoyage en cours », « Tonte en cours » —, dans la teinte du robot ; une
+ *     tondeuse dont l'appareil publie son avance (`avance`, ADR 0313) : « Tond · 45 % · 20 min restantes » ;
  *  5. en pause : « En pause · {pièces} », ou « En pause » ; 6. au retour : « Retour à la base » ;
  *  7. sur la base : « Passage à 09:30 », « Passage demain 09:30 », « Passage mardi 09:30 » — le prochain qui partira —,
  *     sinon « Sur la base », ou « Sur la base · en charge » quand un capteur le dit ;
@@ -254,7 +252,7 @@ export function piecesDites(domaine, pieces, tout = false) {
  * `prochainPassage`, ou null ; `sansZone` : une tondeuse à aires dont aucune n'est allumée — sur la base ou arrêtée, la phrase le dit,
  * « Aucune zone allumée », puisqu'elle n'offre pas « Démarrer » (passe bis 2 du 18/10, point D). Rend `{ texte, encre, panne }`.
  */
-export function phraseRobot({ domaine = 'vacuum', phase = 'absent', depuis = null, bipe = false, erreur = null, pieces = null, tout = false, libelle = null, prochain = null, charge = false, sansZone = false, maintenant = Date.now() } = {}) {
+export function phraseRobot({ domaine = 'vacuum', phase = 'absent', depuis = null, bipe = false, erreur = null, pieces = null, tout = false, libelle = null, prochain = null, charge = false, sansZone = false, avance = null, maintenant = Date.now() } = {}) {
   const tondeuse = domaine === 'lawn_mower';
   const gris = 'var(--o-text2)';
   if (phase === 'absent') {
@@ -264,7 +262,8 @@ export function phraseRobot({ domaine = 'vacuum', phase = 'absent', depuis = nul
   if (bipe) return { texte: tr('Il bipe : suivez le son'), encre: 'var(--o-accent-soft)', panne: false };
   if (phase === 'erreur') return { texte: erreur ? tr('En erreur · {m}', { m: erreur }) : tr('En erreur'), encre: 'var(--o-bad)', panne: false };
   // Le nom d'un script maison (`libelle`, passe bis du 18/10, point A) dit le passage quand ses pièces ne se savent pas.
-  const p = piecesDites(domaine, pieces, tout) || libelle || null;
+  // L'avance d'une tonte (`avanceTonte`, ADR 0313) passe devant ses aires : « Tond · 45 % · 20 min restantes ».
+  const p = (tondeuse && avance) || piecesDites(domaine, pieces, tout) || libelle || null;
   if (phase === 'travail') {
     const texte = p ? (tondeuse ? tr('Tond · {p}', { p }) : tr('Nettoie · {p}', { p })) : (tondeuse ? tr('Tonte en cours') : tr('Nettoyage en cours'));
     return { texte, encre: tondeuse ? 'var(--o-ok)' : 'var(--o-accent-soft)', panne: false };

@@ -3,6 +3,8 @@
 Date : 03/10/2026. Statut : appliqué. **Redémarrage de Home Assistant requis**
 (mise à jour d'un composant personnalisé) ; le paquet est rebâti.
 
+*Complétée par l'ADR [0315](0315-la-liste-de-courses-a-sa-carte-a-part-des-rappels.md) (01/11) : la liste d'achats (`shopping_list`) a sa carte, à part des rappels.*
+
 La carte « Rappels » de l'Accueil portait deux lignes qui n'avaient rien à voir
 l'une avec l'autre : le prochain repas du chat, et le prochain ramassage. Un
 dessin fourni le 03/10 en fait une **vraie liste de choses à faire** — « Rappels

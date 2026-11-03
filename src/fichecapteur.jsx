@@ -174,7 +174,8 @@ export default function FicheCapteurContent({ id, vue, piece = null, epingle = n
   const { courbe, depuis, minmax } = useMemo(() => journeeMesure(brut, { cle, uniteTable, ecrite, neutre, dehors, zi, maintenant }), [brut, cle, uniteTable, ecrite, neutre, dehors, zi, maintenant]);
   const conseil = [conseilMesure(cle, z), depuis].filter(Boolean).join(' ');
   const pile = pileDe(S, id);
-  const dernier = dernierSignal(S, [id, ...soeursDe(id)]);
+  // Figée, le dernier relevé que le serveur a lu (`last_reported`, ADR 0311) : l'écran ne reçoit que `last_updated`, plus ancien.
+  const dernier = vue.figee || dernierSignal(S, [id, ...soeursDe(id)]);
   // Un capteur qui n'écrit pas un nombre garde son état, tel quel, comme la fiche d'avant ; sa phrase, qui le redit, se tait (point 10).
   const mot = vue.muette ? '—' : vue.chiffre == null ? (vue.st ? vue.st.state : '—') : null;
   /* « Ne pas juger cette mesure » (audit du 19/10, décision D5) : la découverte devine — un frigo, la sonde d'un appareil —, ce réglage

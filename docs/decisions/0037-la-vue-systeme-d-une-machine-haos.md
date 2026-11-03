@@ -5,6 +5,8 @@ l'utilisateur, « pour la vue système de HAOS » : cinq tuiles de mesure, la
 charge des soixante dernières minutes, les versions, les modules
 complémentaires, le réseau et le stockage, le journal.
 
+*Complétée par l'ADR [0314](0314-ce-que-l-administrateur-doit-savoir-sauvegardes-disque-plein-et-mises-a-jour.md) (01/11) : les sauvegardes automatiques et le disque plein, jusqu'au rail de l'Accueil.*
+
 ## Contexte
 
 La vue Système tenait en une carte : la machine, quatre chiffres, une courbe

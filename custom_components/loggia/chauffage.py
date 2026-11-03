@@ -60,7 +60,7 @@ from .chauffage_familles import (MUETS, commande, consigne_en_unite, deja, famil
                                  lire_appareil, PLATEFORME_SCHEDULER, PLATEFORME_VELAIR, PREFIXE_CONSIGNE,
                                  concurrents_scheduler, entites_velair,
                                  historique_resume, mode_applicable, mode_chauffe, modes_permis, options_du_module,
-                                 pas_revele, programmes_de_l_appareil, puissance_fixe, refroidit, temperature_du_mode,
+                                 est_poele, pas_revele, programmes_de_l_appareil, puissance_fixe, refroidit, temperature_du_mode,
                                  trame_fausse)
 from .const import DOMAIN
 from .eau_chaude import ESSAIS_LEVEE, RELANCE as RELANCE_EAU, RELANCE_MAX as RELANCE_EAU_MAX, absence_voulue, levee_a, option_active, ordres_absence, sait_absence
@@ -1679,11 +1679,12 @@ class LoggiaChauffage:
         commande_par = self._commandes().get(entite) if entite else None
         if commande_par is not None:
             avertissements.append("commande_par")
-        if fam == "thermostat" and entite:
-            plateforme = next((getattr(e, "platform", None) for e in self._entrees()
-                               if getattr(e, "entity_id", None) == entite), None)
-            if puissance_fixe(plateforme, attrs):
-                avertissements.append("puissance_fixe")
+        # La plateforme de son integration : la puissance fixe d'un poele MCZ, et
+        # le poele lui-meme (ADR 0308), que la fiche seule conseille en Eco.
+        plateforme = next((getattr(e, "platform", None) for e in self._entrees()
+                           if getattr(e, "entity_id", None) == entite), None) if entite else None
+        if fam == "thermostat" and puissance_fixe(plateforme, attrs):
+            avertissements.append("puissance_fixe")
         # Son dernier ordre perdu deux fois (30/10) ; son programme allume le dit deja mieux.
         defait = self._defaits.get(cle) if (c or {}).get("planning") and not programme else None
         if defait is not None:
@@ -1729,6 +1730,8 @@ class LoggiaChauffage:
             "commande_par": commande_par,
             # Le decalage de son capteur (°C, 30/10) : l'ecran montre et regle la consigne de la PIECE.
             "decalage": self._decalage(c),
+            # Un poele a granules (ADR 0308) : la fiche lui conseille l'Eco a l'ouverture d'une fenetre.
+            "poele": est_poele(plateforme),
             # Ce qu'il fait au lieu de son dernier ordre, perdu deux fois (30/10) : {"mode", "temperature" (°C), "depuis"}.
             "defait": defait,
             # Planning eteint, la carte commande le module elle-meme : avec l'option telle

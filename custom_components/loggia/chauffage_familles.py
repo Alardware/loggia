@@ -88,6 +88,19 @@ CHAUFFE = ("heat", "heat_cool", "auto")
 # une consigne tenue a la main, qui marche tres bien.
 PUISSANCE_FIXE = {"maestro_mcz": frozenset({"manual"})}
 
+# Les poeles a granules, reconnus a la PLATEFORME de leur integration (01/11,
+# ADR 0308) : une integration qui ne pilote que des poeles. Jamais un nom, ni
+# « un thermostat qui ne refroidit pas » — un radiateur electrique non plus.
+# Une plateforme de plus ici, et son appareil en profite ; ailleurs, rien.
+PLATEFORMES_POELE = frozenset({"maestro_mcz", "palazzetti"})
+
+# Les capteurs d'un poele que Loggia sait lire, reconnus a la FIN de leur
+# identifiant stable (`unique_id`), par plateforme — l'integration MCZ n'a ni
+# cle de traduction ni classe : `<code du poele>-state` (ce qu'il fait,
+# « Potenza 3 », en italien), `<code du poele>-ore_prox_manut` (les heures de
+# fonctionnement avant l'entretien). Lu dans son code (models.py), 01/11.
+CAPTEURS_POELE = {"maestro_mcz": {"etat": "-state", "entretien": "-ore_prox_manut"}}
+
 # Les modes ou un appareil REFROIDIT (une pompe a chaleur reversible, une
 # clim) : le planning de chauffe ne le commande pas, ni ne le remet en chauffe,
 # ni ne l'eteint ; il attend qu'il repasse en chauffe (audit du 19/10).
@@ -305,6 +318,22 @@ def puissance_fixe(plateforme: Any, attributs: Any) -> bool:
     if not isinstance(attributs, dict):
         return False
     return attributs.get("preset_mode") in PUISSANCE_FIXE.get(str(plateforme or ""), ())
+
+
+def est_poele(plateforme: Any) -> bool:
+    """Un poele a granules, a la plateforme de son integration (ADR 0308)."""
+    return isinstance(plateforme, str) and plateforme in PLATEFORMES_POELE
+
+
+def capteur_poele(domaine: str, plateforme: Any, unique_id: Any) -> str | None:
+    """Le role d'un capteur de poele — `etat`, `entretien` — d'apres la fin de
+    son identifiant stable, ou None (ADR 0308). Le role seul sort du serveur."""
+    if domaine != "sensor" or not isinstance(unique_id, str) or not isinstance(plateforme, str):
+        return None
+    for role, fin in (CAPTEURS_POELE.get(plateforme) or {}).items():
+        if unique_id.endswith(fin):
+            return role
+    return None
 
 
 def refroidit(fam: str, etat: Any) -> bool:

@@ -8,6 +8,8 @@ et ses pièces à cocher, une planification, un historique, un entretien, des
 réglages, une barre d'onglets en bas — avec une consigne : « pour les robots
 aspirateur et tondeuse ».
 
+*Complétée par l'ADR [0313](0313-la-tondeuse-dit-son-avance-et-garde-sa-derniere-erreur-24-h.md) (01/11) : la tondeuse dit son avance, et la popup garde la dernière erreur 24 h.*
+
 ## Contexte
 
 Loggia avait une vue « Aspirateur » écrite pour UN robot : le plan, les pièces,

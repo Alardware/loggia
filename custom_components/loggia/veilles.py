@@ -73,6 +73,25 @@ Le rappel de collecte (chantier G2, S2 ; ADR 0301)
   de trois heures apres l'heure saute le rappel. Eteint par defaut ;
   « Observer sans agir » le simule.
 
+L'entretien du poele (01/11, ADR 0308)
+──────────────────────────────────────
+  Un poele a granules compte les heures de fonctionnement qui le separent de
+  son entretien (`ore_prox_manut` d'un MCZ, reconnu a son identifiant stable :
+  chauffage_familles.CAPTEURS_POELE). Sous SEUIL_ENTRETIEN, la cle
+  `entretien:<capteur>` rejoint ce qui a ete signale, et l'Accueil la montre
+  dans le rail : « Entretien du poele dans 38 h ». Rien ne part au telephone —
+  aucune veille d'usure n'y part sans qu'on l'allume (piles, consommables) —,
+  rien ne se commande : sans reglage, toujours suivi. Le poele envoie parfois
+  un 0 d'un instant entre deux vraies valeurs (releve sur dix jours) : la cle
+  ne se pose qu'au DEUXIEME passage horaire de suite sous le seuil.
+
+La fraicheur des mesures (01/11, ADR 0311)
+──────────────────────────────────────────
+  Une mesure physique sans releve depuis six heures (une plante : vingt-quatre)
+  est figee. Le serveur seul peut le dire : il lit `last_reported`, que l'ecran
+  ne recoit pas (fraicheur.py). L'etat des veilles le porte (`figees`), calcule
+  a chaque lecture : rien a garder, rien au telephone, aucun point d'attention.
+
 A qui (ADR 0301) : les veilles ordinaires et la collecte vont aux personnes a
 la maison ; le monoxyde, a tout le monde (`regles.prevenir`, `pour=`).
 """
@@ -80,11 +99,13 @@ from __future__ import annotations
 
 import logging
 import math
+import time
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
 
-from . import collecte
+from . import collecte, fraicheur
+from .chauffage_familles import capteur_poele
 from .nombres import lu
 from .regles import demarrer, entites_propres, est_entite, niveau
 from .textes import langue_serveur, traduire
@@ -103,7 +124,7 @@ CLE_ETAT = "loggia_veilles_etat"
 VERSION_ETAT = 1
 # Un plafond, pas un reglage : une maison n'a pas mille piles basses.
 MAX_SIGNALES = 1000
-PREFIXES_SIGNALES = ("co2:", "bat:", "conso:", "co:")
+PREFIXES_SIGNALES = ("co2:", "bat:", "conso:", "co:", "entretien:")
 # Le registre change par rafales (une integration qui charge cent entites) :
 # on se reabonne une fois, un peu apres la premiere (audit du 19/10, M4). Le
 # delai laisse aussi a l'entite neuve le temps d'ecrire son premier etat.
@@ -133,6 +154,11 @@ MSG_CREUSES = "Heures creuses : c’est le moment de lancer les machines"
 # Le monoxyde de carbone au palier Danger (ADR 0251) : critique, sous le titre de la surete.
 MSG_CO = "{nom} : monoxyde de carbone à {v} ppm, aérez et sortez"
 TITRE = "Loggia — sûreté"
+
+# L'entretien du poele (ADR 0308), en heures de fonctionnement : sous ce seuil,
+# le rail le dit. 100 h, c'est une semaine d'hiver a plein regime, trois en
+# demi-saison : le temps de prendre rendez-vous ou de sortir l'aspirateur a cendres.
+SEUIL_ENTRETIEN = 100
 # Le rappel de collecte (ADR 0301) : ce qui passe demain, et le bouton de la
 # notification — une cle de CLES_VOIX, comme les boutons du mode enfant.
 MSG_COLLECTE = "Demain : {types}"
@@ -261,6 +287,9 @@ class LoggiaVeilles:
     # Les rappels SIMULES de ce processus : jamais ecrits au magasin, ils ne
     # bloquent pas le vrai rappel si l'observation est coupee le meme soir.
     _collecte_simulee = None
+    # L'entretien du poele : les capteurs vus sous le seuil au passage d'avant,
+    # pas encore signales (un 0 d'un instant ne compte pas). En memoire seulement.
+    _entretien_bas: frozenset = frozenset()
 
     def __init__(self, hass: HomeAssistant, store: "LoggiaStore", regles=None) -> None:
         self.hass = hass
@@ -362,7 +391,8 @@ class LoggiaVeilles:
         # une rafale du registre repoussait le passage des piles sans fin.
         horaire = bool((self.cfg.get("batterie") or {}).get("actif")
                        or (self.cfg.get("consommables") or {}).get("actif")
-                       or self._capteurs_co(self._tous_les_etats()))
+                       or self._capteurs_co(self._tous_les_etats())
+                       or self._compteurs_entretien())
         if horaire and self._horaire is None:
             from datetime import timedelta
 
@@ -406,6 +436,7 @@ class LoggiaVeilles:
         await self._async_batteries()
         await self._async_consommables()
         await self._async_co()
+        await self._async_entretien()
 
     async def _async_evaluer(self) -> None:
         await self._async_co2()
@@ -624,6 +655,49 @@ class LoggiaVeilles:
             elif deja:
                 # Remplace : on redevient capable de prevenir.
                 self.signales.discard(cle)
+        if self.signales != avant:
+            await self._async_garder()
+
+    # ── L'entretien du poele (ADR 0308) ─────────────────────────────────────
+    def _compteurs_entretien(self) -> list:
+        """Les compteurs d'entretien des poeles, reconnus a leur identifiant
+        stable (chauffage_familles.capteur_poele), jamais a leur nom. Un
+        registre illisible n'en connait aucun : ce n'est pas un danger."""
+        try:
+            from homeassistant.helpers import entity_registry as er
+
+            entrees = list(er.async_get(self.hass).entities.values())
+        except Exception:  # noqa: BLE001
+            return []
+        return sorted(str(e.entity_id) for e in entrees
+                      if getattr(e, "disabled_by", None) is None
+                      and capteur_poele(str(e.entity_id).split(".", 1)[0], getattr(e, "platform", None),
+                                        getattr(e, "unique_id", None)) == "entretien")
+
+    async def _async_entretien(self) -> None:
+        """Sous le seuil deux passages de suite : la cle, que le rail lit. Rien
+        au telephone. Revenu franchement au-dessus (l'entretien fait, le compteur
+        reparti), elle s'en va."""
+        avant = set(self.signales)
+        self._purger("entretien:")
+        bas = set()
+        for haid in self._compteurs_entretien():
+            valeur = nombre(self.hass.states.get(haid))
+            if valeur is None:
+                # Muet : ni signal ni rearmement.
+                continue
+            cle = "entretien:" + haid
+            deja = cle in self.signales
+            if en_dessous(valeur, SEUIL_ENTRETIEN, deja, inclus=True):
+                if deja:
+                    continue
+                if haid in self._entretien_bas:
+                    self.signales.add(cle)
+                else:
+                    bas.add(haid)
+            elif deja:
+                self.signales.discard(cle)
+        self._entretien_bas = frozenset(bas)
         if self.signales != avant:
             await self._async_garder()
 
@@ -948,7 +1022,8 @@ class LoggiaVeilles:
         """Du simule au reel, ou l'inverse : la veille repart de ce que la
         maison EST (ADR 0004). Une alerte simulee n'est jamais partie : revenu
         au reel, on doit pouvoir la dire pour de vrai."""
-        self.signales = set()
+        # L'entretien du poele reste : il ne part nulle part, il n'a rien de simule.
+        self.signales = {k for k in self.signales if k.startswith("entretien:")}
         self.creuses_en_cours = False
         self._collecte_simulee = None
         self.regles.relacher("veilles")
@@ -1035,10 +1110,40 @@ class LoggiaVeilles:
             "notification": bool(str((alertes or {}).get("service") or "").strip())
             or await self.regles.a_qui_parler("presents"),
             "signales": sorted(self.signales),
+            # Les mesures figees et l'instant de leur dernier releve (ADR 0311).
+            "figees": await self._figees(),
             # Le rappel de collecte : ce qui a ete dit, ce qui est sorti.
             "collecte": collecte.etat_de(await self.store.async_get_shared(collecte.CLE_ETAT, None)),
             "journal": await self.regles.journal(limite=40, module="veilles"),
         }
+
+    async def _figees(self) -> dict[str, int]:
+        """Les mesures figees (fraicheur.py), lues a chaque demande : l'instant
+        avance tout seul, rien n'est garde. Un registre illisible ne juge
+        rien : mieux vaut une mesure crue fraiche qu'une maison entiere dite
+        figee."""
+        try:
+            from homeassistant.helpers import device_registry as dr
+            from homeassistant.helpers import entity_registry as er
+
+            entrees = list(er.async_get(self.hass).entities.values())
+            appareils = dr.async_get(self.hass)
+        except Exception:  # noqa: BLE001
+            return {}
+        try:
+            plantes = await self.store.async_get_shared(fraicheur.CLE_PLANTES, None)
+        except Exception:  # noqa: BLE001
+            plantes = None
+        bases = [p.get("base") for p in plantes if isinstance(p, dict)] if isinstance(plantes, list) else []
+
+        def physique(appareil: str) -> bool:
+            try:
+                fiche = appareils.async_get(appareil)
+            except Exception:  # noqa: BLE001
+                return False
+            return fiche is not None and not str(getattr(fiche, "entry_type", None) or "").endswith("service")
+
+        return fraicheur.figees(entrees, self.hass.states.get, physique, bases, time.time())
 
     def _poser_patch(self, cfg: dict[str, Any], patch: dict[str, Any]) -> None:
         """Le patch de l'ecran, pose sur `cfg`, seuils bornes. Synchrone :

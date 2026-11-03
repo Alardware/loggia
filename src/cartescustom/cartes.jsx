@@ -1,7 +1,8 @@
 /* Les cartes des vues personnalisées dont les cartes et les fiches se servent : `CvCard`, les caméras, l'alarme.
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
 import { useState, useRef, useEffect, Suspense } from 'react';
-import { LOGGIA_INDEX, cfgVal } from '../state.js';
+import { LOGGIA_INDEX, cfgVal, estTraceur } from '../state.js';
+import { lazyRecharge } from '../recharge.js';
 import { versHex, lisibleSurLavis } from '../contraste.js';
 import { enPanne, gestesCover, positionPubliee } from '../outils.js';
 import { LAVIS } from '../theme.js';
@@ -33,12 +34,15 @@ import { RmBascule, RM_ICO, GlypheCarte, RM_NAME, RM_SUB, RM_BTN } from '../cart
 import { RM_INERTE } from '../cartes/chauffage.jsx';
 import { CarteVanne } from '../cartes/distributeur.jsx';
 import { CarteEauChaude } from '../cartes/eauborne.jsx';
+// La carte d'un traceur d'objet (ADR 0318) : chargée à la demande, elle s'abonne elle-même aux capteurs de son appareil.
+const CarteTraceur = lazyRecharge(() => import('../cartetraceur.jsx'));
 import { useVueLumiere } from '../cartes/lumiere.jsx';
 import { useVueLecteur, CarteEnfant } from '../cartes/media.jsx';
 import { useVueMesure, estMesure } from '../cartes/mesure.jsx';
 import { useVuePrise, useDemandeCoupure } from '../cartes/prise.jsx';
 import { useVueRobot } from '../cartes/robot.jsx';
 import { envoyerGeste } from '../cartes/volet.jsx';
+import { retenirModeVentilo, chargeAllumage } from '../ventilo.js';
 
 /* Une FONCTION, pas une table.
  *
@@ -310,6 +314,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
    * l'accent des autres domaines : allumée, elle reste neutre, sans lavis. */
   const neutre = on && dom === 'climate' && !teinte;
   const togglable = ['light', 'switch', 'input_boolean', 'fan', 'humidifier', 'siren'].indexOf(dom) >= 0;
+  retenirModeVentilo(id, st);
   // Presque tout s'ouvre : les domaines à fiche dédiée, et tout appareil du
   // registre via la fiche universelle. Seuls les capteurs texte restent muets.
   // Un capteur qui porte une DATE ou une heure n'est pas une mesure :
@@ -366,6 +371,8 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
       const geste = appuiBascule({ on, garde: gs.garde, ouvrable: !!onOpen, enDemande });
       if (geste === 'fiche') onOpen(id);
       else if (geste === 'demander') setDemande(true);
+      // Un ventilateur se rallume dans son dernier MODE (ticket #43, ventilo.js).
+      else if (dom === 'fan' && !on && chargeAllumage(id)) { setDemande(false); call('fan', 'turn_on', chargeAllumage(id)); }
       else { setDemande(false); call('homeassistant', on ? 'turn_off' : 'turn_on'); }
       return;
     }
@@ -384,6 +391,8 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   /* Un chauffe-eau (chantier G3, E2 ; ADR 0302) a SA carte, chargée à la demande : la température de l'eau, la consigne, le mode
    * traduit. Elle REMPLACE ce rendu générique, qui écrivait son état brut (« eco ») dans les sept langues. */
   if (dom === 'water_heater') return <CarteEauChaude id={id} hass={hass} label={label} chip={dense} onOpen={onOpen} />;
+  // Un traceur d'objet (ADR 0318) a SA carte, chargée à la demande : sa zone, sa batterie, son dernier signal. Plus de « Présent ».
+  if (estTraceur(id)) return <Suspense fallback={null}><CarteTraceur id={id} hass={hass} nom={label} chip={dense} onOpen={onOpen} /></Suspense>;
   return (
     /* La carte n'englobe plus ses commandes (lot 13 de l'audit du 03/10, motif
      * de l'ADR 0074). Racine `role="button"`, elle rendait sa descendance

@@ -120,6 +120,8 @@ const NEUTRES = new Set([
   'Loggia', 'O', 'OK', 'LIVE', 'AUTO', '×', '+', '—', '·',
   '°C', '%', 'W', 'kWh', 'ppm', 'ppm CO₂', 'CO₂', 'm', 'm²', '24 h',
   'React + Vite', 'Manrope / Newsreader', 'Home Assistant', 'HACS',
+  // ASSERTION MODIFIÉE (01/11, ADR 0321) : le nom des données du fond de carte, dans son attribution (cartegeo.js).
+  'OpenStreetMap',
 ]);
 
 test('aucun texte écrit en clair dans le JSX', () => {

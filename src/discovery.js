@@ -141,6 +141,14 @@ export async function registresDuComposant(hass) {
       famille: e.famille || null,
       // Le rôle dans le contrat à couleurs (`tarifs.py`, chantier G3, E4) : le créneau, la couleur du lendemain.
       tarif: e.tarif || null,
+      // Le bouton qui réarme un appareil en défaut (`voisins.est_rearmement`, ADR 0307) : reconnu par le composant à sa clé stable.
+      rearmer: e.rearmer === true,
+      // Le capteur qui dit ce que fait un poêle (ADR 0308), reconnu par le composant à sa clé stable : l'écran traduit sa valeur.
+      etat_poele: e.etat_poele === true,
+      // Les probabilités et la pluie de l'heure de Météo-France (ADR 0309) : 'pluie', 'neige', 'gel', 'pluie_heure', posés par le composant.
+      meteo: e.meteo || null,
+      // L'entrée de configuration de l'Apple TV, sur son binaire du clavier seul (ADR 0316) : `apple_tv.set_keyboard_text` la demande.
+      clavier: e.clavier || null,
       device_class: e.device_class, original_device_class: e.device_class,
       unit_of_measurement: e.unit, hidden_by: e.hidden ? 'user' : null,
     })),
@@ -236,6 +244,14 @@ export function buildIndex({ areas = [], devices = [], entities = [], floors = [
       famille: e.famille || null,
       // Le rôle dans le contrat à couleurs ('creneau', 'couleur', 'couleur_demain'), posé par le composant (tarifs.py).
       tarif: e.tarif || null,
+      // Le bouton qui réarme un appareil en défaut (ADR 0307), posé par le composant. Sans lui, false.
+      rearmer: e.rearmer === true,
+      // Ce que fait un poêle (ADR 0308), posé par le composant. Sans lui, false.
+      etatPoele: e.etat_poele === true,
+      // Le rôle d'un capteur de Météo-France pour la fiche météo (ADR 0309), posé par le composant. Sans lui, null.
+      meteo: e.meteo || null,
+      // L'entrée de configuration du clavier d'une Apple TV (ADR 0316), posée par le composant. Sans lui, null.
+      clavier: e.clavier || null,
     });
   });
 
@@ -324,13 +340,22 @@ export function siblingsOf(index, entityId) {
  *   2. `unit` — l'unite de mesure ;
  *   3. `match` — un motif sur l'identifiant, en dernier recours seulement.
  *
+ * `cles` : les clés de traduction acceptées (`person_detected`…), le nom que
+ * l'intégration donne à l'entité dans toutes les langues. `sansCle` : seulement
+ * les entités qui n'en ont pas — une entité qui a une clé est nommée par son
+ * intégration, et un motif sur son identifiant la prendrait pour une autre
+ * (lot 8 Gladys, ADR 0312).
+ *
  * `domain` restreint au domaine voulu. Renvoie null si rien ne correspond :
  * l'appelant doit toujours prevoir l'absence.
  */
-export function pickSibling(index, states, entityId, { domain, deviceClass, unit, match } = {}) {
+export function pickSibling(index, states, entityId, { domain, deviceClass, unit, match, cles, sansCle } = {}) {
   const ids = siblingsOf(index, entityId);
+  const cleDe = (id) => { const m = index && index.entityMeta && index.entityMeta.get(id); return (m && m.translationKey) || null; };
   const ok = (id) => {
     if (domain && domaineDe(id) !== domain) return false;
+    if (cles && cles.indexOf(cleDe(id)) < 0) return false;
+    if (sansCle && cleDe(id)) return false;
     const a = (states[id] && states[id].attributes) || {};
     if (deviceClass && a.device_class !== deviceClass) return false;
     // `unit` accepte une liste : la meme grandeur se publie sous plusieurs

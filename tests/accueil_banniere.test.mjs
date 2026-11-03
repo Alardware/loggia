@@ -31,7 +31,7 @@ test('la vue Meteo a disparu : composant, chunk, route, navigation, disponibilit
 });
 
 test('l’entite meteo sert encore : fond de la banniere, veille, Exterieur, carte', () => {
-  assert.ok(src.includes('<WeatherIco wx={wx} size={46} />') && src.includes('function OutdoorModal(') && src.includes("if (t === 'meteo') return <CvWeather id={id} hass={hass} />;"), 'la meteo vit ailleurs');
+  assert.ok(src.includes('<WeatherIco wx={wx} size={34} anime={!!wxFx} />') && src.includes('function OutdoorModal(') && src.includes("if (t === 'meteo') return <CvWeather id={id} hass={hass} />;"), 'la meteo vit ailleurs');
   assert.ok(src.includes("weatherEntity") && src.includes('haWeatherLabel(wEnt.state)'), 'l’entite est toujours lue');
 });
 

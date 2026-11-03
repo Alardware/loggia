@@ -161,7 +161,8 @@ export function PresenceReglages({ hass, cardSt }) {
 
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    // Des lignes dans le panneau de leur module (maquette v3 des Règles, 03/11) : plus d'écart entre elles.
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
       {/* La simulation se dit EN HAUT, pas seulement dans son réglage : sinon
         * on cherche pourquoi rien ne bouge. */}
       {simu.actif && (
@@ -170,7 +171,7 @@ export function PresenceReglages({ hass, cardSt }) {
         </div>
       )}
       <div style={cardSt}>
-        <RegleEntete nom={tr('Départ et retour')}
+        <RegleEntete ico="running" nom={tr('Départ et retour')}
           desc={tr('Quand la dernière personne s’en va, la maison se met en veille. Elle se réveille au retour.')}
           on={!!cfg.actif} cb={() => enregistrer({ actif: !cfg.actif })}
           plie={pliPres} onPlier={plierPres} zone="presence-pres-1 presence-pres-2 presence-pres-3 presence-pres-4" />

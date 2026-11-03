@@ -73,7 +73,7 @@ test('la configuration en retard : le refus nommé du composant fait passer le p
 test('Paramètres ne promet plus « Encore 0000 »', () => {
   const par = lire('views/parametres.jsx');
   assert.ok(!par.includes("tr('Encore 0000')"), 'la pastille annonce encore un code par défaut qui n’ouvre plus rien');
-  assert.ok(par.includes("tr('Pas encore défini')"));
+  assert.ok(par.includes("tr('Pas encore défini : n’importe quel écran peut passer sur un profil administrateur.')"));
 });
 
 test('la démo suit le composant : jamais défini au départ, refus nommé, un code posé referme tout', () => {

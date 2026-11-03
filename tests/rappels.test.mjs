@@ -283,7 +283,10 @@ test('la case « Marquer fait » se vise à 24 px, la pastille reste dessinée �
 
   // Et aucun autre bouton du fichier ne passe sous 24 — le « + », les
   // onglets, la croix du formulaire, « Ajouter le rappel », « C’est sorti ».
-  const boutons = src.match(/<button[\s\S]*?\}\}>/g) || [];
+  // ASSERTION MODIFIÉE (01/11, ADR 0315) : le formulaire se charge à la demande (`nouveaurappel.jsx`), et la carte des
+  // courses a son « + » et ses cases (`courses.jsx`) : les trois fichiers sont relus ensemble.
+  const tous = src + lire('src', 'nouveaurappel.jsx') + lire('src', 'courses.jsx');
+  const boutons = tous.match(/<button[\s\S]*?\}\}>/g) || [];
   assert.ok(boutons.length >= 6, `seulement ${boutons.length} bouton(s) relevé(s)`);
   for (const b of boutons) {
     for (const [, prop, n] of b.matchAll(/\b(width|height|minHeight): (\d+)\b/g)) {

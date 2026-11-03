@@ -1314,13 +1314,15 @@ export function useEtatServeur(hass, type, ms, siErreur) {
   return { etat, setEtat, err, setErr, vivant, codeErr };
 }
 
-export function RegleEntete({ nom, desc, on, cb, plie = false, onPlier = null, zone = null, note = null }) {
-  // Le titre d'une regle parle comme celui d'un panneau de reglages (maquettes du 18/09).
-  const titre = { fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 20, fontWeight: 500, lineHeight: 1.2 };
-  const sous = { fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, marginTop: 3, lineHeight: 1.45 };
+export function RegleEntete({ nom, desc, on, cb, plie = false, onPlier = null, zone = null, note = null, ico = null }) {
+  /* Une ligne du panneau de son module (maquette v3 des Règles, 03/11) : la
+   * puce de l'icône à la teinte du module (`--o-regle-teinte`, posée par le
+   * panneau), le nom, ce qu'elle fait, le chevron qui déplie ses réglages,
+   * puis son interrupteur. Coupée, la puce grisonne. */
+  const teinte = 'var(--o-regle-teinte, var(--o-accent))';
   const pliable = !!(on && onPlier);
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
       {/* `aria-expanded` dit l'etat, `aria-controls` dit DE QUOI.
         *
         * Le second n'est pose QUE deplie, et c'est voulu : replier ne masque
@@ -1335,14 +1337,24 @@ export function RegleEntete({ nom, desc, on, cb, plie = false, onPlier = null, z
       <button type="button" onClick={pliable ? onPlier : undefined} disabled={!pliable}
         aria-expanded={pliable ? !plie : undefined}
         aria-controls={pliable && zone && !plie ? zone : undefined}
-        style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', padding: 0,
+        style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', background: 'none', border: 'none', padding: 0,
           color: 'inherit', font: 'inherit', cursor: pliable ? 'pointer' : 'default' }}>
-        <div style={{ ...titre, display: 'flex', alignItems: 'center', gap: 7 }}>
-          <span style={{ minWidth: 0 }}>{nom}</span>
-          {pliable && <Fi i={plie ? 'angle-small-down' : 'angle-small-up'} size={13} />}
-        </div>
-        <div style={sous}>{desc}</div>
-        {note && <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-warn)', marginTop: 7 }}>{note}</div>}
+        {ico && (
+          <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: 11, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: on ? 'color-mix(in srgb, ' + teinte + ' 16%, transparent)' : 'var(--o-s1)' }}>
+            <Fi i={ico} size={15} color={on ? teinte : 'var(--o-text3)'} />
+          </span>
+        )}
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700 }}>{nom}</span>
+          <span style={{ display: 'block', fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2, lineHeight: 1.45 }}>{desc}</span>
+          {note && <span style={{ display: 'block', fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-warn)', marginTop: 7 }}>{note}</span>}
+        </span>
+        {pliable && (
+          <span aria-hidden="true" style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)' }}>
+            <Fi i={plie ? 'angle-small-down' : 'angle-small-up'} size={14} color="var(--o-text2)" />
+          </span>
+        )}
       </button>
       <Bascule nom={nom} on={!!on} cb={cb} />
     </div>

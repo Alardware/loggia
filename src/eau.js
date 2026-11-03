@@ -12,7 +12,7 @@
  */
 import { tr, trN, trSens, comparerTextes } from './i18n.js';
 import { quandLumiere } from './lumieres.js';
-import { couleurPile } from './attention.js';
+import { couleurPile, pluieDeRobot } from './attention.js';
 
 /** Le filet d'un geste sur une vanne (I33) : 30 s — une vanne motorisée tourne en 5 à 20 s — et un relevé du pont de 2 s. */
 export const VANNE_MS = 32000;
@@ -47,13 +47,14 @@ export function serviceVanne(id, sens) {
 
 const nomDe = (S, id) => (S[id] && S[id].attributes && S[id].attributes.friendly_name) || id;
 /** Les détecteurs de fuite de la maison, rangés par leur nom — la règle du serveur (`eau_calcul.est_detecteur`, ADR 0022) : un
- *  `moisture` d'appareil, ni un modèle, ni un groupe, ni le besoin d'eau d'une plante. `plateforme(id)` : l'index ; `plantes` : les bases. */
-export function detecteursEau(S, { plateforme = () => null, plantes = [] } = {}) {
+ *  `moisture` d'appareil, ni un modèle, ni un groupe, ni le besoin d'eau d'une plante, ni la pluie d'un robot (ADR 0305).
+ *  `plateforme(id)` : l'index ; `voisins(id)` : les domaines de son appareil ; `plantes` : les bases. */
+export function detecteursEau(S, { plateforme = () => null, voisins = () => [], plantes = [] } = {}) {
   const etats = S || {};
   const bases = (plantes || []).filter(b => typeof b === 'string' && b);
   const plante = (id) => bases.some(b => id.indexOf(b) === 0 && (id.length === b.length || id.charAt(b.length) === '_'));
   return Object.keys(etats).filter(id => id.indexOf('binary_sensor.') === 0 && ((etats[id] || {}).attributes || {}).device_class === 'moisture'
-    && PLATEFORMES_CALCULEES.indexOf(plateforme(id)) < 0 && !plante(id))
+    && PLATEFORMES_CALCULEES.indexOf(plateforme(id)) < 0 && !plante(id) && !pluieDeRobot(voisins(id)))
     .sort((x, y) => comparerTextes(String(nomDe(etats, x)), String(nomDe(etats, y))));
 }
 
@@ -65,7 +66,7 @@ const memeJour = (a, b) => { const x = new Date(a), y = new Date(b); return x.ge
  * cause, phrase, plaque, lavis, geste }`. `etat` : la réponse de `loggia/eau/etat` (ou null : le serveur muet) ; `enVol` : le geste
  * partagé en vol (`{ sens }`) ; `designee` : « Quelle vanne ».
  */
-export function vueVanne({ id, S, etat = null, designee = '', plateforme, plantes, enVol = null, maintenant = Date.now(), nom = null }) {
+export function vueVanne({ id, S, etat = null, designee = '', plateforme, voisins, plantes, enVol = null, maintenant = Date.now(), nom = null }) {
   const etats = S || {};
   const st = etats[id] || null;
   const genre = genreVanne(id, st, designee) || 'vanne';
@@ -75,7 +76,7 @@ export function vueVanne({ id, S, etat = null, designee = '', plateforme, plante
   // La vanne tourne (passe bis, point 2) : `closing` compte comme fermée pour le carnet, mais la puce ne propose pas de la rouvrir.
   const bouge = st && st.state === 'closing' ? 'fermer' : st && st.state === 'opening' ? 'ouvrir' : null;
   const mouvement = enVol ? enVol.sens : bouge;
-  const detecteurs = eau ? detecteursEau(etats, { plateforme, plantes }) : [];
+  const detecteurs = eau ? detecteursEau(etats, { plateforme, voisins, plantes }) : [];
   const mouillees = detecteurs.filter(d => etats[d] && etats[d].state === 'on').map(d => ({ id: d, nom: nomDe(etats, d) }));
   // « aucune fuite » ne se promet que si chaque détecteur répond : un détecteur muet ne voit rien (vu dans la démo, variante `muet`).
   const tousRepondent = detecteurs.length > 0 && detecteurs.every(d => etats[d] && MUETS.indexOf(etats[d].state) < 0);

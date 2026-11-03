@@ -2,14 +2,12 @@ import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'rea
 import { lazyRecharge } from './recharge.js';
 import { OUTILS_VUES } from './outilsvues.js';
 import { formatEcran } from './disposition.js';
-import { poserDefautsAccueil } from './contenupartage.js';
 import { profilAppareil, retenirProfilAppareil, ficheAppareil, appareilsConnus, adopterAppareil, apparence, poserApparence } from './state.js';
 // Les deux fonds animes tirent three.js : 448 Ko a analyser, pour un decor. En
 // import direct, ce cout etait paye a CHAQUE ouverture, meme par quelqu'un qui
 // a coupe les effets. En differe, il n'est paye que si le fond s'affiche.
 // La table des conditions, elle, est de la donnee pure et reste immediate.
 import { SAFE_NOLOOK, applyTheme, readLook, signatureHaTheme } from './theme.js';
-import { uniteTemp } from './unites.js';
 // « Cet écran est-il l'un de ceux-ci ? » (ADR 0222) : rare, chargée à la demande.
 const QuestionAppareil = lazyRecharge(() => import('./views/appareils.jsx').then(m => ({ default: m.QuestionAppareil })));
 const ViewEntSheet = lazyRecharge(() => import('./views/parametres.jsx').then(m => ({ default: m.ViewEntSheet })));
@@ -48,7 +46,8 @@ import { reposerFocus, titreDeVue } from './focus.js';
  * qu'après un temps sans geste — un décor, chargé à ce moment-là ;
  * introuvable même après le rechargement, il ne rend rien. */
 const AmbientOverlay = lazyRecharge(() => import('./ecranveille.jsx').then(m => ({ default: m.AmbientOverlay })), { decor: true });
-import { nomScenario, scenariosAccueil } from './scenarios.js';
+// La caméra en grand quand on sonne (ADR 0312) : une option de l'écran, chargée là où elle est cochée.
+const SonnetteGrand = lazyRecharge(() => import('./sonnettegrand.jsx'));
 /* L'assistant : sa popup tire l'orbe, qui tire Three.js. Rien de tout cela
  * ne se telecharge tant qu'on ne lui a pas parle. */
 const AssistantSheet = lazyRecharge(() => import('./views/assistant.jsx'));
@@ -89,6 +88,7 @@ import { useDomainCards, FicheAppareil, adresseDessin } from './appareils/fiches
 // eslint-disable-next-line no-unused-vars -- les tests les exportent d’ici (ADR 0282)
 import { BRIQUES_CAPTEUR, BRIQUES_GROUPE, BRIQUES_SWITCH, CarteDistributeur, FicheBinaire, FicheCapteur, FicheDistributeur, FicheGroupe, FicheMachineHero, FicheMedia, FichePlante, FicheRobot, LigneEntite, RangeePile, RoomClimateSheet, RoomCoverSheet, RoomLockSheet, RoomSwitchSheet } from './appareils/fiches.jsx';
 import { ouvrantsDe, CAMERAS, CameraTile, CvAlarm, CvSirene, armCompte, sousCamera, useSeconde } from './cartescustom/cartes.jsx';
+import { evenementsPorte, cameraPorte, sonnetteEnGrand } from './evenement.js';
 import { useCoarse, useWide } from './app/ecran.jsx';
 import { useLayoutEditor, ROOM_LAYOUT_KEY, layoutOf } from './edition/disposition.jsx';
 // eslint-disable-next-line no-unused-vars -- les tests les exportent d’ici (ADR 0282)
@@ -97,7 +97,7 @@ import { filtresEntite } from './app/noyau.jsx';
 import { RoomPlantCard } from './cartes/plante.jsx';
 import { BiblioView, CustomView, CardEditSheet, ComposeurCartes } from './edition/coquilles.jsx';
 import { habillagePiece, capteurBruitPiece } from './app/pieces.jsx';
-import { scenarios, CarteScenario, lancerScenario } from './app/scenarios.jsx';
+import { scenarios, CarteScenario } from './app/scenarios.jsx';
 import { ChoixIcone, EditableCard, BandeauEdition, CarteAjout, DOMAINES_EDITION } from './edition/briques.jsx';
 import { Header, HeaderCtx } from './chrome/entete.jsx';
 // eslint-disable-next-line no-unused-vars -- les tests les exportent d’ici (ADR 0282)
@@ -124,7 +124,7 @@ import { roomEntitiesBrutes } from './app/decouverte.jsx';
 import { peopleList, bannerKeys, ChoixCamDispo, CvPresence, CarteAjoutSheet, ChipsEditSheet, CvActivite, CvAir, CvBigSensor, CvCalendrier, CvCamera, CvCarte, CvChip, CvChips, CvClock, CvEnergie, CvHistory, CvOuvrants, CvPerson, CvTyped, CvWeather, FicheCarte, biblioStates, cvAvecH, cvAvecW, cvRowsDe, cvTypeDe, CV_TYPE_NOMS, cvW, nomCv } from './cartescustom/galerie.jsx';
 // eslint-disable-next-line no-unused-vars -- les tests les exportent d’ici (ADR 0282)
 import { CvBigToggle, chipTexte } from './cartescustom/galerie.jsx';
-import { ACC_AJOUTEES_DEFAUT, CarteAttention, Num, sunInfo, PieceCard } from './accueil/briques.jsx';
+import { CarteAttention, Num, sunInfo, PieceCard } from './accueil/briques.jsx';
 import { Dashboard } from './accueil/dashboard.jsx';
 // eslint-disable-next-line no-unused-vars -- les tests les exportent d’ici (ADR 0282)
 import { RmBascule } from './cartes/briques.jsx';
@@ -183,8 +183,6 @@ const BANDEAU_ALERTE = { position: 'fixed', top: 0, left: 0, right: 0, zIndex: 4
 onPaintReady(() => { try { document.querySelectorAll('.o-stag, .o-draw, .o-fadein').forEach(el => { el.style.animationPlayState = 'running'; }); } catch {} });
 // Les scènes et scripts liés : sondés avec l'Accueil, comme les anciennes scènes rapides.
 const qsKeys = () => scenarios().map(s => s.lien).filter(Boolean);
-// Le même défaut pour le report des gestes de l'admin à tous les profils (contenupartage.js, 20/10).
-poserDefautsAccueil(ACC_AJOUTEES_DEFAUT);
 
 // Capteurs qui alimentent les notifications. Rien de standard non plus : un
 // lave-vaisselle sur prise commandée ou un calendrier de collecte se désignent.
@@ -192,7 +190,7 @@ poserDefautsAccueil(ACC_AJOUTEES_DEFAUT);
 // Entités de la tondeuse à poller : les siennes, pas celles d'un modèle précis.
 function mowerKeys() {
   const S = (getHass() || {}).states || {};
-  return [mowerId(S), mowerSensor(S, 'battery'), mowerSensor(S, 'charging'), mowerSensor(S, 'progress')].filter(Boolean);
+  return [mowerId(S), mowerSensor(S, 'battery'), mowerSensor(S, 'charging')].filter(Boolean);
 }
 
 // Plage du dial Nest (labels 10°/20°/30°) + palette d'arc fixe (rouge → magenta → violet)
@@ -261,7 +259,7 @@ const secBaseKeys = () => {
   const gens = peopleList();
   return [secAlarm(),
     // Même garde que `cfg.cams` (05/10) : ces clés se calculent à chaque rendu.
-    ...(Array.isArray(cams) ? cams.filter(c => c && typeof c === 'object').flatMap(c => [c.haid, c.motion, c.person, c.vehicle, c.sonnette, c.colis]) : []),
+    ...(Array.isArray(cams) ? cams.filter(c => c && typeof c === 'object').flatMap(c => [c.haid, c.motion, c.person, c.vehicle, c.animal, c.sonnette, c.colis]) : []),
     ...gens.map(x => x.haid)].filter(Boolean);
 };
 // Les capteurs de plante (humidité, conductivité, luminosité) n'ont pas de
@@ -946,14 +944,16 @@ export default function App() {
     ...Object.values(vacSensors(getHass(), vacMain)),
     ...(rv ? [rv.battery, rv.area_cleaned, rv.duration, rv.status] : [])].filter(Boolean);
   const rc = (loggiaRuntime.resolved && loggiaRuntime.resolved.cameras) || null;
-  const secKeys = ((rc && rc.list) || []).flatMap(c => [c.id, c.motion, c.person, c.vehicle, c.sonnette, c.colis]).filter(Boolean);
+  const secKeys = ((rc && rc.list) || []).flatMap(c => [c.id, c.motion, c.person, c.vehicle, c.animal, c.sonnette, c.colis]).filter(Boolean);
   // Poll par vue : GLOBAL (météo/sun/présence + sources des notifications, visibles partout)
   // + les clés de la vue affichée seulement → évite un re-render de toute l'app à chaque tick
   // dès qu'un capteur d'une AUTRE vue bouge. L'Accueil (deriveAccueil) reste le plus large.
   const GLOBAL_KEYS = ['weather.', 'sun.sun', ...peopleList().map(p => p.haid),
     secAlarm(), 'alarm_control_panel.', 'lock.', 'person.',
     ...cfgKeys('alarm'), ...cfgKeys('cameras'), ...cfgKeys('people'),
-    'lawn_mower.', notifIds().dishwasher, notifIds().bins, cfg.energy.surplusNow].filter(Boolean);
+    'lawn_mower.', notifIds().dishwasher, notifIds().bins, cfg.energy.surplusNow,
+    // La sonnette et le colis (ADR 0312) : le journal de l'écran les lit partout. Des `event`, qui ne bougent qu'à l'événement.
+    ...evenementsPorte(loggiaRuntime.index).flatMap(e => [e.id, cameraPorte(e, loggiaRuntime.index, rc ? rc.list : [])])].filter(Boolean);
   const lightKeys = [...Object.values(hueScripts()), ...dimmableLights(getHass()), ...switchLights(), ...cfgKeys('hue'), ...(cfg.lights || []).map(l => l.haid)].filter(Boolean);
   const accueilKeys = [...enKeys(), ...vacKeys, ...croqKeys(), ...plantKeys(), 'light.', ...switchLights(),
     ...mowerKeys(), notifIds().dishwasherStart,
@@ -1072,6 +1072,8 @@ export default function App() {
   const { accueil, cyclesPrises, vivantes } = useAccueilApp({ activeRoom, cfg, hass, lecturePrises, loggiaRuntime, seuilPile, view });
 
   const { notifs, lireNotifs } = useJournalApp({ hass, vivantes });
+  // La caméra en grand quand on sonne (ADR 0312) : vrai pendant ses 60 s, que la veille s'efface.
+  const [appuiSonnette, setAppuiSonnette] = useState(false);
   /* Le compte d'appareils de la barre latérale — TOUJOURS montée, quelle que
    * soit la vue — bouclait sur TOUTES les entités de la maison à chaque rendu
    * d'`App()`, avec un test sur huit préfixes de domaine. Le coût est
@@ -1318,7 +1320,9 @@ export default function App() {
             + `url("${fondPhotoActif}") center center / cover no-repeat var(--o-bg)` }} />
       )}
       {ficheDemo && <FicheAppareil id={ficheDemo} hass={hass} onClose={() => setFicheDemo(null)} />}
-      {idle && ambient > 0 && plageOk && <Suspense fallback={null}><AmbientOverlay scenes={scenariosAccueil(scenarios()).map(s => ({ ...s, nom: nomScenario(s) }))} onScene={(s) => lancerScenario(getHass(), s.id)} wx={weatherMode || 'clouds'} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} inTemp={accueil ? accueil.inTemp : null} uniteTemp={uniteTemp(null, hass)} lightsOn={lightsOn} notifs={notifs}
+      {/* La caméra en grand quand on sonne (ADR 0312) : chargée sur l'écran qui a coché l'option, et lui seul. */}
+      {sonnetteEnGrand() && <Suspense fallback={null}><SonnetteGrand hass={hass} onAppui={setAppuiSonnette} /></Suspense>}
+      {idle && ambient > 0 && plageOk && !appuiSonnette && <Suspense fallback={null}><AmbientOverlay rooms={cfg.rooms || []} hass={hass} wx={weatherMode || 'clouds'} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} notifs={notifs}
         ast={(() => { const S = (hass && hass.states) || {}; const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null; const aid = (secAlarm() && S[secAlarm()]) ? secAlarm() : rAl; return (aid && S[aid]) ? S[aid].state : null; })()} /></Suspense>}
       {haLost && <div role="alert" style={BANDEAU_ALERTE}>{tr('Connexion Home Assistant perdue — les données affichées peuvent être obsolètes')}</div>}
       {!haLost && discovery.echec && <div role="alert" style={BANDEAU_ALERTE}>{tr('La découverte de la maison a été interrompue — rechargez la page')}</div>}

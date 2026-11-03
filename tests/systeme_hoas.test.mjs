@@ -22,14 +22,14 @@ const {
   SEUILS, niveau, enOctets, tailleLisible, paireTailles, nomCarte, dureeLisible, depuisDemarrage, dureeCapteur,
   tuilesMesures, seaux, resumeSerie, lignesVersions, derniereSauvegarde, momentLisible, modulesComplementaires,
   interfaceReseau, debitLisible, baseDeDonnees, etatCloud, journalSysteme, origineJournal, alertesSysteme,
-} = await import('../src/systeme.js');
+} = await import('../src/systemecalc.js');
 const { capteursHote, interfaceDe } = await import('../src/resolve.js');
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const NL = String.fromCharCode(10);
 const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const vue = lire('src', 'views', 'systeme.jsx');
-const pur = lire('src', 'systeme.js');
+const pur = lire('src', 'systemecalc.js');
 const app = MONOLITHE;
 const css = lire('src', 'index.css');
 const en = lire('src', 'langues', 'en.js');

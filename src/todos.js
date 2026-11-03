@@ -26,14 +26,19 @@
  */
 
 import { comparerTextes } from './i18n.js';
+import { plateformeDe } from './state.js';
+
+/** Une liste d'achats, reconnue à sa plateforme (`shopping_list`) : ni date ni rappel, elle a sa carte (ADR 0315). */
+export const estCourses = (id) => plateformeDe(id) === 'shopping_list';
 
 /** Les entités de listes de tâches, par ordre alphabétique de leur nom — celui
- * de la langue de l'écran, pas du navigateur (audit du 03/10). */
+ * de la langue de l'écran, pas du navigateur (audit du 03/10). `courses` dit
+ * une liste d'achats (ADR 0315). */
 export function listesTodo(states) {
   const S = states || {};
   const l = Object.keys(S)
     .filter(id => id.indexOf('todo.') === 0)
-    .map(id => ({ id, nom: (((S[id] || {}).attributes || {}).friendly_name || id.slice(5)).trim() }))
+    .map(id => ({ id, nom: (((S[id] || {}).attributes || {}).friendly_name || id.slice(5)).trim(), courses: estCourses(id) }))
     .sort((x, y) => comparerTextes(x.nom, y.nom));
   /* La couleur SERT a distinguer : a six listes ou moins, chacune a la sienne
    * — le hachage, lui, pouvait en donner deux pareilles. Au-dela il reprend la
@@ -112,13 +117,14 @@ export const ONGLETS_RAPPELS = ['aujourdhui', 'demain', 'plustard'];
  * « Aujourd'hui », en tête : elles attendent qu'on s'en occupe maintenant, et
  * un onglet « En retard » qui n'existerait que les mauvais jours ferait danser
  * la barre. Celles qui n'ont pas de date vont dans « Plus tard » — elles ne
- * sont ni pour aujourd'hui ni en retard. Les tâches faites ne comptent pas.
+ * sont ni pour aujourd'hui ni en retard. Les tâches faites ne comptent pas,
+ * ni les articles d'une liste d'achats : ils ont leur carte (ADR 0315).
  */
 export function rangerTodos(taches, maintenant) {
   const out = { aujourdhui: [], demain: [], plustard: [] };
   const rang = { retard: 0, aujourdhui: 1, demain: 0, plustard: 0, sansdate: 1 };
   for (const t of (taches || [])) {
-    if (!t || t.fait || !t.titre) continue;
+    if (!t || t.fait || !t.titre || estCourses(t.listeId)) continue;
     const cible = (t.quand === 'retard' || t.quand === 'aujourdhui') ? 'aujourdhui'
       : t.quand === 'demain' ? 'demain' : 'plustard';
     out[cible].push(t);

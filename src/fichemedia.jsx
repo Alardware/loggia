@@ -21,7 +21,9 @@
  *    toutes prêtes, et les cartes visées qui l'écrivent six secondes ;
  *  - le panneau d'une TV (§ 6.8) : Applications / Télécommande ; une appli est
  *    une puce de 56 px, son nom et, si Loggia connaît la marque, son logo — plus
- *    d'initiales (M18) ; le pavé rond, puis Retour · Accueil · Lecture · Veille ;
+ *    d'initiales (M18) ; le pavé rond, puis Retour · Accueil · Lecture · Veille, et Volume − / + si la table les a (lot 12,
+ *    M1) ; « Écrire sur la TV » pendant que l'Apple TV attend du texte (M3) ;
+ *  - l'annonce d'une enceinte Cast par `tts.speak` (lot 12, M2 ; voixmedia.js, ADR 0316) ;
  *  - la bibliothèque (§ 6.9), pour un lecteur qui sait parcourir : les favoris
  *    gardés, « Parcourir la bibliothèque » (la seconde feuille, inchangée) ;
  *  - « L'appareil » (§ 6.10).
@@ -42,9 +44,9 @@
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { tr, trSens, locale } from './i18n.js';
 import { enPanne } from './outils.js';
-import { Fi, kbSlider, BottomSheet } from './ui.jsx';
+import { Fi, kbSlider, BottomSheet, ListeChoix } from './ui.jsx';
 import { Ico } from './icones.jsx';
-import { LOGGIA_INDEX, medPlayers, cfgVal, compteOrdinaire } from './state.js';
+import { LOGGIA_INDEX, medPlayers, cfgVal, compteOrdinaire, plateformeDe } from './state.js';
 import { lazyRecharge } from './recharge.js';
 import { useEtatEnfant, maisonAvecEnfant, profilEnfant, dureeTexte, poserEtatEnfant } from './enfantetat.js';
 import { PinModal } from './pinmodal.jsx';
@@ -54,6 +56,7 @@ import { useOptimiste } from './optimiste.js';
 import { appelPourJouer, phraseAlexa, TYPE_PHRASE } from './favlecture.js';
 import { applisDe, appelPourLancer, appliCourante, telecommandeDe } from './applis.js';
 import { integrationDe, telecommandePour, appelPourTouche } from './telecommande.js';
+import { litUneVoix, moteursVoix, appelVoix, clavierDe, appelClavier } from './voixmedia.js';
 import { marqueDe } from './marques.js';
 import NavigateurMedias, { favorisLecture, noterFavori, MEDIA_ICONES } from './navigateurmedias.jsx';
 import { genreLecteur, glypheLecteur, posLecteur, fmtTemps, pourcentTexte, etatVolume, nomLecteur } from './lecteur.js';
@@ -109,11 +112,11 @@ const QUATRE_COLONNES = { display: 'grid', gridTemplateColumns: 'repeat(4, minma
  * inventée : ce que la télécommande sait faire vient de sa table. */
 const DESSIN_TOUCHE = {
   haut: 'angle-small-up', bas: 'angle-small-down', gauche: 'angle-small-left', droite: 'angle-small-right',
-  retour: 'arrow-left', accueil: 'home', lecture: 'play-pause',
+  retour: 'arrow-left', accueil: 'home', lecture: 'play-pause', vol_moins: 'volume-down', vol_plus: 'volume',
 };
 const NOMS_TOUCHES = () => ({
   haut: tr('Haut'), bas: tr('Bas'), gauche: tr('Gauche'), droite: tr('Droite'), ok: tr('OK'),
-  retour: tr('Retour'), accueil: tr('Accueil'), lecture: tr('Lecture ou pause'),
+  retour: tr('Retour'), accueil: tr('Accueil'), lecture: tr('Lecture ou pause'), vol_moins: tr('Volume −'), vol_plus: tr('Volume +'),
 });
 
 /* Un composant encore monté ? Un service qui répond après la fermeture de la feuille ne doit plus rien poser. */
@@ -411,6 +414,52 @@ function Annonce({ hass }) {
   );
 }
 
+/* L'annonce d'une enceinte qui lit un média (M2, ADR 0316) : `tts.speak`, sur CE lecteur, avec un moteur de synthèse de la maison
+ * (`moteursVoix`) — le premier, ou celui qu'on choisit s'il y en a plusieurs. Le formulaire de l'annonce d'Alexa : le champ,
+ * « Annoncer », les quatre annonces prêtes ; rien ne part sans un geste. La carte l'écrit six secondes ; un refus se dit. */
+function PanneauVoix({ id, v, moteurs }) {
+  const [texte, setTexte] = useState('');
+  const [moteur, setMoteur] = useState(null);
+  const [dite, setDite] = useState(null);
+  const [refus, setRefus] = useState(false);
+  const [enVol, envoyer] = useEnVol();
+  const vivant = useVivant();
+  const minuteur = useRef(0);
+  useEffect(() => () => clearTimeout(minuteur.current), []);
+  const choisi = moteurs.some(m => m.id === moteur) ? moteur : moteurs[0].id;
+  const dire = (brut) => {
+    const appel = appelVoix(choisi, id, brut);
+    if (!appel || !v.hass || !v.hass.callService) return;
+    setRefus(false);
+    if (!envoyer(() => Promise.resolve(v.hass.callService(appel.domaine, appel.service, appel.data)).catch(() => { if (vivant.current) { setRefus(true); setDite(null); } }))) return;
+    annoncer([id], appel.data.message);
+    setTexte(''); setDite(appel.data.message);
+    clearTimeout(minuteur.current);
+    minuteur.current = setTimeout(() => { if (vivant.current) setDite(null); }, ANNONCE_MS);
+  };
+  const pret = !!texte.trim() && !enVol;
+  return (
+    <div data-panneau="voix" style={{ ...PANNEAU, padding: '16px 18px' }}>
+      <div style={PETITES_CAPITALES}>{tr('Annonce')}</div>
+      {moteurs.length > 1 && <ListeChoix label={tr('Voix')} value={choisi} options={moteurs} onChange={setMoteur} style={{ marginTop: 10 }} />}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+        <input value={texte} onChange={(e) => setTexte(e.target.value)} spellCheck={false} aria-label={tr('Annonce')}
+          onKeyDown={(e) => { if (e.key === 'Enter' && pret) dire(texte); }} placeholder={tr('Votre annonce : je rentre à la maison')} style={CHAMP} />
+        <button type="button" onClick={() => { if (pret) dire(texte); }} aria-disabled={pret ? undefined : true} title={tr('Annoncer')} aria-label={tr('Annoncer')} style={RONDE(46, true, pret)}>
+          <Fi i="megaphone" size={15} />
+        </button>
+      </div>
+      <div style={{ ...DEUX_COLONNES, marginTop: 10 }}>
+        {ANNONCES_PRETES().map(a => (
+          <button key={a} type="button" aria-disabled={enVol || undefined} title={a} onClick={() => dire(a)} style={{ ...LARGE(false, !enVol), ...SOUPLE }}><span style={DEUX_LIGNES}>{a}</span></button>
+        ))}
+      </div>
+      {refus && <div role="alert" style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-bad)', marginTop: 10 }}>{tr('Home Assistant a refusé.')}</div>}
+      {dite && <div role="status" style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-ok)', marginTop: 10, overflowWrap: 'anywhere' }}>{tr('Annoncé sur {ou} : « {phrase} »', { ou: v.nom, phrase: dite })}</div>}
+    </div>
+  );
+}
+
 /* Le panneau d'une Echo (§ 6.7) : un `Segment` « Dire à Alexa / Annonce » quand les deux existent — « Dire à Alexa » si la jumelle
  * HACS existe, « Annonce » si une `notify` « Annoncer » ou la jumelle existe. Il s'ouvre sur « Dire à Alexa ». */
 function PanneauEcho({ id, v, cibleHacs, peutAnnoncer, Segment, onGarder }) {
@@ -454,8 +503,43 @@ function noterAppli(cle, nom) {
   } catch { return applisRecentes(cle); }
 }
 
+/* Écrire sur la TV (M3, ADR 0316) : pendant que l'Apple TV attend du texte (son binaire « clavier » à `on`), un champ ; le texte
+ * part sur « Envoyer » ou Entrée, jamais à la frappe — `apple_tv.set_keyboard_text` REMPLACE ce que le champ de la TV contient.
+ * Un refus se dit, et le texte reste dans le champ. Le champ s'en va avec le clavier de la TV. */
+function EcrireTv({ hass, clavier }) {
+  const [texte, setTexte] = useState('');
+  const [ecrit, setEcrit] = useState(null);
+  const [refus, setRefus] = useState(false);
+  const [enVol, envoyer] = useEnVol();
+  const vivant = useVivant();
+  const appel = appelClavier(clavier.entree, texte);
+  const pret = !!appel && !enVol;
+  const ecrire = () => {
+    if (!pret || !hass || !hass.callService) return;
+    setRefus(false);
+    envoyer(() => Promise.resolve(hass.callService(appel.domaine, appel.service, appel.data))
+      .then(() => { if (vivant.current) { setEcrit(appel.data.text); setTexte(''); } }, () => { if (vivant.current) setRefus(true); }));
+  };
+  return (
+    <div data-ecrire-tv="" style={{ marginBottom: 14 }}>
+      <div style={PETITES_CAPITALES}>{tr('Écrire sur la TV')}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+        <input value={texte} onChange={(e) => setTexte(e.target.value)} spellCheck={false} aria-label={tr('Écrire sur la TV')}
+          onKeyDown={(e) => { if (e.key === 'Enter') ecrire(); }} placeholder={tr('L’Apple TV attend du texte')} style={CHAMP} />
+        <button type="button" onClick={ecrire} aria-disabled={pret ? undefined : true} title={tr('Envoyer')} aria-label={tr('Envoyer')} style={RONDE(46, true, pret)}>
+          <Fi i="paper-plane" size={15} />
+        </button>
+      </div>
+      {refus && <div role="alert" style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-bad)', marginTop: 10 }}>{tr('Home Assistant a refusé.')}</div>}
+      {!refus && ecrit && <div role="status" style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-ok)', marginTop: 10, overflowWrap: 'anywhere' }}>{tr('Écrit sur la TV : « {texte} »', { texte: ecrit })}</div>}
+    </div>
+  );
+}
+
 function PanneauTv({ id, v, choix, tele, integration, Segment, enfant = false, bloque = null, reprise = null }) {
   const S = (v.hass && v.hass.states) || {};
+  // Le clavier de l'Apple TV qui attend du texte, sur l'appareil de ce lecteur (M3) ; sinon rien.
+  const clavier = clavierDe(id, S, LOGGIA_INDEX);
   const [recentes, setRecentes] = useState(() => applisRecentes(id));
   /* Ce qu'on vient de lancer, et ce que l'appareil annonçait à ce moment-là : `appliCourante` s'en sert pour départager. */
   const [lancee, setLancee] = useState(null);
@@ -520,6 +604,7 @@ function PanneauTv({ id, v, choix, tele, integration, Segment, enfant = false, b
   }
   return (
     <div style={{ ...PANNEAU, padding: '16px 18px' }}>
+      {clavier && <EcrireTv hass={v.hass} clavier={clavier} />}
       {choix && tele && (
         <Segment grandir value={onglet} onChange={setOnglet} label={tr('Applications ou télécommande')}
           options={[{ id: 'applis', label: tr('Applications') }, { id: 'tele', label: tr('Télécommande') }]} />
@@ -560,6 +645,8 @@ function PanneauTv({ id, v, choix, tele, integration, Segment, enfant = false, b
           <div style={{ ...QUATRE_COLONNES, marginTop: 16 }}>
             {['retour', 'accueil', 'lecture'].filter(sait).map(g => touche(g, DESSIN_TOUCHE[g], g === 'lecture' ? tr('Lecture') : noms[g], () => toucher(g)))}
             {v.cmd.marche && touche('veille', 'power', tr('Veille'), () => v.marche(!v.on))}
+            {/* Volume − et + (M1, ADR 0316) : seulement si la table de CETTE intégration les a (`TOUCHES_TV`) ; un geste, une touche. */}
+            {['vol_moins', 'vol_plus'].filter(sait).map(g => touche(g, DESSIN_TOUCHE[g], noms[g], () => toucher(g)))}
           </div>
         </>
       )}
@@ -740,6 +827,9 @@ export default function FicheMediaContent({ id, vue: v, briques, glyphe = null, 
    * garde ses bits, mais `play_media` partirait dans le vide — pas de « Dire à Alexa », et l'annonce ne la vise pas (passe bis, 17/10). */
   const cibleHacs = vivante && lecteur.alexa && lecteur.annonceHacs && !enPanne(lecteur.annonceHacs, S[lecteur.annonceHacs]) ? lecteur.annonceHacs : null;
   const peutAnnoncer = vivante && !!lecteur.alexa && !!(lecteur.annonce || cibleHacs);
+  /* L'annonce de `tts.speak` (M2) : une enceinte d'une plateforme qui lit la voix (`cast`), qui sait jouer un média (le bit PLAY_MEDIA,
+   * 512), et au moins un moteur de synthèse qui répond. Une Echo n'est pas de `cast` : elle garde la sienne, par Alexa. */
+  const moteurs = vivante && litUneVoix(plateformeDe(id)) && (Number((S[id] && S[id].attributes && S[id].attributes.supported_features) || 0) & 512) ? moteursVoix(S) : [];
   const favoris = favorisLecture(id);
   /* Le mode enfant (chantier Mode enfant, E18 à E21) : l'état du module, relu toutes les 15 s fiche ouverte — si la maison a un profil ;
    * le profil de ce lecteur et sa configuration ; le compte (un administrateur n'a rien à prouver, E2 B) ; la feuille des réglages et
@@ -872,6 +962,7 @@ export default function FicheMediaContent({ id, vue: v, briques, glyphe = null, 
           </button>
         )}
 
+        {moteurs.length > 0 && <PanneauVoix id={id} v={v} moteurs={moteurs} />}
         {(cibleHacs || peutAnnoncer) && <PanneauEcho id={id} v={v} cibleHacs={cibleHacs} peutAnnoncer={peutAnnoncer} Segment={Segment} onGarder={() => revoir(n => n + 1)} />}
         {(choix || tele) && <PanneauTv id={id} v={v} choix={choix} tele={tele} integration={integration} Segment={Segment} enfant={!!v.enfant} bloque={v.bloque} reprise={v.reprise} />}
         {/* La bibliothèque ne s'offre pas à un écran BLOQUÉ (passe bis 3 du 17/10, point 2), comme ses applis et sa télécommande : un favori et

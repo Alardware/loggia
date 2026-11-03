@@ -10,7 +10,8 @@ maison (500 lignes, tous modules) n'y suffirait pas une semaine d'absence.
 Il suit les vannes d'eau de la maison - toute `valve` de classe `water`, et la
 vanne designee dans Parametres > Alertes, une prise comprise - et les
 detecteurs de fuite (la regle d'alertes.py : un `moisture` de modele ou de
-groupe n'en est pas un, ni le besoin d'eau d'une plante). Il NOTE chaque
+groupe n'en est pas un, ni le besoin d'eau d'une plante, ni la pluie d'un
+robot). Il NOTE chaque
 changement avec son contexte : la fermeture sur fuite (alertes.py la lui
 annonce AVANT d'agir : le detecteur et son nom), une personne (le compte du
 contexte), une automatisation ou un script (le nom que leur contexte porte),
@@ -39,6 +40,7 @@ from .eau_calcul import (cause, elaguer, est_detecteur, est_vanne_eau, etat_publ
                          regle_de, sens_vanne, vannes_de_la_maison)
 from .lumieres_calcul import garder_liens, lien_de
 from .regles import demarrer
+from .voisins import domaines_voisins
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
@@ -167,14 +169,14 @@ class LoggiaEau:
             _LOGGER.warning("Loggia eau : etats illisibles", exc_info=True)
             return []
 
-    def _plateforme(self, haid: str) -> Any:
+    def _entree(self, haid: str) -> Any:
+        """L'entree du registre, ou None : on y lit la plateforme et l'appareil."""
         try:
             from homeassistant.helpers import entity_registry as er
 
-            entree = er.async_get(self.hass).async_get(haid)
+            return er.async_get(self.hass).async_get(haid)
         except Exception:  # noqa: BLE001
             return None
-        return getattr(entree, "platform", None)
 
     def _est_vanne(self, haid: str, attributs: Any) -> bool:
         return haid == self._designee or (haid.startswith("valve.") and est_vanne_eau(attributs))
@@ -187,7 +189,9 @@ class LoggiaEau:
         # La classe AVANT le registre (passe bis, point 12) : chaque porte, chaque mouvement qui changeait lisait le registre.
         if not haid.startswith("binary_sensor.") or not isinstance(attributs, dict) or attributs.get("device_class") != "moisture":
             return False
-        return est_detecteur(haid, attributs, self._plateforme(haid), self._plantes)
+        entree = self._entree(haid)
+        return est_detecteur(haid, attributs, getattr(entree, "platform", None), self._plantes,
+                             domaines_voisins(self.hass, haid, entree))
 
     # ── Ce que le carnet note ──────────────────────────────────────────────
     @callback

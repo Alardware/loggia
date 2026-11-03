@@ -78,11 +78,23 @@ test('le bandeau porte « Entites de la vue » et sait changer son mot d’ordre
 
 test('Parametres : plus de barre Sombre / Clair au sommaire, le reglage reste dans Apparence', () => {
   assert.ok(!par.includes("['dark', 'Sombre']"), 'le selecteur du sommaire est parti');
-  assert.equal((par.match(/onPick=\{onMode\}|onMode\(/g) || []).length, 1, 'un seul selecteur de mode : celui d’Apparence');
+  // Deux sélecteurs, tous deux dans Apparence : celui de l'ordinateur et le « Mode d'affichage » du téléphone (maquette v4).
+  assert.equal((par.match(/onPick=\{onMode\}|onMode\(/g) || []).length, 2, 'le mode ne se règle que dans Apparence');
   assert.ok(par.includes("opts={[['auto', tr('Auto')], ['dark', tr('Foncé')], ['light', tr('Clair')]]} onPick={onMode}"), 'Apparence garde le sien, « Auto » compris');
-  const hub = bloc(par, "{tab === 'hub' ? (", '{SECTIONS.map(sec =>');
-  assert.ok(!hub.includes('onMode(') && !hub.includes('className="o-bar"'), 'le sommaire n’a plus de barre');
-  assert.ok(hub.includes("{tr('Toutes les sections')}"), 'il ouvre sur ses sections');
+  // Le téléphone n'a plus de sommaire (maquette v4) : il ouvre sur Apparence, les sections en puces.
+  assert.ok(par.includes("const tab = !avecRail && tabEtat === 'hub' ? 'apparence' : tabEtat;"), 'le téléphone ouvre sur Apparence');
+  assert.ok(!par.includes("{tr('Toutes les sections')}") && !par.includes('grid-parsections'), 'plus de sommaire en tuiles au téléphone');
+});
+
+test('Parametres : sur un écran large, un rail en trois groupes et une vue d’ensemble (maquette v3)', () => {
+  assert.ok(par.includes('const avecRail = useWide(1024)'), 'le rail ne vient qu’au-delà de 1024 px');
+  for (const g of ["tr('Pour moi'), ['users', 'apparence']", "tr('La maison'), ['regles', 'alertes', 'inter', 'auto']", "tr('Le système'), ['connexion', 'maj', 'appareils', 'vues', 'about']"]) assert.ok(par.includes(g), 'le groupe ' + g);
+  const large = bloc(par, "{tab === 'hub' && avecRail ? (", '{/* Au téléphone (maquette v4)');
+  assert.ok(large.includes("tr('À regarder')") && !large.includes('SECTIONS.map'), 'ce qui mérite un œil, puis des lignes : plus de tuiles');
+  assert.ok(!par.includes("<button onClick={() => setTab('hub')}"), 'plus de bouton retour : le rail, ou les puces au téléphone');
+  assert.equal((par.match(/aria-label=\{tr\('Sections des paramètres'\)\}/g) || []).length, 2, 'le rail, et les puces du téléphone');
+  const regarder = bloc(par, 'const aRegarder = [', '].filter(Boolean);');
+  assert.ok(regarder.includes('upsAvail > 0') && regarder.includes("cfgVal('loggia_admin_pin_defini', false)") && regarder.includes('!hass'), 'seulement ce que la page sait vraiment');
 });
 
 test('Parametres : la section Entites est partie, avec ce qui ne menait qu’a elle', () => {

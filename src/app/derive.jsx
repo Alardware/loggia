@@ -1,16 +1,16 @@
 /* Ce que l’application dérive de Home Assistant : l’Accueil (`deriveAccueil`) et les notifications (`deriveNotifs`).
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
-import { loggiaEnt, LOGGIA_INDEX, ctxLumieres, secAlarm, plateformeDe, enHaids } from '../state.js';
+import { loggiaEnt, LOGGIA_INDEX, ctxLumieres, secAlarm, plateformeDe, voisinsDe, enHaids } from '../state.js';
 import { wattsDe, uniteTemp, moyenneTemperatures } from '../unites.js';
 import { idsDe, sommeLue } from '../energieparts.js';
 import { pickSibling } from '../discovery.js';
-import { VACUUM_STATE_FR } from '../resolve.js';
+import { evenementsPorte, lignesPorte, textePorte } from '../evenement.js';
 import { dureePrise } from '../prises.js';
 import { lumieresDe } from '../lumieres.js';
-import { couleurPile, motsSurete, fuiteCalculee, niveauPile } from '../attention.js';
+import { motsSurete, fuiteCalculee, pluieDeRobot, entendueParCamera, niveauPile, estMeteoAlarm, lireVigilance } from '../attention.js';
 import { fmtWatts, minutesDepuisHeure } from '../format.js';
 import { notifIds, plantsCfg } from '../lectures.js';
-import { locale, tr } from '../i18n.js';
+import { locale, tr, trN } from '../i18n.js';
 import { estDehors, plantCapteur } from './noyau.jsx';
 import { lireNombre } from '../cartes/mesure.jsx';
 import { peopleList } from '../cartescustom/galerie.jsx';
@@ -34,9 +34,8 @@ function mowerId(S) {
 function mowerSensor(S, kind) {
   const id = mowerId(S);
   if (!id || !LOGGIA_INDEX) return null;
-  const opts = kind === 'battery' ? { domain: 'sensor', deviceClass: 'battery' }
-    : kind === 'charging' ? { domain: 'binary_sensor', deviceClass: 'battery_charging' }
-      : { domain: 'sensor', match: /(progress|progression)/ };
+  // La batterie et la charge, à leur classe ; plus de progression lue au nom (ADR 0319).
+  const opts = kind === 'battery' ? { domain: 'sensor', deviceClass: 'battery' } : { domain: 'binary_sensor', deviceClass: 'battery_charging' };
   return pickSibling(LOGGIA_INDEX, S || {}, id, opts);
 }
 // Dérive les données live de l'Accueil depuis hass + config. null si pas de hass (→ démo).
@@ -94,17 +93,6 @@ function deriveAccueil(hass, cfg, resolved) {
   // `etat` : l'état de la personne, que l'avatar de l'Accueil dit en un mot — sa zone, ou « Inconnu » (G1-D8).
   const people = peopleList().map(p => ({ name: p.name, img: p.img, home: !!(S[p.haid] && S[p.haid].state === 'home'), etat: S[p.haid] ? S[p.haid].state : null }));
   const cams = (cfg.cams || []).map(c => ({ name: c.name, haid: c.haid, online: (S[c.haid] ? S[c.haid].state !== 'unavailable' : c.online !== false) }));
-  // États À-venir — aspirateur : état de l'entité `vacuum`, complété par les
-  // capteurs configurés (texte déjà traduit, batterie).
-  const rVac = (resolved && resolved.vacuum && resolved.vacuum.available) ? resolved.vacuum : null;
-  const eVac = (cfg && cfg.entities && cfg.entities.vacuum) || {};
-  const vacRaw = rVac ? rVac.state : null;
-  const vacEtatS = eVac.etat ? S[eVac.etat] : null;
-  const vacEtat = (vacEtatS && vacEtatS.state && vacEtatS.state !== 'unknown' && vacEtatS.state !== 'unavailable') ? vacEtatS.state : null;
-  const vacCleaning = vacRaw ? vacRaw === 'cleaning' : !!(eVac.cleaning && S[eVac.cleaning] && S[eVac.cleaning].state === 'on');
-  const vacOnBase = vacRaw ? vacRaw === 'docked' : !!(eVac.onBase && S[eVac.onBase] && S[eVac.onBase].state === 'on');
-  const vacLabel = vacEtat || (vacRaw ? (VACUUM_STATE_FR[vacRaw] || vacRaw) : null);
-  const vacBattery = (rVac && rVac.batteryLevel != null) ? rVac.batteryLevel : num(eVac.battery || (rVac && rVac.battery), null);
   const alarmId = (secAlarm() && S[secAlarm()]) ? secAlarm()
     : ((resolved && resolved.alarm && resolved.alarm.available) ? resolved.alarm.main : null);
   const alarmS = alarmId ? S[alarmId] : null;
@@ -114,35 +102,8 @@ function deriveAccueil(hass, cfg, resolved) {
   let sunsetHM = null; if (ssA) { const d = new Date(ssA); if (!isNaN(d.getTime())) sunsetHM = d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); }
   // ── Machines À venir ──
   const machines = {};
-  { const low = (vacEtat || '').toLowerCase(); const bat = vacBattery; // null si capteur indispo → « — », pas un faux 0 %
-    const paused = /pause/.test(low);
-    const returning = /retour/.test(low);
-    const charging = (vacOnBase || /charge/.test(low)) && bat != null && bat < 100;
-    let phase, color, anim = null, spin = false;
-    if (vacCleaning && !paused) { phase = tr('Nettoyage'); color = 'var(--o-cold)'; anim = 'wiggle'; spin = true; }
-    else if (paused) { phase = tr('En pause'); color = 'var(--o-warn2)'; }
-    else if (returning) { phase = tr('Retour base'); color = 'var(--o-purple)'; }
-    else if (/erreur|error/.test(low)) { phase = tr('Erreur'); color = 'var(--o-bad)'; }
-    else if (vacOnBase || /station|base|accueil|charge/.test(low)) { if (bat != null && bat < 100) { phase = tr('En charge'); color = 'var(--o-warn)'; anim = 'charge'; } else { phase = tr('Sur base'); color = 'var(--o-ok)'; } }
-    else { phase = vacEtat || tr('Inactif'); color = 'var(--o-text3)'; }
-    const batColor = couleurPile(bat);
-    // Les clés d'une machine disent sa nature, plus le surnom d'un appareil (chantier IoT, passe bis 2 du 18/10, point L).
-    machines.aspirateur = { label: (rVac && rVac.name) || tr('Aspirateur'), iconKey: 'vacuum', phase, color, active: (vacCleaning && !paused) || returning, anim, spin, valueIcon: charging ? 'battery-charging' : 'battery', valueText: bat != null ? Math.round(bat) + '%' : '—', bar: bat, barColor: batColor };
-  }
-  { const mid = mowerId(S); const lm = mid ? S[mid] : null; const st = lm ? lm.state : 'unknown';
-    const bat = num(mowerSensor(S, 'battery'), null);
-    const chgS = S[mowerSensor(S, 'charging')]; const chg = !!(chgS && ['on', 'true', 'True', 'Oui'].indexOf(chgS.state) >= 0);
-    const prog = num(mowerSensor(S, 'progress'), 0) || 0;
-    let phase, color, anim = null, spin = false;
-    if (st === 'mowing') { phase = tr('Tonte'); color = 'var(--o-ok)'; anim = 'wiggle'; spin = true; }
-    else if (st === 'returning') { phase = tr('Retour base'); color = 'var(--o-purple)'; }
-    else if (st === 'docked') { if (chg) { phase = tr('En charge'); color = 'var(--o-warn)'; anim = 'charge'; } else { phase = tr('Sur base'); color = 'var(--o-ok)'; } }
-    else if (st === 'paused') { phase = tr('En pause'); color = 'var(--o-warn2)'; }
-    else if (st === 'error') { phase = tr('Erreur'); color = 'var(--o-bad)'; }
-    else { phase = tr('Inactif'); color = 'var(--o-text3)'; }
-    const mowing = st === 'mowing'; const batColor = couleurPile(bat);
-    machines.tondeuse = { label: (lm && lm.attributes && lm.attributes.friendly_name) || tr('Tondeuse'), iconKey: 'mower', phase, color, active: st === 'mowing' || st === 'returning', anim, spin, valueIcon: chg ? 'battery-charging' : 'battery', valueText: Math.round(bat) + '%', bar: mowing ? prog : bat, barColor: mowing ? color : batColor, extra: mowing ? (tr('Tonte') + ' ' + Math.round(prog) + '%') : null };
-  }
+  /* Ni l'aspirateur (lot 15 Gladys, ADR 0320) ni la tondeuse (lot 14, ADR 0319) n'ont plus d'entrée ici : aucun écran ne lisait
+   * la leur — l'Accueil ne lit que `machines.lv`. Leurs cartes (cartes/robot.jsx) lisent tout à la clé, et s'abonnent elles-mêmes. */
   // Les seuils de phase (100, 200, 500, 1500) sont des watts : la prise du
   // lave-vaisselle se lit par `numW`, comme les flux (audit du 03/10).
   { const power = numW(notifIds().dishwasher) || 0; const active = power > 100;
@@ -203,7 +164,7 @@ function deriveAccueil(hass, cfg, resolved) {
     metricConso: consoW == null ? null : { raw: consoW, color: exporting ? 'var(--o-ok)' : 'var(--o-accent-soft)' },
     rooms, inTemp, inTempUnite, inHum, maxCo2, lightsOn, lightsTotal: lightIds.length,
     people, cams, hass,
-    vacLabel, vacBattery, alarmArmed, camOnline, camTotal, sunsetHM, machines, plants,
+    alarmArmed, camOnline, camTotal, sunsetHM, machines, plants,
   };
 }
 
@@ -229,11 +190,14 @@ function deriveNotifs(hass, cycles = null) {
    *   une dracaena assoiffée n'est pas un dégât des eaux. Tout binaire dont
    *   l'id commence par la base d'une plante configurée est écarté — et tout
    *   `moisture` qu'un modèle ou un groupe calcule (`fuiteCalculee`, la
-   *   plateforme de l'index ; ADR 0022, 16/10), comme chez le serveur.
+   *   plateforme de l'index ; ADR 0022, 16/10), comme chez le serveur ; et la
+   *   pluie d'un robot (`pluieDeRobot`, l'appareil qui la porte ; ADR 0305).
+   *   Ce qu'une caméra ENTEND (`entendueParCamera`) se dit à part, ambre :
+   *   « Alarme entendue par une caméra », jamais le mot d'un détecteur.
    * — `safety` sert aussi à MeteoAlarm, qui reste `on` des jours entiers en
    *   vigilance jaune. Ce n'est pas un danger domestique : il devient une
    *   notification de vigilance à part, ambre, portant l'événement réel
-   *   (« Vigilance jaune orages ») — rouge seulement en Severe/Extreme. */
+   *   (« Vigilance jaune orages ») — rouge seulement en vigilance rouge. */
   // Les mots : LA table de sûreté (`motsSurete`, attention.js) — celle des points de l'Accueil et des fiches (audit du 19/10, lot 4).
   const basesPlantes = plantsCfg().map(p => p.base).filter(Boolean);
   const estPlante = (id) => basesPlantes.some(b => id.indexOf(b) === 0 && (id.length === b.length || id.charAt(b.length) === '_'));
@@ -245,15 +209,25 @@ function deriveNotifs(hass, cycles = null) {
     const duo = motsSurete(a.device_class);
     if (!duo) continue;
     const nom = a.friendly_name || id;
-    if (a.device_class === 'safety' && (a.awareness_level != null || /meteoalarm/i.test(id) || /meteoalarm/i.test(a.attribution || ''))) {
-      const grave = a.severity === 'Severe' || a.severity === 'Extreme';
+    if (a.device_class === 'safety' && estMeteoAlarm(id, a)) {
+      // Le niveau : LA lecture de la vigilance (attention.js, ADR 0310) — Severe est l'orange de MeteoAlarm, Extreme le rouge.
+      const grave = (lireVigilance(id, e) || {}).niveau === 'rouge';
       out.push({ k: 'meteo:' + id + ':' + (a.event || a.headline || ''), c: grave ? 'var(--o-bad)' : 'var(--o-warn)', t: tr('Vigilance météo'), m: a.event || a.headline || tr('Alerte météo en cours') });
       continue;
     }
-    if (a.device_class === 'moisture' && (estPlante(id) || fuiteCalculee(plateformeDe(id)))) continue;
+    if (a.device_class === 'moisture' && (estPlante(id) || fuiteCalculee(plateformeDe(id)) || pluieDeRobot(voisinsDe(id)))) continue;
+    if (entendueParCamera(a.device_class, voisinsDe(id))) {
+      out.push({ k: 'entendue:' + id, c: 'var(--o-warn)', t: tr('Alarme entendue par une caméra'), m: nom });
+      continue;
+    }
     surete.push({ k: 'surete:' + id, c: 'var(--o-bad)', t: tr(duo[0]), m: tr(duo[1]) + ' · ' + nom });
   }
   out.unshift(...surete.slice(0, 4)); // les dangers d'abord, avant même l'alarme
+  /* LA PORTE (lot 8 Gladys, ADR 0312) : un appui sur la sonnette, un colis déposé — des entités `event`, dont l'état est
+   * l'instant. Une entrée par événement (sa clé porte l'instant), au journal de l'écran seulement : rien au téléphone.
+   * « Vu » ne la retire pas d'ici : le journal a son « lu ». */
+  lignesPorte(evenementsPorte(LOGGIA_INDEX), S).forEach(l => out.push({ k: l.cle, c: 'var(--o-accent)',
+    t: l.genre === 'colis' ? tr('Colis') : tr('Sonnette'), m: textePorte(l) + (l.appareil ? ' · ' + l.appareil : '') }));
   const mid = mowerId(S), mchg = mowerSensor(S, 'charging');
   const mow = mid ? stOf(mid) : null;
   if (mow === 'returning') out.push({ k: 'tondeuse:retour', c: 'var(--o-accent-soft)', t: tr('Tondeuse'), m: tr('Retour à la base') });
@@ -281,19 +255,23 @@ function deriveNotifs(hass, cycles = null) {
    * la moindre configuration, et personne ne les disait : cinq mises à jour en
    * attente et une pile à plat sur l'installation d'essai.
    *
-   * Une par entité, et non un total : « 5 mises à jour » changerait de texte à
-   * chaque installation, donc de clé, donc rentrerait à neuf dans le journal.
-   * Une par entité entre une fois, se marque lue, et s'en va.
+   * LES MISES À JOUR (lot 10 Gladys, ADR 0314) : aux ADMINISTRATEURS seuls — eux
+   * seuls les installent —, et en UNE ligne, « 12 mises à jour ». Une par entité
+   * en faisait cent dix-neuf, micrologiciels compris, chez tout le monde. La clé
+   * suit la plus récente (`last_changed`) : une mise à jour neuve rentre au
+   * journal, en installer une n'y remet rien.
    *
    * Ce qui n'y entre PAS : les entités indisponibles. Il y en a 912 sur
    * l'installation d'essai — c'est du bruit, pas un point d'attention, et la
    * règle est posée depuis le 19/09. */
-  for (const id in S) {
-    if (id.indexOf('update.') !== 0) continue;
-    const e = S[id]; if (!e || e.state !== 'on') continue;
-    const a = e.attributes || {};
-    const v = a.latest_version ? ' ' + a.latest_version : '';
-    out.push({ k: 'maj:' + id + ':' + (a.latest_version || ''), c: 'var(--o-accent-soft)', t: tr('Mise à jour'), m: (a.title || a.friendly_name || id) + v });
+  if (hass.user && hass.user.is_admin) {
+    let n = 0, neuve = '';
+    for (const id in S) {
+      if (id.indexOf('update.') !== 0 || S[id].state !== 'on') continue;
+      n++;
+      if (S[id].last_changed > neuve) neuve = S[id].last_changed;
+    }
+    if (n) out.push({ k: 'maj:' + (neuve || n), c: 'var(--o-accent-soft)', t: tr('Mises à jour'), m: trN(n, '{n} mise à jour', '{n} mises à jour') });
   }
   for (const id in S) {
     const e = S[id]; if (!e) continue;

@@ -4,7 +4,7 @@ import { LOGGIA_INDEX } from '../state.js';
 import { enPanne } from '../outils.js';
 import { LAVIS } from '../theme.js';
 import { pickSibling } from '../discovery.js';
-import { airesTondeuse, phaseRobot, batterieRobot, phraseRobot, PHASE_GESTE, gestePermis, commandesEnVol } from '../robots.js';
+import { airesTondeuse, phaseRobot, batterieRobot, phraseRobot, PHASE_GESTE, gestePermis, commandesEnVol, avanceTonte } from '../robots.js';
 import { bipeRobot, apresCommandeRobot, lancerRobot, signalerRobot, useEtatRobots, useBipe, useGeste, vueCarnetRobot, departRobot, poserGeste, GARDE_DEPART_MS, oublierGeste, gesteEnVol } from '../robotsetat.js';
 import { commanderService } from '../actions.js';
 import { Surface, nomCarte, Fi } from '../ui.jsx';
@@ -72,12 +72,14 @@ const FILET_ROBOT_MS = 5000;
 function useVueRobot(hass, id, label = null, actif = true, { rapide = false } = {}) {
   const S0 = (hass && hass.states) || {};
   const domaine = String(id).split('.')[0];
-  const soeur = (domain, deviceClass) => (actif ? pickSibling(LOGGIA_INDEX, S0, id, { domain, deviceClass }) : null);
+  const soeur = (domain, deviceClass, cles) => (actif ? pickSibling(LOGGIA_INDEX, S0, id, { domain, deviceClass, cles }) : null);
   const idBat = soeur('sensor', 'battery');
   const idCharge = soeur('binary_sensor', 'battery_charging');
   // Les aires d'une tondeuse (point D), suivies comme ses sœurs : l'une s'allume, « Démarrer » revient.
   const aires = actif && domaine === 'lawn_mower' ? airesTondeuse(LOGGIA_INDEX, id) : [];
-  const vivant = useHass(actif ? [id, idBat, idCharge, ...aires].filter(Boolean) : []);
+  // Sa progression et son temps restant, à leur clé (lot 9 Gladys, ADR 0313) : la phrase d'une tondeuse les dit.
+  const idPct = soeur('sensor', 0, ['progress']), idReste = soeur('sensor', 0, ['left_time']);
+  const vivant = useHass(actif ? [id, idBat, idCharge, idPct, idReste, ...aires].filter(Boolean) : []);
   const H = hassQuiConnait(vivant, hass, id);
   const S = (H && H.states) || {};
   const st = actif ? S[id] || null : null;
@@ -99,7 +101,7 @@ function useVueRobot(hass, id, label = null, actif = true, { rapide = false } = 
   const charge = !!(idCharge && S[idCharge] && S[idCharge].state === 'on');
   const carnet = vueCarnetRobot(etat, id, maintenant, departRobot(id, maintenant), { sansZone });
   // Le carnet porte exactement ce que la phrase lit : `pieces`, `tout`, `libelle`, `erreur`, `prochain`.
-  const phrase = phraseRobot({ domaine, phase, depuis: st && st.last_changed, bipe, ...carnet, charge, sansZone, maintenant });
+  const phrase = phraseRobot({ domaine, phase, depuis: st && st.last_changed, bipe, ...carnet, charge, sansZone, maintenant, avance: avanceTonte(S[idPct], S[idReste]) });
   const service = (svc) => { commanderService(H, id, domaine, svc, { entity_id: id }); apresCommandeRobot(); };
   /* Le geste en vol, l'avance partagée : `cle` (la puce), la phase qu'il annonce, la phase réelle d'avant lui et son `last_changed` ;
    * `mot` : celui de la puce de la popup (« Nettoyer 2 pièces ») ; `garde` : un départ par le serveur, tenu jusqu'à sa réponse.

@@ -2,6 +2,8 @@
 
 *17 octobre 2026 — accepté, à l'essai (chantier Médias ; rien de publié). La conception : `docs/chantier-medias.md`, M2 A, M5 à M8, M10 à M13, M15 à M19 ; sa maquette « Cartes médias », cadres 1a à 1e.*
 
+*Complétée par l'ADR [0316](0316-les-medias-restants-volume-annonce-par-une-voix-et-ecrire-sur-la-tv.md) (01/11) : Volume − et + au pavé, l'annonce d'une enceinte Cast par `tts.speak`, « Écrire sur la TV ».*
+
 ## Le problème
 
 La carte d'un lecteur datait de la vue Médias d'avant : la pochette dans la plaque, un

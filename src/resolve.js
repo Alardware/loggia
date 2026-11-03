@@ -174,6 +174,7 @@ export function resolveCameras({ index, caps, states = {}, userCfg = {} } = {}) 
           motion: c.motion || det.motion,
           person: c.person || det.person,
           vehicle: c.vehicle || det.vehicle,
+          animal: c.animal || det.animal,
           sonnette: c.sonnette || det.sonnette,
           colis: c.colis || det.colis,
         };
@@ -219,19 +220,42 @@ export function resolveCameras({ index, caps, states = {}, userCfg = {} } = {}) 
 /**
  * Detecteurs d'une camera : les binary_sensor du MEME appareil.
  *
- * La `device_class` tranche quand elle existe (`motion`, `occupancy`), sinon on
- * lit le nom — les integrations nomment ces capteurs dans leur langue, d'ou les
- * variantes. Un detecteur absent vaut null : la vue n'affiche simplement pas la
- * ligne correspondante.
+ * La `device_class` tranche quand elle existe (`motion`, `occupancy`). Pour ce
+ * que la camera a VU, la cle de traduction de l'integration passe d'abord
+ * (lot 8 Gladys, ADR 0312) : `person_detected`, `vehicle_detected`,
+ * `animal_detected` chez UniFi Protect, `person`, `vehicle`, `pet` chez
+ * Reolink. Le nom ne sert plus qu'en repli, et seulement pour une entite SANS
+ * cle : le motif « voiture » prenait `…_alarme_de_voiture_detectee` (la cle
+ * `car_alarm_detected`, un son) pour un vehicule. Ce qu'une camera ENTEND ne
+ * passe jamais par le repli. Un detecteur absent vaut null : la vue n'affiche
+ * simplement pas la ligne correspondante.
  */
+export const CLES_DETECTION = {
+  person: ['person_detected', 'person'],
+  vehicle: ['vehicle_detected', 'vehicle'],
+  animal: ['animal_detected', 'animal', 'pet'],
+  sonnette: ['doorbell', 'visitor'],
+  colis: ['package_detected', 'package'],
+};
+const MOTIFS_DETECTION = {
+  person: /(person|personne|people)/,
+  vehicle: /(vehicle|vehicule|voiture)/,
+  animal: /(animal|animaux|_pets?(_|$))/,
+  sonnette: /(doorbell|sonnette|ring)/,
+  colis: /(package|colis|parcel)/,
+};
+const ENTENDU = /(alarm|horn|klaxon|audio|sound|sonore|bark|aboie)/;
 function camDetections(index, states, camId) {
   const pick = (opts) => pickSibling(index, states, camId, { domain: 'binary_sensor', ...opts });
+  const vu = (genre) => pick({ cles: CLES_DETECTION[genre] })
+    || pick({ sansCle: true, match: { test: (id) => MOTIFS_DETECTION[genre].test(id) && !ENTENDU.test(id) } });
   return {
     motion: pick({ deviceClass: 'motion' }) || pick({ deviceClass: 'occupancy' }) || pick({ match: /_(motion|mouvement)$/ }),
-    person: pick({ match: /(person|personne|people)/ }),
-    vehicle: pick({ match: /(vehicle|vehicule|voiture)/ }),
-    sonnette: pick({ match: /(doorbell|sonnette|ring)/ }),
-    colis: pick({ match: /(package|colis|parcel)/ }),
+    person: vu('person'),
+    vehicle: vu('vehicle'),
+    animal: vu('animal'),
+    sonnette: vu('sonnette'),
+    colis: vu('colis'),
   };
 }
 

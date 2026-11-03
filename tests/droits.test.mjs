@@ -64,12 +64,13 @@ test('la gestion des profils et le code admin ne sont jamais accordables', () =>
       `« ${interdit} » est entré dans le catalogue : un profil pourrait se promouvoir lui-même`);
   }
   // Les trois gardes qui tiennent cette promesse, relues dans la source : le
-  // bouton d'ajout (dans l'en-tête), le crayon de chaque ligne, l'éditeur du
-  // code et celui des profils.
+  // carte d'ajout, la carte de chaque profil (cliquable pour un administrateur
+  // seulement), l'éditeur du code et celui des profils.
   const par = lire('src', 'views', 'parametres.jsx');
-  for (const garde of ["droite: isAdmin ? <button onClick={() => setEditing({ i: null })}",
-    "{isAdmin && <button type=\"button\" aria-label={tr('Modifier ce profil')}",
-    '{isAdmin && <AdminPinEditor hass={hass} />}',
+  for (const garde of ["{isAdmin && <CarteGens ajout haut={avecRail ? 176 : 150} ico=\"plus-small\"",
+    'onClick={isAdmin ? () => setEditing({ i, u }) : null}',
+    '<AdminPinEditor hass={hass} admin={isAdmin} users={users} />',
+    '<button type="button" disabled={!admin} onClick={() => setOuvert(true)}',
     '{editing && isAdmin && <UserEditor']) {
     assert.ok(par.indexOf(garde) >= 0,
       `cette garde ne dépend plus du rôle : ${garde}`);

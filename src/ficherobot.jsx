@@ -29,7 +29,7 @@ import { useState, useEffect, useRef, useMemo, useId, Suspense } from 'react';
 import { lazyRecharge } from './recharge.js';
 import { tr, trSens, locale, comparerTextes } from './i18n.js';
 import { Fi, Bascule, BottomSheet, TitreFeuille, nomCarte, ListeChoix } from './ui.jsx';
-import { LOGGIA_INDEX, loggiaEnt, vacRooms, vacOption, compteOrdinaire, cfgVal } from './state.js';
+import { LOGGIA_INDEX, loggiaEnt, vacOption, compteOrdinaire, cfgVal } from './state.js';
 import { commanderService } from './actions.js';
 import { useLoggia, useEntities } from './runtime.js';
 import { premierJourSemaine } from './horloge.js';
@@ -45,7 +45,7 @@ import {
   rangeesHistorique, reglagesRobot, ficheTechnique, resumeZones, zonePlanning, nouveauPlanning, capteurPluie, decalerHeure,
   etatAccueil, libelleDepart, sessionsCarnet, septJours, tuileProchain, tuileSemaine, nomDeScript, passageRetenu,
   piecesDeLaVue, lignesPieces, commandeZonesHA, passagesRobot, publieRooms,
-  ROLES_SCRIPTS, libelleRole, scriptDepartDesigne, scriptVivant, optionsScripts,
+  ROLES_SCRIPTS, libelleRole, scriptDepartDesigne, scriptVivant, optionsScripts, avanceeRobot, lignesEtat, vacRooms,
 } from './robotsfiche.js';
 import {
   PETITES_CAPITALES, CHAMP_HEURE, LIGNE, filet, BoutonConfirme, PasAPas, PuceJour,
@@ -133,15 +133,27 @@ function Tuile({ nom, titre, sous, onClick }) {
   );
 }
 
-function OngletAccueil({ vue, etat, zones, choisir, enRoute, toutChoisi, basculerZone, toutPrendre, principale, seconde, aUneCarte, ouvrirCarte, prochain, semaine, alerte, allerA, retenu = null, lignes = [] }) {
+function OngletAccueil({ vue, etat, zones, choisir, enRoute, toutChoisi, basculerZone, toutPrendre, principale, seconde, aUneCarte, ouvrirCarte, prochain, semaine, alerte, allerA, retenu = null, lignes = [], avance = null }) {
   return (
     <div className="rb-accueil" style={{ gap: 12 }}>
       {/* Le panneau de tête (18 px) : le mot d'état et sa phrase, la batterie à droite ; muet, le liseré qui respire — un seul signal. */}
       <div className={'rb-a-hero' + (vue.panne ? ' o-panne' : '')} style={PANNEAU}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.15, color: etat.encre }}>{etat.mot}</div>
             {etat.phrase && <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)', marginTop: 6 }}>{etat.phrase}</div>}
+            {/* L'avance d'une tonte (lot 9 Gladys, ADR 0313) : « 45 % · 20 min restantes », et sa barre quand le pourcentage se lit. */}
+            {avance && !vue.panne && (
+              <div className="rb-a-avance" style={{ marginTop: 10 }}>
+                {avance.pct != null && (
+                  <div role="progressbar" aria-label={avance.texte} aria-valuenow={avance.pct} aria-valuemin={0} aria-valuemax={100}
+                    style={{ height: 4, borderRadius: 2, background: 'var(--o-s1)', overflow: 'hidden', marginBottom: 6 }}>
+                    <div style={{ width: avance.pct + '%', height: '100%', borderRadius: 2, background: etat.encre }} />
+                  </div>
+                )}
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--o-text1)' }}>{avance.texte}</div>
+              </div>
+            )}
           </div>
           {vue.batterie != null && !vue.panne && (
             <div aria-label={tr('batterie {p} %', { p: vue.batterie })} role="img" style={{ flexShrink: 0, textAlign: 'right' }}>
@@ -889,7 +901,9 @@ export default function FicheRobotContent({ hass, idRobot, domaine = 'vacuum', v
             {actuel === 'accueil' && <OngletAccueil vue={vue} etat={etat} zones={zones} choisir={choisir} enRoute={enRoute}
               toutChoisi={enRoute ? !!(enCours && enCours.tout) : domaine === 'lawn_mower' ? toutLeJardin : nChoisies === 0}
               basculerZone={basculerZone} toutPrendre={toutPrendre} principale={principale} seconde={seconde} aUneCarte={!!idCarte} ouvrirCarte={() => setCarteOuverte(true)}
-              prochain={prochain} semaine={semaine} alerte={alerteEntretien(usure)} allerA={aller} retenu={passageRetenu(vue.etat, idRobot, maintenant)} lignes={lignes} />}
+              prochain={prochain} semaine={semaine} alerte={alerteEntretien(usure)} allerA={aller} retenu={passageRetenu(vue.etat, idRobot, maintenant)}
+              lignes={[...lignes, ...lignesEtat({ etat: vue.etat, robot: idRobot, domaine, phase: vue.phase, soeurs, maintenant })]}
+              avance={vue.phase === 'travail' || vue.phase === 'pause' ? avanceeRobot(soeurs) : null} />}
             {actuel === 'planning' && <OngletPlanning hass={hass} domaine={domaine} robot={robot} zones={zonesPlanifiables} planning={planning} />}
             {actuel === 'historique' && <OngletHistorique rangees={rangees} resume={sept} uniteSurface={uniteSurface} chargee={!!duCarnet || !!brut} erreur={histoErreur} />}
             {actuel === 'entretien' && <OngletEntretien hass={hass} pieces={usure} compteurs={compteurs} phrase={phraseEntretien(usure)} />}

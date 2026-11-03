@@ -63,7 +63,9 @@ test('§ 19.5, C28 : MeteoAlarm — éteinte sans niveau, « Aucune alerte en co
   assert.deepEqual([jaune.phrase, jaune.ton, jaune.regarder], ['Vigilance jaune · Orages', 'warn', true]);
   // Un événement qui dit déjà la vigilance ne la redit pas.
   assert.equal(vueVigilance(ma('on', { awareness_level: '2; yellow; Moderate', event: 'Vigilance jaune orages' }), MA).phrase, 'Vigilance jaune orages');
-  assert.deepEqual([vueVigilance(ma('on', { awareness_level: '3; orange; Severe', severity: 'Severe', event: 'Vent' }), MA).ton, vueVigilance(ma('on', { awareness_level: '3; orange; Moderate' }), MA).ton], ['bad', 'warn2']);
+  // ASSERTION MODIFIÉE (01/11, ADR 0310) : la couleur l'emporte, et « Severe » est l'orange de MeteoAlarm — le rouge est « Extreme ».
+  assert.deepEqual([vueVigilance(ma('on', { awareness_level: '3; orange; Severe', severity: 'Severe', event: 'Vent' }), MA).ton, vueVigilance(ma('on', { awareness_level: '3; orange; Moderate' }), MA).ton], ['warn2', 'warn2']);
+  assert.deepEqual([vueVigilance(ma('on', { severity: 'Extreme' }), MA).ton, vueVigilance(ma('on', { awareness_level: '4; red; Extreme' }), MA).phrase], ['bad', 'Vigilance rouge']);
   assert.deepEqual([vueVigilance(ma('on'), MA).phrase, vueVigilance(ma('on'), MA).ton], ['Vigilance jaune', 'warn'], 'allumée sans niveau : l’ambre, comme à l’Accueil');
 });
 

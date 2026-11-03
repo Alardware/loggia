@@ -8,18 +8,19 @@
 import { useState, useEffect, useRef, useMemo, useId } from 'react';
 import { puce } from '../styles.js';
 import { AppareilsReglages } from './appareils.jsx';
-import { appareilsConnus } from '../state.js';
+import { appareilsConnus, ficheAppareil } from '../state.js';
+import { evenementsPorte, sonnetteEnGrand, CLE_SONNETTE_GRAND } from '../evenement.js';
 import {
   Fi, LOOK_DEF, HIDDEN_VIEWS, readViewsCfg, writeViewsCfg, cl_hexRgb, userBg, userImg, ListeChoix, ChampSuggere, CroixFeuille, NomFeuille, alerter
 } from '../ui.jsx';
 import {
-  cfgVal, cfgSet, getHass, loggiaEnt, LOGGIA_CFG, LOGGIA_RESOLVED, LOGGIA_INDEX, enHaids, plateformeDe, medCompanion,
+  cfgVal, cfgSet, getHass, loggiaEnt, LOGGIA_CFG, LOGGIA_RESOLVED, LOGGIA_INDEX, enHaids, plateformeDe, voisinsDe, medCompanion,
   medPlayers, normRooms, secAlarm, switchLightsCfg, ctxLumieres,
   exportConfigComplete, lireConfigImport, importConfigComplete, resetLoggiaComplet, cheminPanneau, lirePageAccueil,
   definirPageAccueil, DROITS, DROITS_ADMIN_HA, compteOrdinaire
 } from '../state.js';
 import { conversationsDe, entiteChoisie, choixAssistant } from '../assistant.js';
-import { fuiteCalculee } from '../attention.js';
+import { fuiteCalculee, pluieDeRobot } from '../attention.js';
 import {
   CV_ICONS, cvInp, cvName, cvEstTpl, cvKey, TplForm, USER_COLORS, BottomSheet, EntPicker, FOND_PHOTO_CLE,
   lireFondPhoto, compresserImage
@@ -37,6 +38,7 @@ import { mesurePortion, scriptsCandidats } from '../distributeurfiche.js';
 import { envoyerFond, retirerFond } from '../fondphoto.js';
 import { BoutonConfirme } from '../fichecommune.jsx';
 import { reposerFocus } from '../focus.js';
+import { useWide, useCoarse } from '../app/ecran.jsx';
 import { useDemandes, enVol } from '../optimiste.js';
 import { InterrupteursSection, gestesRegles, appareilsVisibles } from './interrupteurs.jsx';
 import { VoletsReglages } from './volets.jsx';
@@ -45,6 +47,7 @@ import { PresenceReglages } from './presence.jsx';
 import { NuitReglages } from './nuit.jsx';
 import { VeillesReglages } from './veilles.jsx';
 import { JournalReglages } from './journal.jsx';
+import { FriseJour } from './reglesjour.jsx';
 import { VersionsPrecedentes } from './versions.jsx';
 import { weatherEntity } from '../wxutil.jsx';
 import { lireQualiteCiel, ecrireQualiteCiel, niveauCielIci } from '../wxpresets.js';
@@ -56,7 +59,8 @@ import { raisonEchec, bilanEcritures, texteRefus } from '../refus.js';
 import { commanderChauffage } from '../chauffageetat.js';
 import { poserEtatEnfant } from '../enfantetat.js';
 import { uniteTemp, wattsDe } from '../unites.js';
-import { Panneau, Ligne, Pastille, CAPITALES, MONO, DESC_PANNEAU, FILET, btnPrimaire, btnSecondaire, btnDiscret, btnDanger } from './parcommun.jsx';
+import { CarteTel, LignesTel, LigneTel, ChoixTel, BasculeTel, btnTel, lienTel, pasTel } from './partel.jsx';
+import { Panneau, Ligne, Pastille, GrilleCartes, CarteGens, CAPITALES, MONO, FILET, btnPrimaire, btnSecondaire, btnDiscret, btnDanger } from './parcommun.jsx';
 
 /* « Verre des cartes » : l'écriture, ici et pas dans verre.js — le démarrage
  * n'a besoin que de lire (ADR 0284). La classe suit sur-le-champ. Exportée
@@ -120,12 +124,9 @@ const Tgl = ({ on, cb, label, off = false }) => (
 
 // Carte et ligne de reglages : les briques communes (parcommun.jsx, maquettes
 // du 18/09). Les noms restent, pour les sections qui les appellent deja.
-const AppCard = ({ title, sub, note, action, children }) => (
-  <Panneau titre={title} desc={sub} droite={note ? <span style={CAPITALES}>{note}</span> : action}>{children}</Panneau>
-);
 
-const OptRow = ({ title, desc, children, retrait = false, eteint = false }) => (
-  <Ligne titre={title} desc={desc} retrait={retrait} eteint={eteint}>{children}</Ligne>
+const OptRow = ({ title, desc, children, retrait = false, eteint = false, ici = false }) => (
+  <Ligne titre={title} desc={desc} retrait={retrait} eteint={eteint} ici={ici}>{children}</Ligne>
 );
 
 // Segment : 2 a 3 choix mutuellement exclusifs, sur une piste unique.
@@ -138,7 +139,7 @@ const OptRow = ({ title, desc, children, retrait = false, eteint = false }) => (
  * nomme, `aria-pressed` sur chaque option. Chaque appel donne son nom — le
  * plus souvent le titre de la ligne qui l'entoure. Le bleu plein ne change pas. */
 const Seg = ({ value, opts, onPick, label, disabled = false, wrap = false }) => (
-  <div role="group" aria-label={label} style={{ display: 'flex', flexWrap: wrap ? 'wrap' : 'nowrap', gap: 4, padding: 3, borderRadius: 12, background: 'var(--o-well)', border: 'var(--o-bw,1px) solid var(--o-bd3)', opacity: disabled ? .5 : 1 }}>
+  <div role="group" aria-label={label} className="o-seg" style={{ display: 'flex', flexWrap: wrap ? 'wrap' : 'nowrap', gap: 4, padding: 3, borderRadius: 12, background: 'var(--o-well)', border: 'var(--o-bw,1px) solid var(--o-bd3)', opacity: disabled ? .5 : 1 }}>
     {opts.map(([v, lb]) => (
       <button key={String(v)} aria-pressed={value === v} disabled={disabled} onClick={() => onPick(v)} style={{ padding: '6px 13px', borderRadius: 10, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: value === v ? 'var(--o-accent-fond)' : 'transparent', color: value === v ? '#fff' : 'var(--o-text2)', boxShadow: 'none', fontFamily: 'inherit' }}>{lb}</button>
     ))}
@@ -148,14 +149,13 @@ const Seg = ({ value, opts, onPick, label, disabled = false, wrap = false }) => 
 const stepBtn = { width: 30, height: 30, borderRadius: 10, border: 'var(--o-bw,1px) solid var(--o-bd1)', background: 'var(--o-s2)', color: 'var(--o-text1)', fontWeight: 800, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
 // Marge : un pas a pas. « auto » = valeur calculee, non figee.
 const MarginRow = ({ label, px, auto, onStep }) => (
-  <div className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 22px', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-    <div style={{ fontSize: 13, fontWeight: 700, width: 120, flexShrink: 0 }}>{label}</div>
+  <Ligne retrait titre={label}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: 3, borderRadius: 10, background: 'var(--o-s2)', flexShrink: 0 }}>
       <button onClick={() => onStep(-2)} style={stepBtn} aria-label={tr('Réduire') + ' ' + label}>−</button>
-      <span style={{ minWidth: 48, textAlign: 'center', fontWeight: 800, fontSize: 12, fontFamily: 'ui-monospace,monospace', color: auto ? 'var(--o-text3)' : 'var(--o-text)' }}>{auto ? tr('auto') : Math.round(px) + 'px'}</span>
+      <span style={{ minWidth: 70, textAlign: 'center', fontWeight: 800, fontSize: 12, fontFamily: 'ui-monospace,monospace', color: auto ? 'var(--o-text3)' : 'var(--o-text)' }}>{auto ? tr('Auto') : Math.round(px) + ' px'}</span>
       <button onClick={() => onStep(2)} style={stepBtn} aria-label={tr('Augmenter') + ' ' + label}>+</button>
     </div>
-  </div>
+  </Ligne>
 );
 
 /* Les marges de l'ecran : un reglage de secours, replie par defaut — « auto »
@@ -164,22 +164,20 @@ function MargesAvancees({ navbar, navMargin, navAuto, onNavOffset, topMargin, to
   const [ouvert, setOuvert] = useState(false);
   const auto = navAuto && topAuto;
   return (
-    <Panneau>
-      <button type="button" onClick={() => setOuvert(o => !o)} aria-expanded={ouvert}
-        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '18px 22px', background: 'none', border: 'none', color: 'inherit', font: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'block', fontSize: 14, fontWeight: 800 }}>{tr('Avancé — marges de l’écran')}</span>
-          <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 3 }}>{auto ? tr('« auto » convient dans la quasi-totalité des cas.') : tr('Réglées à la main.')}</span>
-        </span>
-        <Fi i={ouvert ? 'angle-small-up' : 'angle-small-down'} size={15} color="var(--o-text2)" />
-      </button>
+    <>
+      <Ligne ici titre={tr('Marges de l’écran')} desc={ouvert ? tr('Auto lit la zone sûre : encoche, barre d’état.') : tr('« Auto » convient presque toujours.')}>
+        <button type="button" onClick={() => setOuvert(o => !o)} aria-expanded={ouvert} aria-label={ouvert ? tr('Replier') : tr('Déplier')}
+          style={{ width: 34, height: 34, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text2)', cursor: 'pointer' }}>
+          <Fi i={ouvert ? 'angle-small-up' : 'angle-small-down'} size={15} />
+        </button>
+      </Ligne>
       {ouvert && (<>
-        <div style={{ padding: '0 22px 12px', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', lineHeight: 1.5, maxWidth: '62ch' }}>{tr("À ajuster seulement si la barre passe sous l'encoche ou la barre d'accueil de votre téléphone.")}</div>
-        {navbar && <MarginRow label={tr('Marge du bas')} px={navMargin} auto={navAuto} onStep={onNavOffset} />}
-        <MarginRow label={tr('Marge du haut')} px={topMargin} auto={topAuto} onStep={onTopOffset} />
-        {!auto && <Ligne><button onClick={onReset} style={btnDiscret}>{tr('Rétablir « auto »')}</button></Ligne>}
+        <MarginRow label={tr('En haut')} px={topMargin} auto={topAuto} onStep={onTopOffset} />
+        {navbar && <MarginRow label={tr('En bas')} px={navMargin} auto={navAuto} onStep={onNavOffset} />}
+        {/* Une marge réglée à la main ne revient pas seule à « Auto » : le geste reste. */}
+        {!auto && <Ligne retrait><button onClick={onReset} style={btnDiscret}>{tr('Rétablir « auto »')}</button></Ligne>}
       </>)}
-    </Panneau>
+    </>
   );
 }
 
@@ -289,18 +287,20 @@ const REAGISSENT = ['fumee', 'gaz', 'co', 'fuite', 'alarme'];
 /** Les détecteurs d'une famille, reconnus à leur classe — comme le composant (audit du 19/10, M1 : une seule règle « plante ou
  *  fuite »). Un `moisture` n'est pas une fuite quand un modèle ou un groupe le calcule (`fuiteCalculee`, ADR 0022), ni quand il est
  *  le besoin d'eau d'une plante : son identifiant commence par la base d'une plante de `loggia_plants`, suivie de rien ou d'un « _ »
- *  — la règle d'`estPlante` (attention.js) et du serveur (`alertes._est_plante`). `ctx` : `plateforme(id)` (l'index), `plantes`
- *  (les bases). L'écran ne compte pas un détecteur qui n'alerte pas. */
+ *  — la règle d'`estPlante` (attention.js) et du serveur (`alertes._est_plante`) ; ni la pluie d'un robot (`pluieDeRobot`, ADR
+ *  0305). `ctx` : `plateforme(id)` (l'index), `voisins(id)` (les domaines de son appareil), `plantes` (les bases). L'écran ne
+ *  compte pas un détecteur qui n'alerte pas. */
 export function detecteursAlertes(S, classes, ctx = {}) {
   const etats = S && typeof S === 'object' ? S : {};
   const plateforme = typeof ctx.plateforme === 'function' ? ctx.plateforme : () => null;
+  const voisins = typeof ctx.voisins === 'function' ? ctx.voisins : () => [];
   const bases = (Array.isArray(ctx.plantes) ? ctx.plantes : []).filter(b => typeof b === 'string' && b);
   const estPlante = (id) => bases.some(b => id.indexOf(b) === 0 && (id.length === b.length || id.charAt(b.length) === '_'));
   return Object.keys(etats).filter(id => {
     if (id.indexOf('binary_sensor.') !== 0) return false;
     const dc = ((etats[id] || {}).attributes || {}).device_class;
     if (classes.indexOf(dc) < 0) return false;
-    return !(dc === 'moisture' && (fuiteCalculee(plateforme(id)) || estPlante(id)));
+    return !(dc === 'moisture' && (fuiteCalculee(plateforme(id)) || estPlante(id) || pluieDeRobot(voisins(id))));
   });
 }
 
@@ -357,7 +357,7 @@ const exclusDe = (c) => {
   return { admins: Array.isArray(d.admins) ? d.admins : [], presents: Array.isArray(d.presents) ? d.presents : [] };
 };
 
-function QuiRecoit({ hass, cfg, save, services }) {
+function QuiRecoit({ hass, cfg, save, services, tel = false, actif = true }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
   const connecte = !!h;
   /* Lu une fois par connexion : `hass` change à chaque état de la maison, et
@@ -366,6 +366,7 @@ function QuiRecoit({ hass, cfg, save, services }) {
   hRef.current = h;
   const [etat, setEtat] = useState(null);
   const [refus, setRefus] = useState('');
+  const [ouvert, setOuvert] = useState(null);
   useEffect(() => {
     const ws = hRef.current;
     if (!ws) return undefined;
@@ -385,89 +386,185 @@ function QuiRecoit({ hass, cfg, save, services }) {
   if (!etat) return null;
   const corr = cfg.personnes && typeof cfg.personnes === 'object' ? cfg.personnes : {};
   const poser = (person, patch) => save({ personnes: { ...corr, [person]: { ...(corr[person] || {}), ...patch } } });
-  const route = (titre, qui) => (
-    <Ligne titre={titre}><span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--o-text2)', textAlign: 'right', maxWidth: 320 }}>{qui}</span></Ligne>
-  );
   const nomService = (s) => nomTelephone(hass, s) || s;
+  /* Les trois publics que le composant connaît (destinataires) : la sûreté,
+   * qui ne s'exclut jamais ; le mode enfant, pour les administrateurs ; les
+   * machines, la collecte et les veilles, pour les personnes à la maison. La
+   * maquette dessinait cinq familles que Loggia ne distingue pas. */
+  const PUBLICS = [['surete', tr('Sûreté'), 'lock', 'bad'], ['admins', tr('Mode enfant'), 'child-head', 'cyan'], ['presents', tr('Machines, collecte, veilles'), 'bell', 'warn']];
+  const fiche = (p) => {
+          const c = corr[p.person] || {};
+          const exclus = exclusDe(c);
+          const choisi = typeof c.service === 'string' ? c.service : '';
+          const decouverts = Array.isArray(p.appareils) ? p.appareils : [];
+          /* Ce qui reçoit : le service choisi s'il existe encore, sinon les appareils trouvés (destinataires.personnes). */
+          const absent = !!choisi && (services.length ? services.indexOf(choisi) < 0 : !!p.service_absent);
+          // L'identifiant du service sous le nom : calculé ici, pas écrit dans le rendu.
+          const base = (choisi && !absent ? [{ service: choisi, nom: nomService(choisi) }] : decouverts)
+            .map(a => ({ ...a, ident: 'notify.' + a.service }));
+          const pourEnfant = base.filter(a => exclus.admins.indexOf(a.service) < 0);
+          const svcs = choisi && services.indexOf(choisi) < 0 ? [choisi, ...services] : services;
+          const basculer = (pub, service) => {
+            const l = exclus[pub];
+            poser(p.person, { exclus: { ...exclus, [pub]: l.indexOf(service) < 0 ? [...l, service] : l.filter(x => x !== service) } });
+          };
+    return { c, exclus, choisi, absent, base, pourEnfant, svcs, basculer };
+  };
+  /* Une case = un public pour TOUS les téléphones de la personne ; le détail,
+   * téléphone par téléphone, reste dans sa feuille. */
+  const caseDe = (p, pub) => {
+    const { exclus, base } = fiche(p);
+    if (pub === 'surete') return { on: base.length > 0, verrou: true };
+    if (pub === 'admins' && !p.admin) return null;
+    const on = base.length > 0 && base.every(a => exclus[pub].indexOf(a.service) < 0);
+    return { on, go: base.length ? () => {
+      const l = exclus[pub];
+      const ids = base.map(a => a.service);
+      poser(p.person, { exclus: { ...exclus, [pub]: on ? [...new Set([...l, ...ids])] : l.filter(x => ids.indexOf(x) < 0) } });
+    } : null };
+  };
+  const telsDe = (p) => { const { base } = fiche(p); return base.length ? base.map(a => a.nom).join(', ') : tr('Aucun téléphone suivi'); };
+  const feuille = ouvert && etat.personnes.find(x => x.person === ouvert);
+  const detailFeuille = feuille && (() => {
+    const p = feuille;
+    const { exclus, choisi, absent, base, pourEnfant, svcs, basculer } = fiche(p);
+    return (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 13.5, fontWeight: 800 }}>{p.nom}</span>
+                <Pastille capitales niveau={p.present ? 'ok' : 'neutre'}>{p.present ? tr('À la maison') : tr('Absent')}</Pastille>
+                {p.admin && <Pastille capitales niveau="accent">{tr('Administrateur')}</Pastille>}
+                <span style={{ marginLeft: 'auto' }}>
+                  <ListeChoix label={tr('Service de {nom}', { nom: p.nom })} value={choisi} onChange={v => poser(p.person, { service: v })}
+                    options={[{ id: '', label: tr('Automatique') }, ...svcs.map(x => ({ id: x, label: nomService(x), sub: 'notify.' + x }))]}
+                    style={{ padding: '6px 12px', borderRadius: 10, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 12, fontWeight: 700, maxWidth: 220 }} />
+                </span>
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: base.length ? 'var(--o-text2)' : 'var(--o-text3)', marginTop: 3 }}>
+                {base.length ? base.map(a => a.nom).join(', ') : tr('Aucun téléphone trouvé')}
+              </div>
+              {absent && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-warn)', marginTop: 3 }}>{tr('Le service choisi n’existe plus : ses téléphones trouvés prennent le relais.')}</div>}
+              {/* Un administrateur sur plusieurs appareils (relecture du 30/10, point 2) : une tablette d'enfant ou un écran mural ouverts
+                * sous son compte recevraient les demandes de l'enfant, boutons compris. On le DIT ; on ne devine pas lequel. */}
+              {p.admin && pourEnfant.length > 1 && (
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-warn)', marginTop: 4, lineHeight: 1.45 }}>
+                  {tr('{nom} reçoit les demandes du mode enfant sur plusieurs appareils : {appareils}. Si l’un d’eux est la tablette d’un enfant ou un écran mural, retirez-lui « Mode enfant ».', { nom: p.nom, appareils: pourEnfant.map(a => a.nom).join(', ') })}
+                </div>
+              )}
+              {base.map(a => (
+                <div key={a.service} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
+                  <Fi i="mobile-button" size={13} color="var(--o-text2)" />
+                  <span style={{ flex: '1 1 140px', minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nom}</span>
+                    <span style={{ display: 'block', ...MONO, fontSize: 11, color: 'var(--o-text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.ident}</span>
+                  </span>
+                  <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {/* La sûreté : toujours, et le dire — la puce ne se décoche pas. */}
+                    <button type="button" disabled aria-pressed="true" title={tr('La sûreté ne s’exclut jamais')}
+                      style={{ ...puce(true), cursor: 'default', opacity: .75 }}>{tr('Sûreté')}</button>
+                    {EXCLUABLES.filter(pub => pub !== 'admins' || p.admin).map(pub => {
+                      const on = exclus[pub].indexOf(a.service) < 0;
+                      const nom = pub === 'admins' ? tr('Mode enfant') : tr('Machines, collecte, veilles');
+                      return (
+                        <button key={pub} type="button" aria-pressed={on} onClick={() => basculer(pub, a.service)}
+                          aria-label={tr('{public} sur {appareil}', { public: nom, appareil: a.nom })} style={puce(on)}>{nom}</button>
+                      );
+                    })}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+    );
+  })();
+  const repli = cfg.service ? tr('Repli : {service} — toujours pour la sûreté ; pour le reste, quand personne n’est trouvé ou qu’un envoi échoue.', { service: 'notify.' + cfg.service }) : tr('Aucun repli : sans téléphone trouvé, rien ne part.');
+  const sheet = feuille && <BottomSheet onClose={() => setOuvert(null)} title={feuille.nom}>{detailFeuille}</BottomSheet>;
+
+  if (tel) return (
+    <>
+      <CarteTel titre={tr('Qui reçoit quoi')} desc={tr('Chaque personne de Home Assistant, suivie jusqu’à son téléphone — rien à régler ; ici, on corrige.')}>
+        <LignesTel>
+          {etat.personnes.map((p) => {
+            const { base } = fiche(p);
+            return (
+              <LigneTel key={p.person} ava={(p.nom || '?').charAt(0).toUpperCase()} avaFond="linear-gradient(140deg,var(--o-accent),var(--o-purple))" titre={p.nom} desc={telsDe(p)} eteint={!base.length}>
+                {base.length > 0 && PUBLICS.map(([pub, nom]) => {
+                  const k = caseDe(p, pub);
+                  if (!k) return null;
+                  return (
+                    <button key={pub} type="button" aria-pressed={k.on} disabled={!k.go} onClick={k.go || undefined} title={k.verrou ? tr('La sûreté ne s’exclut jamais') : nom}
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 9, border: 'none', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', cursor: k.go ? 'pointer' : 'default', background: k.on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: k.on ? '#fff' : 'var(--o-text1)', transition: 'background .2s' }}>
+                      {k.verrou && <Fi i="lock" size={10} />}{nom}
+                    </button>
+                  );
+                })}
+                <button type="button" onClick={() => setOuvert(p.person)} style={lienTel}>{tr('Corriger')}<Fi i="angle-small-right" size={13} /></button>
+              </LigneTel>
+            );
+          })}
+        </LignesTel>
+        <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)' }}>{repli}</div>
+      </CarteTel>
+      {sheet}
+    </>
+  );
+
+  const grille = 'minmax(170px,1fr) repeat(3,96px)';
   return (
-    <Panneau titre={tr('Qui reçoit quoi')} desc={tr('Chaque personne de Home Assistant, suivie jusqu’à son téléphone — rien à régler ; ici, on corrige.')}
-      pied={<span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>{cfg.service ? tr('Repli : {service} — toujours pour la sûreté ; pour le reste, quand personne n’est trouvé ou qu’un envoi échoue.', { service: 'notify.' + cfg.service }) : tr('Aucun repli : sans téléphone trouvé, rien ne part.')}</span>}>
-      {route(tr('Sûreté'), tr('Tout le monde, et le repli — rien ne l’exclut'))}
-      {route(tr('Mode enfant'), tr('Les administrateurs'))}
-      {route(tr('Machines, collecte, veilles'), tr('Les personnes à la maison — tout le monde s’il n’y a personne'))}
-      {etat.personnes.map((p) => {
-        const c = corr[p.person] || {};
-        const exclus = exclusDe(c);
-        const choisi = typeof c.service === 'string' ? c.service : '';
-        const decouverts = Array.isArray(p.appareils) ? p.appareils : [];
-        /* Ce qui reçoit : le service choisi s'il existe encore, sinon les appareils trouvés (destinataires.personnes). */
-        const absent = !!choisi && (services.length ? services.indexOf(choisi) < 0 : !!p.service_absent);
-        // L'identifiant du service sous le nom : calculé ici, pas écrit dans le rendu.
-        const base = (choisi && !absent ? [{ service: choisi, nom: nomService(choisi) }] : decouverts)
-          .map(a => ({ ...a, ident: 'notify.' + a.service }));
-        const pourEnfant = base.filter(a => exclus.admins.indexOf(a.service) < 0);
-        const svcs = choisi && services.indexOf(choisi) < 0 ? [choisi, ...services] : services;
-        const basculer = (pub, service) => {
-          const l = exclus[pub];
-          poser(p.person, { exclus: { ...exclus, [pub]: l.indexOf(service) < 0 ? [...l, service] : l.filter(x => x !== service) } });
-        };
-        return (
-          <div key={p.person} className="o-optrow" style={{ padding: '12px 22px', borderTop: FILET }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13.5, fontWeight: 800 }}>{p.nom}</span>
-              <Pastille capitales niveau={p.present ? 'ok' : 'neutre'}>{p.present ? tr('À la maison') : tr('Absent')}</Pastille>
-              {p.admin && <Pastille capitales niveau="accent">{tr('Administrateur')}</Pastille>}
-              <span style={{ marginLeft: 'auto' }}>
-                <ListeChoix label={tr('Service de {nom}', { nom: p.nom })} value={choisi} onChange={v => poser(p.person, { service: v })}
-                  options={[{ id: '', label: tr('Automatique') }, ...svcs.map(x => ({ id: x, label: nomService(x), sub: 'notify.' + x }))]}
-                  style={{ padding: '6px 12px', borderRadius: 10, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 12, fontWeight: 700, maxWidth: 220 }} />
-              </span>
-            </div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: base.length ? 'var(--o-text2)' : 'var(--o-text3)', marginTop: 3 }}>
-              {base.length ? base.map(a => a.nom).join(', ') : tr('Aucun téléphone trouvé')}
-            </div>
-            {absent && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-warn)', marginTop: 3 }}>{tr('Le service choisi n’existe plus : ses téléphones trouvés prennent le relais.')}</div>}
-            {/* Un administrateur sur plusieurs appareils (relecture du 30/10, point 2) : une tablette d'enfant ou un écran mural ouverts
-              * sous son compte recevraient les demandes de l'enfant, boutons compris. On le DIT ; on ne devine pas lequel. */}
-            {p.admin && pourEnfant.length > 1 && (
-              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-warn)', marginTop: 4, lineHeight: 1.45 }}>
-                {tr('{nom} reçoit les demandes du mode enfant sur plusieurs appareils : {appareils}. Si l’un d’eux est la tablette d’un enfant ou un écran mural, retirez-lui « Mode enfant ».', { nom: p.nom, appareils: pourEnfant.map(a => a.nom).join(', ') })}
-              </div>
-            )}
-            {base.map(a => (
-              <div key={a.service} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
-                <Fi i="mobile-button" size={13} color="var(--o-text2)" />
-                <span style={{ flex: '1 1 140px', minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nom}</span>
-                  <span style={{ display: 'block', ...MONO, fontSize: 11, color: 'var(--o-text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.ident}</span>
+    <Panneau titre={tr('Qui reçoit quoi')} desc={tr('Chaque personne est suivie jusqu’à son téléphone. Une case, un public d’alertes.')}
+      pied={<span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>{repli}</span>}>
+      <div role="table" aria-label={tr('Qui reçoit quoi')} style={{ padding: '4px 22px 20px', overflowX: 'auto', opacity: actif ? 1 : .45, transition: 'opacity .2s' }}>
+        <div role="row" style={{ display: 'grid', gridTemplateColumns: grille, alignItems: 'end', gap: 8, paddingBottom: 6, minWidth: 460 }}>
+          <span role="columnheader" aria-label={tr('Personne')} />
+          {PUBLICS.map(([pub, nom, ico, teinte]) => (
+            <span key={pub} role="columnheader" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, ...CAPITALES, fontSize: 9.5, textAlign: 'center', lineHeight: 1.25 }}>
+              <Fi i={ico} size={13} color={'var(--o-' + teinte + ')'} />{nom}
+            </span>
+          ))}
+        </div>
+        {etat.personnes.map((p) => {
+          const { base } = fiche(p);
+          return (
+            <div key={p.person} role="row" style={{ display: 'grid', gridTemplateColumns: grille, alignItems: 'center', gap: 8, padding: '6px 0', minWidth: 460 }}>
+              {/* Le nom ouvre le détail : le service choisi, téléphone par téléphone. */}
+              <button type="button" role="rowheader" onClick={() => setOuvert(p.person)} title={tr('Corriger')}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 0, background: 'none', border: 'none', color: 'inherit', font: 'inherit', textAlign: 'left', cursor: 'pointer', minWidth: 0, opacity: base.length ? 1 : .5 }}>
+                <span aria-hidden="true" style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: 'linear-gradient(140deg,var(--o-accent),var(--o-purple))', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800 }}>{(p.nom || '?').charAt(0).toUpperCase()}</span>
+                <span style={{ minWidth: 0, lineHeight: 1.25 }}>
+                  <span style={{ display: 'block', fontSize: 13, fontWeight: 800 }}>{p.nom}</span>
+                  <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{telsDe(p)}</span>
                 </span>
-                <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {/* La sûreté : toujours, et le dire — la puce ne se décoche pas. */}
-                  <button type="button" disabled aria-pressed="true" title={tr('La sûreté ne s’exclut jamais')}
-                    style={{ ...puce(true), cursor: 'default', opacity: .75 }}>{tr('Sûreté')}</button>
-                  {EXCLUABLES.filter(pub => pub !== 'admins' || p.admin).map(pub => {
-                    const on = exclus[pub].indexOf(a.service) < 0;
-                    const nom = pub === 'admins' ? tr('Mode enfant') : tr('Machines, collecte, veilles');
-                    return (
-                      <button key={pub} type="button" aria-pressed={on} onClick={() => basculer(pub, a.service)}
-                        aria-label={tr('{public} sur {appareil}', { public: nom, appareil: a.nom })} style={puce(on)}>{nom}</button>
-                    );
-                  })}
-                </span>
-              </div>
-            ))}
-          </div>
-        );
-      })}
+              </button>
+              {PUBLICS.map(([pub, nom]) => {
+                const k = caseDe(p, pub);
+                return (
+                  <span key={pub} role="cell" style={{ display: 'flex', justifyContent: 'center' }}>
+                    {k && (
+                      <button type="button" role="checkbox" aria-checked={k.on} aria-label={tr('{public} pour {nom}', { public: nom, nom: p.nom })} disabled={!k.go} onClick={k.go || undefined}
+                        title={k.verrou ? tr('La sûreté ne s’exclut jamais') : nom}
+                        style={{ width: 48, height: 26, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: k.go ? 'pointer' : 'default', transition: 'background .2s', background: k.on ? 'var(--o-accent-fond)' : 'transparent', border: k.on ? 'none' : '1.5px solid var(--o-bd1)', color: k.on ? '#fff' : 'var(--o-text3)' }}>
+                        {(k.on || k.verrou) && <Fi i={k.verrou ? 'lock' : 'check'} size={11} />}
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+      {sheet}
     </Panneau>
   );
 }
 
-function AlertesTele({ hass }) {
+function AlertesTele({ hass, tel = false, tailleTitre = 34 }) {
   const h = hass && typeof hass.callWS === 'function' ? hass : null;
   const [cfg, setCfg] = useState(null);
   const [services, setServices] = useState([]);
   const [msg, setMsg] = useState('');
+  // Le refus d'une écriture, à part du message de l'essai : il se dit en haut, près des bascules (relecture du 03/11).
+  const [refus, setRefus] = useState('');
   // La demonstration n'a pas de composant : ses reglages vivent dans sa
   // configuration locale, et rien ne part.
   const [local, setLocal] = useState(false);
@@ -495,7 +592,7 @@ function AlertesTele({ hass }) {
   const save = (patch) => {
     if (!cfg) return;
     const n = { ...cfg, ...patch };
-    setCfg(n); setMsg('');
+    setCfg(n); setMsg(''); setRefus('');
     if (local) { cfgSet({ loggia_alertes: n }); return; }
     /* Un refus n'est pas une panne (audit du 03/10). `loggia_alertes` est un
      * réglage de la maison : sous un compte Home Assistant ordinaire, le
@@ -510,7 +607,7 @@ function AlertesTele({ hass }) {
      * faisait ici avant d'écrire est partie : elle ne ramenait plus la bascule après un refus (point 5), et deux réglages rapides
      * relisaient la même configuration — le second effaçait le premier. */
     if (h) h.callWS({ type: 'loggia/config/set', config: { loggia_alertes: n } })
-      .catch((e) => { setMsg(raisonEchec(e, 'loggia_alertes')); setCfg(c => (c === n ? cfg : c)); });
+      .catch((e) => { setRefus(raisonEchec(e, 'loggia_alertes')); setCfg(c => (c === n ? cfg : c)); });
   };
   /* Le téléphone choisi ici ne sert pas qu'aux alertes de sûreté : la fin d'un cycle d'électroménager, les veilles (batterie, heures creuses…)
    * l'utilisent AUSSI, sûreté coupée (`prevenir`, regles.py, ne lit que `service`). L'essai marche donc dès qu'un téléphone est choisi — « pour la prise
@@ -535,7 +632,7 @@ function AlertesTele({ hass }) {
   // Les detecteurs de chaque famille, reconnus a leur classe — comme le composant ; ni un `moisture` qu'un modèle ou un groupe calcule
   // (ADR 0022, 16/10), ni le besoin d'eau d'une plante (audit du 19/10, M1) : l'écran ne compte pas un détecteur qui n'alerte pas.
   const plantes = plantsCfg().map(p => p.base).filter(Boolean);
-  const capteurs = (classes) => detecteursAlertes(S, classes, { plateforme: plateformeDe, plantes });
+  const capteurs = (classes) => detecteursAlertes(S, classes, { plateforme: plateformeDe, voisins: voisinsDe, plantes });
   const decompte = (ids, humidite = false) => {
     if (!ids.length) return tr('Aucun détecteur pour l’instant');
     const n = ids.length;
@@ -551,7 +648,7 @@ function AlertesTele({ hass }) {
     ['co', tr('Monoxyde de carbone'), 'temperature-high', 'warn', decompte(capteurs(ALERTES_CLASSES.co))],
     ['fuite', tr("Fuite d'eau"), 'water', 'cold', decompte(capteurs(ALERTES_CLASSES.fuite), true)],
     ['alarme', tr('Alarme déclenchée'), 'bell', 'bad', tr('Toujours envoyée, sans délai anti-rafale')],
-    ['portes', tr('Ouverture sous alarme armée'), 'door-closed', null, tr('Portes, fenêtres et garage')],
+    ['portes', tr('Ouverture sous alarme armée'), 'door-closed', null, tr('{p} · {s}', { p: tr('Portes, fenêtres et garage'), s: tr('Sabotage') })],
   ];
   // Les vannes possibles : une `valve`, ou une prise commandee sur l'arrivee d'eau.
   const vannes = Object.keys(S).filter(id => id.indexOf('valve.') === 0).sort();
@@ -565,42 +662,134 @@ function AlertesTele({ hass }) {
   const vanne = cfg.actions.vanne.entite || '';
   const svcs = cfg.service && services.indexOf(cfg.service) < 0 ? [cfg.service, ...services] : services;
   const actOff = !cfg.actions.actif;
-  const carre = (icone, teinte) => (
-    <span style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: teinte ? 'rgba(var(--o-' + teinte + '-rgb),.14)' : 'var(--o-s1)' }}>
-      <Fi i={icone} size={15} color={teinte ? 'var(--o-' + teinte + ')' : 'var(--o-text2)'} />
-    </span>
+  /* La frise du calme (maquette v3) : la plage sur 24 h, l'heure qu'il est. */
+  const enHeures = (t) => { const m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return m ? (+m[1]) + (+m[2]) / 60 : null; };
+  const de = enHeures(cfg.calme.debut), a = enHeures(cfg.calme.fin);
+  const pct = (x) => (x / 24 * 100).toFixed(2) + '%';
+  const plages = de == null || a == null ? [] : de > a ? [[de, 24], [0, a]] : [[de, a]];
+  const maintenant = (() => { const d = new Date(); return d.getHours() + d.getMinutes() / 60; })();
+  const frise = (
+    <div aria-hidden="true" style={{ position: 'relative', height: 46, margin: '2px 22px 8px' }}>
+      <div style={{ position: 'absolute', left: 0, right: 0, top: 10, height: 4, borderRadius: 2, background: 'var(--o-s1)' }} />
+      {plages.map(([x, y], i) => <div key={i} style={{ position: 'absolute', top: 10, height: 4, borderRadius: 2, left: pct(x), width: pct(y - x), background: 'rgba(var(--o-purple-rgb),.55)' }} />)}
+      <div style={{ position: 'absolute', top: 2, height: 20, width: 2, borderRadius: 1, left: pct(maintenant), background: 'var(--o-accent)' }} />
+      {[0, 6, 12, 18, 24].map(x => <span key={x} style={{ position: 'absolute', top: 28, left: pct(x), transform: x === 24 ? 'translateX(-100%)' : x ? 'translateX(-50%)' : 'none', fontSize: 9.5, fontWeight: 700, color: 'var(--o-text3)' }}>{tr('{n} h', { n: x })}</span>)}
+    </div>
   );
+  const styleHeure = { ...cvInp, width: tel ? 108 : 112, padding: tel ? '8px 11px' : '9px 12px', fontSize: tel ? 12 : 13 };
+  const heureDebut = <input aria-label={tr('Début des heures calmes')} type="time" value={cfg.calme.debut || ''} onChange={e => save({ calme: { ...cfg.calme, debut: e.target.value } })} style={styleHeure} />;
+  const heureFin = <input aria-label={tr('Fin des heures calmes')} type="time" value={cfg.calme.fin || ''} onChange={e => save({ calme: { ...cfg.calme, fin: e.target.value } })} style={styleHeure} />;
+  const choixService = (
+    <ChoixEntite icone="mobile-button" label={tr('Téléphone de secours')} value={cfg.service || ''} onChange={v => save({ service: v })}
+      nom={cfg.service ? nomTelephone(hass, cfg.service) : tr('Aucun téléphone')} ident={cfg.service ? 'notify.' + cfg.service : tr('à choisir')}
+      options={[{ id: '', label: tr('Aucun téléphone') }, ...svcs.map(x => ({ id: x, label: nomTelephone(hass, x), sub: 'notify.' + x }))]} />
+  );
+  const choixVanne = (
+    <ChoixEntite icone="water" label={tr('Entité de la vanne d’eau')} value={vanne} onChange={v => save({ actions: { ...cfg.actions, vanne: { ...cfg.actions.vanne, entite: v } } })}
+      nom={vanne ? nomDe(vanne) : vanneAuto || tr('Aucune vanne d’eau')} ident={vanne || (vannesEau.length ? vannesEau.join(', ') + ' · ' + tr('auto') : tr('rien à couper'))}
+      options={[
+        { id: '', label: tr('Automatique') + (vanneAuto ? ' — ' + vanneAuto : ''), sub: vannesEau.join(', ') || null },
+        ...parNom(vannes).map(x => ({ id: x, label: nomDe(x), sub: x, groupe: tr('Vannes') })),
+        // Tout `switch.*` : une prise, mais aussi un interrupteur — le groupe le dit.
+        ...parNom(prises).map(x => ({ id: x, label: nomDe(x), sub: x, groupe: tr('Prises et interrupteurs') })),
+      ]} />
+  );
+  /* Une famille sans détecteur s'éteint (maquette v3) ; l'alarme et les
+   * ouvertures n'ont pas de détecteur à compter. */
+  const sansDetecteur = (k, d) => ['alarme', 'portes'].indexOf(k) < 0 && d === tr('Aucun détecteur pour l’instant');
+  // « Fermer en cas de fuite » se règle dans la popup de la vanne (I29) : ici, sa valeur.
+  const etatVanne = <span style={{ fontSize: tel ? 12 : 13, fontWeight: 800, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>{cfg.actions.vanne.actif ? tr('Activé') : tr('Désactivé')}</span>;
+
+  /* ── Le téléphone (maquette v4) ── */
+  if (tel) return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {refus && (
+        <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 18px', borderRadius: 14, background: 'rgba(var(--o-bad-rgb),.10)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)', fontSize: 12.5, fontWeight: 700, lineHeight: 1.45 }}>
+          <Fi i="triangle-warning" size={15} color="var(--o-bad)" /><span>{refus}</span>
+        </div>
+      )}
+      <CarteTel gap={14}>
+        <LigneTel ico="portrait" titre={tr('Téléphone')} desc={cfg.service ? 'notify.' + cfg.service : tr('Aucun téléphone')} mono>{choixService}</LigneTel>
+        <LigneTel ico="moon" titre={tr('Heures calmes')} desc={tr('Une notification ordinaire arrive sans sonner. Rien n’est différé.')}>
+          <span style={{ fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap' }}>{cfg.calme.actif ? (cfg.calme.debut || '—') + ' → ' + (cfg.calme.fin || '—') : tr('Coupées')}</span>
+        </LigneTel>
+        <div style={{ display: 'flex', gap: 12, padding: '12px 14px', borderRadius: 14, background: 'rgba(var(--o-bad-rgb),.1)', border: '1px solid rgba(var(--o-bad-rgb),.28)' }}>
+          <Fi i="shield-exclamation" size={16} color="var(--o-bad)" />
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text1)', lineHeight: 1.5 }}>{tr('{a} : {b}', { a: tr('Critique'), b: tr('fumée, gaz, monoxyde, fuite, alarme. Passe toujours, par-dessus le mode silencieux du téléphone et les heures calmes.') })}</div>
+        </div>
+      </CarteTel>
+      <CarteTel titre={tr('Livraison')}>
+        <LignesTel>
+          <LigneTel titre={tr('Alertes actives')} desc={cfg.actif ? tr('Poussées sur le téléphone, par l’app compagnon.') : tr('Coupées. La maison réagit quand même aux dangers.')}>
+            <span style={pasTel(cfg.actif ? 'ok' : 'warn')}>{cfg.actif ? tr('Actives') : tr('Coupées')}</span>
+            <BasculeTel on={!!cfg.actif} cb={() => save({ actif: !cfg.actif })} nom={tr('Activer les alertes')} />
+          </LigneTel>
+          <LigneTel titre={tr('Heures calmes')} desc={tr('Rien ne sonne pendant ces heures ; seul le danger passe.')}>
+            <BasculeTel on={!!cfg.calme.actif} cb={() => save({ calme: { ...cfg.calme, actif: !cfg.calme.actif } })} nom={tr('Heures calmes')} />
+          </LigneTel>
+          <LigneTel retrait eteint={!cfg.calme.actif} titre={tr('De … à')} desc={tr('La plage peut traverser minuit.')}>
+            {heureDebut}<span style={{ color: 'var(--o-text3)' }}>→</span>{heureFin}
+          </LigneTel>
+          <LigneTel titre={tr('Envoyer un essai')} desc={msg || (cfg.service ? tr('Il part sur {tel}.', { tel: nomTelephone(hass, cfg.service) }) : tr('Choisissez d’abord un téléphone.'))}>
+            <button type="button" onClick={test} disabled={!cfg.service} style={{ ...btnTel, opacity: cfg.service ? 1 : .45, cursor: cfg.service ? 'pointer' : 'not-allowed' }}><Fi i="bell" size={11} />{tr('Envoyer')}</button>
+          </LigneTel>
+        </LignesTel>
+      </CarteTel>
+      {!cfg.actif && (
+        <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 18px', borderRadius: 14, background: 'rgba(var(--o-warn-rgb),.10)', border: '1px solid rgba(var(--o-warn-rgb),.45)', color: 'var(--o-warn)', fontSize: 12.5, fontWeight: 700, lineHeight: 1.45 }}>
+          <Fi i="triangle-warning" size={15} color="var(--o-warn)" />
+          {/* Couper les alertes de surete ne coupe NI la maison, qui reagit
+            * toujours aux dangers (alertes.py, _reagir), NI le telephone : il
+            * recoit encore les autres alertes de Loggia, la fin d'un cycle par
+            * exemple (regles.prevenir ne lit que le telephone, jamais `actif`). */}
+          <span>{tr('Les alertes de sûreté sont coupées : les réglages ci-dessous restent enregistrés, mais ne préviennent de rien. Le téléphone choisi reçoit quand même les autres alertes de Loggia, comme la fin d’un cycle.')}{cfg.actions.actif ? ' ' + tr('La maison réagit quand même aux dangers.') : ''}</span>
+        </div>
+      )}
+      <QuiRecoit hass={hass} cfg={cfg} save={save} services={services} tel actif={!!cfg.actif} />
+      <CarteTel titre={tr('Ce qui alerte')} desc={tr('Une famille de capteurs par ligne — reconnue par sa classe, rien à désigner à la main.')}>
+        <LignesTel>
+          {CATS.map(([k, t, icone, teinte, d]) => (
+            <LigneTel key={k} ico={icone} icoCouleur={teinte ? 'var(--o-' + teinte + ')' : 'var(--o-text2)'} titre={t} desc={d} eteint={!cfg.actif || sansDetecteur(k, d)}>
+              <BasculeTel on={!!cfg.categories[k]} cb={() => save({ categories: { ...cfg.categories, [k]: !cfg.categories[k] } })} nom={t} />
+            </LigneTel>
+          ))}
+        </LignesTel>
+      </CarteTel>
+      <CarteTel titre={tr('La maison réagit')} desc={tr('Sur un danger, sans attendre personne — puis tout revient comme avant, sauf la vanne.')}>
+        <LignesTel>
+          <LigneTel titre={tr('Activer')}><BasculeTel on={!!cfg.actions.actif} cb={() => save({ actions: { ...cfg.actions, actif: !cfg.actions.actif } })} nom={tr('La maison réagit')} /></LigneTel>
+          <LigneTel eteint={actOff} ico="bulb" icoCouleur="var(--o-lampe)" titre={tr('Lumières à 100 %')} desc={tr('Fumée, monoxyde, alarme — pas le gaz : un relais qui claque est une étincelle.')}>
+            <BasculeTel on={!!cfg.actions.lumieres} cb={() => save({ actions: { ...cfg.actions, lumieres: !cfg.actions.lumieres } })} nom={tr('Lumières à 100 %')} />
+          </LigneTel>
+          <LigneTel eteint={actOff} ico="blinds-open" icoCouleur="var(--o-purple)" titre={tr('Volets remontés')} desc={tr('Fumée, monoxyde, gaz — les issues, et l’accès des secours.')}>
+            <BasculeTel on={!!cfg.actions.volets} cb={() => save({ actions: { ...cfg.actions, volets: !cfg.actions.volets } })} nom={tr('Volets remontés')} />
+          </LigneTel>
+          <LigneTel eteint={actOff} ico="water" icoCouleur="var(--o-cyan)" titre={tr('Fermer en cas de fuite')} desc={tr('Se règle dans la popup de la vanne d’eau.')}>{etatVanne}</LigneTel>
+          <LigneTel retrait eteint={actOff || !cfg.actions.vanne.actif} titre={tr('Quelle vanne')} desc={tr('Vide : toutes les vannes d’eau que Home Assistant connaît. Une prise commandée vaut aussi.')}>{choixVanne}</LigneTel>
+        </LignesTel>
+      </CarteTel>
+    </div>
+  );
+
+  /* ── L'ordinateur et la tablette (maquette v3) ── */
   return (
     <>
-      <Panneau titre={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>{tr('Livraison')}<Pastille capitales niveau={cfg.actif ? 'ok' : 'alerte'}>{cfg.actif ? tr('Actives') : tr('Coupées')}</Pastille></span>}
-        desc={tr("Envoyées par le serveur via l'app compagnon Home Assistant.")}
-        droite={<Tgl on={!!cfg.actif} cb={() => save({ actif: !cfg.actif })} label={tr('Activer les alertes')} />}>
-        <Ligne titre={tr('Téléphone cible')} desc={tr('Reçoit toujours la sûreté ; le reste, quand aucun téléphone n’est trouvé ou qu’un envoi échoue')}>
-          <ChoixEntite icone="mobile-button" label={tr('Téléphone cible')} value={cfg.service || ''} onChange={v => save({ service: v })}
-            nom={cfg.service ? nomTelephone(hass, cfg.service) : tr('Aucun téléphone')} ident={cfg.service ? 'notify.' + cfg.service : tr('à choisir')}
-            options={[{ id: '', label: tr('Aucun téléphone') }, ...svcs.map(x => ({ id: x, label: nomTelephone(hass, x), sub: 'notify.' + x }))]} />
-        </Ligne>
-        {/* Entre ces heures, les notifications arrivent en silence — on les lit
-          * au réveil. Une seule chose passe quand même, et par-dessus le mode
-          * silencieux du téléphone : le danger. Fumée, gaz, CO, fuite, alarme. */}
-        <Ligne titre={tr('Heures calmes')} desc={tr('Rien ne sonne pendant ces heures ; seul le danger passe.')}>
-          <Tgl on={!!cfg.calme.actif} cb={() => save({ calme: { ...cfg.calme, actif: !cfg.calme.actif } })} label={tr('Heures calmes')} />
-        </Ligne>
-        {cfg.calme.actif && (
-          <Ligne retrait titre={tr('De … à')} desc={tr('La plage peut traverser minuit.')}>
-            <input aria-label={tr('Début des heures calmes')} type="time" value={cfg.calme.debut || ''} onChange={e => save({ calme: { ...cfg.calme, debut: e.target.value } })}
-              style={{ ...cvInp, width: 'auto', padding: '9px 12px', fontSize: 13 }} />
-            <input aria-label={tr('Fin des heures calmes')} type="time" value={cfg.calme.fin || ''} onChange={e => save({ calme: { ...cfg.calme, fin: e.target.value } })}
-              style={{ ...cvInp, width: 'auto', padding: '9px 12px', fontSize: 13 }} />
-          </Ligne>
-        )}
-        <Ligne desc={msg || tr('Vérifier que le téléphone reçoit bien.')}>
-          <button onClick={test} disabled={!cfg.service} style={{ ...btnSecondaire, opacity: cfg.service ? 1 : .45, cursor: cfg.service ? 'pointer' : 'not-allowed' }}><Fi i="test-tube" size={13} />{tr('Envoyer un test')}</button>
-        </Ligne>
-      </Panneau>
-
-      {/* Qui reçoit quoi (ADR 0301) : les téléphones de chaque personne, découverts ; le téléphone cible n'est plus qu'un repli. */}
-      <QuiRecoit hass={hass} cfg={cfg} save={save} services={services} />
+      {/* L'en-tête de la section, avec sa bascule à droite : « Actives ». */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+          <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: tailleTitre, fontWeight: 500 }}>{tr('Alertes')}</h1>
+          <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{cfg.actif ? tr('Ce que la maison vous dit, et à qui. La sûreté passe toujours.') : tr('Coupées. La maison réagit quand même aux dangers.')}</div>
+        </div>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 2 }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: cfg.actif ? 'var(--o-ok)' : 'var(--o-warn)' }}>{cfg.actif ? tr('Actives') : tr('Coupées')}</span>
+          <Tgl on={!!cfg.actif} cb={() => save({ actif: !cfg.actif })} label={tr('Activer les alertes')} />
+        </span>
+      </div>
+      {refus && (
+        <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 18px', borderRadius: 14, background: 'rgba(var(--o-bad-rgb),.10)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)', fontSize: 12.5, fontWeight: 700, lineHeight: 1.45 }}>
+          <Fi i="triangle-warning" size={15} color="var(--o-bad)" /><span>{refus}</span>
+        </div>
+      )}
 
       {!cfg.actif && (
         <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 18px', borderRadius: 14, background: 'rgba(var(--o-warn-rgb),.10)', border: '1px solid rgba(var(--o-warn-rgb),.45)', color: 'var(--o-warn)', fontSize: 12.5, fontWeight: 700, lineHeight: 1.45 }}>
@@ -613,52 +802,60 @@ function AlertesTele({ hass }) {
         </div>
       )}
 
-      <Panneau titre={tr('Ce qui alerte')} desc={tr('Une famille de capteurs par ligne — reconnue par sa classe, rien à désigner à la main.')}
+      {/* Qui reçoit quoi (ADR 0301) : les téléphones de chaque personne, découverts ; le téléphone de secours n'est plus qu'un repli. */}
+      <QuiRecoit hass={hass} cfg={cfg} save={save} services={services} actif={!!cfg.actif} />
+
+      {/* Entre ces heures, les notifications arrivent en silence — on les lit
+        * au réveil. Une seule chose passe quand même, et par-dessus le mode
+        * silencieux du téléphone : le danger. Fumée, gaz, CO, fuite, alarme. */}
+      <Panneau titre={tr('Le calme')} desc={tr('Pendant ces heures, rien ne sonne ; seul le danger passe.')}
+        droite={<Tgl on={!!cfg.calme.actif} cb={() => save({ calme: { ...cfg.calme, actif: !cfg.calme.actif } })} label={tr('Heures calmes')} />}>
+        {cfg.calme.actif && (<>
+          {frise}
+          <Ligne titre={tr('De')} desc={tr('La plage peut traverser minuit.')}>
+            {heureDebut}
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--o-text3)' }}>{tr('à')}</span>
+            {heureFin}
+          </Ligne>
+        </>)}
+      </Panneau>
+
+      <Panneau titre={tr('Ce qui alerte')} desc={tr('Reconnu par sa classe dans Home Assistant : rien à désigner.')}
         pied={<span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Anti-rafale : {n} min par capteur, sauf l’alarme.', { n: cfg.cooldown_min || 5 })}</span>}>
+        <div style={{ opacity: cfg.actif ? 1 : .5, transition: 'opacity .2s' }}>
         {CATS.map(([k, t, icone, teinte, d]) => (
-          <div key={k} className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 22px', borderTop: FILET, opacity: cfg.actif ? 1 : .5, transition: 'opacity .2s' }}>
-            {carre(icone, teinte)}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700 }}>{t}</div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 }}>{d}</div>
-              {/* Décocher coupe AUSSI la réaction de la maison (audit du 19/10, M22) : la vanne se coupait sur une fuite
-                * décochée. Seulement sous ce qui fait réagir la maison. */}
-              {REAGISSENT.indexOf(k) >= 0 && (
-                <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{tr('Décochée : ni alerte, ni réaction de la maison.')}</div>
-              )}
-            </div>
+          <Ligne key={k} ico={icone} icoFond={teinte ? 'rgba(var(--o-' + teinte + '-rgb),.12)' : 'var(--o-s1)'} icoCouleur={teinte ? 'var(--o-' + teinte + ')' : 'var(--o-text2)'}
+            titre={t} desc={REAGISSENT.indexOf(k) >= 0 ? d + ' · ' + tr('Décochée : ni alerte, ni réaction de la maison.') : d} eteint={sansDetecteur(k, d)}>
+            {/* Décocher coupe AUSSI la réaction de la maison (audit du 19/10, M22). */}
             <Tgl on={!!cfg.categories[k]} cb={() => save({ categories: { ...cfg.categories, [k]: !cfg.categories[k] } })} label={t} />
-          </div>
+          </Ligne>
         ))}
+        </div>
       </Panneau>
 
       {/* La moitié « action » de §18 : sur un danger, la maison réagit
         * d'elle-même — en tête de l'échelle, tenu tant que le danger dure,
         * puis rendu à l'état d'avant. La vanne, elle, reste coupée : une
         * fuite s'inspecte avant de rouvrir (ADR 0022). */}
-      <Panneau titre={tr('La maison réagit')} desc={tr('Sur un danger, sans attendre personne — puis tout revient comme avant, sauf la vanne.')}
+      <Panneau titre={tr('Sur un danger, la maison agit')} desc={tr('Sans attendre personne. Puis tout revient comme avant, sauf la vanne.')}
         droite={<Tgl on={!!cfg.actions.actif} cb={() => save({ actions: { ...cfg.actions, actif: !cfg.actions.actif } })} label={tr('La maison réagit')} />}>
-        <Ligne eteint={actOff} titre={tr('Lumières à 100 %')} desc={tr('Fumée, monoxyde, alarme — pas le gaz : un relais qui claque est une étincelle.')}>
+        <Ligne eteint={actOff} ico="bulb" icoFond="rgba(var(--o-lampe-rgb),.16)" icoCouleur="var(--o-lampe)" titre={tr('Toutes les lumières à 100 %')} desc={tr('Fumée, monoxyde, alarme. Pas le gaz : un relais qui claque est une étincelle.')}>
           <Tgl on={!!cfg.actions.lumieres} cb={() => save({ actions: { ...cfg.actions, lumieres: !cfg.actions.lumieres } })} label={tr('Lumières à 100 %')} />
         </Ligne>
-        <Ligne eteint={actOff} titre={tr('Volets remontés')} desc={tr('Fumée, monoxyde, gaz — les issues, et l’accès des secours.')}>
+        <Ligne eteint={actOff} ico="blinds-open" icoFond="rgba(var(--o-purple-rgb),.16)" icoCouleur="var(--o-purple)" titre={tr('Les volets remontent')} desc={tr('Pour les issues, et l’accès des secours.')}>
           <Tgl on={!!cfg.actions.volets} cb={() => save({ actions: { ...cfg.actions, volets: !cfg.actions.volets } })} label={tr('Volets remontés')} />
         </Ligne>
         {/* « Fermer en cas de fuite » (chantier IoT, étape 3 ; I29) : la bascule a DÉMÉNAGÉ dans la popup de la vanne — un réglage ne se
-          * double pas. Ici, une ligne qui dit sa valeur et où elle se règle ; « Quelle vanne » reste. Sans nommer de filtre (passe bis,
-          * point 16) : une prise désignée se range sous Prises, pas sous IoT. */}
-        <Ligne eteint={actOff} titre={tr('Fermer en cas de fuite')} desc={tr('Se règle dans la popup de la vanne d’eau.')}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--o-text2)' }}>{cfg.actions.vanne.actif ? tr('Activé') : tr('Désactivé')}</span>
+          * double pas. Ici, la vanne choisie et la valeur de la bascule. */}
+        <Ligne eteint={actOff} ico="water" icoFond="rgba(var(--o-cyan-rgb),.16)" icoCouleur="var(--o-cyan)" titre={tr('L’eau se coupe sur une fuite')} desc={tr('Elle se rouvre à la main, jamais seule. La bascule vit dans la popup de la vanne.')}>
+          {choixVanne}{etatVanne}
         </Ligne>
-        <Ligne retrait eteint={actOff || !cfg.actions.vanne.actif} titre={tr('Quelle vanne')} desc={tr('Vide : toutes les vannes d’eau que Home Assistant connaît. Une prise commandée vaut aussi.')}>
-          <ChoixEntite icone="water" label={tr('Entité de la vanne d’eau')} value={vanne} onChange={v => save({ actions: { ...cfg.actions, vanne: { ...cfg.actions.vanne, entite: v } } })}
-            nom={vanne ? nomDe(vanne) : vanneAuto || tr('Aucune vanne d’eau')} ident={vanne || (vannesEau.length ? vannesEau.join(', ') + ' · ' + tr('auto') : tr('rien à couper'))}
-            options={[
-              { id: '', label: tr('Automatique') + (vanneAuto ? ' — ' + vanneAuto : ''), sub: vannesEau.join(', ') || null },
-              ...parNom(vannes).map(x => ({ id: x, label: nomDe(x), sub: x, groupe: tr('Vannes') })),
-              // Tout `switch.*` : une prise, mais aussi un interrupteur — le groupe le dit.
-              ...parNom(prises).map(x => ({ id: x, label: nomDe(x), sub: x, groupe: tr('Prises et interrupteurs') })),
-            ]} />
+      </Panneau>
+
+      <Panneau titre={tr('Où ça part')}>
+        <Ligne ico="mobile-button" titre={tr('Téléphone de secours')} desc={tr('Reçoit la sûreté, et ce qu’aucun téléphone n’a pu recevoir.')} style={{ borderTop: 'none' }}>{choixService}</Ligne>
+        <Ligne ico="bell" titre={tr('Un essai')} desc={msg || tr('Sur le téléphone de secours, pour vérifier qu’il reçoit bien.')}>
+          <button onClick={test} disabled={!cfg.service} style={{ ...btnSecondaire, opacity: cfg.service ? 1 : .45, cursor: cfg.service ? 'pointer' : 'not-allowed' }}>{tr('Envoyer')}</button>
         </Ligne>
       </Panneau>
     </>
@@ -671,13 +868,22 @@ function AlertesTele({ hass }) {
 // Éditeur du code administrateur : défini par `loggia/pin/definir`, jamais lu (18/09).
 // Aperçu vivant du thème (Paramètres → Apparence) : il rend avec les CSS vars COURANTES,
 // donc il suit chaque clic de thème/mode sans plomberie. Valeurs réelles si hass est là.
-function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = LOOK_DEF }) {
-  // Les rayons de l'apercu sont en dur (il doit rester lisible a 264 px) : on les derive
-  // du reglage « Arrondi » pour qu'il montre vraiment ce que donnent Net / Doux / Rond.
-  const RAD = look.radius === 'net' ? [5, 4, 4, 3] : look.radius === 'rond' ? [22, 17, 15, 9] : [16, 11, 10, 6];
+/* L'aperçu de l'Apparence, en bande au-dessus des réglages (maquette v3,
+ * 02/11) : la salutation, l'accent, et trois cartes de la maison. La première
+ * porte le lavis d'une carte allumée, pour que « Teinte d'état » se voie.
+ * Collante sur l'ordinateur seulement (`collante`) : sur une tablette, elle
+ * mangerait la moitié de l'écran en défilant. */
+/* Les couleurs d'accent et les deux collections de thèmes : une seule liste,
+ * pour l'ordinateur et le téléphone. */
+const ACCENTS = [['', 'Du thème'], ['#2dd4bf', 'Cyan'], ['#a78bfa', 'Violet'], ['#f5a524', 'Ambre'], ['#f87171', 'Rouge']];
+const NATIFS = ['', 'projekt', 'saphir', 'acier', 'givre', 'atrium', 'ios', 'google', 'neumorphix'];
+const COMMU = ['frosted', 'onedark', 'dracula', 'github', 'tokyo', 'nightowl', 'plum', 'material', 'lavande'];
+
+function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = LOOK_DEF, collante = false, cartesSeules = false }) {
+  // Les rayons suivent le reglage « Arrondi », pour montrer ce que donnent Net / Doux / Rond.
+  const RAD = look.radius === 'net' ? [6, 4] : look.radius === 'rond' ? [24, 18] : [18, 13];
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const iv = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(iv); }, []);
-  const { resolved: pvRes } = useLoggia();
   const S = (hass && hass.states) || {};
   const rooms = normRooms(cfgVal('loggia_rooms', null));
   const t0 = rooms[0] && rooms[0].haid && rooms[0].haid.temp ? S[rooms[0].haid.temp] : null;
@@ -692,9 +898,6 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
   // Arrondi AVANT l'unité (05/10), comme l'arc solaire : 994,6 W s'écrivait
   // « 995 W » quand 995 donne « 1,0 kW » — `cw` arrive brut de `wattsDe`.
   const conso = cw != null ? (Math.round(Math.abs(cw)) >= 995 ? (Math.abs(cw) / 1000).toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' kW' : Math.round(Math.abs(cw)) + ' W') : '—';
-  const pvAlarm = (pvRes && pvRes.alarm && pvRes.alarm.available) ? pvRes.alarm.main : null;
-  const al = (secAlarm() && S[secAlarm()]) ? S[secAlarm()] : (pvAlarm ? S[pvAlarm] : null);
-  const alTxt = al ? (al.state === 'disarmed' ? tr('désarmée') : al.state.indexOf('armed') === 0 ? tr('armée') : al.state) : '—';
   const h = now.getHours();
   // Les memes mots que l'Accueil, traduits — l'apercu montrait « Bonjour,
   // Administrateur » en francais au milieu de l'italien (retour du 23/09).
@@ -707,39 +910,36 @@ function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = L
   const ligneTheme = themeMode === 'light'
     ? tr('Thème « {nom} » · mode clair.', { nom: nomTheme })
     : tr('Thème « {nom} » · mode foncé.', { nom: nomTheme });
-  const tile = (v, l, c) => (
-    <div key={l} style={{ background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: RAD[2], padding: '9px 11px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 4, background: c, flexShrink: 0 }} /><span style={{ fontSize: 12, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span></div>
-      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--o-text3)', marginTop: 3 }}>{l}</div>
+  // Le lavis d'une carte allumee, a la force choisie dans « Teinte d'état ».
+  const force = { sans: 0, discrete: .1, douce: .2, pleine: .32 }[look.tint || 'douce'] ?? .2;
+  const lave = (rgb) => force ? 'linear-gradient(180deg,rgba(var(' + rgb + '),' + force + '),rgba(var(' + rgb + '),' + (force / 4) + ') 72%),linear-gradient(180deg,var(--o-surfA),var(--o-surfB))' : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';
+  const carte = (ico, nom, etat, c, rgb, allumee) => (
+    <div key={nom} style={{ flex: '0 1 150px', minWidth: cartesSeules ? 0 : 118, padding: cartesSeules ? 12 : '11px 12px', borderRadius: cartesSeules ? 16 : RAD[1], background: allumee ? lave(rgb) : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid ' + (allumee && force ? 'rgba(var(' + rgb + '),.26)' : 'var(--o-bd2)'), boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', display: 'flex', flexDirection: cartesSeules ? 'row' : 'column', alignItems: cartesSeules ? 'center' : 'stretch', gap: cartesSeules ? 10 : 12, minHeight: 0 }}>
+      <span style={{ width: 28, height: 28, borderRadius: 9, background: 'rgba(var(' + rgb + '),.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i={ico} size={13} color={c} /></span>
+      <span style={{ lineHeight: 1.25, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 12.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nom}</span>
+        <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--o-text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{etat}</span>
+      </span>
+    </div>
+  );
+  if (cartesSeules) return (
+    <div aria-hidden="true" style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,200px))', gap: 10, marginTop: 12 }}>
+      {carte('bulb', tr('Lumières'), trN(lightsOn, '{n} allumée', '{n} allumées'), 'var(--o-lampe)', '--o-lampe-rgb', true)}
+      {carte('temperature-high', rooms[0] ? rooms[0].room : tr('Pièce'), temp, 'var(--o-orange)', '--o-orange-rgb', false)}
     </div>
   );
   return (
-    <div className="o-par-preview" style={{ position: 'sticky', top: 20 }}>
-      <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', color: 'var(--o-text3)', padding: '2px 2px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>{tr('APERÇU')}<span style={{ flex: 1, height: 1, background: 'var(--o-bd3)' }} /></div>
-      <div style={{ background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: RAD[0], padding: 13, boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <span style={{ width: 20, height: 20, borderRadius: 10, background: 'linear-gradient(135deg,var(--o-ok),var(--o-accent))', flexShrink: 0 }} />
-          <span style={{ fontSize: 12, fontWeight: 800 }}>Loggia</span>
-          <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>{now.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}</span>
-        </div>
-        <div style={{ background: 'var(--o-s3)', border: 'var(--o-bw,1px) solid var(--o-bd3)', borderRadius: RAD[1], padding: '10px 12px', marginBottom: 9 }}>
-          <div style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 15, fontWeight: 500 }}>{greet}{userName ? ', ' + nomProfil(userName) : ''}</div>
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--o-text3)', marginTop: 2 }}>{tr("l'aperçu suit le thème choisi")}</div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 9 }}>
-          {tile(temp, rooms[0] ? rooms[0].room : tr('Pièce'), 'var(--o-orange)')}
-          {tile(trN(lightsOn, '{n} allumée', '{n} allumées'), tr('Lumières'), 'var(--o-gold)')}
-          {tile(conso, tr('Consommation'), 'var(--o-ok)')}
-          {tile(alTxt, tr('Alarme'), 'var(--o-accent)')}
-        </div>
-        <div style={{ display: 'flex', gap: 4 }}>
-          <span style={{ flex: 1.4, height: 14, borderRadius: RAD[3], background: 'var(--o-accent-fond)', opacity: .85 }} />
-          <span style={{ flex: 1, height: 14, borderRadius: RAD[3], background: 'var(--o-s1)' }} />
-          <span style={{ flex: 1, height: 14, borderRadius: RAD[3], background: 'var(--o-s2)' }} />
-          <span style={{ flex: 1, height: 14, borderRadius: RAD[3], background: 'var(--o-s3)' }} />
-        </div>
+    <div className="o-par-preview" role="img" aria-label={tr('Aperçu') + ' · ' + ligneTheme}
+      style={{ position: collante ? 'sticky' : 'relative', top: collante ? 'calc(var(--o-safe-top,0px) + 12px)' : 'auto', zIndex: collante ? 6 : 'auto', overflow: 'hidden', borderRadius: RAD[0], background: 'var(--o-bg)', border: 'var(--o-bw,1px) solid var(--o-bd1)', boxShadow: '0 18px 40px -24px rgba(0,0,0,.6)', padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+      <div aria-hidden="true" style={{ position: 'absolute', inset: 0, background: 'var(--o-bggrad)', opacity: .55, pointerEvents: 'none' }} />
+      <div style={{ position: 'relative', flex: '1 1 180px', minWidth: 0 }}>
+        <div style={{ ...CAPITALES, fontSize: 10, color: 'var(--o-text2)' }}>{tr('Aperçu')} · {nomTheme} · {themeMode === 'light' ? tr('Clair') : themeMode === 'auto' ? tr('Auto') : tr('Foncé')}</div>
+        <div style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontWeight: 500, fontSize: 23, lineHeight: 1.15, marginTop: 4 }}>{greet}{userName ? ', ' + nomProfil(userName) : ''}</div>
+        <div style={{ display: 'inline-flex', marginTop: 10, padding: '7px 12px', borderRadius: RAD[1] / 1.6, background: 'var(--o-accent-fond)', color: '#fff', fontSize: 11.5, fontWeight: 800 }}>{tr('Accent')}</div>
       </div>
-      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', padding: '8px 2px 0' }}>{ligneTheme}</div>
+      {carte('bulb', tr('Lumières'), trN(lightsOn, '{n} allumée', '{n} allumées'), 'var(--o-lampe)', '--o-lampe-rgb', true)}
+      {carte('temperature-high', rooms[0] ? rooms[0].room : tr('Pièce'), temp, 'var(--o-orange)', '--o-orange-rgb', false)}
+      {carte('bolt', tr('Consommation'), conso, 'var(--o-ok)', '--o-ok-rgb', false)}
     </div>
   );
 }
@@ -807,7 +1007,7 @@ function ResetLoggiaBtn() {
     }
     window.location.reload();
   };
-  return <button disabled={enCours} onClick={() => { if (arm) doReset(); else setArm(true); }} style={{ ...btnDanger, flexShrink: 0, background: arm ? 'var(--o-bad)' : 'transparent', color: arm ? '#fff' : 'var(--o-bad)', transition: 'background .2s, color .2s' }}>{etape === 'raz' ? tr('Remise à zéro…') : enCours ? tr('Sauvegarde…') : arm ? tr('Confirmer ?') : tr('Réinitialiser…')}</button>;
+  return <button disabled={enCours} onClick={() => { if (arm) doReset(); else setArm(true); }} style={{ ...btnDanger, flexShrink: 0, background: arm ? 'var(--o-bad)' : 'transparent', color: arm ? '#fff' : 'var(--o-bad)', transition: 'background .2s, color .2s' }}>{etape === 'raz' ? tr('Remise à zéro…') : enCours ? tr('Sauvegarde…') : arm ? tr('Confirmer ?') : tr('Remettre à zéro…')}</button>;
 }
 
 /* Ce qu'un echec veut dire, dans la langue de l'ecran.
@@ -913,17 +1113,52 @@ function ImportConfigBtn() {
   );
 }
 
-function AdminPinEditor({ hass }) {
-  /* Le code suit la MAISON (03/09) et, depuis le 18/09, il est HACHÉ par le
-   * composant : l'écran ne le lit jamais — il sait seulement s'il est défini
-   * (`loggia_admin_pin_defini`) — et ne l'écrit que par sa commande, réservée
-   * aux administrateurs Home Assistant. Un seul code, partout. */
+/* Le pas à pas d'une marge, au téléphone (maquette v4). */
+const PasTel = ({ px, auto, onStep, label }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: 3, borderRadius: 10, background: 'var(--o-s1)' }}>
+    <button type="button" onClick={() => onStep(-2)} aria-label={tr('Réduire') + ' ' + label} style={{ width: 28, height: 26, borderRadius: 8, border: 'none', cursor: 'pointer', background: 'transparent', color: 'var(--o-text1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="minus-small" size={14} /></button>
+    <span style={{ minWidth: 58, textAlign: 'center', fontSize: 12, fontWeight: 800, color: auto ? 'var(--o-text2)' : 'var(--o-text)' }}>{auto ? tr('Auto') : Math.round(px) + ' px'}</span>
+    <button type="button" onClick={() => onStep(2)} aria-label={tr('Augmenter') + ' ' + label} style={{ width: 28, height: 26, borderRadius: 8, border: 'none', cursor: 'pointer', background: 'transparent', color: 'var(--o-text1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="plus-small" size={14} /></button>
+  </div>
+);
+
+/* « Ajouter un profil » au téléphone (maquette v4) : un prénom, et c'est fait.
+ * Le profil arrive en Famille, sans autorisation ; il s'ajuste ensuite dans
+ * son éditeur, comme tout profil. */
+function AjoutProfilTel({ onAjouter }) {
+  const [nom, setNom] = useState('');
+  const n = nom.trim();
+  return (
+    <CarteTel chip="user" chipFond="rgba(var(--o-accent-rgb),.16)" chipCouleur="var(--o-accent)" titre={tr('Ajouter un profil')}
+      desc={tr('L’utilisateur Home Assistant connecté est reconnu automatiquement ; un profil sans compte sert aux écrans partagés.')}>
+      <LignesTel>
+        <LigneTel titre={tr('Prénom')}>
+          <input aria-label={tr('Prénom')} placeholder={tr('Prénom')} value={nom} maxLength={30} onChange={e => setNom(e.target.value)}
+            style={{ width: 170, maxWidth: '100%', boxSizing: 'border-box', padding: '8px 11px', borderRadius: 10, border: '1px solid var(--o-bd1)', background: 'var(--o-s2)', color: 'var(--o-text)', font: 'inherit', fontSize: 12, fontWeight: 700 }} />
+          <button type="button" disabled={!n} onClick={() => { onAjouter(n); setNom(''); }} style={{ ...btnTel, background: 'var(--o-accent-fond)', color: '#fff', opacity: n ? 1 : .45, cursor: n ? 'pointer' : 'not-allowed' }}>{tr('Ajouter')}</button>
+        </LigneTel>
+      </LignesTel>
+    </CarteTel>
+  );
+}
+
+/* Le panneau « Accès » des Profils (maquette v3, 02/11) : ce qui protège les
+ * réglages de la maison, en trois lignes. Le code se règle dans une feuille.
+ *
+ * Le code suit la MAISON (03/09) et, depuis le 18/09, il est HACHÉ par le
+ * composant : l'écran ne le lit jamais — il sait seulement s'il est défini
+ * (`loggia_admin_pin_defini`) — et ne l'écrit que par sa commande, réservée
+ * aux administrateurs Home Assistant. Un seul code, partout. */
+function AdminPinEditor({ hass, admin = false, users = [], tel = false }) {
   const [defini, setDefini] = useState(() => cfgVal('loggia_admin_pin_defini', false) === true);
+  const [ouvert, setOuvert] = useState(false);
   const [np, setNp] = useState('');
   const [cf, setCf] = useState('');
   const [msg, setMsg] = useState(null);
   const [enCours, setEnCours] = useState(false);
   const dg = v => v.replace(/\D/g, '').slice(0, 8);
+  const pret = np.length >= 4 && np === cf;
+  const fermer = () => { setOuvert(false); setNp(''); setCf(''); setMsg(null); };
   const save = async () => {
     if (np.length < 4) { setMsg({ ok: false, t: tr('Le code fait de 4 à 8 chiffres.') }); return; }
     if (np !== cf) { setMsg({ ok: false, t: tr('Les deux codes ne correspondent pas.') }); return; }
@@ -932,34 +1167,63 @@ function AdminPinEditor({ hass }) {
     setEnCours(true);
     try {
       await h.callWS({ type: 'loggia/pin/definir', pin: np });
-      setDefini(true); setNp(''); setCf(''); setMsg({ ok: true, t: tr('Code administrateur mis à jour — le même sur tous les appareils.') });
+      setDefini(true); setNp(''); setCf(''); setOuvert(false); setMsg({ ok: true, t: tr('Code administrateur mis à jour — le même sur tous les appareils.') });
     } catch (e) {
       setMsg({ ok: false, t: e && e.code === 'unauthorized' ? tr('Réservé aux administrateurs.') : ((e && (e.message || e.code)) || tr('Enregistrement impossible.')) });
     } finally { setEnCours(false); }
   };
-  const inp = { width: '100%', padding: '11px 14px', borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 17, fontWeight: 700, letterSpacing: '.3em', textAlign: 'center', fontFamily: 'ui-monospace,monospace', boxSizing: 'border-box' };
-  const champ = { ...CAPITALES, marginBottom: 7 };
+  const inp = { width: 170, maxWidth: '100%', padding: '9px 12px', borderRadius: 10, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontSize: 15, fontWeight: 700, letterSpacing: '.3em', textAlign: 'center', fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace' };
+  const enfants = users.filter(u => u && u.role === 'Enfant');
+  const comptes = users.filter(u => u && u.haId).length;
+  const compte = { fontSize: 13, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' };
+  const statut = <div role="status" style={msg ? { fontSize: 12, fontWeight: 700, color: msg.ok ? 'var(--o-ok)' : 'var(--o-bad)', padding: tel ? 0 : '0 22px 18px' } : undefined}>{msg ? msg.t : ''}</div>;
   return (
-    <Panneau niveau={defini ? null : 'alerte'}
-      titre={<span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span aria-hidden="true" style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: defini ? 'var(--o-s1)' : 'rgba(var(--o-warn-rgb),.16)' }}><Fi i="key" size={15} color={defini ? 'var(--o-text2)' : 'var(--o-warn)'} /></span>
-        {tr('Code administrateur')}
-      </span>}
-      desc={<span style={{ display: 'block', paddingLeft: 44 }}>{tr('Requis pour basculer vers un profil Admin, et vérifié par le composant. Haché, jamais affiché — le même sur tous les appareils.')}</span>}
-      droite={defini ? <Pastille niveau="ok" icone="check">{tr('Code défini')}</Pastille> : <Pastille niveau="alerte" icone="triangle-warning">{tr('Pas encore défini')}</Pastille>}>
-      <div className="grid-par-pin" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr) auto', gap: 14, alignItems: 'end', padding: '4px 22px 20px' }}>
-        <div><div style={champ}>{tr('Nouveau code')}</div><input aria-label={tr('Nouveau code')} value={np} onChange={e => { setNp(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" type="password" autoComplete="new-password" style={inp} /></div>
-        <div><div style={champ}>{tr('Confirmer')}</div><input aria-label={tr('Confirmer le nouveau code')} value={cf} onChange={e => { setCf(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" type="password" autoComplete="new-password" style={inp} /></div>
-        <button onClick={save} disabled={enCours} style={{ ...btnPrimaire, padding: '12px 20px', opacity: enCours ? .6 : 1 }}>{tr('Enregistrer le code')}</button>
-      </div>
-      {/* Le refus se DIT (audit du 03/10, règle de l'ADR 0107) : monté avec son
-        * texte, ce `status` ne s'annonçait pas — et c'est lui qui répondait au
-        * bouton quand le composant refusait le code (administrateurs
-        * seulement, enregistrement impossible). La région reste montée ;
-        * vide, elle ne prend aucune place, et c'est son texte qui change. Un
-        * seul nœud : rien ne se lit deux fois. */}
-      <div role="status" style={msg ? { padding: '0 22px 18px', fontSize: 12, fontWeight: 700, color: msg.ok ? 'var(--o-ok)' : 'var(--o-bad)' } : undefined}>{msg ? msg.t : ''}</div>
-    </Panneau>
+    <>
+      {tel ? (
+        /* Le téléphone (maquette v4) : une carte, le bouton dessous. */
+        <CarteTel chip="key" chipFond={defini ? 'rgba(var(--o-ok-rgb),.16)' : 'rgba(var(--o-warn-rgb),.16)'} chipCouleur={defini ? 'var(--o-ok)' : 'var(--o-warn)'}
+          titre={tr('Code administrateur')} desc={defini ? tr('Défini. Haché par l’intégration, jamais renvoyé à un écran.') : tr('Pas encore défini : n’importe quel écran peut passer sur un profil administrateur.')}>
+          <div><button type="button" disabled={!admin} onClick={() => setOuvert(true)} style={{ ...btnTel, padding: '9px 14px', fontSize: 12, opacity: admin ? 1 : .45, cursor: admin ? 'pointer' : 'not-allowed' }}>{defini ? tr('Changer le code') : tr('Définir le code')}</button></div>
+          {!ouvert && statut}
+        </CarteTel>
+      ) : (
+      <Panneau titre={tr('Accès')} desc={tr('Ce qui protège les réglages de la maison.')}>
+        <Ligne ico="key" icoFond={defini ? 'rgba(var(--o-ok-rgb),.16)' : 'rgba(var(--o-warn-rgb),.16)'} icoCouleur={defini ? 'var(--o-ok)' : 'var(--o-warn)'}
+          titre={tr('Code administrateur')}
+          desc={defini ? tr('Défini. Demandé pour passer un écran sur un profil administrateur ; haché par le composant, le même partout.') : tr('Pas encore défini : n’importe quel écran peut passer sur un profil administrateur.')}>
+          <button type="button" disabled={!admin} onClick={() => setOuvert(true)}
+            style={{ ...(defini ? btnSecondaire : btnPrimaire), opacity: admin ? 1 : .45, cursor: admin ? 'pointer' : 'not-allowed' }}>{defini ? tr('Changer') : tr('Définir le code')}</button>
+        </Ligne>
+        <Ligne ico="child-head" icoFond="rgba(var(--o-cyan-rgb),.16)" icoCouleur="var(--o-cyan)" titre={tr('Mode enfant')}
+          desc={(enfants.length ? enfants.map(u => u.name).join(', ') + ' · ' : '') + tr('L’écran est tenu par le serveur ; le code de la maison rouvre les réglages du parent.')}>
+          <span style={compte}>{trN(enfants.length, '{n} profil', '{n} profils')}</span>
+        </Ligne>
+        <Ligne ico="user" titre={tr('Compte Home Assistant')} desc={tr('Chaque compte retrouve son profil tout seul. Ici, on ne corrige que les noms et les rôles.')}>
+          <span style={compte}>{trN(comptes, '{n} compte', '{n} comptes')}</span>
+        </Ligne>
+        {/* Le refus se DIT (audit du 03/10, règle de l'ADR 0107) : monté avec son
+          * texte, ce `status` ne s'annonçait pas. La région reste montée ;
+          * vide, elle ne prend aucune place, et c'est son texte qui change. Un
+          * seul nœud à la fois : rien ne se lit deux fois. */}
+        {!ouvert && statut}
+      </Panneau>
+      )}
+      {ouvert && (
+        <BottomSheet onClose={fermer} title={defini ? tr('Changer le code') : tr('Définir le code')}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)', lineHeight: 1.45, marginBottom: 6 }}>{tr('De 4 à 8 chiffres. Haché par le composant, jamais affiché.')}</div>
+          <Ligne titre={tr('Le code')} style={{ padding: '14px 0', borderTop: 'none' }}>
+            <input aria-label={tr('Nouveau code')} value={np} onChange={e => { setNp(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" type="password" autoComplete="new-password" style={inp} />
+          </Ligne>
+          <Ligne titre={tr('Encore une fois')} desc={cf && cf !== np ? tr('Ce n’est pas le même.') : null} descCouleur="var(--o-warn)" style={{ padding: '14px 0' }}>
+            <input aria-label={tr('Confirmer le nouveau code')} value={cf} onChange={e => { setCf(dg(e.target.value)); setMsg(null); }} inputMode="numeric" placeholder="••••" type="password" autoComplete="new-password" style={inp} />
+          </Ligne>
+          <div role="status" style={msg ? { padding: '4px 0 10px', fontSize: 12, fontWeight: 700, color: msg.ok ? 'var(--o-ok)' : 'var(--o-bad)' } : undefined}>{msg ? msg.t : ''}</div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+            <button type="button" onClick={save} disabled={enCours || !pret} style={{ ...btnPrimaire, opacity: enCours || !pret ? .5 : 1, cursor: enCours || !pret ? 'not-allowed' : 'pointer' }}>{tr('Enregistrer')}</button>
+          </div>
+        </BottomSheet>
+      )}
+    </>
   );
 }
 
@@ -1827,12 +2091,18 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
    *
    * `hub` reste le point de depart d'un onglet neuf : la memoire est propre a
    * la session, et on n'ouvre pas Loggia le lendemain au milieu d'un reglage. */
-  const [tab, setTab] = useState(() => {
+  const [tabEtat, setTab] = useState(() => {
     try { return window.sessionStorage.getItem('loggia-par-section') || 'hub'; } catch { return 'hub'; }
   });
   useEffect(() => {
-    try { window.sessionStorage.setItem('loggia-par-section', tab); } catch { /* stockage indisponible */ }
-  }, [tab]);
+    try { window.sessionStorage.setItem('loggia-par-section', tabEtat); } catch { /* stockage indisponible */ }
+  }, [tabEtat]);
+  // Le rail des sections : écran large seulement ; plus étroit au doigt (maquette v3).
+  const avecRail = useWide(1024);
+  const railEtroit = useCoarse();
+  /* Au téléphone, pas de sommaire ni de bouton retour (maquette v4) : des
+   * onglets en puces, et la page s'ouvre sur Apparence. */
+  const tab = !avecRail && tabEtat === 'hub' ? 'apparence' : tabEtat;
   /* Le focus suit la section (audit du 03/10). La tuile du sommaire et le
    * retour « ‹ Paramètres » disparaissent avec l'écran qu'ils quittent : le
    * focus tombait sur <body>, et la tabulation repartait du haut de la page.
@@ -1992,9 +2262,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
    * lignes ne prolonge plus un refus. */
   const [autoOv, demanderAuto] = useDemandes();
   const autoCall = (svc, id) => commanderService(hass, id, 'automation', svc, { entity_id: id });
-  // ── Entités (config du dashboard) : leur compte, pour « À propos ». Elles se règlent dans la fiche de chaque vue. ──
-  const { ent } = useEntConfig(hass);
-  const entIds = [...ent.rooms.flatMap(r => [r.temp, r.humidity, r.co2]), ent.energy.consoNow, ent.energy.surplusNow, ent.energy.solarOutput, ent.alarm, ...ent.people.map(x => x.haid), ...ent.switches.map(x => x.haid), ...ent.cams.map(x => x.haid), ...ent.medias.flatMap(x => [x.haid, x.ma])].filter(Boolean);
   const [cvEditing, setCvEditing] = useState(null); // null | 'new' | objet vue custom
   // Veille : diaporama photos + réveil caméra — par appareil, lus par AmbientOverlay au montage.
   // Aperçu du nouvel accueil : par appareil, réversible — l'ancien reste le défaut.
@@ -2030,6 +2297,10 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const toggleAmbPhotos = () => setAmbPhotos(v => { const n = !v; try { localStorage.setItem('loggia-ambphotos', n ? '1' : '0'); } catch {} return n; });
   const [ambMotion, setAmbMotion] = useState(() => { try { return localStorage.getItem('loggia-ambmotion') === '1'; } catch { return false; } });
   const toggleAmbMotion = () => setAmbMotion(v => { const n = !v; try { localStorage.setItem('loggia-ambmotion', n ? '1' : '0'); } catch {} return n; });
+  // La caméra en grand quand on sonne (ADR 0312) : par écran, décochée par défaut ; proposée seulement s'il y a une sonnette à caméra.
+  const [camSonnette, setCamSonnette] = useState(sonnetteEnGrand);
+  const toggleCamSonnette = () => setCamSonnette(v => { const n = !v; try { localStorage.setItem(CLE_SONNETTE_GRAND, n ? '1' : '0'); } catch {} return n; });
+  const aSonnette = evenementsPorte(LOGGIA_INDEX).some(e => e.genre === 'sonnette' && e.camera);
   // ── Mises à jour (entités update.*) : install avec confirmation 2 temps, skip, progression ──
   const [updConfirm, setUpdConfirm] = useState(null); // id en attente de confirmation
   const [updBusy, setUpdBusy] = useState({}); // id → timestamp : « Installation… » optimiste dès le clic (HA met du temps à passer in_progress)
@@ -2086,10 +2357,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const depuisMin = (m) => m < 1 ? tr('à l’instant') : m < 60 ? tr('il y a {n} min', { n: Math.round(m) }) : m < 1440 ? tr('il y a {n} h', { n: Math.round(m / 60) }) : tr('il y a {n} j', { n: Math.round(m / 1440) });
   const autoRel = (t) => { try { if (!t) return ''; const ms = new Date(t).getTime(); return Number.isFinite(ms) ? depuisMin((Date.now() - ms) / 60000) : ''; } catch { return ''; } };
   const autos = (hass && hass.states) ? Object.keys(hass.states).filter(e => e.indexOf('automation.') === 0).map(id => { const s = hass.states[id], at = s.attributes || {}; return { id, name: at.friendly_name || id.replace('automation.', '').replace(/_/g, ' '), on: enVol(autoOv, id, s, s.state === 'on'), last: at.last_triggered }; }).sort((a, b) => comparerTextes(a.name, b.name)) : [];
-  const tabStyle = on => on
-    ? { padding: '9px 18px', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#fff', flexShrink: 0, whiteSpace: 'nowrap' }
-    : { padding: '9px 18px', borderRadius: 14, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text1)', flexShrink: 0, whiteSpace: 'nowrap' };
-  const cardSt = { background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: '18px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.36))' };
 
   // Combien de boutons sont deja regles : le chiffre du sommaire. Lu une
   // fois a l'ouverture — la section, elle, sonde en continu quand on y est.
@@ -2230,12 +2497,12 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
    * (maquettes du 18/09). Chaque section le dit a sa facon ; par defaut, sa
    * phrase du sommaire. */
   const enTete = (() => {
-    const moi = users[userIdx] || {};
     if (tab === 'users') return {
-      sous: trN(users.length, '{n} profil du foyer', '{n} profils du foyer') + (moi.name ? ' · ' + tr('vous êtes {nom}', { nom: moi.name }) : ''),
-      droite: isAdmin ? <button onClick={() => setEditing({ i: null })} style={btnPrimaire}>{tr('Ajouter un profil')}</button> : null,
+      sous: tr('Ceux qui vivent ici. Un profil suit la personne, sur tous ses écrans.'),
+      droite: null,
     };
-    if (tab === 'apparence') return { sous: tr('Thème, couleurs, effets'), droite: null };
+    if (tab === 'appareils') return { sous: tr('Chaque écran garde son rangement ; le contenu, lui, se synchronise.'), droite: null };
+    if (tab === 'apparence') return { sous: tr('Pour vous, sur ce type d’écran. Tout s’applique tout de suite.'), droite: null };
     if (tab === 'inter') {
       const c = compteInter;
       const t = c ? trN(c.telecommandes, '{n} télécommande', '{n} télécommandes') : null;
@@ -2288,7 +2555,14 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     if (tab === 'regles') {
       // Douze regles : volets 4, chauffage 1, depart 1, nuit 3, veilles 3.
       const total = 12;
-      return { sous: tr('Ce que Loggia fait tout seul') + ' · ' + (nbVolRegles > 1 ? tr('{a} règles actives sur {t}', { a: nbVolRegles, t: total }) : tr('{a} règle active sur {t}', { a: nbVolRegles, t: total })), droite: null };
+      const { actifs } = etatObservation(observe);
+      return {
+        sous: tr('Ce que la maison fait seule') + ' · ' + (nbVolRegles > 1 ? tr('{a} règles actives sur {t}', { a: nbVolRegles, t: total }) : tr('{a} règle active sur {t}', { a: nbVolRegles, t: total })),
+        droite: <>
+          <span style={{ fontSize: 13, fontWeight: 700 }}>{tr('Observer sans agir')}</span>
+          <Tgl on={actifs.length > 0} cb={basculerObserve} off={!observe} label={tr('Observer sans agir')} />
+        </>,
+      };
     }
     if (tab === 'vues') {
       const c = readViewsCfg();
@@ -2308,266 +2582,493 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   })();
   // Bandeau d'une section : volontairement LEGER (1 a 2 groupes) — entasser dix reglages
 
-  return (
-    <div ref={racineRef} className="loggia-content" style={{ padding: '26px 28px 56px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {tab === 'hub' ? (
-        <>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
-            <div style={{ minWidth: 0 }}>
-              <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Paramètres')}</h1>
-              <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{tr('Réglages de Loggia')} · {trN(users.length, '{n} profil du foyer', '{n} profils du foyer')}</div>
-            </div>
-            <span style={{ flex: 1 }} />
-            {upsAvail > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: 'rgba(var(--o-warn2-rgb),.14)', color: 'var(--o-warn2)' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--o-warn2)' }} />{trN(upsAvail, '{n} MISE À JOUR', '{n} MISES À JOUR')}</span>}
-          </div>
+  /* Le rail et la vue d'ensemble (maquette « Loggia Prototype v3 », 02/11).
+   * Sur un écran large, les sections vivent dans un rail à gauche, rangées en
+   * trois groupes ; le sommaire n'est plus une grille de tuiles mais ce qui
+   * mérite un œil, puis une ligne par section. Au téléphone, rien ne change. */
+  /* Le menu des langues, le même à l'ordinateur et au téléphone : seul son
+   * déclencheur change d'habit. */
+  const menuLangue = (style) => (
+      <ListeChoix label={tr('Langue')} value={choixLangue()}
+        options={languesDisponibles(hass).map(l => ({
+          id: l.code,
+          label: l.code === 'auto' ? tr('Suivre Home Assistant') : l.nom,
+          sub: l.enFrancais ? tr(l.enFrancais) : undefined,
+        }))}
+        style={style}
+        onChange={v => {
+          /* Pas de rechargement : les listes sont des fonctions, elles
+           * se disent dans la langue du moment, un redessin suffit. */
+          cfgSet({ 'loggia-langue': v });
+          // La racine ecoute : elle rappelle `preparerLangue` puis redessine.
+          try { window.dispatchEvent(new CustomEvent('loggia-langue-changee')); } catch {}
+          /* SAUF en démonstration (23/09) : la maison factice nomme ses
+           * pièces au démarrage, et les renommer à chaud demanderait de
+           * la rebâtir entière — ces noms sont aussi des clés. On
+           * recharge donc avec la langue dans l'URL. Le magasin mémoire
+           * repart à neuf à chaque chargement de toute façon, et le lien
+           * devient partageable. Une vraie installation, elle, tient ses
+           * noms de Home Assistant : rien à recharger. */
+          if (typeof window !== 'undefined' && window.__loggiaDemo) {
+            try {
+              /* La vue courante survit au rechargement par
+               * `sessionStorage`. Si c'est une PIÈCE, son nom vient de
+               * changer : gardée telle quelle, elle rouvrirait une
+               * pièce qui n'existe plus, vide et intitulée dans
+               * l'ancienne langue. On revient à l'Accueil. */
+              const vue = window.sessionStorage.getItem('loggia-vue') || '';
+              if (vue.indexOf('room:') === 0) window.sessionStorage.setItem('loggia-vue', 'accueil');
+            } catch { /* rien */ }
+            try {
+              const u = new URL(window.location.href);
+              if (v === 'auto') u.searchParams.delete('lang');
+              else u.searchParams.set('lang', v);
+              window.location.replace(u.toString());
+            } catch { /* rien : le redessin a déjà eu lieu */ }
+          }
+        }} />
+  );
+  const GROUPES_PAR = [
+    ['moi', tr('Pour moi'), ['users', 'apparence']],
+    ['maison', tr('La maison'), ['regles', 'alertes', 'inter', 'auto']],
+    ['systeme', tr('Le système'), ['connexion', 'maj', 'appareils', 'vues', 'about']],
+  ].map(([id, l, ids]) => ({ id, l, secs: ids.map(s => SECTIONS.find(x => x.id === s)).filter(Boolean) })).filter(g => g.secs.length);
+  const NOM_RAIL = { regles: tr('Règles'), vues: tr('Menu'), appareils: tr('Écrans'), connexion: tr('Connexion') };
+  const resumeSection = (sec) => (sec.small ? sec.big : sec.big + ' ' + sec.unit) + ' · ' + sec.sub;
+  const prenom = nomProfil((users[userIdx] || {}).name || '');
+  /* « À regarder » : seulement ce que cette page sait VRAIMENT, et que l'on
+   * règle depuis elle. Rien à regarder, pas de panneau. */
+  const aRegarder = [
+    isAdmin && upsAvail > 0 && { ico: 'refresh', k: 'warn2', titre: trN(upsAvail, '{n} mise à jour en attente', '{n} mises à jour en attente'), desc: tr('Firmwares et modules'), vers: 'maj', bouton: tr('Voir') },
+    isAdmin && cfgVal('loggia_admin_pin_defini', false) !== true && { ico: 'key', k: 'warn', titre: tr('Le code administrateur n’est pas défini'), desc: tr('Il se règle dans Profils.'), vers: 'users', bouton: tr('Le définir') },
+    !hass && { ico: 'link', k: 'bad', titre: tr('Session Home Assistant absente'), desc: tr('Les réglages ne peuvent pas être enregistrés.'), vers: 'connexion', bouton: tr('Voir') },
+  ].filter(Boolean);
+  const ligneSection = (sec, premier) => (
+    <button key={sec.id} data-section={sec.id} onClick={() => setTab(sec.id)} style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%', padding: '14px 22px', border: 'none', borderTop: premier ? 'none' : FILET, background: 'transparent', color: 'inherit', font: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
+      <span style={{ width: 34, height: 34, borderRadius: 11, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: sec.bg }}><Fi i={sec.ico} size={15} color={sec.col} /></span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700 }}>{sec.long || sec.name}</span>
+        <span style={{ display: 'block', fontSize: 12, fontWeight: 600, lineHeight: 1.45, marginTop: 2, color: 'var(--o-text2)' }}>{resumeSection(sec)}</span>
+      </span>
+      {sec.id === 'maj' && upsAvail > 0 && <Pastille niveau="alerte" capitales>{String(upsAvail)}</Pastille>}
+      <span aria-hidden="true" style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)' }}><Fi i="angle-small-right" size={13} color="var(--o-text1)" /></span>
+    </button>
+  );
+  const railItem = (id, l, ico, col) => {
+    const on = tab === id;
+    const badge = id === 'maj' && upsAvail > 0 ? String(upsAvail) : '';
+    return (
+      <button key={id} onClick={() => setTab(id)} aria-current={on ? 'page' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 11, width: '100%', padding: '9px 10px', borderRadius: 11, border: 'none', cursor: 'pointer', font: 'inherit', fontSize: 13, fontWeight: on ? 800 : 600, textAlign: 'left', background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text1)', transition: 'background .2s, color .2s' }}>
+        <Fi i={ico} size={14} color={on ? '#fff' : col} />
+        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l}</span>
+        {badge && <span style={{ minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 9, fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'rgba(255,255,255,.25)' : 'rgba(var(--o-warn2-rgb),.2)', color: on ? '#fff' : 'var(--o-warn2)' }}>{badge}</span>}
+      </button>
+    );
+  };
 
-          {/* Pas de barre « Mode Sombre / Clair » ici (retiree le 17/09) : le
-            * reglage vit dans Apparence, avec le theme qu'il accompagne. */}
-          <div style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Toutes les sections')}</div>
-          <div className="grid-parsections" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(210px,1fr))', gap: 16 }}>
-            {SECTIONS.map(sec => (
-              <button key={sec.id} data-section={sec.id} onClick={() => setTab(sec.id)} style={{ textAlign: 'left', cursor: 'pointer', padding: '16px 17px', borderRadius: 18, background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: sec.bg }}><Fi i={sec.ico} size={15} color={sec.col} /></span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 800 }}>{tr(sec.name)}</div>
-                    {/* Deux lignes, hauteur RÉSERVÉE (audit du 03/10) : sur
-                      * une seule, six sous-titres sur dix finissaient en « … »
-                      * à 1440 px ; réservée, la grande valeur tombe au même
-                      * endroit dans toutes les cartes d'une rangée. */}
-                    <div style={{ fontSize: 11, fontWeight: 600, lineHeight: 1.35, minHeight: '2.7em', color: 'var(--o-text3)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{sec.sub}</div>
-                  </div>
-                  {sec.dot && <span style={{ width: 7, height: 7, borderRadius: '50%', background: sec.col, flexShrink: 0 }} />}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
-                  {/* La valeur ne se coupe jamais (« notify » finissait en
-                    * « no… ») : c'est l'unité, à côté, qui cède. */}
-                  <span style={{ flexShrink: 0, maxWidth: '100%', fontSize: sec.small ? 17 : 24, fontWeight: 800, letterSpacing: '-.02em', color: sec.col, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sec.big}</span>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sec.unit}</span>
-                </div>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-accent-soft)' }}>{tr('Ouvrir')}<Fi i="angle-small-right" size={12} color="var(--o-accent-soft)" /></span>
-              </button>
-            ))}
+  return (
+    <div ref={racineRef} className="loggia-content" style={{ padding: '26px 28px 56px', display: 'grid', gridTemplateColumns: avecRail ? '210px minmax(0,1fr)' : 'minmax(0,1fr)', gap: 28, alignItems: 'start' }}>
+      {avecRail && (
+        <nav aria-label={tr('Sections des paramètres')} style={{ position: 'sticky', top: 'calc(var(--o-safe-top, 0px) + 18px)', display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 2 }}>
+          {railItem('hub', tr('Vue d’ensemble'), 'apps', 'var(--o-text2)')}
+          {GROUPES_PAR.map(g => (
+            <div key={g.id} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <div style={{ ...CAPITALES, fontSize: 10, letterSpacing: '.1em', padding: '16px 10px 6px' }}>{g.l}</div>
+              {g.secs.map(sec => railItem(sec.id, NOM_RAIL[sec.id] || sec.name, sec.ico, sec.col))}
+            </div>
+          ))}
+          {!isAdmin && (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '12px 10px 0', fontSize: 11, fontWeight: 700, lineHeight: 1.4, color: 'var(--o-text3)' }}>
+              <span style={{ marginTop: 2, display: 'inline-flex' }}><Fi i="lock" size={11} color="var(--o-text3)" /></span>
+              <span>{tr('La maison et le système se règlent depuis un profil administrateur.')}</span>
+            </div>
+          )}
+        </nav>
+      )}
+      <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {tab === 'hub' && avecRail ? (
+        <>
+          <div style={{ minWidth: 0, paddingBottom: 6 }}>
+            <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: railEtroit ? 32 : 34, fontWeight: 500, lineHeight: 1.1, letterSpacing: '-.01em' }}>{tr('Paramètres')}</h1>
+            <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>
+              {aRegarder.length
+                ? trN(aRegarder.length, 'Bonjour {nom}. Tout tourne ; une chose mérite un œil.', 'Bonjour {nom}. Tout tourne ; {n} choses méritent un œil.', { nom: prenom })
+                : tr('Bonjour {nom}. Tout tourne, rien ne demande votre attention.', { nom: prenom })}
+            </div>
           </div>
+          {aRegarder.length > 0 && (
+            <Panneau titre={tr('À regarder')}>
+              {aRegarder.map(a => (
+                <div key={a.vers + a.ico} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 22px', borderTop: FILET, flexWrap: 'wrap' }}>
+                  <span style={{ width: 34, height: 34, borderRadius: 11, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-' + a.k + '-rgb),.16)' }}><Fi i={a.ico} size={15} color={'var(--o-' + a.k + ')'} /></span>
+                  <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700 }}>{a.titre}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.45, marginTop: 2, color: 'var(--o-text2)' }}>{a.desc}</div>
+                  </div>
+                  <button onClick={() => setTab(a.vers)} style={{ ...btnDiscret, marginLeft: 'auto' }}>{a.bouton}</button>
+                </div>
+              ))}
+            </Panneau>
+          )}
+          {!isAdmin && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 14, background: 'rgba(var(--o-accent-rgb),.1)', border: '1px solid rgba(var(--o-accent-rgb),.32)' }}>
+              <span style={{ width: 30, height: 30, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-accent-rgb),.18)' }}><Fi i="lock" size={13} color="var(--o-accent-soft)" /></span>
+              <span style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.4 }}>{tr('Cet écran est sur le profil de {nom} : la maison et le système se règlent depuis un profil administrateur.', { nom: prenom })}</span>
+            </div>
+          )}
+          {GROUPES_PAR.map(g => (
+            <Panneau key={g.id} titre={g.l}>
+              {g.secs.map(sec => <div key={sec.id} style={{ borderTop: FILET }}>{ligneSection(sec, true)}</div>)}
+            </Panneau>
+          ))}
         </>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div>
-            <button onClick={() => setTab('hub')} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' }}><Fi i="angle-small-left" size={13} color="var(--o-text2)" />{tr('Paramètres')}</button>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+            {/* Avec le rail, plus de retour : le sommaire reste à un geste, à gauche. */}
+            {/* Au téléphone (maquette v4) : le titre de la page, le profil, puis
+              * les sections en puces qui défilent — plus de sommaire ni de
+              * retour. L'onglet ouvert passe à l'accent, comme le rail. */}
+            {!avecRail && (
+              <div>
+                <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 30, fontWeight: 500, lineHeight: 1.1, letterSpacing: '-.01em' }}>{tr('Paramètres')}</h1>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}>{tr('Profil de {nom} · réglages suivis sur tous ses écrans', { nom: prenom })}</div>
+                <nav aria-label={tr('Sections des paramètres')} style={{ display: 'flex', gap: 2, overflowX: 'auto', scrollbarWidth: 'none', marginTop: 18 }}>
+                  {SECTIONS.map(sec => {
+                    const on = tab === sec.id;
+                    return (
+                      <button key={sec.id} type="button" onClick={() => setTab(sec.id)} aria-current={on ? 'page' : undefined}
+                        style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: on ? 800 : 600, whiteSpace: 'nowrap', transition: 'background .2s, color .2s', background: on ? 'rgba(var(--o-accent-rgb),.14)' : 'transparent', color: on ? 'var(--o-text)' : 'var(--o-text1)' }}>
+                        <Fi i={sec.ico} size={14} color={on ? 'var(--o-accent)' : 'var(--o-text2)'} />{tr(sec.name)}
+                        {sec.id === 'maj' && upsAvail > 0 && <span style={{ minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 9, background: 'var(--o-warn2)', color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{upsAvail}</span>}
+                      </button>
+                    );
+                  })}
+                </nav>
+                {/* Les sections que la maquette téléphone ne redessine pas gardent leurs actions d'en-tête. */}
+                {!['users', 'apparence', 'appareils', 'about', 'regles'].includes(tab) && enTete.droite && <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>{enTete.droite}</div>}
+              </div>
+            )}
+            {avecRail && tab !== 'about' && tab !== 'alertes' && <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
               <div style={{ flex: '1 1 280px', minWidth: 0 }}>
-                <h1 style={{ margin: '10px 0 0', fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 34, fontWeight: 500 }}>{curSection ? (curSection.long || curSection.name) : tr('Paramètres')}</h1>
+                <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: railEtroit ? 32 : 34, fontWeight: 500 }}>{curSection ? (NOM_RAIL[curSection.id] || curSection.long || curSection.name) : tr('Paramètres')}</h1>
                 <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{enTete.sous}</div>
               </div>
               {enTete.droite && <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingBottom: 2 }}>{enTete.droite}</div>}
-            </div>
+            </div>}
           </div>
 
       {editing && isAdmin && <UserEditor user={editing.u} customViews={customViews} onSave={(data) => { if (editing.i == null) onAddUser && onAddUser(data); else onUpdateUser && onUpdateUser(editing.i, data); setEditing(null); }} onDelete={editing.i != null ? () => { onDeleteUser && onDeleteUser(editing.i); setEditing(null); } : null} onClose={() => setEditing(null)} />}
 
-      {tab === 'apparence' && (
-        <div className="grid-appar" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 264px', gap: 16, alignItems: 'start' }}>
-        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>{(() => {
+      {tab === 'apparence' && (() => {
+        /* Maquette v3 (02/11), ordinateur et tablette : l'aperçu en bande, puis
+         * six panneaux — Thème, Couleur, Matière, Mouvement, Écran mural,
+         * Langue et démarrage. Chaque réglage garde sa clé : seule sa place
+         * et sa phrase changent. */
         const notFollow = haTheme !== 'FOLLOW';
-        const ACCENTS = [['', 'Couleur du thème'], ['#2dd4bf', 'Turquoise'], ['#a78bfa', 'Violet'], ['#f5a524', 'Ambre'], ['#f87171', 'Rouge']];
-        const NATIFS = ['', 'projekt', 'saphir', 'acier', 'givre', 'atrium', 'ios', 'google', 'neumorphix'];
-        const COMMU = ['frosted', 'onedark', 'dracula', 'github', 'tokyo', 'nightowl', 'plum', 'material', 'lavande'];
         const ids = themeTab === 'natifs' ? NATIFS : COMMU;
         const themeList = ids.map(id => PRESET_META().find(x => x.id === id)).filter(Boolean);
         const veille = !!ambient;
-        return (<>
-          <AppCard title={tr('Thème')}
-            sub={themeTab === 'natifs' ? tr('{n} thèmes natifs installés', { n: themeList.length }) : tr('{n} thèmes de la communauté', { n: themeList.length })}
-            action={<Seg label={tr('Collection de thèmes')} value={themeTab} opts={[['natifs', tr('Natifs')], ['commu', tr('Communauté')]]} onPick={setThemeTab} />}>
-            <div className="grid-par-pal" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(170px,1fr))', gap: 10, opacity: notFollow ? 1 : .55, transition: 'opacity .25s', padding: '0 22px 20px' }}>
+        const nuitOn = nuit === 'soleil';
+        const discret = { fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap' };
+        return avecRail ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+          <ParPreview themeMode={themeMode} loggiaTheme={loggiaTheme} hass={hass} userName={(users[userIdx] || {}).name || ''} look={look} collante={avecRail && !railEtroit} />
+
+          <Panneau titre={tr('Thème')}
+            desc={themeTab === 'natifs' ? tr('Les neuf de Loggia, chacun en clair et en foncé.') : tr('Neuf thèmes partagés par la communauté.')}
+            droite={<Seg label={tr('Collection de thèmes')} value={themeTab} opts={[['natifs', tr('Natifs')], ['commu', tr('Communauté')]]} onPick={setThemeTab} />}>
+            {/* Chaque thème se montre en petit écran : son fond, sa barre
+              * latérale, deux cartes et son accent. Choisi, la carte passe en
+              * bleu plein, texte blanc, comme toute puce choisie. */}
+            <div className="grid-par-pal" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10, opacity: notFollow ? 1 : .55, transition: 'opacity .25s', padding: '0 22px 20px' }}>
               {themeList.map(p => {
-                const on = notFollow && (loggiaTheme || '') === p.id, rgb = cl_hexRgb(p.cols[0]);
+                const on = notFollow && (loggiaTheme || '') === p.id;
+                const fond = cl_hexRgb(p.cols[1]).split(',').map(Number);
+                const vers = (t) => 'rgb(' + fond.map(v => Math.round(v + (255 - v) * t)).join(',') + ')';
                 return (
-                  <button key={p.id || 'loggia'} className="o-theme" onClick={() => onPickTheme(p.id)} aria-pressed={on} style={{ position: 'relative', textAlign: 'left', padding: '13px 14px', borderRadius: 14, cursor: 'pointer', transition: 'all .25s', fontFamily: 'inherit', color: 'inherit',
-                    border: '1px solid ' + (on ? 'rgba(' + rgb + ',.7)' : 'var(--o-bd2)'), background: on ? 'rgba(' + rgb + ',.10)' : 'var(--o-s3)', boxShadow: on ? '0 0 0 1px rgba(' + rgb + ',.35)' : 'none' }}>
-                    <div className="o-theme-tete" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
-                      <div className="o-theme-nom" style={{ fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
-                      {on && <span className="o-theme-ok" style={{ flexShrink: 0, marginLeft: 6, display: 'inline-flex' }}><Fi i="check" size={13} color={p.cols[0]} /></span>}
-                    </div>
-                    <div className="o-theme-pts" style={{ display: 'flex', gap: 5, marginBottom: 9 }}>
-                      {p.cols.map((c, k) => <div key={k} className="o-theme-pt" style={{ width: 18, height: 18, borderRadius: 9, background: c, border: '1px solid var(--o-bd1)' }} />)}
-                    </div>
-                    <div className="o-theme-desc" style={{ fontSize: 11.5, color: 'var(--o-text3)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tr(p.desc)}</div>
+                  <button key={p.id || 'loggia'} className="o-theme" onClick={() => onPickTheme(p.id)} aria-pressed={on}
+                    style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '7px 7px 11px', borderRadius: 15, border: 'none', cursor: 'pointer', textAlign: 'left', minWidth: 0, fontFamily: 'inherit', transition: 'background .2s, color .2s', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text)' }}>
+                    <span className="o-theme-pts" aria-hidden="true" style={{ position: 'relative', display: 'block', height: 64, borderRadius: 10, background: p.cols[1], overflow: 'hidden', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.07)' }}>
+                      <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '20%', background: vers(.05) }} />
+                      <span style={{ position: 'absolute', left: '5%', top: 12, width: '10%', height: 4, borderRadius: 2, background: p.cols[0] }} />
+                      <span style={{ position: 'absolute', left: '27%', top: 10, width: '31%', height: 22, borderRadius: 6, background: vers(.11) }} />
+                      <span style={{ position: 'absolute', left: '62%', top: 10, width: '31%', height: 22, borderRadius: 6, background: vers(.11) }} />
+                      <span className="o-theme-pt" style={{ position: 'absolute', left: '30%', top: 16, width: 8, height: 8, borderRadius: '50%', background: p.cols[2] }} />
+                      <span style={{ position: 'absolute', left: '27%', top: 39, width: '24%', height: 14, borderRadius: 5, background: p.cols[0] }} />
+                    </span>
+                    <span className="o-theme-tete" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 4px', minWidth: 0 }}>
+                      <span className="o-theme-nom" style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
+                      {on && <span className="o-theme-ok" style={{ flexShrink: 0, display: 'inline-flex' }}><Fi i="check" size={11} color="#fff" /></span>}
+                    </span>
+                    <span className="o-theme-desc" style={{ display: 'block', padding: '0 4px', fontSize: 11, fontWeight: 600, color: on ? 'rgba(255,255,255,.82)' : 'var(--o-text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tr(p.desc)}</span>
                   </button>
                 );
               })}
             </div>
-            {!notFollow && <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, padding: '0 22px 18px' }}>{tr('Thème suivi depuis Home Assistant — coupez « Suivre » pour choisir manuellement.')}</div>}
-          </AppCard>
-
-          <AppCard title={tr('Couleurs')}>
-            <OptRow title={tr('Mode')} desc={tr('Appliqué au thème choisi.')}>
+            {/* « Auto » suit le clair ou le foncé de l'APPAREIL (App.jsx) : la
+              * maquette disait « de 07:00 à 19:00 », ce que Loggia ne fait pas. */}
+            <OptRow title={tr('Clair ou foncé')} desc={notFollow ? tr('Auto suit le clair ou le foncé de l’appareil.') : tr('Suit Home Assistant.')} eteint={!notFollow}>
               <Seg label={tr('Mode')} value={themeMode} opts={[['auto', tr('Auto')], ['dark', tr('Foncé')], ['light', tr('Clair')]]} onPick={onMode} disabled={!notFollow} />
             </OptRow>
-            <OptRow title={tr("Couleur d'accent")} desc={tr('Éléments actifs, jauges et liens.')}>
-              {/* Le nom de la teinte se traduit ICI et non dans `ACCENTS`, que les
-                * tests relisent comme une donnée (audit du 03/10) : l'info-bulle et
-                * le lecteur d'écran le disaient en français. */}
-              {ACCENTS.map(([c, lb]) => {
-                const on = (look.accent || '') === c;
-                const nomTeinte = tr(lb);
-                return (
-                  <button key={c || 'auto'} onClick={() => onLook({ accent: c })} title={nomTeinte} aria-label={nomTeinte} aria-pressed={on}
-                    style={{ width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, background: c || 'var(--o-accent-theme, var(--o-accent))', border: on ? '2px solid var(--o-text)' : '2px solid transparent', boxShadow: on ? '0 0 0 2px var(--o-surfA) inset' : 'none' }}>
-                    {on ? <Fi i="check" size={12} color="#fff" /> : null}
-                  </button>
-                );
-              })}
+            <OptRow title={tr('Suivre Home Assistant')} desc={tr('Calque le thème actif de Home Assistant, et son mode.')}>
+              <Tgl on={haTheme === 'FOLLOW'} cb={onFollowHa} label={tr('Suivre le thème Home Assistant')} />
             </OptRow>
-            <OptRow title={tr("Teinte d'état")} desc={tr('Une carte active se lave de sa couleur.')}>
-              <Seg label={tr("Teinte d'état")} value={look.tint || 'douce'}
+          </Panneau>
+
+          <Panneau titre={tr('Couleur')}>
+            <OptRow title={tr('Accent')} desc={tr('Les éléments actifs, les jauges, les liens.')}>
+              {/* Le nom de la teinte se traduit ICI et non dans `ACCENTS`, que les
+                * tests relisent comme une donnée (audit du 03/10). */}
+              <div role="group" aria-label={tr('Accent')} style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                {ACCENTS.map(([c, lb]) => {
+                  const on = (look.accent || '') === c;
+                  const nomTeinte = tr(lb);
+                  return (
+                    <button key={c || 'auto'} onClick={() => onLook({ accent: c })} title={nomTeinte} aria-label={nomTeinte} aria-pressed={on}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 11px 6px 8px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>
+                      <span aria-hidden="true" style={{ width: 13, height: 13, borderRadius: '50%', flexShrink: 0, background: c || 'var(--o-accent-theme, var(--o-accent))', boxShadow: on ? '0 0 0 2px rgba(255,255,255,.9)' : 'none' }} />
+                      {nomTeinte}
+                    </button>
+                  );
+                })}
+              </div>
+            </OptRow>
+            <OptRow title={tr('Teinte des cartes actives')} desc={tr('Une lampe allumée lave sa carte de sa couleur. Voyez l’aperçu.')}>
+              <Seg label={tr('Teinte des cartes actives')} value={look.tint || 'douce'}
                 opts={[['sans', tr('Sans')], ['discrete', tr('Discrète')], ['douce', tr('Douce')], ['pleine', tr('Pleine')]]}
                 onPick={v => onLook({ tint: v })} />
             </OptRow>
-          </AppCard>
+          </Panneau>
 
-          <AppCard title={tr('Affichage')}>
-            <OptRow title={tr('Suivre Home Assistant')} desc={tr('Calque le thème actif de Home Assistant.')}>
-              <Tgl on={haTheme === 'FOLLOW'} cb={onFollowHa} label={tr('Suivre le thème Home Assistant')} />
+          {/* La matière n'est plus un choix : un seul matériau — le translucide de
+              l'accueil — partout (décision user 29/08). Le verre, lui, se règle. */}
+          <Panneau titre={tr('Matière')} droite={<span style={discret}>{tr('Sans coût pour l’écran')}</span>}>
+            <OptRow title={tr('Arrondi')}>
+              <Seg label={tr('Arrondi')} value={look.radius || 'doux'} opts={[['net', tr('Net')], ['doux', tr('Doux')], ['rond', tr('Rond')]]} onPick={v => onLook({ radius: v })} />
             </OptRow>
-            <OptRow title={tr('Langue')} desc={tr('Les noms de pièces et d’appareils viennent de Home Assistant.')}>
-              {/* Un menu, pas une rangée de boutons : dès six langues, la rangée
-                * débordait (demande du 22/09). Chaque langue se lit dans sa
-                * propre langue — c'est ainsi qu'on la reconnaît —, son nom
-                * traduit en petit dessous, comme le sélecteur de HA. */}
-              <ListeChoix label={tr('Langue')} value={choixLangue()}
-                options={languesDisponibles(hass).map(l => ({
-                  id: l.code,
-                  label: l.code === 'auto' ? tr('Suivre Home Assistant') : l.nom,
-                  sub: l.enFrancais ? tr(l.enFrancais) : undefined,
-                }))}
-                style={{ gap: 12, minWidth: 0, width: 268, maxWidth: '100%', padding: '9px 14px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)' }}
-                onChange={v => {
-                  /* Pas de rechargement : les listes sont des fonctions, elles
-                   * se disent dans la langue du moment, un redessin suffit. */
-                  cfgSet({ 'loggia-langue': v });
-                  // La racine ecoute : elle rappelle `preparerLangue` puis redessine.
-                  try { window.dispatchEvent(new CustomEvent('loggia-langue-changee')); } catch {}
-                  /* SAUF en démonstration (23/09) : la maison factice nomme ses
-                   * pièces au démarrage, et les renommer à chaud demanderait de
-                   * la rebâtir entière — ces noms sont aussi des clés. On
-                   * recharge donc avec la langue dans l'URL. Le magasin mémoire
-                   * repart à neuf à chaque chargement de toute façon, et le lien
-                   * devient partageable. Une vraie installation, elle, tient ses
-                   * noms de Home Assistant : rien à recharger. */
-                  if (typeof window !== 'undefined' && window.__loggiaDemo) {
-                    try {
-                      /* La vue courante survit au rechargement par
-                       * `sessionStorage`. Si c'est une PIÈCE, son nom vient de
-                       * changer : gardée telle quelle, elle rouvrirait une
-                       * pièce qui n'existe plus, vide et intitulée dans
-                       * l'ancienne langue. On revient à l'Accueil. */
-                      const vue = window.sessionStorage.getItem('loggia-vue') || '';
-                      if (vue.indexOf('room:') === 0) window.sessionStorage.setItem('loggia-vue', 'accueil');
-                    } catch { /* rien */ }
-                    try {
-                      const u = new URL(window.location.href);
-                      if (v === 'auto') u.searchParams.delete('lang');
-                      else u.searchParams.set('lang', v);
-                      window.location.replace(u.toString());
-                    } catch { /* rien : le redessin a déjà eu lieu */ }
-                  }
-                }} />
+            <OptRow title={tr('Ombres')} desc={tr('Détachent les cartes du fond.')}>
+              <Tgl on={!!look.shadow} cb={() => onLook({ shadow: !look.shadow })} label={tr('Ombres portées')} />
             </OptRow>
-            <OptRow title={tr('Barre de navigation')} desc={tr('Accès rapide en bas de l’écran, sur mobile.')}>
-              <Tgl on={!!navbar} cb={onToggleNavbar} label={tr('Barre de navigation mobile')} />
+            <OptRow title={tr('Liserés')} desc={tr('Un trait d’un pixel autour des cartes.')}>
+              <Tgl on={!!look.hairline} cb={() => onLook({ hairline: !look.hairline })} label={tr('Liserés')} />
             </OptRow>
-            <OptRow title={tr('Plan 3D de la maison')} desc={tr('Le bouton « Plan » de la section Pièces de l’Accueil. Coupé, les pièces restent en cartes.')}>
-              <Tgl on={look.plan !== false} cb={() => onLook({ plan: look.plan === false })} label={tr('Plan 3D de la maison')} />
-            </OptRow>
-            <OptRow title={tr("Page d'accueil")}
-              desc={accueilDefaut === true
-                ? tr('Home Assistant ouvre Loggia au démarrage, sur ce compte.')
-                : accueilDefaut === null
-                  ? tr('Réglage indisponible : la page qui affiche Loggia n’a pas pu être identifiée.')
-                  : tr('Home Assistant ouvre un autre écran au démarrage. Son sélecteur ne propose que les tableaux de bord — ce bouton fait le réglage à sa place.')}>
-              {accueilDefaut === true
-                ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 800, color: 'var(--o-ok)' }}><Fi i="check" size={12} color="var(--o-ok)" />{tr('Déjà le cas')}</span>
-                : <button onClick={mettreEnAccueil} disabled={accueilDefaut !== false} style={{ ...btnSecondaire, opacity: accueilDefaut === false ? 1 : .5, cursor: accueilDefaut === false ? 'pointer' : 'default' }}>{tr('Ouvrir Loggia au démarrage')}</button>}
-            </OptRow>
-          </AppCard>
-
-          <AppCard title={tr('Effets')} note={tr('coût GPU modéré')}>
-            <OptRow title={tr('Effets météo animés')} desc={tr("Ciel vivant derrière la bannière d'accueil.")}>
-              <Tgl on={!!wxFx} cb={onToggleWxFx} label={tr('Effets météo animés')} />
-            </OptRow>
-            <OptRow eteint={!wxFx} title={tr('Ciel animé')} desc={descCiel}>
-              <Seg label={tr('Ciel animé')} value={qualiteCiel}
-                opts={[['auto', tr('Auto')], ['leger', tr('Léger')], ['fixe', tr('Fixe')]]}
-                onPick={choisirQualiteCiel} />
-            </OptRow>
-            <OptRow title={tr('Verre des cartes')} desc={descVerre}>
+            <OptRow ici title={tr('Verre')} desc={descVerre}>
               <Seg label={tr('Verre des cartes')} value={verre}
                 opts={[['auto', tr('Auto')], ['plein', tr('Plein')], ['leger', tr('Léger')]]}
                 onPick={choisirVerre} />
             </OptRow>
-            <OptRow title={tr('Nuit de l’écran')} desc={descNuit(nuit, hass)}>
-              <Seg label={tr('Nuit de l’écran')} value={nuit}
-                opts={[['non', tr('Non')], ['soleil', tr('Soleil')]]}
-                onPick={choisirNuit} />
+            <OptRow title={tr("Fond d'écran")} desc={tr('Une photo à vous, sous les cartes.')}>
+              <FondPhotoBtn actif={(look.fond || 'aucun') === 'photo'} fondV={look.fondV} onLook={onLook} />
             </OptRow>
-            {/* Grisée tant que la nuit est sur Non, sans être verrouillée : on peut la préparer avant. */}
-            <OptRow eteint={nuit !== 'soleil'} title={tr('Assombrir')} desc={tr('Un voile sur tout l’écran ; la photo de fond baisse aussi')}>
-              <Seg label={tr('Assombrir')} value={assombrir}
-                opts={[['peu', tr('Un peu')], ['moyen', tr('Moyen')], ['beaucoup', tr('Beaucoup')]]}
-                onPick={choisirAssombrir} />
+          </Panneau>
+
+          <Panneau ici titre={tr('Mouvement')} droite={<span style={discret}>{tr('Demande un peu de puissance')}</span>}>
+            <OptRow title={tr('Ciel animé')} desc={tr('Les nuages derrière la bannière d’accueil.')}>
+              <Tgl on={!!wxFx} cb={onToggleWxFx} label={tr('Effets météo animés')} />
             </OptRow>
-            <OptRow title={tr('Écran de veille')} desc={tr('Pour une tablette murale : après ce délai sans toucher, heure et météo.')}>
+            <OptRow retrait eteint={!wxFx} title={tr('Fluidité')} desc={descCiel}>
+              <Seg label={tr('Ciel animé')} value={qualiteCiel}
+                opts={[['auto', tr('Auto')], ['leger', tr('Léger')], ['fixe', tr('Fixe')]]}
+                onPick={choisirQualiteCiel} />
+            </OptRow>
+          </Panneau>
+
+          <Panneau ici titre={tr('Écran mural')} desc={tr('Pour une tablette fixée au mur, qui reste allumée.')}>
+            <OptRow title={tr('Écran de veille')} desc={tr('Après ce délai sans toucher : l’heure et la météo.')}>
               <Seg label={tr('Écran de veille')} value={String(ambient || 0)}
                 opts={[['0', tr('Off')], ['1', '1 min'], ['2', '2 min'], ['5', '5 min'], ['10', '10 min']]}
                 onPick={v => onAmbient && onAmbient(parseInt(v, 10) || 0)} />
+              {/* « Voir » ouvre la veille tout de suite (useReglagesEcran écoute) ;
+                * un geste la referme, comme d'habitude. */}
+              {veille && <button type="button" onClick={() => { try { window.dispatchEvent(new CustomEvent('loggia-veille-voir')); } catch { /* rien */ } }} style={btnSecondaire}><Fi i="eye" size={13} />{tr('Voir')}</button>}
             </OptRow>
             {/* Trois réglages de la veille : grisés tant qu'elle est coupée,
               * sans être verrouillés — on peut les préparer avant. */}
-            <OptRow retrait eteint={!veille} title={tr('Plage horaire')} desc={tr("La nuit, la veille baisse d'un ton et l'horloge dérive pour ménager l'écran.")}>
+            <OptRow retrait eteint={!veille} title={tr('Quand')} desc={tr("La nuit, la veille baisse d'un ton et l'horloge dérive pour ménager l'écran.")}>
               <Seg label={tr('Plage horaire')} value={ambPlage}
                 opts={[['toujours', tr('Toujours')], ['nuit', tr('Nuit')], ['jour', tr('Journée')]]}
                 onPick={v => onAmbPlage && onAmbPlage(v)} />
             </OptRow>
-            <OptRow retrait eteint={!veille} title={tr('Photos en fond')} desc={tr('Diaporama du dossier media, une photo toutes les 30 s, jamais un service externe.')}>
+            <OptRow retrait eteint={!veille} title={tr('Photos en fond')} desc={tr('Le dossier media, une photo toutes les 30 s.')}>
               <Tgl on={ambPhotos} cb={toggleAmbPhotos} label={tr('Photos en fond')} />
             </OptRow>
-            <OptRow retrait eteint={!veille} title={tr('Réveil par la caméra')} desc={tr("Tout reste local. Nécessite un accès HTTPS et l'autorisation caméra.")}>
+            <OptRow retrait eteint={!veille} title={tr('Réveil par la caméra')} desc={tr('Tout reste local. Demande HTTPS et l’autorisation caméra.')}>
               <Tgl on={ambMotion} cb={toggleAmbMotion} label={tr('Réveil par la caméra')} />
+            </OptRow>
+            <OptRow title={tr('La nuit')} desc={nuitOn ? descNuit(nuit, hass) : tr('L’écran garde sa lumière.')}>
+              <Seg label={tr('Nuit de l’écran')} value={nuit}
+                opts={[['non', tr('Comme le jour')], ['soleil', tr('Plus sombre')]]}
+                onPick={choisirNuit} />
+            </OptRow>
+            {/* Grisée tant que la nuit est comme le jour, sans être verrouillée : on peut la préparer avant. */}
+            <OptRow retrait eteint={!nuitOn} title={tr('De combien')}>
+              <Seg label={tr('Assombrir')} value={assombrir}
+                opts={[['peu', tr('Un peu')], ['moyen', tr('Moyen')], ['beaucoup', tr('Beaucoup')]]}
+                onPick={choisirAssombrir} />
             </OptRow>
             {/* Même famille que la veille — c'est le même écran de couloir —,
               * mais réglage à part, et NON grisé par elle : la veille masque,
               * celui-ci range. On peut vouloir l'un sans l'autre. */}
-            <OptRow title={tr('Retour à l’accueil')} desc={tr('Après ce délai sans toucher, les fenêtres se ferment et Loggia revient à l’accueil.')}>
+            <OptRow title={tr('Retour à l’accueil')} desc={tr('Les fenêtres se ferment, l’Accueil revient.')}>
               <Seg label={tr('Retour à l’accueil')} value={String(retourAcc || 0)}
                 opts={[['0', tr('Off')], ['1', '1 min'], ['2', '2 min'], ['5', '5 min'], ['10', '10 min'], ['30', '30 min']]}
                 onPick={v => onRetourAcc && onRetourAcc(parseInt(v, 10) || 0)} />
             </OptRow>
-          </AppCard>
+            {aSonnette && (
+            <OptRow title={tr('Sonnette')} desc={tr('Quand on sonne, la caméra s’ouvre en grand 60 s.')}>
+              <Tgl on={camSonnette} cb={toggleCamSonnette} label={tr('Caméra en grand à la sonnette')} />
+            </OptRow>
+            )}
+          </Panneau>
 
-          {/* La matière n'est plus un choix : un seul matériau — le translucide de
-              l'accueil — partout (décision user 29/08). */}
-          <AppCard title={tr('Matière & formes')} note={tr('aucun coût GPU')}>
-            <OptRow title={tr('Arrondi')} desc={tr('Rayon des cartes, des champs et des boutons.')}>
-              <Seg label={tr('Arrondi')} value={look.radius || 'doux'} opts={[['net', tr('Net')], ['doux', tr('Doux')], ['rond', tr('Rond')]]} onPick={v => onLook({ radius: v })} />
+          <Panneau titre={tr('Langue et démarrage')}>
+            <OptRow title={tr('Langue')} desc={tr('Les noms des pièces viennent de Home Assistant.')}>
+              {/* Un menu, pas une rangée de boutons : dès six langues, la rangée
+                * débordait (demande du 22/09). Chaque langue se lit dans sa
+                * propre langue — c'est ainsi qu'on la reconnaît —, son nom
+                * traduit en petit dessous, comme le sélecteur de HA. */}
+              {menuLangue({ gap: 12, minWidth: 0, width: 268, maxWidth: '100%', padding: '9px 14px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)' })}
             </OptRow>
-            <OptRow title={tr('Ombres portées')} desc={tr('Détache les cartes du fond. À couper pour un rendu plat.')}>
-              <Tgl on={!!look.shadow} cb={() => onLook({ shadow: !look.shadow })} label={tr('Ombres portées')} />
+            <OptRow title={tr('Ouvrir Loggia au démarrage')}
+              desc={accueilDefaut === null
+                ? tr('Réglage indisponible : la page qui affiche Loggia n’a pas pu être identifiée.')
+                : tr('Le sélecteur de Home Assistant ne propose que ses tableaux de bord : ce bouton fait le réglage à sa place.')}>
+              {accueilDefaut === true
+                ? <Pastille niveau="ok" icone="check" capitales>{tr('Fait')}</Pastille>
+                : <button onClick={mettreEnAccueil} disabled={accueilDefaut !== false} style={{ ...btnSecondaire, opacity: accueilDefaut === false ? 1 : .5, cursor: accueilDefaut === false ? 'pointer' : 'default' }}>{tr('Le faire')}</button>}
             </OptRow>
-            <OptRow title={tr('Liserés')} desc={tr('Trait de 1 px autour des cartes et des tableaux.')}>
-              <Tgl on={!!look.hairline} cb={() => onLook({ hairline: !look.hairline })} label={tr('Liserés')} />
+            <OptRow title={tr('Barre du bas')} desc={tr('Les raccourcis, sur tablette et téléphone.')}>
+              <Tgl on={!!navbar} cb={onToggleNavbar} label={tr('Barre de navigation mobile')} />
             </OptRow>
-            <OptRow title={tr("Fond d'écran")} desc={tr('Votre photo sous les cartes.')}>
-              <FondPhotoBtn actif={(look.fond || 'aucun') === 'photo'} fondV={look.fondV} onLook={onLook} />
+            <OptRow title={tr('Plan 3D')} desc={tr('Le bouton « Plan » des pièces, sur l’Accueil.')}>
+              <Tgl on={look.plan !== false} cb={() => onLook({ plan: look.plan === false })} label={tr('Plan 3D de la maison')} />
             </OptRow>
-          </AppCard>
+            <MargesAvancees navbar={navbar} navMargin={navMargin} navAuto={navAuto} onNavOffset={onNavOffset}
+              topMargin={topMargin} topAuto={topAuto} onTopOffset={onTopOffset}
+              onReset={() => { onNavOffsetReset && onNavOffsetReset(); onTopOffsetReset && onTopOffsetReset(); }} />
+          </Panneau>
+        </div>
+        ) : (
+        /* Le téléphone (maquette v4) : d'autres groupes, les choix posés sous
+         * leur titre, les mêmes réglages aux mêmes clés. */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+          <CarteTel gap={20}>
+            <ChoixTel titre={tr('Mode d’affichage')} desc={ficheAppareil().apparence === true ? tr('Son thème et ses couleurs ne changent que sur cet écran.') : tr('Son thème suit celui du profil, sur tous ses écrans.')} label={tr('Mode')}
+              value={notFollow ? themeMode : 'ha'}
+              opts={[['dark', tr('Sombre')], ['light', tr('Clair')], ['auto', tr('Auto')], ['ha', tr('Suivre Home Assistant')]]}
+              onPick={(v) => { if (v === 'ha') { if (notFollow) onFollowHa(); return; } if (!notFollow) onFollowHa(); onMode(v); }} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 800 }}>{tr("Couleur d'accent")}</div>
+              <div role="group" aria-label={tr("Couleur d'accent")} style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 10 }}>
+                {ACCENTS.map(([c, lb]) => {
+                  const on = (look.accent || '') === c;
+                  const teinte = c || 'var(--o-accent-theme, var(--o-accent))';
+                  return (
+                    <button key={c || 'auto'} type="button" onClick={() => onLook({ accent: c })} aria-pressed={on}
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', padding: 2, fontFamily: 'inherit' }}>
+                      <span aria-hidden="true" style={{ width: 30, height: 30, borderRadius: '50%', background: teinte, boxShadow: on ? '0 0 0 2px var(--o-bg), 0 0 0 4px ' + teinte : 'none', transition: 'box-shadow .2s' }} />
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text2)' }}>{tr(lb)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <ChoixTel titre={tr("Teinte d'état")} desc={tr('Les cartes d’un appareil actif se lavent de sa couleur.')} value={look.tint || 'douce'}
+                opts={[['sans', tr('Sans')], ['discrete', tr('Discrète')], ['douce', tr('Douce')], ['pleine', tr('Pleine')]]}
+                onPick={v => onLook({ tint: v })} />
+              <ParPreview themeMode={themeMode} loggiaTheme={loggiaTheme} hass={hass} look={look} cartesSeules />
+            </div>
+            <LignesTel>
+              <LigneTel titre={tr('Liserés')} desc={tr('Un filet d’un pixel autour des cartes')}><BasculeTel on={!!look.hairline} cb={() => onLook({ hairline: !look.hairline })} nom={tr('Liserés')} /></LigneTel>
+              <LigneTel titre={tr('Ombres portées')} desc={tr('Le relief des cartes')}><BasculeTel on={!!look.shadow} cb={() => onLook({ shadow: !look.shadow })} nom={tr('Ombres portées')} /></LigneTel>
+              <LigneTel ici titre={tr('Ciel animé')} desc={tr('Les nuages de l’Accueil bougent lentement')}><BasculeTel on={!!wxFx} cb={onToggleWxFx} nom={tr('Effets météo animés')} /></LigneTel>
+            </LignesTel>
+          </CarteTel>
 
-          <MargesAvancees navbar={navbar} navMargin={navMargin} navAuto={navAuto} onNavOffset={onNavOffset}
-            topMargin={topMargin} topAuto={topAuto} onTopOffset={onTopOffset}
-            onReset={() => { onNavOffsetReset && onNavOffsetReset(); onTopOffsetReset && onTopOffsetReset(); }} />
-        </>);
-      })()}</div><ParPreview themeMode={themeMode} loggiaTheme={loggiaTheme} hass={hass} userName={(users[userIdx] || {}).name || ''} look={look} /></div>
-      )}
+          <CarteTel titre={tr('Thème')} desc={tr('Neuf thèmes natifs et neuf de la communauté, chacun en clair et en foncé.')} gap={20}>
+            <ChoixTel titre={tr('Collection')} label={tr('Collection de thèmes')} value={themeTab} opts={[['natifs', tr('Natifs')], ['commu', tr('Communauté')]]} onPick={setThemeTab} />
+            {(() => {
+              const courant = PRESET_META().find(x => x.id === (loggiaTheme || '')) || PRESET_META()[0];
+              return (
+                <ChoixTel titre={themeTab === 'natifs' ? tr('Thèmes natifs') : tr('Thèmes de la communauté')} desc={courant.name + ' · ' + tr(courant.desc)}
+                  value={notFollow ? (loggiaTheme || '') : null} opts={themeList.map(p => [p.id, p.name])} onPick={onPickTheme} />
+              );
+            })()}
+          </CarteTel>
+
+          <CarteTel titre={tr('Affichage')}>
+            <LignesTel>
+              <LigneTel titre={tr('Suivre Home Assistant')} desc={tr('Calque le thème actif de Home Assistant.')}><BasculeTel on={haTheme === 'FOLLOW'} cb={onFollowHa} nom={tr('Suivre le thème Home Assistant')} /></LigneTel>
+              <LigneTel titre={tr('Langue')} desc={tr('Les noms de pièces et d’appareils viennent de Home Assistant.')}>
+                {menuLangue({ gap: 3, minWidth: 0, maxWidth: '100%', padding: '4px 0', background: 'none', border: 'none', color: 'var(--o-accent-soft)', fontSize: 12, fontWeight: 800 })}
+              </LigneTel>
+              <LigneTel ici titre={tr('Barre de navigation')} desc={tr('Accès rapide en bas de l’écran, sur tablette et téléphone.')}><BasculeTel on={!!navbar} cb={onToggleNavbar} nom={tr('Barre de navigation mobile')} /></LigneTel>
+              <LigneTel titre={tr('Plan 3D de la maison')} desc={tr('Le bouton « Plan » de la section Pièces de l’Accueil. Coupé, les pièces restent en cartes.')}><BasculeTel on={look.plan !== false} cb={() => onLook({ plan: look.plan === false })} nom={tr('Plan 3D de la maison')} /></LigneTel>
+              <LigneTel titre={tr("Page d'accueil")}
+                desc={accueilDefaut === true ? tr('Home Assistant ouvre Loggia au démarrage, sur ce compte.')
+                  : accueilDefaut === null ? tr('Réglage indisponible : la page qui affiche Loggia n’a pas pu être identifiée.')
+                    : tr('Home Assistant ouvre un autre écran au démarrage : ce bouton fait le réglage à sa place.')}>
+                {accueilDefaut === true
+                  ? <span style={pasTel('ok')}>{tr('Fait')}</span>
+                  : <button type="button" onClick={mettreEnAccueil} disabled={accueilDefaut !== false} style={{ ...btnTel, opacity: accueilDefaut === false ? 1 : .45 }}>{tr('Ouvrir Loggia au démarrage')}</button>}
+              </LigneTel>
+            </LignesTel>
+          </CarteTel>
+
+          <CarteTel ici titre={tr('Effets')} desc={tr('Coût GPU modéré.')} gap={20}>
+            <ChoixTel titre={tr('Ciel animé')} desc={wxFx ? descCiel : tr('Le ciel animé est coupé plus haut.')} value={qualiteCiel} eteint={!wxFx}
+              opts={[['auto', tr('Auto')], ['leger', tr('Léger')], ['fixe', tr('Fixe')]]} onPick={choisirQualiteCiel} />
+            <ChoixTel titre={tr('Verre des cartes')} desc={descVerre} value={verre} opts={[['auto', tr('Auto')], ['plein', tr('Plein')], ['leger', tr('Léger')]]} onPick={choisirVerre} />
+            <ChoixTel titre={tr('Nuit de l’écran')} desc={descNuit(nuit, hass)} value={nuit} opts={[['non', tr('Non')], ['soleil', tr('Soleil')]]} onPick={choisirNuit} />
+            <ChoixTel titre={tr('Assombrir')} desc={tr('Un voile sur tout l’écran ; la photo de fond baisse aussi')} value={assombrir} eteint={!nuitOn}
+              opts={[['peu', tr('Un peu')], ['moyen', tr('Moyen')], ['beaucoup', tr('Beaucoup')]]} onPick={choisirAssombrir} />
+          </CarteTel>
+
+          <CarteTel ici titre={tr('Écran de veille')} desc={tr('Pour une tablette murale : après ce délai sans toucher, heure et météo.')} gap={20}>
+            <ChoixTel titre={tr('Délai')} label={tr('Écran de veille')} value={String(ambient || 0)}
+              opts={[['0', tr('Off')], ['1', '1 min'], ['2', '2 min'], ['5', '5 min'], ['10', '10 min']]} onPick={v => onAmbient && onAmbient(parseInt(v, 10) || 0)} />
+            <ChoixTel titre={tr('Plage horaire')} desc={tr("La nuit, la veille baisse d'un ton et l'horloge dérive pour ménager l'écran.")} value={ambPlage} eteint={!veille}
+              opts={[['toujours', tr('Toujours')], ['nuit', tr('Nuit')], ['jour', tr('Journée')]]} onPick={v => onAmbPlage && onAmbPlage(v)} />
+            <LignesTel>
+              <LigneTel titre={tr('Photos en fond')} desc={tr('Diaporama du dossier media, une photo toutes les 30 s, jamais un service externe.')} eteint={!veille}><BasculeTel on={ambPhotos} cb={toggleAmbPhotos} nom={tr('Photos en fond')} /></LigneTel>
+              <LigneTel titre={tr('Réveil par la caméra')} desc={tr("Tout reste local. Nécessite un accès HTTPS et l'autorisation caméra.")} eteint={!veille}><BasculeTel on={ambMotion} cb={toggleAmbMotion} nom={tr('Réveil par la caméra')} /></LigneTel>
+              <LigneTel titre={tr('Voir l’écran de veille')} desc={tr('Tel qu’il s’affichera sur cet écran.')}>
+                <button type="button" disabled={!veille} onClick={() => { try { window.dispatchEvent(new CustomEvent('loggia-veille-voir')); } catch { /* rien */ } }} style={{ ...btnTel, opacity: veille ? 1 : .45 }}><Fi i="eye" size={11} />{tr('Voir')}</button>
+              </LigneTel>
+            </LignesTel>
+          </CarteTel>
+
+          <CarteTel ici titre={aSonnette ? tr('Retour et sonnette') : tr('Retour à l’accueil')} gap={20}>
+            <ChoixTel titre={aSonnette ? tr('Retour à l’accueil') : tr('Délai')} desc={tr('Après ce délai sans toucher, les fenêtres se ferment et Loggia revient à l’accueil.')} value={String(retourAcc || 0)} label={tr('Retour à l’accueil')}
+              opts={[['0', tr('Off')], ['1', '1 min'], ['2', '2 min'], ['5', '5 min'], ['10', '10 min'], ['30', '30 min']]} onPick={v => onRetourAcc && onRetourAcc(parseInt(v, 10) || 0)} />
+            {aSonnette && (
+              <LignesTel>
+                <LigneTel titre={tr('Caméra en grand à la sonnette')} desc={tr('Sur cet écran, quand on sonne, la caméra de la sonnette s’ouvre en grand pendant 60 s.')}><BasculeTel on={camSonnette} cb={toggleCamSonnette} nom={tr('Caméra en grand à la sonnette')} /></LigneTel>
+              </LignesTel>
+            )}
+          </CarteTel>
+
+          <CarteTel titre={tr('Matière & formes')} desc={tr('Aucun coût GPU.')} gap={20}>
+            <ChoixTel titre={tr('Arrondi')} desc={tr('Rayon des cartes, des champs et des boutons.')} value={look.radius || 'doux'} opts={[['net', tr('Net')], ['doux', tr('Doux')], ['rond', tr('Rond')]]} onPick={v => onLook({ radius: v })} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 800 }}>{tr("Fond d'écran")}</div>
+              <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 }}>{tr('Votre photo sous les cartes.')}</div>
+              <div style={{ display: 'flex', marginTop: 10 }}><FondPhotoBtn actif={(look.fond || 'aucun') === 'photo'} fondV={look.fondV} onLook={onLook} /></div>
+            </div>
+          </CarteTel>
+
+          <CarteTel ici style="tirets" titre={tr('Avancé — marges de l’écran')} desc={navAuto && topAuto ? tr('« Auto » convient dans la quasi-totalité des cas.') : tr('Réglées à la main.')}>
+            <LignesTel>
+              <LigneTel titre={tr('Marge du haut')} desc={tr('Auto lit la zone sûre de l’écran : encoche, barre d’état.')}><PasTel px={topMargin} auto={topAuto} onStep={onTopOffset} label={tr('Marge du haut')} /></LigneTel>
+              {navbar && <LigneTel titre={tr('Marge du bas')} desc={tr('Sous la barre de navigation.')}><PasTel px={navMargin} auto={navAuto} onStep={onNavOffset} label={tr('Marge du bas')} /></LigneTel>}
+              {!(navAuto && topAuto) && <LigneTel><button type="button" onClick={() => { onNavOffsetReset && onNavOffsetReset(); onTopOffsetReset && onTopOffsetReset(); }} style={btnTel}>{tr('Rétablir « auto »')}</button></LigneTel>}
+            </LignesTel>
+          </CarteTel>
+        </div>
+        );
+      })()}
 
       {tab === 'connexion' && (
         <Panneau titre={tr('Adresses du serveur')} desc={tr('Loggia n’a pas de compte : il emprunte la session Home Assistant ouverte dans ce navigateur.')}
@@ -2607,36 +3108,51 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         </Panneau>
       )}
 
-      {tab === 'users' && (<>
-        <Panneau titre={tr('Utilisateurs')} desc={tr('L’utilisateur Home Assistant connecté est reconnu automatiquement.')}>
-          {!isAdmin && <div style={{ padding: '0 22px 14px', fontSize: 12, color: 'var(--o-text3)', fontWeight: 600 }}>{tr('Seul un administrateur peut ajouter, modifier ou supprimer un utilisateur.')}</div>}
+      {tab === 'users' && !avecRail && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Maquette v4 : la liste des profils, le code, les rôles, et l'ajout. */}
+          <CarteTel titre={tr('Profils')} gap={6}>
+            <LignesTel>
+              {users.map((u, i) => {
+                const role = u.role === 'Admin' ? tr('Administrateur') : tr(u.role || 'Famille');
+                return (
+                  <LigneTel key={u._k || 'u' + i} ava={userImg(u) ? '' : (u.name || '?').charAt(0).toUpperCase()} avaFond={userImg(u) ? userBg(u) : (u.c || 'var(--o-ok)')}
+                    titre={u.name} desc={i === userIdx ? tr('{role} · ce compte', { role }) : role}
+                    onClick={isAdmin ? () => setEditing({ i, u }) : null} label={tr('Modifier ce profil') + ' · ' + u.name} />
+                );
+              })}
+            </LignesTel>
+          </CarteTel>
+          <AdminPinEditor hass={hass} admin={isAdmin} users={users} tel />
+          <CarteTel titre={tr('Rôles')} desc={tr('Ce que chaque profil peut régler.')}>
+            <LignesTel>
+              <LigneTel ico="shield-check" icoCouleur="var(--o-warn)" titre={tr('Administrateur')} desc={tr('Tout se règle, sections réservées comprises : automatisations, alertes, mises à jour, interrupteurs, règles et vues.')} />
+              <LigneTel ico="users" icoCouleur="var(--o-ok)" titre={tr('Famille')} desc={tr('Commande la maison ; les réglages réservés restent fermés.')} />
+              <LigneTel ico="child-head" icoCouleur="var(--o-cyan)" titre={tr('Enfant')} desc={tr('Un écran tenu par le serveur, dans sa pièce. Le code de la maison rouvre les réglages du parent.')} />
+            </LignesTel>
+          </CarteTel>
+          {isAdmin && <AjoutProfilTel onAjouter={(nom) => onAddUser && onAddUser({ name: nom, role: 'Famille', c: USER_COLORS[users.length % USER_COLORS.length], sub: 'Famille · ' + nom.toLowerCase().replace(/\s+/g, '.'), vues: [], droits: [] })} />}
+        </div>
+      )}
+      {tab === 'users' && avecRail && (<>
+        {/* Les gens du foyer en cartes, à nu (maquette v3, 02/11) : la carte
+          * entière ouvre l'éditeur pour un administrateur, et « Ajouter » est
+          * la dernière carte — plus de bouton en double dans l'en-tête. */}
+        <GrilleCartes label={tr('Profils')}>
           {users.map((u, i) => {
-            const im = userImg(u);
             const moi = i === userIdx;
             const vu = seenRel(u.name, moi);
-            const admin = u.role === 'Admin';
-            // L'identifiant du profil : celui que l'editeur ecrit (« Admin · prenom »).
-            const ident = String(u.sub || '').split(' · ')[1] || String(u.name || '').toLowerCase().replace(/\s+/g, '.');
+            /* Le rôle est une VALEUR gardée telle quelle (« Admin », « Famille ») :
+             * il se traduit à l'affichage, comme dans le menu des profils (audit du 03/10). */
             return (
-              <div key={u._k || 'u' + i} className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 22px', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-                <span style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, color: '#fff', background: userBg(u) }}>{im ? '' : (u.name || '?').charAt(0).toUpperCase()}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 14, fontWeight: 800 }}>{u.name}</span>
-                    {/* Le rôle est une VALEUR gardée telle quelle (« Admin », « Famille ») :
-                      * il se traduit à l'affichage, comme dans le menu des profils (audit du 03/10). */}
-                    <Pastille capitales niveau={admin ? 'alerte' : 'ok'}>{tr(u.role || 'Famille')}</Pastille>
-                  </div>
-                  <div style={{ ...MONO, fontSize: 11.5, color: 'var(--o-text3)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ident}</div>
-                </div>
-                {vu && <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', flexShrink: 0 }}>{vu}</span>}
-                {isAdmin && <button type="button" aria-label={tr('Modifier ce profil')} title={tr('Modifier ce profil')} onClick={() => setEditing({ i, u })}
-                  style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text2)' }}><Fi i="pencil" size={13} /></button>}
-              </div>
+              <CarteGens key={u._k || 'u' + i} haut={avecRail ? 176 : 150} ava={userImg(u) ? '' : (u.name || '?').charAt(0).toUpperCase()} avaFond={userImg(u) ? userBg(u) : (u.c || 'var(--o-ok)')}
+                nom={u.name} sous={u.role === 'Admin' ? tr('Administrateur') : tr(u.role || 'Famille')} vu={vu || null} actif={moi} etiquette={moi ? tr('Cet écran') : null}
+                onClick={isAdmin ? () => setEditing({ i, u }) : null} label={isAdmin ? tr('Modifier ce profil') + ' · ' + u.name : undefined} />
             );
           })}
-        </Panneau>
-        {isAdmin && <AdminPinEditor hass={hass} />}
+          {isAdmin && <CarteGens ajout haut={avecRail ? 176 : 150} ico="plus-small" nom={tr('Ajouter')} sous={tr('Une personne du foyer')} onClick={() => setEditing({ i: null })} label={tr('Ajouter un profil')} />}
+        </GrilleCartes>
+        <AdminPinEditor hass={hass} admin={isAdmin} users={users} />
       </>)}
 
       {tab === 'vues' && aD('vues') && (() => {
@@ -2760,62 +3276,78 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         );
       })()}
 
-      {tab === 'alertes' && aD('alertes') && <AlertesTele hass={hass} />}
+      {tab === 'alertes' && aD('alertes') && <AlertesTele hass={hass} tel={!avecRail} tailleTitre={railEtroit ? 32 : 34} />}
       {tab === 'inter' && aD('inter') && <InterrupteursSection hass={hass} onCompte={surCompteInter} />}
-      {tab === 'regles' && aD('regles') && (<>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
-          <div className="o-onglets" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', minWidth: 0, maxWidth: '100%' }}>
-            {[['volets', tr('Volets')], ['fenetres', tr('Chauffage')], ['presence', tr('Départ et retour')], ['nuit', tr('La nuit')], ['veilles', tr('Veilles')], ['journal', tr('Journal')]].map(([id, nom]) => (
-              <button key={id} onClick={() => setOngletRegle(id)} style={tabStyle(ongletRegle === id)}>{nom}</button>
-            ))}
+      {tab === 'regles' && aD('regles') && (() => {
+        const noms = { volets: tr('Volets'), fenetres: tr('Chauffage'), presence: tr('Départ et retour'), nuit: tr('La nuit'),
+          // Le moteur du chauffage : « Chauffage » nomme déjà la règle des fenêtres (plan 2, choix 16).
+          chauffage: tr('Planning de chauffe'),
+          // Le mode enfant (chantier Mode enfant, E11) : le plafond qui ramène, la coupure, la pause au coucher.
+          enfant: tr('Mode enfant'),
+          // Les veilles (audit du 19/10, H3) : la ventilation du CO₂, les heures creuses, et leur téléphone.
+          veilles: tr('Veilles') };
+        // « Tous » : tous ceux qui ont répondu — un module muet ne compte pas.
+        const { actifs, tous } = etatObservation(observe);
+        // Des regles qui n'agissent plus : un etat d'attention (ADR 0047).
+        const texte = !observe ? tr('Lecture…')
+          : !actifs.length ? tr('Les règles agissent normalement.')
+            : tous ? tr('Les règles automatiques notent ce qu’elles feraient ; minuteurs et boutons agissent toujours.')
+              : tr('En observation : {liste}', { liste: actifs.map(k => noms[k]).join(', ') });
+        /* Un module = un panneau à sa teinte, ses règles en lignes (maquette v3, 03/11). La teinte passe
+         * par `--o-regle-teinte`, que lit la puce de chaque `RegleEntete`. */
+        const MODULES = [['volets', 'purple', VoletsReglages], ['fenetres', 'orange', FenetresReglages], ['presence', 'ok', PresenceReglages],
+          ['nuit', 'cyan', NuitReglages], ['veilles', 'warn', VeillesReglages]];
+        const mod = MODULES.find(m => m[0] === ongletRegle);
+        const Module = mod && mod[2];
+        return (<>
+          {/* Au téléphone (maquette v4), « Observer sans agir » a sa pastille ; ailleurs, il est dans l'en-tête. */}
+          {!avecRail && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 12, background: 'var(--o-s1)', alignSelf: 'flex-start', maxWidth: '100%', boxSizing: 'border-box' }}>
+              <span style={{ lineHeight: 1.25, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 12.5, fontWeight: 800 }}>{tr('Observer sans agir')}</span>
+                <span style={{ display: 'block', fontSize: 10.5, fontWeight: 600, color: actifs.length ? 'var(--o-warn)' : 'var(--o-text2)' }}>{texte}</span>
+              </span>
+              <BasculeTel on={actifs.length > 0} cb={basculerObserve} off={!observe} nom={tr('Observer sans agir')} />
+            </div>
+          )}
+          {/* En observation, la page le dit sous l'en-tête — et ce qui agit malgré tout : la sûreté (audit du 19/10,
+            * ADR 0250), les minuteurs et les boutons. */}
+          {actifs.length > 0 && (
+            <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderRadius: 14, background: 'rgba(var(--o-warn-rgb),.1)', border: '1px solid rgba(var(--o-warn-rgb),.32)', fontSize: 12.5, fontWeight: 700, lineHeight: 1.45 }}>
+              <span aria-hidden="true" style={{ width: 30, height: 30, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-warn-rgb),.18)' }}><Fi i="eye" size={13} color="var(--o-warn)" /></span>
+              <span>{tous ? tr('Observer sans agir : les règles notent ce qu’elles feraient. La sûreté, les minuteurs et les boutons agissent toujours.') : texte + ' · ' + tr('sauf la sûreté')}</span>
+            </div>
+          )}
+          {/* Ce que la dernière bascule d'« Observer sans agir » n'a pas pu poser
+            * (audit du 03/10). Sous la barre, pour ne pas la déformer. `alert`
+            * se dit à sa CRÉATION (WAI-ARIA 1.2, comme le toast d'App.jsx) : le
+            * bandeau n'est monté qu'avec son texte, et `setObsRefus('')` le
+            * démonte avant chaque bascule — un même refus se redit. */}
+          {obsRefus && (
+            <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, background: 'rgba(var(--o-bad-rgb),.10)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)', fontSize: 12.5, fontWeight: 700, lineHeight: 1.45 }}>
+              <Fi i="triangle-warning" size={15} color="var(--o-bad)" />
+              <span>{obsRefus}</span>
+            </div>
+          )}
+          {/* La journée, passée et à venir : sur un écran large seulement — la maquette du téléphone ne la montre pas. */}
+          {avecRail && <FriseJour hass={hass} />}
+          <div className="o-onglets" style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 12, background: 'var(--o-well)', overflowX: 'auto', scrollbarWidth: 'none', width: 'fit-content', maxWidth: '100%', boxSizing: 'border-box' }}>
+            {[['volets', tr('Volets')], ['fenetres', tr('Chauffage')], ['presence', tr('Départ et retour')], ['nuit', tr('La nuit')], ['veilles', tr('Veilles')], ['journal', tr('Journal')]].map(([id, nom]) => {
+              const on = ongletRegle === id;
+              // Choisi = bleu plein, texte blanc (sa règle des puces).
+              return <button key={id} type="button" onClick={() => setOngletRegle(id)} aria-pressed={on}
+                style={{ flex: 'none', padding: '7px 12px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', transition: 'background .2s', background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text2)' }}>{nom}</button>;
+            })}
           </div>
-          <span style={{ flex: 1 }} />
-          {(() => {
-            const noms = { volets: tr('Volets'), fenetres: tr('Chauffage'), presence: tr('Départ et retour'), nuit: tr('La nuit'),
-              // Le moteur du chauffage : « Chauffage » nomme déjà la règle des fenêtres (plan 2, choix 16).
-              chauffage: tr('Planning de chauffe'),
-              // Le mode enfant (chantier Mode enfant, E11) : le plafond qui ramène, la coupure, la pause au coucher.
-              enfant: tr('Mode enfant'),
-              // Les veilles (audit du 19/10, H3) : la ventilation du CO₂, les heures creuses, et leur téléphone.
-              veilles: tr('Veilles') };
-            // « Tous » : tous ceux qui ont répondu — un module muet ne compte pas.
-            const { actifs, tous } = etatObservation(observe);
-            // Des regles qui n'agissent plus : un etat d'attention (ADR 0047).
-            const texte = !observe ? tr('Lecture…')
-              : !actifs.length ? tr('Les règles agissent normalement.')
-                : tous ? tr('Les règles automatiques notent ce qu’elles feraient ; minuteurs et boutons agissent toujours.')
-                  : tr('En observation : {liste}', { liste: actifs.map(k => noms[k]).join(', ') });
-            return (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '2px 4px', minWidth: 0 }}>
-                <div style={{ textAlign: 'right', minWidth: 0 }}>
-                  {/* « sauf la sûreté » (audit du 19/10, ADR 0250) : en observation, la maison réagit encore à une fumée, un gaz,
-                    * une fuite — les lumières, les volets, la vanne, le téléphone. Le dire ici, sinon on croit tout figé. */}
-                  <div style={{ fontSize: 13, fontWeight: 800 }}>{tr('Observer sans agir')} <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)' }}>· {tr('sauf la sûreté')}</span></div>
-                  <div style={{ fontSize: 11.5, fontWeight: 600, color: actifs.length ? 'var(--o-warn)' : 'var(--o-text2)' }}>{texte}</div>
-                </div>
-                <Tgl on={actifs.length > 0} cb={basculerObserve} off={!observe} label={tr('Observer sans agir')} />
-              </div>
-            );
-          })()}
-        </div>
-        {/* Ce que la dernière bascule d'« Observer sans agir » n'a pas pu poser
-          * (audit du 03/10). Sous la barre, pour ne pas la déformer. `alert`
-          * se dit à sa CRÉATION (WAI-ARIA 1.2, comme le toast d'App.jsx) : le
-          * bandeau n'est monté qu'avec son texte, et `setObsRefus('')` le
-          * démonte avant chaque bascule — un même refus se redit. */}
-        {obsRefus && (
-          <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14, background: 'rgba(var(--o-bad-rgb),.10)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)', fontSize: 12.5, fontWeight: 700, lineHeight: 1.45 }}>
-            <Fi i="triangle-warning" size={15} color="var(--o-bad)" />
-            <span>{obsRefus}</span>
-          </div>
-        )}
-        {ongletRegle === 'volets' ? <VoletsReglages hass={hass} cardSt={cardSt} />
-          : ongletRegle === 'fenetres' ? <FenetresReglages hass={hass} cardSt={cardSt} />
-            : ongletRegle === 'presence' ? <PresenceReglages hass={hass} cardSt={cardSt} />
-              : ongletRegle === 'nuit' ? <NuitReglages hass={hass} cardSt={cardSt} />
-                : ongletRegle === 'journal' ? <JournalReglages hass={hass} cardSt={cardSt} />
-                  : <VeillesReglages hass={hass} cardSt={cardSt} />}
-      </>)}
+          {Module ? (
+            <div style={{ '--o-regle-teinte': 'var(--o-' + mod[1] + ')' }}>
+              <Panneau titre={noms[mod[0]]} desc={tr('Touchez une règle pour la régler.')}>
+                <Module hass={hass} cardSt={{ padding: '14px 22px', borderTop: FILET }} />
+              </Panneau>
+            </div>
+          ) : <JournalReglages hass={hass} tel={!avecRail} />}
+        </>);
+      })()}
       {tab === 'maj' && aD('maj') && (() => {
         /* Le groupe d'une mise a jour : l'integration qui la publie — les
          * firmwares Zigbee ensemble, les modules HACS ensemble. */
@@ -2873,101 +3405,169 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         );
       })()}
 
-      {tab === 'appareils' && <AppareilsReglages peutOublier={isAdmin} />}
+      {tab === 'appareils' && <AppareilsReglages peutOublier={isAdmin} profil={prenom} role={(users[userIdx] || {}).role} tel={!avecRail} profils={users.map(u => nomProfil(u.name || ''))} />}
       {tab === 'about' && (() => {
         const cacheKb = (() => { try { let n = 0; for (let k = 0; k < localStorage.length; k++) { const key = localStorage.key(k); n += (localStorage.getItem(key) || '').length + key.length; } return Math.round(n / 1024 * 10) / 10; } catch { return null; } })();
-        const entCount = (hass && hass.states) ? Object.keys(hass.states).length : 0;
         const inst = installationReelle();
+        /* « À jour » ou « vX disponible », à côté de la version (revenu le 03/11 : la maquette v3 l'avait perdu, et un compte
+         * ordinaire, sans la section Mises à jour, ne voyait plus rien). Sans entité de suivi, rien : mieux vaut se taire
+         * que d'annoncer « à jour » sans l'avoir vérifié. */
+        const etatVersion = inst.aJour === null ? null : inst.aJour
+          ? <Pastille niveau="ok" point>{tr('À jour')}</Pastille>
+          : <Pastille niveau="alerte" point>{inst.disponible ? tr('v{v} disponible', { v: String(inst.disponible).replace(/^v/, '') }) : tr('Mise à jour disponible')}</Pastille>;
         const nombre = (v) => Number(v).toLocaleString(locale(), { maximumFractionDigits: 1 });
+        /* Sauvegarder la configuration COMPLETE : celle du serveur, partagee
+         * entre tous les appareils, et non le seul navigateur. Un serveur muet
+         * le dit, au lieu d'un bouton qui ne fait rien. */
+        const exporter = async () => {
+          try {
+            const j = await exportConfigComplete();
+            if (!telechargerConfig(j, 'loggia-config')) throw new Error(PAS_DE_FICHIER);
+          } catch (err) { alerter({ titre: tr('Exporter'), texte: tr('Export impossible : ') + motifEchec(err) }); }
+        };
+        // Des noms propres, qui ne se traduisent pas.
+        const POLICES = 'Manrope · Newsreader', DEPOT = 'github.com/Alardware/loggia';
         const valeur = { ...MONO, fontSize: 13, fontWeight: 700, color: 'var(--o-text)', whiteSpace: 'nowrap' };
         const texte = { fontSize: 13.5, fontWeight: 800, color: 'var(--o-text1)', whiteSpace: 'nowrap' };
         /* Liens du projet : navigation volontaire au clic — rien n'est charge
          * depuis GitHub tant qu'on ne tape pas. */
-        const tuile = ([titre, sous, url]) => (
-          <a key={url} href={url} target="_blank" rel="noopener noreferrer"
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '16px 18px', borderRadius: 'var(--o-radius,18px)', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', textDecoration: 'none', color: 'var(--o-text)', minWidth: 0 }}>
-            <span style={{ minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: 13.5, fontWeight: 800 }}>{titre}</span>
-              <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', marginTop: 3 }}>{sous}</span>
-            </span>
-            <Fi i="arrow-right" size={12} color="var(--o-text3)" />
+        const ouvrir = (url, nom) => (
+          <a href={url} target="_blank" rel="noopener noreferrer" aria-label={nom}
+            style={{ width: 34, height: 34, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text2)' }}>
+            <Fi i="arrow-up-right-from-square" size={13} />
           </a>
         );
-        return (
+        return avecRail ? (
         <>
-          {/* Toujours affichée : la carte de l'installation N'EST PAS un réglage,
-            * c'est la réponse à « quelle version ai-je ? » (retour 02/09). */}
-          <Panneau titre={tr('Installation')} titreStyle={{ ...CAPITALES, fontFamily: 'inherit', fontStyle: 'normal', lineHeight: 1.4 }}
-            pied={<>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', flex: '1 1 220px' }}>{tr('La configuration Loggia s’exporte en un fichier JSON.')}</span>
-              <button onClick={() => window.location.reload()} style={btnSecondaire}>{tr('Recharger')}</button>
-              {/* L'import reste un geste d'administrateur : il remplace la
-                  configuration de toute la maison. */}
-              {isAdmin && <ImportConfigBtn />}
+          {/* Maquette v3 (02/11) : le nom et la version en grand, à la place du
+            * titre de la section ; puis Installation, Revenir en arrière, les
+            * liens et la remise à zéro. */}
+          <div style={{ maxWidth: '60ch' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+              {avecRail
+                ? <h1 style={{ margin: 0, fontSize: 40, fontWeight: 800, letterSpacing: '-.03em', lineHeight: 1 }}>Loggia</h1>
+                : <span style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-.03em', lineHeight: 1 }}>Loggia</span>}
+              {inst.version && <span style={{ fontSize: 14, fontWeight: 800 }}>{inst.version}</span>}
+              {etatVersion}
+            </div>
+            <div style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.5, color: 'var(--o-text2)', marginTop: 8 }}>{tr('Un tableau de bord pour Home Assistant, servi par sa propre intégration. Rien ne sort de chez vous.')}</div>
+          </div>
+
+          {/* Toujours affichée : l'installation N'EST PAS un réglage, c'est la
+            * réponse à « quelle version ai-je ? » (retour 02/09). */}
+          <Panneau titre={tr('Installation')}
+            pied={<div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginLeft: 'auto' }}>
               {/* Sauvegarder la configuration COMPLETE : celle du serveur,
                   partagee entre tous les appareils, et non le seul navigateur.
                   Un serveur muet le dit, au lieu d'un bouton qui ne fait rien. */}
-              <button onClick={async () => {
-                try {
-                  const j = await exportConfigComplete();
-                  if (!telechargerConfig(j, 'loggia-config')) throw new Error(PAS_DE_FICHIER);
-                } catch (err) { alerter({ titre: tr('Exporter'), texte: tr('Export impossible : ') + motifEchec(err) }); }
-              }} style={btnSecondaire}>{tr('Exporter')}</button>
-            </>}>
-            <Ligne titre={tr('Version')} desc={inst.suiviPar ? tr('Suivie par {x}', { x: inst.suiviPar }) : tr('Lue dans le composant installé')}><span style={valeur}>{inst.version || '—'}</span></Ligne>
-            <Ligne titre={tr('Socle technique')} desc={tr('Construit et servi depuis Home Assistant')}><span style={texte}>React + Vite</span></Ligne>
-            <Ligne titre={tr('Typographie')} desc={tr('Auto-hébergée, sans CDN')}><span style={texte}>Manrope / Newsreader</span></Ligne>
-            <Ligne titre={tr('Entités suivies')} desc={tr('{a} configurées sur {n} disponibles', { a: nombre(entIds.length), n: nombre(entCount) })}><span style={valeur}>{nombre(entIds.length)}</span></Ligne>
-            <Ligne titre={tr('Cache local')} desc={tr('États des entités et réglages de cet appareil')}>
+              <button onClick={exporter} style={btnSecondaire}><Fi i="download" size={13} />{tr('Exporter la configuration')}</button>
+              {/* L'import reste un geste d'administrateur : il remplace la
+                  configuration de toute la maison. */}
+              {isAdmin && <ImportConfigBtn />}
+            </div>}>
+            {hass && hass.config && hass.config.version && <Ligne titre="Home Assistant"><span style={valeur}>{hass.config.version}</span></Ligne>}
+            <Ligne titre={tr('Socle')} desc={tr('Construit et servi depuis Home Assistant')}><span style={texte}>React + Vite</span></Ligne>
+            <Ligne titre={tr('Typographie')} desc={tr('Auto-hébergée, sans CDN')}><span style={texte}>{POLICES}</span></Ligne>
+            <Ligne titre={tr('Cache de cet écran')} desc={tr('Les états et les réglages gardés ici')}>
               <span style={valeur}>{cacheKb != null ? (cacheKb >= 1024 ? nombre(cacheKb / 1024) + ' ' + tr('Mo') : nombre(cacheKb) + ' ' + tr('Ko')) : '—'}</span>
             </Ligne>
-            {/* Les copies que le composant garde avant les écritures (ADR 0285) :
-              * en remettre une remplace la configuration de toute la maison,
-              * comme l'import — les mêmes comptes, la même garde. */}
-            {isAdmin && <VersionsPrecedentes hass={hass} motif={motifEchec} alerter={alerter} />}
           </Panneau>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12 }}>
-            {[
-              [tr('Dépôt GitHub'), 'Alardware/loggia', 'https://github.com/Alardware/loggia'],
-              [tr('Journal des versions'), tr('nouveautés et correctifs'), 'https://github.com/Alardware/loggia/releases'],
-              [tr('Signaler un problème'), tr('ouvrir un ticket'), 'https://github.com/Alardware/loggia/issues'],
-            ].map(tuile)}
-          </div>
+          {/* Les copies que le composant garde avant les écritures (ADR 0285) :
+            * en remettre une remplace la configuration de toute la maison,
+            * comme l'import — les mêmes comptes, la même garde. */}
+          {isAdmin && <VersionsPrecedentes hass={hass} motif={motifEchec} alerter={alerter} />}
+
+          <Panneau>
+            <Ligne ico="code-branch" titre={tr('Le code')} desc={<span style={MONO}>{DEPOT}</span>} style={{ borderTop: 'none' }}>
+              {ouvrir('https://github.com/Alardware/loggia', tr('Le code'))}
+            </Ligne>
+            <Ligne ico="exclamation" titre={tr('Signaler un problème')}>
+              {ouvrir('https://github.com/Alardware/loggia/issues', tr('Signaler un problème'))}
+            </Ligne>
+          </Panneau>
 
           {/* La remise a zero vide la configuration de la MAISON — vues,
             * profils, regles, scenarios — et non ce seul appareil. */}
           {isAdmin && (
-            <Panneau niveau="danger">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '18px 22px', flexWrap: 'wrap' }}>
-                <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-                  <div style={{ ...CAPITALES, color: 'var(--o-bad)' }}>{tr('Irréversible')}</div>
-                  <div style={{ fontSize: 14, fontWeight: 800, marginTop: 5 }}>{tr('Réinitialiser Loggia')}</div>
-                  <div style={DESC_PANNEAU}>{tr('Efface les vues, les règles, les scénarios et les réglages de Loggia, pour toute la maison — une sauvegarde part d’abord. Les automatisations Home Assistant ne sont pas touchées.')}</div>
-                </div>
-                <ResetLoggiaBtn />
-              </div>
-            </Panneau>
+            <Panneau niveau="danger" titre={tr('Tout remettre à zéro')} desc={tr('Pour toute la maison — une sauvegarde part d’abord. Les automatisations Home Assistant ne sont pas touchées.')}
+              droite={<ResetLoggiaBtn />} />
           )}
 
-          {/* Ko-fi : meme regle que les liens ci-dessus, rien n'est charge
-            * depuis ko-fi.com tant qu'on ne tape pas — la tasse est dessinee
-            * ici plutot que servie par leur CDN. */}
-          <a href="https://ko-fi.com/alardware" target="_blank" rel="noopener noreferrer"
-            style={{ display: 'inline-flex', alignSelf: 'center', alignItems: 'center', gap: 10, padding: '13px 26px', borderRadius: 999, background: '#72a4f2', color: '#152744', fontSize: 14, fontWeight: 800, textDecoration: 'none', boxShadow: '0 10px 26px rgba(114,164,242,.26)' }}>
-            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
-              <path d="M3 6.6h13v6.6a6.5 6.5 0 0 1-13 0z" fill="#fff" />
-              <path d="M16.4 8.2h1.9a2.9 2.9 0 0 1 0 5.8h-1.9" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
-              <path d="M9.5 16.5C6.4 14.3 5.1 13 5.1 11.6A2.4 2.4 0 0 1 9.5 10.6 2.4 2.4 0 0 1 13.9 11.6C13.9 13 12.6 14.3 9.5 16.5Z" fill="#ff5f5f" />
-            </svg>
-            {tr('Me soutenir sur Ko-fi')}
-          </a>
+          {/* SA regle (18/09) : la pastille Ko-fi garde son dessin et reste en bas,
+            * sous la zone rouge — elle prime sur la maquette, qui la rangeait parmi les liens. */}
+          <PastilleKofi />
         </>
+        ) : (
+        /* Le téléphone (maquette v4) : le nom et la version dans une carte,
+         * les sauvegardes, l'installation, le projet, la remise à zéro. La
+         * pastille Ko-fi reste seule, en bas, sous la zone rouge (sa règle). */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 18, borderRadius: 20, background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
+            <img src="./logo.png" alt="" width={46} height={46} style={{ width: 46, height: 46, borderRadius: 12, flexShrink: 0, display: 'block' }} />
+            <div style={{ lineHeight: 1.35, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 800 }}>Loggia{inst.version ? ' ' + inst.version : ''}</div>
+              <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)' }}>{(hass && hass.config && hass.config.version ? 'Home Assistant ' + hass.config.version + ' · ' : '') + tr('rien ne sort de chez vous')}</div>
+              {etatVersion && <div style={{ marginTop: 6 }}>{etatVersion}</div>}
+            </div>
+          </div>
+          {isAdmin && <VersionsPrecedentes hass={hass} motif={motifEchec} alerter={alerter} tel />}
+          <CarteTel titre={tr('Installation')}>
+            <LignesTel>
+              {hass && hass.config && hass.config.version && <LigneTel titre="Home Assistant"><span style={valeur}>{hass.config.version}</span></LigneTel>}
+              <LigneTel titre={tr('Socle technique')} desc={tr('Construit et servi depuis Home Assistant')}><span style={texte}>React + Vite</span></LigneTel>
+              <LigneTel titre={tr('Typographie')} desc={tr('Auto-hébergée, sans CDN')}><span style={texte}>{POLICES}</span></LigneTel>
+              <LigneTel titre={tr('Cache local')} desc={tr('États des entités et réglages de cet appareil')}>
+                <span style={valeur}>{cacheKb != null ? (cacheKb >= 1024 ? nombre(cacheKb / 1024) + ' ' + tr('Mo') : nombre(cacheKb) + ' ' + tr('Ko')) : '—'}</span>
+              </LigneTel>
+              <LigneTel titre={tr('Configuration')} desc={tr('Vues, profils, règles et apparence, dans un fichier.')}>
+                <button type="button" onClick={exporter} style={btnTel}><Fi i="download" size={11} />{tr('Exporter')}</button>
+                {isAdmin && <ImportConfigBtn />}
+              </LigneTel>
+            </LignesTel>
+          </CarteTel>
+          <CarteTel titre={tr('Le projet')}>
+            <LignesTel>
+              <LigneTel ico="code-branch" titre={tr('Code source')} desc={DEPOT} mono>
+                <a href="https://github.com/Alardware/loggia" target="_blank" rel="noopener noreferrer" style={lienTel}>{tr('Ouvrir')}<Fi i="angle-small-right" size={13} /></a>
+              </LigneTel>
+              <LigneTel ico="exclamation" titre={tr('Signaler un problème')}>
+                <a href="https://github.com/Alardware/loggia/issues" target="_blank" rel="noopener noreferrer" style={lienTel}>{tr('Ouvrir')}<Fi i="angle-small-right" size={13} /></a>
+              </LigneTel>
+            </LignesTel>
+          </CarteTel>
+          {isAdmin && (
+            <CarteTel style="danger" chip="trash" chipFond="rgba(var(--o-bad-rgb),.16)" chipCouleur="var(--o-bad)" titre={tr('Tout remettre à zéro')} desc={tr('Pour toute la maison, une sauvegarde part d’abord.')}>
+              <LignesTel>
+                <LigneTel titre={tr('Remettre Loggia comme au premier jour')}><ResetLoggiaBtn /></LigneTel>
+              </LignesTel>
+            </CarteTel>
+          )}
+          <PastilleKofi />
+        </div>
         );
       })()}
         </div>
       )}
+      </div>
     </div>
+  );
+}
+
+/* La pastille Ko-fi d'« À propos », à l'ordinateur comme au téléphone. Rien
+ * n'est charge depuis ko-fi.com tant qu'on ne tape pas : la tasse est dessinee
+ * ici plutot que servie par leur CDN. Elle garde son dessin (sa regle). */
+function PastilleKofi() {
+  return (
+    <a href="https://ko-fi.com/alardware" target="_blank" rel="noopener noreferrer"
+      style={{ display: 'inline-flex', alignSelf: 'center', alignItems: 'center', gap: 10, padding: '13px 26px', borderRadius: 999, background: '#72a4f2', color: '#152744', fontSize: 14, fontWeight: 800, textDecoration: 'none', boxShadow: '0 10px 26px rgba(114,164,242,.26)' }}>
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+        <path d="M3 6.6h13v6.6a6.5 6.5 0 0 1-13 0z" fill="#fff" />
+        <path d="M16.4 8.2h1.9a2.9 2.9 0 0 1 0 5.8h-1.9" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+        <path d="M9.5 16.5C6.4 14.3 5.1 13 5.1 11.6A2.4 2.4 0 0 1 9.5 10.6 2.4 2.4 0 0 1 13.9 11.6C13.9 13 12.6 14.3 9.5 16.5Z" fill="#ff5f5f" />
+      </svg>
+      {tr('Me soutenir sur Ko-fi')}
+    </a>
   );
 }
 

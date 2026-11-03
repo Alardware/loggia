@@ -30,8 +30,10 @@ from homeassistant.helpers import (
     entity_registry as er,
 )
 
-from .chauffage_familles import PLATEFORME_BT, commandes_par, famille
+from .chauffage_familles import PLATEFORME_BT, capteur_poele, commandes_par, famille
+from .meteo import role_meteo
 from .tarifs import role_tarif
+from .voisins import est_rearmement
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -269,6 +271,28 @@ def _entites(hass: HomeAssistant, autorise: Any = None) -> list[dict[str, Any]]:
             role = role_tarif(domaine, getattr(e, "unique_id", None), getattr(e, "translation_key", None), attributs)
             if role:
                 entree["tarif"] = role
+            # Ce que fait un poele (ADR 0308), reconnu a son identifiant stable : l'ecran
+            # traduit sa valeur, envoyee telle quelle par le poele. Le drapeau seul.
+            if capteur_poele(domaine, e.platform, getattr(e, "unique_id", None)) == "etat":
+                entree["etat_poele"] = True
+            # Les probabilites et la pluie de l'heure de Meteo-France (ADR 0309), reconnues a
+            # leur identifiant stable, qui porte les coordonnees de la ville : le role seul.
+            role_m = role_meteo(domaine, e.platform, getattr(e, "unique_id", None))
+            if role_m:
+                entree["meteo"] = role_m
+            # Le clavier de l'Apple TV (ADR 0316) : le binaire `keyboard_focused`
+            # de l'integration `apple_tv`, reconnu a sa cle. Le service qui ecrit
+            # sur la TV (`apple_tv.set_keyboard_text`) ne prend pas d'entite mais
+            # l'entree de configuration : elle seule sort, pour ce binaire seul.
+            if (domaine == "binary_sensor" and e.platform == "apple_tv"
+                    and getattr(e, "translation_key", None) == "keyboard_focused"
+                    and getattr(e, "config_entry_id", None)):
+                entree["clavier"] = e.config_entry_id
+        # Le bouton qui rearme un appareil en defaut (ADR 0307) : reconnu a son
+        # identifiant stable, que l'ecran n'a pas. Le drapeau seul.
+        elif domaine == "button" and est_rearmement(domaine, getattr(e, "unique_id", None),
+                                                    getattr(e, "translation_key", None)):
+            entree["rearmer"] = True
         sortie.append(entree)
     return sortie
 

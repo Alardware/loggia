@@ -22,7 +22,7 @@
 import { useState } from 'react';
 import { tr } from './i18n.js';
 import { Fi, Bascule, BottomSheet } from './ui.jsx';
-import { LOGGIA_INDEX, cfgVal, plateformeDe, compteOrdinaire } from './state.js';
+import { LOGGIA_INDEX, cfgVal, plateformeDe, voisinsDe, compteOrdinaire } from './state.js';
 import { plantsCfg } from './lectures.js';
 import { pickSibling } from './discovery.js';
 import { LISERE } from './styles.js';
@@ -55,7 +55,7 @@ export function ContenuVanne({ id, hass: vue, onFiche = null, epingle = null, qu
   const [envoi, setEnvoi] = useState(false);
   const [err, setErr] = useState('');
   const maintenant = Date.now();
-  const v = vueVanne({ id, S, etat, designee, plateforme: plateformeDe, plantes: plantsCfg().map(p => p.base).filter(Boolean), enVol, maintenant });
+  const v = vueVanne({ id, S, etat, designee, plateforme: plateformeDe, voisins: voisinsDe, plantes: plantsCfg().map(p => p.base).filter(Boolean), enVol, maintenant });
   const eau = v.genre === 'eau';
   const tete = teteVanne(v, etat && etat.vannes ? etat.vannes[id] : null, maintenant);
   const geste = v.geste;

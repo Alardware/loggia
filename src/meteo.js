@@ -9,8 +9,7 @@
  * (tests/accueil_meteo.test.mjs).
  */
 import { tr, locale } from './i18n.js';
-import { estMeteoAlarm } from './groupes.js';
-import { niveauDe } from './vigilance.js';
+import { lireVigilance, texteVigilance } from './attention.js';
 
 /* `WeatherEntityFeature` : une entité dit elle-même quelles prévisions elle
  * sait donner. Demander un type qu'elle n'a pas, c'est une erreur côté serveur. */
@@ -156,7 +155,57 @@ export function nomVille(nom) {
 export const aVenir = (liste, maintenant) => (liste || []).map(p => ({ p, t: lectureDate(p) })).filter(x => !isNaN(x.t) && x.t > maintenant).sort((a, b) => a.t - b.t);
 export const pleut = (p) => { const n = nombreOuNull(p.precipitation_probability); return n != null ? n >= 50 : /rain|pour|lightning-rainy|snowy-rainy|hail/.test(String(p.condition || '')); };
 
+/* Les capteurs de Météo-France rattachés à l'entité météo choisie (lot 5 Gladys, ADR 0309) : les probabilités de pluie, de neige
+ * et de gel, et la pluie de l'heure qui vient. Le composant les reconnaît à leur identifiant stable et pose leur RÔLE dans l'index
+ * (`meteo`) ; ils se rattachent par l'APPAREIL — la ville —, jamais par leur nom. `meta(id)` : ce que l'index sait d'une entité.
+ * Sans appareil pour la météo, rien : on ne prend pas la pluie d'une autre ville. */
+export function capteursMeteo(S, idMeteo, meta) {
+  const out = { pluie: null, neige: null, gel: null, pluie_heure: null };
+  const m0 = idMeteo && typeof meta === 'function' ? meta(idMeteo) : null;
+  if (!m0 || !m0.deviceId) return out;
+  Object.keys(S || {}).filter(id => id.indexOf('sensor.') === 0).sort().forEach(id => {
+    const m = meta(id);
+    if (m && m.meteo && m.deviceId === m0.deviceId && out[m.meteo] === null) out[m.meteo] = id;
+  });
+  return out;
+}
+
+/* La pluie dans l'heure (W1), lue dans le capteur `next_rain` de Météo-France : son état est l'heure de la première tranche
+ * pluvieuse (vide sans pluie dans l'heure) ; son attribut `1_hour_forecast`, la description de chaque tranche — « 0 min »,
+ * « 5 min »… « 55 min » après `forecast_time_ref`, de 5 puis de 10 minutes. La fin de la pluie est la première tranche SÈCHE qui
+ * suit : sèche comme les tranches d'avant le début (l'état dit qu'elles le sont), ou « Temps sec », le mot de Météo-France. Une
+ * pluie qui court jusqu'au bout de l'heure n'a pas de durée connue : on ne la dit pas. Les minutes s'arrondissent à 5, le pas de
+ * la prévision. `{ texte, dans, duree }`, ou null : pas de pluie dans l'heure, prévision périmée, ou forme inconnue. */
+const SEC_METEO_FRANCE = 'temps sec';
+const cinq = (ms) => Math.max(5, Math.round(ms / 300000) * 5);
+export function pluieDansLheure(st, maintenant = Date.now()) {
+  const a = (st && st.attributes) || {};
+  const debut = Date.parse((st && st.state) || '');
+  const ref = Date.parse(a.forecast_time_ref || '');
+  const f = a['1_hour_forecast'];
+  if (isNaN(debut) || isNaN(ref) || !f || typeof f !== 'object') return null;
+  if (maintenant > ref + 3600000 || debut > maintenant + 3600000) return null;
+  const T = Object.keys(f).map(k => ({ t: ref + parseInt(k, 10) * 60000, d: String(f[k] == null ? '' : f[k]).trim().toLowerCase() }))
+    .filter(x => !isNaN(x.t) && x.d).sort((x, y) => x.t - y.t);
+  const i0 = T.findIndex(x => x.t >= debut - 60000);
+  if (i0 < 0) return null;
+  const secs = new Set(T.slice(0, i0).map(x => x.d).concat(SEC_METEO_FRANCE));
+  if (secs.has(T[i0].d)) return null;
+  let j = i0;
+  while (j < T.length && !secs.has(T[j].d)) j++;
+  const fin = j < T.length ? T[j].t : null;
+  if (fin != null && fin <= maintenant) return null;
+  const dans = debut - maintenant < 150000 ? 0 : cinq(debut - maintenant);
+  const duree = fin == null ? null : cinq(fin - Math.max(debut, maintenant));
+  const texte = dans > 0
+    ? (duree != null ? tr('Pluie dans {n} min, pendant {d} min environ', { n: dans, d: duree }) : tr('Pluie dans {n} min', { n: dans }))
+    : (duree != null ? tr('Pluie encore {d} min environ', { d: duree }) : tr('Pluie en cours'));
+  return { texte, dans, duree };
+}
+
 /* La phrase qui répond à la question qu'on se pose en regardant la météo.
+ *  0. La pluie dans l'heure de Météo-France (`proche`, `pluieDansLheure`), plus précise que l'heure pleine, prend le texte ; le
+ *     conseil reste celui de la pluie des heures qui viennent, s'il y en a une.
  *  1. De la pluie dans les heures qui viennent : « Pluie vers 16 h, jusqu'à 19 h »
  *     et le conseil, avec le cumul. Déjà là : « Pluie jusqu'à 19 h ».
  *  2. Sinon, de nuit : la température au réveil (le minimum avant le lever),
@@ -165,7 +214,13 @@ export const pleut = (p) => { const n = nombreOuNull(p.precipitation_probability
  *     « Sec jusqu'à demain », ou « Sec toute la semaine ».
  * Rend `{ texte, conseil, ton }` — `ton` : 'cold' pour la pluie et le gel, null
  * sinon —, ou null sans prévision. */
-export function phraseMeteo({ heures = null, jours = null, maintenant = Date.now(), soleil = null, etat = null } = {}) {
+export function phraseMeteo({ heures = null, jours = null, maintenant = Date.now(), soleil = null, etat = null, proche = null } = {}) {
+  const base = phraseDesHeures(heures, jours, maintenant, soleil, etat);
+  if (!proche || !proche.texte) return base && { texte: base.texte, conseil: base.conseil, ton: base.ton };
+  return { texte: proche.texte, conseil: base && base.pluie ? base.conseil : null, ton: 'cold' };
+}
+
+function phraseDesHeures(heures, jours, maintenant, soleil, etat) {
   const H = aVenir(heures, maintenant).slice(0, 12);
   const enCours = !!etat && pleut({ condition: etat.state });
   const premiere = H.findIndex(x => pleut(x.p));
@@ -175,12 +230,12 @@ export function phraseMeteo({ heures = null, jours = null, maintenant = Date.now
     for (; i < H.length && pleut(H[i].p); i++) { fin = H[i].t; cumul += nombreOuNull(H[i].p.precipitation) || 0; }
     const finTexte = fin != null ? heureRonde(fin + 3600000) : null;
     if (debut == null) {
-      return { texte: finTexte ? tr('Pluie jusqu’à {h}', { h: finTexte }) : tr('Pluie en cours'), conseil: cumul > 0 ? tr('Environ {n} mm encore attendus.', { n: mmArrondi(cumul) }) : null, ton: 'cold' };
+      return { texte: finTexte ? tr('Pluie jusqu’à {h}', { h: finTexte }) : tr('Pluie en cours'), conseil: cumul > 0 ? tr('Environ {n} mm encore attendus.', { n: mmArrondi(cumul) }) : null, ton: 'cold', pluie: true };
     }
     const d = heureRonde(debut);
     const texte = finTexte && finTexte !== d ? tr('Pluie vers {a}, jusqu’à {b}', { a: d, b: finTexte }) : tr('Pluie vers {h}', { h: d });
     const conseil = cumul > 0 ? tr('Rentrez le linge avant {h}. Environ {n} mm attendus.', { h: d, n: mmArrondi(cumul) }) : tr('Rentrez le linge avant {h}.', { h: d });
-    return { texte, conseil, ton: 'cold' };
+    return { texte, conseil, ton: 'cold', pluie: true };
   }
   if (soleil && estNuit(maintenant, soleil) && H.length) {
     const lever = Date.parse((soleil.attributes || {}).next_rising || '');
@@ -228,21 +283,11 @@ export function soleilMeteo(maintenant, soleil) {
 export function vigilanceWidget(S, id) {
   const st = id && S ? S[id] : null;
   if (!st || st.state === 'unavailable' || st.state === 'unknown') return null;
-  const a = st.attributes || {};
-  let niveau = null, detail = null;
-  if (estMeteoAlarm(id, a)) {
-    const on = st.state === 'on';
-    const couleur = niveauDe(String(a.awareness_level || '').split(';')[1]);
-    niveau = on ? (a.severity === 'Severe' || a.severity === 'Extreme' ? 'rouge' : couleur || 'jaune') : (couleur === 'vert' ? 'vert' : null);
-    detail = on ? (a.event || a.headline || null) : null;
-  } else {
-    niveau = niveauDe(st.state);
-    const phenomenes = niveau && niveau !== 'vert' ? Object.keys(a).filter(k => niveauDe(a[k]) === niveau) : [];
-    detail = phenomenes.length ? phenomenes.join(', ') : null;
-  }
-  if (!niveau) return null;
-  const mots = { vert: tr('Vigilance verte'), jaune: tr('Vigilance jaune'), orange: tr('Vigilance orange'), rouge: tr('Vigilance rouge') };
-  const texte = !detail ? mots[niveau] : /vigilance/i.test(detail) ? detail : mots[niveau] + ' · ' + detail;
+  // LA lecture du niveau (attention.js, ADR 0310) : celle de la carte Vigilance, du point d'attention et du rail.
+  const v = lireVigilance(id, st);
+  if (!v) return null;
+  const niveau = v.niveau;
+  const texte = texteVigilance(v);
   const ton = niveau === 'rouge' ? 'bad' : niveau === 'orange' ? 'warn2' : niveau === 'jaune' ? 'warn' : null;
   return { niveau, ton, texte, widget: niveau === 'orange' || niveau === 'rouge' };
 }

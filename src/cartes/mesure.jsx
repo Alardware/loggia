@@ -1,5 +1,6 @@
 /* La carte d'une mesure.
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
+import { useSyncExternalStore } from 'react';
 import { LOGGIA_INDEX, cfgVal } from '../state.js';
 import { enPanne } from '../outils.js';
 import { LAVIS } from '../theme.js';
@@ -11,6 +12,7 @@ import { LISERE, petitesCapitales } from '../styles.js';
 import { nombre } from '../format.js';
 import { Ico } from '../icones.jsx';
 import { tr } from '../i18n.js';
+import { figeeDe, ecouterFigees, texteFigee } from '../fraicheur.js';
 import { soeursDe, estDehors, pieceLoggiaDe, useHass, lavisCarte } from '../app/noyau.jsx';
 import { cvIcoEntite } from '../cartescustom/cartes.jsx';
 import { RM_NAME, RM_CARD, RM_ICO, ChiffreHaut, RM_SUB, EM_CHIFFRE, EM_UNITE } from './briques.jsx';
@@ -108,6 +110,8 @@ function vueMesure(H, id, label = null, humId = null) {
   const st = S[id] || null;
   const a = (st && st.attributes) || {};
   const muette = enPanne(id, st);
+  // Figée au jugement du SERVEUR (ADR 0311) : le chiffre reste, sans zone ni teinte ; la phrase dit son dernier relevé.
+  const figee = muette ? null : figeeDe(id);
   const cle = cleMesure(a.device_class, a.unit_of_measurement);
   const n = st ? lireNombre(st.state) : null;
   const lu = !muette && n != null;
@@ -120,14 +124,14 @@ function vueMesure(H, id, label = null, humId = null) {
   const inconnue = ventInconnu(cle, uniteTable);
   const dehors = dehorsDe(cle, id);
   const neutre = neutreDe(cle, uniteTable, dehors) || horsPiece(cle, id) || nonJugee(S, id, cle);
-  const zone = cle && v != null && !neutre ? zoneMesure(cle, v, dehors) : null;
+  const zone = cle && v != null && !neutre && !figee ? zoneMesure(cle, v, dehors) : null;
   const hum = lu && humId && S[humId] ? lireNombre(S[humId].state) : null;
-  const phrase = muette ? tr('Indisponible') : !lu ? tr('Valeur illisible') : phraseMesure(cle, zone, hum);
+  const phrase = muette ? tr('Indisponible') : !lu ? tr('Valeur illisible') : figee ? texteFigee(figee) : phraseMesure(cle, zone, hum);
   const repli = zone ? phraseMesure(cle, zone, hum, true) : null;
   const nom = label || cvName(st, id);
   const famille = nomMesure(cle);
   return {
-    nom, muette, cle, famille: nomDitFamille(nom, famille) ? '' : famille, zone, neutre, inconnue, dehors,
+    nom, muette, figee, cle, famille: nomDitFamille(nom, famille) ? '' : famille, zone, neutre, inconnue, dehors,
     chiffre: !lu ? null : cle ? chiffreMesure(cle, n, uniteTable) : nombre(n, 1, 0), unite: cle === 'temp' ? signeTemp(uT) : (a.unit_of_measurement || ''),
     barre: zone ? barreMesure(cle, v, uniteTable, dehors) : null,
     phrase,
@@ -151,6 +155,8 @@ function useVueMesure(hass, id, label = null, actif = true) {
   const a0 = (S0[id] && S0[id].attributes) || {};
   const humId = actif && cleMesure(a0.device_class, a0.unit_of_measurement) === 'temp' ? humiditeDe(S0, id) : null;
   const vivant = useHass(actif ? [id, humId].filter(Boolean) : []);
+  const lireFigee = () => figeeDe(actif ? id : null);
+  useSyncExternalStore(ecouterFigees, lireFigee, lireFigee);
   return actif ? vueMesure(hassQuiConnait(vivant, hass, id), id, label, humId) : null;
 }
 

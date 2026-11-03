@@ -131,7 +131,9 @@ const radiateur = (o = {}) => ({
 const poele = (o = {}) => ({
   cle: POELE, entite: POELE, nom: 'Poêle', famille: 'thermostat', planning: false, modes: TOUS,
   mode: null, source: null, fin: null, puis: null, reprise: null, fenetre: 'arret', fenetre_ouverte: false,
-  semaine: null, temperatures: null, avertissements: [], options: null, jour: null, ...o,
+  semaine: null, temperatures: null, avertissements: [], options: null, jour: null,
+  // Un poêle à granulés, que le serveur reconnaît à la plateforme de son intégration (ADR 0308).
+  poele: true, ...o,
 });
 const vtherm = (o = {}) => ({
   cle: VTHERM, entite: VTHERM, nom: 'Salon', famille: 'vtherm', planning: false, modes: ['confort', 'eco', 'hors_gel', 'arret'],
@@ -980,7 +982,10 @@ test('un appareil qui sait refroidir, planning éteint : ses modes, ses prérég
   assert.match(modes.puces[1].attrs, /background:var\(--o-accent-fond\);color:#fff/);
   const presets = groupe(html, 'preset');
   assert.equal(presets.libelle, 'Préréglage');
-  assert.deepEqual(presets.puces.map(p => [p.mot, p.presse]), [['eco', 'false'], ['comfort', 'true'], ['boost', 'false']]);
+  /* ASSERTION MODIFIÉE (01/11, ADR 0319) : sans les mots de Home Assistant (ce test ne les charge pas), un préréglage qui écrit un
+   * ordre fil pilote se dit avec ceux de Loggia (`motPreset`, chauffageecran.js) — comme la fiche d'avant, désormais ; l'inconnu
+   * (« boost ») reste tel que l'appareil l'écrit. */
+  assert.deepEqual(presets.puces.map(p => [p.mot, p.presse]), [['Éco', 'false'], ['Confort', 'true'], ['boost', 'false']]);
   /* Sa consigne et sa marche, comme avant ; pas de puces des modes du planning.
    * ASSERTIONS MODIFIÉES (cadre 3e) : la consigne s'écrit « 24,0° », la
    * bascule s'appelle « En marche ». */
@@ -991,8 +996,9 @@ test('un appareil qui sait refroidir, planning éteint : ses modes, ses prérég
     supported_features: 401, preset_modes: ['turbo', 'manual', 'comfort', 'auto', 'overnight'], preset_mode: 'manual' });
   const p = rendre({ ch: poele(), sonde: null }, maison({ states: [poeleAPresets] }));
   assert.equal(groupe(p, 'hvac'), null);
+  // ASSERTION MODIFIÉE (01/11, ADR 0319) : « comfort » se dit Confort ; les préréglages propres au poêle restent tels quels.
   assert.deepEqual(groupe(p, 'preset').puces.map(x => [x.mot, x.presse]),
-    [['turbo', 'false'], ['manual', 'true'], ['comfort', 'false'], ['auto', 'false'], ['overnight', 'false']]);
+    [['turbo', 'false'], ['manual', 'true'], ['Confort', 'false'], ['auto', 'false'], ['overnight', 'false']]);
   // ASSERTION MODIFIÉE (« Celles de la maquette ») : la chauffe à l'orange, plus au rouge.
   assert.match(p, /font-size:28px;[^"]*color:var\(--o-warn2\)[^"]*">Chauffe</, 'témoin : il chauffe');
   // Témoin : le poêle des autres tests, sans préréglage, n'a aucun groupe.
@@ -1362,6 +1368,10 @@ test('la fenêtre : « À l’ouverture : … », Ouverte à l’ambre ou Fermé
   assert.ok(!ouverte.includes(conseil), 'un fil pilote');
   assert.ok(!deplie(climatisation(), { sonde: null, hass: maison({ states: [clim()] }) }).includes(conseil), 'une clim réversible : l’Éco ne vaut pas pour elle');
   assert.ok(!deplie(poele({ modes: ['confort', 'hors_gel', 'arret'] }), { sonde: null }).includes(conseil), 'sans Éco, pas de conseil');
+  // Réservé au poêle (01/11, ADR 0308) : un thermostat qui comprend l'Éco et ne refroidit pas, mais que le serveur ne
+  // reconnaît pas comme un poêle (un radiateur électrique), n'a pas le conseil.
+  assert.ok(!deplie(poele({ poele: false }), { sonde: null }).includes(conseil), 'un thermostat qui n’est pas un poêle');
+  assert.ok(!deplie(poele({ poele: undefined }), { sonde: null }).includes(conseil), 'un serveur d’avant : pas de drapeau, pas de conseil');
   // Joué : le réglage part aussitôt, montré d'avance ; le pli se tourne au clic.
   const j = jouer('OngletAccueil', accueil(), { noms: ['err', 'fenetre'], etats: { fenetre: true } });
   chercher(j.arbre, el => el.type === j.F.Puces && el.props.idNom === 'b-fenetre')[0].props.onChoisir('rien');

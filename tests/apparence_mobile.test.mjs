@@ -45,7 +45,7 @@ test('les couleurs d’accent : la couleur du thème, puis quatre teintes — pl
   assert.ok(m, 'la liste des couleurs d’accent a changé de forme');
   const accents = JSON.parse(m[1].replace(/'/g, '"'));
   assert.deepEqual(accents.map(a => a[0]), ['', '#2dd4bf', '#a78bfa', '#f5a524', '#f87171']);
-  assert.deepEqual(accents[0], ['', 'Couleur du thème']);
+  assert.deepEqual(accents[0], ['', 'Du thème']);
   // Un « Bleu » enregistré revient à la couleur du thème, comme les dégradés retirés du fond.
   assert.ok(fonction(APP, 'readLook').includes("if (L.accent === '#4f8cff') L.accent = '';"), 'un ancien « Bleu » resterait choisi sans pastille pour le dire');
 });

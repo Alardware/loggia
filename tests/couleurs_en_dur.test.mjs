@@ -48,13 +48,13 @@ const PLAFONDS = {
   'boot.jsx': 8,
   // Le ciel animé : des couleurs de ciel, pas d'interface.
   'ciel.js': 6,
-  'ecranveille.jsx': 5,
+  // La veille du 01/11 : son fond et son encre, toujours sombres quel que soit le thème.
+  'ecranveille.jsx': 2,
   // `USER_COLORS` : la couleur de chaque profil.
   'ui.jsx': 6,
   // Le badge « Démonstration », posé hors de React, avant le thème.
   'demo.js': 5,
   'scenes.jsx': 3,
-  'Onboarding.jsx': 1,
   'plan3d.jsx': 1,
   'wxutil.jsx': 1,
 };

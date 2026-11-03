@@ -193,20 +193,25 @@ test('2. la sûreté : la plante assoiffée n’est pas une fuite — mais seule
   assert.equal(pointsAttention({ S }).length, 4, 'sans plantes configurées, tout se dit');
 });
 
-test('2. la sûreté : MeteoAlarm est une vigilance, rouge seulement en Severe ou Extreme', () => {
+/* ASSERTIONS MODIFIÉES (01/11, ADR 0310 ; lot 6 Gladys) : MeteoAlarm suit la règle de toute vigilance — le ROUGE seul est un point
+ * (« Vigilance rouge », un danger), l'orange va au rail, le jaune ne dit plus rien à l'Accueil ; « Severe » est l'orange de
+ * MeteoAlarm, plus le rouge, et la couleur de `awareness_level` l'emporte sur la gravité. */
+test('2. la sûreté : MeteoAlarm est une vigilance, un point au rouge seulement', () => {
   const jaune = pointsAttention({ S: { 'binary_sensor.meteo': bin('safety', 'on', 'Vigilance') } });
   assert.equal(jaune[0].titre, 'Alerte de sécurité', 'sans indice MeteoAlarm, c’est un capteur de sécurité');
   const S = { 'binary_sensor.vigilance': et('on', { device_class: 'safety', awareness_level: '2; yellow; Moderate', event: 'Vigilance jaune orages', severity: 'Moderate' }) };
-  const pts = pointsAttention({ S });
-  assert.deepEqual(pts, [{ cle: 'meteo:binary_sensor.vigilance', niveau: 'alerte', icone: 'umbrella', titre: 'Vigilance météo', sous: 'Vigilance jaune orages', vue: 'securite', haid: 'binary_sensor.vigilance' }]);
+  assert.deepEqual(pointsAttention({ S }), [], 'jaune : rien à l’Accueil');
   S['binary_sensor.vigilance'].attributes.severity = 'Severe';
-  assert.equal(pointsAttention({ S })[0].niveau, 'danger');
-  S['binary_sensor.vigilance'].attributes.severity = 'Extreme';
-  assert.equal(pointsAttention({ S })[0].niveau, 'danger');
-  const parId = pointsAttention({ S: { 'binary_sensor.meteoalarm_paris': et('on', { device_class: 'safety', headline: 'Orages' }) } });
-  assert.deepEqual([parId[0].titre, parId[0].sous, parId[0].niveau], ['Vigilance météo', 'Orages', 'alerte']);
-  const parAttribution = pointsAttention({ S: { 'binary_sensor.alerte': et('on', { device_class: 'safety', attribution: 'Information provided by MeteoAlarm' }) } });
-  assert.deepEqual([parAttribution[0].titre, parAttribution[0].sous], ['Vigilance météo', 'Alerte météo en cours']);
+  assert.deepEqual(pointsAttention({ S }), [], 'la couleur dit jaune : la gravité ne la contredit pas');
+  S['binary_sensor.vigilance'].attributes.awareness_level = '3; orange; Severe';
+  assert.deepEqual(pointsAttention({ S }), [], 'orange : le rail, pas un point');
+  Object.assign(S['binary_sensor.vigilance'].attributes, { awareness_level: '4; red; Extreme', severity: 'Extreme', event: 'Vigilance rouge orages' });
+  assert.deepEqual(pointsAttention({ S }), [{ cle: 'meteo:binary_sensor.vigilance', niveau: 'danger', icone: 'umbrella', titre: 'Vigilance rouge', sous: 'Vigilance rouge orages', vue: 'securite', haid: 'binary_sensor.vigilance' }]);
+  assert.deepEqual(pointsAttention({ S: { 'binary_sensor.meteoalarm_paris': et('on', { device_class: 'safety', headline: 'Orages' }) } }), [], 'allumée sans niveau : le jaune');
+  const parId = pointsAttention({ S: { 'binary_sensor.meteoalarm_paris': et('on', { device_class: 'safety', headline: 'Orages', severity: 'Extreme' }) } });
+  assert.deepEqual([parId[0].titre, parId[0].sous, parId[0].niveau], ['Vigilance rouge', 'Orages', 'danger']);
+  const parAttribution = pointsAttention({ S: { 'binary_sensor.alerte': et('on', { device_class: 'safety', attribution: 'Information provided by MeteoAlarm', severity: 'Extreme' }) } });
+  assert.deepEqual([parAttribution[0].titre, parAttribution[0].sous], ['Vigilance rouge', 'Alerte météo en cours']);
 });
 
 test('3. un ouvrant ouvert pendant que l’alarme est armée — et seulement alors', () => {

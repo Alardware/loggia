@@ -55,10 +55,12 @@ test('le champ de recherche de l’en-tête garde de quoi se lire, sans faire d�
   assert.ok(!/minWidth: \d/.test(champ.split('\n')[0]), 'le minimum vit dans index.css, sinon la requête de conteneur ne pourrait pas le lever');
 });
 
-test('hub Paramètres : sous-titres sur deux lignes réservées, valeur jamais coupée', () => {
+test('Paramètres au téléphone : plus de sommaire en tuiles, les sections en puces qui défilent (maquette v4)', () => {
+  // Les tuiles du sommaire (sous-titres sur deux lignes réservées) sont parties
+  // avec lui : au téléphone, une rangée de puces ; sur écran large, le rail.
   const p = lire('src', 'views', 'parametres.jsx');
-  assert.ok(p.includes("lineHeight: 1.35, minHeight: '2.7em', color: 'var(--o-text3)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{sec.sub}</div>"));
-  assert.ok(p.includes("<span style={{ flexShrink: 0, maxWidth: '100%', fontSize: sec.small ? 17 : 24,"));
+  assert.ok(!p.includes('{sec.sub}</div>') && !p.includes('grid-parsections'), 'le sommaire en tuiles est revenu');
+  assert.ok(p.includes("overflowX: 'auto', scrollbarWidth: 'none', marginTop: 18"), 'les puces défilent sans barre');
 });
 
 test('le badge de la démo s’efface pendant qu’une fenêtre est ouverte', () => {

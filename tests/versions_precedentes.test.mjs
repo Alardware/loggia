@@ -106,7 +106,8 @@ test('rien de plus exporté par le démarrage : les versions n’importent de lu
    * `enregistrerRefus` et `estCleAppareil` ajoutaient 15 octets au boot). */
   const imports = (f) => [...lire('src', ...f).matchAll(/^import \{([^}]*)\} from '([^']+)';$/gm)].map((m) => [m[2], m[1].split(',').map((x) => x.trim()).sort()]);
   assert.deepEqual(imports(['versions.js']), [['./i18n.js', ['locale', 'tr']]]);
-  assert.deepEqual(imports(['views', 'versions.jsx']).map(([de]) => de), ['react', '../i18n.js', './parcommun.jsx', '../versions.js']);
+  assert.deepEqual(imports(['views', 'versions.jsx']).map(([de]) => de), ['react', '../i18n.js', './parcommun.jsx', './partel.jsx', '../versions.js']);
+  // partel.jsx : les briques du téléphone, dans le morceau de Paramètres, pas dans le démarrage.
 });
 
 test('un retour refusé ne touche pas au navigateur', async () => {
@@ -135,12 +136,12 @@ const LISTE = [
   { id: 'a0', date: '2026-10-27T13:05:00Z', compte: null, taille: 1, motif: 'retour' },
 ];
 
-test('chaque copie : sa date, son compte, et « Revenir à celle-ci »', () => {
+test('chaque copie : sa date, son compte, et « Remettre » (maquette v3)', () => {
   const html = rendre(ListeVersions, { etat: { charge: true, liste: LISTE, erreur: null }, maintenant: MAINTENANT });
   const t = texte(html);
-  assert.ok(t.startsWith('Versions précédentes'), t);
-  assert.ok(t.includes('il y a 2 h Avant un enregistrement de Camille Revenir à celle-ci'), t);
-  assert.ok(t.includes('mardi 27 octobre à 14:05 Avant un retour en arrière Revenir à celle-ci'), t);
+  assert.ok(t.startsWith('Revenir en arrière'), t);
+  assert.ok(t.includes('il y a 2 h Avant un enregistrement de Camille Remettre'), t);
+  assert.ok(t.includes('mardi 27 octobre à 14:05 Avant un retour en arrière Remettre'), t);
   assert.equal((html.match(/<button/g) || []).length, 2);
   assert.ok(!html.includes('<select'), 'jamais de <select> natif');
   assert.ok(!/#(?!fff\b)[0-9a-f]{3,8}\b/i.test(html), 'aucune couleur en dur, hors le blanc');
@@ -157,16 +158,16 @@ test('la confirmation en deux temps, puis « Retour… » ; les autres boutons a
 
 test('rien encore, une lecture, une panne : la ligne le dit', () => {
   const lu = (etat) => texte(rendre(ListeVersions, { etat, maintenant: MAINTENANT }));
-  assert.equal(lu({ charge: false, liste: [], erreur: null }), 'Versions précédentes Lecture…');
+  assert.equal(lu({ charge: false, liste: [], erreur: null }), 'Revenir en arrière Lecture…');
   assert.equal(lu({ charge: true, liste: [], erreur: null }),
-    'Versions précédentes Aucune copie pour l’instant : la première se fera au prochain enregistrement.');
-  assert.equal(lu({ charge: true, liste: [], erreur: 'Home Assistant n’a pas répondu.' }), 'Versions précédentes Home Assistant n’a pas répondu.');
+    'Revenir en arrière Aucune copie pour l’instant : la première se fera au prochain enregistrement.');
+  assert.equal(lu({ charge: true, liste: [], erreur: 'Home Assistant n’a pas répondu.' }), 'Revenir en arrière Home Assistant n’a pas répondu.');
 });
 
 test('dans Paramètres › À propos, sous la même garde que l’import, et à la demande', () => {
   const par = lire('src', 'views', 'parametres.jsx');
   assert.ok(par.includes("import { VersionsPrecedentes } from './versions.jsx';"));
-  const installation = par.slice(par.indexOf("<Panneau titre={tr('Installation')}"), par.indexOf("[tr('Dépôt GitHub')"));
+  const installation = par.slice(par.indexOf("<Panneau titre={tr('Installation')}"), par.indexOf("tr('Dépôt GitHub')"));
   assert.ok(installation.includes('{isAdmin && <VersionsPrecedentes hass={hass} motif={motifEchec} alerter={alerter} />}'),
     'la ligne vit avec Exporter et Importer, pour les mêmes comptes que l’import');
   assert.ok(installation.includes('{isAdmin && <ImportConfigBtn />}'));

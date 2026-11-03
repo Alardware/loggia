@@ -58,7 +58,9 @@ test('MeteoAlarm : la règle de l’Accueil — l’attribut, l’attribution, �
   for (const [id, a, attendu] of cas) {
     assert.equal(estMeteoAlarm(id, a), attendu, id + ' ' + JSON.stringify(a));
     // L'Accueil en fait une vigilance, et seulement d'elle : les deux règles disent la même chose.
-    const points = pointsAttention({ S: { [id]: { state: 'on', attributes: a } } });
+    // ASSERTION MODIFIÉE (01/11, ADR 0310) : seule une vigilance ROUGE fait un point — l'essai la pose au rouge (la couleur l'emporte).
+    const rouge = { ...a, severity: 'Extreme', ...(a.awareness_level ? { awareness_level: '4; red; Extreme' } : {}) };
+    const points = pointsAttention({ S: { [id]: { state: 'on', attributes: rouge } } });
     assert.equal(points.some(p => p.cle.indexOf('meteo:') === 0), attendu, 'pointsAttention ' + id);
   }
 });

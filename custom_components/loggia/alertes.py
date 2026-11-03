@@ -54,6 +54,7 @@ from .const import DOMAIN
 from .lumieres_maison import async_interrupteurs_declares, lumieres_de_la_maison, par_service, registre_de
 from .ouvrants import CLASSES_VOLETS, STORE_BANNE, ouvre_et_ferme
 from .regles import niveau
+from .voisins import domaines_voisins, entendue, pluie_de_robot
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
@@ -70,6 +71,11 @@ CLE_CONFIG = "loggia_alertes"
 TITRE = "Loggia — sûreté"
 MSG_ALARME = "Alarme déclenchée"
 MSG_OUVERTURE = "Ouverture pendant que l’alarme est armée"
+# Un capteur qu'on ouvre ou qu'on arrache (`tamper`) PENDANT que l'alarme est
+# armee (01/11, ADR 0307 ; fin du S4 du 30/10) : l'ecran le disait, le
+# telephone non. La meme categorie que l'ouverture sous alarme (« portes »),
+# le meme traitement : il attend les heures calmes, comme elle.
+MSG_SABOTAGE = "Sabotage pendant que l’alarme est armée"
 # Un detecteur de surete qui se tait (audit du 19/10, M5) : une pile a plat,
 # un appareil decroche du reseau. Il ne previent plus de rien, et personne ne
 # le savait. Une notification ORDINAIRE — pas un danger : elle attend les
@@ -79,6 +85,12 @@ MSG_MUET = "Détecteur muet, à vérifier"
 # tombe, tous les detecteurs se taisent dans la meme minute — UNE notification
 # qui les nomme, pas une par detecteur.
 MSG_MUETS = "Détecteurs muets, à vérifier"
+# Une alarme qu'une camera ENTEND (31/10, ADR 0305) : le son d'un detecteur de
+# fumee ou de monoxyde, reconnu par la camera (UniFi Protect). Il part au
+# telephone comme un danger - un detecteur autonome sonne peut-etre dans
+# l'entree -, mais la maison ne reagit pas : le son ne prouve pas le danger, il
+# peut venir d'un voisin ou de la television. Le texte dit ce qu'on sait.
+MSG_ENTENDUE = "Alarme entendue par une caméra"
 
 
 def gabarit(message: str) -> str:
@@ -126,6 +138,7 @@ PLATEFORMES_CALCULEES = ("template", "group")
 # plante de `loggia_plants`, suivie de rien ou d'un « _ ».
 CLE_PLANTES = "loggia_plants"
 PORTES = ("door", "window", "garage_door", "opening")
+SABOTAGE = "tamper"
 # Ce qui reveille — le seul canal qui contourne les heures calmes.
 DANGER = ("fumee", "gaz", "co", "fuite", "alarme")
 # `armed_custom_bypass` : arme, quelques zones contournees. L'ecran le tenait
@@ -280,6 +293,9 @@ class LoggiaAlertes:
             if etat.entity_id.startswith("alarm_control_panel."):
                 await self._envoyer(etat, "alarme", MSG_ALARME, urgent=True)
                 continue
+            if self._entendue(etat.entity_id, etat.attributes.get("device_class")):
+                await self._envoyer(etat, BINAIRES[etat.attributes.get("device_class")][0], MSG_ENTENDUE)
+                continue
             cat, msg = BINAIRES[etat.attributes.get("device_class")]
             await self._envoyer(etat, cat, msg)
 
@@ -326,7 +342,8 @@ class LoggiaAlertes:
             self._guetter_muet(new, old)
             return
         self._fin_muet(haid)
-        porte = domaine == "binary_sensor" and (new.attributes or {}).get("device_class") in PORTES
+        # Un sabotage se lit comme une porte : il APPARAIT ouvert sans s'etre ouvert.
+        porte = domaine == "binary_sensor" and (new.attributes or {}).get("device_class") in PORTES + (SABOTAGE,)
         if old is None:
             # Une apparition. Pendant le demarrage, la revue s'en charge (H4) ;
             # APRES, c'est un evenement (relecture du lot 2, point 3) : une
@@ -368,12 +385,18 @@ class LoggiaAlertes:
             if dc in BINAIRES:
                 if not self._danger_reel(new.entity_id, dc):
                     return  # « la plante a soif » n'est pas une fuite
+                if self._entendue(new.entity_id, dc):
+                    # Ce que la camera entend : le telephone, pas la maison.
+                    self._hass.async_create_task(self._envoyer(new, BINAIRES[dc][0], MSG_ENTENDUE))
+                    return
                 cat, msg = BINAIRES[dc]
                 self._hass.async_create_task(self._envoyer(new, cat, msg))
                 if vu:
                     self._hass.async_create_task(self._reagir(new, cat))
             elif dc in PORTES:
                 self._hass.async_create_task(self._porte_ouverte(new))
+            elif dc == SABOTAGE:
+                self._hass.async_create_task(self._sabotage(new))
         elif domaine == "binary_sensor" and new.state == "off" and avant == "on":
             dc = new.attributes.get("device_class")
             if dc in BINAIRES and self._danger_reel(new.entity_id, dc):
@@ -390,7 +413,9 @@ class LoggiaAlertes:
         `moisture` qu'un modele ou un groupe calcule (16/10, ADR 0022). Le
         registre illisible, ou l'entite qu'il ne connait pas : c'est une fuite.
         Le besoin d'eau d'une plante se juge a part, sur la configuration
-        (`_est_plante`, audit du 19/10, M1) : elle se lit en asynchrone."""
+        (`_est_plante`, audit du 19/10, M1) : elle se lit en asynchrone.
+        La pluie d'un robot non plus (31/10, ADR 0305) : un `moisture` dont
+        l'appareil porte une tondeuse ou un aspirateur."""
         if dc != "moisture":
             return True
         try:
@@ -400,7 +425,14 @@ class LoggiaAlertes:
         except Exception:  # noqa: BLE001
             _LOGGER.debug("Loggia alertes : registre illisible pour %s, la fuite reste une fuite", haid, exc_info=True)
             return True
-        return getattr(entree, "platform", None) not in PLATEFORMES_CALCULEES
+        if getattr(entree, "platform", None) in PLATEFORMES_CALCULEES:
+            return False
+        return not pluie_de_robot(domaines_voisins(self._hass, haid, entree))
+
+    def _entendue(self, haid: str, dc: Any) -> bool:
+        """Une alarme qu'une camera ENTEND (31/10, ADR 0305) : le telephone,
+        jamais la maison - ni lumieres, ni volets."""
+        return haid.startswith("binary_sensor.") and entendue(dc, domaines_voisins(self._hass, haid))
 
     async def _est_plante(self, haid: str) -> bool:
         """Ce binaire est-il le besoin d'eau d'une plante de la maison ? La
@@ -433,7 +465,9 @@ class LoggiaAlertes:
         # Un etat muet garde souvent ses attributs ; sinon, ceux d'avant.
         dc = (etat.attributes or {}).get("device_class") or (
             (getattr(old, "attributes", None) or {}).get("device_class"))
-        if dc not in BINAIRES or not self._danger_reel(haid, dc):
+        # Une camera qui se tait est deja « Caméra hors ligne » : ce qu'elle
+        # entend n'est pas un detecteur muet de plus (ADR 0305).
+        if dc not in BINAIRES or not self._danger_reel(haid, dc) or self._entendue(haid, dc):
             return
         from homeassistant.helpers.event import async_call_later
 
@@ -643,8 +677,11 @@ class LoggiaAlertes:
         """Sur un danger, la maison agit — en tete de l'echelle, et tenu.
 
         Toujours, meme en « Observer sans agir » (audit du 19/10, ADR 0250) :
-        la surete ne se simule pas. Sauf une categorie decochee, et le besoin
-        d'eau d'une plante."""
+        la surete ne se simule pas. Sauf une categorie decochee, le besoin
+        d'eau d'une plante, et l'alarme qu'une camera entend (ADR 0305) : le
+        dernier filet, quel que soit le chemin qui mene ici."""
+        if self._entendue(etat.entity_id, (etat.attributes or {}).get("device_class")):
+            return
         actions = await self._actions()
         if not actions.get("actif"):
             return
@@ -760,6 +797,16 @@ class LoggiaAlertes:
         )
         if armee:
             await self._envoyer(etat, "portes", MSG_OUVERTURE)
+
+    async def _sabotage(self, etat: Any) -> None:
+        """Un sabotage n'alerte, comme une ouverture, que si une alarme est armee
+        (ADR 0307) : desarmee, c'est quelqu'un qui change une pile."""
+        armee = any(
+            s.state in ARMEE
+            for s in self._hass.states.async_all("alarm_control_panel")
+        )
+        if armee:
+            await self._envoyer(etat, "portes", MSG_SABOTAGE)
 
     async def _envoyer(self, etat: Any, categorie: str, message: str, urgent: bool = False) -> None:
         cfg = await self._store.async_get_shared(CLE_CONFIG)

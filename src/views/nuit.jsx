@@ -127,7 +127,8 @@ export function NuitReglages({ hass, cardSt }) {
   const sansFondu = choisies.filter(l => !l.fondu);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    // Des lignes dans le panneau de leur module (maquette v3 des Règles, 03/11) : plus d'écart entre elles.
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
       {/* La simulation se dit EN HAUT, pas seulement dans son réglage : sinon
         * on cherche pourquoi rien ne bouge. */}
       {simu.actif && (
@@ -137,7 +138,7 @@ export function NuitReglages({ hass, cardSt }) {
       )}
       {/* ── La veilleuse ── */}
       <div style={cardSt}>
-        <RegleEntete nom={tr('Veilleuse')}
+        <RegleEntete ico="moon" nom={tr('Veilleuse')}
           desc={tr('Allumée le soir, elle s’éteint toute seule après le délai réglé.')}
           on={v.actif} cb={() => enregistrer({ veilleuse: { actif: !v.actif } })} plie={pliVeilleuse} onPlier={plierVeilleuse} zone="nuit-veilleuse" />
         {etat.en_cours && etat.en_cours.length > 0 && (
@@ -199,7 +200,7 @@ export function NuitReglages({ hass, cardSt }) {
 
       {/* ── Les lampes oubliées ── */}
       <div style={cardSt}>
-        <RegleEntete nom={tr('Extinction du soir')}
+        <RegleEntete ico="power" nom={tr('Extinction du soir')}
           desc={tr('À l’heure dite, ce qui traîne encore allumé s’éteint.')}
           on={c.actif} cb={() => enregistrer({ coucher: { actif: !c.actif } })} plie={pliCoucher} onPlier={plierCoucher} zone="nuit-coucher" />
         {c.actif && !pliCoucher && (
@@ -248,7 +249,7 @@ export function NuitReglages({ hass, cardSt }) {
         * mouvement, elle s'éteint seule. Une lampe montée à la main reste
         * allumée : la main l'emporte, la règle lâche (ADR 0012). */}
       <div style={cardSt}>
-        <RegleEntete nom={tr('Éclairage nocturne')}
+        <RegleEntete ico="sensor-on" nom={tr('Éclairage nocturne')}
           desc={tr('La nuit, un mouvement dans une pièce allume ses lampes à faible intensité ; sans mouvement, elles s’éteignent seules.')}
           on={ecl.actif} cb={() => enregistrer({ eclairage: { actif: !ecl.actif } })} plie={pliEclairage} onPlier={plierEclairage} zone="nuit-eclairage" />
         {etat.eclairees && Object.keys(etat.eclairees).length > 0 && (

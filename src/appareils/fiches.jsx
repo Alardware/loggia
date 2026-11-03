@@ -2,7 +2,8 @@
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
 import { useState, Suspense, useRef, useEffect } from 'react';
 import { lazyRecharge } from '../recharge.js';
-import { LOGGIA_INDEX, compteOrdinaire, loggiaEnt, cfgVal, normRooms } from '../state.js';
+import { LOGGIA_INDEX, compteOrdinaire, loggiaEnt, cfgVal, normRooms, estEtatPoele, estTraceur } from '../state.js';
+import { texteEtatPoele } from '../poele.js';
 import { gestesCover, positionPubliee, enPanne } from '../outils.js';
 import { uniteTemp, versCelsius } from '../unites.js';
 import { consigneClimat, plageClimat } from '../consigne.js';
@@ -28,7 +29,8 @@ import { lireEtatDistributeur, useEtatDistributeur, useDistribution, lancerDistr
 import { useEtatChauffage, chauffageParCle, chauffageDe } from '../chauffageetat.js';
 import { coverFerme, coverOuvert, estVolet, iconeSelonEtat } from '../voletecran.js';
 import { useEtatVolets, voletDe } from '../voletsetat.js';
-import { consigneVoisine } from '../chauffageecran.js';
+// Le mot d'un préréglage (D15, ADR 0319) : « frost_protection » se dit Hors-gel.
+import { consigneVoisine, motPreset } from '../chauffageecran.js';
 import { Ico } from '../icones.jsx';
 import { reduireDerniers } from '../evenement.js';
 import { tr, locale, comparerTextes } from '../i18n.js';
@@ -90,6 +92,8 @@ const FicheMeteoContenu = lazyRecharge(() => import('../fichemeteo.jsx'));
 const FicheGroupeContent = lazyRecharge(() => import('../fichegroupe.jsx'));
 // La fiche d'une plante (chantier Capteurs, étape 3 ; C31, C34) : à l'ouverture de sa carte — le démarrage n'en embarque rien.
 const FichePlanteContent = lazyRecharge(() => import('../ficheplante.jsx'));
+// La popup d'un traceur d'objet (ADR 0318) : sa feuille entière, à l'ouverture de sa carte.
+const FicheTraceur = lazyRecharge(() => import('../fichetraceur.jsx'));
 
 /* La feuille d'un LECTEUR (passe téléphone, T16 : la borne du démarrage) : la
  * coquille. Le contenu se charge à la demande (`fichemedia.jsx`) et n'importe
@@ -207,6 +211,23 @@ function FichePuces({ options, valeur, onChoix }) {
         <button key={o.id} onClick={() => onChoix(o.id)} aria-pressed={on} style={{ padding: '8px 14px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' }}>{o.nom}</button>
       ); })}
     </div>
+  );
+}
+/* Les MODES d'un ventilateur ou d'un purificateur (ticket #43) : un Levoit
+ * publie `auto`, `sleep`, `manual`, `pet`… et Loggia n'offrait que marche /
+ * arrêt — le mode automatique ne se retrouvait qu'ailleurs. Le nom vient de
+ * Home Assistant ; les quatre plus courants ont le leur. */
+const MOTS_VENTILO = { auto: 'Automatique', sleep: 'Nuit', manual: 'Manuel', pet: 'Animaux' };
+const motVentilo = (p) => (MOTS_VENTILO[p] ? tr(MOTS_VENTILO[p]) : String(p).charAt(0).toUpperCase() + String(p).slice(1));
+function ModesVentilo({ id, hass }) {
+  const st = hass && hass.states && hass.states[id];
+  const modes = st && Array.isArray(st.attributes.preset_modes) ? st.attributes.preset_modes.filter(m => typeof m === 'string' && m) : [];
+  const [ov, setOv] = useOptimiste(st ? st.attributes.preset_mode : null);
+  if (!modes.length || !st || st.state === 'unavailable') return null;
+  const valeur = ov != null ? ov : (st.state === 'on' ? st.attributes.preset_mode : null);
+  return (
+    <FichePuces options={modes.map(m => ({ id: m, nom: motVentilo(m) }))} valeur={valeur}
+      onChoix={(m) => { setOv(m); commanderService(hass, id, 'fan', 'turn_on', { entity_id: id, preset_mode: m }); }} />
   );
 }
 const heureDe = (iso) => {
@@ -347,7 +368,7 @@ function RoomClimateSheet({ id, hass, onClose }) {
         </div>
         {!mort && <div style={{ marginTop: 12 }}>
           {presets.length > 0
-            ? <FichePuces options={presets.map(p => ({ id: p, nom: p }))} valeur={a.preset_mode && a.preset_mode !== 'unknown' ? a.preset_mode : null} onChoix={(p) => commander(hass, id, 'set_preset_mode', p)} />
+            ? <FichePuces options={presets.map(p => ({ id: p, nom: motPreset(p) }))} valeur={a.preset_mode && a.preset_mode !== 'unknown' ? a.preset_mode : null} onChoix={(p) => commander(hass, id, 'set_preset_mode', p)} />
             : <FichePuces options={all.map(m => ({ id: m, nom: motModeClimat(m) }))} valeur={mode} onChoix={(m) => commander(hass, id, 'set_hvac_mode', m)} />}
         </div>}
         <div style={{ marginTop: 14 }}>
@@ -563,10 +584,12 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
     // l'ISO à T passait par `relTime` : une date seule s'écrivait « 2 026 »,
     // une heure « 07:30 » un « 7 ».
     const rel = texteDate(st);
+    // Ce que fait un poêle (ADR 0308) : envoyé en italien, dit dans la langue de l'écran ; une valeur inconnue, telle quelle.
+    const poele = estEtatPoele(id) ? texteEtatPoele(brut) : null;
     const bat = a.device_class === 'battery' && !isNaN(n);
     controle = (
       <span style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: bat ? couleurPile(n, 'var(--o-text)') : 'var(--o-text)' }}>
-        {mort ? '—' : rel || (isNaN(n) ? String(brut) : decMax(n, 2))}{!rel && a.unit_of_measurement ? ' ' + a.unit_of_measurement : ''}
+        {mort ? '—' : poele || rel || (isNaN(n) ? String(brut) : decMax(n, 2))}{!rel && !poele && a.unit_of_measurement ? ' ' + a.unit_of_measurement : ''}
       </span>
     );
   }
@@ -873,7 +896,12 @@ function FicheAppareil({ id, hass, onClose }) {
               ? <FicheMachineHero key={x.id} id={x.id} hass={H} />
               : domDe(x.id) === 'alarm_control_panel'
                 ? <CvAlarm key={x.id} id={x.id} hass={H} sans />
-                : <CvCard key={x.id} id={x.id} hass={H} onOpen={x.id !== id ? dc.ouvrir : null} />)}
+                : domDe(x.id) === 'fan'
+                  ? <div key={x.id} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <CvCard id={x.id} hass={H} onOpen={x.id !== id ? dc.ouvrir : null} />
+                      <ModesVentilo id={x.id} hass={H} />
+                    </div>
+                  : <CvCard key={x.id} id={x.id} hass={H} onOpen={x.id !== id ? dc.ouvrir : null} />)}
           </div>
         )}
         {section(tr('ÉPINGLES'), epinglees, true)}
@@ -1095,6 +1123,7 @@ function useDomainCards(hass, { onNav = null } = {}) {
   const [groupePop, setGroupePop] = useState(null);
   const [eauPop, setEauPop] = useState(null);
   const [bornePop, setBornePop] = useState(false);
+  const [traceurPop, setTraceurPop] = useState(null);
   // La fiche du domaine, depuis n'importe quelle carte — la compacte ouvre la
   // même popup que la riche. Tout ce qui n'a pas de fiche dédiée reçoit la
   // FICHE APPAREIL UNIVERSELLE : l'appareil entier, rendu par le registre.
@@ -1131,6 +1160,8 @@ function useDomainCards(hass, { onNav = null } = {}) {
     else if (DOMAINES_ROBOT.indexOf(d) >= 0) setRobotPop(id);
     // Un chauffe-eau a SA popup (chantier G3, E2) : la consigne, le mode, l'arrêt.
     else if (d === 'water_heater') setEauPop(id);
+    // Un traceur d'objet a SA popup (ADR 0318) : sa zone, sa batterie, son dernier signal, son état.
+    else if (estTraceur(id)) setTraceurPop(id);
     else setAppPop(id);
   };
   // ── Les cartes que Loggia compose lui-meme — distributeur, plantes, zones
@@ -1219,9 +1250,10 @@ function useDomainCards(hass, { onNav = null } = {}) {
       {groupePop && <FicheGroupe groupe={groupePop} hass={hass} onClose={() => setGroupePop(null)} />}
       {eauPop && <FicheEauChaude id={eauPop} hass={hass} onClose={() => setEauPop(null)} />}
       {bornePop && <FicheBorne hass={hass} onClose={() => setBornePop(false)} />}
+      {traceurPop && <Suspense fallback={null}><FicheTraceur id={traceurPop} hass={hass} onClose={() => setTraceurPop(null)} /></Suspense>}
     </>
   );
-  const fermer = () => { setLightPop(null); setClimPop(null); setPilotPop(null); setCoverPop(null); setMediaPop(null); setSensPop(null); setAppPop(null); setCamPop(null); setPrisePop(null); setLockPop(null); setBinPop(null); setRobotPop(null); setGroupePop(null); setFeederPop(false); setPlantPop(null); setEauPop(null); setBornePop(false); };
+  const fermer = () => { setLightPop(null); setClimPop(null); setPilotPop(null); setCoverPop(null); setMediaPop(null); setSensPop(null); setAppPop(null); setCamPop(null); setPrisePop(null); setLockPop(null); setBinPop(null); setRobotPop(null); setGroupePop(null); setFeederPop(false); setPlantPop(null); setEauPop(null); setBornePop(false); setTraceurPop(null); };
   /* La COMPACTE d'une entite : une rangee — icone, nom, etat, le controle —
    * qui ouvre la meme fiche que la riche. Une zone fil pilote n'en a pas. */
   const compact = (id, label = null) => card(id, label, null, true);

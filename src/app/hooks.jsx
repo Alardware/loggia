@@ -257,6 +257,28 @@ function useJournalApp({ hass, vivantes }) {
   return { notifs, lireNotifs };
 }
 
+/* Le geste qui sort de la veille ne doit rien actionner dessous (02/11).
+ * Pris à la capture, avant tout composant : les événements de souris que le
+ * navigateur tire d'un toucher, la fin du toucher (`touchend`, dont
+ * l'annulation empêche aussi le clic), le relâché et le clic. Le premier clic
+ * avalé suffit. Sinon, tout se lâche peu après le relâché — un appui long ou
+ * un glissé ne produit aucun clic —, et au plus tard après `max` : une
+ * tablette lente ne doit pas laisser passer le clic d'un doigt resté posé. */
+export function avalerGesteSuivant(cible, { apres = 400, max = 3000 } = {}) {
+  const evs = ['mousedown', 'touchend', 'pointerup', 'mouseup', 'click'];
+  let t = 0;
+  const lacher = () => { clearTimeout(t); evs.forEach(e => cible.removeEventListener(e, avaler, { capture: true })); };
+  function avaler(e) {
+    if (e.cancelable) e.preventDefault();
+    e.stopImmediatePropagation();
+    if (e.type === 'click') lacher();
+    else if (e.type !== 'mousedown') { clearTimeout(t); t = setTimeout(lacher, apres); }
+  }
+  evs.forEach(e => cible.addEventListener(e, avaler, { capture: true, passive: false }));
+  t = setTimeout(lacher, max);
+  return lacher;
+}
+
 function useReglagesEcran({ haTheme, look, setHaTheme, setLoggiaTheme, setThemeMode, setView, view }) {
   /* Un GESTE écrit l'apparence (ADR 0223) ; le démarrage, jamais — sinon le
    * premier écran allumé imposerait son thème à tous ceux du profil. */
@@ -337,14 +359,33 @@ function useReglagesEcran({ haTheme, look, setHaTheme, setLoggiaTheme, setThemeM
   useEffect(() => {
     if (!ambient) { setIdle(false); return; }
     let t = 0;
+    let lacher = null;
     const arme = () => { clearTimeout(t); t = setTimeout(() => setIdle(true), ambient * 60000); };
-    // Un geste quelconque réveille ET réarme. L'overlay couvre tout l'écran :
-    // le toucher de réveil ne peut rien actionner en dessous.
-    const reveil = () => { setIdle(false); arme(); };
+    /* Un geste quelconque réveille ET réarme. La veille part dès que le doigt
+     * se pose (`pointerdown`) : le clic qui suit tombait sur ce qu'elle
+     * cachait — un interrupteur sous le doigt changeait d'état (02/11). Le
+     * geste qui réveille est donc avalé jusqu'au bout. Seul un geste VRAI : la
+     * caméra et le bouton de surface réveillent par un `pointerdown` de
+     * synthèse, qu'aucun clic ne suit. Et seulement si la veille est VRAIMENT
+     * affichée (`loggia-ambient-on`, posée par AmbientOverlay) : hors de sa
+     * plage horaire ou sous la popup de la sonnette, `idle` est vrai sans rien
+     * à l'écran, et le premier toucher était mangé (relecture du 03/11). */
+    const reveil = (e) => {
+      if (document.documentElement.classList.contains('loggia-ambient-on') && e && e.isTrusted && (e.type === 'pointerdown' || e.type === 'touchstart')) {
+        if (lacher) lacher();
+        lacher = avalerGesteSuivant(window);
+      }
+      setIdle(false); arme();
+    };
     const evs = ['pointerdown', 'keydown', 'wheel', 'touchstart'];
     evs.forEach(e => window.addEventListener(e, reveil, { passive: true }));
+    /* « Voir » dans Paramètres › Apparence (maquette v3, 02/11) : la veille
+     * s'ouvre tout de suite. Le clic arrive après son `pointerdown`, qui l'a
+     * déjà réarmée : elle reste donc ouverte jusqu'au prochain geste. */
+    const voir = () => { clearTimeout(t); setIdle(true); };
+    window.addEventListener('loggia-veille-voir', voir);
     arme();
-    return () => { clearTimeout(t); evs.forEach(e => window.removeEventListener(e, reveil)); };
+    return () => { clearTimeout(t); if (lacher) lacher(); evs.forEach(e => window.removeEventListener(e, reveil)); window.removeEventListener('loggia-veille-voir', voir); };
   }, [ambient]);
   /* ── Le retour à l'accueil après inactivité (05/10) ────────────────────────
    *

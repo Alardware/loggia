@@ -84,20 +84,25 @@ test('« À surveiller » : un « Besoin Eau » de modèle ou un groupe ne fait 
 test('« En ce moment » (deriveNotifs) et l’Accueil : la même exclusion, par la plateforme de l’index', () => avec(maisonFuites(), {}, (S) => {
   const notifs = F.deriveNotifs({ states: S }).filter(n => n.k.indexOf('surete:') === 0).map(n => n.k.slice(7));
   assert.deepEqual(notifs, ['binary_sensor.fuite_evier', 'binary_sensor.cave_humide'], 'le modèle et le groupe ne sont pas des fuites ; le YAML inconnu du registre, si (l’ordre des états)');
-  assert.ok(APP.includes("    if (a.device_class === 'moisture' && (estPlante(id) || fuiteCalculee(plateformeDe(id)))) continue;"), '« En ce moment »');
+  // ASSERTION MODIFIÉE (31/10, ADR 0305) : la pluie d'un robot (`pluieDeRobot`, l'appareil qui la porte) n'est pas une fuite non plus.
+  assert.ok(APP.includes("    if (a.device_class === 'moisture' && (estPlante(id) || fuiteCalculee(plateformeDe(id)) || pluieDeRobot(voisinsDe(id)))) continue;"), '« En ce moment »');
   // ASSERTION MODIFIÉE (audit du 19/10, M14) : l'Accueil passe aussi les entités masquées — un groupe et une entité masquée n'y comptent pas.
   // ASSERTION MODIFIÉE (30/10, G3-E4) : l'Accueil passe aussi la couleur Tempo du lendemain, après la plateforme et le masque.
   assert.ok(APP.includes("    plantes: plantsCfg().map(p => p.base).filter(Boolean),\n    // Un `moisture` calculé n'est pas une fuite (ADR 0022, 16/10) : la plateforme, lue dans l'index ; un groupe, une entité masquée n'y comptent pas (M14).\n    plateforme: plateformeDe, masque: masqueDe,\n"), 'l’Accueil passe la plateforme à « À surveiller »');
+  // L'appareil qui porte un binaire (31/10, ADR 0305), juste après.
+  assert.ok(APP.includes("    plateforme: plateformeDe, masque: masqueDe,\n    // L'appareil qui porte un binaire (ADR 0305) : la pluie de la tondeuse n'est pas une fuite, ce qu'une caméra entend se dit à part.\n    voisins: voisinsDe,\n"), 'l’Accueil passe les voisins à « À surveiller »');
   assert.equal(plateformeDe('binary_sensor.fuite_evier'), 'mqtt');
   assert.equal(plateformeDe('binary_sensor.cave_humide'), null, 'inconnue du registre : null');
 }));
 
 test('Paramètres › Alertes compte les détecteurs de fuite sans les modèles — le compte dit ce qui alerte', () => {
-  assert.ok(PAR.includes("import { fuiteCalculee } from '../attention.js';") && PAR.includes('LOGGIA_INDEX, enHaids, plateformeDe, medCompanion,'), 'la règle et la plateforme, importées');
+  // ASSERTION MODIFIÉE (31/10, ADR 0305) : la pluie d'un robot et les voisins de l'appareil, importés avec la règle et la plateforme.
+  assert.ok(PAR.includes("import { fuiteCalculee, pluieDeRobot } from '../attention.js';") && PAR.includes('LOGGIA_INDEX, enHaids, plateformeDe, voisinsDe, medCompanion,'), 'la règle et la plateforme, importées');
   /* ASSERTION MODIFIÉE (audit du 19/10, M1) : le compte passe par `detecteursAlertes`, qui écarte aussi le besoin d'eau d'une plante
    * de `loggia_plants` — la règle du serveur et de l'Accueil. Le moisture calculé y est toujours écarté par `fuiteCalculee`. */
-  assert.ok(PAR.includes("  const capteurs = (classes) => detecteursAlertes(S, classes, { plateforme: plateformeDe, plantes });"), 'le compte des détecteurs ne passe plus par la règle commune');
-  assert.ok(PAR.includes("    return !(dc === 'moisture' && (fuiteCalculee(plateforme(id)) || estPlante(id)));"), 'le compte des détecteurs écarte un moisture calculé');
+  // ASSERTION MODIFIÉE (31/10, ADR 0305) : les voisins de l'appareil passent aussi, et la pluie d'un robot est écartée.
+  assert.ok(PAR.includes("  const capteurs = (classes) => detecteursAlertes(S, classes, { plateforme: plateformeDe, voisins: voisinsDe, plantes });"), 'le compte des détecteurs ne passe plus par la règle commune');
+  assert.ok(PAR.includes("    return !(dc === 'moisture' && (fuiteCalculee(plateforme(id)) || estPlante(id) || pluieDeRobot(voisins(id))));"), 'le compte des détecteurs écarte un moisture calculé');
   assert.ok(PAR.includes("const ALERTES_CLASSES = { fumee: ['smoke'], gaz: ['gas'], co: ['carbon_monoxide'], fuite: ['moisture'] };"), 'la table des classes ne bouge pas');
 });
 

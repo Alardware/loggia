@@ -70,9 +70,9 @@
  * vus — le panneau du temps les dit, avec leurs durées.
  */
 import { useState, useEffect, useRef, useId, useMemo } from 'react';
-import { tr, trN, trHA, locale } from './i18n.js';
+import { tr, trN, locale } from './i18n.js';
 import { Fi, Bascule } from './ui.jsx';
-import { compteOrdinaire, enHaids, enPrix } from './state.js';
+import { compteOrdinaire, enHaids, enPrix, entitesAppareilDe, estRearmement } from './state.js';
 import { commander, commanderService, planAction, actionCtx } from './actions.js';
 import { useOptimiste } from './optimiste.js';
 import { raisonEchec, enregistrerRefus } from './refus.js';
@@ -84,7 +84,7 @@ import { premierJourSemaine } from './horloge.js';
 import { ordreJours, nomJour, dureeLisible } from './robots.js';
 import { commanderChauffage, refroidit } from './chauffageetat.js';
 import {
-  ORDRE_MODES, couleurMode, encreMode, motMode, modeDuModule, consigneVoisine, finMurale, jourEnPhrase, plaqueMode, enChauffe,
+  ORDRE_MODES, couleurMode, encreMode, motMode, motPreset, modeDuModule, consigneVoisine, finMurale, jourEnPhrase, plaqueMode, enChauffe,
   consigneAtteinte, mesureLisible, moduleMuet, decalageEn,
 } from './chauffageecran.js';
 import { ecrireHeure, lireHeure, modePlanning } from './chauffage.js';
@@ -161,10 +161,10 @@ const enOrdreHvac = (liste) => [...ORDRE_HVAC.filter(m => liste.includes(m)), ..
  * fiche d'avant (`motModeClimat`, App.jsx) — Home Assistant d'abord, sinon
  * Loggia. Sans lui, le mode tel que l'appareil l'écrit. */
 const motHvacBrut = (mode) => mode;
-/* Le mot d'un préréglage : celui de Home Assistant pour les siens (eco,
- * comfort, away, boost…), sinon tel que l'appareil l'écrit (le `turbo`,
- * l'`overnight` d'un poêle) — la fiche d'avant les montrait tous ainsi. */
-const motPreset = (p) => trHA('component.climate.entity_component._.state_attributes.preset_mode.state.' + p) || p;
+/* Le mot d'un préréglage (`motPreset`, chauffageecran.js) : celui de Home
+ * Assistant pour les siens (eco, comfort, away, boost…), sinon celui d'un
+ * ordre fil pilote (D15, ADR 0319), sinon tel que l'appareil l'écrit (le
+ * `turbo`, l'`overnight` d'un poêle). */
 
 /* Les fins d'une reprise en main (spec § 9.3, D3) : le prochain changement
  * par défaut — dit par son heure (`quand` : « 22:30 », « demain 07:30 » ;
@@ -545,6 +545,31 @@ function Avertissements({ ch, st, etats = {}, rate = false }) {
   ));
 }
 
+/* L'alarme que l'APPAREIL signale (01/11, ADR 0307) : un binaire `problem` de son appareil, allumé — l'alarme du poêle, qu'on ne
+ * voyait qu'en ouvrant sa fiche d'entités. Une ligne comme les avertissements, et « Réarmer » quand l'appareil a SON bouton de
+ * réarmement (reconnu par le composant à sa clé stable, `estRearmement`) : un seul, joignable. Rien ne réarme seul : seulement
+ * sur le geste. Le défaut parti, la ligne s'en va. */
+const BOUTON_REARMER = { minHeight: 44, flexShrink: 0, padding: '0 14px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+  fontSize: 12.5, fontWeight: 700, background: 'var(--o-s1)', color: 'var(--o-text1)' };
+function DefautAppareil({ hass, ch, etats = {} }) {
+  const ids = entitesAppareilDe(ch.entite);
+  const allume = (id) => { const e = etats[id]; return !!e && e.state === 'on' && (e.attributes || {}).device_class === 'problem'; };
+  if (!ids.some(id => id.indexOf('binary_sensor.') === 0 && allume(id))) return null;
+  const boutons = ids.filter(id => id.indexOf('button.') === 0 && estRearmement(id) && etats[id] && etats[id].state !== 'unavailable');
+  const bouton = boutons.length === 1 ? boutons[0] : null;
+  return (
+    <div className="o-panne" role="status" data-avertissement="defaut"
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: bouton ? '6px 6px 6px 14px' : '10px 14px', borderRadius: 14, fontSize: 13, fontWeight: 700, lineHeight: 1.4 }}>
+      <Fi i="triangle-warning" size={14} color="var(--o-text2)" />
+      <span style={{ minWidth: 0, flex: 1 }}>{tr('L’appareil signale un défaut.')}</span>
+      {bouton && (
+        <button type="button" data-rearmer="" style={BOUTON_REARMER}
+          onClick={() => commanderService(hass, bouton, 'button', 'press', { entity_id: bouton })}>{tr('Réarmer')}</button>
+      )}
+    </div>
+  );
+}
+
 /* ════════════ L'accueil ════════════ */
 
 /**
@@ -791,7 +816,8 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
    *    dessous pour un administrateur : Arrêt et Éco seulement s'il les
    *    comprend — sinon le moteur appliquerait un repli, et la rangée
    *    mentirait —, ou ne rien faire ; un poêle à granulés gagne à l'Éco (le
-   *    conseil : un thermostat qui le comprend, et qui ne refroidit pas). La
+   *    conseil : un POÊLE reconnu par le serveur, ADR 0308, qui le comprend
+   *    et ne refroidit pas). La
    *    puce de l'Arrêt se nomme TOUJOURS de ce que l'appareil recevra (le
    *    jumeau, `modeApplique(ch, 'arret')`), quel que soit le réglage en cours :
    *    « Hors-gel » pour un appareil qui ne s'éteint pas — elle reste là quand
@@ -813,7 +839,9 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
     { id: 'rien', label: tr('Ne rien faire') },
   ];
   const choisiFenetre = fenetre === 'arret' && recoitArret === 'eco' ? 'eco' : fenetre;
-  const conseil = thermostat && modes.includes('eco') && !modesHvac(a).some(m => m === 'cool' || m === 'heat_cool');
+  // Réservé au POÊLE (ADR 0308) : `poele`, que le serveur pose d'après la plateforme de son intégration — un radiateur électrique
+  // qui ne refroidit pas n'a rien à gagner à l'Éco pour une aération.
+  const conseil = thermostat && ch.poele === true && modes.includes('eco') && !modesHvac(a).some(m => m === 'cool' || m === 'heat_cool');
   const modeOuverture = fenetre === 'rien' ? null : ovF == null && ch.fenetre_mode !== undefined ? ch.fenetre_mode : fenetre;
   const motOuverture = modeOuverture ? motMode(modeOuverture) : null;
   const regleAgira = !(etat && etat.fenetres_observe) && !sansArret;
@@ -948,6 +976,7 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
   return (
     <div className="rb-accueil" style={{ gap: 12 }}>
       <Avertissements ch={ch} st={st} etats={S} rate={!!etat && etat.demarrage === false} />
+      <DefautAppareil hass={hass} ch={ch} etats={S} />
       {err && <div role="alert" style={ALERTE}>{err}</div>}
 
       <div data-panneau="haut" style={PANNEAU_HAUT}>

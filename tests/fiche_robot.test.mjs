@@ -34,7 +34,9 @@ register('data:text/javascript,' + encodeURIComponent([
   "  return { ...r, source: String(r.source) + ';export { useVueRobot };' };",
   '}',
 ].join('\n')));
-const { setLoggiaState, vacRooms } = await import('../src/state.js');
+const { setLoggiaState } = await import('../src/state.js');
+// ASSERTION MODIFIÉE (01/11, ADR 0318) : `vacRooms` a quitté state.js (le démarrage) pour robotsfiche.js, chargé avec la fiche du robot.
+const { vacRooms } = await import('../src/robotsfiche.js');
 const F = await import(new URL('../src/App.jsx?fiche_robot', import.meta.url).href);
 const FR = await import(new URL('../src/ficherobot.jsx', import.meta.url).href);
 const RE = await import('../src/robotsetat.js');
@@ -1035,4 +1037,34 @@ test('R7 : le plan coloré reprend de lui-même une association écrite par segm
   monter(VP.default, { hass: w3.hass(), haid: CARTE, zones: [{ id: 'seg:1', name: 'Salon', segments: [1] }], selection: {}, onToggle: () => {} });
   await attendre();
   assert.deepEqual(cfgVal('loggia_vacplan', null), { aabbcc: 'seg:1' });
+}));
+
+/* TEST AJOUTÉ (01/11, lot 9 Gladys, R2, R3 ; ADR 0313) : la tondeuse au travail, montée comme l'écran la monte — son avance sur la
+ * carte (sa phrase) et dans la popup (la barre et la phrase), sa dernière erreur que le carnet garde, la pluie de son appareil. Les
+ * capteurs se reconnaissent à leur CLÉ ; rien n'est commandé. */
+test('lot 9 : la tondeuse dit son avance, garde sa dernière erreur et sent la pluie — sans rien commander', () => dans(async () => {
+  const PCT = 'sensor.tondeuse_p', RESTE = 'sensor.tondeuse_r', PLUIE = 'binary_sensor.tondeuse_pluie';
+  const avec = (cle) => ({ deviceId: 'd2', device: 'Tondeuse', platform: 'mammotion', translationKey: cle });
+  META.set(PCT, avec('progress')); META.set(RESTE, avec('left_time')); META.set(PLUIE, avec('rain_detected'));
+  try {
+    const etat = { ...ETAT(), erreurs: { [TOND]: { texte: 'Lame bloquée', t: S - 7200, date: S - 7200 } } };
+    const w = poser({ etat, retouche: (c) => {
+      c[TOND].state = 'mowing';
+      c[PCT] = st(PCT, '45', { unit_of_measurement: '%' });
+      c[RESTE] = st(RESTE, '20', { unit_of_measurement: 'min' });
+      c[PLUIE] = st(PLUIE, 'on', { device_class: 'moisture' });
+    } });
+    const { vue, accueil } = await fiche(w, TOND);
+    assert.equal(vue.arbre.phrase.texte, 'Tond · 45 % · 20 min restantes', 'la carte');
+    const a = accueil().props;
+    assert.deepEqual(a.avance, { pct: 45, texte: '45 % · 20 min restantes' });
+    assert.deepEqual(a.lignes.map(l => l.texte), ['Dernière erreur à 16:20 : Lame bloquée', 'Pluie en cours']);
+    const ma = monter(accueil().type, accueil().props);
+    const barre = ma.trouver(e => e.props && e.props.role === 'progressbar')[0];
+    assert.equal(barre.props['aria-valuenow'], 45, 'la barre se dit au lecteur d’écran');
+    assert.ok(ma.texte().includes('Dernière erreur à 16:20 : Lame bloquée'), ma.texte());
+    assert.deepEqual(w.appels, [], 'rien n’est commandé');
+  } finally {
+    META.delete(PCT); META.delete(RESTE); META.delete(PLUIE);
+  }
 }));

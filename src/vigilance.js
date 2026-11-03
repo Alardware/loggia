@@ -7,8 +7,9 @@
  *    de chaque phénomène (« Vent violent », « Orages ») ;
  *  - sinon le binaire MeteoAlarm (`safety`), reconnu par la règle de l'Accueil
  *    (attention.js) : `awareness_level` (« 2; yellow; Moderate »), l'attribution,
- *    à défaut l'identifiant ; `event` dit l'événement ; `severity` Severe ou
- *    Extreme vaut le rouge, comme à l'Accueil.
+ *    à défaut l'identifiant ; `event` dit l'événement ; sans couleur, la
+ *    gravité à l'échelle de MeteoAlarm — Severe l'orange, Extreme le rouge
+ *    (ADR 0310 : Severe valait le rouge).
  * Au calme, elle écrit le NIVEAU (« Vigilance verte »), jamais « Tout va bien » ;
  * sans niveau connu (MeteoAlarm éteinte), « Aucune alerte en cours ». En alerte,
  * l'ambre pour jaune, l'orange pour orange, le rouge pour rouge, avec l'événement
@@ -17,19 +18,21 @@
  * Pur : pas de React, pas de Home Assistant.
  */
 import { tr } from './i18n.js';
-import { estMeteoAlarm } from './groupes.js';
+// Le niveau se lit en UN endroit, avec la règle de l'Accueil (lot 6 Gladys, ADR 0310) : attention.js.
+import { estMeteoAlarm, niveauVigilanceDe, lireVigilance, texteVigilance } from './attention.js';
 
-// Les quatre niveaux, en français comme en anglais : « Vert » chez Météo-France, « yellow » chez MeteoAlarm.
-const COULEURS = { vert: 'vert', green: 'vert', jaune: 'jaune', yellow: 'jaune', orange: 'orange', rouge: 'rouge', red: 'rouge' };
+/** Le niveau d'un mot de couleur — « Jaune », « yellow » —, ou null (en français comme en anglais : « Vert » chez Météo-France,
+ *  « yellow » chez MeteoAlarm). */
+export const niveauDe = niveauVigilanceDe;
 
-/** Le niveau d'un mot de couleur — « Jaune », « yellow » —, ou null. */
-export const niveauDe = (mot) => COULEURS[String(mot == null ? '' : mot).trim().toLowerCase()] || null;
-
-/** Le capteur d'alerte départementale de Météo-France : sa plateforme et sa clé de traduction (`weather_alert`) ou son
- *  identifiant ; sans registre, l'identifiant (`…_weather_alert`) et un état qui est un niveau. */
+/** Le capteur d'alerte départementale de Météo-France : le rôle `vigilance` de l'index (son identifiant stable), sinon sa
+ *  plateforme et sa clé de traduction (`weather_alert`) ou son identifiant ; sans registre, l'identifiant (`…_weather_alert`) et
+ *  un état qui est un niveau. */
 export function estVigilanceMeteoFrance(id, st, meta = null) {
   if (String(id).indexOf('sensor.') !== 0) return false;
   const m = meta || {};
+  // Le rôle que le composant pose à son identifiant stable, « 18 Weather alert » (ADR 0310) — la clé, pas le nom.
+  if (m.meteo === 'vigilance') return true;
   if (m.platform === 'meteo_france' && (m.translationKey === 'weather_alert' || /_weather_alert$/.test(id))) return true;
   return /_weather_alert$/.test(id) && !!niveauDe(st && st.state);
 }
@@ -53,23 +56,11 @@ export function capteurVigilance(S, index = null) {
  */
 export function vueVigilance(S, id) {
   const st = S && S[id];
-  const a = (st && st.attributes) || {};
   const muette = !st || st.state === 'unavailable' || st.state === 'unknown';
-  let niveau = null, detail = null;
-  if (!muette && String(id).indexOf('sensor.') === 0) {
-    niveau = niveauDe(st.state);
-    // Les phénomènes au niveau de l'alerte : « Vent violent, Pluie-inondation ».
-    const phenomenes = niveau && niveau !== 'vert' ? Object.keys(a).filter(k => niveauDe(a[k]) === niveau) : [];
-    detail = phenomenes.length ? phenomenes.join(', ') : null;
-  } else if (!muette) {
-    const on = st.state === 'on';
-    const couleur = niveauDe(String(a.awareness_level || '').split(';')[1]);
-    niveau = on ? (a.severity === 'Severe' || a.severity === 'Extreme' ? 'rouge' : couleur || 'jaune') : (couleur === 'vert' ? 'vert' : null);
-    detail = on ? (a.event || a.headline || null) : null;
-  }
-  const mots = { vert: tr('Vigilance verte'), jaune: tr('Vigilance jaune'), orange: tr('Vigilance orange'), rouge: tr('Vigilance rouge') };
-  // Un événement qui dit déjà la vigilance (« Vigilance jaune orages ») ne la redit pas.
-  const phrase = muette ? tr('Indisponible') : !niveau ? tr('Aucune alerte en cours') : !detail ? mots[niveau] : /vigilance/i.test(detail) ? detail : mots[niveau] + ' · ' + detail;
+  // Le niveau et le détail : LA lecture (attention.js) ; la phrase, la même que celle du widget et de l'Accueil.
+  const v = muette ? null : lireVigilance(id, st);
+  const niveau = v ? v.niveau : null, detail = v ? v.detail : null;
+  const phrase = muette ? tr('Indisponible') : !niveau ? tr('Aucune alerte en cours') : texteVigilance(v);
   const ton = muette || niveau === 'rouge' ? 'bad' : niveau === 'orange' ? 'warn2' : niveau === 'jaune' ? 'warn' : null;
   return { niveau, detail, phrase, ton, glyphe: 'umbrella', regarder: muette || (!!niveau && niveau !== 'vert'), muette, puces: [] };
 }

@@ -14,7 +14,7 @@ import { Fi } from '../ui.jsx';
 import { tr, locale } from '../i18n.js';
 
 export const TITRE_PANNEAU = { fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 20, fontWeight: 500, lineHeight: 1.2, color: 'var(--o-text)', letterSpacing: '-.005em' };
-export const DESC_PANNEAU = { fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, lineHeight: 1.45, marginTop: 3 };
+const DESC_PANNEAU = { fontSize: 12.5, color: 'var(--o-text2)', fontWeight: 600, lineHeight: 1.45, marginTop: 3 };
 export const CAPITALES = { fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-text3)' };
 export const MONO = { fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace' };
 export const FILET = 'var(--o-bw,1px) solid var(--o-bd3)';
@@ -22,29 +22,35 @@ export const FILET = 'var(--o-bw,1px) solid var(--o-bd3)';
 /** Un panneau : titre, description, ce qui se range à droite, puis ses lignes.
  *  `niveau` = 'alerte' l'entoure d'ambre ; `pied` ferme le panneau d'une
  *  dernière ligne (une note, des boutons). */
-export function Panneau({ titre = null, desc = null, droite = null, niveau = null, pied = null, children = null, id = undefined, titreStyle = null }) {
+/* La PORTÉE d'un réglage (03/11) : « Paramètres · réglages suivis sur tous ses
+ * écrans » est la règle, et ce qui ne vaut que pour l'écran qu'on tient le dit
+ * — gardé dans son navigateur (veille, ciel, verre, marges…). Sans la marque,
+ * on ne pouvait pas deviner ce qu'un geste changerait ailleurs. */
+export const MarqueIci = () => <Pastille capitales>{tr('Cet écran')}</Pastille>;
+
+export function Panneau({ titre = null, desc = null, droite = null, niveau = null, pied = null, children = null, id = undefined, titreStyle = null, ici = false }) {
   const bord = niveau === 'alerte' ? '1px solid rgba(var(--o-warn-rgb),.55)'
     : niveau === 'danger' ? '1px solid rgba(var(--o-bad-rgb),.55)' : 'var(--o-bw,1px) solid var(--o-bd2)';
   const fond = niveau === 'danger' ? 'linear-gradient(180deg,rgba(var(--o-bad-rgb),.07),rgba(var(--o-bad-rgb),.03))'
     : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';
   return (
-    <section id={id} style={{ background: fond, border: bord, borderRadius: 'var(--o-radius,18px)', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))', overflow: 'hidden', minWidth: 0 }}>
-      {(titre || desc || droite) && (
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '18px 22px ' + (children ? '16px' : '18px'), flexWrap: 'wrap' }}>
+    <section id={id} className="o-panneau" style={{ background: fond, border: bord, borderRadius: 'var(--o-radius,18px)', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))', overflow: 'hidden', minWidth: 0 }}>
+      {(titre || desc || droite || ici) && (
+        <div className="o-panneau-tete" style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '18px 22px ' + (children ? '16px' : '18px'), flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 240px', minWidth: 0 }}>
             {/* Un `h2`, plus un `div` (plan M7) : chaque panneau de Paramètres
               * et de Règles portait son titre sans niveau, si bien qu'un
               * lecteur d'écran n'avait aucun plan de la page. `margin: 0` et la
               * graisse du jeton : rien ne bouge à l'œil, comme pour les titres
               * de l'Accueil (ADR 0063). */}
-            {titre && <h2 style={{ margin: 0, ...TITRE_PANNEAU, ...(titreStyle || {}) }}>{titre}</h2>}
-            {desc && <div style={DESC_PANNEAU}>{desc}</div>}
+            {titre && <h2 className={titreStyle ? undefined : 'o-panneau-titre'} style={{ margin: 0, ...TITRE_PANNEAU, ...(titreStyle || {}) }}>{titre}</h2>}
+            {desc && <div className="o-panneau-desc" style={DESC_PANNEAU}>{desc}</div>}
           </div>
-          {droite && <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>{droite}</div>}
+          {(droite || ici) && <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>{ici && <MarqueIci />}{droite}</div>}
         </div>
       )}
       {children}
-      {pied && <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '14px 22px', borderTop: FILET }}>{pied}</div>}
+      {pied && <div className="o-panneau-pied" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '14px 22px', borderTop: FILET }}>{pied}</div>}
     </section>
   );
 }
@@ -52,16 +58,20 @@ export function Panneau({ titre = null, desc = null, droite = null, niveau = nul
 /** Une ligne de panneau : titre et description à gauche, le réglage à droite.
  *  `retrait` : un réglage qui dépend du précédent ; `eteint` : un réglage
  *  sans effet tant que son parent est coupé (il reste lisible, grisé). */
-export function Ligne({ titre = null, desc = null, children = null, retrait = false, eteint = false, style = null }) {
+export function Ligne({ titre = null, desc = null, children = null, retrait = false, eteint = false, style = null, ico = null, icoFond = 'var(--o-s1)', icoCouleur = 'var(--o-text2)', descCouleur = null, ici = false }) {
   return (
-    <div className="o-optrow" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 22px', paddingLeft: retrait ? 46 : 22, borderTop: FILET, opacity: eteint ? .5 : 1, transition: 'opacity .2s', ...(style || {}) }}>
+    <div className="o-optrow" data-retrait={retrait ? '' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 22px', paddingLeft: retrait ? 46 : 22, borderTop: FILET, opacity: eteint ? .5 : 1, transition: 'opacity .2s', ...(style || {}) }}>
+      {/* L'icône d'une ligne, dans sa puce de 34 (maquette v3, 02/11). */}
+      {ico && <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: 11, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: icoFond }}><Fi i={ico} size={15} color={icoCouleur} /></span>}
       {(titre || desc) && (
-        <div style={{ flex: 1, minWidth: 0, maxWidth: '62ch' }}>
-          {titre && <div style={{ fontSize: 13.5, fontWeight: 700 }}>{titre}</div>}
-          {desc && <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, lineHeight: 1.45, marginTop: 2 }}>{desc}</div>}
+        <div className="o-optrow-texte" style={{ flex: 1, minWidth: 0, maxWidth: '62ch' }}>
+          {titre && <div className="o-optrow-titre" style={{ fontSize: 13.5, fontWeight: 700 }}>{titre}</div>}
+          {desc && <div className="o-optrow-desc" style={{ fontSize: 12, color: descCouleur || 'var(--o-text2)', fontWeight: 600, lineHeight: 1.45, marginTop: 2 }}>{desc}</div>}
         </div>
       )}
-      {children != null && <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end', marginLeft: 'auto' }}>{children}</div>}
+      {/* À côté du texte, pas dedans : le titre reste ce qu'il dit. */}
+      {ici && <MarqueIci />}
+      {children != null && <div className="o-optrow-reglage" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end', marginLeft: 'auto' }}>{children}</div>}
     </div>
   );
 }
@@ -100,7 +110,9 @@ export const btnDanger = { display: 'inline-flex', alignItems: 'center', gap: 8,
 
 /** La zone depliee d'une regle : sous un filet qui court d'un bord a l'autre
  *  de sa carte (les cartes de regles ont 22 px de marge laterale). */
-export const ZONE_REGLAGES = { margin: '16px -22px 0', padding: '2px 22px 0', borderTop: FILET };
+/* Les réglages dépliés d'une règle sur le fond plus sombre de la maquette v3
+ * (03/11) : la marge basse négative les mène jusqu'au filet de la ligne suivante. */
+export const ZONE_REGLAGES = { margin: '14px -22px -14px', padding: '2px 22px 14px', borderTop: FILET, background: 'var(--o-s3)' };
 
 /** L'heure d'une ligne de journal : seule aujourd'hui, « hier » la veille,
  *  la date avant. */
@@ -118,3 +130,48 @@ export function quandCourt(ts) {
 
 /** La premiere lettre en capitale : « ouvrir » devient « Ouvrir ». */
 export const majuscule = (t) => { const s = String(t || ''); return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; };
+
+/** Une rangée de cartes de personnes ou d'écrans (maquette v3, 02/11) : deux
+ *  colonnes au téléphone, autant qu'il en tient au-delà. Posée À NU, hors de
+ *  tout panneau — pas de boîte dans une boîte. */
+export const GrilleCartes = ({ children, label = undefined }) => (
+  <div role="list" aria-label={label} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(min(190px,calc(50% - 6px)),1fr))', gap: 12 }}>{children}</div>
+);
+
+/** Une carte de la rangée : un avatar (`ava` : initiale sur `avaFond`) ou une
+ *  icône (`ico`), le nom, une ligne sous le nom, un point d'activité (`vu`,
+ *  vert si `actif`) et une étiquette en haut à droite. `choisi` la remplit
+ *  d'accent, texte blanc ; `ajout` la dessine en pointillés. Avec `onClick`,
+ *  la carte entière est un bouton ; sans, `children` y pose une action. */
+export function CarteGens({ ava = null, avaFond = null, ico = null, nom, sous = null, vu = null, actif = false, etiquette = null, choisi = false, ajout = false, onClick = null, label = undefined, haut = 176, children = null }) {
+  const blanc = choisi ? 'rgba(255,255,255,.82)' : 'var(--o-text2)';
+  const corps = (
+    <>
+      {ava != null && <span aria-hidden="true" style={{ width: 52, height: 52, borderRadius: '50%', background: avaFond, color: 'var(--o-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800, flexShrink: 0 }}>{ava}</span>}
+      {ico && <span aria-hidden="true" style={{ width: 48, height: 48, borderRadius: 15, background: choisi ? 'rgba(255,255,255,.18)' : 'var(--o-s1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Fi i={ico} size={20} color={choisi ? '#fff' : 'var(--o-text2)'} /></span>}
+      {etiquette && <span style={{ position: 'absolute', top: 16, right: 16, padding: '3px 8px', borderRadius: 7, fontSize: 10, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', background: 'rgba(var(--o-accent-rgb),.16)', color: 'var(--o-accent-soft)' }}>{etiquette}</span>}
+      <span style={{ display: 'block', marginTop: 'auto', minWidth: 0, width: '100%', lineHeight: 1.3, textAlign: 'left' }}>
+        <span style={{ display: 'block', fontSize: 15, fontWeight: 800, overflowWrap: 'anywhere' }}>{nom}</span>
+        {sous && <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: blanc, marginTop: 2 }}>{sous}</span>}
+        {vu && <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: blanc, marginTop: 8 }}>
+          <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: choisi ? '#fff' : actif ? 'var(--o-ok)' : 'var(--o-text3)' }} />{vu}</span>}
+        {children}
+      </span>
+    </>
+  );
+  const style = {
+    position: 'relative', minHeight: haut, boxSizing: 'border-box', padding: 16, borderRadius: 'var(--o-radius,18px)', minWidth: 0,
+    display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 12, font: 'inherit',
+    background: choisi ? 'var(--o-accent-fond)' : ajout ? 'transparent' : 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))',
+    border: ajout ? '1.5px dashed var(--o-bd1)' : choisi ? 'none' : 'var(--o-bw,1px) solid var(--o-bd2)',
+    boxShadow: ajout ? 'none' : 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))',
+    color: choisi ? '#fff' : 'var(--o-text)', cursor: onClick ? 'pointer' : 'default', transition: 'background .25s',
+  };
+  return (
+    <div role="listitem" style={{ display: 'flex', minWidth: 0 }}>
+      {onClick
+        ? <button type="button" onClick={onClick} aria-label={label} style={{ ...style, flex: 1 }}>{corps}</button>
+        : <div style={{ ...style, flex: 1 }}>{corps}</div>}
+    </div>
+  );
+}

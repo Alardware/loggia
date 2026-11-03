@@ -47,7 +47,8 @@ const rien = () => {};
 const fenetre = {
   localStorage: stockage, sessionStorage: session, location: { search: '', href: 'http://loggia.test/', pathname: '/' },
   addEventListener: rien, removeEventListener: rien, dispatchEvent: () => true, innerWidth: 1280, innerHeight: 800,
-  matchMedia: () => ({ matches: false, addEventListener: rien, removeEventListener: rien }),
+  // Un écran large (au-delà de 1024 px) : l'Apparence de l'ordinateur (maquette v3).
+    matchMedia: (q) => ({ matches: /min-width/.test(String(q)), addEventListener: rien, removeEventListener: rien }),
 };
 fenetre.top = fenetre; // la page directe : `getHass` lit le document lui-même
 Object.defineProperty(globalThis, 'window', { configurable: true, writable: true, value: fenetre });
@@ -197,14 +198,14 @@ test('Non : aucun minuteur ; il s’arrête de lui-même quand on repasse à Non
   } finally { globalThis.setTimeout = vrai; }
 });
 
-test('les lignes des Paramètres : sous « Verre des cartes », alignées, Non / Soleil, « Assombrir » grisée sur Non', async () => {
+test('les lignes des Paramètres (maquette v3) : « La nuit » dans Écran mural, Comme le jour / Plus sombre, « De combien » en retrait, grisée', async () => {
   const PAR = lire('src', 'views', 'parametres.jsx');
-  const verre = PAR.indexOf("<OptRow title={tr('Verre des cartes')} desc={descVerre}>");
-  const nuit = PAR.indexOf("<OptRow title={tr('Nuit de l’écran')} desc={descNuit(nuit, hass)}>");
-  const asb = PAR.indexOf("<OptRow eteint={nuit !== 'soleil'} title={tr('Assombrir')}");
   const veille = PAR.indexOf("<OptRow title={tr('Écran de veille')}");
-  assert.ok(verre > 0 && nuit > verre && asb > nuit && veille > asb, 'sous « Verre des cartes », avant l’écran de veille');
-  assert.ok(!/<OptRow[^>]*retrait[^>]*title=\{tr\('(Nuit de l’écran|Assombrir)'\)\}/.test(PAR), 'sans `retrait` : alignées sur les autres');
+  const nuit = PAR.indexOf("<OptRow title={tr('La nuit')} desc={nuitOn ? descNuit(nuit, hass) : tr('L’écran garde sa lumière.')}>");
+  const asb = PAR.indexOf("<OptRow retrait eteint={!nuitOn} title={tr('De combien')}>");
+  const retour = PAR.indexOf("<OptRow title={tr('Retour à l’accueil')}");
+  assert.ok(veille > 0 && nuit > veille && asb > nuit && retour > asb, 'dans Écran mural, après la veille, avant le retour à l’accueil');
+  assert.ok(PAR.includes("opts={[['non', tr('Comme le jour')], ['soleil', tr('Plus sombre')]]}"), 'les deux choix de la maquette');
 
   poser({});
   const { setLoggiaState } = await import('../src/state.js');
@@ -223,22 +224,23 @@ test('les lignes des Paramètres : sous « Verre des cartes », alignées, Non /
   const choix = (s) => [...s.matchAll(/<button[^>]*aria-pressed="(true|false)"[^>]*>([^<]*)<\/button>/g)].map(m => [m[2], m[1]]);
 
   let html = rendu();
-  const n = ligne(html, 'Nuit de l’écran'), s = ligne(html, 'Assombrir'), v = ligne(html, 'Verre des cartes'), plage = ligne(html, 'Plage horaire');
-  assert.equal(style(n), style(v), 'la ligne n’a pas l’alignement de « Verre des cartes »');
-  assert.equal(style(s), style(v), '« Assombrir » n’a pas l’alignement de « Verre des cartes »');
+  // Maquette v3 : « La nuit » alignée, « De combien » en retrait sous elle, comme « Quand » sous la veille.
+  const n = ligne(html, 'La nuit'), s = ligne(html, 'De combien'), v = ligne(html, 'Verre'), plage = ligne(html, 'Quand');
+  assert.equal(style(n), style(v), 'la ligne n’a pas l’alignement de « Verre »');
+  assert.equal(style(s), style(plage), '« De combien » n’est pas en retrait comme « Quand »');
   assert.notEqual(style(n), style(plage), 'témoin : une ligne en retrait se distingue');
   assert.ok(n.includes('role="group" aria-label="Nuit de l’écran"') && s.includes('role="group" aria-label="Assombrir"'), 'les groupes portent leur nom');
-  assert.deepEqual(choix(n), [['Non', 'true'], ['Soleil', 'false']]);
+  assert.deepEqual(choix(n), [['Comme le jour', 'true'], ['Plus sombre', 'false']]);
   assert.deepEqual(choix(s), [['Un peu', 'false'], ['Moyen', 'true'], ['Beaucoup', 'false']]);
-  assert.equal(opacite(s), '0.5', 'Non : « Assombrir » grisée');
+  assert.equal(opacite(s), '0.5', 'Comme le jour : « De combien » grisée');
   assert.equal(opacite(n), '1');
-  assert.ok(n.includes('Assombrit cet écran la nuit, pour ne pas éclairer la pièce'));
+  assert.ok(n.includes('L’écran garde sa lumière.'));
 
   poser({ 'loggia-nuit': 'soleil', 'loggia-nuit-assombrir': 'beaucoup' });
   html = rendu();
-  assert.deepEqual(choix(ligne(html, 'Nuit de l’écran')), [['Non', 'false'], ['Soleil', 'true']]);
-  assert.deepEqual(choix(ligne(html, 'Assombrir')), [['Un peu', 'false'], ['Moyen', 'false'], ['Beaucoup', 'true']]);
-  assert.equal(opacite(ligne(html, 'Assombrir')), '1', 'Soleil : « Assombrir » se rallume');
+  assert.deepEqual(choix(ligne(html, 'La nuit')), [['Comme le jour', 'false'], ['Plus sombre', 'true']]);
+  assert.deepEqual(choix(ligne(html, 'De combien')), [['Un peu', 'false'], ['Moyen', 'false'], ['Beaucoup', 'true']]);
+  assert.equal(opacite(ligne(html, 'De combien')), '1', 'Plus sombre : « De combien » se rallume');
 });
 
 test('la ligne dit l’heure : le coucher de ce soir, le lever s’il fait nuit, sinon 21 h–7 h', async () => {
@@ -255,7 +257,7 @@ test('la ligne dit l’heure : le coucher de ce soir, le lever s’il fait nuit,
     const cat = lire('src', 'langues', lg + '.js');
     for (const k of ['Nuit de l’écran', 'Assombrit cet écran la nuit, pour ne pas éclairer la pièce', 'Du coucher au lever du soleil · cette nuit jusqu’à {h}',
       'Du coucher au lever du soleil · ce soir dès {h}', 'Du coucher au lever du soleil', 'Sans soleil connu : de {debut} à {fin}', 'Assombrir',
-      'Un voile sur tout l’écran ; la photo de fond baisse aussi', 'Un peu', 'Beaucoup', 'Non', 'Soleil', 'Moyen']) {
+      'La nuit', 'L’écran garde sa lumière.', 'Comme le jour', 'Plus sombre', 'De combien', 'Un peu', 'Beaucoup', 'Moyen']) {
       assert.ok(cat.includes("  '" + k + "': "), lg + ' : « ' + k + ' » manque');
     }
   }

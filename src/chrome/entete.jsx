@@ -5,7 +5,8 @@ import { lazyRecharge } from '../recharge.js';
 import { nonLues as journalNonLues } from '../journal.js';
 import { getHass } from '../state.js';
 import { sansAccents, enPanne } from '../outils.js';
-import { commander, surVanne } from '../actions.js';
+import { commander, commanderService, surVanne } from '../actions.js';
+import { chargeAllumage } from '../ventilo.js';
 import { useLoggia } from '../runtime.js';
 import { isViewAvailable } from '../views.js';
 import { Fi, REDUCE_MOTION, HIDDEN_VIEWS, BottomSheet, NomFeuille, CroixFeuille, userBg, FlipText } from '../ui.jsx';
@@ -130,7 +131,10 @@ function appareilsRecherche(nq, h, { onNav, droits = [], onFiche = null }) {
       icon: <Fi i={DOMS[dom]} color="var(--o-cyan)" />,
       act: pont ? mene('loggia-par-section', 'inter', 'parametres') : sirene ? (close) => { onNav('securite'); close(); } : garde ? (onFiche ? (close) => { onFiche(id); close(); } : mene('loggia-objets-filtre', 'prises', 'objets'))
         : (close) => {
-          if (togglable) { commander(h, id, allumee ? 'turn_off' : 'turn_on'); }
+          // Un ventilateur se rallume dans son dernier mode, comme depuis sa carte (ticket #43, ventilo.js).
+          const charge = togglable && dom === 'fan' && !allumee ? chargeAllumage(id) : null;
+          if (charge) commanderService(h, id, 'fan', 'turn_on', { entity_id: id, ...charge });
+          else if (togglable) { commander(h, id, allumee ? 'turn_off' : 'turn_on'); }
           else if (VUE_DOM[dom]) onNav(VUE_DOM[dom]);
           close();
         },

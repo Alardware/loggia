@@ -883,7 +883,7 @@ function FavorisAccueil({ hass, edit = false }) {
                * fleches du clavier rangent les favoris. */
               if (edit) {
                 return (
-                  <div key={cle} style={{ position: 'relative', flex: '0 0 auto', ...taille, scrollSnapAlign: 'start' }}>
+                  <div key={cle} className={'o-favtuile' + (cvW(x) === 2 ? ' o-favlarge' : '')} style={{ position: 'relative', flex: '0 0 auto', ...taille, scrollSnapAlign: 'start' }}>
                     <EditableCard ed={edFav} id={cle} nom={nomCv(x, hass)} hass={hass}
                       entite={typeof x === 'string' ? x : (x.id || cle)} sous={sousCarte(x)}
                       onEdit={() => setFiche(x)} />
@@ -891,7 +891,7 @@ function FavorisAccueil({ hass, edit = false }) {
                 );
               }
               return (
-                <div key={cle} style={{ position: 'relative', flex: '0 0 auto', ...taille, scrollSnapAlign: 'start' }}>
+                <div key={cle} className={'o-favtuile' + (cvW(x) === 2 ? ' o-favlarge' : '')} style={{ position: 'relative', flex: '0 0 auto', ...taille, scrollSnapAlign: 'start' }}>
                   <div className="o-cvfit" style={{ height: '100%' }}>
                     <CvTyped x={x} hass={hass} dc={dc} />
                   </div>

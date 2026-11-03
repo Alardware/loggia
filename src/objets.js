@@ -44,7 +44,8 @@ const CLASSES_PRESENCE = ['motion', 'occupancy', 'presence'];
  * « Que des prises » (chantier Prises, P1, 13/10) : une prise est un switch
  * qui MESURE — `estPrise`, la règle de prises.js. Les autres switch rejoignent
  * IoT. Un `input_boolean` n'est pas découvert : il n'arrive dans Objets que
- * si on l'ajoute à la main, et il est alors rangé sous IoT.
+ * si on l'ajoute à la main, et il est alors rangé sous IoT. Un traceur d'objet
+ * (`device_tracker`, ADR 0318) aussi : seul lui entre dans Objets.
  */
 export function filtresObjet({ domaine, type = 'entite', estLumiere = false, estPrise = false, epingle = false }) {
   // Un groupe de capteurs binaires (chantier Capteurs, C20) est sous « Capteurs », comme ses membres l'étaient.
@@ -54,7 +55,7 @@ export function filtresObjet({ domaine, type = 'entite', estLumiere = false, est
       : dom === 'climate' || dom === 'water_heater' ? 'chauffage'
         : dom === 'switch' && estPrise ? 'prises'
           : dom === 'media_player' ? 'multimedia'
-            : DOMAINES_IOT.indexOf(dom) >= 0 || dom === 'switch' || dom === 'input_boolean' ? 'iot'
+            : DOMAINES_IOT.indexOf(dom) >= 0 || dom === 'switch' || dom === 'input_boolean' || dom === 'device_tracker' ? 'iot'
               : dom === 'binary_sensor' || dom === 'sensor' || dom === 'plant' || dom === 'groupe' ? 'capteurs'
                 : null;
   const f = principal ? [principal] : [];

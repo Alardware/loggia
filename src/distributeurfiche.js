@@ -14,8 +14,8 @@
  */
 import { tr, trN, trSens } from './i18n.js';
 import { sansAccents } from './outils.js';
-import { heureValide, resumeJours, dureeLisible } from './robots.js';
-import { niveauUsure } from './robotsfiche.js';
+import { heureValide, dureeLisible } from './robots.js';
+import { niveauUsure, resumeJours } from './robotsfiche.js';
 import { TABLES, designees, estMasse, enGrammes } from './distributeur.js';
 
 export { mesurePortion, repasPourReserve, joursDeReserveDistributeur } from './distributeur.js';

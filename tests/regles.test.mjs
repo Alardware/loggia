@@ -305,15 +305,17 @@ test('présence ne promet plus de consigne de confort', () => {
 test('l’onglet Journal existe, et lit le socle', () => {
   const par = readFileSync(join(RACINE, 'src', 'views', 'parametres.jsx'), 'utf8');
   assert.ok(par.includes("['journal', tr('Journal')]"), 'plus d’onglet Journal dans Règles');
-  assert.ok(par.includes("ongletRegle === 'journal' ? <JournalReglages"), 'l’onglet Journal ne rend rien');
+  // ASSERTION MODIFIÉE (03/11, maquette v3 des Règles) : un module a son panneau ; sans module, c'est le Journal, aux deux formats.
+  assert.ok(par.includes(") : <JournalReglages hass={hass} tel={!avecRail} />}"), 'l’onglet Journal ne rend rien');
   const vue = readFileSync(join(RACINE, 'src', 'views', 'journal.jsx'), 'utf8');
   assert.ok(vue.includes("useEtatServeur(hass, 'loggia/regles/etat'"), 'la vue ne lit pas le journal commun');
 });
 
 test('le journal montre le présent avant le passé', () => {
   const vue = readFileSync(join(RACINE, 'src', 'views', 'journal.jsx'), 'utf8');
-  const present = vue.indexOf("{tr('En ce moment')}");
-  const passe = vue.indexOf("{tr('Toutes les règles, la plus récente en premier.')}");
+  // ASSERTION MODIFIÉE (03/11, maquette v3 des Règles) : le titre change avec le format (« En ce moment » au téléphone, « Ce qui retient les règles » ailleurs).
+  const present = vue.indexOf("tr('Ce qui retient les règles')");
+  const passe = vue.indexOf("tr('Toutes les règles, la plus récente en premier.')");
   assert.ok(present > 0 && passe > present, 'la section « en ce moment » doit venir en tête');
   for (const morceau of ['Object.keys(gels)', 'Object.keys(tenues)', 'Object.keys(attentes)']) {
     assert.ok(vue.includes(morceau), 'le présent ne montre plus : ' + morceau);
@@ -324,7 +326,8 @@ test('rendre la main est un geste d’administrateur, et passe par le serveur', 
   const vue = readFileSync(join(RACINE, 'src', 'views', 'journal.jsx'), 'utf8');
   assert.ok(vue.includes("h.callWS({ type: 'loggia/regles/degeler', entity_id: id })"));
   assert.ok(vue.includes('const admin = !!(hass && hass.user && hass.user.is_admin);'));
-  assert.ok(vue.includes('{admin && ('), 'le bouton s’afficherait à un compte qui ne peut que le voir échouer');
+  // ASSERTION MODIFIÉE (03/11, maquette v3 des Règles) : le geste est l'argument d'une ligne commune, plus un enfant JSX.
+  assert.ok(vue.includes('admin && ('), 'le bouton s’afficherait à un compte qui ne peut que le voir échouer');
 });
 
 test('le journal montre tout, du plus récent au plus ancien, sans filtre', () => {
@@ -370,7 +373,8 @@ test('la porte ou la fenêtre devant chaque volet se désigne dans sa fiche ; l�
 
 test('le journal dit pourquoi un ordre attend', () => {
   const vue = readFileSync(join(RACINE, 'src', 'views', 'journal.jsx'), 'utf8');
-  assert.ok(vue.includes("{mot(attentes[id], 'motif') ? ' · ' + mot(attentes[id], 'motif') : ''}"),
+  // ASSERTION MODIFIÉE (03/11, maquette v3 des Règles) : la phrase se compose en texte, pour la ligne commune.
+  assert.ok(vue.includes("(mot(attentes[id], 'motif') ? ' · ' + mot(attentes[id], 'motif') : '')"),
     '« en attente · fermer » sans dire si c’est le volet ou la baie');
 });
 

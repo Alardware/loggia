@@ -71,7 +71,9 @@ test('les piles de l’écran passent par la même table', () => {
   // d'un capteur, à la rangée Pile des fiches et à la valeur d'une pile dans la fiche universelle.
   // ASSERTION MODIFIÉE (chantier IoT, tâche 6, 18/10 ; I8, I12) : la batterie de la carte d'un robot et de sa compacte suit la même règle.
   // ASSERTION MODIFIÉE (audit du 19/10, point 13) : les cinq barres d'une pile prennent elles aussi `couleurPile` (`barresPile` est parti).
-  assert.equal(compter(app, 'couleurPile('), 8, 'l’aspirateur, la tondeuse, le coin d’un capteur, les barres d’une pile, la rangée Pile, la fiche universelle, la carte d’un robot et sa compacte');
+  // ASSERTION MODIFIÉE (01/11, ADR 0319) : `machines.tondeuse`, que rien n'affichait, est parti avec sa couleur de pile.
+  // ASSERTION MODIFIÉE (01/11, ADR 0320) : `machines.aspirateur`, que rien n'affichait non plus, est parti avec sa couleur de pile.
+  assert.equal(compter(app, 'couleurPile('), 6, 'le coin d’un capteur, les barres d’une pile, la rangée Pile, la fiche universelle, la carte d’un robot et sa compacte');
   // ASSERTION MODIFIÉE (ADR 0283) : les cartes sorties d'App.jsx importent elles-mêmes ce qu'elles lisent ; la ligne recopiée se lit par ses noms (`importsDe`).
   assert.ok(['couleurPile', 'reglerSeuilPile'].every(n => importsDe(app, './attention.js').has(n)) && !app.includes('const couleurPile ='), 'la règle vient d’attention.js');
   assert.deepEqual(couleurNiveau('danger'), { col: 'var(--o-bad)', rgb: 'var(--o-bad-rgb)' });
@@ -105,8 +107,13 @@ test('la tondeuse porte son nom, comme l’aspirateur', () => {
   assert.ok(!app.includes("label: 'Luba'"));
   /* ASSERTION MODIFIÉE (chantier IoT, passe bis 2 du 18/10, point L) : les clés de ces deux machines portaient les surnoms des
    * robots de l'installation d'origine ; elles disent leur nature (`machines.aspirateur`, `machines.tondeuse`). */
-  assert.ok(app.includes("machines.tondeuse = { label: (lm && lm.attributes && lm.attributes.friendly_name) || tr('Tondeuse')"));
-  assert.ok(app.includes("machines.aspirateur = { label: (rVac && rVac.name) || tr('Aspirateur')"), 'la clé de l’aspirateur dit sa nature');
+  /* ASSERTION MODIFIÉE (01/11, ADR 0319) : `machines.tondeuse` est parti — aucun écran ne le lisait, et sa progression se cherchait
+   * au nom du capteur. Plus de surnom, et plus de progression lue au nom ; la carte du robot lit tout à la clé. */
+  assert.ok(!app.includes('machines.tondeuse'), 'l’objet mort de la tondeuse ne revient pas');
+  assert.ok(!app.includes('(progress|progression)'), 'la progression ne se cherche plus au nom');
+  assert.ok(!app.includes("mowerSensor(S, 'progress')"), 'ni au démarrage, dans ce que l’Accueil suit');
+  /* ASSERTION MODIFIÉE (01/11, ADR 0320) : `machines.aspirateur` est parti à son tour — l'Accueil ne lit que `machines.lv`. */
+  assert.ok(!app.includes('machines.aspirateur'), 'l’objet mort de l’aspirateur ne revient pas');
 });
 
 test('les styles partagés vivent une fois, dans styles.js', () => {

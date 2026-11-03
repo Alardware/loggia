@@ -45,7 +45,8 @@ function roomEntitiesBrutes(hass, roomName) {
     const candidats = [];
     (zone ? zone.entities : []).forEach(id => {
       const st = hass.states[id]; if (!st || pris.has(id)) return;
-      const m = meta(id); if (m.hidden || m.disabled || m.category) return;
+      // Rien d'un téléphone (`mobile_app`, Z1, ADR 0319) : sa santé et son baromètre ne sont pas la pièce.
+      const m = meta(id); if (m.hidden || m.disabled || m.category || m.platform === 'mobile_app') return;
       const d = id.split('.')[0]; const dc = (st.attributes || {}).device_class || '';
       const rang = ROOM_ZONE_DOMAINES.indexOf(d); if (rang < 0) return;
       if (d === 'switch' && cvEstLumiere(id)) return;
@@ -144,15 +145,26 @@ function lightType(l) {
   if (/plafonnier|plafond|ceiling|interrupteur|spot|downlight|dome/.test(s)) return 'plafonnier';
   return 'ampoule';
 }
-// Volets pilotés : configuration de l'utilisateur, sinon tout le domaine `cover`
-// tel que la découverte l'a trouvé — les noms viennent de Home Assistant.
+// Volets pilotés : la configuration de l'utilisateur d'abord, puis le domaine
+// `cover` tel que la découverte l'a trouvé — les noms viennent de Home Assistant.
+//
+// La configuration COMPLÈTE la découverte, elle ne la remplace plus (03/11) :
+// « les volets n'apparaissent pas sur les cartes de l'Accueil, pourtant ils
+// sont bien dans les pièces ». Sa liste nommait `cover.volet_salon` et
+// `cover.volet_chambre`, renommés depuis dans Home Assistant : filtrée sur les
+// états, elle se vidait — et masquait les deux volets bien vivants que la
+// découverte connaissait. Les minis de l'Accueil, la vue Volets et ses ordres
+// groupés partaient de cette liste vide ; la vue d'une pièce, qui lit sa zone,
+// les montrait.
 function voletCovers(S) {
   const c = loggiaEnt('covers', null);
-  const list = (c && Array.isArray(c.list) && c.list.length) ? c.list : null;
-  if (list) return list.filter(x => x && x.haid && (!S || S[x.haid]));
+  const list = (c && Array.isArray(c.list) ? c.list : []).filter(x => x && x.haid && (!S || S[x.haid]));
   const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.covers;
-  if (r && r.available) return r.list.map(x => ({ id: x.id, name: x.name, haid: x.id }));
-  return [];
+  const vus = new Set(list.map(x => x.haid));
+  const decouverts = (r && r.available ? r.list : [])
+    .map(x => ({ id: x.id, name: x.name, haid: x.haid || x.id }))
+    .filter(x => x.haid && !vus.has(x.haid) && (!S || S[x.haid]));
+  return list.concat(decouverts);
 }
 
 export { roomEntitiesBrutes, ROOM_BIN_CLASSES, ROOM_SENSOR_CLASSES, rangClasse, discoverLights, voletCovers };

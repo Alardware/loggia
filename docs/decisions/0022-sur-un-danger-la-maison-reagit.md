@@ -2,6 +2,8 @@
 
 **Statut** : appliqué (v3.16.0) — `alertes._reagir`, `alertes._async_rendre` (§18, moitié « action »).
 
+*Complétée par l'ADR [0305](0305-la-surete-lit-l-appareil-qui-porte-le-binaire.md) (31/10) : la pluie d'un robot n'est pas une fuite, et ce qu'une caméra entend ne fait pas réagir la maison.*
+
 **16/10/2026, précisé (à l'essai, rien de publié)** : un `binary_sensor` de classe `moisture` n'est une fuite que s'il n'est pas de la plateforme `template` ni `group` (`alertes._danger_reel`, `PLATEFORMES_CALCULEES`), lue au registre des entités. Chez l'utilisateur, `binary_sensor.dracaena_besoin_eau` et `binary_sensor.schefflera_besoin_eau` sont des modèles de classe `moisture`, sans appareil — « la plante a soif » : allumés, ils auraient dit « Fuite d'eau détectée » et coupé la vanne. La même famille d'erreur que le `safety` de Meteoalarm (ADR 0157). Une entité absente du registre (YAML sans `unique_id`), ou un registre illisible : c'est une fuite — on ne perd aucun vrai détecteur. Les autres classes ne changent pas (`tests/python/test_alertes.py`).
 
 **16/10/2026, l'écran suit (chantier Capteurs, étapes 2 et 3, tâche 12 ; à l'essai, rien de publié)** : la même règle côté écran — `fuiteCalculee` (attention.js), la plateforme lue dans l'index (`plateformeDe`, state.js). « À surveiller » à l'Accueil (`pointsAttention`), « En ce moment » (`deriveNotifs`) et Paramètres › Alertes (le compte des détecteurs de fuite) écartent un `moisture` de `template` ou de `group` ; la règle du préfixe de la base d'une plante reste, pour un modèle que le registre ne connaît pas (`tests/fuite_calculee.test.mjs`).
