@@ -65,7 +65,8 @@ async function ouvrir(options) {
   m.effets();
   return { hass, m };
 }
-const bouton = (m) => m.trouver(e => e.type === 'button' && texteDe(e) === 'Envoyer un test')[0];
+// « Un essai · Envoyer », dans « Où ça part » (maquette v3, 02/11).
+const bouton = (m) => m.trouver(e => e.type === 'button' && texteDe(e) === 'Envoyer')[0];
 /** La ligne qui porte le bouton : sa description dit le message du dernier essai. */
 const ligneDuBouton = (m) => m.trouver(e => e.props && Array.isArray([].concat(e.props.children)) && [].concat(e.props.children).includes(bouton(m)))[0];
 

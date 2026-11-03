@@ -2015,6 +2015,21 @@ def test_un_poele_mcz_en_manuel_le_dit_sans_y_toucher(creer):
     assert "puissance_fixe" not in poele["avertissements"]
 
 
+def test_l_etat_dit_poele_pour_le_poele_seul(creer):
+    """01/11, ADR 0308 : le poele, reconnu a la plateforme de son integration
+    (`maestro_mcz`), et lui seul — ni le fil pilote, ni le VTherm. La fiche ne
+    conseille l'Eco qu'a lui."""
+    # Un radiateur electrique en thermostat (Netatmo) : un thermostat qui ne refroidit pas, pas un poele.
+    radiateur = "climate.radiateur_salon"
+    table = etats()
+    table[radiateur] = FauxEtat("heat", {**ATTRS_POELE, "temperature": 19})
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat")), ("id-rad", chauffage(RAD, "fil_pilote")),
+                     ("id-vth", chauffage(VTH, "vtherm")), ("id-elec", chauffage(radiateur, "thermostat"))), table,
+              registre=REGISTRE + [Entree(radiateur, "id-elec", platform="netatmo", unique_id="n-1", device_id="d-elec")])
+    drapeaux = {c["cle"]: c["poele"] for c in lancer(m.async_etat())["chauffages"]}
+    assert drapeaux == {"id-poele": True, "id-rad": False, "id-vth": False, "id-elec": False}
+
+
 def test_un_planning_deja_allume_avec_le_programme_reste_allume_et_le_dit(creer):
     """Son cas : les deux etaient deja allumes. Le planning n'est pas coupe en silence ;
     l'avertissement le dit, et le reste de la configuration s'ecrit encore."""

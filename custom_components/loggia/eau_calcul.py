@@ -25,6 +25,7 @@ from datetime import datetime
 from typing import Any
 
 from .nombres import fini
+from .voisins import pluie_de_robot
 
 # Une fermeture annoncee par la regle de fuite vaut deux minutes : une vanne
 # motorisee tourne en 5 a 20 s, une integration en nuage repond parfois en dix.
@@ -91,15 +92,17 @@ def est_plante(haid: str, bases: Any) -> bool:
     return False
 
 
-def est_detecteur(haid: Any, attributs: Any, plateforme: Any, bases_plantes: Any = ()) -> bool:
+def est_detecteur(haid: Any, attributs: Any, plateforme: Any, bases_plantes: Any = (), voisins: Any = ()) -> bool:
     """Un detecteur de fuite : un `binary_sensor` de classe `moisture` que ni un
-    modele ni un groupe ne calcule, et qui n'est pas le besoin d'eau d'une
-    plante. Une entite que le registre ne connait pas reste un detecteur."""
+    modele ni un groupe ne calcule, qui n'est pas le besoin d'eau d'une plante,
+    ni la pluie d'un robot (`voisins`, les domaines de son appareil ; ADR
+    0305). Une entite que le registre ne connait pas reste un detecteur."""
     if not isinstance(haid, str) or not haid.startswith("binary_sensor."):
         return False
     if _table(attributs).get("device_class") != "moisture":
         return False
-    return plateforme not in PLATEFORMES_CALCULEES and not est_plante(haid, bases_plantes)
+    return (plateforme not in PLATEFORMES_CALCULEES and not est_plante(haid, bases_plantes)
+            and not pluie_de_robot(voisins or ()))
 
 
 # ── Qui a ferme ────────────────────────────────────────────────────────────

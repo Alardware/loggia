@@ -432,6 +432,59 @@ export function cfgVal(key, fallback = null) {
   return (part == null) ? fallback : part;
 }
 
+/* Le RANGEMENT DES PIECES de l'Accueil : ordre, places, tailles (ticket #43).
+ *
+ * Depuis que chaque compte ouvre son profil (ADR 0276), un ecran a pu changer
+ * de profil sans rien demander — et le rangement fait jusque-la etait reste
+ * dans l'ANCIEN. Le nouveau lisait une part sans ordre : les pieces par ordre
+ * alphabetique, sur le PC comme sur le telephone.
+ *
+ * Un reglage VIDE n'est pas un choix : c'est le defaut. Le profil herite donc
+ * celui de la maison — la part commune, sinon le premier profil Admin qui en a
+ * un —, reglage par reglage, comme les formats (ADR 0221). Rien ne s'ecrit : au
+ * premier rangement, ce qu'il voit devient le sien. */
+const RANGEMENT_PIECES = ['piecesOrdre', 'places', 'tailles'];
+const range = (v) => (Array.isArray(v) ? v.length > 0 : (!!v && typeof v === 'object' && Object.keys(v).length > 0));
+
+/** `loggia_accueil` tel que le profil qui regarde le voit, rangement herite compris. */
+export function accueilDuProfil() {
+  const v = cfgVal('loggia_accueil', null);
+  const propre = (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};
+  const brut = cfgBrute('loggia_accueil', null);
+  if (!indexe(brut)) return propre;
+  const p = brut[MARQUE] || {};
+  const id = profilActif();
+  const users = cfgBrute('loggia_users', null);
+  const admins = Object.keys(p).filter(k => /^[0-9]{1,3}$/.test(k) && profilEstAdmin(users, k)).sort((a, b) => Number(a) - Number(b));
+  const sources = ['*', ...admins].filter(k => k !== id && p[k] && typeof p[k] === 'object');
+  const out = { ...propre };
+  const herites = [];
+  RANGEMENT_PIECES.forEach((k) => {
+    if (range(out[k])) return;
+    const s = sources.find(x => range(p[x][k]));
+    if (s) { out[k] = p[s][k]; herites.push(k); }
+  });
+  /* Le téléphone et la tablette aussi (relecture du 03/11) : « un ordre
+   * personnalisé sur le PC ET sur le téléphone ». Un réglage hérité de la
+   * maison l'est avec ce qu'elle a rangé pour chaque format ; un réglage que
+   * le profil a fait sur son PC reste celui que ses formats suivent. */
+  if (herites.length) {
+    const fmt = (o) => ((o && o.formats && typeof o.formats === 'object') ? o.formats : {});
+    const formats = { ...fmt(out) };
+    sources.forEach(x => Object.keys(fmt(p[x])).forEach((f) => {
+      const part = fmt(p[x])[f];
+      if (!part || typeof part !== 'object') return;
+      herites.forEach((k) => {
+        const mien = formats[f] && typeof formats[f] === 'object' ? formats[f] : {};
+        if (range(mien[k]) || !range(part[k])) return;
+        formats[f] = { ...mien, [k]: part[k] };
+      });
+    }));
+    out.formats = formats;
+  }
+  return out;
+}
+
 /** La valeur ENTIERE d'une cle, sans decoupage par profil. */
 function cfgBrute(key, fallback) {
   const v = LOGGIA_CFG ? LOGGIA_CFG[key] : undefined;
@@ -1114,6 +1167,64 @@ export function plateformeDe(id) {
   return (m && m.platform) || null;
 }
 
+/* Les domaines de chaque appareil, calculés une fois par index (ADR 0305). */
+const VOISINS_PAR_INDEX = new WeakMap();
+/** Les domaines des entités que porte le même appareil — la sienne comprise —, lus dans l'index (ADR 0305) ; [] sans appareil connu. */
+export function voisinsDe(id) {
+  const meta = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta;
+  if (!meta || typeof meta.get !== 'function' || typeof meta.forEach !== 'function') return [];
+  const m = meta.get(id);
+  if (!m || !m.deviceId) return [];
+  let parAppareil = VOISINS_PAR_INDEX.get(meta);
+  if (!parAppareil) {
+    parAppareil = new Map();
+    meta.forEach((x, eid) => {
+      if (!x || !x.deviceId) return;
+      const dom = String(eid).split('.')[0];
+      const liste = parAppareil.get(x.deviceId) || [];
+      if (liste.indexOf(dom) < 0) liste.push(dom);
+      parAppareil.set(x.deviceId, liste);
+    });
+    VOISINS_PAR_INDEX.set(meta, parAppareil);
+  }
+  return parAppareil.get(m.deviceId) || [];
+}
+
+/** Le nom de l'appareil qui porte une entité, lu dans l'index (ADR 0307) ; null sans appareil connu. */
+export function nomAppareilDe(id) {
+  const m = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && typeof LOGGIA_INDEX.entityMeta.get === 'function' ? LOGGIA_INDEX.entityMeta.get(id) : null;
+  return (m && m.device) || null;
+}
+
+/** Les entités que porte le même appareil — la sienne comprise —, lues dans l'index, triées (ADR 0307) ; [] sans appareil connu. */
+export function entitesAppareilDe(id) {
+  const meta = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta;
+  if (!meta || typeof meta.get !== 'function' || typeof meta.forEach !== 'function') return [];
+  const m = meta.get(id);
+  if (!m || !m.deviceId) return [];
+  const out = [];
+  meta.forEach((x, eid) => { if (x && x.deviceId === m.deviceId) out.push(eid); });
+  return out.sort();
+}
+
+/** Le bouton qui réarme un appareil en défaut, que le composant a reconnu à sa clé stable (`rearmer`, ADR 0307) ; null sinon. */
+export function estRearmement(id) {
+  const m = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && typeof LOGGIA_INDEX.entityMeta.get === 'function' ? LOGGIA_INDEX.entityMeta.get(id) : null;
+  return !!(m && m.rearmer);
+}
+
+/** Le capteur qui dit ce que fait un poêle, que le composant a reconnu à sa clé stable (`etat_poele`, ADR 0308). */
+export function estEtatPoele(id) {
+  const m = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && typeof LOGGIA_INDEX.entityMeta.get === 'function' ? LOGGIA_INDEX.entityMeta.get(id) : null;
+  return !!(m && m.etatPoele);
+}
+
+/* Les intégrations de traceurs d'OBJETS (ADR 0318) : `invoxia_biotracker`, vue au registre de l'installation d'essai (01/11) ;
+ * `invoxia`, le nom que l'audit lui donnait. Un téléphone (`mobile_app`), un routeur (`unifi`, `ping`) n'en sont pas. */
+const TRACEURS_OBJETS = ['invoxia', 'invoxia_biotracker'];
+/** Un traceur d'objet — un sac, un vélo, un chien —, reconnu à sa plateforme : un `device_tracker` qui n'est pas une personne (ADR 0318). */
+export const estTraceur = (id) => String(id).indexOf('device_tracker.') === 0 && TRACEURS_OBJETS.indexOf(plateformeDe(id)) >= 0;
+
 export function enHaids() {
   const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.energy;
   const deduit = (r && r.haids && typeof r.haids === 'object') ? r.haids : {};
@@ -1185,7 +1296,7 @@ export function enVente() {
 // Configurable (Paramètres → Entités) : {name, haid, ma?} — id/couleur auto-complétés.
 /* La palette des pièces nouvelles et des lecteurs (chantier IoT, I17) : les jetons de sa maquette — le cyan, le froid, le violet, le
  * vert, l'ambre des pièces —, puis d'autres teintes du thème ; plus une couleur en dur : le mode clair et les thèmes la suivent. */
-const MED_COLORS = ['var(--o-cyan)', 'var(--o-cold)', 'var(--o-purple)', 'var(--o-ok)', 'var(--o-piece-ambre)', 'var(--o-piece-tendre)', 'var(--o-piece-bain)', 'var(--o-accent)'];
+export const MED_COLORS = ['var(--o-cyan)', 'var(--o-cold)', 'var(--o-purple)', 'var(--o-ok)', 'var(--o-piece-ambre)', 'var(--o-piece-tendre)', 'var(--o-piece-bain)', 'var(--o-accent)'];
 
 // Lecteurs multimédia : la configuration, sinon ce que la résolution apparie.
 function medResolved() {
@@ -1221,60 +1332,11 @@ function discoveredRooms() {
  * zone configurée qui lui correspond, pour qu'un clic sur le plan fasse
  * exactement ce que fait le bouton de la liste : basculer le même interrupteur.
  */
-const vacSlug = (s) => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '')
+export const vacSlug = (s) => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '')
   .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-// « salle_de_bains » et « salle_de_bain » sont la même pièce : le pluriel ne
-// doit pas empêcher le rapprochement.
-const vacSing = (s) => s.replace(/s(?=_|$)/g, '');
-
-/** Proximité de deux libellés, du plus sûr (4) au plus vague (1) ; 0 = rien. */
-function vacScore(cle, txt) {
-  const a = vacSing(vacSlug(cle)), b = vacSing(vacSlug(txt));
-  if (!a || !b) return 0;
-  if (a === b) return 4;
-  if (b.endsWith('_' + a) || a.endsWith('_' + b)) return 3;
-  if (b.indexOf('_' + a + '_') >= 0) return 2;
-  const da = a.split('_').pop(), db = b.split('_').pop();
-  return (da && da === db) ? 1 : 0;
-}
-
-/**
- * Appariement glouton : on prend d'abord les rapprochements les plus sûrs, et
- * chaque candidat ne sert qu'une fois. Sans cela « Chambre » attraperait
- * « chambre_enfant » avant que « Chambre enfant » ait sa chance.
- * @returns {Object} indice de pièce → indice de candidat
- */
-function vacApparier(pieces, cands, prisP, prisC) {
-  const paires = [];
-  pieces.forEach((p, i) => {
-    if (prisP[i]) return;
-    cands.forEach((c, j) => {
-      if (prisC[j]) return;
-      let s = 0;
-      c.txts.forEach(t => { const v = vacScore(p.cle, t); if (v > s) s = v; });
-      if (s > 0) paires.push({ i, j, s });
-    });
-  });
-  paires.sort((x, y) => y.s - x.s);
-  const res = {};
-  paires.forEach(({ i, j }) => {
-    if (prisP[i] || prisC[j]) return;
-    prisP[i] = 1; prisC[j] = 1; res[i] = j;
-  });
-  return res;
-}
-
-/** Préfixe commun de plusieurs identifiants, coupé au dernier « _ ». */
-function vacPrefixe(ids) {
-  if (ids.length < 2) return null;
-  let p = ids[0];
-  ids.forEach(id => { let i = 0; while (i < p.length && i < id.length && p[i] === id[i]) i++; p = p.slice(0, i); });
-  const c = p.lastIndexOf('_');
-  return c > 0 ? p.slice(0, c + 1) : null;
-}
 
 /** Joli nom : « salle_de_bains » → « Salle de bains ». */
-const vacNom = (cle) => { const t = String(cle).replace(/_/g, ' ').trim(); return t.charAt(0).toUpperCase() + t.slice(1); };
+export const vacNom = (cle) => { const t = String(cle).replace(/_/g, ' ').trim(); return t.charAt(0).toUpperCase() + t.slice(1); };
 
 /**
  * Entités du robot trouvées toutes seules.
@@ -1354,70 +1416,5 @@ export function vacOption(opt) {
   return VAC_MOTS[k] || vacNom(k);
 }
 
-/**
- * Pièces à afficher : `{ id, name, color, icon, toggle, segments }`.
- * `toggle` peut être absent — une pièce que le robot connaît mais dont aucun
- * interrupteur ne parle reste visible, simplement pas sélectionnable.
- * Sans robot joignable, la configuration passe telle quelle : rien ne change
- * pour qui n'a pas d'entité `vacuum` exposant ses pièces.
- */
-export function vacRooms(hass, vacId, zones = []) {
-  const st = (hass && hass.states && vacId) ? hass.states[vacId] : null;
-  const brut = st && st.attributes && st.attributes.rooms;
-  if (!brut || typeof brut !== 'object') return zones;
-  // Une clé peut porter PLUSIEURS segments quand deux pièces partagent le même
-  // type : elles se nettoient ensemble, comme une seule entrée.
-  const pieces = Object.keys(brut).map(cle => {
-    const v = brut[cle];
-    const segs = (Array.isArray(v) ? v : [v]).map(Number).filter(n => !isNaN(n));
-    return { cle, segments: segs, id: 'seg:' + segs.join('-') };
-  }).filter(p => p.segments.length);
-  if (!pieces.length) return zones;
-
-  const prisP = {}, prisZ = {};
-  const czones = zones.map(z => ({ txts: [z.id, z.name], z }));
-  const parZone = vacApparier(pieces, czones, prisP, prisZ);
-
-  // Les zones configurées ne couvrent que ce que l'utilisateur avait saisi. Les
-  // autres pièces cherchent leur interrupteur parmi ceux qui partagent le
-  // préfixe des interrupteurs déjà connus — « input_boolean.xxx_nettoyer_ »
-  // chez qui les a nommés ainsi, rien du tout chez les autres.
-  const prefixe = vacPrefixe(zones.map(z => z.toggle).filter(Boolean));
-  const S = (hass && hass.states) || {};
-  const dejaPris = zones.map(z => z.toggle).filter(Boolean);
-  const cbool = !prefixe ? [] : Object.keys(S)
-    .filter(id => id.indexOf(prefixe) === 0 && dejaPris.indexOf(id) < 0)
-    .map(id => ({ txts: [id, (S[id].attributes && S[id].attributes.friendly_name) || ''], toggle: id }));
-  const parBool = vacApparier(pieces, cbool, prisP, {});
-
-  // Dernier recours : s'il ne reste qu'une pièce sans interrupteur et qu'une
-  // seule zone configurée sans emploi, c'est forcément elle. C'est ce qui
-  // rattache « bedroom » à « Chambre », qu'aucune comparaison de texte ne peut
-  // rapprocher.
-  const restP = pieces.map((p, i) => i).filter(i => !prisP[i]);
-  const restZ = czones.map((c, j) => j).filter(j => !prisZ[j]);
-  if (restP.length === 1 && restZ.length === 1) { parZone[restP[0]] = restZ[0]; prisP[restP[0]] = 1; prisZ[restZ[0]] = 1; }
-
-  // Palette des pièces nouvelles : on écarte les couleurs déjà portées par une
-  // zone configurée, sinon deux pièces voisines finissent de la même teinte.
-  const prises = zones.map(z => z.color);
-  const libres = MED_COLORS.filter(c => prises.indexOf(c) < 0);
-  const palette = libres.length ? libres : MED_COLORS;
-  let nouv = 0;
-
-  return pieces.map((p, i) => {
-    const z = parZone[i] != null ? czones[parZone[i]].z : null;
-    const b = parBool[i] != null ? cbool[parBool[i]].toggle : null;
-    return {
-      id: p.id,
-      segments: p.segments,
-      name: (z && z.name) || vacNom(p.cle),
-      color: (z && z.color) || palette[nouv++ % palette.length],
-      icon: (z && z.icon) || null,
-      toggle: (z && z.toggle) || b || null,
-      // Rang de la zone configurée : conserve l'ordre auquel l'utilisateur est
-      // habitué, les pièces nouvelles venant ensuite par numéro de segment.
-      rang: parZone[i] != null ? parZone[i] : 1000 + p.segments[0],
-    };
-  }).sort((a, b) => a.rang - b.rang);
-}
+/* `vacRooms`, qui rattache les pièces du robot aux zones configurées, vit dans robotsfiche.js : seule la fiche du robot,
+ * chargée à la demande, l'appelle (lot 13 Gladys, ADR 0318 : la place du démarrage). */

@@ -6,7 +6,7 @@
  *
  * La page d'une machine Home Assistant OS (ADR 0037) : les mesures en tuiles, la
  * charge de la derniere heure, les versions, les modules complementaires, le
- * journal et le reseau. Tout ce qui se CALCULE vit dans `systeme.js`, teste a
+ * journal et le reseau. Tout ce qui se CALCULE vit dans `systemecalc.js`, teste a
  * sec ; ici il ne reste que les lectures et le dessin.
  *
  * RIEN NE S'AFFICHE SANS SOURCE. Les capteurs viennent de la table de
@@ -24,8 +24,8 @@ import { LOGGIA_INDEX } from '../state.js';
 import {
   tuilesMesures, seaux, resumeSerie, lignesVersions, derniereSauvegarde, momentLisible, modulesComplementaires,
   interfaceReseau, debitLisible, baseDeDonnees, etatCloud, journalSysteme, alertesSysteme, nomCarte, dureeLisible,
-  depuisDemarrage, dureeCapteur, enOctets, tailleLisible, paireTailles, nombre,
-} from '../systeme.js';
+  depuisDemarrage, dureeCapteur, enOctets, tailleLisible, paireTailles, nombre, etatSauvegarde, entitesAdmin,
+} from '../systemecalc.js';
 import { CARTE_MAISON, ICONE_CARTE, NOM_CARTE, SOUS_CARTE, LISERE } from '../styles.js';
 import { uniteTemp, versCelsius } from '../unites.js';
 
@@ -227,7 +227,7 @@ function PanneauCharge({ series, releve }) {
   );
 }
 
-function PanneauVersions({ lignes, sauvegarde, maintenant }) {
+function PanneauVersions({ lignes, sauvegarde, maintenant, enDefaut = false }) {
   return (
     <div style={SYS_PANNEAU}>
       <EntetePanneau titre={tr('Versions')} />
@@ -243,7 +243,8 @@ function PanneauVersions({ lignes, sauvegarde, maintenant }) {
       ))}
       {sauvegarde && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, paddingTop: 14, borderTop: '1px solid var(--o-bd1)' }}>
-          <Fi i="cloud-check" size={16} color="var(--o-ok)" />
+          {/* Verte quand tout va ; ambre quand la sauvegarde automatique a échoué ou pris du retard (lot 10 Gladys, ADR 0314). */}
+          <Fi i={enDefaut ? 'cloud-disabled' : 'cloud-check'} size={16} color={enDefaut ? 'var(--o-warn2)' : 'var(--o-ok)'} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{sauvegarde.complete ? tr('Dernière sauvegarde complète') : tr('Dernière sauvegarde')}</div>
             <div style={{ fontSize: 13, fontWeight: 700, marginTop: 1 }}>{[momentLisible(sauvegarde.t, maintenant), tailleLisible(sauvegarde.octets)].filter(Boolean).join(' · ')}</div>
@@ -453,7 +454,7 @@ function SystemeContent({ hass }) {
   const swapTotal = swapUtilise != null && swapLibre != null ? swapUtilise + swapLibre : null;
   const tempAffiche = num(H.temp);
   // Le capteur de température CPU suit l'unité de l'installation (°F aux
-  // États-Unis) : les seuils de systeme.js, eux, restent en Celsius.
+  // États-Unis) : les seuils de systemecalc.js, eux, restent en Celsius.
   const uniteT = uniteTemp(H.temp && S[H.temp] ? S[H.temp].attributes : null, hass);
   const temp = versCelsius(tempAffiche, uniteT);
   const serieCpu = resumeSerie(seaux(hist[cpuId], releve));
@@ -474,7 +475,12 @@ function SystemeContent({ hass }) {
   // ── Les panneaux
   const versions = lignesVersions({ S, core: sup.core, supervisor: sup.supervisor, os: sup.os,
     versionCore: (hass && hass.config && hass.config.version) || null, versionLoggia: (LOGGIA_INDEX && LOGGIA_INDEX.componentVersion) || null });
-  const sauvegarde = derniereSauvegarde(sup.backups);
+  /* La dernière sauvegarde : le Superviseur d'abord (manuelles comprises), sinon la dernière réussie de l'intégration
+   * `backup`. Son défaut — échec, retard — se lit dans ses entités (lot 10 Gladys, ADR 0314) : il passe la pastille à l'ambre. */
+  const defautSauvegarde = etatSauvegarde(S, LOGGIA_INDEX, maintenant);
+  const reussie = entitesAdmin(LOGGIA_INDEX).sauvegarde.reussie;
+  const tReussie = reussie && S[reussie] ? Date.parse(S[reussie].state) : NaN;
+  const sauvegarde = derniereSauvegarde(sup.backups) || (isNaN(tReussie) ? null : { t: tReussie, octets: null, complete: false });
   const modules = modulesComplementaires(sup.addons, sup.stats);
   const reseau = interfaceReseau(sup.network);
   const base = baseDeDonnees(infoBase);
@@ -488,7 +494,7 @@ function SystemeContent({ hass }) {
   ].filter(Boolean);
   // Le journal defile : toute la journee, pas seulement ses huit dernieres lignes.
   const journal = journalSysteme({ erreurs: Array.isArray(erreursHA) ? erreursHA : null, logbook, maintenant, max: 60 });
-  const alertes = alertesSysteme({ memPct, memTexte: paireTailles(memUtilise, memTotal), disquePct, temp, tempAffiche, uniteT, enLigne, modules: modules.liste });
+  const alertes = alertesSysteme({ memPct, memTexte: paireTailles(memUtilise, memTotal), disquePct, temp, tempAffiche, uniteT, enLigne, modules: modules.liste, sauvegarde: defautSauvegarde });
   const series = [
     cpuId && { cle: 'cpu', nom: tr('Processeur'), points: hist[cpuId], actuel: cpu, rgb: 'var(--o-accent-rgb)', couleur: 'var(--o-accent-soft)' },
     memId && { cle: 'memoire', nom: tr('Mémoire'), points: hist[memId], actuel: num(memId), rgb: 'var(--o-purple-rgb)', couleur: 'var(--o-purple)' },
@@ -550,7 +556,7 @@ function SystemeContent({ hass }) {
       {(series.length > 0 || versions.length > 0) && (
         <div className="grid-sys-duo">
           {series.length > 0 && <PanneauCharge series={series} releve={releve} />}
-          {versions.length > 0 && <PanneauVersions lignes={versions} sauvegarde={sauvegarde} maintenant={maintenant} />}
+          {versions.length > 0 && <PanneauVersions lignes={versions} sauvegarde={sauvegarde} maintenant={maintenant} enDefaut={!!defautSauvegarde} />}
         </div>
       )}
 

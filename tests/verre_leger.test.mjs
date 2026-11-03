@@ -113,13 +113,14 @@ test('la classe est posée au DÉMARRAGE : à l’import du thème, avant tout r
   assert.ok(!/^import /m.test(lire('src', 'verre.js')), 'verre.js ne doit rien importer');
 });
 
-test('la ligne des Paramètres : « Verre des cartes » sous « Ciel animé », alignée, Auto / Plein / Léger', async () => {
+test('la ligne des Paramètres (maquette v3) : « Verre » dans Matière, sous les liserés, alignée, Auto / Plein / Léger', async () => {
   const PAR = lire('src', 'views', 'parametres.jsx');
-  const ciel = PAR.indexOf("<OptRow eteint={!wxFx} title={tr('Ciel animé')}");
-  const verre = PAR.indexOf("<OptRow title={tr('Verre des cartes')} desc={descVerre}>");
-  const veille = PAR.indexOf("<OptRow title={tr('Écran de veille')}");
-  assert.ok(ciel > 0 && verre > ciel && veille > verre, 'juste sous « Ciel animé », avant l’écran de veille');
-  assert.ok(!/<OptRow[^>]*retrait[^>]*title=\{tr\('Verre des cartes'\)\}/.test(PAR), 'sans `retrait` : alignée sur les autres');
+  const liseres = PAR.indexOf("<OptRow title={tr('Liserés')}");
+  // ASSERTION MODIFIÉE (03/11) : la ligne porte la marque « Cet écran » (`ici`) — le verre est gardé dans le navigateur.
+  const verre = PAR.indexOf("<OptRow ici title={tr('Verre')} desc={descVerre}>");
+  const fond = PAR.indexOf("<OptRow title={tr(\"Fond d'écran\")}");
+  assert.ok(liseres > 0 && verre > liseres && fond > verre, 'dans Matière, entre les liserés et le fond d’écran');
+  assert.ok(!/<OptRow[^>]*retrait[^>]*title=\{tr\('Verre'\)\}/.test(PAR), 'sans `retrait` : alignée sur les autres');
 
   // Le rendu : la section Apparence ouverte, Auto choisi. Le peu de fenêtre que Paramètres lit au rendu.
   const session = { getItem: () => 'apparence', setItem: () => {}, removeItem: () => {} };
@@ -127,7 +128,8 @@ test('la ligne des Paramètres : « Verre des cartes » sous « Ciel animé », 
   Object.defineProperty(globalThis, 'window', { configurable: true, writable: true, value: {
     localStorage: stockage, sessionStorage: session, location: { search: '', href: 'http://loggia.test/', pathname: '/' },
     addEventListener: rien, removeEventListener: rien, dispatchEvent: () => true, innerWidth: 1280, innerHeight: 800,
-    matchMedia: () => ({ matches: false, addEventListener: rien, removeEventListener: rien }),
+    // Un écran large (au-delà de 1024 px) : l'Apparence de l'ordinateur (maquette v3).
+    matchMedia: (q) => ({ matches: /min-width/.test(String(q)), addEventListener: rien, removeEventListener: rien }),
   } });
   globalThis.sessionStorage = session;
   poser({});
@@ -142,9 +144,9 @@ test('la ligne des Paramètres : « Verre des cartes » sous « Ciel animé », 
     const f = html.indexOf('<div class="o-optrow"', i);
     return html.slice(d, f > 0 ? f : undefined);
   };
-  const v = ligne('Verre des cartes'), c = ligne('Ciel animé'), plage = ligne('Plage horaire');
+  const v = ligne('Verre'), c = ligne('Ciel animé'), plage = ligne('Quand');
   const style = (s) => s.slice(0, s.indexOf('>')).replace(/opacity:[^;"]*;?/, '');
-  assert.equal(style(v), style(c), 'la ligne n’a pas l’alignement de « Ciel animé »');
+  assert.equal(style(v), style(c), 'la ligne « Verre » n’a pas l’alignement de « Ciel animé »');
   assert.notEqual(style(v), style(plage), 'témoin : une ligne en retrait se distingue');
   assert.ok(v.includes('role="group" aria-label="Verre des cartes"'), 'le groupe porte son nom');
   const choix = [...v.matchAll(/<button[^>]*aria-pressed="(true|false)"[^>]*>([^<]*)<\/button>/g)].map(m => [m[2], m[1]]);

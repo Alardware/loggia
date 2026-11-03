@@ -41,7 +41,8 @@ export const GESTES_TV = [
  * shell ADB : `input keyevent 85` est KEYCODE_MEDIA_PLAY_PAUSE.
  *
  * `precedent` et `suivant` ne sont PAS dessinés : le pavé de la télécommande
- * (fichemedia.jsx) n'a que les flèches, OK, Retour, Accueil et Lecture ; la
+ * (fichemedia.jsx) n'a que les flèches, OK, Retour, Accueil, Lecture, et Volume − / +
+ * depuis le lot 12 (ADR 0316) ; la
  * piste précédente et la suivante passent par le LECTEUR (`media_previous_track`,
  * `media_next_track`). Plusieurs de leurs valeurs, ici, AVANCENT dans la vidéo
  * au lieu de changer de piste : REWIND / FAST_FORWARD d'Android TV en ADB

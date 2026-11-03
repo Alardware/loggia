@@ -420,8 +420,13 @@ export function EnCalendrier({ mois = [], rgb = 'var(--o-accent-rgb)', min = nul
  * `cases` et `serie` viennent de la periode « mois » (stats.js) : une entree
  * par jour, dans l'ordre. Le decalage du premier jour se calcule sur sa date —
  * la semaine commence le lundi, comme partout dans Loggia.
+ *
+ * Sur un grand ecran (31/10, la planche « Trade Echo » de Pinterest), le meme
+ * mois sert en grand : `semaines` ajoute une huitieme colonne, le total de
+ * chaque semaine, et `hauteur` donne aux cases une hauteur fixe — carrees sur
+ * mille pixels de large, six semaines feraient six cents pixels de haut.
  */
-export function CalendrierMois({ cases = [], serie = null, rgb = 'var(--o-accent-rgb)', formater = null, maintenant = Date.now(), onJour = null }) {
+export function CalendrierMois({ cases = [], serie = null, rgb = 'var(--o-accent-rgb)', formater = null, maintenant = Date.now(), onJour = null, semaines = false, hauteur = null, formaterSemaine = null }) {
   const l = locale();
   const fmt = formater || ((v) => nombre(v, 0));
   const vus = (serie || []).filter(v => v != null && isFinite(v));
@@ -429,24 +434,42 @@ export function CalendrierMois({ cases = [], serie = null, rgb = 'var(--o-accent
   const hi = vus.length ? Math.max(...vus) : 0;
   /* Un dixieme d'encre au minimum : une journee tres basse reste une case
    * teintee, pas un trou dans la grille. */
-  const teinte = (v) => 'rgba(' + rgb + ',' + (0.1 + 0.9 * (hi > lo ? (v - lo) / (hi - lo) : 1)).toFixed(2) + ')';
+  const encre = (v) => 0.1 + 0.9 * (hi > lo ? (v - lo) / (hi - lo) : 1);
+  const teinte = (v) => 'rgba(' + rgb + ',' + encre(v).toFixed(2) + ')';
+  /* Sur une case bien teintee, le chiffre passe en blanc : en mode clair, le
+   * texte sombre du theme disparaissait dans le bleu fonce des jours charges.
+   * En mode sombre, le texte du theme est deja clair — rien ne change. */
+  const encreTexte = (v) => (v != null && encre(v) > 0.6 ? '#fff' : null);
   const auj = new Date(maintenant);
   const memeJour = (d) => d.getFullYear() === auj.getFullYear() && d.getMonth() === auj.getMonth() && d.getDate() === auj.getDate();
   // `getDay()` rend 0 pour dimanche : la semaine commence le lundi.
   const vides = cases.length ? (new Date(cases[0].debut).getDay() + 6) % 7 : 0;
   if (!cases.length) return null;
+  const valeur = (i) => (serie && serie[i] != null && isFinite(serie[i]) ? serie[i] : null);
+  /* Le total d'une semaine : ses jours connus, ou rien si aucun ne l'est —
+   * zero dirait « rien consomme », ce que personne n'a mesure. */
+  const totalSemaine = (fin) => {
+    let s = null;
+    for (let i = Math.max(0, fin - (vides + fin) % 7); i <= fin; i++) {
+      const v = valeur(i);
+      if (v != null) s = (s || 0) + v;
+    }
+    return s;
+  };
+  const colonnes = semaines ? 'repeat(7,minmax(0,1fr)) minmax(0,1.2fr)' : 'repeat(7,minmax(0,1fr))';
 
   return (
     <div>
-      <div aria-hidden="true" style={{ display: 'grid', gridTemplateColumns: 'repeat(7,minmax(0,1fr))', gap: 6, marginBottom: 6 }}>
+      <div aria-hidden="true" style={{ display: 'grid', gridTemplateColumns: colonnes, gap: 6, marginBottom: 6 }}>
         {[0, 1, 2, 3, 4, 5, 6].map(j => (
-          <span key={j} style={{ textAlign: 'center', fontSize: 10.5, fontWeight: 700, color: 'var(--o-text3)' }}>{nomJour(j, l, 'narrow')}</span>
+          <span key={j} style={{ textAlign: hauteur ? 'left' : 'center', paddingLeft: hauteur ? 8 : 0, fontSize: 10.5, fontWeight: 700, color: 'var(--o-text3)', textTransform: hauteur ? 'uppercase' : 'none', letterSpacing: hauteur ? '.06em' : 0 }}>{nomJour(j, l, hauteur ? 'short' : 'narrow')}</span>
         ))}
+        {semaines && <span style={{ textAlign: 'right', paddingRight: 8, fontSize: 10.5, fontWeight: 700, color: 'var(--o-text3)', textTransform: 'uppercase', letterSpacing: '.06em' }}>{tr('Semaine')}</span>}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,minmax(0,1fr))', gap: 6 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: colonnes, gap: 6 }}>
         {Array.from({ length: vides }, (_, i) => <span key={'v' + i} />)}
-        {cases.map((c, i) => {
-          const v = serie && serie[i] != null && isFinite(serie[i]) ? serie[i] : null;
+        {cases.flatMap((c, i) => {
+          const v = valeur(i);
           const d = new Date(c.debut);
           const aVenir = c.debut > maintenant;
           /* Une case qui M\u00c8NE quelque part est un bouton : au clavier comme au
@@ -454,19 +477,32 @@ export function CalendrierMois({ cases = [], serie = null, rgb = 'var(--o-accent
            * venir n'a rien \u00e0 montrer \u2014 il reste inerte. */
           const ouvrable = !!onJour && !aVenir;
           const Case = ouvrable ? 'button' : 'div';
-          return (
+          /* Le total de la semaine ferme sa rangee : apres le dimanche, ou
+           * apres le dernier jour du mois, pose a la huitieme colonne. */
+          const finSemaine = semaines && ((vides + i) % 7 === 6 || i === cases.length - 1);
+          const tSem = finSemaine ? totalSemaine(i) : null;
+          const jour = (
             <Case key={c.debut} type={ouvrable ? 'button' : undefined} title={c.titre + (v != null ? ' \u00b7 ' + fmt(v) : '')}
               aria-label={ouvrable ? c.titre : undefined} onClick={ouvrable ? () => onJour(c.debut) : undefined}
-              style={{ position: 'relative', aspectRatio: '1 / 1', minWidth: 0, borderRadius: 10, padding: 5, boxSizing: 'border-box',
-                border: 'none', font: 'inherit', color: 'inherit', textAlign: 'left', cursor: ouvrable ? 'pointer' : 'default',
+              style={{ position: 'relative', ...(hauteur ? { height: hauteur, padding: '7px 9px' } : { aspectRatio: '1 / 1', padding: 5 }), minWidth: 0, borderRadius: 10, boxSizing: 'border-box',
+                border: 'none', font: 'inherit', color: encreTexte(v) || 'inherit', textAlign: 'left', cursor: ouvrable ? 'pointer' : 'default',
                 background: v != null ? teinte(v) : 'var(--o-s1)',
                 opacity: aVenir ? 0.45 : 1,
                 boxShadow: memeJour(d) ? '0 0 0 1.5px var(--o-text)' : 'none',
                 display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: v != null ? 'var(--o-text)' : 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>{d.getDate()}</span>
-              {v != null && <span style={{ fontSize: 13, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden' }}>{fmt(v)}</span>}
+              <span style={{ fontSize: hauteur ? 11 : 10, fontWeight: 700, color: v != null ? (encreTexte(v) || 'var(--o-text)') : 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>{d.getDate()}</span>
+              {v != null && <span style={{ fontSize: hauteur ? 16 : 13, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden' }}>{fmt(v)}</span>}
             </Case>
           );
+          if (!finSemaine) return [jour];
+          /* Sans teinte : un total n'est pas une journee de plus, il ne doit
+           * pas entrer dans l'echelle des couleurs. Un liseré le separe. */
+          return [jour, (
+            <div key={'s' + c.debut} style={{ gridColumn: 8, ...(hauteur ? { height: hauteur } : { aspectRatio: '1 / 1' }), minWidth: 0, boxSizing: 'border-box', padding: '7px 9px', borderRadius: 10,
+              border: 'var(--o-bw,1px) solid var(--o-bd2)', display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end' }}>
+              <span style={{ fontSize: hauteur ? 15 : 12, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', color: tSem != null ? 'var(--o-text)' : 'var(--o-text3)' }}>{tSem != null ? (formaterSemaine || fmt)(tSem) : '—'}</span>
+            </div>
+          )];
         })}
       </div>
       {vus.length > 0 && (

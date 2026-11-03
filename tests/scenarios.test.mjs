@@ -242,13 +242,11 @@ test('la bibliothèque Hue, chargée à la demande, garde ses 55 ambiances', () 
     'le dégradé ou la luminosité d’une ambiance s’est perdu en route');
 });
 
-test('la veille et la recherche passent aux scenarios ; les liens sont sondes avec l’Accueil', () => {
-  /* La veille les reçoit en PROPS depuis le 23/09 (plan M1) : sortie
-   * d'App.jsx, elle ne connaît plus le magasin des scénarios ni la commande —
-   * on lui passe la liste de l'Accueil et de quoi en lancer un. */
-  assert.ok(app.includes("<AmbientOverlay scenes={scenariosAccueil(scenarios()).map(s => ({ ...s, nom: nomScenario(s) }))} onScene={(s) => lancerScenario(getHass(), s.id)}"),
-    'la veille : quatre scénarios de l’Accueil');
-  assert.ok(app.includes('{scenes.slice(0, 4).map(s => ('), 'la veille n’en montre plus quatre');
+test('la recherche passe aux scenarios ; les liens sont sondes avec l’Accueil', () => {
+  /* La veille ne les montre plus depuis la maquette du 01/11 : elle se
+   * regarde, elle ne se pilote pas. Elle reçoit les pièces, plus de scénarios. */
+  assert.ok(app.includes("<AmbientOverlay rooms={cfg.rooms || []} hass={hass}") && !app.includes('<AmbientOverlay scenes='),
+    'la veille reçoit encore des scénarios');
   assert.ok(app.includes("scenarios().forEach(s => { const nom = nomScenario(s); if (!match(nom)) return; results.push({ group: tr('Scénarios'),"), 'la recherche ⌘K');
   assert.ok(app.includes("const qsKeys = () => scenarios().map(s => s.lien).filter(Boolean);"), 'les scènes et scripts liés sont sondés');
   assert.ok(app.includes("{ label: 'Scénarios', svg: <Fi i=\"sparkles\"") && app.includes("'Scénarios': 'scenes',"), '« Scènes » est devenue « Scénarios », l’identifiant reste');

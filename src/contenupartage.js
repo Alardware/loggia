@@ -24,11 +24,6 @@ const liste = (v) => (Array.isArray(v) ? v : []);
 const avec = (l, id, present) => { const s = liste(l).filter((x) => x !== id); if (present) s.push(id); return s; };
 const union = (...ls) => [...new Set(ls.flatMap(liste))];
 
-/* Le défaut des widgets en option de l'Accueil (`ACC_AJOUTEES_DEFAUT`, App.jsx) :
- * une grille qui n'a jamais rien choisi les montre. Posé par App au chargement. */
-let AJOUTEES_DEFAUT = [];
-export function poserDefautsAccueil(l) { AJOUTEES_DEFAUT = liste(l).slice(); }
-
 /** Le profil d'indice `id` est-il Admin ? (le rôle de `loggia_users`, casse ignorée) */
 export function profilEstAdmin(users, id) {
   const u = liste(users)[Number(id)];
@@ -63,71 +58,15 @@ function reportCartes(avant, apres) {
   };
 }
 
-/* Une épingle s'identifie par son entité ; un gabarit (`t: 'tpl'`) par son contenu,
- * sans sa taille — agrandir une épingle range, ça n'ajoute rien. */
-const cleEpingle = (x) => {
-  if (typeof x === 'string') return x;
-  if (x && x.t === 'tpl') { const { w: _w, h: _h, ...reste } = x; return 'tpl:' + JSON.stringify(reste); }
-  return x && x.id;
-};
-
-function reportEpingles(avant, apres) {
-  const ka = new Set(liste(avant).map(cleEpingle)), kb = new Set(liste(apres).map(cleEpingle));
-  const plus = liste(apres).filter((x) => !ka.has(cleEpingle(x)));
-  const moins = new Set([...ka].filter((k) => !kb.has(k)));
-  if (!plus.length && !moins.size) return null;
-  return (part) => {
-    const l = liste(part).filter((x) => !moins.has(cleEpingle(x)));
-    const deja = new Set(l.map(cleEpingle));
-    plus.forEach((x) => { if (!deja.has(cleEpingle(x))) l.push(x); });
-    return l;
-  };
-}
-
-/* L'Accueil : les sections masquées (`caches`) et les widgets en option ajoutés
- * (`ajoutees`), sur la grille de l'ordinateur et sur chaque format ou appareil
- * qui a les siens (disposition.js). Ce qui change dans UN contexte vaut partout. */
-const CLES_ACCUEIL = ['caches', 'ajoutees'];
-function effectif(G, ctx, cle) {
-  const o = ctx ? obj(obj(G[ctx[0]])[ctx[1]]) : G;
-  if (cle in o) return liste(o[cle]);
-  if (ctx && cle in G) return liste(G[cle]);
-  return cle === 'ajoutees' ? AJOUTEES_DEFAUT : [];
-}
-function reportAccueil(avant, apres) {
-  const A = obj(avant), B = obj(apres);
-  const ctxs = [null];
-  for (const t of ['formats', 'appareils']) for (const k of union(Object.keys(obj(A[t])), Object.keys(obj(B[t])))) ctxs.push([t, k]);
-  const changes = new Map();
-  for (const ctx of ctxs) {
-    for (const cle of CLES_ACCUEIL) {
-      const a = effectif(A, ctx, cle), b = effectif(B, ctx, cle);
-      for (const id of union(a, b)) if (a.includes(id) !== b.includes(id)) changes.set(cle + '\u0000' + id, b.includes(id));
-    }
-  }
-  if (!changes.size) return null;
-  const appliquer = (o, base) => {
-    for (const [k, present] of changes) {
-      const [cle, id] = k.split('\u0000');
-      if (base || cle in o) o[cle] = avec(cle in o ? o[cle] : (cle === 'ajoutees' ? AJOUTEES_DEFAUT : []), id, present);
-    }
-    return o;
-  };
-  return (part) => {
-    const P = appliquer({ ...obj(part) }, true);
-    for (const t of ['formats', 'appareils']) {
-      if (!P[t] || typeof P[t] !== 'object') continue;
-      P[t] = Object.fromEntries(Object.entries(P[t]).map(([k, v]) => [k, appliquer({ ...obj(v) }, false)]));
-    }
-    return P;
-  };
-}
+/* Les FAVORIS et l'ACCUEIL n'en sont plus (ticket #43, 02/11) : « je modifie
+ * sur mobile en tant que Guillaume, ça modifie aussi sur PC en Admin (autre
+ * profil), et vice versa » — « l'interface est propre à chacun ». Une épingle,
+ * une section masquée, un widget ajouté sont la personnalisation de quelqu'un,
+ * pas le contenu de la maison : chaque profil garde les siens. */
 
 /** Le report à appliquer à toutes les parts pour un geste de l'admin sur `cle`,
  *  ou `null` s'il n'a rien ajouté ni retiré (il n'a fait que ranger). */
 export function reportContenu(cle, avant, apres) {
   if (VUES_A_CARTES.has(cle)) return reportCartes(avant, apres);
-  if (cle === 'loggia_epingles') return reportEpingles(avant, apres);
-  if (cle === 'loggia_accueil') return reportAccueil(avant, apres);
   return null;
 }

@@ -41,7 +41,7 @@ const entre = (texte, debut, fin) => {
   return texte.slice(i, j);
 };
 const APROPOS = entre(PAR, "{tab === 'about' && (() => {", 'const HA_CFG_DEF');
-const CONNEXION = entre(PAR, "{tab === 'connexion' && (", "{tab === 'users' && (");
+const CONNEXION = entre(PAR, "{tab === 'connexion' && (", "{tab === 'users' && ");
 const ALERTES = entre(PAR, 'const ALERTES_CLASSES', '/* ════════════ VUES PERSONNALISÉES');
 
 // ── À propos ────────────────────────────────────────────────────────────────
@@ -55,11 +55,13 @@ test('la pastille Ko-fi d’« À propos » reste telle quelle', () => {
   assert.ok(APROPOS.includes('<path d="M3 6.6h13v6.6a6.5 6.5 0 0 1-13 0z" fill="#fff" />'), 'la tasse dessinée a disparu');
 });
 
-test('l’installation tient en cinq lignes, la configuration en pied de panneau', () => {
-  for (const t of ['Version', 'Socle technique', 'Typographie', 'Entités suivies', 'Cache local']) {
+test('l’installation tient en quatre lignes (Home Assistant, Socle, Typographie, Cache), la version en tête, la configuration en pied de panneau', () => {
+  // Maquette v3 (02/11) : la version se lit en grand avant le panneau.
+  assert.ok(APROPOS.includes('{inst.version && <span'), 'la version a disparu de l’en-tête d’À propos');
+  for (const t of ['Socle', 'Typographie', 'Cache de cet écran']) {
     assert.ok(APROPOS.includes(`<Ligne titre={tr('${t}')}`), 'ligne absente : ' + t);
   }
-  assert.ok(APROPOS.includes("{tr('La configuration Loggia s’exporte en un fichier JSON.')}"));
+  assert.ok(APROPOS.includes("{tr('Exporter la configuration')}"), 'le bouton d’export de la maquette');
   assert.ok(APROPOS.includes("telechargerConfig(j, 'loggia-config')"), 'l’export complet a disparu');
   // L'import vit dans son composant depuis le 03/10 (lire, montrer,
   // sauvegarder, remplacer) ; son comportement est épinglé par
@@ -75,11 +77,11 @@ test('l’installation tient en cinq lignes, la configuration en pied de panneau
 test('la remise à zéro dit ce qu’elle efface : la configuration de toute la maison', () => {
   // La maquette disait « de cet appareil ». `resetLoggiaComplet` vide la
   // partie commune du serveur — vues, profils, règles, scénarios.
-  assert.ok(APROPOS.includes('pour toute la maison — une sauvegarde part d’abord. Les automatisations Home Assistant ne sont pas touchées.'));
+  assert.ok(APROPOS.includes('Pour toute la maison — une sauvegarde part d’abord. Les automatisations Home Assistant ne sont pas touchées.'));
   assert.ok(!PAR.includes('les réglages de cet appareil. Les automatisations'), 'la phrase fausse de la maquette est revenue');
   const etat = lire('src', 'state.js');
   assert.ok(entre(etat, 'export async function resetLoggiaComplet()', '\n}\n').includes("type: 'loggia/config/set', config: patch"), 'la remise à zéro ne touche plus le serveur : la phrase deviendrait fausse');
-  assert.ok(/\{isAdmin && \(\s*<Panneau niveau="danger">/.test(APROPOS), 'la zone rouge s’offre à tous');
+  assert.ok(/\{isAdmin && \(\s*<Panneau niveau="danger" titre=\{tr\('Tout remettre à zéro'\)\}/.test(APROPOS), 'la zone rouge s’offre à tous');
 });
 
 // ── Connexion ───────────────────────────────────────────────────────────────
@@ -201,7 +203,8 @@ test('le code reste à côté du libellé, et chaque télécommande n’apparaî
 
 test('le sommaire ne prétend plus que tout est propre à l’appareil', () => {
   assert.ok(!PAR.includes("tr('Réglages propres à cet appareil')"));
-  assert.ok(PAR.includes("{tr('Réglages de Loggia')} · {trN(users.length, '{n} profil du foyer', '{n} profils du foyer')}"));
+  // Au téléphone (maquette v4), la page dit à qui sont ces réglages, et qu'ils le suivent.
+  assert.ok(PAR.includes("{tr('Profil de {nom} · réglages suivis sur tous ses écrans', { nom: prenom })}"));
 });
 
 test('une pastille garde sa police, même posée dans un titre en italique', () => {
@@ -224,7 +227,7 @@ test('la démo a de quoi montrer ces pages, sans composant serveur', () => {
 
 test('la pastille Ko-fi passe sous la zone rouge, sans changer de dessin', () => {
   // « me soutenir en dessous » : la fin de la page, sous « Réinitialiser Loggia ».
-  const danger = APROPOS.indexOf('<Panneau niveau="danger">');
+  const danger = APROPOS.indexOf('<Panneau niveau="danger"');
   const kofi = APROPOS.indexOf('<a href="https://ko-fi.com/alardware"');
   assert.ok(danger > 0 && kofi > danger, 'la pastille est remontée au-dessus de la zone rouge');
 });

@@ -11,6 +11,7 @@ import { membresGroupes, nomsMembres, vuePresence, vueSecurite, vueOuvertures } 
 import { vueVigilance } from '../vigilance.js';
 import { useDerniersEvenements } from '../historique.jsx';
 import { seuilsPile, reglerSeuilPile } from '../attention.js';
+import { retenirFigees } from '../fraicheur.js';
 import { useJournee, depuisQuand } from '../journeelue.js';
 import { LISERE, petitesCapitales } from '../styles.js';
 import { reduireDerniers } from '../evenement.js';
@@ -67,7 +68,8 @@ function useSeuilPile(hass) {
       const h = hRef.current;
       if (!h) return;
       h.callWS({ type: 'loggia/veilles/etat' })
-        .then(r => { if (vivant) setSeuil(reglerSeuilPile(r).alerte); })
+        // Le verdict de fraîcheur des mesures voyage avec (ADR 0311) : les cartes qui l'écoutent se redessinent seules.
+        .then(r => { if (vivant) { retenirFigees(r); setSeuil(reglerSeuilPile(r).alerte); } })
         .catch(() => {});   // une veille muette garde le dernier seuil connu (attention.js)
     };
     lire();

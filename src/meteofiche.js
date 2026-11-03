@@ -119,17 +119,24 @@ export function tuilesMeteo({ attributs = {}, jours = null, heures = null, maint
 }
 
 /* Les risques sur les prochaines heures : la plus forte probabilité de pluie
- * et de neige, et le gel — la part des heures à 0° ou moins. Sans
- * probabilité ni température, rien. */
-export function risquesMeteo(heures, maintenant = Date.now()) {
+ * et de neige, et le gel — la part des heures à 0° ou moins.
+ * Lot 5 Gladys (D14, W2 ; ADR 0309) : une case sans valeur connue NE S'AFFICHE PAS. La prévision horaire de Météo-France n'a
+ * aucune probabilité : pluie et neige s'y taisaient en « 0 % ». `capteurs` — `{ pluie, neige, gel }`, les états des capteurs
+ * de Météo-France de la même ville (`capteursMeteo`, meteo.js) — passe AVANT la déduction ; un capteur muet ne vaut rien, et la
+ * déduction reprend. La neige déduite n'existe que là où la pluie l'est : sans probabilité, on ne sait rien de l'une ni de l'autre. */
+export function risquesMeteo(heures, maintenant = Date.now(), capteurs = null) {
   const H = aVenir(heures, maintenant).slice(0, 12);
   const probas = H.map(x => nombreOuNull(x.p.precipitation_probability)).filter(v => v != null);
   const temps = H.map(x => nombreOuNull(x.p.temperature)).filter(v => v != null);
-  if (!probas.length && !temps.length) return [];
-  const max = (l) => (l.length ? Math.max(0, Math.min(100, Math.round(Math.max(...l)))) : 0);
-  const pluie = max(H.filter(x => !neige(x.p)).map(x => nombreOuNull(x.p.precipitation_probability)).filter(v => v != null));
-  const neigeP = max(H.filter(x => neige(x.p)).map(x => nombreOuNull(x.p.precipitation_probability)).filter(v => v != null));
-  const gel = temps.length ? Math.round(100 * temps.filter(v => 0 >= v).length / temps.length) : 0;
-  return [{ cle: 'pluie', titre: tr('Pluie'), valeur: pluie }, { cle: 'neige', titre: tr('Neige'), valeur: neigeP }, { cle: 'gel', titre: tr('Gel'), valeur: gel }];
+  const borne = (v) => Math.max(0, Math.min(100, Math.round(v)));
+  const max = (l) => (l.length ? borne(Math.max(...l)) : 0);
+  const lu = (k) => { const v = capteurs ? nombreOuNull(capteurs[k]) : null; return v == null ? null : borne(v); };
+  const deduite = (garder) => (probas.length ? max(H.filter(x => garder(neige(x.p))).map(x => nombreOuNull(x.p.precipitation_probability)).filter(v => v != null)) : null);
+  const valeurs = [
+    ['pluie', tr('Pluie'), lu('pluie') != null ? lu('pluie') : deduite(n => !n)],
+    ['neige', tr('Neige'), lu('neige') != null ? lu('neige') : deduite(n => n)],
+    ['gel', tr('Gel'), lu('gel') != null ? lu('gel') : temps.length ? Math.round(100 * temps.filter(v => 0 >= v).length / temps.length) : null],
+  ];
+  return valeurs.filter(([, , valeur]) => valeur != null).map(([cle, titre, valeur]) => ({ cle, titre, valeur }));
 }
 

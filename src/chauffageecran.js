@@ -10,7 +10,7 @@
  * (tests/chauffageecran.test.mjs). Les mots se lisent à l'APPEL, jamais à
  * l'import : bâtis au chargement, ils garderaient la langue du démarrage.
  */
-import { tr, locale } from './i18n.js';
+import { tr, trHA, locale } from './i18n.js';
 import { nombre } from './format.js';
 import { deCelsius } from './unites.js';
 
@@ -161,6 +161,30 @@ export function etatModule(watts, mode) {
 export function modeDuModule(options, option) {
   if (!options || typeof options !== 'object' || option == null) return null;
   return ORDRE_MODES.find(m => options[m] === option) || null;
+}
+
+/* Les graphies d'un ordre fil pilote, une fois mises à plat (`OPTIONS`, chauffage_familles.py) : l'écran les lit pour dire un
+ * préréglage (lot 14 Gladys, ADR 0319). La démo garde sa copie (`GRAPHIES_CHA`) : l'importer d'ici sortirait ce module du
+ * démarrage en morceau à part. Un test tient les trois ensemble. */
+export const GRAPHIES_MODES = {
+  confort: ['comfort', 'confort', 'komfort'], confort_1: ['comfort_1', 'confort_1', 'komfort_1', 'comfort_minus_1'],
+  confort_2: ['comfort_2', 'confort_2', 'komfort_2', 'comfort_minus_2'], eco: ['eco', 'economy'],
+  hors_gel: ['frost_protection', 'frost', 'hors_gel', 'horsgel', 'antigel', 'anti_freeze', 'antifreeze'], arret: ['off', 'arret', 'stop'],
+};
+
+/** Le mode d'une option, quelle que soit sa graphie (`mode_option`, chauffage_familles.py) ; null si ce n'est pas un ordre fil pilote. */
+export function modeDOption(option) {
+  // Les noms collés de ZHA se découpent (« FrostProtection », « ComfortMinus1 »), comme `canonique`.
+  const c = String(option == null ? '' : option).normalize('NFKD').replace(/[^\x00-\x7f]/g, '')
+    .replace(/([a-z])(?=[A-Z])|([A-Za-z])(?=\d)/g, '$1$2_').trim().toLowerCase()
+    .replace(/[\s_-]+/g, '_').replace(/^_+|_+$/g, '');
+  return Object.keys(GRAPHIES_MODES).find(m => GRAPHIES_MODES[m].includes(c)) || null;
+}
+
+/** Le mot d'un préréglage (D15, ADR 0319) : celui de Home Assistant pour les siens (eco, comfort, away, boost…), sinon celui de
+ * l'ordre fil pilote qu'il écrit (« frost_protection » : Hors-gel, « comfort-1 » : Confort −1), sinon tel que l'appareil l'écrit. */
+export function motPreset(p) {
+  return trHA('component.climate.entity_component._.state_attributes.preset_mode.state.' + p) || motMode(modeDOption(p)) || String(p);
 }
 
 // Ce que Home Assistant publie d'un appareil qui ne répond pas (MUETS, chauffage_familles.py).

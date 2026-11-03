@@ -1,6 +1,7 @@
 /* Les cartes des vues personnalisées et de l’Accueil : leur catalogue, leur aperçu, leurs feuilles.
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
-import { useState, useEffect, useMemo, useId } from 'react';
+import { useState, useEffect, useMemo, useId, Suspense } from 'react';
+import { lazyRecharge } from '../recharge.js';
 import { getHass, enHaids, cfgVal, LOGGIA_RESOLVED } from '../state.js';
 import { enPanne } from '../outils.js';
 import { wattsDe, kwhDe } from '../unites.js';
@@ -741,35 +742,8 @@ function CvAir({ hass }) {
     </div>
   );
 }
-/* Toute la maisonnée, sans limite : la carte n'en montre que ce que 184 px
- * peuvent porter. Même patron que les autres feuilles (ADR 0055) : hauteur au
- * contenu, une croix en bout de ligne d'en-tête. Chaque ligne dit où est la
- * personne et depuis quand, comme la carte d'une personne seule. */
-function FeuillePresence({ liste, onClose }) {
-  const maison = liste.filter(p => p.home).length;
-  return (
-    <BottomSheet onClose={onClose}>
-      <TitreFeuille marge={12}>
-        <span style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
-          <span style={{ fontSize: 17, fontWeight: 800 }}>{tr('Présence')}</span>
-          <span style={{ fontSize: 12, fontWeight: 800, color: maison ? 'var(--o-ok)' : 'var(--o-text3)' }}>{maison + ' / ' + liste.length}</span>
-        </span>
-      </TitreFeuille>
-      <div role="list">
-        {liste.map((p) => (
-          <div key={p.haid} role="listitem" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)' }}>
-            <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: p.img ? `url("${p.img}") center/cover` : 'var(--o-s1)', fontSize: 12, fontWeight: 800, color: p.home ? 'var(--o-text2)' : 'var(--o-text3)', opacity: p.home || !p.img ? 1 : .55 }}>{!p.img && p.name.slice(0, 2).toUpperCase()}</span>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: 14, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
-              <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: p.home ? 'var(--o-ok)' : 'var(--o-text3)' }}>{p.mot + (p.lc ? ' · ' + relTime(p.lc).toLowerCase() : '')}</span>
-            </span>
-            <span aria-hidden="true" style={{ width: 9, height: 9, borderRadius: '50%', flexShrink: 0, background: p.home ? 'var(--o-ok)' : 'var(--o-text3)', boxShadow: p.home ? '0 0 6px rgba(var(--o-ok-rgb),.6)' : 'none' }} />
-          </div>
-        ))}
-      </div>
-    </BottomSheet>
-  );
-}
+/* La feuille Présence, toute la maisonnée sans limite (ADR 0088) : son propre module, chargé au premier toucher (lot 16 Gladys, ADR 0321). */
+const FeuillePresence = lazyRecharge(() => import('./feuillepresence.jsx'));
 /* Présence : toute la maisonnée. Jusqu'à trois personnes, une ligne chacune —
  * avatar, où, depuis quand. À partir de quatre, la ligne déborderait le format
  * standard (deux rangées de 88 px, règle du projet) : une grille d'avatars,
@@ -847,7 +821,9 @@ function CvPresence({ hass, gens = null }) {
         )}
       </div>
     </div>
-    {ouvert && <FeuillePresence liste={liste} onClose={() => setOuvert(false)} />}
+    <Suspense fallback={null}>
+      {ouvert && <FeuillePresence liste={liste} onClose={() => setOuvert(false)} />}
+    </Suspense>
   </>);
 }
 /* Ouvrants : portes, fenêtres, garage — l'état de chaque ouverture, et le

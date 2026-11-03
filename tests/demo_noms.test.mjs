@@ -51,7 +51,9 @@ const APPAREILS = table('APPAREILS');
 const TELS_QUELS = new Set(['Camille', 'Alex', 'Léa', 'Sam', 'Démo', 'Orbit V3', 'Meadow M2']);
 /* ASSERTION MODIFIÉE (30/10, G4-A1) : Atmo France (HACS) écrit ses noms en dur, en français, dans toutes les langues de Home
  * Assistant — son service, son modèle (« Atmo France API »), « Qualité globale-<ville> », « Niveau <plante>-<ville> ». */
-const INTEGRATION = /^(System Monitor|Home Assistant|ESPHome|Zigbee2MQTT|Mosquitto broker|MariaDB|Samba share|Studio Code Server|Atmo France)( |$)|^homeassistant\.|^(Qualité globale|Niveau [^-]+)(-| Pollen-)/;
+/* ASSERTION MODIFIÉE (01/11, ADR 0309) : Météo-France aussi — son modèle (« Météo-France API ») et les noms de ses capteurs
+ * (« Rain chance », « Next rain »), que l'intégration écrit en anglais dans toutes les langues. */
+const INTEGRATION = /^(System Monitor|Home Assistant|ESPHome|Zigbee2MQTT|Mosquitto broker|MariaDB|Samba share|Studio Code Server|Atmo France|Météo-France)( |$)|^homeassistant\.|^(Qualité globale|Niveau [^-]+)(-| Pollen-)/;
 const telQuel = (n) => TELS_QUELS.has(n) || INTEGRATION.test(n);
 const litteraux = (avant) => [...demo.matchAll(new RegExp(avant + LIT, 'g'))].map(m => m[1] ?? m[2]);
 

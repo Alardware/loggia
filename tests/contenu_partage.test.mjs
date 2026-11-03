@@ -1,5 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Ce que l'ADMIN ajoute ou retire vaut pour TOUS les profils (20/10).
+// Ce que l'ADMIN ajoute ou retire sur une VUE vaut pour TOUS les profils (20/10).
+// Pas les Favoris ni l'Accueil : « l'interface est propre à chacun » (ticket #43).
 //
 // « Sur PC ou mobile, en admin, si je supprime une carte ou en ajoute une, ça
 // ne se répète pas sur les autres profils et appareils : je suis obligé, pour
@@ -81,29 +82,23 @@ test('un changement d’ordre de l’admin reste à lui', () => {
   assert.deepEqual(part('loggia_objlayout', 1).objets, { order: ['b', 'a'] });
 });
 
-test('les Favoris : une épingle ajoutée ou retirée par l’admin, partout ; la taille reste à chacun', () => {
+/* ASSERTION MODIFIÉE (ticket #43, 02/11) : les Favoris ne passent plus d'un profil à l'autre — « je modifie sur mobile en tant
+ * que Guillaume, ça modifie aussi sur PC en Admin, et vice versa ». Chacun garde les siens, même quand c'est un Admin qui épingle. */
+test('les Favoris restent à chaque profil, même épinglés par un Admin', () => {
   regarde(0, { loggia_epingles: { __profils: { 0: ['light.a', 'light.b'], 1: ['light.b', { id: 'light.a', w: 2 }] } } });
   S.cfgSet({ loggia_epingles: ['light.b', 'switch.c'] });
-  assert.deepEqual(part('loggia_epingles', 1), ['light.b', 'switch.c'], 'Luna doit perdre light.a et gagner switch.c');
-  S.cfgSet({ loggia_epingles: [{ id: 'light.b', w: 2 }, 'switch.c'] });
-  assert.deepEqual(part('loggia_epingles', 1), ['light.b', 'switch.c'], 'agrandir une épingle n’est pas un geste de contenu');
+  assert.deepEqual(part('loggia_epingles', 0), ['light.b', 'switch.c']);
+  assert.deepEqual(part('loggia_epingles', 1), ['light.b', { id: 'light.a', w: 2 }], 'Luna garde ses favoris');
 });
 
-test('l’Accueil : une section masquée par l’admin sur le téléphone l’est partout, formats compris', () => {
+/* ASSERTION MODIFIÉE (ticket #43, 02/11) : « l'interface est propre à chacun ». Une section masquée, un widget ajouté par un Admin
+ * restent chez lui ; les autres profils gardent leur Accueil tel quel. */
+test('l’Accueil : une section masquée ou un widget ajouté par un Admin reste chez lui', () => {
   regarde(0, { loggia_accueil: { __profils: {
-    0: { main: ['scenes', 'pieces'], caches: [], formats: { mobile: { caches: [] } } },
-    1: { main: ['pieces', 'scenes'], caches: ['cameras'], formats: { tablette: { caches: ['cameras'] } } },
+    0: { main: ['scenes', 'pieces'], caches: [], ajoutees: ['heure'], formats: { mobile: { caches: [] } } },
+    1: { main: ['pieces', 'scenes'], caches: ['cameras'], rail: ['meteo'], formats: { tablette: { caches: ['cameras'] } } },
   } } });
-  S.cfgSet({ loggia_accueil: { main: ['scenes', 'pieces'], caches: [], formats: { mobile: { caches: ['scenes'] } } } });
-  const l = part('loggia_accueil', 1);
-  assert.deepEqual(l.caches, ['cameras', 'scenes'], 'Luna voit encore Scénarios');
-  assert.deepEqual(l.formats.tablette.caches, ['cameras', 'scenes'], 'la tablette de Luna voit encore Scénarios');
-  assert.deepEqual(l.main, ['pieces', 'scenes'], 'l’ordre de Luna a été touché');
-});
-
-test('l’Accueil : un widget en option ajouté par l’admin arrive chez tous', () => {
-  regarde(0, { loggia_accueil: { __profils: { 0: { ajoutees: ['heure'] }, 1: { rail: ['meteo'] } } } });
-  S.cfgSet({ loggia_accueil: { ajoutees: ['heure', 'agenda'] } });
-  assert.ok(part('loggia_accueil', 1).ajoutees.includes('agenda'), 'le widget n’arrive pas chez Luna');
-  assert.deepEqual(part('loggia_accueil', 1).rail, ['meteo']);
+  S.cfgSet({ loggia_accueil: { main: ['scenes', 'pieces'], caches: [], ajoutees: ['heure', 'agenda'], formats: { mobile: { caches: ['scenes'] } } } });
+  assert.deepEqual(part('loggia_accueil', 0).formats.mobile.caches, ['scenes']);
+  assert.deepEqual(part('loggia_accueil', 1), { main: ['pieces', 'scenes'], caches: ['cameras'], rail: ['meteo'], formats: { tablette: { caches: ['cameras'] } } }, 'l’Accueil de Luna a été touché');
 });

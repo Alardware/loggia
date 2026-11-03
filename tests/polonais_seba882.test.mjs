@@ -37,12 +37,14 @@ test('l’empreinte couvre bien sa traduction : plus de deux mille valeurs retro
   // Sans ce garde-fou, une empreinte calculée autrement rendrait le test
   // ci-dessus toujours vert.
   const retrouvees = Object.keys(pl).filter(k => h(k) in empreintes).length;
-  assert.ok(retrouvees > 2000, `seulement ${retrouvees} valeurs retrouvées`);
+  // 1 950 depuis le 01/11 : les mots de l'ancien premier lancement sont partis avec lui — retirés, pas réécrits.
+  // 1 900 depuis le 02/11 : les Paramètres sur la maquette v3 ont laissé 64 phrases sans lecteur — retirées, pas réécrites.
+  assert.ok(retrouvees > 1900, `seulement ${retrouvees} valeurs retrouvées`);
 });
 
 test('ses deux entrées restaurées le 03/10 gardent ses mots', () => {
   assert.equal(pl['+{n} autres'].few, '+{n} inne');
   assert.equal(pl['+{n} autres'].many, '+{n} innych');
-  assert.ok(pl['Requis pour basculer vers un profil Admin, et vérifié par le composant. Haché, jamais affiché — le même sur tous les appareils.']
-    .startsWith('Wymagany do przełączenia na profil administratora'));
+  // La seconde, « Requis pour basculer vers un profil Admin… », est partie avec
+  // l'ancien panneau du code (maquette v3, 02/11) : retirée, pas réécrite.
 });

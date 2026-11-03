@@ -1,9 +1,11 @@
 /* La carte d'une plante.
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
+import { useSyncExternalStore } from 'react';
 import { LAVIS } from '../theme.js';
 import { deCelsius } from '../unites.js';
 import { Fi, nomCarte } from '../ui.jsx';
 import { vuePlante } from '../plantes.js';
+import { figeeDe, ecouterFigees } from '../fraicheur.js';
 import { LISERE } from '../styles.js';
 import { nombre } from '../format.js';
 import { tr } from '../i18n.js';
@@ -28,6 +30,9 @@ import { NOM_GROUPE } from './groupe.jsx';
  * Sans commande, la plante reste un bouton entier (lot 13 de l'audit du 03/10) : son nom dit ce qu'elle affiche — le nom, le sol,
  * la phrase —, et `aria-haspopup` la fiche qu'elle ouvre. Budget : 38 + 14 + 2 × 18 + 16 + 8 + 14 + 6 + 14 = 146 px, pour 150. */
 function RoomPlantCard({ pl, nom, onOpen, chip = false }) {
+  // Le verdict de fraîcheur du serveur la redessine (ADR 0311).
+  const lireFigee = () => figeeDe(pl && pl.ids && pl.ids.hum);
+  useSyncExternalStore(ecouterFigees, lireFigee, lireFigee);
   const v = vuePlante(pl, { quand: heureDe, deCelsius });
   const mort = v.muette;
   const encre = v.ton === 'bad' ? 'var(--o-bad)' : v.ton === 'warn' ? 'var(--o-warn)' : 'var(--o-text2)';

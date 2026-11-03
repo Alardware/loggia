@@ -96,7 +96,10 @@ test('les lignes qui ouvrent une fiche le disent, celles qui changent de vue non
    * le lave-vaisselle et les zones qui chauffent. */
   /* ASSERTION MODIFIÉE (audit de l'écran des prises, 19/10, point 2) : sept poussées — le cycle d'électroménager que le
    * serveur suit (une ligne par prise, qui ouvre sa fiche) passe avant l'ancienne ligne du lave-vaisselle, gardée en repli. */
-  assert.equal(lignes.length, 7, 'lecteur, robot, cycles des prises, lave-vaisselle, planning de chauffe, zones qui chauffent, volet : le lecteur du test ne suit plus le code');
+  // ASSERTION MODIFIÉE (01/11, ADR 0310) : huit poussées — la vigilance orange, en tête, qui ouvre la fiche météo.
+  // ASSERTION MODIFIÉE (01/11, ADR 0312) : neuf poussées — la sonnette et le colis, après la vigilance, qui ouvrent la caméra.
+  // ASSERTION MODIFIÉE (01/11, ADR 0314) : dix poussées — la sauvegarde et le disque de l'administrateur, après la porte, qui mènent à la vue Système.
+  assert.equal(lignes.length, 10, 'vigilance orange, porte, administrateur, lecteur, robot, cycles des prises, lave-vaisselle, planning de chauffe, zones qui chauffent, volet : le lecteur du test ne suit plus le code');
   for (const l of lignes) {
     assert.equal(/ fiche /.test(l), l.includes('onOpen={() => dc.ouvrir('), 'une ligne qui ouvre une fiche sans `fiche`, ou l’inverse : ' + l.slice(0, 90));
   }

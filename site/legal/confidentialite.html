@@ -33,7 +33,7 @@
       <ul>
         <li>Pas de compte, pas de formulaire, pas de lettre d’information.</li>
         <li>Pas de mesure d’audience, pas de publicité, pas de cookie.</li>
-        <li>Pas de police ni de script venus d’un autre site : tout est servi d’ici. Une seule exception : à l’écran des mises à jour, les logos des intégrations viennent de <code>brands.home-assistant.io</code>, le service d’images de Home Assistant, comme dans Home Assistant lui-même. Votre navigateur les y demande, et ce service voit donc votre adresse IP ; rien d’autre ne lui est envoyé.</li>
+        <li>Pas de police ni de script venus d’un autre site : tout est servi d’ici. Deux exceptions, des images seulement. À l’écran des mises à jour, les logos des intégrations viennent de <code>brands.home-assistant.io</code>, le service d’images de Home Assistant, comme dans Home Assistant lui-même. Votre navigateur les y demande, et ce service voit donc votre adresse IP ; rien d’autre ne lui est envoyé. Et si vous ouvrez la carte de la démonstration, son fond vient d’OpenStreetMap (<a href="#carte">voir plus bas</a>).</li>
         <li>Une seule donnée personnelle existe : votre adresse IP, que l’hébergeur enregistre pour sa sécurité. Je n’y ai pas accès.</li>
       </ul>
     </div>
@@ -48,6 +48,8 @@
 
     <h2 id="demo">La démonstration</h2>
     <p>La maison que vous voyez est fictive : ses pièces, ses habitants, ses caméras et son agenda sont inventés. Tout ce que vous y changez — une lampe, un réglage, un thème — reste dans la mémoire de l’onglet et disparaît au rechargement. Rien n’est envoyé à un serveur : il n’y en a pas.</p>
+    <p id="carte"><strong>La carte.</strong> Dans la démonstration, « Voir sur la carte » (Sécurité › Présence) affiche les habitants fictifs sur un fond de carte. Ce fond est fait d’images que votre navigateur demande aux serveurs d’OpenStreetMap, <code>tile.openstreetmap.org</code>, gérés par la Fondation OpenStreetMap (OSMF), au Royaume-Uni. Il ne les demande qu’une fois la carte ouverte : si vous ne l’ouvrez pas, rien ne part chez OpenStreetMap.</p>
+    <p>Comme pour toute image venue d’un autre site, ces serveurs voient alors votre adresse IP, ce que votre navigateur dit de lui-même (son nom, sa version) et l’adresse de ce site, d’où part la demande. Les images demandées leur disent aussi quelle zone est affichée : Paris, où j’ai placé la maison fictive, ou l’endroit où vous déplacez la carte. Rien d’autre ne leur est envoyé : aucune position réelle, ni la vôtre ni celle de quelqu’un d’autre, et ni moi ni le site ne gardons rien de ces images. Ce que l’OSMF fait de ce qu’elle reçoit relève de sa <a href="https://osmfoundation.org/wiki/Privacy_Policy" rel="noopener">politique de confidentialité</a>.</p>
     <p>Le temps de la visite, le site retient dans votre navigateur quelques notes purement pratiques (la vue affichée, par exemple). Elles ne vous identifient pas, ne quittent pas votre appareil et s’effacent à la fermeture de l’onglet. Leur liste exacte figure dans la <a href="./cookies.html">politique des cookies</a>.</p>
 
     <h2 id="capteurs">Micro et caméra</h2>
@@ -62,7 +64,7 @@
     <p>Les <a href="https://github.com/Alardware/loggia/issues" rel="noopener">tickets GitHub</a> sont publics et gérés par GitHub : n’y mettez rien de personnel.</p>
 
     <h2 id="logiciel">Le logiciel installé chez vous</h2>
-    <p>Cette politique porte sur le site. Si vous installez Loggia, il tourne sur <em>votre</em> Home Assistant : vos réglages sont enregistrés sur votre serveur et dans votre navigateur, il n’y a ni télémétrie, ni serveur à moi, ni ressource chargée d’ailleurs, à une exception près : à l’écran des mises à jour, le logo d’une intégration vient de <code>brands.home-assistant.io</code> quand Home Assistant ne le fournit pas lui-même, là où son interface le prend. Je n’ai aucun accès à votre installation et je ne suis responsable d’aucun traitement qui s’y déroule.</p>
+    <p>Cette politique porte sur le site. Si vous installez Loggia, il tourne sur <em>votre</em> Home Assistant : vos réglages sont enregistrés sur votre serveur et dans votre navigateur, il n’y a ni télémétrie, ni serveur à moi, ni ressource chargée d’ailleurs, à une exception près : à l’écran des mises à jour, le logo d’une intégration vient de <code>brands.home-assistant.io</code> quand Home Assistant ne le fournit pas lui-même, là où son interface le prend. Le fond de sa carte, lui, vient de votre Home Assistant, qui va le chercher lui-même chez OpenStreetMap, comme pour sa propre carte : votre navigateur ne parle qu’à Home Assistant. Je n’ai aucun accès à votre installation et je ne suis responsable d’aucun traitement qui s’y déroule.</p>
 
     <h2 id="droits">Vos droits</h2>
     <p>Le règlement général sur la protection des données (RGPD) vous donne le droit d’accéder aux données qui vous concernent, de les faire rectifier ou effacer, d’en limiter le traitement ou de vous y opposer. Pour les messages que vous m’avez envoyés, écrivez-moi à l’adresse ci-dessus : je réponds dans le mois. Pour les journaux de l’hébergeur, la demande s’adresse à GitHub, par les moyens indiqués dans sa déclaration de confidentialité.</p>
@@ -74,7 +76,7 @@
 
   <footer class="pied">
     <p>Voir aussi : <a href="./mentions-legales.html">mentions légales</a>, <a href="./cgu.html">conditions d’utilisation</a>, <a href="./cookies.html">politique des cookies</a>, <a href="./accessibilite.html">accessibilité</a>.</p>
-    <p>Dernière mise à jour : <time datetime="2026-10-27">27 octobre 2026</time>.</p>
+    <p>Dernière mise à jour : <time datetime="2026-11-01">1er novembre 2026</time>.</p>
   </footer>
 </body>
 </html>

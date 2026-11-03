@@ -22,6 +22,8 @@ import { fmtWatts } from '../format.js';
 import { LOGGIA_INDEX, enPrix, enVente, enHaids, enBatteries, enPrevisionSolaire } from '../state.js';
 // Les sources qui se comptent à plusieurs, et la batterie au sens de Loggia (chantier G3, ADR 0302).
 import { idsDe, sommeLue } from '../energieparts.js';
+// Electricity Maps, à sa clé (lot 14 Gladys, ADR 0319).
+import { capteursCarbone, valeurCarbone, uniteCarbone } from '../carbone.js';
 import { puissanceBatterie, niveauBatterie, reserveBatterieKwh, autonomieBatterie, consoPourAutonomie, texteAutonomie } from '../energiebatterie.js';
 import { usePrevisionSolaire } from '../previsionsolaire.js';
 import energyHomeImg from '../assets/energy/home.webp';
@@ -474,15 +476,12 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   /* Part bas-carbone : Electricity Maps (ou CO2 Signal) publie le pourcentage
    * d'energies FOSSILES du reseau. Le solaire de la maison est bas-carbone par
    * construction ; on pondere donc les deux sources par leurs kWh du jour.
-   * Sans cette integration, pas de tuile — on ne devine pas un mix. */
-  const fossilePct = (() => {
-    if (!S) return null;
-    const id = Object.keys(S).find(k => k.indexOf('sensor.') === 0 && /fossil/i.test(k)
-      && S[k].attributes && S[k].attributes.unit_of_measurement === '%');
-    if (!id) return null;
-    const v = parseFloat(S[id].state);
-    return isNaN(v) ? null : v;
-  })();
+   * Sans cette integration, pas de tuile — on ne devine pas un mix. Ses deux
+   * capteurs se reconnaissent a leur plateforme et a leur cle, jamais a leur
+   * nom (D16, E1, ADR 0319) : la part fossile, et l'intensite carbone. */
+  const carbone = capteursCarbone(S, LOGGIA_INDEX && LOGGIA_INDEX.entityMeta);
+  const fossilePct = valeurCarbone(S, carbone.fossile);
+  const intensite = valeurCarbone(S, carbone.intensite);
   const basCarbonePct = (() => {
     if (fossilePct == null || totalToday == null || injectionMuette) return null;
     const solaireConsomme = prodJour != null ? Math.max(0, prodJour - (injJour || 0)) : 0;
@@ -581,6 +580,8 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   const mesures = [
     autoPct != null && { caption: tr('Autosuffisance'), value: String(autoPct), unit: '%', icon: 'leaf', tone: 'var(--o-ok)', pct: autoPct },
     basCarbonePct != null && { caption: tr('Électricité bas-carbone'), value: String(basCarbonePct), unit: '%', icon: 'bolt', tone: 'var(--o-cyan)', pct: basCarbonePct },
+    // L'intensité carbone du réseau, à côté de sa part bas-carbone (E1) : ce que pèse un kWh acheté en ce moment.
+    intensite != null && { caption: tr('Intensité carbone'), value: String(Math.round(intensite)), unit: uniteCarbone(uniteDe(carbone.intensite)), icon: 'leaf', tone: 'var(--o-cyan)', pct: null },
     avail(EN.gasJour) && { caption: tr('Gaz'), value: dec(numKwh(EN.gasJour), 1), unit: uniteDe(EN.gasJour) || 'kWh', icon: 'flame', tone: 'var(--o-orange)', pct: null },
     avail(EN.waterJour) && { caption: tr('Eau'), value: dec(num(EN.waterJour), 0), unit: uniteDe(EN.waterJour) || 'L', icon: 'raindrops', tone: 'var(--o-cold)', pct: null },
   ].filter(Boolean);

@@ -22,7 +22,8 @@
  *    pollens (chantier G4, ADR 0303), au même dessin, seulement quand leur
  *    échelle est connue : le chiffre, le mot du rang, le lendemain, une barre
  *    des rangs — une information, sans lavis ;
- *  - « Risques » : pluie, neige, gel sur les prochaines heures ;
+ *  - « Risques » : pluie, neige, gel sur les prochaines heures — lus dans les capteurs de Météo-France de la même ville quand
+ *    il y en a (lot 5 Gladys, ADR 0309) ; une case sans valeur connue ne s'affiche pas ;
  *  - « Vigilance » : chaque phénomène du capteur et son niveau, en vert au
  *    calme ; sans capteur, rien ;
  *  - « L'appareil ».
@@ -35,7 +36,7 @@ import { useMemo } from 'react';
 import { tr, locale } from './i18n.js';
 import { Fi } from './ui.jsx';
 import { WeatherIco, haWeatherLabel } from './wxutil.jsx';
-import { typesPrevision, degres, estNuit, modeMeteo, heuresMeteo, extremesDuJour, nomVille, phraseMeteo, vigilanceWidget } from './meteo.js';
+import { typesPrevision, degres, estNuit, modeMeteo, heuresMeteo, extremesDuJour, nomVille, phraseMeteo, vigilanceWidget, capteursMeteo, pluieDansLheure } from './meteo.js';
 import { semaineMeteo, tuilesMeteo, risquesMeteo } from './meteofiche.js';
 import { airDuDehors, pollensDuDehors } from './airdehors.js';
 import { LOGGIA_INDEX } from './state.js';
@@ -84,10 +85,16 @@ export default function FicheMeteoContenu({ id, hass, epingle = null, onFiche = 
   const temperature = muette ? null : degres(a.temperature, 1);
   const ressenti = muette ? null : degres(a.apparent_temperature);
   const extremes = extremesDuJour(parJour, t);
-  const capteur = capteurVigilance(S);
+  const capteur = capteurVigilance(S, LOGGIA_INDEX); // le même capteur que le widget et l'Accueil (ADR 0310)
   const vigilance = vigilanceWidget(S, capteur);
+  /* Les capteurs de Météo-France de la même ville (ADR 0309) : la pluie dans l'heure pour la phrase, les probabilités pour les risques. */
+  const em = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta;
+  const cm = capteursMeteo(S, id, (x) => (em ? em.get(x) || null : null));
+  const proche = pluieDansLheure(cm.pluie_heure ? S[cm.pluie_heure] : null, t);
+  const etatDe = (x) => (x && S[x] ? S[x].state : null);
+  const probaPluie = etatDe(cm.pluie), probaNeige = etatDe(cm.neige), probaGel = etatDe(cm.gel);
   /* La phrase et le conseil ; une vigilance orange ou rouge prend la phrase, comme sur le widget. */
-  const phrase = muette ? null : vigilance && vigilance.widget ? { texte: vigilance.texte, conseil: null, ton: vigilance.ton } : phraseMeteo({ heures: parHeure, jours: parJour, maintenant: t, soleil, etat: st });
+  const phrase = muette ? null : vigilance && vigilance.widget ? { texte: vigilance.texte, conseil: null, ton: vigilance.ton } : phraseMeteo({ heures: parHeure, jours: parJour, maintenant: t, soleil, etat: st, proche });
   const ton = (phrase && phrase.ton) || null;
   /* L'air et les pollens du dehors (chantier G4, A1 et A6) : ce que l'index sait de chaque entité — sa plateforme, son appareil —
    * dit si leur échelle est connue ; sans index, rien. */
@@ -105,8 +112,8 @@ export default function FicheMeteoContenu({ id, hass, epingle = null, onFiche = 
     }),
     semaine: semaineMeteo(parJour, a.temperature, t, soleil),
     tuiles: muette ? [] : tuilesMeteo({ attributs: a, jours: parJour, heures: parHeure, maintenant: t, soleil, air, pollens }),
-    risques: risquesMeteo(parHeure, t),
-  }), [st, muette, parHeure, parJour, t, soleil, a, air, pollens]);
+    risques: risquesMeteo(parHeure, t, { pluie: probaPluie, neige: probaNeige, gel: probaGel }),
+  }), [st, muette, parHeure, parJour, t, soleil, a, air, pollens, probaPluie, probaNeige, probaGel]);
   const avecPluie = heures.some(h => h.pluie);
   /* Le capteur de Météo-France : chaque phénomène et son niveau ; MeteoAlarm : l'événement seul. */
   const phenomenes = useMemo(() => {

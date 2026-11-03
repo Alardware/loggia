@@ -88,25 +88,23 @@ function pointeurs(html) {
   return out;
 }
 
-test('la veille : tout toucher hors des scènes atteint la surface, les scènes restent vivantes', async () => {
+test('la veille : tout toucher atteint la surface', async () => {
   const AmbientOverlay = await composant('ecranveille.jsx', 'AmbientOverlay');
   const html = rendre(AmbientOverlay, {
-    wx: 'clouds', wxFx: false, weatherTemp: 12, weatherLabel: 'Nuageux', inTemp: 20.5, lightsOn: 2,
+    wx: 'clouds', wxFx: false, weatherTemp: 12, weatherLabel: 'Nuageux',
     notifs: [{ k: 'n1', c: 'var(--o-bad)', t: 'Fuite', m: 'Cuisine' }],
-    ast: 'disarmed', scenes: [{ id: 'soir', nom: 'Soirée', icone: 'moon' }, { id: 'nuit', nom: 'Nuit' }], onScene: () => {},
+    ast: 'disarmed', rooms: [{ room: 'Salon', haid: { temp: 'sensor.ts' } }], hass: { states: { 'sensor.ts': { state: '21.4' } } },
   });
   const els = pointeurs(html);
   const i = els.findIndex(e => e.attrs.includes('class="o-surface"'));
   assert.ok(i > 0 && els[i].pe === 'auto', 'la surface reçoit le toucher');
-  const horloge = els.find(e => e.attrs.includes('font-size:clamp(72px, 17vw, 170px)'));
+  const horloge = els.find(e => e.attrs.includes('font-size:clamp(100px, 17vw, 220px)'));
   assert.ok(horloge, 'l’horloge a changé de forme');
   assert.equal(horloge.pe, 'none', 'l’horloge recouvre la surface : l’appui ne vise plus de bouton, rien ne vibre');
-  // Après la surface, seul ce qui est dans une scène prend le pointeur.
-  const prises = els.slice(i + 1).filter(e => e.pe !== 'none' && !e.scene);
+  // Après la surface, plus rien ne prend le pointeur : la veille n'a plus de scènes (maquette du 01/11).
+  const prises = els.slice(i + 1).filter(e => e.pe !== 'none');
   assert.deepEqual(prises.map(e => '<' + e.nom + e.attrs.slice(0, 80)), [], 'un élément de la veille recouvre encore la surface');
-  const scenes = els.filter(e => e.nom === 'button' && !e.attrs.includes('o-surface'));
-  assert.equal(scenes.length, 2);
-  for (const s of scenes) assert.equal(s.pe, 'auto', 'une scène ne se lance plus');
+  assert.ok(html.includes('Fuite · Cuisine'), 'l’alerte rouge prend la place du point quand rien d’autre n’est à surveiller');
   // Le diaporama n'apparaît qu'après le chargement des photos : il se lit au source.
   assert.ok(lire('src', 'ecranveille.jsx').includes(`<div aria-hidden="true" style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>`),
     'le diaporama recouvre la surface entière');

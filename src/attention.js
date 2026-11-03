@@ -39,6 +39,15 @@ export const CLASSES_SURETE = ['smoke', 'carbon_monoxide', 'gas', 'moisture', 's
  * détecteur. L'Accueil, « En ce moment » et Paramètres › Alertes la lisent (chantier Capteurs, étapes 2 et 3, tâche 12). */
 const PLATEFORMES_CALCULEES = ['template', 'group'];
 export const fuiteCalculee = (plateforme) => PLATEFORMES_CALCULEES.indexOf(plateforme) >= 0;
+/* La classe dit CE QU'UN BINAIRE MESURE, l'appareil qui le porte dit QUI le mesure (31/10, ADR 0305) — la règle du serveur
+ * (`voisins.py`), lue aux domaines des entités de son appareil (`voisins(id)`, l'index ; [] sans appareil connu : rien ne se perd) :
+ * — un `moisture` porté par une tondeuse ou un aspirateur est la PLUIE du robot, pas une fuite (sa tondeuse, à chaque averse) ;
+ * — une fumée ou un monoxyde porté par une caméra est une alarme qu'elle ENTEND (ses caméras UniFi) : un point « Alarme entendue par
+ *   une caméra », ambre, jamais celui d'un détecteur — le son ne prouve pas un danger dans la maison. */
+const ROBOTS = ['lawn_mower', 'vacuum'];
+const CLASSES_ENTENDUES = ['smoke', 'carbon_monoxide'];
+export const pluieDeRobot = (voisins) => Array.isArray(voisins) && voisins.some(d => ROBOTS.indexOf(d) >= 0);
+export const entendueParCamera = (dc, voisins) => CLASSES_ENTENDUES.indexOf(dc) >= 0 && Array.isArray(voisins) && voisins.indexOf('camera') >= 0;
 /* « Élevé » : le palier de la table de `confort.js` où le CO₂ passe à
  * l'orange (captures du 19/09 : 1 400 ppm). C'est le défaut de la veille CO₂
  * du serveur ; un seuil qu'on y règle reste le sien, et l'Accueil le lit
@@ -114,7 +123,7 @@ export const ICONES_ATTENTION = {
   alarme: 'bell-ring', smoke: 'fire-smoke', carbon_monoxide: 'flame', gas: 'flame',
   moisture: 'water', safety: 'shield-exclamation', tamper: 'shield-exclamation', meteo: 'umbrella',
   ouvrant: 'door-open', co2: 'wind', camera: 'camera', chauffage: 'flame', pile: 'battery-quarter', sante: 'exclamation',
-  tempo: 'bolt',
+  tempo: 'bolt', entendue: 'camera', defaut: 'triangle-warning', entretien: 'wrench-simple',
 };
 
 /* Une entité muette ne dit rien : elle ne compte ni fermée ni ouverte. Sans
@@ -324,6 +333,66 @@ export function iconePoint(point) {
   return ICONES_ATTENTION[genre] || ICONES_ATTENTION.sante;
 }
 
+/* LA VIGILANCE MÉTÉO, lue en UN endroit (lot 6 Gladys, ADR 0310). Le widget et la popup météo (meteo.js), la carte Vigilance
+ * (vigilance.js), les notifications (derive.jsx), le point d'attention et la ligne du rail (ci-dessous) lisent le niveau ici ; il y
+ * en avait trois copies, et elles ne disaient pas la même chose d'une alerte orange de MeteoAlarm.
+ * — Le capteur d'alerte départementale de Météo-France (`sensor`) : son état EST le niveau (« Vert »… « Rouge »), ses attributs
+ *   disent le niveau de chaque phénomène (« Orages » : « Rouge ») ; le détail est la liste des phénomènes AU niveau de l'alerte.
+ * — Le binaire MeteoAlarm (`safety`) : la couleur de `awareness_level` (« 3; orange; Severe ») ; à défaut, la gravité, à l'échelle
+ *   de MeteoAlarm elle-même — Minor vert, Moderate jaune, Severe ORANGE, Extreme rouge. « Severe » valait le rouge jusqu'ici : une
+ *   alerte orange passait pour rouge. Allumé sans rien de cela : le jaune, comme avant. Éteint : vert s'il le dit, sinon rien. */
+const COULEURS_VIGILANCE = { vert: 'vert', green: 'vert', jaune: 'jaune', yellow: 'jaune', orange: 'orange', rouge: 'rouge', red: 'rouge' };
+const GRAVITES_METEOALARM = { minor: 'vert', moderate: 'jaune', severe: 'orange', extreme: 'rouge' };
+/** Le niveau d'un mot de couleur — « Jaune », « yellow » —, ou null. */
+export const niveauVigilanceDe = (mot) => COULEURS_VIGILANCE[String(mot == null ? '' : mot).trim().toLowerCase()] || null;
+/** MeteoAlarm : un `safety` qui porte `awareness_level`, ou dont l'identifiant ou l'attribution nomment MeteoAlarm. */
+export function estMeteoAlarm(id, a) {
+  const x = estObjet(a) ? a : {};
+  return x.device_class === 'safety' && (x.awareness_level != null || /meteoalarm/i.test(String(id)) || /meteoalarm/i.test(x.attribution || ''));
+}
+/** Le niveau d'une source de vigilance DÉJÀ reconnue (le capteur de Météo-France, ou le binaire MeteoAlarm) :
+ *  `{ niveau: 'vert' | 'jaune' | 'orange' | 'rouge', detail }`, ou null — muette, ou sans niveau connu. */
+export function lireVigilance(id, st) {
+  if (estMuet(st)) return null;
+  const a = attrs(st);
+  let niveau = null, detail = null;
+  if (String(id).indexOf('binary_sensor.') === 0) {
+    const on = st.state === 'on';
+    const couleur = niveauVigilanceDe(String(a.awareness_level || '').split(';')[1]);
+    niveau = on ? couleur || GRAVITES_METEOALARM[String(a.severity || '').toLowerCase()] || 'jaune' : (couleur === 'vert' ? 'vert' : null);
+    detail = on ? (a.event || a.headline || null) : null;
+  } else {
+    niveau = niveauVigilanceDe(st.state);
+    const phenomenes = niveau && niveau !== 'vert' ? Object.keys(a).filter(k => niveauVigilanceDe(a[k]) === niveau) : [];
+    detail = phenomenes.length ? phenomenes.join(', ') : null;
+  }
+  return niveau ? { niveau, detail } : null;
+}
+/** Le mot d'un niveau : « Vigilance orange ». */
+function motVigilance(niveau) {
+  return ({ vert: tr('Vigilance verte'), jaune: tr('Vigilance jaune'), orange: tr('Vigilance orange'), rouge: tr('Vigilance rouge') })[niveau] || null;
+}
+/** La phrase d'une vigilance lue : la couleur et le phénomène, « Vigilance rouge · Orages ». Un événement qui dit déjà la vigilance
+ *  (« Vigilance jaune orages », chez MeteoAlarm) ne la redit pas. */
+export function texteVigilance(v) {
+  const mot = estObjet(v) ? motVigilance(v.niveau) : null;
+  if (!mot) return null;
+  return !v.detail ? mot : /vigilance/i.test(v.detail) ? String(v.detail) : mot + ' · ' + v.detail;
+}
+/* LE CHOIX PAR DÉFAUT, réversible (ADR 0310 ; sa règle : l'information va dans le rail, un point d'attention est actionnable et
+ * rare). Le ROUGE est un point d'attention — un danger ; l'ORANGE, une ligne du rail, dans « En ce moment » ; le jaune et le vert
+ * restent dans le widget et la popup, comme avant. Changer d'avis, c'est changer ces deux niveaux. */
+export const VIGILANCE_POINT = 'rouge';
+export const VIGILANCE_RAIL = 'orange';
+/** La ligne du rail d'une vigilance ORANGE : `{ cle, titre, sous, haid }` — « Vigilance orange », « Orages » —, ou null. `id` est
+ *  le capteur de vigilance de la maison (`capteurVigilance`, vigilance.js : Météo-France d'abord, MeteoAlarm sinon). */
+export function vigilanceRail(S, id) {
+  const st = typeof id === 'string' && estObjet(S) ? S[id] : null;
+  const v = st ? lireVigilance(id, st) : null;
+  if (!v || v.niveau !== VIGILANCE_RAIL) return null;
+  return { cle: 'vigilance:' + id, titre: motVigilance(v.niveau), sous: v.detail || tr('Alerte météo en cours'), haid: id };
+}
+
 /* Un incident dit son compte ; à défaut, ses entités ou ses appareils. */
 function compteIncident(i) {
   const n = Number(i.count);
@@ -334,7 +403,7 @@ function compteIncident(i) {
 
 /** Les points d'attention, du plus grave au plus doux puis par titre.
  *
- * ctx = { S, cams, pieces, sante, veilles, fenetres, plantes, plateforme } — chaque
+ * ctx = { S, cams, pieces, sante, veilles, fenetres, plantes, plateforme, voisins, nomAppareil, tempoDemain, vigilance } — chaque
  * morceau peut manquer : l'Accueil se dessine avant que le serveur ait répondu,
  * et un ctx vide donne simplement une liste vide.
  *
@@ -370,15 +439,18 @@ export function pointsAttention(ctx) {
    * le nom. Deux exclusions, celles de `deriveNotifs` :
    * — `moisture` d'une plante (binaire `<base>_besoin_eau`), ou calculé par un
    *   modèle ou un groupe (`plateforme(id)`, l'index ; ADR 0022, 16/10) : une
-   *   dracaena assoiffée n'est pas un dégât des eaux ;
+   *   dracaena assoiffée n'est pas un dégât des eaux ; ni la pluie d'un robot
+   *   (`voisins(id)`, ADR 0305) — et ce qu'une caméra entend est dit à part ;
    * — `safety` de MeteoAlarm, `on` des jours entiers en vigilance jaune : une
-   *   vigilance à part, rouge seulement en Severe/Extreme.
+   *   vigilance, pas un capteur de sécurité — la règle 10 la dit, rouge seulement.
    * 3. Un ouvrant ouvert PENDANT que l'alarme est armée : de jour, alarme
    *   désarmée, une fenêtre ouverte n'est qu'une fenêtre ouverte. */
   const bases = (Array.isArray(c.plantes) ? c.plantes : []).filter(b => typeof b === 'string' && b);
   const estPlante = (id) => bases.some(b => id.indexOf(b) === 0 && (id.length === b.length || id.charAt(b.length) === '_'));
   const plateforme = typeof c.plateforme === 'function' ? c.plateforme : () => null;
   const masque = typeof c.masque === 'function' ? c.masque : () => false;
+  const voisins = typeof c.voisins === 'function' ? c.voisins : () => [];
+  const nomAppareil = typeof c.nomAppareil === 'function' ? c.nomAppareil : () => null;
   ids.forEach(id => {
     if (id.indexOf('binary_sensor.') !== 0) return;
     const st = S[id];
@@ -387,15 +459,22 @@ export function pointsAttention(ctx) {
     const dc = a.device_class;
     const nom = nomDe(id, st);
     if (CLASSES_SURETE.indexOf(dc) >= 0) {
-      if (dc === 'safety' && (a.awareness_level != null || /meteoalarm/i.test(id) || /meteoalarm/i.test(a.attribution || ''))) {
-        // Au niveau vert, MeteoAlarm n'alerte pas (audit du 19/10) : la carte Vigilance dit « Vigilance verte », l'Accueil se tait.
-        if (/;\s*green\s*(;|$)/i.test(String(a.awareness_level || ''))) return;
-        const grave = a.severity === 'Severe' || a.severity === 'Extreme';
-        ajouter('meteo:' + id, grave ? 'danger' : 'alerte', tr('Vigilance météo'), a.event || a.headline || tr('Alerte météo en cours'), 'securite', id);
+      // MeteoAlarm est une vigilance : la règle 10 la lit, avec Météo-France (ADR 0310).
+      if (dc === 'safety' && estMeteoAlarm(id, a)) return;
+      if (dc === 'moisture' && (estPlante(id) || fuiteCalculee(plateforme(id)) || pluieDeRobot(voisins(id)))) return;
+      if (entendueParCamera(dc, voisins(id))) {
+        ajouter('entendue:' + id, 'alerte', tr('Alarme entendue par une caméra'), nom, 'securite', id);
         return;
       }
-      if (dc === 'moisture' && (estPlante(id) || fuiteCalculee(plateforme(id)))) return;
       ajouter('surete:' + dc + ':' + id, NIVEAU_SURETE[dc], tr(TABLE_SURETE[dc][1]), nom, 'securite', id);
+      return;
+    }
+    /* Un défaut que l'APPAREIL signale (`problem`, 01/11, ADR 0307) : l'alarme d'un poêle, un disque qui lâche, un pont Zigbee à
+     * redémarrer. Il ne se voyait que dans sa fiche. Un appareil seulement (`voisins(id)` non vide : il a un appareil au registre) —
+     * ni un modèle ni un groupe qui calculent (« la plante a soif »), ni le besoin d'eau d'une plante. Le nom de l'appareil d'abord. */
+    if (dc === 'problem') {
+      if (!voisins(id).length || PLATEFORMES_CALCULEES.indexOf(plateforme(id)) >= 0 || estPlante(id)) return;
+      ajouter('defaut:' + id, 'alerte', tr('Défaut signalé'), nomAppareil(id) || nom, 'objets', id);
       return;
     }
     if (armee && familleOuvrant(dc)) ajouter('ouvrant:' + id, 'alerte', tr('Ouvert, alarme armée'), nom, 'securite', id);
@@ -437,8 +516,9 @@ export function pointsAttention(ctx) {
   });
 
   /* 7. Les veilles du serveur (`veilles.py`) : `signales` liste des clés
-   * `bat:<haid>` et `co2:<haid>`. La pile est une info qui attend ; le CO₂ une
-   * alerte, sauf si la pièce l'a déjà dit (règle 4). */
+   * `bat:<haid>`, `co2:<haid>` et `entretien:<haid>`. La pile est une info qui attend ; le CO₂ une
+   * alerte, sauf si la pièce l'a déjà dit (règle 4). L'entretien du poêle (ADR 0308) : le serveur le
+   * signale sous son seuil, en heures de fonctionnement ; une info, une alerte quand il est dû. */
   const signales = (estObjet(c.veilles) && Array.isArray(c.veilles.signales)) ? c.veilles.signales : [];
   signales.forEach(cle => {
     if (typeof cle !== 'string') return;
@@ -456,6 +536,11 @@ export function pointsAttention(ctx) {
     } else if (genre === 'co2') {
       if (co2Haids.has(haid) || cles.has('co2:' + haid)) return;
       ajouter('co2:' + haid, 'alerte', tr('CO₂ élevé'), val != null ? nom + ' · ' + chiffre(val, 'ppm') : nom, null, haid);
+    } else if (genre === 'entretien') {
+      const du = val != null && val <= 0;
+      ajouter('entretien:' + haid, du ? 'alerte' : 'info',
+        val != null && !du ? tr('Entretien du poêle dans {n} h', { n: Math.round(val).toLocaleString(locale()) }) : tr('Entretien du poêle à faire'),
+        nomAppareil(haid) || nom, 'objets', haid);
     }
   });
 
@@ -488,6 +573,20 @@ export function pointsAttention(ctx) {
   if (td && estObjet(S[td]) && jourRouge(S[td].state)) {
     ajouter('tempo:' + td, 'info', tr('Demain : jour rouge'), tr('Décalez ce qui peut attendre'), 'energie', td);
   }
+
+  /* 10. LA VIGILANCE ROUGE (lot 6 Gladys, ADR 0310) : un danger, rare et actionnable — rentrer le salon de jardin, ne pas
+   * prendre la route. La couleur et le phénomène : « Vigilance rouge », « Orages ». L'orange va au rail (`vigilanceRail`), le
+   * jaune et le vert ne font pas de point. La source est CELLE du widget : `vigilance`, le capteur de la maison
+   * (`capteurVigilance` : Météo-France d'abord, MeteoAlarm sinon) — une alerte ne se dit pas deux fois. Sans ce morceau du
+   * contexte, chaque binaire MeteoAlarm est lu, comme avant. */
+  const sourcesVig = c.vigilance !== undefined ? [c.vigilance].filter(id => typeof id === 'string' && estObjet(S[id]))
+    : ids.filter(id => id.indexOf('binary_sensor.') === 0 && estMeteoAlarm(id, attrs(S[id])));
+  sourcesVig.forEach(id => {
+    if (ecarte(id, S[id], plateforme, masque)) return;
+    const v = lireVigilance(id, S[id]);
+    if (!v || v.niveau !== VIGILANCE_POINT) return;
+    ajouter('meteo:' + id, 'danger', motVigilance(v.niveau), v.detail || tr('Alerte météo en cours'), 'securite', id);
+  });
 
   /* Du plus grave au plus doux, puis par titre — puis par sous-titre et clé :
    * un ordre entièrement déterminé, pour que la liste ne saute pas d'un rendu

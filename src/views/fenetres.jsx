@@ -270,7 +270,8 @@ export function FenetresReglages({ hass, cardSt }) {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    // Des lignes dans le panneau de leur module (maquette v3 des Règles, 03/11) : plus d'écart entre elles.
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
       {/* La simulation se dit EN HAUT, pas seulement dans son réglage : sinon
         * on cherche pourquoi rien ne bouge. */}
       {simu && (
@@ -279,7 +280,7 @@ export function FenetresReglages({ hass, cardSt }) {
         </div>
       )}
       <div style={cardSt}>
-        <RegleEntete nom={tr('Fenêtre ouverte, chauffage coupé')}
+        <RegleEntete ico="window-alt" nom={tr('Fenêtre ouverte, chauffage coupé')}
           desc={tr('Chauffer une pièce dont la fenêtre est ouverte, c’est chauffer la rue.')}
           on={!!cfg.actif} cb={() => enregistrer({ actif: !cfg.actif })}
           plie={pliFen} onPlier={plierFen} zone="fenetres-fen" />

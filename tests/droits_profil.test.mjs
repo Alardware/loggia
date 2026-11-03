@@ -86,7 +86,8 @@ test('les sections des trois droits passent par le même motif', () => {
   const par = lire('src', 'views', 'parametres.jsx');
   assert.ok(!par.includes(".catch(() => setMsg(tr('Enregistrement impossible — le composant ne répond pas.')))"),
     'les alertes annoncent de nouveau une panne sur un refus');
-  assert.ok(par.includes("setMsg(raisonEchec(e, 'loggia_alertes'))"), 'le refus des alertes ne nomme plus sa clé');
+  // ASSERTION MODIFIÉE (relecture du 03/11) : le refus a son propre bandeau en haut (`setRefus`), plus le message de l'essai.
+  assert.ok(par.includes("setRefus(raisonEchec(e, 'loggia_alertes'))"), 'le refus des alertes ne nomme plus sa clé');
   const debut = par.indexOf('const basculerObserve = async () => {');
   assert.ok(debut > 0, '« Observer sans agir » a disparu');
   const corps = par.slice(debut, par.indexOf('\n  };', debut));

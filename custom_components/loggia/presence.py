@@ -47,6 +47,7 @@ from .lumieres_maison import (a_epargner, async_interrupteurs_declares, async_ve
                               lumieres_de_la_maison, par_service, registre_de)
 from .regles import demarrer, entites_propres, est_entite, niveau
 from .unites import depuis_celsius, unite_temperature
+from .voisins import domaines_voisins
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
@@ -604,13 +605,21 @@ class LoggiaPresence:
                 and str(getattr(self.hass.states.get(h), "state", "")).lower() == "on"]
 
     def _capteurs_indices(self) -> list:
-        """Les capteurs de mouvement et d'ouverture de la maison, par `device_class`."""
+        """Les capteurs de mouvement et d'ouverture de la maison, par `device_class`.
+
+        Sans ceux d'une camera (31/10, ADR 0306) : son mouvement, sa
+        personne, sa sonnette (`occupancy`) voient la RUE. Un passant devant
+        la camera de l'entree relancait le delai du depart, et l'armement
+        d'Alarmo reculait d'autant, sans fin sur une rue passante. Un binaire
+        porte par l'appareil d'une `camera` n'est pas un indice ; un capteur de
+        mouvement de l'interieur, si. Registre illisible : rien n'est ecarte."""
         try:
             ids = self.hass.states.async_entity_ids("binary_sensor")
         except Exception:  # noqa: BLE001
             _LOGGER.warning("Loggia presence : capteurs illisibles", exc_info=True)
             return []
-        return [i for i in sorted(ids) if genre_indice(self.hass.states.get(i))]
+        return [i for i in sorted(ids) if genre_indice(self.hass.states.get(i))
+                and "camera" not in domaines_voisins(self.hass, i)]
 
     def _nom(self, haid: str) -> str:
         st = self.hass.states.get(haid)

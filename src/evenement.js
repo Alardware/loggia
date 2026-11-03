@@ -5,7 +5,7 @@
  * l'instant. Ici, ce qui s'est passé en dernier — « Mouvement · il y a 3 min »
  * — d'après deux sources que l'on a déjà :
  *   - les DÉTECTEURS que la résolution connaît par caméra (mouvement,
- *     personne, véhicule, sonnette, colis : le choix de l'utilisateur,
+ *     personne, véhicule, animal, sonnette, colis : le choix de l'utilisateur,
  *     complété par les binary_sensor du même appareil) ;
  *   - le JOURNAL de Home Assistant (logbook) pour le dernier déclenchement de
  *     chacun. Jamais `last_changed` : après un redémarrage il vaut l'heure du
@@ -21,9 +21,9 @@ export const ACTIFS_DETECTION = ['on', 'true', 'True', 'detected', 'Detected'];
 
 /** Les genres, du plus parlant au plus commun : quand deux détecteurs
  * s'allument ensemble, la sonnette prime sur le mouvement. */
-export const GENRES_DETECTION = ['sonnette', 'person', 'vehicle', 'colis', 'motion'];
+export const GENRES_DETECTION = ['sonnette', 'person', 'vehicle', 'animal', 'colis', 'motion'];
 
-export const ICONES_DETECTION = { sonnette: 'bell', person: 'user', vehicle: 'car', colis: 'box', motion: 'eye' };
+export const ICONES_DETECTION = { sonnette: 'bell', person: 'user', vehicle: 'car', animal: 'paw', colis: 'box', motion: 'eye' };
 
 /** Le journal ne remonte que 24 h ; au-delà, rien à dire. */
 export const FENETRE_EVENEMENT = 24 * 3600 * 1000;
@@ -32,8 +32,8 @@ export const FENETRE_EVENEMENT = 24 * 3600 * 1000;
  * (« Quelqu’un » — « Personne » seul dirait le contraire en français). */
 export function libelleDetection(genre, enCours = false) {
   const mots = enCours
-    ? { sonnette: tr('Sonnette'), person: tr('Personne détectée'), vehicle: tr('Véhicule présent'), colis: tr('Colis livré'), motion: tr('Mouvement') }
-    : { sonnette: tr('Sonnette'), person: tr('Quelqu’un'), vehicle: tr('Véhicule'), colis: tr('Colis'), motion: tr('Mouvement') };
+    ? { sonnette: tr('Sonnette'), person: tr('Personne détectée'), vehicle: tr('Véhicule présent'), animal: tr('Animal détecté'), colis: tr('Colis livré'), motion: tr('Mouvement') }
+    : { sonnette: tr('Sonnette'), person: tr('Quelqu’un'), vehicle: tr('Véhicule'), animal: tr('Animal'), colis: tr('Colis'), motion: tr('Mouvement') };
   return mots[genre] || null;
 }
 
@@ -152,4 +152,110 @@ export function heureJournal(quand, maintenant = Date.now(), lang = null) {
   const hier = new Date(auj); hier.setDate(hier.getDate() - 1);
   if (d.toDateString() === hier.toDateString()) return tr('hier') + ' ' + h;
   return d.toLocaleDateString(l, { day: 'numeric', month: 'short' }) + ' ' + h;
+}
+
+/* ── Ce qui arrive à la porte : la sonnette et le colis (lot 8 Gladys, ADR 0312) ──
+ *
+ * UniFi Protect ne dit le colis qu'en entité `event` (clé `package`), et l'appui
+ * sur la sonnette aussi (classe `doorbell`, le standard de Home Assistant). Un
+ * `event` n'a pas d'état allumé ou éteint : son état est l'INSTANT du dernier
+ * événement. Loggia ne les lisait pas.
+ *
+ * Ils vont au journal des notifications de l'écran et dans « En ce moment »,
+ * jusqu'à ce qu'on les ait vus (le geste « Vu ») ou que leur temps passe :
+ * 30 min pour un appui, 12 h pour un colis (`DUREE_PORTE`). Rien au téléphone.
+ * Aucun React ici. */
+
+/** Les clés de traduction d'un `event` de colis. Sans clé, le nom en repli — sur l'appareil d'une caméra seulement. */
+const CLES_COLIS_EVENT = ['package'];
+
+/** Combien de temps un événement de la porte reste à dire. */
+const DUREE_PORTE = { sonnette: 30 * 60 * 1000, colis: 12 * 3600 * 1000 };
+
+/** 'sonnette', 'colis' ou null, d'après l'entrée de l'index d'une entité `event`. */
+function genreEvenementPorte(id, m) {
+  if (!m || String(id).indexOf('event.') !== 0) return null;
+  if (m.deviceClass === 'doorbell') return 'sonnette';
+  if (m.translationKey) return CLES_COLIS_EVENT.indexOf(m.translationKey) >= 0 ? 'colis' : null;
+  return /(package|colis|parcel)/.test(String(id)) ? 'colis' : null;
+}
+
+const PORTE_PAR_INDEX = new WeakMap();
+/** Les entités `event` de la porte, lues dans l'index, une fois par index :
+ * [{ id, genre, deviceId, appareil, camera }], triées. `camera` : une caméra du
+ * même appareil, null s'il n'en porte pas. Cachées et désactivées : dehors. */
+export function evenementsPorte(index) {
+  const meta = index && index.entityMeta;
+  if (!meta || typeof meta.forEach !== 'function') return [];
+  const deja = PORTE_PAR_INDEX.get(meta);
+  if (deja) return deja;
+  const out = [];
+  const cams = new Map();
+  meta.forEach((m, id) => {
+    if (!m || !m.deviceId || m.hidden || m.disabled) return;
+    if (String(id).indexOf('camera.') === 0) { if (!cams.has(m.deviceId) || id < cams.get(m.deviceId)) cams.set(m.deviceId, id); return; }
+    const genre = genreEvenementPorte(id, m);
+    // Reconnu au nom seul (aucune clé, aucune classe) : il ne compte que sur l'appareil d'une caméra.
+    if (genre) out.push({ id, genre, deviceId: m.deviceId, appareil: m.device || null, camera: null, sur: !!m.translationKey || m.deviceClass === 'doorbell' });
+  });
+  const garde = out.filter(e => { e.camera = cams.get(e.deviceId) || null; const ok = e.sur || !!e.camera; delete e.sur; return ok; })
+    .sort((a, b) => (a.id < b.id ? -1 : 1));
+  PORTE_PAR_INDEX.set(meta, garde);
+  return garde;
+}
+
+/** La caméra à montrer pour un événement de la porte : le flux que la résolution a retenu pour son appareil
+ * (`cameras` : sa liste), sinon celle de l'index. */
+export function cameraPorte(e, index, cameras = []) {
+  const meta = index && index.entityMeta;
+  const retenue = meta && typeof meta.get === 'function'
+    ? (cameras || []).find(c => c && c.id && (meta.get(c.id) || {}).deviceId === e.deviceId) : null;
+  return (retenue && retenue.id) || e.camera || null;
+}
+
+/** L'instant du dernier événement (ms), l'état de l'entité `event`. Null s'il est muet, illisible ou dans le futur. */
+export function instantPorte(S, id, maintenant = Date.now()) {
+  const e = S && S[id];
+  if (!e) return null;
+  // `unknown` (après un redémarrage de HA) et `unavailable` ne se lisent pas comme un instant : null.
+  const t = instantDe(e.state);
+  return t == null || t > maintenant + 60000 ? null : t;
+}
+
+/** Ce que la porte a à dire maintenant, le plus récent d'abord : [{ cle, id, genre, quand, camera, appareil }].
+ * Un événement plus vieux que sa durée, ou déjà vu sur cet écran (`vus[id] >= quand`), ne dit rien. */
+export function lignesPorte(evs, S, vus = {}, maintenant = Date.now()) {
+  const out = [];
+  (evs || []).forEach(e => {
+    const t = instantPorte(S, e.id, maintenant);
+    if (t == null || maintenant - t > DUREE_PORTE[e.genre]) return;
+    const v = vus ? vus[e.id] : null;
+    if (typeof v === 'number' && v >= t) return;
+    out.push({ ...e, cle: 'porte:' + e.id + ':' + t, quand: t });
+  });
+  return out.sort((a, b) => b.quand - a.quand);
+}
+
+/** « Un colis déposé à 14:12 », « On a sonné à 14:12 » : l'heure seule, dans la langue de l'écran. */
+export function textePorte(l, lang = null) {
+  const heure = new Date(l.quand).toLocaleTimeString(lang || locale(), { hour: '2-digit', minute: '2-digit' });
+  return l.genre === 'colis' ? tr('Un colis déposé à {heure}', { heure }) : tr('On a sonné à {heure}', { heure });
+}
+
+/** « Vu » : l'instant de l'événement, retenu par entité. Propre à l'écran, comme « lu » au journal (journal.js). */
+const CLE_VUS = 'loggia_vus';
+export function lireVus() {
+  try { const v = JSON.parse(localStorage.getItem(CLE_VUS) || '{}'); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch { return {}; }
+}
+export function marquerVu(vus, l) {
+  const suite = { ...(vus || {}), [l.id]: l.quand };
+  try { localStorage.setItem(CLE_VUS, JSON.stringify(suite)); } catch { /* stockage plein : la ligne partira à son heure */ }
+  return suite;
+}
+
+/* La caméra en grand quand on sonne (C2, ADR 0312) : UNE OPTION DE L'ÉCRAN, décochée par défaut (Paramètres › Apparence,
+ * près de la veille : c'est le même écran de couloir). Cochée, App monte `sonnettegrand.jsx`, qui guette l'appui neuf. */
+export const CLE_SONNETTE_GRAND = 'loggia-sonnette-camera';
+export function sonnetteEnGrand() {
+  try { return localStorage.getItem(CLE_SONNETTE_GRAND) === '1'; } catch { return false; }
 }

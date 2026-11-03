@@ -10,7 +10,7 @@ import { useOptimiste } from '../optimiste.js';
 import { LISERE } from '../styles.js';
 import { nombre } from '../format.js';
 import { commanderChauffage, useEtatChauffage, chauffageDe, refroidit } from '../chauffageetat.js';
-import { plaqueMode, estMuet, consigneVoisine, decalageEn, modeVoisin, enChauffe, phrasePlanning, consigneAtteinte, motMode, etiquetteCarte, mesureLisible, moduleMuet, modeDuModule, etatModule, couleurMode } from '../chauffageecran.js';
+import { plaqueMode, estMuet, consigneVoisine, decalageEn, modeVoisin, enChauffe, phrasePlanning, consigneAtteinte, motMode, etiquetteCarte, mesureLisible, moduleMuet, modeDuModule, etatModule, couleurMode, motPreset } from '../chauffageecran.js';
 import { tr, trHA } from '../i18n.js';
 import { lavisCarte, estClimate, readZone, pilotFamille, dec, decMax } from '../app/noyau.jsx';
 import { useHistorique24, BoutonEpingle, Courbe24 } from '../appareils/fiches.jsx';
@@ -122,6 +122,33 @@ function reprendreLaMain(hass, ch, quoi, annuler, signaler = (err) => { Promise.
     annuler();
     signaler(estRefus(e) ? e : Object.assign(new Error((e && e.message) || 'service'), { code: 'service_error' }));
   });
+}
+/** La bascule d'un MODULE fil pilote hors de sa carte : la mini de sa pièce, à
+ * l'Accueil (03/11 — « les radiateurs des chambres n'apparaissent pas sur les
+ * cartes de l'Accueil »). La règle de `basculer` (RoomPilotCard), sans son
+ * optimiste : arrêt ↔ confort ; au planning, une reprise en main jusqu'au
+ * prochain créneau, si le moteur connaît le mode ; sinon l'option du module
+ * telle qu'il l'écrit, puis la famille de ses options. `on` : tout mode sauf
+ * l'Arrêt — l'Éco du planning est « en marche », comme sur la carte. null pour
+ * un module muet : sa carte n'a plus de bascule non plus. */
+export function basculeModule(hass, zone, etat) {
+  const S = (hass && hass.states) || null;
+  const st = zone && zone.modeEnt && S ? S[zone.modeEnt] : null;
+  if (!st || moduleMuet(st)) return null;
+  const ch = chauffageDe(etat, zone.modeEnt);
+  const auPlanning = !!(ch && ch.planning && !(etat && etat.simulation));
+  const mode = !ch ? null : auPlanning ? ch.applique || ch.mode : modeDuModule(ch.options, st.state);
+  const on = mode ? mode !== 'arret' : pilotFamille(st.state) !== 'off';
+  const poser = (option) => commanderService(hass, zone.modeEnt, 'input_select', 'select_option', { entity_id: zone.modeEnt, option });
+  return { on, froid: false, onToggle: () => {
+    const cible = on ? 'arret' : 'confort';
+    if (auPlanning && Array.isArray(ch.modes) && ch.modes.indexOf(cible) >= 0) { reprendreLaMain(hass, ch, { mode: cible }, () => {}); return; }
+    if (!auPlanning && ch && ch.options && ch.options[cible]) { poser(ch.options[cible]); return; }
+    const options = zoneModes(S, zone);
+    const m = on ? (options.find(o => pilotFamille(o) === 'off') || 'off')
+      : (options.find(o => pilotFamille(o) === 'confort') || options.find(o => pilotFamille(o) !== 'off') || null);
+    if (m) poser(m);
+  } };
 }
 function RoomClimateCard({ id, hass, onOpen, label = null }) {
   const st = hass && hass.states ? hass.states[id] : null;
@@ -615,11 +642,11 @@ function RoomPilotSheet({ zone, hass, onClose }) {
           ); })}
         </div>
         {/* Préréglage du thermostat (Turbo, Comfort, Overnight…) : le sélecteur
-          * de la fiche native — les noms viennent de l'entité. */}
+          * de la fiche native — les noms viennent de l'entité, dits par `motPreset` (D15, ADR 0319). */}
         {estClimate(zone) && !mort && (() => { const at = (S && S[zone.haid] && S[zone.haid].attributes) || {}; return Array.isArray(at.preset_modes) && at.preset_modes.length > 0 && (
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
             <MenuDeroulant icone="settings-sliders" etiquette={tr('Préréglage')} valeur={at.preset_mode && at.preset_mode !== 'unknown' ? at.preset_mode : null}
-              options={at.preset_modes.slice(0, 10)} surChoix={(p) => commander(hass, zone.haid, 'set_preset_mode', p)} />
+              options={at.preset_modes.slice(0, 10)} rendre={motPreset} surChoix={(p) => commander(hass, zone.haid, 'set_preset_mode', p)} />
           </div>
         ); })()}
         {(zone.tempSensor || estClimate(zone)) && (<>

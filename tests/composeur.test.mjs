@@ -24,7 +24,8 @@ test('la fabrique rend toute cle : entite, zone, distributeur, plante — et por
   assert.ok(bloc('function CarteDistributeur(', NL + '}').includes('<RoomFeederCard v={useVueDistributeur(hass, nom)} chip={chip} onOpen={onOpen} />'), 'la carte du distributeur, compacte ou non');
   assert.ok(dc.includes('{feederPop && <FicheDistributeur hass={hass} onClose={() => setFeederPop(false)} />}') && dc.includes('{plantPop && <FichePlante pl={plantPop}'), 'leurs fiches voyagent avec la fabrique');
   // ASSERTION MODIFIÉE (30/10, G3-E2/E3) : les popups du chauffe-eau et de la borne se ferment avec les autres.
-  assert.ok(dc.includes('setFeederPop(false); setPlantPop(null); setEauPop(null); setBornePop(false); };'), 'fermer les ferme aussi');
+  // ASSERTION MODIFIÉE (01/11, ADR 0318) : la popup d'un traceur d'objet se ferme avec les autres.
+  assert.ok(dc.includes('setFeederPop(false); setPlantPop(null); setEauPop(null); setBornePop(false); setTraceurPop(null); };'), 'fermer les ferme aussi');
   assert.ok(dc.includes('const nom = (k) => nomDeCle(S, k);'), 'et elle sait nommer une cle');
   const n = bloc('function nomDeCle(', NL + '}');
   assert.ok(n.includes("if (s === 'obj:feeder') return tr('Distributeur');") && n.includes("if (s.indexOf('plant:') === 0)") && n.includes("if (s.indexOf('zone:') === 0)") && n.includes('return cvName(S && S[s], s);'), 'distributeur, plante, zone, sinon l’entite');

@@ -104,7 +104,7 @@ test('les libellés de l’alarme passent tous par la traduction', () => {
   /* Qu'ils AIENT une traduction est vérifié ailleurs, pour tout le projet
    * (`tout_tr_traduit`). Ici on vérifie autre chose : qu'ils passent bien par
    * `tr()`. Un libellé écrit en clair resterait français partout. */
-  for (const l of ['Alarme · état inconnu', 'ALARME DÉCLENCHÉE', 'Alarme · activation…', 'Alarme armée · Absent', 'Alarme armée · Présent', 'Alarme armée']) {
+  for (const l of ['Alarme · état inconnu', 'ALARME DÉCLENCHÉE', 'Alarme · activation…', 'Alarme armée · Absent', 'Alarme armée · Présent']) { // « Alarme armée » était une puce de la veille, retirée avec la maquette du 01/11
     assert.ok(app.includes("tr('" + l + "')"), l);
   }
   assert.ok(!app.includes(": 'Alarme armée'}"), 'plus de libellé brut dans la puce d’ambiance');

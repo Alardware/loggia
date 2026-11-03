@@ -2,7 +2,7 @@
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
 import { useState, useMemo, useRef, useEffect, useCallback, Suspense } from 'react';
 import { formatEcran, vuePiecesDe, poserVuePieces, grilleDuFormat, poserGrille, sansPart } from '../disposition.js';
-import { cfgVal, cfgSet, cfgRecue, appareilPropre, LOGGIA_RESOLVED, compteOrdinaire, plateformeDe, medPlayers, LOGGIA_INDEX, secAlarm, switchLights, ficheAppareil, enHaids } from '../state.js';
+import { cfgVal, cfgSet, accueilDuProfil, cfgRecue, appareilPropre, LOGGIA_RESOLVED, compteOrdinaire, plateformeDe, voisinsDe, nomAppareilDe, medPlayers, LOGGIA_INDEX, secAlarm, switchLights, ficheAppareil, enHaids } from '../state.js';
 import { CIEL_HA, CIEL_SOMBRES } from '../wxpresets.js';
 import { enPanne, gestesCover } from '../outils.js';
 import { uniteTemp } from '../unites.js';
@@ -29,7 +29,8 @@ import { WIDGETS_OPTION, prochainSoleil, styleDe, STYLES_WIDGETS, NOMS_STYLES } 
 import { useDerniersEvenements } from '../historique.jsx';
 import { poserCamDispo, camSerre, colonnesCam } from '../camdispo.js';
 import { colonnesPour, cellulePointee, nettoyer, poser, disposer, hauteur as hauteurCarte, premiereLibre } from '../placement.js';
-import { pointsAttention, couleurNiveau, niveauMax, animationNiveau, resumeAttention, tuileAlarme } from '../attention.js';
+import { pointsAttention, couleurNiveau, niveauMax, animationNiveau, resumeAttention, tuileAlarme, vigilanceRail } from '../attention.js';
+import { capteurVigilance } from '../vigilance.js';
 import { sectionTitle, CARTE_RAIL } from '../styles.js';
 import { fmtWatts, nombre } from '../format.js';
 import { plantsCfg, notifIds } from '../lectures.js';
@@ -39,12 +40,12 @@ import { useSensCourses, ordreEtArret } from '../voletcourse.js';
 import { lignesMoment } from '../chauffageecran.js';
 import { Ico } from '../icones.jsx';
 import { ambiancesParPiece } from '../ambiance.js';
-import { detecteursDe, reduireDerniers, evenementCamera } from '../evenement.js';
+import { detecteursDe, reduireDerniers, evenementCamera, evenementsPorte, lignesPorte, textePorte, cameraPorte, lireVus, marquerVu } from '../evenement.js';
 import { plageSemaine } from '../agenda.js';
 import { tr, trN, nomProfil, locale } from '../i18n.js';
 import { useAgenda, masqueDe, rmNorm, cvEstLumiere, priseDe, indexLu, climateZones, estClimate, dec, Segment } from '../app/noyau.jsx';
 import { envoyerGeste } from '../cartes/volet.jsx';
-import { modesClimat } from '../cartes/chauffage.jsx';
+import { modesClimat, basculeModule } from '../cartes/chauffage.jsx';
 import { useDomainCards, FicheChauffage } from '../appareils/fiches.jsx';
 import { tuileCamera, CAMERAS, CameraTile, ouvrantsDe } from '../cartescustom/cartes.jsx';
 import { useWide, useCoarse } from '../app/ecran.jsx';
@@ -145,7 +146,7 @@ function useAgencementAccueil({ editMode, planActif }) {
    * `loggia_accueil`, par appareil. Une section inconnue de la sauvegarde
    * (ajoutée par une version future) se range à la fin, jamais perdue. */
   const [accL, setAccL] = useState(() => {
-    const v = cfgVal('loggia_accueil', null) || {};
+    const v = accueilDuProfil();
     // piecesOrdre et tailles font partie de la sauvegarde : les oublier ici
     // rendait l'ordre et la taille des cartes pièces perdus à chaque
     // rechargement, alors que saveAccL les écrivait bien.
@@ -163,7 +164,10 @@ function useAgencementAccueil({ editMode, planActif }) {
        * l'ORDINATEUR : une installation existante retrouve donc son accueil
        * tel qu'elle l'a laisse, et ne decouvre `formats` que le jour ou
        * quelqu'un edite depuis une tablette ou un telephone. */
-      formats: (v.formats && typeof v.formats === 'object') ? v.formats : {} };
+      formats: (v.formats && typeof v.formats === 'object') ? v.formats : {},
+      /* Les écrans NOMMÉS (ADR 0222) : oubliés ici, leur grille était ignorée
+       * au rechargement, puis effacée par le geste suivant (ticket #43). */
+      appareils: (v.appareils && typeof v.appareils === 'object') ? v.appareils : {} };
   });
   /* Le dashboard suit la MAISON, pas le navigateur : l'agencement part au
    * composant. En localStorage, il changeait d'un appareil a l'autre — et meme
@@ -733,8 +737,14 @@ function useAttentionAccueil({ a, dashHass, sante, sectionMasquee }) {
     plantes: plantsCfg().map(p => p.base).filter(Boolean),
     // Un `moisture` calculé n'est pas une fuite (ADR 0022, 16/10) : la plateforme, lue dans l'index ; un groupe, une entité masquée n'y comptent pas (M14).
     plateforme: plateformeDe, masque: masqueDe,
+    // L'appareil qui porte un binaire (ADR 0305) : la pluie de la tondeuse n'est pas une fuite, ce qu'une caméra entend se dit à part.
+    voisins: voisinsDe,
+    // Un défaut d'appareil (`problem`, ADR 0307) se dit au nom de l'appareil.
+    nomAppareil: nomAppareilDe,
     // La couleur Tempo du lendemain (chantier G3, E4) : « Demain : jour rouge », seulement s'il l'est.
     tempoDemain: enHaids().tempoDemain || null,
+    // La vigilance de la maison, celle du widget (ADR 0310) : rouge, un point ; l'orange va à « En ce moment ».
+    vigilance: capteurVigilance(etatsAcc, LOGGIA_INDEX),
   });
   const couleurAcc = points.length ? couleurNiveau(niveauMax(points)).col : 'var(--o-ok)';
   /* La ligne sous le prénom suit la section « À surveiller » (ticket #34). */
@@ -927,9 +937,9 @@ function useLumieresAccueil({ a, dashHass, lightsSig, noms }) {
   // Agir sans ouvrir la pièce. Double chemin de rattachement, comme les
   // lumières : la ZONE HA de la pièce (byArea) d'abord, le nom ensuite —
   // voletCovers et climateZones savent déjà d'où viennent leurs entités
-  // (config ou découverte). Le fil pilote (zones sans entité climate) n'a pas
-  // de bascule sûre en un geste : seules les entités climate réelles ont un
-  // mini.
+  // (config ou découverte). Le fil pilote : seul un module que le serveur
+  // reconnaît a sa mini (03/11, `basculeModule`) ; une zone décrite à la main
+  // n'a pas de bascule sûre en un geste.
   const roomExtras = useMemo(() => {
     const S = dashHass && dashHass.states;
     if (!S) return null;
@@ -938,13 +948,18 @@ function useLumieresAccueil({ a, dashHass, lightsSig, noms }) {
       // Le bouton de la pièce ne commande que ses VOLETS (audit du 19/10) : pas le portail de l'Entrée.
       const covs = voletsCommandables(S).filter(c => S[c.haid]);
       const zones = climateZones(S).filter(z => estClimate(z) && z.haid && S[z.haid]);
+      const modules = climateZones(S).filter(z => z.decouvert && z.modeEnt && S[z.modeEnt]);
       for (const nom of noms) {
         const target = rmNorm(nom);
         const r = a && a.rooms && a.rooms.find(x => (x.name || x.room) === nom);
         const parZone = (r && r.area && a.index && a.index.byArea && a.index.byArea.get(r.area)) || [];
         const covers = covs.filter(c => parZone.indexOf(c.haid) >= 0 || rmNorm(c.name).indexOf(target) >= 0).map(c => c.haid);
         const zc = zones.find(z => parZone.indexOf(z.haid) >= 0 || rmNorm(z.room || '') === target || rmNorm(z.name || '').indexOf(target) >= 0);
-        m[target] = { covers, clim: zc ? zc.haid : null };
+        /* Sans thermostat, le MODULE fil pilote de la pièce (03/11) : « les radiateurs des chambres n'apparaissent pas sur
+         * les cartes de l'Accueil ». La mini ne bascule que les modules que le serveur reconnaît — sa carte sait les
+         * commander, au planning compris (`basculeModule`) ; une zone décrite à la main, sans moteur, reste sans mini. */
+        const mz = zc ? null : modules.find(z => parZone.indexOf(z.modeEnt) >= 0 || rmNorm(z.room || '') === target);
+        m[target] = { covers, clim: zc ? zc.haid : null, module: mz || null };
       }
     } catch { return null; }
     return m;
@@ -970,8 +985,11 @@ function useLumieresAccueil({ a, dashHass, lightsSig, noms }) {
   // refroidissent avant les autres). Aucun → la section n'existe pas du tout.
   // Plusieurs → glissière à la page, points sous la carte (HeroSlider).
   const dc = useDomainCards(dashHass);
+  // L'état du moteur de chauffage, pour les seuls modules (déjà lu par « En ce moment » : pas d'abonnement de plus).
+  const { etat: etatChauffage } = useEtatChauffage(!!(roomExtras && Object.keys(roomExtras).some(k => roomExtras[k].module)));
   const roomClimInfo = (name) => {
     const ex = roomExtras && roomExtras[rmNorm(name)];
+    if (ex && !ex.clim && ex.module) return basculeModule(dashHass, ex.module, etatChauffage);
     if (!ex || !ex.clim) return null;
     const st = dashHass.states[ex.clim];
     if (!st || st.state === 'unavailable') return null;
@@ -1020,8 +1038,31 @@ function useMomentAccueil({ a, cyclesPrises, dashHass, dc, mLv, onNav, ordinaire
    * pas le volet que sa carte disait « En fermeture ». Le sens de leur course jouée (voletcourse.js), relu à chaque changement. */
   const coversMoment = voletCovers(S0);
   const sensJoue = useSensCourses(coversMoment.map(c => c.haid), S0);
+  // Ce que l'on a vu à la porte, sur cet écran (lot 8 Gladys, ADR 0312) : comme « lu » au journal.
+  const [vusPorte, setVusPorte] = useState(lireVus);
+  /* Ce que l'administrateur doit savoir (lot 10 Gladys, ADR 0314) : la sauvegarde qui a échoué ou pris du retard, le disque
+   * plein. Pour un administrateur SEUL : la règle vit dans `systemecalc.js`, que seul son écran charge — à la demande. Le compte
+   * d'une session Home Assistant ne change pas sans recharger la page. */
+  const admin = dashHass && dashHass.user && dashHass.user.is_admin;
+  const [sys, setSys] = useState(null);
+  useEffect(() => { if (admin) import('../systemecalc.js').then(setSys, () => {}); }, [admin]);
   const momentRows = [];
   try {
+    /* LA VIGILANCE ORANGE (lot 6 Gladys, ADR 0310 ; choix par défaut, réversible) : la couleur et le phénomène, en tête — rare,
+     * elle passe avant ce qui tourne. Elle ouvre la fiche météo, qui dit chaque phénomène. Le rouge est un point d'attention. */
+    const vigId = capteurVigilance(S0, LOGGIA_INDEX);
+    const vig = vigilanceRail(S0, vigId);
+    if (vig) momentRows.push(<LigneMoment key={vig.cle} icone="umbrella" rgb="var(--o-warn2-rgb)" nom={vig.titre} sous={vig.sous}
+      onOpen={() => dc.ouvrir(weatherEntity(dashHass) || vig.haid)} fiche />);
+    /* LA PORTE (lot 8 Gladys, ADR 0312) : « On a sonné à 14:12 », « Un colis déposé à 14:12 », au nom de l'appareil. La ligne
+     * ouvre la caméra ; « Vu » la retire de cet écran, sinon elle part à son heure (30 min, 12 h). Aucune commande. */
+    lignesPorte(evenementsPorte(LOGGIA_INDEX), S0, vusPorte).forEach(p => {
+      const cam = cameraPorte(p, LOGGIA_INDEX, (LOGGIA_RESOLVED && LOGGIA_RESOLVED.cameras && LOGGIA_RESOLVED.cameras.list) || []);
+      momentRows.push(<LigneMoment key={p.cle} icone={p.genre === 'colis' ? 'box' : 'bell'} rgb="var(--o-accent-rgb)" nom={textePorte(p)}
+        sous={p.appareil || ''} onOpen={cam ? () => dc.ouvrir(cam) : null} fiche={!!cam}
+        action={tr('Vu')} actionIcone="check" onAction={() => setVusPorte(v => marquerVu(v, p))} />);
+    });
+    if (sys) sys.lignesAdmin(S0).forEach(x => momentRows.push(<LigneMoment key={x.cle} {...x} onOpen={onNav ? () => onNav('systeme') : null} />));
     /* Un lecteur en lecture (chantier Médias, M16) : lu avec son jumeau (M14), sa ligne est la phrase de sa carte (M6), et
      * « Mettre en pause » envoie `media_pause` à l'entité qui commande — jamais `media_play_pause` (M13). */
     medPlayers().forEach(m => {

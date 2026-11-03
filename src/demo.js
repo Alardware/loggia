@@ -52,6 +52,8 @@ const s = (state, attributes = {}) => ({
   last_updated: maintenant(), last_changed: maintenant(),
 });
 const ilYaMin = (min) => new Date(Date.now() - min * 60000).toISOString();
+// 3 h du matin, la dernière passée, décalée de `j` jours : l'heure des sauvegardes automatiques de la démo (ADR 0314).
+const troisHeures = (j = 0) => { const d = new Date(); d.setHours(3, 0, 0, 0); if (d > new Date()) d.setDate(d.getDate() - 1); d.setDate(d.getDate() + j); return d.toISOString(); };
 
 /* Les noms des lieux de la maison factice (23/09/2026).
  *
@@ -179,6 +181,11 @@ const APPAREILS = {
   'Aspirateur Surface nettoyée': { en: 'Vacuum Cleaned area', de: 'Staubsauger Gereinigte Fläche', nl: 'Stofzuiger Schoongemaakt oppervlak', it: 'Aspirapolvere Superficie pulita', es: 'Aspiradora Superficie limpiada', pl: 'Odkurzacz Posprzątana powierzchnia' },
   'Aspirateur Surface totale nettoyée': { en: 'Vacuum Total cleaned area', de: 'Staubsauger Gesamte gereinigte Fläche', nl: 'Stofzuiger Totaal schoongemaakt oppervlak', it: 'Aspirapolvere Superficie totale pulita', es: 'Aspiradora Superficie total limpiada', pl: 'Odkurzacz Łączna posprzątana powierzchnia' },
   'Avant mise à jour': { en: 'Before update', de: 'Vor dem Update', nl: 'Voor de update', it: 'Prima dell’aggiornamento', es: 'Antes de actualizar', pl: 'Przed aktualizacją' },
+  // Les sauvegardes automatiques (ADR 0314) : l'appareil « Backup », puis le nom que Home Assistant traduit.
+  'Backup Dernière sauvegarde automatique réussie': { en: 'Backup Last successful automatic backup', de: 'Backup Letzte erfolgreiche automatische Sicherung', nl: 'Backup Laatste geslaagde automatische back-up', it: 'Backup Ultimo backup automatico riuscito', es: 'Backup Última copia automática correcta', pl: 'Backup Ostatnia udana automatyczna kopia' },
+  'Backup Dernière tentative de sauvegarde automatique': { en: 'Backup Last attempted automatic backup', de: 'Backup Letzter Versuch einer automatischen Sicherung', nl: 'Backup Laatste poging tot automatische back-up', it: 'Backup Ultimo tentativo di backup automatico', es: 'Backup Último intento de copia automática', pl: 'Backup Ostatnia próba automatycznej kopii' },
+  'Backup Prochaine sauvegarde automatique programmée': { en: 'Backup Next scheduled automatic backup', de: 'Backup Nächste geplante automatische Sicherung', nl: 'Backup Volgende geplande automatische back-up', it: 'Backup Prossimo backup automatico programmato', es: 'Backup Próxima copia automática programada', pl: 'Backup Następna zaplanowana automatyczna kopia' },
+  'Backup État du gestionnaire de sauvegarde': { en: 'Backup Backup manager state', de: 'Backup Zustand der Sicherungsverwaltung', nl: 'Backup Status van back-upbeheer', it: 'Backup Stato del gestore dei backup', es: 'Backup Estado del gestor de copias', pl: 'Backup Stan menedżera kopii zapasowych' },
   'Baie vitrée': { en: 'Patio door', de: 'Terrassentür', nl: 'Schuifpui', it: 'Portafinestra', es: 'Ventanal', pl: 'Drzwi tarasowe' },
   'Basilic': { en: 'Basil', de: 'Basilikum', nl: 'Basilicum', it: 'Basilico', es: 'Albahaca', pl: 'Bazylia' },
   'Basilic conductivité': { en: 'Basil conductivity', de: 'Basilikum Leitfähigkeit', nl: 'Basilicum geleidbaarheid', it: 'Basilico conducibilità', es: 'Albahaca conductividad', pl: 'Bazylia przewodność' },
@@ -215,6 +222,8 @@ const APPAREILS = {
   'Caméra entrée Mode privé': { en: 'Entrance camera Privacy mode', de: 'Kamera Eingang Privatmodus', nl: 'Camera entree Privémodus', it: 'Telecamera ingresso Modalità privata', es: 'Cámara entrada Modo privado', pl: 'Kamera wejście Tryb prywatny' },
   'Caméra entrée Mouvement': { en: 'Entrance camera Motion', de: 'Kamera Eingang Bewegung', nl: 'Camera entree Beweging', it: 'Telecamera ingresso Movimento', es: 'Cámara entrada Movimiento', pl: 'Kamera wejście Ruch' },
   'Caméra entrée Personne': { en: 'Entrance camera Person', de: 'Kamera Eingang Person', nl: 'Camera entree Persoon', it: 'Telecamera ingresso Persona', es: 'Cámara entrada Persona', pl: 'Kamera wejście Osoba' },
+  'Caméra entrée Sonnette': { en: 'Entrance camera Doorbell', de: 'Kamera Eingang Klingel', nl: 'Camera entree Deurbel', it: 'Telecamera ingresso Campanello', es: 'Cámara entrada Timbre', pl: 'Kamera wejście Dzwonek' },
+  'Caméra entrée Colis': { en: 'Entrance camera Package', de: 'Kamera Eingang Paket', nl: 'Camera entree Pakket', it: 'Telecamera ingresso Pacco', es: 'Cámara entrada Paquete', pl: 'Kamera wejście Paczka' },
   'Caméra entrée Suivi de mouvement': { en: 'Entrance camera Motion tracking', de: 'Kamera Eingang Bewegungsverfolgung', nl: 'Camera entree Bewegingsvolging', it: 'Telecamera ingresso Inseguimento movimento', es: 'Cámara entrada Seguimiento de movimiento', pl: 'Kamera wejście Śledzenie ruchu' },
   'Caméra entrée Voyant': { en: 'Entrance camera Indicator light', de: 'Kamera Eingang Kontrollleuchte', nl: 'Camera entree Indicatielampje', it: 'Telecamera ingresso Spia', es: 'Cámara entrada Piloto', pl: 'Kamera wejście Kontrolka' },
   'Carte météo animée': { en: 'Animated weather map', de: 'Animierte Wetterkarte', nl: 'Geanimeerde weerkaart', it: 'Mappa meteo animata', es: 'Mapa del tiempo animado', pl: 'Animowana mapa pogody' },
@@ -291,6 +300,7 @@ const APPAREILS = {
   'Météo': { en: 'Weather', de: 'Wetter', nl: 'Weer', it: 'Meteo', es: 'Tiempo', pl: 'Pogoda' },
   'Nuit': { en: 'Night', de: 'Nacht', nl: 'Nacht', it: 'Notte', es: 'Noche', pl: 'Noc' },
   'Part fossile du réseau': { en: 'Fossil share of the grid', de: 'Fossiler Anteil im Netz', nl: 'Fossiel aandeel van het net', it: 'Quota fossile della rete', es: 'Parte fósil de la red', pl: 'Udział paliw kopalnych w sieci' },
+  'Intensité carbone du réseau': { en: 'Grid carbon intensity', de: 'CO₂-Intensität des Netzes', nl: 'Koolstofintensiteit van het net', it: 'Intensità di carbonio della rete', es: 'Intensidad de carbono de la red', pl: 'Intensywność emisji CO₂ w sieci' },
   // Les aires de la tondeuse au carnet des robots (chantier IoT, § 10) : le nom de leur interrupteur, sans « Tondeuse Zone ».
   'Côté garage': { en: 'Garage side', de: 'Garagenseite', nl: 'Garagekant', it: 'Lato garage', es: 'Lado garaje', pl: 'Przy garażu' },
   'Pelouse arrière': { en: 'Back lawn', de: 'Rasen hinten', nl: 'Achtergazon', it: 'Prato dietro', es: 'Césped trasero', pl: 'Trawnik z tyłu' },
@@ -333,6 +343,7 @@ const APPAREILS = {
   'Source du dernier repas': { en: 'Last meal source', de: 'Quelle der letzten Mahlzeit', nl: 'Bron laatste maaltijd', it: 'Origine dell’ultimo pasto', es: 'Origen de la última comida', pl: 'Źródło ostatniego posiłku' },
   'Soleil': { en: 'Sun', de: 'Sonne', nl: 'Zon', it: 'Sole', es: 'Sol', pl: 'Słońce' },
   'Sonnette vers le téléphone': { en: 'Doorbell to phone', de: 'Türklingel aufs Handy', nl: 'Deurbel naar telefoon', it: 'Campanello al telefono', es: 'Timbre al teléfono', pl: 'Dzwonek na telefon' },
+  'Rappeler le garage': { en: 'Call the garage back', de: 'Die Werkstatt zurückrufen', nl: 'De garage terugbellen', it: 'Richiamare l’officina', es: 'Llamar al taller', pl: 'Oddzwonić do warsztatu' },
   'Sortir le linge': { en: 'Take out the laundry', de: 'Wäsche herausnehmen', nl: 'Was uit de machine halen', it: 'Tirare fuori il bucato', es: 'Sacar la ropa', pl: 'Wyjąć pranie' },
   'Surplus': { en: 'Surplus', de: 'Überschuss', nl: 'Overschot', it: 'Surplus', es: 'Excedente', pl: 'Nadwyżka' },
   'TV du salon': { en: 'Living room TV', de: 'Fernseher Wohnzimmer', nl: 'Tv woonkamer', it: 'TV soggiorno', es: 'TV salón', pl: 'Telewizor salon' },
@@ -350,6 +361,8 @@ const APPAREILS = {
   "Tondeuse Seuil d'usure des lames": { en: 'Mower Blade wear threshold', de: 'Mähroboter Verschleißgrenze der Klingen', nl: 'Grasmaaier Slijtagedrempel messen', it: 'Tosaerba Soglia di usura lame', es: 'Cortacésped Umbral de desgaste de cuchillas', pl: 'Kosiarka Próg zużycia ostrzy' },
   'Tondeuse Signal Wi-Fi': { en: 'Mower Wi-Fi signal', de: 'Mähroboter WLAN-Signal', nl: 'Grasmaaier Wifi-signaal', it: 'Tosaerba Segnale Wi-Fi', es: 'Cortacésped Señal Wi-Fi', pl: 'Kosiarka Sygnał Wi-Fi' },
   'Tondeuse Surface': { en: 'Mower Area', de: 'Mähroboter Fläche', nl: 'Grasmaaier Oppervlak', it: 'Tosaerba Superficie', es: 'Cortacésped Superficie', pl: 'Kosiarka Powierzchnia' },
+  'Tondeuse Progression': { en: 'Mower Progress', de: 'Mähroboter Fortschritt', nl: 'Grasmaaier Voortgang', it: 'Tosaerba Avanzamento', es: 'Cortacésped Progreso', pl: 'Kosiarka Postęp' },
+  'Tondeuse Temps restant': { en: 'Mower Time left', de: 'Mähroboter Restzeit', nl: 'Grasmaaier Resterende tijd', it: 'Tosaerba Tempo rimanente', es: 'Cortacésped Tiempo restante', pl: 'Kosiarka Pozostały czas' },
   'Tondeuse Sécurité faune': { en: 'Mower Wildlife safety', de: 'Mähroboter Tierschutz', nl: 'Grasmaaier Dierbeveiliging', it: 'Tosaerba Sicurezza fauna', es: 'Cortacésped Seguridad fauna', pl: 'Kosiarka Ochrona zwierząt' },
   'Tondeuse Temps de travail total': { en: 'Mower Total working time', de: 'Mähroboter Gesamtarbeitszeit', nl: 'Grasmaaier Totale werktijd', it: 'Tosaerba Tempo di lavoro totale', es: 'Cortacésped Tiempo total de trabajo', pl: 'Kosiarka Łączny czas pracy' },
   'Tondeuse Voix': { en: 'Mower Voice', de: 'Mähroboter Stimme', nl: 'Grasmaaier Stem', it: 'Tosaerba Voce', es: 'Cortacésped Voz', pl: 'Kosiarka Głos' },
@@ -419,6 +432,7 @@ const APPAREILS = {
   // wiatr, Stacja pogodowa (liste : docs/chantier-capteurs-plan-1-mesures.md, tâche 8).
   'luminosité': { en: 'brightness', de: 'Helligkeit', nl: 'lichtsterkte', it: 'luminosità', es: 'luminosidad', pl: 'jasność' },
   'particules': { en: 'particles', de: 'Feinstaub', nl: 'fijnstof', it: 'particolato', es: 'partículas', pl: 'pyły' },
+  'purificateur': { en: 'air purifier', de: 'Luftreiniger', nl: 'luchtreiniger', it: 'purificatore', es: 'purificador', pl: 'oczyszczacz' },
   'COV': { en: 'VOC', de: 'VOC', nl: 'VOS', it: 'COV', es: 'COV', pl: 'LZO' },
   'Thermomètre salon': { en: 'Living room thermometer', de: 'Thermometer Wohnzimmer', nl: 'Thermometer woonkamer', it: 'Termometro soggiorno', es: 'Termómetro salón', pl: 'Termometr salon' },
   'Thermomètre salon pile': { en: 'Living room thermometer battery', de: 'Thermometer Wohnzimmer Batterie', nl: 'Thermometer woonkamer batterij', it: 'Termometro soggiorno batteria', es: 'Termómetro salón pila', pl: 'Termometr salon bateria' },
@@ -489,6 +503,10 @@ const APPAREILS = {
   'Bouton sans fil': { en: 'Wireless button', de: 'Funktaster', nl: 'Draadloze knop', it: 'Pulsante senza fili', es: 'Botón inalámbrico', pl: 'Przycisk bezprzewodowy' },
   'Dracaena Marginata': { en: 'Dracaena Marginata', de: 'Dracaena Marginata', nl: 'Dracaena Marginata', it: 'Dracaena Marginata', es: 'Dracaena Marginata', pl: 'Dracaena Marginata' },
   'Schefflera': { en: 'Schefflera', de: 'Schefflera', nl: 'Schefflera', it: 'Schefflera', es: 'Schefflera', pl: 'Schefflera' },
+  // Le traceur d'objet de la démo (ADR 0318) : un vélo, son dernier signal.
+  'Vélo': { en: 'Bike', de: 'Fahrrad', nl: 'Fiets', it: 'Bicicletta', es: 'Bicicleta', pl: 'Rower' },
+  'Vélo Dernier signal': { en: 'Bike Last seen', de: 'Fahrrad Zuletzt gesehen', nl: 'Fiets Laatst gezien', it: 'Bicicletta Ultimo segnale', es: 'Bicicleta Última señal', pl: 'Rower Ostatni sygnał' },
+  'Traceur GPS': { en: 'GPS tracker', de: 'GPS-Tracker', nl: 'GPS-tracker', it: 'Localizzatore GPS', es: 'Localizador GPS', pl: 'Lokalizator GPS' },
   'Capteur de plante': { en: 'Plant sensor', de: 'Pflanzensensor', nl: 'Plantsensor', it: 'Sensore per piante', es: 'Sensor de planta', pl: 'Czujnik rośliny' },
   'MeteoAlarm': { en: 'MeteoAlarm', de: 'MeteoAlarm', nl: 'MeteoAlarm', it: 'MeteoAlarm', es: 'MeteoAlarm', pl: 'MeteoAlarm' },
   'Basilic besoin eau': { en: 'Basil needs water', de: 'Basilikum braucht Wasser', nl: 'Basilicum heeft water nodig', it: 'Basilico ha bisogno d’acqua', es: 'Albahaca necesita agua', pl: 'Bazylia potrzebuje wody' },
@@ -515,6 +533,14 @@ const PIECES = [
   ['salle_de_bain', 'Salle de bain', 23.2, 68, null],  // « Humide » : la salle de bain de sa maquette, après la douche
 ];
 
+/* Les instants de la porte de la démo (ADR 0312), relus à l'ouverture : un appui il y a 4 min, un colis il y a 25. */
+const PORTE_DEMO = {
+  sonnette: () => new Date(Date.now() - 4 * 60000).toISOString(),
+  colis: () => new Date(Date.now() - 25 * 60000).toISOString(),
+};
+// Le colis d'UniFi Protect porte la clé de traduction `package` : c'est par elle qu'il se reconnaît.
+const metaPorteDemo = (id) => (id === 'event.camera_entree_colis' ? { key: 'package' } : {});
+
 function etatsInitiaux() {
   const states = {
     // Le soleil des volets (§ 9) : levé à 07:47, couché à 20:24, sa position à l'heure de la démo.
@@ -522,6 +548,8 @@ function etatsInitiaux() {
     'weather.maison': s('partlycloudy', { friendly_name: 'Météo', temperature: 24.3, humidity: 52, temperature_unit: '°C', supported_features: 3,
       apparent_temperature: 26, wind_speed: 9, wind_gust_speed: 20, wind_bearing: 281, wind_speed_unit: 'km/h',
       pressure: 1014, uv_index: 3, visibility: 12 }),
+    // Ses capteurs de Météo-France (lot 5 Gladys, ADR 0309) : les probabilités, et une averse dans 20 minutes.
+    ...capteursMeteoFranceDemo(),
     /* 39 = maison (1) + absent (2) + nuit (4) + vacances (32), les quatre modes
      * que `callService` modelise plus bas. Un vrai panneau publie ce masque, et
      * c'est lui qui dit au moteur d'actions quels armements l'entite accepte :
@@ -543,6 +571,10 @@ function etatsInitiaux() {
     // Ses deux detecteurs : ce que la tuile raconte en dernier evenement (ADR 0031).
     'binary_sensor.camera_entree_mouvement': s('off', { friendly_name: 'Caméra entrée Mouvement', device_class: 'motion' }),
     'binary_sensor.camera_entree_personne': s('off', { friendly_name: 'Caméra entrée Personne' }),
+    /* La sonnette et le colis de la caméra (lot 8 Gladys, ADR 0312) : des entités `event`, dont l'état est l'instant — un appui
+     * il y a 4 minutes, un colis déposé il y a 25. Le journal de l'écran et « En ce moment » les disent. */
+    'event.camera_entree_sonnette': s(PORTE_DEMO.sonnette(), { friendly_name: 'Caméra entrée Sonnette', device_class: 'doorbell', event_types: ['ring'], event_type: 'ring' }),
+    'event.camera_entree_colis': s(PORTE_DEMO.colis(), { friendly_name: 'Caméra entrée Colis', event_types: ['detected'], event_type: 'detected' }),
     // Le sonometre du salon : la pastille « Bruit » de la barre de confort (ADR 0039).
     'sensor.salon_bruit': s(34, { friendly_name: 'Salon Bruit', unit_of_measurement: 'dB', device_class: 'sound_pressure' }),
     /* La machine de la vue Systeme (ADR 0037) : un System Monitor tel que la
@@ -563,6 +595,12 @@ function etatsInitiaux() {
     'update.home_assistant_core_update': s('on', { friendly_name: 'Home Assistant Core Update', title: 'Home Assistant Core', installed_version: '2026.3.4', latest_version: '2026.4.0' }),
     'update.home_assistant_supervisor_update': s('off', { friendly_name: 'Home Assistant Supervisor Update', title: 'Home Assistant Supervisor', installed_version: '2026.03.2', latest_version: '2026.03.2' }),
     'update.home_assistant_operating_system_update': s('off', { friendly_name: 'Home Assistant Operating System Update', title: 'Home Assistant Operating System', installed_version: '16.2', latest_version: '16.2' }),
+    /* Les sauvegardes automatiques (lot 10 Gladys, ADR 0314) : celle de cette nuit, à 3 h, a échoué ; la dernière réussie est
+     * celle de la veille. L'administrateur le lit au rail de l'Accueil, et la pastille de la vue Système passe à l'ambre. */
+    'sensor.backup_last_successful_automatic_backup': s(troisHeures(-1), { friendly_name: 'Backup Dernière sauvegarde automatique réussie', device_class: 'timestamp' }),
+    'sensor.backup_last_attempted_automatic_backup': s(troisHeures(0), { friendly_name: 'Backup Dernière tentative de sauvegarde automatique', device_class: 'timestamp' }),
+    'sensor.backup_next_scheduled_automatic_backup': s(troisHeures(1), { friendly_name: 'Backup Prochaine sauvegarde automatique programmée', device_class: 'timestamp' }),
+    'sensor.backup_backup_manager_state': s('idle', { friendly_name: 'Backup État du gestionnaire de sauvegarde', device_class: 'enum', options: ['idle', 'create_backup', 'blocked', 'receive_backup', 'restore_backup'] }),
     // Des firmwares Zigbee et un module HACS en attente : la section des mises
     // a jour les range par integration (maquettes du 18/09).
     'update.interrupteur_couloir_firmware': s('on', { friendly_name: 'Interrupteur Couloir', installed_version: '1124102917', latest_version: '1124103169' }),
@@ -619,6 +657,8 @@ function etatsInitiaux() {
      * cout : 0,96 kWh injectes a 0,1269 EUR. */
     'sensor.revente_du_jour': s(0.12, { friendly_name: etiquette('Revente du jour'), unit_of_measurement: '€', device_class: 'monetary', last_reset: MINUIT }),
     'sensor.part_fossile_reseau': s(38, { friendly_name: 'Part fossile du réseau', unit_of_measurement: '%' }),
+    // Electricity Maps (ADR 0319) : son intensité carbone, à côté de sa part fossile ; l'une et l'autre reconnues à leur clé.
+    'sensor.intensite_carbone_reseau': s(56, { friendly_name: 'Intensité carbone du réseau', unit_of_measurement: 'gCO2eq/kWh' }),
     /* Les POSTES de consommation (06/10) : la section existait, la demo n'avait
      * jamais de quoi la remplir. Chacun sa puissance et ses kWh du jour, comme
      * ce qu'un tableau de bord Energie declare. */
@@ -661,9 +701,14 @@ function etatsInitiaux() {
     'sensor.niveau_gramine_paris': s(3, { friendly_name: 'Niveau Graminé-Paris', device_class: 'aqi', 'Libellé': 'Modéré' }),
     'sensor.niveau_ambroisie_paris': s(2, { friendly_name: 'Niveau Ambroisie-Paris', device_class: 'aqi', 'Libellé': 'Faible' }),
     'sensor.vigilance_meteo': s('Jaune', { friendly_name: 'Vigilance météo', vent_violent: 'Jaune', orages: 'Jaune' }),
-    'person.camille': s('home', { friendly_name: 'Camille' }),
+    /* La carte des personnes et des traceurs (lot 16 Gladys, ADR 0321) : des positions INVENTÉES autour du point de la démo
+     * (`config`, Paris). Camille est à la maison, Alex au « Travail », une zone fictive ; Léa n'en donne pas : elle n'est pas
+     * posée sur la carte, la liste le dit. Les deux zones, la maison d'abord, comme Home Assistant les publie. */
+    'zone.home': s('2', { friendly_name: lieu('Maison'), latitude: 48.8566, longitude: 2.3522, radius: 100, passive: false, icon: 'mdi:home' }),
+    'zone.travail': s('1', { friendly_name: lieu('Travail'), latitude: 48.8790, longitude: 2.3290, radius: 150, passive: false, icon: 'mdi:briefcase' }),
+    'person.camille': s('home', { friendly_name: 'Camille', latitude: 48.8567, longitude: 2.3519, gps_accuracy: 12, source: 'device_tracker.telephone_de_camille' }),
     // Alex est dans une ZONE de Home Assistant (G1-D8) : sa carte dit « Travail », plus « Absent ».
-    'person.alex': s(lieu('Travail'), { friendly_name: 'Alex' }),
+    'person.alex': s(lieu('Travail'), { friendly_name: 'Alex', latitude: 48.8792, longitude: 2.3287, gps_accuracy: 20 }),
     /* Le chauffe-eau (G1-D7) : son mode traduit, la température relevée et la consigne — « Pompe à chaleur · 52,5° → 55° » —,
      * jamais « heat_pump » ; il ne compte pas « actif » : rien ne dit qu'il chauffe. */
     'water_heater.ballon': s('heat_pump', { friendly_name: 'Chauffe-eau', current_temperature: 52.5, temperature: 55, min_temp: 40, max_temp: 65,
@@ -725,6 +770,9 @@ function etatsInitiaux() {
     'sensor.tondeuse_usage_des_lames': s(52, { friendly_name: "Tondeuse Durée d'utilisation des lames", device_class: 'duration', unit_of_measurement: 'h' }),
     'sensor.tondeuse_seuil_des_lames': s(60, { friendly_name: "Tondeuse Seuil d'usure des lames", device_class: 'duration', unit_of_measurement: 'h' }),
     'sensor.tondeuse_surface': s(210, { friendly_name: 'Tondeuse Surface', unit_of_measurement: 'm²' }),
+    // L'avance de la tonte (lot 9 Gladys, ADR 0313), à leur clé : « Tond · 45 % · 20 min restantes ».
+    'sensor.tondeuse_progression': s(45, { friendly_name: 'Tondeuse Progression', unit_of_measurement: '%' }),
+    'sensor.tondeuse_temps_restant': s(20, { friendly_name: 'Tondeuse Temps restant', device_class: 'duration', unit_of_measurement: 'min' }),
     'sensor.tondeuse_cycles_de_batterie': s(86, { friendly_name: 'Tondeuse Cycles de batterie', unit_of_measurement: 'cycles' }),
     'sensor.tondeuse_temps_de_travail_total': s(212, { friendly_name: 'Tondeuse Temps de travail total', device_class: 'duration', unit_of_measurement: 'h' }),
     'sensor.tondeuse_kilometrage_total': s(148, { friendly_name: 'Tondeuse Kilométrage total', device_class: 'distance', unit_of_measurement: 'km' }),
@@ -805,6 +853,10 @@ function etatsInitiaux() {
     'sensor.fuite_chauffe_eau_pile': s(54, { friendly_name: 'Pile chauffe-eau', device_class: 'battery', unit_of_measurement: '%' }),
     // Le telephone de l'app compagnon : son traceur donne son nom au service notify.
     'device_tracker.telephone_de_camille': s('home', { friendly_name: 'Téléphone de Camille', source_type: 'gps' }),
+    /* Un traceur d'objet (ADR 0318) : le vélo, garé à la maison, sa batterie sur le traceur, son dernier signal sur un capteur de son
+     * appareil (clé `last_seen`) — comme l'intégration Invoxia les publie. Ce n'est pas une personne : la présence ne le lit pas. */
+    'device_tracker.velo': { ...s('home', { friendly_name: 'Vélo', source_type: 'gps', battery_level: 64, latitude: 48.8563, longitude: 2.3527, gps_accuracy: 30 }), last_changed: ilYaMin(26 * 60) },
+    'sensor.velo_dernier_signal': s(ilYaMin(35), { friendly_name: 'Vélo Dernier signal', device_class: 'timestamp' }),
     'climate.salon': s('heat', { friendly_name: 'Thermostat salon', current_temperature: 21.4, temperature: 22, hvac_action: 'heating', hvac_modes: ['off', 'heat'], min_temp: 7, max_temp: 30, target_temp_step: .5 }),
     'climate.chambre': s('off', { friendly_name: 'Thermostat chambre', current_temperature: 19.6, temperature: 19, hvac_action: 'off', hvac_modes: ['off', 'heat'], min_temp: 7, max_temp: 30, target_temp_step: .5 }),
     /* Le poêle du salon (planning de chauffe) : un thermostat pour le serveur —
@@ -1512,6 +1564,28 @@ export function previsionsDemo(type, maintenant = Date.now()) {
       uv_index: h >= 8 && h <= 18 ? Math.round(6 * Math.sin((h - 7) / 12 * Math.PI)) : 0 });
   }
   return out;
+}
+
+/* La météo de la démo est celle de Météo-France (lot 5 Gladys, D14, W1, W2 ; ADR 0309), avec ses capteurs, tels que l'intégration
+ * les publie : les probabilités de pluie, de neige et de gel des prochaines heures, et la pluie de l'heure qui vient — l'état est
+ * l'heure de la première tranche pluvieuse, `1_hour_forecast` la description de chaque tranche après `forecast_time_ref`. Une
+ * averse faible dans 20 minutes, pour 25 minutes : la phrase du widget le dit. Le composant reconnaît ces capteurs à leur
+ * identifiant stable ; l'index de la démo pose leur rôle (`METEO_FRANCE_DEMO`). */
+export const METEO_FRANCE_DEMO = { 'sensor.meteo_maison_rain_chance': 'pluie', 'sensor.meteo_maison_snow_chance': 'neige',
+  'sensor.meteo_maison_freeze_chance': 'gel', 'sensor.meteo_maison_next_rain': 'pluie_heure' };
+export function capteursMeteoFranceDemo(maintenant = Date.now()) {
+  const ref = Math.floor(maintenant / 300000) * 300000;
+  const TRANCHES = [0, 5, 10, 15, 20, 25, 35, 45, 55];
+  const pluie = (m) => (m >= 20 && m < 45 ? (m === 25 ? 'Pluie modérée' : 'Pluie faible') : 'Temps sec');
+  const iso = (ms) => new Date(ms).toISOString().replace('.000Z', '+00:00');
+  const chance = (nom, n, icone) => s(n, { friendly_name: 'Météo-France ' + nom, unit_of_measurement: '%', icon: icone });
+  return {
+    'sensor.meteo_maison_rain_chance': chance('Rain chance', 40, 'mdi:weather-rainy'),
+    'sensor.meteo_maison_snow_chance': chance('Snow chance', 0, 'mdi:weather-snowy'),
+    'sensor.meteo_maison_freeze_chance': chance('Freeze chance', 0, 'mdi:snowflake'),
+    'sensor.meteo_maison_next_rain': s(iso(ref + 20 * 60000), { friendly_name: 'Météo-France Next rain', device_class: 'timestamp', forecast_time_ref: iso(ref),
+      '1_hour_forecast': Object.fromEntries(TRANCHES.map(m => [m + ' min', pluie(m)])) }),
+  };
 }
 
 /* Interrupteurs sans fil : deux telecommandes, l'une deja reglee, l'autre a
@@ -2583,7 +2657,8 @@ function superviseurDemo(msg) {
     '/supervisor/info': { version: '2026.03.2', version_latest: '2026.03.2', update_available: false },
     '/addons': { addons: MODULES_DEMO.map(m => ({ ...m })) },
     '/backups': { backups: [
-      { slug: 'demo1', name: etiquette('Sauvegarde automatique'), date: nuit.toISOString(), type: 'full', size: 1945.6 },
+      // La dernière RÉUSSIE est celle de la veille : celle de cette nuit a échoué (ADR 0314).
+      { slug: 'demo1', name: etiquette('Sauvegarde automatique'), date: troisHeures(-1), type: 'full', size: 1945.6 },
       { slug: 'demo0', name: etiquette('Avant mise à jour'), date: new Date(nuit.getTime() - 5 * 86400000).toISOString(), type: 'partial', size: 412.3 },
     ] },
     '/network/info': { interfaces: [{ interface: 'eth0', type: 'ethernet', enabled: true, connected: true, primary: true, ipv4: { method: 'auto', address: ['192.0.2.20/24'], gateway: '192.0.2.1' } }] },
@@ -2679,7 +2754,7 @@ const APPAREILS_MESURES_DEMO = {
   thermo_salon: ['salon', 'Thermomètre salon', 'Thermomètre', ['sensor.salon_temperature', 'sensor.salon_humidite', 'sensor.salon_thermometre_pile']],
   capteur_salon: ['salon', 'Capteur salon', 'Capteur', ['sensor.salon_co2', 'sensor.salon_bruit']],
   luxmetre_salon: ['salon', 'Luxmètre salon', 'Capteur', ['sensor.salon_luminosite']],
-  purificateur_salon: ['salon', 'Purificateur salon', 'Capteur', ['sensor.salon_particules']],
+  purificateur_salon: ['salon', 'Purificateur salon', 'Capteur', ['sensor.salon_particules', 'fan.salon_purificateur']],
   capteur_cov_salon: ['salon', 'Capteur COV salon', 'Capteur', ['sensor.salon_cov']],
   capteur_cuisine: ['cuisine', 'Capteur cuisine', 'Capteur', ['sensor.cuisine_temperature', 'sensor.cuisine_humidite']],
   capteur_chambre: ['chambre', 'Capteur chambre', 'Capteur', ['sensor.chambre_temperature', 'sensor.chambre_humidite', 'sensor.chambre_co2']],
@@ -2737,6 +2812,9 @@ function etatsMesuresDemo(states) {
     'sensor.chambre_lino_co2': s(1177, { friendly_name: lieu('Chambre') + ' Lino CO2', unit_of_measurement: 'ppm', device_class: 'carbon_dioxide', state_class: 'measurement' }),
     'sensor.salon_luminosite': s(120, { friendly_name: lieu('Salon') + ' ' + etiquette('luminosité'), unit_of_measurement: 'lx', device_class: 'illuminance', state_class: 'measurement' }),
     'sensor.salon_particules': s(8, { friendly_name: lieu('Salon') + ' ' + etiquette('particules'), unit_of_measurement: 'µg/m³', device_class: 'pm25', state_class: 'measurement' }),
+    // Son ventilateur, avec ses modes, comme un Levoit (ticket #43) : la fiche les propose, la carte rallume dans le dernier.
+    'fan.salon_purificateur': s('on', { friendly_name: lieu('Salon') + ' ' + etiquette('purificateur'), percentage: 40, percentage_step: 25,
+      preset_modes: ['auto', 'sleep', 'manual', 'pet', 'turbo'], preset_mode: 'auto', supported_features: 57 }),
     // Un INDICE, sans unité : celui que la table lit (chantier Capteurs, § 6).
     'sensor.salon_cov': s(182, { friendly_name: lieu('Salon') + ' ' + etiquette('COV'), device_class: 'volatile_organic_compounds', state_class: 'measurement' }),
     'sensor.salon_thermometre_pile': s(81, { friendly_name: etiquette('Thermomètre salon pile'), device_class: 'battery', unit_of_measurement: '%' }),
@@ -2821,7 +2899,9 @@ const metaCapteurDemo = (id) => { const d = appareilCapteurDemo(id); return d ? 
 // Les entités SANS appareil (C21, C28) : un modèle « Besoin eau » et la vigilance MeteoAlarm — l'index dit leur plateforme.
 const SANS_APPAREIL_DEMO = { 'binary_sensor.basilic_besoin_eau': 'template', 'binary_sensor.meteoalarm': 'meteoalarm', 'sensor.paris_weather_alert': 'meteo_france',
   // Un planning de scheduler-component (26/10) : sa plateforme, `scheduler`, est ce qui le reconnaît.
-  'switch.schedule_radiateur_bureau': 'scheduler' };
+  'switch.schedule_radiateur_bureau': 'scheduler',
+  // La liste de courses de Home Assistant (ADR 0315) : sa plateforme, `shopping_list`, lui donne sa carte, à part des rappels.
+  'todo.courses': 'shopping_list' };
 // Atmo France (chantier G4, ADR 0303) : les entités de son SERVICE, sans pièce — sa plateforme, `atmofrance`, dit l'échelle.
 const ATMO_DEMO = ['sensor.qualite_globale_paris', 'sensor.qualite_globale_paris_j_1', 'sensor.qualite_globale_pollen_paris', 'sensor.niveau_gramine_paris', 'sensor.niveau_ambroisie_paris'];
 // Les binaires dont la démo tient l'histoire du jour : ceux de ces appareils, et le mouvement de la caméra.
@@ -3435,6 +3515,7 @@ function indexDemo(states) {
     entree: ['light.entree', 'sensor.entree_temperature', 'binary_sensor.porte_entree', 'binary_sensor.detecteur_fumee_entree', 'binary_sensor.mouvement_entree', 'lock.porte_entree', 'siren.interieure',
              'camera.entree', 'switch.camera_entree_detection_mouvement', 'switch.camera_entree_suivi', 'switch.camera_entree_pleurs',
              'switch.camera_entree_prive', 'switch.camera_entree_voyant', 'binary_sensor.camera_entree_mouvement', 'binary_sensor.camera_entree_personne',
+             'event.camera_entree_sonnette', 'event.camera_entree_colis',
              'cover.volet_entree', 'cover.porte_garage', 'cover.portail',
              // La borne de recharge (chantier G3, E3) : un appareil devant le garage.
              'sensor.borne_recharge', 'sensor.borne_energie', 'number.borne_courant_max', 'binary_sensor.borne_branchee', 'sensor.borne_statut', 'switch.borne_charge'],
@@ -3448,7 +3529,7 @@ function indexDemo(states) {
   const APPAREIL_DE = (id) => appareilChauffageDemo(id) || appareilPriseDemo(id) || appareilMesureDemo(id) || appareilCapteurDemo(id) || appareilMediaDemo(id) || (
     /^(sensor\.borne_|number\.borne_|binary_sensor\.borne_|switch\.borne_)/.test(id) ? 'borne'
     : /^(media_player|remote)\.tv_salon$/.test(id) ? 'tv_salon'
-    : /^(camera\.entree$|switch\.camera_entree_|binary_sensor\.camera_entree_)/.test(id) ? 'cam_entree' : null);
+    : /^(camera\.entree$|switch\.camera_entree_|binary_sensor\.camera_entree_|event\.camera_entree_)/.test(id) ? 'cam_entree' : null);
   // Les prises de la démo, leurs capteurs et la sirène de l'alarme : chacune dans sa pièce (chantier Prises, § 10).
   PRISES_DEMO.forEach(id => ZONE_DE[PIECES_PRISES_DEMO[id]].push(id, capteursPriseDemo(id).power, capteursPriseDemo(id).energy));
   // Les lampes de sa maquette qui n'avaient pas de pièce (chantier Lumières, § 9).
@@ -3491,6 +3572,14 @@ function indexDemo(states) {
     const at = states[id].attributes || {};
     entities.push({ id, name: at.friendly_name || id, device: null, area: null, platform: SANS_APPAREIL_DEMO[id], category: null, device_class: at.device_class || null, unit: at.unit_of_measurement || null, hidden: false });
   });
+  /* Météo-France (ADR 0309) : la météo et ses capteurs sur l'appareil de la ville, comme l'intégration les range ; le rôle que le
+   * composant pose, d'après leur identifiant stable. */
+  ['weather.maison', ...Object.keys(METEO_FRANCE_DEMO)].forEach(id => {
+    if (!states[id]) return;
+    const at = states[id].attributes || {};
+    entities.push({ id, name: at.friendly_name || id, device: 'meteo_maison', area: null, platform: 'meteo_france', category: null, device_class: at.device_class || null,
+      unit: at.unit_of_measurement || null, hidden: false, ...(METEO_FRANCE_DEMO[id] ? { meteo: METEO_FRANCE_DEMO[id] } : {}) });
+  });
   ATMO_DEMO.forEach(id => {
     if (!states[id]) return;
     const at = states[id].attributes || {};
@@ -3505,7 +3594,7 @@ function indexDemo(states) {
       const famille = familleChauffageDemo(id);
       // La plateforme et la catégorie : celles de la démo, sauf pour les capteurs de sa maquette « Cartes capteurs » (Zigbee, Bluetooth, les piles en diagnostic).
       entities.push({ id, name: at.friendly_name || id, device: APPAREIL_DE(id), area: zone,
-        ...metaCapteurDemo(id), ...metaMediaDemo(id), ...metaChauffageDemo(id), device_class: at.device_class || null,
+        ...metaCapteurDemo(id), ...metaMediaDemo(id), ...metaChauffageDemo(id), ...metaPorteDemo(id), device_class: at.device_class || null,
         unit: at.unit_of_measurement || null, hidden: false, ...(famille ? { famille } : {}) });
     });
   });
@@ -3528,6 +3617,7 @@ function indexDemo(states) {
       'switch.tondeuse_zone_pelouse_avant': ['area', 'config'], 'switch.tondeuse_zone_pelouse_arriere': ['area', 'config'], 'switch.tondeuse_zone_cote_garage': ['area', 'config'],
       'sensor.tondeuse_usage_des_lames': ['blade_used_time', 'diagnostic'], 'sensor.tondeuse_seuil_des_lames': ['blade_used_warn_time', 'diagnostic'],
       'sensor.tondeuse_surface': ['area', 'diagnostic'], 'sensor.tondeuse_cycles_de_batterie': ['maintenance_bat_cycles', 'diagnostic'],
+      'sensor.tondeuse_progression': ['progress', null], 'sensor.tondeuse_temps_restant': ['left_time', null],
       'sensor.tondeuse_temps_de_travail_total': ['maintenance_work_time', 'diagnostic'], 'sensor.tondeuse_kilometrage_total': ['maintenance_distance', 'diagnostic'],
       'sensor.tondeuse_signal_wi_fi': ['wifi_rssi', 'diagnostic'], 'number.tondeuse_hauteur_des_lames': ['blade_height', 'config'],
       'switch.tondeuse_detection_de_pluie': ['rain_detection', 'config'], 'select.tondeuse_securite_faune': ['wildlife_safety', 'config'],
@@ -3562,7 +3652,7 @@ function indexDemo(states) {
   Object.keys(states).filter(id => id.indexOf('sensor.system_monitor_') === 0).forEach(id => {
     const at = states[id].attributes || {};
     entities.push({ id, name: at.friendly_name || id, device: 'sysmon', area: null,
-      platform: 'systemmonitor', category: 'diagnostic', device_class: at.device_class || null,
+      platform: 'systemmonitor', category: 'diagnostic', device_class: at.device_class || null, key: id === 'sensor.system_monitor_disk_use_percent' ? 'disk_use_percent' : null,
       unit: at.unit_of_measurement || null, hidden: false });
   });
   // Les mises a jour : chacune publiee par son integration — c'est elle qui
@@ -3573,6 +3663,25 @@ function indexDemo(states) {
     const at = states[id].attributes || {};
     entities.push({ id, name: at.friendly_name || id, device: null, area: null, platform: plateforme, category: 'config',
       device_class: null, unit: null, hidden: false });
+  });
+  // Le traceur d'objet (ADR 0318) : un appareil Invoxia, le traceur et son dernier signal, reconnus à leur plateforme et à leur clé.
+  [['device_tracker.velo', null, null], ['sensor.velo_dernier_signal', 'last_seen', 'diagnostic']].forEach(([id, key, category]) => {
+    if (!states[id]) return;
+    entities.push({ id, name: states[id].attributes.friendly_name, device: 'traceur_velo', area: null, platform: 'invoxia_biotracker', key, category,
+      device_class: states[id].attributes.device_class || null, unit: null, hidden: false });
+  });
+  // Electricity Maps (ADR 0319) : la plateforme `co2signal`, ses deux capteurs reconnus à leur clé, jamais à leur nom.
+  [['sensor.part_fossile_reseau', 'fossil_fuel_percentage'], ['sensor.intensite_carbone_reseau', 'carbon_intensity']].forEach(([id, key]) => {
+    if (!states[id]) return;
+    entities.push({ id, name: states[id].attributes.friendly_name, device: null, area: null, platform: 'co2signal', key, category: null,
+      device_class: null, unit: states[id].attributes.unit_of_measurement, hidden: false });
+  });
+  // Les sauvegardes automatiques (ADR 0314) : l'intégration `backup`, reconnue à sa plateforme et à ses clés.
+  ['last_successful_automatic_backup', 'last_attempted_automatic_backup', 'next_scheduled_automatic_backup', 'backup_manager_state'].forEach(key => {
+    const id = 'sensor.backup_' + key;
+    if (!states[id]) return;
+    entities.push({ id, name: states[id].attributes.friendly_name, device: null, area: null, platform: 'backup', key, category: null,
+      device_class: states[id].attributes.device_class, unit: null, hidden: false });
   });
   return {
     version: 1,
@@ -3596,7 +3705,9 @@ function indexDemo(states) {
       { id: 'cam_entree', name: etiquette('Caméra entrée'), area: 'entree', manufacturer: 'Démo', model: etiquette('Caméra'), firmware: null, via: null, entry_type: null, integration: 'demo' },
       { id: 'sysmon', name: 'System Monitor', area: null, manufacturer: 'Démo', model: 'System Monitor', firmware: null, via: null, entry_type: 'service', integration: 'systemmonitor' },
       { id: 'atmo_paris', name: 'Atmo France', area: null, manufacturer: 'Atmo France', model: 'Atmo France API', firmware: null, via: null, entry_type: 'service', integration: 'atmofrance' },
+      { id: 'meteo_maison', name: etiquette('Météo'), area: null, manufacturer: 'Météo-France', model: 'Météo-France API', firmware: null, via: null, entry_type: 'service', integration: 'meteo_france' },
       { id: 'robot_aspirateur', name: etiquette('Aspirateur'), area: null, manufacturer: 'Démo', model: 'Orbit V3', firmware: null, via: null, entry_type: null, integration: 'ecovacs' },
+      { id: 'traceur_velo', name: etiquette('Vélo'), area: null, manufacturer: 'Invoxia', model: etiquette('Traceur GPS'), firmware: null, via: null, entry_type: null, integration: 'invoxia_biotracker' },
       { id: 'robot_tondeuse', name: etiquette('Tondeuse'), area: null, manufacturer: 'Démo', model: 'Meadow M2', firmware: null, via: null, entry_type: null, integration: 'mammotion' },
       // Les appareils du planning de chauffe : deux modules fil pilote, le poêle du salon.
       { id: 'radiateur_chambre', name: etiquette('Radiateur chambre'), area: 'chambre', manufacturer: 'Démo', model: etiquette('Module fil pilote'), firmware: null, via: null, entry_type: null, integration: 'demo' },
@@ -3813,6 +3924,9 @@ function veillesDemo(states) {
     capteurs_batterie: classe('battery'),
     notification: true,
     signales: [],
+    /* Un capteur FIGÉ (ADR 0311) : la température de l'entrée n'a rien relevé depuis 7 h 10 — sa carte et sa fiche écrivent
+     * « Dernier relevé il y a 7 h », sans zone. Le serveur en juge sur `last_reported`, que la démo n'a pas : elle le pose. */
+    figees: { 'sensor.entree_temperature': Math.round(Date.now() / 1000) - 7 * 3600 - 600 },
     collecte: { sorti: '', rappele: '' },
     // Le gabarit de veilles.py ; le capteur porte le nom de son état, traduit comme lui.
     journal: [ligneJournal({ module: 'veilles', regle: 'co2', quoi: 'prevenir', cibles: [], n: 1, motif: [['{v} ppm', { v: 1310 }]], detail: [['{nom} : {v} ppm, il faut aerer', { nom: lieu('Chambre') + ' CO2', v: 1310 }]], simule: false, ts: Date.now() / 1000 - 9000 })],
@@ -4088,7 +4202,9 @@ function robotsDemo(states, entites = null) {
     passages: c.passages.slice().sort((a, b) => b.fin - a.fin).map(p => ({ robot: p.robot, debut: p.debut, fin: p.fin, duree_min: Math.round(p.travail_s / 60), issue: p.issue,
       zones: zones(p.zones), tout: p.tout, source: p.source, surface: p.surface, motif: p.motif, libelle: p.libelle || null })),
     // Plus de `maintenant` (passe bis du 18/10, point 10), comme le serveur : l'écran ne le lisait pas.
-    en_cours, erreurs: {},
+    /* Une erreur récente, gardée par le carnet (lot 9 Gladys, ADR 0313) : l'aspirateur s'est coincé il y a deux heures, puis il est
+     * rentré ; sa popup la dit encore, avec son heure. */
+    en_cours, erreurs: { 'vacuum.aspirateur': { texte: etiquette('Bloqué sous le canapé'), t: t - 2 * 3600, date: t - 2 * 3600 } },
     // Les pièces de chaque aspirateur selon Home Assistant (tranche robots 2, R3) : la variante décide, et ses scripts désignés.
     pieces: states['vacuum.aspirateur'] ? { 'vacuum.aspirateur': piecesRobotDemo(states, entites) } : {},
   };
@@ -5519,6 +5635,8 @@ function etatUnCha(ctx, cle, c, info, quand, faits, index, suivis = null) {
     programme, concurrents,
     // Le décalage de son capteur (°C, 30/10) : l'écran montre et règle la consigne de la pièce.
     decalage: decalageCha(c),
+    // Un poêle à granulés (ADR 0308) : le serveur le reconnaît à la plateforme de son intégration ; la démo, à son appareil.
+    poele: !!entite && appareilChauffageDemo(entite) === 'poele',
     options: famille === 'fil_pilote' && entite ? optionsDuModuleCha(attrs.options) : null, jour: null,
   };
   if (!c) return sortie;
@@ -6030,9 +6148,12 @@ function todosDemo(id) {
       { uid: 'd1', summary: etiquette('Fermer les volets du bureau'), status: 'needs_action', due: h(-1, 21) },
       { uid: 'd2', summary: etiquette('Arroser les plantes'), status: 'needs_action', due: h(0, 18) },
       { uid: 'd3', summary: etiquette('Sortir le linge'), status: 'needs_action', due: j(2) },
+      // Demain : l'onglet garde de quoi se montrer depuis que les croquettes sont des courses (ADR 0315).
+      { uid: 'd7', summary: etiquette('Rappeler le garage'), status: 'needs_action', due: h(1, 10) },
     ],
+    /* Une liste de courses (`shopping_list`, ADR 0315) : ses articles n'ont pas de date. */
     'todo.courses': [
-      { uid: 'd4', summary: etiquette('Croquettes du chat'), status: 'needs_action', due: h(1, 10) },
+      { uid: 'd4', summary: etiquette('Croquettes du chat'), status: 'needs_action', due: null },
       { uid: 'd5', summary: etiquette('Ampoules'), status: 'needs_action', due: null },
     ],
     'todo.partagee': [
@@ -6218,6 +6339,16 @@ let VARIANTE_EAU = null;
  * « Le moins cher : 13:00–15:00 ». */
 const VARIANTES_TARIF = ['dynamique'];
 let VARIANTE_TARIF = null;
+/* `vigilance=orange|rouge` (lot 6 Gladys, ADR 0310) : la vigilance de Météo-France passe à l'orange — une ligne en tête
+ * d'« En ce moment » — ou au rouge — un point d'attention —, aux orages. Sans elle, la vigilance jaune reste dans la popup. */
+const VARIANTES_VIGILANCE = { orange: 'Orange', rouge: 'Rouge' };
+let VARIANTE_VIGILANCE = null;
+/** Pose la vigilance de la variante sur le capteur de Météo-France de la démo : son niveau, et les orages à ce niveau. */
+export function varianteVigilance(states, variante) {
+  const id = 'sensor.paris_weather_alert', st = states[id], niveau = VARIANTES_VIGILANCE[variante];
+  if (!st || !niveau) return;
+  states[id] = { ...st, state: niveau, attributes: { ...st.attributes, 'Orages': niveau } };
+}
 const PRISE_EAU_DEMO = 'switch.prise_arrivee_eau';
 let CARNET_EAU = { vannes: {}, detecteurs: {}, journal: [] };
 const sensEauDemo = (id, etat) => (id.indexOf('switch.') === 0 ? (etat === 'off' ? 'fermee' : etat === 'on' ? 'ouverte' : null)
@@ -6334,6 +6465,7 @@ export function installerDemo(langue) {
     // `eau=fuite|mouillee|fermee|plusieurs|prise|gaz|muet` (chantier IoT, étape 3 ; § 10) : l'arrivée d'eau, cas par cas.
     if (VARIANTES_EAU.indexOf(q.get('eau')) >= 0) VARIANTE_EAU = q.get('eau');
     if (VARIANTES_TARIF.indexOf(q.get('tarif')) >= 0) VARIANTE_TARIF = q.get('tarif');
+    if (Object.prototype.hasOwnProperty.call(VARIANTES_VIGILANCE, q.get('vigilance'))) VARIANTE_VIGILANCE = q.get('vigilance');
     ordinaire = q.get('compte') === 'ordinaire';
     /* `heure=HH:MM` (chantier Mode enfant, § 10) : l'horloge des médias figée à cette heure du jour — les trois situations du mode
      * enfant se regardent l'une après l'autre (`?demo&heure=18:20`, `?demo&heure=21:30`) sans attendre l'heure. */
@@ -6362,6 +6494,7 @@ export function installerDemo(langue) {
   varianteRobots(states);
   CARNET_EAU = maisonEauDemo(states, VARIANTE_EAU);
   if (VARIANTE_TARIF === 'dynamique') states['sensor.prix_spot'] = prixSpotDemo();
+  varianteVigilance(states, VARIANTE_VIGILANCE);
   /* Le chauffe-eau de G1 sait aussi le mode absence et l'arrêt (chantier G3, E2) : l'option du mode absence pendant les Vacances
    * se montre dans sa popup. */
   if (states['water_heater.ballon']) states['water_heater.ballon'] = { ...states['water_heater.ballon'], attributes: { ...states['water_heater.ballon'].attributes, supported_features: 7, away_mode: 'off' } };
@@ -6485,7 +6618,9 @@ export function installerDemo(langue) {
       const lampes = [].concat(id || []).filter(lampeDemo);
       const autres = [].concat(id || []).filter(x => !lampeDemo(x));
       if (lampes.filter(x => gesteLumiereDemo(states, x, service, data || {})).length) el.hass = { ...el.hass, states };
-      if (service === 'turn_on') toucher(autres, 'on');
+      // Un ventilateur rallumé dans un mode le garde (ticket #43).
+      if (service === 'turn_on' && data && data.preset_mode) toucher(autres, 'on', { preset_mode: data.preset_mode });
+      else if (service === 'turn_on') toucher(autres, 'on');
       else if (service === 'turn_off') toucher(autres, 'off');
       else if (service === 'toggle') toucher(autres, states[id] && states[id].state === 'on' ? 'off' : 'on');
       [].concat(id || []).forEach(x => gestePriseDemo(x));
@@ -6881,6 +7016,9 @@ export function installerDemo(langue) {
             { when: ilYA(2.5), entity_id: 'binary_sensor.camera_entree_mouvement', state: 'off', name: etiquette('Caméra entrée Mouvement') },
             { when: ilYA(41), entity_id: 'binary_sensor.camera_entree_personne', state: 'on', name: etiquette('Caméra entrée Personne') },
             { when: ilYA(40), entity_id: 'binary_sensor.camera_entree_personne', state: 'off', name: etiquette('Caméra entrée Personne') },
+            // La sonnette et le colis (ADR 0312) : l'état d'un `event` est l'instant de l'événement.
+            { when: ilYA(4), entity_id: 'event.camera_entree_sonnette', state: new Date(ilYA(4) * 1000).toISOString(), name: etiquette('Caméra entrée Sonnette') },
+            { when: ilYA(25), entity_id: 'event.camera_entree_colis', state: new Date(ilYA(25) * 1000).toISOString(), name: etiquette('Caméra entrée Colis') },
             // Les détecteurs de présence de sa maquette « Cartes capteurs » (chantier Capteurs, étapes 2 et 3, § 12) : ce que la carte Présence lit.
             ...journalCapteursDemo(Date.now()),
           ].filter(e => !ids || ids.indexOf(e.entity_id) >= 0);
@@ -6966,8 +7104,8 @@ export function installerDemo(langue) {
    * LECTURE SEULE (`supported_features` a 0) : ni « + », ni case a cocher. A 15,
    * tout est permis (creer 1 + supprimer 2 + modifier 4 + dater 8... voir
    * TodoListEntityFeature). */
-  states['todo.maison'] = s('3', { friendly_name: etiquette('Maison'), supported_features: 1 | 2 | 4 | 16 | 32 });
-  states['todo.courses'] = s('2', { friendly_name: etiquette('Courses'), supported_features: 1 | 2 | 4 | 16 | 32 });
+  states['todo.maison'] = s('4', { friendly_name: etiquette('Maison'), supported_features: 1 | 2 | 4 | 16 | 32 });
+  states['todo.courses'] = s('2', { friendly_name: etiquette('Courses'), supported_features: 1 | 2 | 4 | 8 });
   states['todo.partagee'] = s('1', { friendly_name: etiquette('Liste partagée'), supported_features: 0 });
 
   /* Deux entites de conversation, pour que le choix de l'assistant se montre :

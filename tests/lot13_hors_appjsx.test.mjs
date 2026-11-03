@@ -50,20 +50,22 @@ test('le lecteur des imbrications voit bien un bouton dans un bouton', () => {
   assert.equal(imbriques('<button type="button"><svg><path d="M0"/></svg></button><input type="time"/><button>z</button>').length, 0);
 });
 
-test('la veille : plus un bouton qui englobe les scènes, un bouton de surface qui réveille', async () => {
+test('la veille : pas un bouton qui englobe tout, un bouton de surface qui réveille', async () => {
   const AmbientOverlay = await composant('ecranveille.jsx', 'AmbientOverlay');
   const html = rendre(AmbientOverlay, {
-    wx: 'clouds', wxFx: false, weatherTemp: 12, weatherLabel: 'Nuageux', inTemp: 20.5, lightsOn: 2, notifs: [],
-    ast: 'disarmed', scenes: [{ id: 'soir', nom: 'Soirée', icone: 'moon' }, { id: 'nuit', nom: 'Nuit' }], onScene: () => {},
+    wx: 'clouds', wxFx: false, weatherTemp: 12, weatherLabel: 'Nuageux', notifs: [], ast: 'disarmed',
+    rooms: [{ room: 'Salon', haid: { temp: 'sensor.ts' } }, { room: 'Chambre', haid: { temp: 'sensor.tc' } }],
+    hass: { states: { 'sensor.ts': { state: '21.4' }, 'sensor.tc': { state: '19.6' } } },
   });
-  assert.deepEqual(imbriques(html), [], 'un élément interactif en contient un autre : un lecteur d’écran ne voit plus les scènes');
+  assert.deepEqual(imbriques(html), [], 'un élément interactif en contient un autre');
   const racine = html.slice(0, html.indexOf('>') + 1);
   assert.ok(racine.startsWith('<div class="o-sombre"') && !racine.includes('role='), 'la racine est l’îlot sombre, sans rôle');
   assert.match(html, /<button type="button" class="o-surface" aria-label="Toucher pour réveiller"/, 'le geste « réveiller » a son bouton, nommé');
   const surface = html.match(/<button[^>]*class="o-surface"[^>]*>/)[0];
   assert.ok(!surface.includes('aria-haspopup'), 'réveiller n’ouvre pas de fiche');
-  assert.ok(html.indexOf('class="o-surface"') < html.indexOf('Soirée'), 'la surface passe SOUS les scènes : premier enfant');
-  assert.equal((html.match(/<button/g) || []).length, 3, 'la surface et les deux scènes');
+  assert.ok(html.indexOf('class="o-surface"') < html.indexOf('Salon'), 'la surface est le premier enfant');
+  // La maquette du 01/11 : la veille se regarde, elle ne se pilote pas — un seul bouton.
+  assert.equal((html.match(/<button/g) || []).length, 1, 'la surface seule');
 });
 
 test('la carte météo : nommée par ce qu’elle affiche, et elle dit qu’elle ouvre une fiche', async () => {

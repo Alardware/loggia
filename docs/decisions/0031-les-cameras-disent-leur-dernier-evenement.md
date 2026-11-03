@@ -3,6 +3,8 @@
 Date : 16/09/2026 (v3.32.0). Statut : acceptée. Quatrième étape de la refonte
 de l'Accueil (plan dans l'ADR 0028).
 
+*Complétée par l'ADR [0312](0312-les-cameras-disent-quoi-par-la-cle-la-sonnette-et-le-colis-vont-au-journal-et-au-rail.md) (01/11) : les détecteurs se trouvent à la clé de leur intégration, l'animal s'y ajoute, la sonnette et le colis viennent de leurs `event`.*
+
 ## Contexte
 
 Une tuile caméra de l'Accueil disait « Direct » et rien d'autre ; celle de la

@@ -31,7 +31,8 @@ test('les detecteurs d’une camera : dans l’ordre des genres, seulement ceux 
   ]);
   assert.deepEqual(detecteursDe({ id: 'camera.x', motion: null, vehicle: '', colis: 3 }), [], 'null, vide ou pas une chaine : pas un detecteur');
   assert.deepEqual(detecteursDe(null), []);
-  assert.deepEqual(GENRES_DETECTION, ['sonnette', 'person', 'vehicle', 'colis', 'motion'], 'la sonnette prime, le mouvement ferme la marche');
+  // ASSERTION MODIFIÉE (01/11, ADR 0312) : l'animal rejoint la personne et le véhicule, après eux.
+  assert.deepEqual(GENRES_DETECTION, ['sonnette', 'person', 'vehicle', 'animal', 'colis', 'motion'], 'la sonnette prime, le mouvement ferme la marche');
   GENRES_DETECTION.forEach(g => assert.ok(ICONES_DETECTION[g], 'une icone pour ' + g));
 });
 

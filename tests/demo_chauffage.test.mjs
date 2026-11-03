@@ -61,8 +61,9 @@ const JOUR_BUREAU_LUNDI = [{ de: 0, a: 450, mode: 'hors_gel' }, { de: 450, a: 81
 /* ASSERTION MODIFIÉE (26/10) : `programme` et `concurrents`, le programme de l'appareil allumé et ceux d'ailleurs
  * qui le commandent, comme le serveur (tests/demo_chauffage_concurrents.test.mjs). */
 // ASSERTION MODIFIÉE (30/10) : `decalage`, celui du capteur d'un thermostat, comme le serveur.
+// ASSERTION MODIFIÉE (01/11, ADR 0308) : `poele`, le poêle à granulés que le serveur reconnaît à sa plateforme, comme le serveur.
 const CLES_CHAUFFAGE = ['applique', 'avertissements', 'cle', 'concurrents', 'decalage', 'entite', 'famille', 'fenetre', 'fenetre_mode', 'fenetre_ouverte', 'fin',
-  'jour', 'mode', 'modes', 'nom', 'options', 'ouvrant_ouvert', 'planning', 'programme', 'puis', 'reprise', 'semaine', 'source', 'temperatures'];
+  'jour', 'mode', 'modes', 'nom', 'options', 'ouvrant_ouvert', 'planning', 'poele', 'programme', 'puis', 'reprise', 'semaine', 'source', 'temperatures'];
 
 const par = (etat, cle) => etat.chauffages.find((c) => c.cle === cle);
 const etat = (m) => m.ws({ type: 'loggia/chauffage/etat' });
@@ -103,6 +104,8 @@ test('l’état a la forme exacte de loggia/chauffage/etat', async () => {
    * départ garde un radiateur du grenier que Home Assistant ne connaît plus —
    * renommé ou retiré —, configuré, donc listé avec les configurés. */
   assert.deepEqual(e.chauffages.map((c) => c.cle), [CHAMBRE, BUREAU, GRENIER, POELE, CLIM, 'climate.chambre', 'climate.salon']);
+  // Le poêle seul est un poêle (ADR 0308) : ni les thermostats, ni la clim, ni les modules fil pilote.
+  assert.deepEqual(e.chauffages.filter((c) => c.poele).map((c) => c.cle), [POELE]);
   for (const c of e.chauffages) {
     assert.deepEqual(Object.keys(c).sort(), CLES_CHAUFFAGE, c.cle);
     /* ASSERTION MODIFIÉE (même relecture) : la clé est l'entity_id — pour

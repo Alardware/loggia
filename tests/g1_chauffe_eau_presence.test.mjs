@@ -123,7 +123,8 @@ test('D8 : la carte Présence et sa feuille, l’avatar de l’Accueil', () => {
   const html = texte(renderToStaticMarkup(createElement(F.CvPresence, { hass: S, gens })));
   assert.ok(html.includes(' · Travail|') && html.includes(' · Inconnu|') && html.includes(' · À la maison|'), html);
   assert.ok(!html.includes('Absent'), 'personne n’est « Absent » ici');
-  const galerie = lire('src/cartescustom/galerie.jsx');
+  // ASSERTION MODIFIÉE (01/11, ADR 0321) : la feuille Présence quitte galerie.jsx pour son module chargé à la demande, texte inchangé.
+  const galerie = lire('src/cartescustom/feuillepresence.jsx');
   assert.ok(galerie.includes('{p.mot + (p.lc ?'), 'la feuille Présence écrit le mot de la ligne');
   const accueil = lire('src/accueil/dashboard.jsx');
   assert.ok(accueil.includes('title: `${p.name} · ${motPresence({ state: p.etat })}`'), 'l’avatar de l’Accueil');

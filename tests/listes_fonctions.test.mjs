@@ -138,7 +138,7 @@ const IMMEDIATS = new Set(['map', 'flatMap', 'filter', 'forEach', 'reduce', 'som
  * `HUE_SCENES` a suivi la bibliothèque Hue dans scenes.jsx, chargé à la
  * demande depuis le 11/10 : le même reste, à sa nouvelle place. De même
  * `VIEW_TITLES`, sorti d'App.jsx avec les vues le 29/10 (ADR 0283). */
-const RESTES = ['src/scenes.jsx HUE_SCENES', 'src/vues/simples.jsx VIEW_TITLES', 'src/Onboarding.jsx VIEW_TITLES'];
+const RESTES = ['src/scenes.jsx HUE_SCENES', 'src/vues/simples.jsx VIEW_TITLES'];
 
 test('rien de ce qui dépend de la langue ne s’évalue à l’import', () => {
   const fautes = [], vus = new Set();

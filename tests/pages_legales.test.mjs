@@ -125,14 +125,25 @@ test('la confidentialité dit vrai : ni mesure d’audience, ni adresse tierce, 
   // adresse de plus oblige à relire la politique de confidentialité.
   // ASSERTION MODIFIÉE (27/10, sa décision) : les logos des intégrations, à l'écran des mises à jour,
   // viennent de brands.home-assistant.io — la politique de confidentialité le dit, aux deux endroits.
-  const PERMIS = new Set(['www.w3.org', 'homeassistant.local', 'xxxx.ui.nabu.casa', 'github.com', 'ko-fi.com', 'brands.home-assistant.io']);
+  /* ASSERTION MODIFIÉE (01/11, ADR 0321) : l'attribution du fond de carte, un lien qu'on CLIQUE vers la page des droits
+   * d'OpenStreetMap ; elle ne s'affiche qu'avec les tuiles du relais de Home Assistant, jamais sur le site (la démo n'a pas de
+   * fond). Les tuiles ne viennent que de Home Assistant : `tile.openstreetmap.org` reste refusé. */
+  const PERMIS = new Set(['www.w3.org', 'homeassistant.local', 'xxxx.ui.nabu.casa', 'github.com', 'ko-fi.com', 'brands.home-assistant.io', 'www.openstreetmap.org']);
   const conf = lire('site', 'legal', 'confidentialite.html');
   assert.equal(conf.split('<code>brands.home-assistant.io</code>').length - 1, 2, 'la politique de confidentialité ne nomme plus le service des logos');
+  /* ASSERTION MODIFIÉE (01/11, ADR 0322, sa réponse « Oui, tuiles OSM ») : `tile.openstreetmap.org` devient permis, mais
+   * SEULEMENT dans le fond de la démo en ligne (feuillecarte.jsx, la construction `--mode demo`), et la politique de
+   * confidentialité le nomme. Ailleurs dans le code, il reste refusé. */
+  const PERMIS_DEMO = new Map([['tile.openstreetmap.org', /[\\/]src[\\/]feuillecarte\.jsx$/]]);
   for (const { p, texte } of SRC) {
     for (const m of texte.matchAll(/https?:\/\/([a-z0-9.-]+\.[a-z]{2,})/gi)) {
-      assert.ok(PERMIS.has(m[1].toLowerCase()), p + ' nomme ' + m[1] + ' : la politique de confidentialité est à relire');
+      const hote = m[1].toLowerCase();
+      const ok = PERMIS.has(hote) || (PERMIS_DEMO.has(hote) && PERMIS_DEMO.get(hote).test(p));
+      assert.ok(ok, p + ' nomme ' + m[1] + ' : la politique de confidentialité est à relire');
     }
   }
+  assert.ok(conf.includes('<code>tile.openstreetmap.org</code>'), 'la politique de confidentialité ne nomme pas le serveur de tuiles de la démo');
+  assert.ok(conf.includes('href="https://osmfoundation.org/wiki/Privacy_Policy"'), 'la politique de confidentialité d’OSMF n’est pas liée');
   // Le micro : la liaison à Home Assistant est exigée AVANT de le demander, et
   // la démo n'a pas cette liaison — il ne s'ouvre donc jamais sur le site.
   const voix = lire('src', 'voix.js');

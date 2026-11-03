@@ -25,7 +25,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Fi, Surface, nomCarte } from './ui.jsx';
-import { cfgVal, plateformeDe } from './state.js';
+import { cfgVal, plateformeDe, voisinsDe } from './state.js';
 import { plantsCfg } from './lectures.js';
 import { CARTE_MAISON, ICONE_CARTE, NOM_CARTE, SOUS_CARTE, LISERE } from './styles.js';
 import { LAVIS, lav } from './theme.js';
@@ -62,7 +62,7 @@ export default function CarteVanne({ id, hass: vue, nom = null, chip = false, on
   const enVol = useGesteVanne(id, st);
   const [demande, setDemande] = useState(false);
   useEffect(() => { if (!demande) return undefined; const t = setTimeout(() => setDemande(false), QUESTION_MS); return () => clearTimeout(t); }, [demande]);
-  const v = vueVanne({ id, S, etat, designee, plateforme: plateformeDe, plantes: plantsCfg().map(p => p.base).filter(Boolean), enVol, nom });
+  const v = vueVanne({ id, S, etat, designee, plateforme: plateformeDe, voisins: voisinsDe, plantes: plantsCfg().map(p => p.base).filter(Boolean), enVol, nom });
   const geste = v.geste;
   // En vol, ou la vanne qui tourne (`closing`, `opening` ; passe bis, point 2) : la puce reste à sa place, choisie, et ne fait rien.
   const inerte = !!enVol || !!(geste && geste.inerte);

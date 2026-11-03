@@ -34,8 +34,6 @@ test('aucun texte quasi noir sur le fond d’accent — sauf deux icônes', () =
       if (l.indexOf('#06121f') < 0) return;
       // Une icône seule dans sa case (la coche du composeur) : 3:1 lui suffit.
       if (PIECES_DU_MONOLITHE.includes(nom.slice(4)) && l.includes("<Fi i={on ? 'check' : 'plus'} size={11} /></span>")) return;
-      // La coche de l'accueil, son pendant ; et le logo « O » sur son dégradé.
-      if (nom === 'src/Onboarding.jsx' && (l.includes('<Fi i="check" size={11} color="#06121f" />') || l.includes("linear-gradient(135deg,var(--o-ok),var(--o-accent))"))) return;
       // L'écran d'erreur : ses couleurs sont fixes, le thème n'a peut-être pas chargé.
       if (nom === 'src/boot.jsx' && l.includes("background: '#4f8cff', color: '#06121f'")) return;
       fautes.push(nom + ':' + (i + 1));
@@ -44,7 +42,7 @@ test('aucun texte quasi noir sur le fond d’accent — sauf deux icônes', () =
   assert.deepEqual(fautes, [], 'du quasi-noir sur un fond plein, là où le blanc est calculé pour tenir');
   // Les six boutons pleins de l'audit, nommément.
   assert.ok(lire('src', 'ui.jsx').includes("background: accent ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: accent ? '#fff' : 'var(--o-text1)',"), 'editBtn (Restaurer)');
-  assert.ok(lire('src', 'Onboarding.jsx').includes("fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#fff',"), 'Commencer, Continuer, Ouvrir mon dashboard');
+  assert.ok(lire('src', 'Onboarding.jsx').includes("fontSize: 13, fontWeight: 800, background: 'var(--o-accent-fond)', color: '#fff',"), 'Commencer, Continuer, Ouvrir l’Accueil');
   assert.ok(bloc(APP, 'function BandeauEdition(', NL + 'function ').includes("background: accent ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: accent ? '#fff' : 'var(--o-text1)'"), 'Ajouter une carte');
   // ASSERTION MODIFIÉE (audit du 19/10) : la fiche d'une pièce est chargée à la demande (fichepiece.jsx).
   for (const [code, f] of [[APP, 'function CardEditSheet('], [lire('src', 'fichepiece.jsx'), 'export default function FichePiece('], [lire('src', 'fichescenario.jsx'), 'export default function FicheScenario(']]) { // ASSERTION MODIFIÉE (contre-relecture du lot 3 des capteurs) : la fiche d'un scénario est chargée à la demande — fichescenario.jsx.

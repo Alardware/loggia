@@ -19,7 +19,8 @@ import { useState, useEffect, useRef, useId } from 'react';
 import { tr } from './i18n.js';
 import { weatherEntity, WeatherIco, haWeatherLabel } from './wxutil.jsx';
 import { Fi, nomCarte } from './ui.jsx';
-import { typesPrevision, degres, estNuit, modeMeteo, heuresMeteo, extremesDuJour, pluieEtVent, nomVille, phraseMeteo, soleilMeteo, vigilanceWidget } from './meteo.js';
+import { typesPrevision, degres, estNuit, modeMeteo, heuresMeteo, extremesDuJour, pluieEtVent, nomVille, phraseMeteo, soleilMeteo, vigilanceWidget, capteursMeteo, pluieDansLheure } from './meteo.js';
+import { LOGGIA_INDEX } from './state.js';
 import { CARTE_RAIL } from './styles.js';
 import { capteurVigilance } from './vigilance.js';
 
@@ -84,8 +85,12 @@ export function CarteMeteo({ hass, onOpen = null }) {
   const astre = soleilMeteo(maintenant, soleil);
   /* La phrase, et la vigilance qui la prend quand elle est orange ou rouge.
    * Une vigilance jaune reste dans la popup : l'Accueil ne fait pas de bruit. */
-  const vigilance = vigilanceWidget(S, capteurVigilance(S));
-  const phrase = vigilance && vigilance.widget ? { texte: vigilance.texte, ton: vigilance.ton } : phraseMeteo({ heures: parHeure, jours: parJour, maintenant, soleil, etat: st });
+  const vigilance = vigilanceWidget(S, capteurVigilance(S, LOGGIA_INDEX)); // l'index : le même capteur que l'Accueil (ADR 0310)
+  /* La pluie dans l'heure de Météo-France (lot 5 Gladys, ADR 0309) : son capteur, rattaché à la même ville, prend la phrase. */
+  const em = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta;
+  const pluieHeure = capteursMeteo(S, id, (x) => (em ? em.get(x) || null : null)).pluie_heure;
+  const proche = pluieDansLheure(pluieHeure ? S[pluieHeure] : null, maintenant);
+  const phrase = vigilance && vigilance.widget ? { texte: vigilance.texte, ton: vigilance.ton } : phraseMeteo({ heures: parHeure, jours: parJour, maintenant, soleil, etat: st, proche });
   const ton = (phrase && phrase.ton) || null;
   const ouvrir = () => { if (onOpen) onOpen(id); };
   /* Relecture du lot 13 : un rôle bouton rend sa descendance

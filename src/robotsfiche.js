@@ -13,12 +13,25 @@
  */
 import { tr, trN, trSens, locale, comparerTextes } from './i18n.js';
 import { sansAccents } from './outils.js';
-import { phaseRobot, dureeLisible, heureValide } from './robots.js';
+import { phaseRobot, dureeLisible, heureValide, ordreJours, nomJour, avanceTonte } from './robots.js';
 import { quandLumiere } from './lumieres.js';
 import { mot } from './journalmots.js';
+import { MED_COLORS, vacSlug, vacNom } from './state.js';
 
 const nombre = (v) => { const n = typeof v === 'number' ? v : parseFloat(v); return isNaN(n) ? null : n; };
 const borne = (n, a, b) => Math.min(b, Math.max(a, n));
+
+/** « Tous les jours », « En semaine », « Le week-end », sinon les jours courts dans l'ordre de la langue. Venu de robots.js (lot 9
+ *  Gladys, ADR 0313) : seules les fiches le lisent, et le démarrage y gagne la place de l'avance d'une tonte. */
+export function resumeJours(jours, premier = 1, loc = 'fr-FR') {
+  const retenus = new Set((jours || []).filter(j => Number.isInteger(j) && j >= 0 && j <= 6));
+  if (!retenus.size) return tr('Aucun jour');
+  if (retenus.size === 7) return tr('Tous les jours');
+  const cle = [...retenus].sort().join('');
+  if (cle === '01234') return tr('En semaine');
+  if (cle === '56') return tr('Le week-end');
+  return ordreJours(premier).filter(j => retenus.has(j)).map(j => nomJour(j, loc, 'short')).join(' · ');
+}
 
 /* ════════════ Les entités sœurs ════════════ */
 
@@ -445,6 +458,51 @@ export function etatAccueil({ domaine = 'vacuum', phase = 'absent', bipe = false
   return { mot: tr('À l’arrêt'), encre: gris, phrase: choix };
 }
 
+/* ════════════ La tondeuse au travail (lot 9 Gladys, R2, R3 ; ADR 0313) ════════════ */
+
+/**
+ * L'avance d'un passage, d'après les capteurs de SON appareil reconnus à leur clé — `progress` (le pourcentage) et `left_time` (le
+ * temps restant), ceux de Mammotion — : `{ pct, texte }`, « 45 % · 20 min restantes » (`avanceTonte`, la phrase de la carte) ; `pct`
+ * null quand seul le temps se lit. null sans rien de lisible. Jamais un nom : une sœur sans clé n'en est pas.
+ */
+export function avanceeRobot(soeurs) {
+  const de = (cle) => { const s = (soeurs || []).find(x => x.domaine === 'sensor' && x.cle === cle); return s ? { state: s.etat, attributes: s.attributs } : null; };
+  const p = de('progress');
+  const texte = avanceTonte(p, de('left_time'));
+  const n = p ? nombre(p.state) : null;
+  return texte ? { pct: n != null && n >= 0 && n <= 100 ? Math.round(n) : null, texte } : null;
+}
+
+const JOUR_MS = 86400000;
+
+/**
+ * Les lignes d'état du panneau de tête, sous « Où » (le motif de `lignesPieces`) :
+ *  - la dernière erreur que le carnet du serveur garde (`erreurs`, robots_carnet.py), VINGT-QUATRE HEURES après l'avoir vue, avec son
+ *    heure : « Dernière erreur à 14:12 : Lame bloquée », « Dernière erreur hier à 22:40 : … ». Son heure est celle que l'appareil
+ *    publie (`date`), sinon l'instant où le serveur l'a vue (`t`). En erreur, le mot d'état la dit déjà : rien de plus ;
+ *  - une tondeuse dont l'appareil sent la pluie (un binaire `moisture` de SON appareil, la règle de `pluieDeRobot`, ADR 0305) :
+ *    « Pluie en cours ».
+ * `etat` : celui de `loggia/robots/etat` ; `soeurs` : `decrireSoeurs`. Rend `[{ cle, glyphe, encre, texte }]`.
+ */
+export function lignesEtat({ etat = null, robot = null, domaine = 'vacuum', phase = 'absent', soeurs = [], maintenant = Date.now() } = {}) {
+  const out = [];
+  const gris = 'var(--o-text2)';
+  const e = etat && etat.erreurs && typeof etat.erreurs === 'object' ? etat.erreurs[robot] : null;
+  const s = e && typeof e.texte === 'string' && e.texte ? Number(e.date != null ? e.date : e.t) * 1000 : NaN;
+  // Cinq minutes d'avance au plus : l'horloge d'un appareil n'est pas celle de la maison.
+  if (phase !== 'erreur' && maintenant - s <= JOUR_MS && maintenant - s >= -300000) {
+    const veille = new Date(maintenant);
+    veille.setDate(veille.getDate() - 1);
+    const v = { h: heureDe(s), m: e.texte };
+    out.push({ cle: 'erreur', glyphe: 'triangle-warning', encre: gris,
+      texte: new Date(s).toDateString() === veille.toDateString() ? tr('Dernière erreur hier à {h} : {m}', v) : tr('Dernière erreur à {h} : {m}', v) });
+  }
+  if (domaine === 'lawn_mower' && (soeurs || []).some(x => x.domaine === 'binary_sensor' && x.classe === 'moisture' && x.etat === 'on')) {
+    out.push({ cle: 'pluie', glyphe: 'raindrops', encre: gris, texte: tr('Pluie en cours') });
+  }
+  return out;
+}
+
 /** La puce principale d'un départ (I16) : « Nettoyer tout le logement », « Nettoyer 2 pièces » ; « Tondre tout le jardin », « Tondre 1 zone ». */
 export function libelleDepart(domaine, n = 0) {
   if (domaine === 'lawn_mower') return n ? trN(n, 'Tondre {n} zone', 'Tondre {n} zones') : tr('Tondre tout le jardin');
@@ -724,4 +782,126 @@ export function optionsScripts(states, scripts) {
 export function commandeZonesHA({ idRobot = null, zones = [] } = {}) {
   const ids = (zones || []).map(z => z && z.zone).filter(z => typeof z === 'string' && z);
   return idRobot && ids.length ? { domaine: 'vacuum', service: 'clean_area', data: { entity_id: idRobot, cleaning_area_id: ids } } : null;
+}
+
+/* ── Les pièces de l'aspirateur (venues de state.js, lot 13 Gladys, ADR 0318) ──
+ * Le robot publie `attributes.rooms` sous des clés de TYPE de pièce ; la configuration porte les zones nommées, leur couleur et
+ * leur interrupteur. On garde le robot comme source des pièces, et on rattache à chacune sa zone. Seule la fiche du robot,
+ * chargée à la demande, s'en sert : le démarrage n'en porte rien. */
+// « salle_de_bains » et « salle_de_bain » sont la même pièce : le pluriel ne
+// doit pas empêcher le rapprochement.
+const vacSing = (s) => s.replace(/s(?=_|$)/g, '');
+
+/** Proximité de deux libellés, du plus sûr (4) au plus vague (1) ; 0 = rien. */
+function vacScore(cle, txt) {
+  const a = vacSing(vacSlug(cle)), b = vacSing(vacSlug(txt));
+  if (!a || !b) return 0;
+  if (a === b) return 4;
+  if (b.endsWith('_' + a) || a.endsWith('_' + b)) return 3;
+  if (b.indexOf('_' + a + '_') >= 0) return 2;
+  const da = a.split('_').pop(), db = b.split('_').pop();
+  return (da && da === db) ? 1 : 0;
+}
+
+/**
+ * Appariement glouton : on prend d'abord les rapprochements les plus sûrs, et
+ * chaque candidat ne sert qu'une fois. Sans cela « Chambre » attraperait
+ * « chambre_enfant » avant que « Chambre enfant » ait sa chance.
+ * @returns {Object} indice de pièce → indice de candidat
+ */
+function vacApparier(pieces, cands, prisP, prisC) {
+  const paires = [];
+  pieces.forEach((p, i) => {
+    if (prisP[i]) return;
+    cands.forEach((c, j) => {
+      if (prisC[j]) return;
+      let s = 0;
+      c.txts.forEach(t => { const v = vacScore(p.cle, t); if (v > s) s = v; });
+      if (s > 0) paires.push({ i, j, s });
+    });
+  });
+  paires.sort((x, y) => y.s - x.s);
+  const res = {};
+  paires.forEach(({ i, j }) => {
+    if (prisP[i] || prisC[j]) return;
+    prisP[i] = 1; prisC[j] = 1; res[i] = j;
+  });
+  return res;
+}
+
+/** Préfixe commun de plusieurs identifiants, coupé au dernier « _ ». */
+function vacPrefixe(ids) {
+  if (ids.length < 2) return null;
+  let p = ids[0];
+  ids.forEach(id => { let i = 0; while (i < p.length && i < id.length && p[i] === id[i]) i++; p = p.slice(0, i); });
+  const c = p.lastIndexOf('_');
+  return c > 0 ? p.slice(0, c + 1) : null;
+}
+
+/**
+ * Pièces à afficher : `{ id, name, color, icon, toggle, segments }`.
+ * `toggle` peut être absent — une pièce que le robot connaît mais dont aucun
+ * interrupteur ne parle reste visible, simplement pas sélectionnable.
+ * Sans robot joignable, la configuration passe telle quelle : rien ne change
+ * pour qui n'a pas d'entité `vacuum` exposant ses pièces.
+ */
+export function vacRooms(hass, vacId, zones = []) {
+  const st = (hass && hass.states && vacId) ? hass.states[vacId] : null;
+  const brut = st && st.attributes && st.attributes.rooms;
+  if (!brut || typeof brut !== 'object') return zones;
+  // Une clé peut porter PLUSIEURS segments quand deux pièces partagent le même
+  // type : elles se nettoient ensemble, comme une seule entrée.
+  const pieces = Object.keys(brut).map(cle => {
+    const v = brut[cle];
+    const segs = (Array.isArray(v) ? v : [v]).map(Number).filter(n => !isNaN(n));
+    return { cle, segments: segs, id: 'seg:' + segs.join('-') };
+  }).filter(p => p.segments.length);
+  if (!pieces.length) return zones;
+
+  const prisP = {}, prisZ = {};
+  const czones = zones.map(z => ({ txts: [z.id, z.name], z }));
+  const parZone = vacApparier(pieces, czones, prisP, prisZ);
+
+  // Les zones configurées ne couvrent que ce que l'utilisateur avait saisi. Les
+  // autres pièces cherchent leur interrupteur parmi ceux qui partagent le
+  // préfixe des interrupteurs déjà connus — « input_boolean.xxx_nettoyer_ »
+  // chez qui les a nommés ainsi, rien du tout chez les autres.
+  const prefixe = vacPrefixe(zones.map(z => z.toggle).filter(Boolean));
+  const S = (hass && hass.states) || {};
+  const dejaPris = zones.map(z => z.toggle).filter(Boolean);
+  const cbool = !prefixe ? [] : Object.keys(S)
+    .filter(id => id.indexOf(prefixe) === 0 && dejaPris.indexOf(id) < 0)
+    .map(id => ({ txts: [id, (S[id].attributes && S[id].attributes.friendly_name) || ''], toggle: id }));
+  const parBool = vacApparier(pieces, cbool, prisP, {});
+
+  // Dernier recours : s'il ne reste qu'une pièce sans interrupteur et qu'une
+  // seule zone configurée sans emploi, c'est forcément elle. C'est ce qui
+  // rattache « bedroom » à « Chambre », qu'aucune comparaison de texte ne peut
+  // rapprocher.
+  const restP = pieces.map((p, i) => i).filter(i => !prisP[i]);
+  const restZ = czones.map((c, j) => j).filter(j => !prisZ[j]);
+  if (restP.length === 1 && restZ.length === 1) { parZone[restP[0]] = restZ[0]; prisP[restP[0]] = 1; prisZ[restZ[0]] = 1; }
+
+  // Palette des pièces nouvelles : on écarte les couleurs déjà portées par une
+  // zone configurée, sinon deux pièces voisines finissent de la même teinte.
+  const prises = zones.map(z => z.color);
+  const libres = MED_COLORS.filter(c => prises.indexOf(c) < 0);
+  const palette = libres.length ? libres : MED_COLORS;
+  let nouv = 0;
+
+  return pieces.map((p, i) => {
+    const z = parZone[i] != null ? czones[parZone[i]].z : null;
+    const b = parBool[i] != null ? cbool[parBool[i]].toggle : null;
+    return {
+      id: p.id,
+      segments: p.segments,
+      name: (z && z.name) || vacNom(p.cle),
+      color: (z && z.color) || palette[nouv++ % palette.length],
+      icon: (z && z.icon) || null,
+      toggle: (z && z.toggle) || b || null,
+      // Rang de la zone configurée : conserve l'ordre auquel l'utilisateur est
+      // habitué, les pièces nouvelles venant ensuite par numéro de segment.
+      rang: parZone[i] != null ? parZone[i] : 1000 + p.segments[0],
+    };
+  }).sort((a, b) => a.rang - b.rang);
 }

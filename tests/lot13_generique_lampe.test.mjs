@@ -185,7 +185,8 @@ test('la lampe : un div au dessin du bouton, sa bascule et sa glissière hors de
   /* ASSERTION MODIFIÉE (passe téléphone, tâche 3) : la bascule de la carte large et la plaque-interrupteur de la carte étroite partagent un seul geste (`basculer`) ;
    * toutes deux nomment la lampe. */
   assert.ok(f.includes('const basculer = () => { flash(c.col); v.commander(!v.on); };'), 'un seul geste');
-  assert.ok(f.includes('<RmBascule className="o-seul-large" on={v.on} nom={v.nom} onToggle={basculer} inerte={v.muette} />') && f.includes('<PlaqueBascule on={v.on} nom={v.nom} fond={fond} encre={encre} inerte={v.muette} onToggle={basculer}>')
+  /* ASSERTION MODIFIÉE (ticket #43) : sans variateur, la bascule reste aussi sur la carte étroite — la plaque commande toujours. */
+  assert.ok(f.includes("<RmBascule className={v.variable ? 'o-seul-large' : undefined} on={v.on} nom={v.nom} onToggle={basculer} inerte={v.muette} />") && f.includes('<PlaqueBascule on={v.on} nom={v.nom} fond={fond} encre={encre} inerte={v.muette} onToggle={basculer}>')
     && f.includes("label={tr('Luminosité') + ' ' + v.nom}"), 'les commandes nomment la lampe');
 });
 

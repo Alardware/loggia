@@ -2,7 +2,7 @@
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
 import { useState, useEffect, useMemo, Suspense } from 'react';
 import { lazyRecharge } from '../recharge.js';
-import { LOGGIA_INDEX, medPlayers, loggiaEnt, enBorne } from '../state.js';
+import { LOGGIA_INDEX, medPlayers, loggiaEnt, enBorne, estTraceur } from '../state.js';
 import { borneEnCharge } from '../borne.js';
 import { enPanne } from '../outils.js';
 import { wattsDe } from '../unites.js';
@@ -185,11 +185,15 @@ function objetsDeLaMaison(hass, ajoutes = [], epinglesDehors = null) {
   const candidats = [];
   Object.keys(S).forEach(id => {
     if (pris.has(id) || duDistributeur.has(id) || dUnePlante(id)) return;
-    const d = cvDomain(id); const rang = OBJ_DOMAINES.indexOf(d); if (rang < 0) return;
+    // Un traceur d'objet (ADR 0318) fait la carte de son appareil, avant ses capteurs ; un autre `device_tracker` n'en fait pas.
+    const d = cvDomain(id); const rang = estTraceur(id) ? 0 : OBJ_DOMAINES.indexOf(d); if (rang < 0) return;
     /* Les lecteurs sont ceux de `medPlayers()` (resolve.js : M1 B) — une entité `media_player` qui n'en est pas n'a pas de carte :
      * ni la jumelle d'une Echo, ni Spotify (un appareil de service), ni le haut-parleur d'une sonnette (Sécurité le garde par sa caméra). */
     if (d === 'media_player') return;
     const m = meta(id); if (m.hidden || m.disabled || m.category) return;
+    /* Rien de l'application Home Assistant d'un téléphone (Z1, ADR 0319) : ni sa glycémie ni sa tension (Health Connect), ni le
+     * baromètre d'un iPhone. Sa présence, ses notifications et ses piles se lisent ailleurs. */
+    if (m.platform === 'mobile_app') return;
     // Un `light.*` que la découverte n'a pas retenu — un groupe dont les membres ont chacun leur carte (ADR 0261) — n'en a pas ici non plus.
     if (d === 'light') return;
     // L'interrupteur d'un module fil pilote : l'appareil est sa zone (étape 1).

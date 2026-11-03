@@ -228,7 +228,8 @@ export function VoletsReglages({ hass, cardSt }) {
   const joursActifs = Array.isArray(plan.jours) ? plan.jours : [0, 1, 2, 3, 4, 5, 6];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    // Des lignes dans le panneau de leur module (maquette v3 des Règles, 03/11) : plus d'écart entre elles.
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
       {/* La simulation se dit EN HAUT, pas seulement dans son réglage : sinon
         * on cherche pourquoi les volets ne bougent plus. */}
       {simu.actif && (
@@ -238,7 +239,7 @@ export function VoletsReglages({ hass, cardSt }) {
       )}
       {/* ── Le planning ── */}
       <div style={cardSt}>
-        <RegleEntete nom={tr('Lever et coucher du soleil')}
+        <RegleEntete ico="sunrise" nom={tr('Lever et coucher du soleil')}
           desc={tr('Ouvrir le matin, fermer le soir, aux heures réelles du soleil chez vous.')}
           on={plan.actif} cb={() => enregistrer({ planning: { actif: !plan.actif } })} plie={pliPlan} onPlier={plierPlan} zone="volets-plan" />
         {alerte('planning.actif')}
@@ -315,7 +316,7 @@ export function VoletsReglages({ hass, cardSt }) {
 
       {/* ── La protection solaire ── */}
       <div style={cardSt}>
-        <RegleEntete nom={tr('Protection solaire')}
+        <RegleEntete ico="sun" nom={tr('Protection solaire')}
           desc={tr('Quand le soleil frappe une façade et qu’il fait chaud, baisser ses volets — puis les rouvrir quand il est passé.')}
           on={sol.actif} cb={() => enregistrer({ soleil: { actif: !sol.actif } })} plie={pliSol} onPlier={plierSol} zone="volets-sol" />
         {alerte('soleil.actif')}
@@ -369,7 +370,7 @@ export function VoletsReglages({ hass, cardSt }) {
 
       {/* ── La mise à l'abri ── */}
       <div style={cardSt}>
-        <RegleEntete nom={tr('Vent fort')}
+        <RegleEntete ico="wind" nom={tr('Vent fort')}
           desc={tr('Au-delà d’un seuil, remonter les volets et replier les stores bannes — un volet baissé dans une rafale est un volet plié.')}
           note={tr('Passe avant les deux règles ci-dessus')}
           on={vent.actif} cb={() => enregistrer({ vent: { actif: !vent.actif } })} plie={pliVent} onPlier={plierVent} zone="volets-vent" />
@@ -402,7 +403,7 @@ export function VoletsReglages({ hass, cardSt }) {
         * « Tout remonter » au vent, c'est l'OUVRIR dans la tempête — Loggia ne
         * fait donc que les fermer, et chacun choisit (03/10, ouvrants.py). */}
       <div style={cardSt}>
-        <RegleEntete nom={tr('Fenêtres de toit (velux)')}
+        <RegleEntete ico="window-alt" nom={tr('Fenêtres de toit (velux)')}
           desc={tr('Les fermer avec les volets : au coucher du soleil, par vent fort et dans les scénarios qui ferment. Loggia ne les ouvre jamais.')}
           on={velux} cb={() => enregistrer({ velux: { actif: !velux } })} plie={pliVelux} onPlier={plierVelux} zone="volets-velux" />
         {alerte('velux.actif')}
@@ -422,7 +423,7 @@ export function VoletsReglages({ hass, cardSt }) {
         * dehors. La fermeture attend que la baie se referme, jamais au-delà
         * du matin. Un capteur muet ne retient rien (ADR 0010). */}
       <div style={cardSt}>
-        <RegleEntete nom={tr('Volet bloqué')}
+        <RegleEntete ico="door-open" nom={tr('Volet bloqué')}
           desc={tr('Ne pas fermer un volet tant que la porte ou la fenêtre devant lui est ouverte : la fermeture attend qu’elle se referme.')}
           on={baies.actif} cb={() => enregistrer({ baies: { actif: !baies.actif } })} plie={pliBaies} onPlier={plierBaies} zone="volets-baies" />
         {alerte('baies.actif')}

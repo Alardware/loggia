@@ -79,7 +79,8 @@ test('chaque feuille porte la croix sur sa ligne d’en-tête', () => {
       // ASSERTION MODIFIÉE (étape 3 IoT, 25/10 ; I27) : la popup d'une vanne : son contenu (`ContenuVanne`, fichevanne.jsx) porte l'en-tête commun — sa croix et son nom (`EnteteFiche`).
       /* ASSERTION MODIFIÉE (30/10, G3-E2/E3) : les popups du chauffe-eau et de la borne : leurs contenus (`FicheEauContent`, ficheeau.jsx ;
        * `FicheBorneContent`, ficheborne.jsx), chargés à la demande, portent l'en-tête commun — sa croix et son nom (`EnteteFiche`), vérifié plus bas. */
-      if (!/<CroixFeuille|<TitreFeuille|<FicheEntete|<ContenuEnfant|<FicheRobotContent|<FicheDistributeurContent|<FicheChauffageContent|<FicheVoletContent|<FichePriseContent|<FicheLumiereContent|<FicheMediaContent|<FicheMeteoContenu|<FicheCapteurContent|<FicheBinaireContent|<FicheConfortContent|<FichePlanteContent|<FicheGroupeContent|<FicheSwitchContent|<FeuilleCalendrierContent|<ContenuVanne|<FicheEauContent|<FicheBorneContent/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
+      // ASSERTION MODIFIÉE (01/11, ADR 0318) : la feuille d'un traceur d'objet ; son contenu (`FicheTraceurContent`, fichetraceur.jsx) porte l'en-tête commun.
+      if (!/<CroixFeuille|<TitreFeuille|<FicheEntete|<ContenuEnfant|<FicheRobotContent|<FicheDistributeurContent|<FicheChauffageContent|<FicheVoletContent|<FichePriseContent|<FicheLumiereContent|<FicheMediaContent|<FicheMeteoContenu|<FicheCapteurContent|<FicheBinaireContent|<FicheConfortContent|<FichePlanteContent|<FicheGroupeContent|<FicheSwitchContent|<FeuilleCalendrierContent|<ContenuVanne|<FicheEauContent|<FicheBorneContent|<FicheTraceurContent/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
       i = s.indexOf('<BottomSheet', i + 1);
     }
   }
@@ -150,9 +151,10 @@ test('aucune autre croix : la commune, la commande d’un volet, le formulaire d
    * n'a plus aucune croix à part. */
   // ASSERTION MODIFIÉE (chantier Prises, tâche 2) : la croix de la fiche d'un événement a suivi la feuille dans son fichier.
   // ASSERTION MODIFIÉE (lot 7 de l'audit du 28/10, V7) : la croix commune (`CroixFeuille`, ui.jsx) se nomme « Fermer la fiche ».
-  assert.deepEqual(croix.sort(), ['src/feuilleagenda.jsx × 1', 'src/formevenement.jsx × 1', 'src/rappelsrail.jsx × 1']);
+  // ASSERTION MODIFIÉE (01/11, ADR 0315) : le formulaire de rappel, et sa croix, se chargent à la demande depuis `nouveaurappel.jsx`.
+  assert.deepEqual(croix.sort(), ['src/feuilleagenda.jsx × 1', 'src/formevenement.jsx × 1', 'src/nouveaurappel.jsx × 1']);
   assert.equal((lire('src', 'ui.jsx').match(/aria-label=\{tr\('Fermer la fiche'\)\}/g) || []).length, 1, 'la croix commune');
-  const rap = readFileSync(join(RACINE, 'src', 'rappelsrail.jsx'), 'utf8');
+  const rap = readFileSync(join(RACINE, 'src', 'nouveaurappel.jsx'), 'utf8');
   assert.ok(rap.includes("<button onClick={onClose} aria-label={tr('Fermer')}"), 'la croix du formulaire de rappel');
   // ASSERTION MODIFIÉE (19/10) : la commande suit ce que le cover accepte (`gestesCover`) ; son nom dit toujours le volet.
   assert.ok(APP.includes("<button aria-label={tr('Fermer') + ' ' + nom} title={tr('Fermer')} onClick={(e) => { e.stopPropagation(); envoyer(gestes.descendre, 0); }}"), 'la commande du volet');
@@ -254,7 +256,8 @@ test('chaque feuille dit son nom : sa ligne de titre, ou NomFeuille posé sur le
       // ASSERTION MODIFIÉE (étape 3 IoT, 25/10 ; I27) : la popup d'une vanne : son contenu (`ContenuVanne`, fichevanne.jsx) porte l'en-tête commun — sa croix et son nom (`EnteteFiche`).
       /* ASSERTION MODIFIÉE (30/10, G3-E2/E3) : les popups du chauffe-eau et de la borne : leurs contenus (`FicheEauContent`, ficheeau.jsx ;
        * `FicheBorneContent`, ficheborne.jsx), chargés à la demande, portent l'en-tête commun — sa croix et son nom (`EnteteFiche`), vérifié plus bas. */
-      if (!/<TitreFeuille|<FicheEntete|<NomFeuille|<ContenuEnfant|<FicheRobotContent|<FicheDistributeurContent|<FicheChauffageContent|<FicheVoletContent|<FichePriseContent|<FicheLumiereContent|<FicheMediaContent|<FicheMeteoContenu|<FicheCapteurContent|<FicheBinaireContent|<FicheConfortContent|<FichePlanteContent|<FicheGroupeContent|<FicheSwitchContent|<FeuilleCalendrierContent|<ContenuVanne|<FicheEauContent|<FicheBorneContent/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
+      // ASSERTION MODIFIÉE (01/11, ADR 0318) : la feuille d'un traceur d'objet ; son contenu (`FicheTraceurContent`, fichetraceur.jsx) porte l'en-tête commun.
+      if (!/<TitreFeuille|<FicheEntete|<NomFeuille|<ContenuEnfant|<FicheRobotContent|<FicheDistributeurContent|<FicheChauffageContent|<FicheVoletContent|<FichePriseContent|<FicheLumiereContent|<FicheMediaContent|<FicheMeteoContenu|<FicheCapteurContent|<FicheBinaireContent|<FicheConfortContent|<FichePlanteContent|<FicheGroupeContent|<FicheSwitchContent|<FeuilleCalendrierContent|<ContenuVanne|<FicheEauContent|<FicheBorneContent|<FicheTraceurContent/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
       i = s.indexOf('<BottomSheet', i + 1);
     }
   }

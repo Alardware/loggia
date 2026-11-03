@@ -166,7 +166,9 @@ function RoomLightCard({ id, hass, onOpen, label = null }) {
           <GlypheCarte id={id} size={17}><Fi i="bulb" size={17} /></GlypheCarte></span>
         <PlaqueBascule on={v.on} nom={v.nom} fond={fond} encre={encre} inerte={v.muette} onToggle={basculer}>
           <GlypheCarte id={id} size={17}><Fi i="bulb" size={17} /></GlypheCarte></PlaqueBascule>
-        <RmBascule className="o-seul-large" on={v.on} nom={v.nom} onToggle={basculer} inerte={v.muette} />
+        {/* Sans variateur, la carte étroite n'a ni chiffre ni barre : la bascule y reste, à droite (ticket #43) — la plaque
+          * commande toujours, mais rien ne le disait. */}
+        <RmBascule className={v.variable ? 'o-seul-large' : undefined} on={v.on} nom={v.nom} onToggle={basculer} inerte={v.muette} />
         {chiffre && <ChiffreHaut v={v.bri} u="%" />}
       </div>
       {/* La rangée du radiateur (`RM_MILIEU`) : le nom et la phrase à gauche, le pourcentage d'une carte large à droite, aligné sur leur bas.

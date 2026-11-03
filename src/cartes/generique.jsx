@@ -10,11 +10,13 @@ import { CLASSES_MOUVEMENT, couleurPile, niveauPile } from '../attention.js';
 import { LISERE } from '../styles.js';
 import { Ico } from '../icones.jsx';
 import { tr } from '../i18n.js';
+import { retenirModeVentilo, chargeAllumage } from '../ventilo.js';
 import { useGardeSwitch, decMax, iconeChoisie, hx, lavisCarte } from '../app/noyau.jsx';
 import { pileDe } from '../appareils/fiches.jsx';
 import { cvIcoEntite, OUVRANT_DCS, texteDate, PlugIcon } from '../cartescustom/cartes.jsx';
 import { BIN_ETATS, RM_CARD, IlluOuvrant, RM_ICO, RmBascule, PileRepere, RM_NAME, RM_SUB, JaugePile, RM_BTN } from './briques.jsx';
 import { lireNombre } from './mesure.jsx';
+
 
 function RoomGenericCard({ id, hass, onOpen, label = null }) {
   const S = (hass && hass.states) || {};
@@ -33,6 +35,7 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   const actif = ov != null ? ov : on;
   // Avant l'index de la découverte, une PRISE s'affiche ici, en switch ordinaire : la règle commune des switch que l'index ne classe pas (F2).
   const gs = useGardeSwitch(S, id, dom === 'switch');
+  retenirModeVentilo(id, st);
   const basculer = () => {
     /* Avant l'index de la découverte, une PRISE s'affiche ici, en switch ordinaire
      * (relecture finale, A3, F2) : si l'état du serveur la nomme dans `protegees`,
@@ -42,6 +45,8 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
     if (dom === 'switch' && onOpen && appuiBascule({ on: actif, garde: gs.garde, ouvrable: true }) === 'fiche') { onOpen(id); return; }
     const nv = !actif; setOv(nv);
     if (dom === 'lock') call('lock', nv ? 'lock' : 'unlock');
+    // Un ventilateur se rallume dans son dernier MODE (ticket #43, ventilo.js).
+    else if (dom === 'fan' && nv && chargeAllumage(id)) call('fan', 'turn_on', chargeAllumage(id));
     else call('homeassistant', nv ? 'turn_on' : 'turn_off');
   };
   const fmtN = (n) => decMax(Math.round(n * 10) / 10, 1);

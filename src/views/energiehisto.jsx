@@ -606,6 +606,67 @@ function FeuilleJour({ hass, EN = {}, jour, devise = '\u20ac', onClose }) {
   );
 }
 
+const JOUR_MS = 24 * 3600 * 1000;
+const moyenne = (vals) => (vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null);
+
+/**
+ * Ce qui resume un mois : son total, sa moyenne par jour, son jour le plus
+ * haut, et l'ecart de la moyenne avec le mois d'avant.
+ *
+ * La moyenne ne compte que les journees FINIES : aujourd'hui, a dix heures,
+ * n'a encore presque rien consomme et tirerait le mois vers le bas. Le mois
+ * d'avant est fini, lui, en entier. On compare des moyennes, pas des totaux :
+ * le 10 du mois, un total ne se mesure pas a trente jours.
+ */
+export function resumeMois(cases = [], serie = null, serieVeille = null, maintenant = Date.now()) {
+  if (!Array.isArray(serie)) return null;
+  const finis = [];
+  let haut = null;
+  cases.forEach((c, i) => {
+    const v = serie[i];
+    if (v == null || !isFinite(v)) return;
+    if (c.debut + JOUR_MS <= maintenant) finis.push(v);
+    if (!haut || v > haut.v) haut = { v, debut: c.debut };
+  });
+  const moy = moyenne(finis);
+  const moyVeille = moyenne((serieVeille || []).filter(v => v != null && isFinite(v)));
+  return {
+    total: sommeStat(serie),
+    moyenne: moy,
+    haut,
+    ecart: moy != null && moyVeille ? (moy - moyVeille) / moyVeille : null,
+  };
+}
+
+/* Les chiffres du mois, en une rangee : des chiffres separes par un filet,
+ * pas des cartes dans la carte. L'ecart se colore selon ce qu'il annonce —
+ * plus de production est une bonne nouvelle, plus de consommation non. */
+function ChiffresMois({ resume, fmt, etroit, hausseBonne }) {
+  const { total, moyenne: moy, haut, ecart } = resume;
+  const ecartTexte = ecart == null || !isFinite(ecart) ? null
+    : ({ 1: '+', [-1]: '−' }[Math.sign(ecart)] || '') + nombre(Math.abs(ecart * 100), 0) + ' %';
+  const bon = ecart != null && Math.sign(ecart) === (hausseBonne ? 1 : -1);
+  const items = [
+    { lb: tr('Total du mois'), v: total != null ? fmt(total) : '—' },
+    { lb: tr('Moyenne par jour'), v: moy != null ? fmt(moy) : '—',
+      sous: ecartTexte && (etroit ? ecartTexte : tr('{p} sur le mois précédent', { p: ecartTexte })),
+      couleur: ecart === 0 ? 'var(--o-text3)' : bon ? 'var(--o-ok)' : 'var(--o-bad)' },
+    { lb: tr('Jour le plus haut'), v: haut ? fmt(haut.v) : '—',
+      sous: haut && new Date(haut.debut).toLocaleDateString(locale(), { day: 'numeric', month: 'short' }) },
+  ];
+  return (
+    <div style={{ display: 'flex', marginTop: etroit ? 12 : 18 }}>
+      {items.map((it, k) => (
+        <div key={k} style={{ flex: '1 1 0', minWidth: 0, padding: k ? (etroit ? '0 0 0 10px' : '0 0 0 20px') : 0, marginLeft: k ? (etroit ? 10 : 20) : 0, borderLeft: k ? 'var(--o-bw,1px) solid var(--o-bd2)' : 'none' }}>
+          <div style={{ fontSize: etroit ? 10.5 : 11.5, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.lb}</div>
+          <div style={{ marginTop: 3, fontSize: etroit ? 15 : 22, fontWeight: 800, letterSpacing: '-.01em', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.v}</div>
+          {it.sous && <div style={{ marginTop: 2, fontSize: etroit ? 10.5 : 12, fontWeight: 700, color: it.couleur || 'var(--o-text3)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.sous}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
  * Le calendrier des douze derniers mois.
  *
@@ -619,6 +680,11 @@ export function EnergieCalendrier({ hass, EN = {}, tour = 0, devise = '€', etr
    * sont illisibles sur 390 px. On feuillette donc les mois, comme un vrai
    * calendrier — c'est ce que montre la maquette mobile. */
   const [moisRecul, setMoisRecul] = useState(0);
+  /* SUR UN GRAND ECRAN, le mois en grand d'abord (31/10, planche « Trade
+   * Echo ») : chaque jour avec sa valeur, le total de chaque semaine, et les
+   * chiffres qui resument le mois. Le damier des douze mois reste a un clic. */
+  const [vue, setVue] = useState('mois');
+  const enMois = etroit || vue === 'mois';
   /* Le jour dont on lit le detail, ou `null`. Une case du calendrier l'ouvre —
    * l'infobulle du systeme ne disait qu'une valeur, en noir sur blanc, hors du
    * theme (demande du 07/10). */
@@ -641,43 +707,49 @@ export function EnergieCalendrier({ hass, EN = {}, tour = 0, devise = '€', etr
   const liste = choix ? PAR_MESURE[choix] : [];
   const facteurs = {};
   liste.forEach(id => { facteurs[id] = choix === 'cout' ? 1 : facteurKwh(unite(id)); });
-  const cal = useStats(hass, liste, etroit ? 'mois' : 'calendrier', etroit ? moisRecul : 0, tour, facteurs);
-  const serie = (() => {
-    const dispo = liste.filter(id => Array.isArray(cal.series[id]));
+  const cal = useStats(hass, liste, enMois ? 'mois' : 'calendrier', enMois ? moisRecul : 0, tour, facteurs);
+  /* Le mois d'avant, pour dire si la moyenne monte ou baisse. Rien a lire
+   * quand on regarde les douze mois. */
+  const veille = useStats(hass, enMois ? liste : [], 'mois', moisRecul + 1, tour, facteurs);
+  const cumul = (st) => {
+    const dispo = liste.filter(id => Array.isArray(st.series[id]));
     if (!dispo.length) return null;
-    const n = cal.cases.length;
+    const n = st.cases.length;
     const out = Array.from({ length: n }, () => null);
-    dispo.forEach(id => cal.series[id].forEach((v, i) => {
+    dispo.forEach(id => st.series[id].forEach((v, i) => {
       if (v != null && isFinite(v) && i < n) out[i] = (out[i] || 0) + v;
     }));
     return out;
-  })();
-  const frais = (serie && !etroit) ? damier(cal.cases, serie) : [];
+  };
+  const serie = cumul(cal);
+  const serieVeille = enMois ? cumul(veille) : null;
+  const frais = (serie && !enMois) ? damier(cal.cases, serie) : [];
   /* Comme l'historique : passer de « Consommation » à « Production » relance la
    * lecture, et un damier vide ferait disparaître la carte sous le doigt. */
   const dernier = useRef(null);
   if (frais.length) dernier.current = frais;
   const mois = frais.length ? frais : dernier.current;
-  if (!etroit && (!mois || !mois.length)) return null;
-  if (etroit && serie) dernierMois.current = { cases: cal.cases, serie };
-  const vuMois = etroit ? (serie ? { cases: cal.cases, serie } : dernierMois.current) : null;
-  if (etroit && !vuMois) return null;
+  if (!enMois && (!mois || !mois.length)) return null;
+  if (enMois && serie) dernierMois.current = { cases: cal.cases, serie };
+  const vuMois = enMois ? (serie ? { cases: cal.cases, serie } : dernierMois.current) : null;
+  if (enMois && !vuMois) return null;
   const TEINTE = { conso: 'var(--o-accent-rgb)', prod: 'var(--o-gold-rgb)', cout: 'var(--o-purple-rgb)' };
   const estCout = choix === 'cout';
-  const totalMois = etroit && vuMois ? sommeStat(vuMois.serie) : null;
   const fmt = (v) => (estCout ? dec(v, 2) + ' ' + devise : dec(v, 1) + ' kWh');
+  const resume = enMois && vuMois ? resumeMois(vuMois.cases, vuMois.serie, serieVeille) : null;
 
   return (
     <section style={{ ...CARTE, padding: etroit ? 14 : '22px 24px' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 200px', minWidth: 0 }}>
           <div style={SURTITRE}>{tr('Le calendrier')}</div>
-          <div style={TITRE}>{etroit ? tr('{m} par jour', { m: MESURE_NOM()[choix] || MESURE_NOM().conso }) : tr('Les douze derniers mois')}</div>
+          <div style={TITRE}>{enMois ? tr('{m} par jour', { m: MESURE_NOM()[choix] || MESURE_NOM().conso }) : tr('Les douze derniers mois')}</div>
         </div>
-        {etroit && totalMois != null && (
-          <div style={{ textAlign: 'right', lineHeight: 1.3 }}>
-            <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>{tr('Total du mois')}</div>
-            <div style={{ fontSize: 15, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmt(totalMois)}</div>
+        {!etroit && (
+          <div className={CL_ONGLETS} style={ONGLETS}>
+            {[['mois', tr('Mois')], ['annee', tr('Année')]].map(([id, lb]) => (
+              <button key={id} onClick={() => setVue(id)} aria-pressed={vue === id} style={onglet(vue === id)}>{lb}</button>
+            ))}
           </div>
         )}
         <div className={CL_ONGLETS} style={ONGLETS}>
@@ -687,19 +759,21 @@ export function EnergieCalendrier({ hass, EN = {}, tour = 0, devise = '€', etr
             ))}
         </div>
       </div>
-      {etroit ? (
+      {enMois ? (
         <>
           {/* Un mois a la fois : la fleche de gauche remonte, celle de droite
             * s'arrete au mois en cours — on ne feuillette pas l'avenir. */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, maxWidth: etroit ? 'none' : 340 }}>
             <button onClick={() => setMoisRecul(r => Math.min(RECUL_MAX.mois, r + 1))} disabled={moisRecul >= RECUL_MAX.mois} aria-label={tr('Période précédente')}
               style={{ width: 44, height: 38, flexShrink: 0, border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 11, background: 'var(--o-well)', color: 'var(--o-text1)', cursor: moisRecul >= RECUL_MAX.mois ? 'default' : 'pointer', opacity: moisRecul >= RECUL_MAX.mois ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="angle-small-left" size={15} /></button>
             <span style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden' }}>{libellePeriode('mois', moisRecul)}</span>
             <button onClick={() => setMoisRecul(r => Math.max(0, r - 1))} disabled={moisRecul === 0} aria-label={tr('Période suivante')}
               style={{ width: 44, height: 38, flexShrink: 0, border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 11, background: 'var(--o-well)', color: 'var(--o-text1)', cursor: moisRecul === 0 ? 'default' : 'pointer', opacity: moisRecul === 0 ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="angle-small-right" size={15} /></button>
           </div>
-          <div style={{ marginTop: 12 }}>
-            <CalendrierMois cases={vuMois.cases} serie={vuMois.serie} rgb={TEINTE[choix] || TEINTE.conso} formater={(v) => dec(v, estCout ? 2 : 0)} onJour={setJourOuvert} />
+          {resume && <ChiffresMois resume={resume} fmt={fmt} etroit={etroit} hausseBonne={choix === 'prod'} />}
+          <div style={{ marginTop: etroit ? 12 : 18 }}>
+            <CalendrierMois cases={vuMois.cases} serie={vuMois.serie} rgb={TEINTE[choix] || TEINTE.conso} formater={(v) => dec(v, estCout ? 2 : (v < 10 ? 1 : 0))} onJour={setJourOuvert}
+              semaines={!etroit} hauteur={etroit ? null : 64} formaterSemaine={(v) => dec(v, estCout ? 2 : 1)} />
           </div>
         </>
       ) : (

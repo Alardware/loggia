@@ -505,9 +505,9 @@ def test_le_programme_de_l_appareil_est_trouve_par_son_identifiant_ou_son_nom_d_
                  translation_key=translation_key, disabled_by=disabled_by, entity_category=None)
 
     entrees = [
-        e("climate.poele", unique_id="1809110010019"),
-        e("switch.poele_timer", unique_id="1809110010019-crono_enabled", original_name="Timer"),
-        e("switch.poele_start_stop", unique_id="1809110010019-att_eco", original_name="Start / Stop"),
+        e("climate.poele", unique_id="0000000000002"),
+        e("switch.poele_timer", unique_id="0000000000002-crono_enabled", original_name="Timer"),
+        e("switch.poele_start_stop", unique_id="0000000000002-att_eco", original_name="Start / Stop"),
         e("switch.mon_nom_a_moi", unique_id="abc", translation_key="schedule"),
         e("switch.desactive", unique_id="x-schedule", disabled_by="user"),
         e("switch.voisin_timer", device_id="d2", unique_id="y-timer"),

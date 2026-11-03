@@ -134,6 +134,8 @@ export function etatJournal(id, st, S, dernier = false) {
     // 03/10) : le journal d'une pièce les disait en français.
     return st === 'on' ? (porte ? tr('Ouvert') : tr('Détecté')) : (porte ? tr('Fermé') : tr('RAS'));
   }
+  // Un `event` (la sonnette, le colis ; ADR 0312) : son état est l'instant de l'événement, que l'heure de la ligne dit déjà.
+  if (dom === 'event') return tr('Détecté');
   if (dom === 'climate') return st === 'off' ? tr('Éteint') : st === 'heat' ? tr('CONFORT') : st;
   if (dom === 'vacuum') return st === 'cleaning' ? tr('Nettoyage') : st === 'docked' ? tr('À la base') : st === 'returning' ? tr('Retour base') : st === 'paused' ? tr('En pause') : st;
   return st + (a.unit_of_measurement ? ' ' + a.unit_of_measurement : '');
@@ -164,7 +166,7 @@ export function RoomActivityCard({ hass, ids, titre = null, sous = null, max = 8
   const vus = new Set();
   const dernieres = new Set(events.filter(e => (vus.has(e.entity_id) ? false : (vus.add(e.entity_id), true))));
   // Un volet « open » à 1 % est fermé (`coverFerme`) : son point ne s'allume pas.
-  const actif = (e) => ['on', 'open', 'unlocked', 'playing', 'heat', 'cleaning', 'home'].indexOf(e.state) >= 0
+  const actif = (e) => (['on', 'open', 'unlocked', 'playing', 'heat', 'cleaning', 'home'].indexOf(e.state) >= 0 || e.entity_id.indexOf('event.') === 0)
     && !voletBute(e.entity_id, e.state, S, dernieres.has(e));
   return (
     <div style={{ background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 'var(--o-radius,18px)', padding: '20px 22px', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>

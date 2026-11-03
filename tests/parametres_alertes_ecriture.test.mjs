@@ -61,7 +61,11 @@ async function ouvrir(options) {
   m.effets();
   return { hass, m };
 }
-const bascule = (m, label) => m.trouver(e => e.type && e.type.name === 'Tgl' && e.props.label === label)[0];
+/* Une bascule de ligne, ou celle d'un en-tête de panneau (maquette v3, 02/11 :
+ * « Le calme » et « Sur un danger » portent la leur à droite de leur titre). */
+const estBascule = (e, label) => e && e.type && e.type.name === 'Tgl' && e.props.label === label;
+const bascule = (m, label) => m.trouver(e => estBascule(e, label))[0]
+  || m.trouver(e => e.props && estBascule(e.props.droite, label)).map(e => e.props.droite)[0];
 
 test('point 5 : un refus (`not_admin`) RAMÈNE la bascule — elle ne ment pas', async () => {
   const { hass, m } = await ouvrir({ refus: { code: 'not_admin', message: 'reglages reserves aux administrateurs Home Assistant : loggia_alertes' } });
@@ -73,9 +77,12 @@ test('point 5 : un refus (`not_admin`) RAMÈNE la bascule — elle ne ment pas',
   hass.repondre();
   await tic(); await tic(); m.effets();
   assert.equal(bascule(m, 'Heures calmes').props.on, false, 'refusée : elle revient à sa valeur d’avant');
-  // Le message vit dans la description de la ligne de l'essai (`Ligne desc`), comme celui de « Envoyer un test ».
-  const dit = m.trouver(e => e.props && typeof e.props.desc === 'string' && /administrat|loggia_alertes/i.test(e.props.desc));
-  assert.ok(dit.length > 0, 'et le refus se dit');
+  /* ASSERTION MODIFIÉE (relecture du 03/11) : le refus vivait dans la ligne de l'essai, en bas de la page, loin de la bascule
+   * touchée. Il se dit maintenant en haut, dans un bandeau `role="alert"` que le lecteur d'écran annonce. */
+  const bandeau = m.trouver(e => e.props && e.props.role === 'alert');
+  const dit = m.trouver(e => e.type === 'span' && typeof e.props.children === 'string' && /administrat|loggia_alertes/i.test(e.props.children));
+  assert.ok(bandeau.length > 0 && dit.length > 0, 'et le refus se dit, en haut');
+  assert.equal(m.trouver(e => e.props && typeof e.props.desc === 'string' && /administrat|loggia_alertes/i.test(e.props.desc)).length, 0, 'plus dans la ligne de l’essai');
 });
 
 test('point 6 : deux réglages rapides sur deux clés différentes — le second ne perd pas le premier', async () => {

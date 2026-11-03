@@ -13,8 +13,9 @@ import { Fi, Anim, editBtn, nomCarte } from '../ui.jsx';
 import { RoomActivityCard, useDerniersEvenements } from '../historique.jsx';
 import { colonnesCam, poserCamDispo, camSerre } from '../camdispo.js';
 import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, estSirene, pointsAttention } from '../attention.js';
-import { evenementCamera, detecteursDe, reduireDerniers } from '../evenement.js';
-import { cfgVal, cfgSet, loggiaEnt, plateformeDe, secAlarm } from '../state.js';
+import { evenementCamera, detecteursDe, reduireDerniers, evenementsPorte } from '../evenement.js';
+import { cfgVal, cfgSet, loggiaEnt, plateformeDe, voisinsDe, nomAppareilDe, secAlarm, LOGGIA_INDEX } from '../state.js';
+import { capteurVigilance } from '../vigilance.js';
 import { tr } from '../i18n.js';
 import { OUTILS_VUES } from '../outilsvues.js';
 
@@ -81,7 +82,7 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
   // quand il en a une, et la complète par les détecteurs du même appareil.
   const camList = rCams.map(c => ({
     haid: c.haid || c.id, label: c.label || c.name,
-    motion: c.motion, person: c.person, vehicle: c.vehicle, sonnette: c.sonnette, colis: c.colis,
+    motion: c.motion, person: c.person, vehicle: c.vehicle, animal: c.animal, sonnette: c.sonnette, colis: c.colis,
     preset: c.preset,
   })).filter(c => c && c.haid);
   // Le dernier declenchement de chaque detecteur, par le journal (ADR 0031).
@@ -99,7 +100,8 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
   const camsInfoSec = (camsCfg || camList).map(c => ({ nom: c.name || c.label, online: S[c.haid] ? S[c.haid].state !== 'unavailable' : c.online !== false }));
   const comptesSecVue = comptesSecurite(S, camsInfoSec, { plateforme: plateformeDe, masque: masqueDe });
   const tuilesSecVue = tuilesSecurite(comptesSecVue);
-  const pointsSec = pointsAttention({ S, cams: camsInfoSec, plateforme: plateformeDe, masque: masqueDe });
+  // La vigilance rouge, de la même source que l'Accueil, dont le point mène ici (ADR 0310).
+  const pointsSec = pointsAttention({ S, cams: camsInfoSec, plateforme: plateformeDe, masque: masqueDe, voisins: voisinsDe, nomAppareil: nomAppareilDe, vigilance: capteurVigilance(S, LOGGIA_INDEX) });
   const defiler = (cle) => {
     const el = document.getElementById(cle === 'cameras' ? 'sec-cameras' : cle === 'mouvement' ? 'sec-journal' : 'sec-ouvrants');
     // Un saut net, pas un glissement : le glissement est ignore par certains
@@ -268,10 +270,11 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
       </div>
 
       {/* Le journal de ce qui touche à la sécurité : ouvrants, mouvements,
-        * alarme et caméras — la carte des pièces, restreinte à ces entités. */}
+        * alarme et caméras — la carte des pièces, restreinte à ces entités —,
+        * la sonnette et le colis compris (ADR 0312). */}
       <div id="sec-journal">
         <RoomActivityCard hass={hass} max={12} titre={tr('Journal de la sécurité')} sous={tr('Ouvrants, mouvements et alarme — 24 h, en direct')}
-          ids={[...ouvrantsDe(S).map(o => o.id), ...(alarmId ? [alarmId] : []), ...camList.map(c => c.haid).filter(Boolean), ...camList.flatMap(c => detecteursDe(c).map(d => d.id)), ...people.map(p => p.haid).filter(Boolean)]} />
+          ids={[...ouvrantsDe(S).map(o => o.id), ...(alarmId ? [alarmId] : []), ...camList.map(c => c.haid).filter(Boolean), ...camList.flatMap(c => detecteursDe(c).map(d => d.id)), ...evenementsPorte(LOGGIA_INDEX).map(e => e.id), ...people.map(p => p.haid).filter(Boolean)]} />
       </div>
       {/* Les fiches des ouvrants : sans elles, une carte cliquee resterait muette. */}
       {dc.sheets}

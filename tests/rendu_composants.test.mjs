@@ -79,12 +79,11 @@ test('le premier lancement : ses textes passent tous par la traduction', async (
     },
   };
   const html = rendre(Onboarding, { runtime, onDone: () => {}, onSkip: () => {} });
-  assert.ok(html.includes('Bienvenue') && html.includes('Commencer') && html.includes('Passer'),
+  assert.ok(html.includes('Bienvenue dans Loggia') && html.includes('Commencer') && html.includes('Passer'),
     'les boutons et le titre de la premiere etape');
-  assert.ok(html.includes('ÉTAPE 1 SUR 3'), 'le compteur d’etapes est rempli, pas laisse en gabarit');
-  assert.ok(html.includes('412') && html.includes('ENTITÉS'), 'ce que la lecture a trouve');
-  assert.ok(html.includes('Rien n&#x27;est à saisir') || html.includes("Rien n'est à saisir"),
-    'la phrase de bienvenue, ecrite sur plusieurs lignes');
+  // Maquette du 01/11 : des points pour les etapes, le compte reste dit au lecteur d'ecran. Le code n'est pas defini : cinq etapes.
+  assert.ok(html.includes('ÉTAPE 1 SUR 5'), 'le compteur d’etapes est rempli, pas laisse en gabarit');
+  assert.ok(html.includes('Rien à écrire.'), 'la phrase de bienvenue');
   assert.ok(!html.includes('{n}') && !html.includes('{a}') && !html.includes('{b}'),
     'aucun repere de gabarit ne reste a l’ecran');
 });

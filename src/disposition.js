@@ -114,17 +114,35 @@ export function sansPart(L, format, appareil = null) {
   return { [table]: Object.keys(f).length ? f : null };
 }
 
+/* Le rangement des pièces de l'Accueil, et le test « rien n'y est rangé » :
+ * une liste vide, un objet sans clé. */
+const RANGEMENT_PIECES = ['piecesOrdre', 'places', 'tailles'];
+const rangeVide = (o, k) => {
+  if (!(k in o)) return false;
+  const v = o[k];
+  return !(Array.isArray(v) ? v.length : (v && typeof v === 'object' && Object.keys(v).length));
+};
+
 /** La grille de l'Accueil telle que CE format la voit (ADR 0221) : chaque clé
  *  de sa part l'emporte, les autres viennent de l'ordinateur ; un appareil
  *  nommé passe devant son format (ADR 0222). Les grilles déjà recopiées en
- *  entier par l'ancien éditeur restent ce qu'elles étaient. */
+ *  entier par l'ancien éditeur restent ce qu'elles étaient, sauf un rangement
+ *  des pièces vide, qui hérite. */
 export function grilleDuFormat(accL, format, appareil = null) {
   const l = accL || {};
   const duFormat = partDe(l, format);
   const deLAppareil = appareil ? partDe(l, format, appareil) : null;
   if (!duFormat && !deLAppareil) return l;
   const { formats: _f, appareils: _a, ...pc } = l;
-  const sans = (p) => { if (!p) return {}; const { formats: _x, appareils: _y, ...r } = p; return r; };
+  /* Le rangement des pièces VIDE n'est pas un choix (ticket #43) : l'ancien
+   * éditeur recopiait la grille entière, `piecesOrdre: []` compris, et cet
+   * ordre vide masquait celui de l'ordinateur — les pièces par nom. */
+  const sans = (p) => {
+    if (!p) return {};
+    const { formats: _x, appareils: _y, ...r } = p;
+    RANGEMENT_PIECES.forEach((k) => { if (rangeVide(r, k)) delete r[k]; });
+    return r;
+  };
   return { ...pc, ...sans(duFormat), ...sans(deLAppareil) };
 }
 
@@ -141,7 +159,9 @@ export function poserGrille(accL, format, g, appareil = null) {
   const part = { ...propre };
   Object.keys(g || {}).forEach(k => {
     if (k === 'formats' || k === 'appareils') return;
-    if (!(k in propre) && g[k] === vue[k]) return;
+    // Un rangement vide de la part compte comme hérité (voir `grilleDuFormat`).
+    const herite = !(k in propre) || (RANGEMENT_PIECES.indexOf(k) >= 0 && rangeVide(propre, k));
+    if (herite && g[k] === vue[k]) { delete part[k]; return; }
     part[k] = g[k];
   });
   const table = appareil ? 'appareils' : 'formats';

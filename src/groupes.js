@@ -31,7 +31,7 @@
  * '' sinon — et `appareil(id)`, le nom de son appareil.
  */
 import { tr, trN } from './i18n.js';
-import { motsSurete, ICONES_ATTENTION, CLASSES_OUVRANT, CLASSES_SURETE, CLASSES_MOUVEMENT } from './attention.js';
+import { motsSurete, ICONES_ATTENTION, CLASSES_OUVRANT, CLASSES_SURETE, CLASSES_MOUVEMENT, estMeteoAlarm } from './attention.js';
 import { coDanger } from './confort.js';
 import { uniteCo } from './unites.js';
 
@@ -48,12 +48,9 @@ export function groupeDeClasse(classe) {
   return GROUPES.find(g => FAMILLES_GROUPES[g].indexOf(classe) >= 0) || null;
 }
 
-/** MeteoAlarm, reconnue par la règle de l'Accueil (attention.js, `pointsAttention`) : un `safety` qui porte
- *  `awareness_level`, ou dont l'identifiant ou l'attribution nomment MeteoAlarm. */
-export function estMeteoAlarm(id, a) {
-  const x = a || {};
-  return x.device_class === 'safety' && (x.awareness_level != null || /meteoalarm/i.test(String(id)) || /meteoalarm/i.test(x.attribution || ''));
-}
+/* MeteoAlarm, reconnue par LA règle de l'Accueil (attention.js, ADR 0310) : un `safety` qui porte `awareness_level`, ou dont
+ * l'identifiant ou l'attribution nomment MeteoAlarm. Elle n'a plus de copie ici. */
+export { estMeteoAlarm };
 
 const attrs = (S, id) => (S && S[id] && S[id].attributes) || {};
 

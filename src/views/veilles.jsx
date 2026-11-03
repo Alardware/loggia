@@ -26,6 +26,12 @@ import { sourcesCollecte } from '../collecte.js';
  * cours repartait de zero. Voir `tests/composants.test.mjs`. */
 
 
+/* Le seuil d'un consommable (D21, ADR 0319) : dans l'unité du capteur, comme au serveur (`veilles.py`, `_poser_patch`), qui n'a pas de
+ * borne haute — un réservoir compté en millilitres reçoit un seuil de 150. 100 au plus quand TOUS les capteurs désignés sont en
+ * pour-cent ; 1 au moins ; 10 pour ce qui n'est pas un nombre. */
+export const plafondConso = (designes, S) => (designes.length > 0 && designes.every(id => ((S[id] && S[id].attributes) || {}).unit_of_measurement === '%') ? 100 : null);
+export const seuilConso = (v, plafond) => { const n = Number(v); const x = Number.isFinite(n) && n ? Math.max(1, n) : 10; return plafond ? Math.min(plafond, x) : x; };
+
 const Choix = ({ liste, retenues, champNom, section, enregistrer }) => (
   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
     {liste.map(x => {
@@ -129,6 +135,7 @@ export function VeillesReglages({ hass, cardSt }) {
   const col = cfg.collecte || {};
   const autoCollecte = collecteSources.auto.map(nomDe).join(', ');
   const designes = (conso.capteurs || []).filter(x => typeof x === 'string');
+  const plafond = plafondConso(designes, (hass && hass.states) || {});
 
   /* Les derniers signalements d'une regle, dans sa carte (maquette du 18/09) :
    * le message du journal dit « <capteur> : <ce qui se passe> ». La pile se
@@ -164,7 +171,8 @@ export function VeillesReglages({ hass, cardSt }) {
 
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    // Des lignes dans le panneau de leur module (maquette v3 des Règles, 03/11) : plus d'écart entre elles.
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
       {/* Sans service de notification, ces trois veilles n'ont personne à qui
         * parler : autant le dire avant de faire régler des seuils. */}
       {etat.notification === false && (
@@ -178,7 +186,7 @@ export function VeillesReglages({ hass, cardSt }) {
 
       {/* ── L'air ── */}
       <div style={cardSt}>
-        <RegleEntete nom={tr('Air vicié')}
+        <RegleEntete ico="wind" nom={tr('Air vicié')}
           desc={tr('Au-delà de 1000 à 1200 ppm on dort mal et on pense moins bien. Personne ne consulte un capteur de CO2 : il faut qu’il vienne le dire.')}
           on={co2.actif} cb={() => enregistrer({ co2: { actif: !co2.actif } })} plie={pliCo2} onPlier={plierCo2} zone="veilles-co2" />
         {co2.actif && !pliCo2 && (
@@ -213,7 +221,7 @@ export function VeillesReglages({ hass, cardSt }) {
 
       {/* ── Les piles ── */}
       <div style={cardSt}>
-        <RegleEntete nom={tr('Piles faibles')}
+        <RegleEntete ico="battery-quarter" nom={tr('Piles faibles')}
           desc={tr('Un détecteur à plat ne prévient pas qu’il est à plat : il se tait, et on croit la porte fermée.')}
           on={bat.actif} cb={() => enregistrer({ batterie: { actif: !bat.actif } })} plie={pliBat} onPlier={plierBat} zone="veilles-bat" />
         {bat.actif && !pliBat && (
@@ -240,15 +248,15 @@ export function VeillesReglages({ hass, cardSt }) {
         * nom ne prouve rien : les capteurs se DESIGNENT, la veille ne lit
         * qu'eux. Vérifiés une fois par heure, comme les piles. */}
       <div style={cardSt}>
-        <RegleEntete nom={tr('Consommables')}
+        <RegleEntete ico="broom" nom={tr('Consommables')}
           desc={tr('Le filtre d’un aspirateur, la brosse d’un robot, le réservoir d’un distributeur : rien ne les nomme dans Home Assistant. Désignez leurs capteurs, la veille prévient quand il faut remplacer.')}
           on={conso.actif} cb={() => enregistrer({ consommables: { actif: !conso.actif } })} plie={pliConso} onPlier={plierConso} zone="veilles-conso" />
         {conso.actif && !pliConso && (
           <div id="veilles-conso" style={ZONE_REGLAGES}>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 68 }}>{tr('En dessous de')}</span>
-              <input aria-label={tr('Seuil des consommables, dans l’unité du capteur')} type="number" value={conso.seuil != null ? conso.seuil : 10} min={1} max={90}
-                onChange={e => enregistrer({ consommables: { seuil: Math.max(1, Math.min(90, Number(e.target.value) || 10)) } })}
+              <input aria-label={tr('Seuil des consommables, dans l’unité du capteur')} type="number" value={conso.seuil != null ? conso.seuil : 10} min={1} max={plafond || undefined}
+                onChange={e => enregistrer({ consommables: { seuil: seuilConso(e.target.value, plafond) } })}
                 style={{ ...champ, width: 74 }} />
               <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>{tr('dans l’unité du capteur')}</span>
             </div>
@@ -275,7 +283,7 @@ export function VeillesReglages({ hass, cardSt }) {
 
       {/* ── Le tarif ── */}
       <div style={cardSt}>
-        <RegleEntete nom={tr('Heures creuses')}
+        <RegleEntete ico="bolt" nom={tr('Heures creuses')}
           desc={tr('Le lave-vaisselle attend souvent qu’on y pense.')}
           on={cr.actif} cb={() => enregistrer({ creuses: { actif: !cr.actif } })} plie={pliCr} onPlier={plierCr} zone="veilles-cr" />
         {cr.actif && !pliCr && (
@@ -315,7 +323,7 @@ export function VeillesReglages({ hass, cardSt }) {
         * la maison, avec le bouton « C'est sorti » que le bandeau de l'Accueil
         * partage. La source se trouve seule ; la choisir ne fait que corriger. */}
       <div style={cardSt}>
-        <RegleEntete nom={tr('Rappel de collecte')}
+        <RegleEntete ico="trash" nom={tr('Rappel de collecte')}
           desc={tr('La veille au soir, un message aux personnes à la maison : ce qui passe demain, et un bouton « C’est sorti » qui fait taire le bandeau sur tous les écrans.')}
           on={col.actif} cb={() => enregistrer({ collecte: { actif: !col.actif } })} plie={pliCol} onPlier={plierCol} zone="veilles-collecte" />
         {col.actif && !pliCol && (

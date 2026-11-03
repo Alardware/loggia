@@ -186,6 +186,9 @@ test('la vigilance vue du widget : orange et rouge le teintent et prennent la ph
   assert.deepEqual(jaune, { niveau: 'jaune', ton: 'warn', texte: 'Vigilance jaune · Orages', widget: false }, 'jaune : pas de bruit sur l’Accueil');
   assert.equal(vigilanceWidget({ 'sensor.x_weather_alert': { state: 'Vert', attributes: {} } }, 'sensor.x_weather_alert').widget, false);
   assert.equal(vigilanceWidget(S, null), null, 'sans capteur, rien');
-  const rouge = vigilanceWidget({ 'binary_sensor.meteoalarm': { state: 'on', attributes: { device_class: 'safety', attribution: 'MeteoAlarm', severity: 'Severe', event: 'Vent violent' } } }, 'binary_sensor.meteoalarm');
+  // ASSERTION MODIFIÉE (01/11, ADR 0310) : « Severe » est l'orange de MeteoAlarm ; le rouge est « Extreme ».
+  const orange = vigilanceWidget({ 'binary_sensor.meteoalarm': { state: 'on', attributes: { device_class: 'safety', attribution: 'MeteoAlarm', severity: 'Severe', event: 'Vent violent' } } }, 'binary_sensor.meteoalarm');
+  assert.deepEqual(orange, { niveau: 'orange', ton: 'warn2', texte: 'Vigilance orange · Vent violent', widget: true }, 'Severe : l’orange');
+  const rouge = vigilanceWidget({ 'binary_sensor.meteoalarm': { state: 'on', attributes: { device_class: 'safety', attribution: 'MeteoAlarm', severity: 'Extreme', event: 'Vent violent' } } }, 'binary_sensor.meteoalarm');
   assert.deepEqual(rouge, { niveau: 'rouge', ton: 'bad', texte: 'Vigilance rouge · Vent violent', widget: true }, 'MeteoAlarm aussi');
 });
