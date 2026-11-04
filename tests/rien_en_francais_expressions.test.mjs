@@ -46,7 +46,7 @@ const fichiers = [];
     const p = join(d, f);
     if (statSync(p).isDirectory()) { if (f !== 'langues') walk(p); }
     // `dessins.js` ne porte que du balisage SVG.
-    else if (/\.jsx?$/.test(f) && f !== 'dessins.js') fichiers.push(p);
+    else if (/\.jsx?$/.test(f) && f !== 'dessins.js' && f !== 'dessinsrares.js') fichiers.push(p);
   }
 })(SRC);
 const nom = (f) => relative(SRC, f).split(sep).join('/');

@@ -1,5 +1,27 @@
 # Loggia Dashboard
 
+A Home Assistant dashboard that fills itself in.
+
+Loggia reads the registries of your installation — areas, devices, entities —
+and works out what it can show. **No entity ID is written in the code**: what
+you don't have doesn't appear, what you add later shows up without touching
+anything.
+
+- Rooms worked out from your Home Assistant areas
+- Energy view fed by the native Energy dashboard
+- A view with nothing to show hides itself, and comes back by itself
+- Settings **per user**, on the server: the same rooms and theme on all your
+  devices
+- Writing the configuration is reserved for Home Assistant administrators
+- No external resource, no telemetry
+
+After installing: Settings → Devices & services → Add → **Loggia**. Nothing to
+copy into `www/`, no YAML dashboard to write.
+
+---
+
+# Loggia Dashboard
+
 Un tableau de bord Home Assistant qui se remplit tout seul.
 
 Loggia lit les registres de votre installation — zones, appareils, entités — et

@@ -58,7 +58,8 @@ test('la grille suit la catégorie de la carte', () => {
    * cinquante icônes où la bonne est en page six ne sert à rien. */
   const bloc = app.match(/const GROUPES_ICONES = \{([\s\S]*?)\n\};/);
   assert.ok(bloc, 'GROUPES_ICONES introuvable');
-  const dessins = readFileSync(join(RACINE, 'src', 'dessins.js'), 'utf8');
+  // ASSERTION MODIFIÉE (04/11) : le catalogue tient en deux fichiers — les dessins cités dans le code, et les rares (dessinsrares.js).
+  const dessins = readFileSync(join(RACINE, 'src', 'dessins.js'), 'utf8') + readFileSync(join(RACINE, 'src', 'dessinsrares.js'), 'utf8');
   const groupesDessin = new Set([...dessins.slice(dessins.indexOf('DESSINS_CAT'), dessins.indexOf('FONTE_CAT')).matchAll(/^  ([a-z]+): \[/gm)].map(m => m[1]));
   const groupesFonte = new Set([...dessins.slice(dessins.indexOf('FONTE_CAT')).matchAll(/^  ([a-z]+): \[/gm)].map(m => m[1]));
 
@@ -158,7 +159,8 @@ test('un dessin ne bouge que là où quelque chose travaille', () => {
   // Le trace est AGRANDI dans sa boite : un appareil du catalogue tient dans
   // 16 a 19 unites sur 24, la ou un glyphe de la fonte remplit son cadratin.
   assert.ok(ico.includes('const ECHELLE_DESSIN = 1.18;'), 'les dessins reviennent a la taille ou ils paraissaient trop petits');
-  assert.ok(ico.includes("OUVRE_GRANDI + DESSINS[name] + '</g>'"), 'le tracé n’est plus agrandi dans sa boîte');
+  // ASSERTION MODIFIÉE (04/11) : le corps vient de `dessins.js` OU des rares (`corps`), toujours agrandi.
+  assert.ok(ico.includes("OUVRE_GRANDI + corps + '</g>'"), 'le tracé n’est plus agrandi dans sa boîte');
   // La carte d'une prise (chantier Prises) : l'icône choisie d'abord, sinon le glyphe de son appareil, immobile (P11).
   assert.ok(app.includes('<GlypheCarte id={id} size={17}>{tp.ico ? <Ico name={tp.ico} size={17} /> : <PlugIcon size={17} />}</GlypheCarte>'), 'la carte de prise n’écoute plus l’icône choisie');
   const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');

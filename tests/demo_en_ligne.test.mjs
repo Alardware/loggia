@@ -49,7 +49,8 @@ test('la démo ne nomme pas un serveur qu’elle n’a pas', () => {
 });
 
 test('le README mène à la démo en ligne une seule fois, sans captures par appareil', () => {
-  const r = lire('README.md');
+  // ASSERTION MODIFIÉE (04/11) : le français vit dans README.fr.md (l'anglais : readme_anglais.test.mjs).
+  const r = lire('README.fr.md');
   // Un seul lien, dans « Essayer sans rien installer » : ni doublon sous le
   // bandeau, ni liste d'entrées directes (retirés le 18/09 à la demande).
   assert.ok(r.includes('**[La démo en ligne](https://alardware.github.io/loggia/)**'));

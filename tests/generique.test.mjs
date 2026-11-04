@@ -348,7 +348,8 @@ test('la documentation ne promet pas de garde-fou inexistant', () => {
   // Une barriere de securite qu'on croit avoir est pire que pas de barriere :
   // un administrateur qui ouvre des comptes a sa famille en s'y fiant n'est
   // protege par rien.
-  const readme = readFileSync(join(RACINE, 'README.md'), 'utf8');
+  // ASSERTION MODIFIÉE (04/11) : les deux README, l'anglais et le français.
+  const readme = readFileSync(join(RACINE, 'README.md'), 'utf8') + readFileSync(join(RACINE, 'README.fr.md'), 'utf8');
   const info = readFileSync(join(RACINE, 'info.md'), 'utf8');
   const init = readFileSync(join(RACINE, 'custom_components', 'loggia', '__init__.py'), 'utf8');
   const py = readdirSync(join(RACINE, 'custom_components', 'loggia'))
