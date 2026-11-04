@@ -16,7 +16,8 @@ const src = [MONOLITHE, ...['ecranveille.jsx', 'pinmodal.jsx'].map(f => readFile
 const ui = readFileSync(join(RACINE, 'src', 'ui.jsx'), 'utf8');
 const views = readFileSync(join(RACINE, 'src', 'views.js'), 'utf8');
 const css = readFileSync(join(RACINE, 'src', 'index.css'), 'utf8');
-const readme = readFileSync(join(RACINE, 'README.md'), 'utf8');
+// ASSERTION MODIFIÉE (04/11) : les deux README, l'anglais et le français.
+const readme = readFileSync(join(RACINE, 'README.md'), 'utf8') + readFileSync(join(RACINE, 'README.fr.md'), 'utf8');
 const NL = String.fromCharCode(10);
 const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, debut + ' introuvable'); const f = src.indexOf(fin, d + 1); return src.slice(d, f < 0 ? undefined : f); };
 

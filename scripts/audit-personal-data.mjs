@@ -19,7 +19,7 @@ const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 // `docs` et les fichiers de la racine sont publies avec le depot : une ADR qui
 // recopierait un extrait de journal doit etre arretee ici aussi (audit 18/09).
 const SCAN = ['src', 'custom_components', 'tests', 'docs'];
-const RACINE_FICHIERS = ['README.md', 'info.md', 'CHANGELOG.md', 'hacs.json', 'package.json'];
+const RACINE_FICHIERS = ['README.md', 'README.fr.md', 'info.md', 'CHANGELOG.md', 'hacs.json', 'package.json'];
 const EXT = /\.(m?js|jsx|py|json|css|html|md)$/;
 const SKIP = /(node_modules|__pycache__|\.avant-|frontend[/\\]assets|frontend[/\\]fonts)/;
 
