@@ -736,6 +736,10 @@ class LoggiaStore:
             commun[appareils.CLE_APPAREILS] = appareils.pour_l_ecran(commun[appareils.CLE_APPAREILS])
         return {**commun, **couvre}
 
+    async def async_pour_diagnostics(self) -> dict[str, Any]:
+        """Le contenu du magasin, pour `diagnostics.py` (ADR 0325), qui n'en garde que la FORME."""
+        return await self._load()
+
     async def async_get_code_admin(self) -> dict[str, Any] | None:
         """L'enregistrement du code (sel, hache), ou None s'il n'a jamais ete defini."""
         data = await self._load()

@@ -95,7 +95,8 @@ test('la table : des jetons, des glyphes qui existent, et un nom pour chacun', (
   const noms = NOMS_PRISE();
   const css = readFileSync(join(RACINE, 'public', 'fonts', 'uicons-regular-rounded.css'), 'utf8');
   const maison = readFileSync(join(RACINE, 'src', 'icones.jsx'), 'utf8');
-  const dessins = readFileSync(join(RACINE, 'src', 'dessins.js'), 'utf8');
+  // ASSERTION MODIFIÉE (04/11) : le catalogue tient en deux fichiers — les dessins cités dans le code, et les rares (dessinsrares.js).
+  const dessins = readFileSync(join(RACINE, 'src', 'dessins.js'), 'utf8') + readFileSync(join(RACINE, 'src', 'dessinsrares.js'), 'utf8');
   for (const [id, t] of Object.entries(TYPES_PRISE)) {
     assert.match(t.col, /^var\(--o-[a-z0-9-]+\)$/, id + ' : une couleur en dur');
     assert.match(t.rgb, /^var\(--o-[a-z0-9-]+-rgb\)$/, id + ' : le rgb doit aller avec la couleur');

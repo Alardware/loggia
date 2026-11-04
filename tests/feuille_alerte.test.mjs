@@ -60,7 +60,8 @@ test('les réglages d’usine de l’écran de secours passent par la feuille, l
 test('Paramètres et ses versions n’appellent plus que la feuille', () => {
   const par = lire('views/parametres.jsx');
   const ver = lire('views/versions.jsx');
-  assert.equal((par.match(/\balerter\(\{ titre: tr\(/g) || []).length, 9, 'les neuf alertes de Paramètres');
+  // ASSERTION MODIFIÉE (04/11) : dix, avec l'échec du téléchargement des diagnostics (ADR 0325), par la même feuille.
+  assert.equal((par.match(/\balerter\(\{ titre: tr\(/g) || []).length, 10, 'les dix alertes de Paramètres');
   assert.equal((ver.match(/\balerter\(\{ titre: tr\('Versions précédentes'\)/g) || []).length, 1, 'le retour à une version');
 });
 

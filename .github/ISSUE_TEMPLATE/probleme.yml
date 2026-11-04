@@ -1,0 +1,33 @@
+name: Signaler un problème / Report a problem
+description: Quelque chose ne marche pas comme prévu. / Something does not work as expected.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: quoi
+    attributes:
+      label: Ce qui se passe / What happens
+      description: Ce que vous avez fait, ce que vous attendiez, ce que vous avez vu. Une capture aide beaucoup. / What you did, what you expected, what you saw. A screenshot helps a lot.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version de Loggia / Loggia version
+      description: Paramètres › À propos. / Settings › About.
+      placeholder: "3.97.0"
+  - type: dropdown
+    id: ecran
+    attributes:
+      label: Écran / Screen
+      options:
+        - Ordinateur / Computer
+        - Tablette / Tablet
+        - Téléphone / Phone
+        - Plusieurs / Several
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: |
+        Loggia › Paramètres › À propos › Diagnostics › Télécharger, ou Home Assistant › Appareils et services › Loggia › ⋮ › Télécharger les diagnostics. Glissez le fichier ici. Il décrit la forme de votre configuration, sans aucun nom, adresse ni code.
+        Loggia › Settings › About › Diagnostics › Download, or Home Assistant › Devices & services › Loggia › ⋮ › Download diagnostics. Drop the file here. It describes the shape of your configuration, without any name, address or code.

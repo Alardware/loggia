@@ -77,6 +77,20 @@ cartes ; le contenu, lui, se synchronise.
 2. Ouvrez « Loggia Dashboard » dans HACS → *Télécharger*.
 3. Redémarrez Home Assistant.
 
+### Versions bêta
+
+Chaque version passe d'abord par une bêta (`3.98.0-beta.1`, par exemple), que
+j'installe chez moi avant tout le monde. Pour la recevoir aussi :
+
+1. Paramètres → Appareils et services → *HACS* → entités : activez puis
+   allumez l'interrupteur *Pre-release* de « Loggia Dashboard » (il est
+   désactivé par défaut).
+2. La bêta arrive alors comme une mise à jour ordinaire.
+
+Pour revenir à la version stable : éteignez l'interrupteur, puis HACS →
+« Loggia Dashboard » → ⋮ → *Télécharger à nouveau* → choisissez la dernière
+version sans `-beta`.
+
 ### Manuelle
 
 1. Téléchargez la dernière
@@ -163,7 +177,7 @@ automation:
 | Ce que vous voyez | Ce qu'il faut faire |
 | --- | --- |
 | Loggia n'est pas dans le menu latéral | L'intégration n'est pas ajoutée : Paramètres → Appareils et services → Ajouter une intégration → Loggia. Puis redémarrez Home Assistant. |
-| Après une mise à jour, rien n'a changé | L'écran garde l'ancienne version : rechargez la page (Ctrl+F5), ou fermez et rouvrez l'application Home Assistant. |
+| Après une mise à jour, rien n'a changé | L'écran garde l'ancienne version jusqu'au rechargement. Loggia le signale par « Une nouvelle version de Loggia est installée » : touchez *Recharger*. Sinon, rechargez la page (Ctrl+F5), ou fermez et rouvrez l'application Home Assistant. |
 | Une vue manque | Rien ne l'alimente chez vous. Paramètres → Vues dit pourquoi. |
 | Les réglages ne suivent pas d'un écran à l'autre | L'intégration n'est pas ajoutée : sans elle, chaque navigateur garde les siens. |
 | « Aucun code n'est encore défini » | Un administrateur de Home Assistant doit créer le code administrateur, dans Paramètres › Profils. |
@@ -171,6 +185,10 @@ automation:
 - Journaux : Paramètres → Système → Journaux, cherchez `loggia`.
 - Signalez un problème sur [GitHub](https://github.com/Alardware/loggia/issues)
   en indiquant la version de Loggia et, si possible, une capture d'écran.
+  Joignez les diagnostics : Loggia → Paramètres → À propos → *Diagnostics*, ou
+  Paramètres → Appareils et services → Loggia → ⋮ → *Télécharger les
+  diagnostics*. Le fichier décrit la forme de votre configuration, sans aucun
+  nom, adresse ni code.
 
 ## Vos données
 

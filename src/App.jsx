@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react';
 import { lazyRecharge } from './recharge.js';
+import { NouvelleVersion } from './nouvelleversion.jsx';
 import { OUTILS_VUES } from './outilsvues.js';
 import { formatEcran } from './disposition.js';
 import { profilAppareil, retenirProfilAppareil, ficheAppareil, appareilsConnus, adopterAppareil, apparence, poserApparence } from './state.js';
@@ -1068,7 +1069,7 @@ export default function App() {
   const hass = useHass(haKeys, noisyKeys);
   const { seuilPile, lecturePrises, viewBlocked, wasConnectedRef, haLost, patienceHa } = useConnexionApp({ activeCv, activeRoom, hass, loggiaRuntime, view });
   const { toast } = useToastApp();
-  const { weatherMode, weatherRaw, weatherTemp, weatherLabel } = useMeteoApp({ hass });
+  const { weatherMode, weatherRaw, weatherTemp, weatherLabel } = useMeteoApp({ hass, rooms: cfg.rooms || null });
   const { accueil, cyclesPrises, vivantes } = useAccueilApp({ activeRoom, cfg, hass, lecturePrises, loggiaRuntime, seuilPile, view });
 
   const { notifs, lireNotifs } = useJournalApp({ hass, vivantes });
@@ -1325,6 +1326,8 @@ export default function App() {
       {idle && ambient > 0 && plageOk && !appuiSonnette && <Suspense fallback={null}><AmbientOverlay rooms={cfg.rooms || []} hass={hass} wx={weatherMode || 'clouds'} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} notifs={notifs}
         ast={(() => { const S = (hass && hass.states) || {}; const rAl = (loggiaRuntime.resolved && loggiaRuntime.resolved.alarm && loggiaRuntime.resolved.alarm.available) ? loggiaRuntime.resolved.alarm.main : null; const aid = (secAlarm() && S[secAlarm()]) ? secAlarm() : rAl; return (aid && S[aid]) ? S[aid].state : null; })()} /></Suspense>}
       {haLost && <div role="alert" style={BANDEAU_ALERTE}>{tr('Connexion Home Assistant perdue — les données affichées peuvent être obsolètes')}</div>}
+      {/* Une nouvelle version installée se dit : un écran ouvert garde l'ancienne jusqu'au rechargement (03/11). */}
+      <NouvelleVersion />
       {!haLost && discovery.echec && <div role="alert" style={BANDEAU_ALERTE}>{tr('La découverte de la maison a été interrompue — rechargez la page')}</div>}
       {/* L'échec d'une commande se DIT (audit du 03/10).
         *

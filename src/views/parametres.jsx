@@ -56,6 +56,7 @@ import { CLE_NUIT, CLE_ASSOMBRIR, lireNuit, poserNuit, suivreNuit, soleilCouche 
 import { coursSoleil } from '../soleilcalc.js';
 import { tr, trN, locale, choixLangue, languesDisponibles, nomProfil, comparerTextes } from '../i18n.js';
 import { raisonEchec, bilanEcritures, texteRefus } from '../refus.js';
+import { telechargerDiagnostics } from '../diagnostics.js';
 import { commanderChauffage } from '../chauffageetat.js';
 import { poserEtatEnfant } from '../enfantetat.js';
 import { uniteTemp, wattsDe } from '../unites.js';
@@ -3425,6 +3426,11 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             if (!telechargerConfig(j, 'loggia-config')) throw new Error(PAS_DE_FICHIER);
           } catch (err) { alerter({ titre: tr('Exporter'), texte: tr('Export impossible : ') + motifEchec(err) }); }
         };
+        /* Les diagnostics (ADR 0325) : le fichier à joindre à un ticket. Home Assistant ne le sert qu'à un
+         * administrateur ; la démonstration n'a pas de composant. */
+        const peutDiag = isAdmin && !!hass && typeof hass.callWS === 'function' && !(typeof window !== 'undefined' && window.__loggiaDemo);
+        const telechargerDiag = () => telechargerDiagnostics(hass)
+          .catch((err) => alerter({ titre: tr('Diagnostics'), texte: tr('Téléchargement impossible : ') + motifEchec(err) }));
         // Des noms propres, qui ne se traduisent pas.
         const POLICES = 'Manrope · Newsreader', DEPOT = 'github.com/Alardware/loggia';
         const valeur = { ...MONO, fontSize: 13, fontWeight: 700, color: 'var(--o-text)', whiteSpace: 'nowrap' };
@@ -3485,6 +3491,9 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <Ligne ico="exclamation" titre={tr('Signaler un problème')}>
               {ouvrir('https://github.com/Alardware/loggia/issues', tr('Signaler un problème'))}
             </Ligne>
+            {peutDiag && <Ligne ico="download" titre={tr('Diagnostics')} desc={tr('À joindre à un ticket : la forme de votre configuration, sans aucun nom ni adresse.')}>
+              <button type="button" onClick={telechargerDiag} style={btnSecondaire}>{tr('Télécharger')}</button>
+            </Ligne>}
           </Panneau>
 
           {/* La remise a zero vide la configuration de la MAISON — vues,
@@ -3534,6 +3543,9 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               <LigneTel ico="exclamation" titre={tr('Signaler un problème')}>
                 <a href="https://github.com/Alardware/loggia/issues" target="_blank" rel="noopener noreferrer" style={lienTel}>{tr('Ouvrir')}<Fi i="angle-small-right" size={13} /></a>
               </LigneTel>
+              {peutDiag && <LigneTel ico="download" titre={tr('Diagnostics')} desc={tr('À joindre à un ticket : la forme de votre configuration, sans aucun nom ni adresse.')}>
+                <button type="button" onClick={telechargerDiag} style={btnTel}>{tr('Télécharger')}</button>
+              </LigneTel>}
             </LignesTel>
           </CarteTel>
           {isAdmin && (

@@ -13,7 +13,28 @@
  * Un dessin est fait de TRAITS et porte son mouvement ; un trace maison est un
  * aplat. Les deux prennent `currentColor`, donc la teinte de la carte.
  */
-import { DESSINS } from './dessins.js';
+import { useEffect, useReducer } from 'react';
+import { DESSINS, NOMS_DESSINS } from './dessins.js';
+
+/* Les dessins RARES (04/11) : `dessinsrares.js`, hors du boot. Leur chargement part
+ * dès l'évaluation de ce module — en même temps que la connexion à Home
+ * Assistant, plus longue : ils sont là avant les cartes. Une icône rare
+ * demandée plus tôt garde sa place, vide, et se dessine à leur arrivée. */
+let RARES = null;
+let chargement = null;
+const enAttente = new Set();
+function chargerRares() {
+  if (!chargement) {
+    chargement = import('./dessinsrares.js').then((m) => {
+      RARES = m.DESSINS_RARES;
+      enAttente.forEach(f => f());
+      enAttente.clear();
+    }, () => { chargement = null; });
+  }
+  return chargement;
+}
+chargerRares();
+const estDessin = (name) => Object.prototype.hasOwnProperty.call(NOMS_DESSINS, name);
 
 /* Un dessin paraissait PLUS PETIT que le glyphe d'à côté (retour du 26/09 :
  * « l'icône en elle-même est trop petite par rapport aux autres »).
@@ -59,18 +80,28 @@ const FI_MAP = {
 };
 // Icône universelle : SVG custom si dispo, sinon glyphe Flaticon UICons.
 export function Ico({ name, size = 20, color = 'currentColor', style, anime = false }) {
+  const [, redessiner] = useReducer(n => n + 1, 0);
+  const corps = DESSINS[name] || (RARES && RARES[name]) || null;
+  const attendu = !corps && !RARES && estDessin(name);
+  useEffect(() => {
+    if (!attendu) return undefined;
+    enAttente.add(redessiner);
+    chargerRares();
+    return () => { enAttente.delete(redessiner); };
+  }, [attendu]);
+  if (attendu) return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" style={{ display: 'block', ...style }} />;
   /* Le dessin d'abord. Son corps est du balisage, pas un attribut : un appareil
    * est fait de plusieurs traits, et certains bougent tout seuls. Il vient de
    * `dessins.js`, ecrit par nous a partir du catalogue — jamais d'une entite,
    * jamais d'une saisie. */
-  if (DESSINS[name]) {
+  if (corps) {
     return (
       /* FIGE par defaut. Un dessin porte son mouvement ; s'il bougeait partout,
        * une grille de choix ou une liste de cartes deviendrait une fete foraine.
        * On ne l'anime que la ou quelque chose travaille vraiment (`anime`). */
       <svg aria-hidden="true" className={anime ? undefined : 'o-ico-fige'} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color}
         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block', overflow: 'visible', ...style }}
-        dangerouslySetInnerHTML={{ __html: OUVRE_GRANDI + DESSINS[name] + '</g>' }} />
+        dangerouslySetInnerHTML={{ __html: OUVRE_GRANDI + corps + '</g>' }} />
     );
   }
   if (CUSTOM_SVG[name]) return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" style={style}><path d={CUSTOM_SVG[name]} fill={color} /></svg>;

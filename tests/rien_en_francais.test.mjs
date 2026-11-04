@@ -34,7 +34,7 @@ const fichiers = [];
     if (statSync(p).isDirectory()) { if (f !== 'langues') walk(p); }
     // `dessins.js` ne porte pas un mot d'interface : c'est du balisage SVG, des
     // `<rect>` et des `<path>` que le filet lit comme des noeuds de texte.
-    else if (/\.jsx?$/.test(f) && f !== 'dessins.js') fichiers.push(p);
+    else if (/\.jsx?$/.test(f) && f !== 'dessins.js' && f !== 'dessinsrares.js') fichiers.push(p);
   }
 })(SRC);
 const nom = (f) => relative(SRC, f).replace(/\\/g, '/');

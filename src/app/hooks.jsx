@@ -11,6 +11,8 @@ import { viewReason } from '../views.js';
 import { lireFondPhoto, FERMER_TOUT } from '../ui.jsx';
 import { synchroniserFond } from '../fondphoto.js';
 import { weatherEntity, haWeatherMode, haWeatherLabel } from '../wxutil.jsx';
+import { temperatureDehors } from '../meteosecours.js';
+import { lireNombre } from '../cartes/mesure.jsx';
 import { useLecturePrises, cyclesElectromenager } from '../prisesetat.js';
 import { useAssistant } from '../assistant.js';
 import { tr } from '../i18n.js';
@@ -148,12 +150,14 @@ function useToastApp() {
   return { toast };
 }
 
-function useMeteoApp({ hass }) {
+function useMeteoApp({ hass, rooms = null }) {
   const wEnt = (hass && hass.states) ? hass.states[weatherEntity(hass)] : null;
   const isNight = (hass && hass.states && hass.states['sun.sun'] && hass.states['sun.sun'].state === 'below_horizon') || (wEnt && wEnt.state === 'clear-night');
   const weatherMode = wEnt ? haWeatherMode(wEnt.state, isNight) : null;
   const weatherRaw = wEnt ? String(wEnt.state) : null; // état HA brut pour le fond GLSL (presets = états HA)
-  const weatherTemp = wEnt && wEnt.attributes ? wEnt.attributes.temperature : null;
+  /* Sans température de la météo, la sonde d'une pièce du dehors (03/11) : jamais un service en ligne. */
+  const temperatureMeteo = wEnt && wEnt.attributes ? lireNombre(wEnt.attributes.temperature) : null;
+  const weatherTemp = temperatureMeteo != null ? temperatureMeteo : temperatureDehors(rooms, hass && hass.states);
   const weatherLabel = wEnt ? haWeatherLabel(wEnt.state) : null;
   return { weatherMode, weatherRaw, weatherTemp, weatherLabel };
 }

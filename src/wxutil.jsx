@@ -12,23 +12,25 @@
  * plutot que servies depuis  : la demo et une installation neuve les
  * ont aussi. */
 import { useEffect, useRef, useSyncExternalStore } from 'react';
-import wxClearDay from './assets/wx/clear-day.svg';
-import wxClearNight from './assets/wx/clear-night.svg';
-import wxPartly from './assets/wx/partly-cloudy-day.svg';
-import wxPartlyNight from './assets/wx/partly-cloudy-night.svg';
-import wxCloudy from './assets/wx/cloudy.svg';
-import wxRain from './assets/wx/rain.svg';
-import wxRainFort from './assets/wx/extreme-rain.svg';
-import wxSnow from './assets/wx/snow.svg';
-import wxSleet from './assets/wx/sleet.svg';
-import wxHail from './assets/wx/hail.svg';
-import wxStorm from './assets/wx/thunderstorms.svg';
-import wxStormRain from './assets/wx/thunderstorms-rain.svg';
-import wxWind from './assets/wx/wind.svg';
-import wxFog from './assets/wx/fog.svg';
-import wxTornado from './assets/wx/tornado.svg';
-import wxAube from './assets/wx/sunrise.svg';
-import wxCrepuscule from './assets/wx/sunset.svg';
+/* Le jeu SOMBRE en fichiers lui aussi (04/11) : 26 Ko de dessins dans le boot, qui n'avait plus que 2 Ko de
+ * marge. Une image météo arrive par sa propre requête, comme le jeu clair depuis le 25/10. */
+import wxClearDay from './assets/wx/clear-day.svg?no-inline';
+import wxClearNight from './assets/wx/clear-night.svg?no-inline';
+import wxPartly from './assets/wx/partly-cloudy-day.svg?no-inline';
+import wxPartlyNight from './assets/wx/partly-cloudy-night.svg?no-inline';
+import wxCloudy from './assets/wx/cloudy.svg?no-inline';
+import wxRain from './assets/wx/rain.svg?no-inline';
+import wxRainFort from './assets/wx/extreme-rain.svg?no-inline';
+import wxSnow from './assets/wx/snow.svg?no-inline';
+import wxSleet from './assets/wx/sleet.svg?no-inline';
+import wxHail from './assets/wx/hail.svg?no-inline';
+import wxStorm from './assets/wx/thunderstorms.svg?no-inline';
+import wxStormRain from './assets/wx/thunderstorms-rain.svg?no-inline';
+import wxWind from './assets/wx/wind.svg?no-inline';
+import wxFog from './assets/wx/fog.svg?no-inline';
+import wxTornado from './assets/wx/tornado.svg?no-inline';
+import wxAube from './assets/wx/sunrise.svg?no-inline';
+import wxCrepuscule from './assets/wx/sunset.svg?no-inline';
 /* Le jeu CLAIR (25/10, sa maquette « Cartes météo » en thème clair) : les mêmes
  * dessins, le contour des nuages en gris-bleu (#93a5bd, 1,5 px quelle que soit
  * la taille) et les traits du vent plus foncés. Un nuage blanc sur une carte
@@ -61,11 +63,20 @@ export function weatherEntity(hass) {
   const c = loggiaEnt('weather', null);
   const pick = Array.isArray(c) ? c.find(id => typeof id === 'string' && id.indexOf('weather.') === 0)
     : (typeof c === 'string' && c.indexOf('weather.') === 0) ? c : null;
-  if (pick && (!S || S[pick])) return pick;
   const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.weather;
-  if (r && r.available && (!S || S[r.main])) return r.main;
-  if (S) return Object.keys(S).find(id => id.indexOf('weather.') === 0) || null;
-  return null;
+  const trouvee = r && r.available ? r.main : null;
+  if (!S) return pick || trouvee || null;
+  /* Une entité EN PANNE passe la main (03/11, idée reprise de HomeDeck) : celle
+   * choisie, puis celle de la découverte, puis toute autre `weather.*` qui
+   * répond. Toutes muettes : celle choisie, qui dira qu'elle est indisponible. */
+  const repond = (id) => !!(id && S[id] && S[id].state !== 'unavailable' && S[id].state !== 'unknown');
+  if (repond(pick)) return pick;
+  if (repond(trouvee)) return trouvee;
+  const autre = Object.keys(S).find(id => id.indexOf('weather.') === 0 && repond(id));
+  if (autre) return autre;
+  if (pick && S[pick]) return pick;
+  if (trouvee && S[trouvee]) return trouvee;
+  return Object.keys(S).find(id => id.indexOf('weather.') === 0) || null;
 }
 
 /* Les glyphes de police (, ) ont disparu le 02/09 : toute
