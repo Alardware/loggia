@@ -77,7 +77,8 @@ test('la section et la tuile de pièce de l’Accueil : une surface en édition,
    * scénarios » joignable : leur rangée seule devient inerte. */
   assert.ok(d.includes("<div inert={editMode && id !== 'pieces' && id !== 'favoris' && id !== 'scenes' ? '' : undefined} style={{ ...(editMode ? { position: 'relative' } : {}),"), 'en édition, le contenu d’une section se tabule encore');
   const scn = bloc('function ScenariosAccueil(');
-  const rang = scn.indexOf(`<div ref={rangee} className="grid-qscenes" inert={edit ? '' : undefined}>`);
+  // ASSERTION MODIFIÉE (05/11, étape 5) : hors édition, la rangée se range par un appui long (`{...ranger}`), chaque carte porte sa clé (`dataId`).
+  const rang = scn.indexOf(`<div ref={rangee} {...ranger} className="grid-qscenes" inert={edit ? '' : undefined}>`);
   assert.ok(rang > 0, 'en édition, Entrée lance encore un scénario de la rangée');
   const gerer = scn.indexOf("<button data-drag-ui=\"1\" onClick={() => onNav('scenes')}");
   assert.ok(gerer > 0 && gerer < rang, '« Gérer les scénarios » est passé dans la rangée inerte');

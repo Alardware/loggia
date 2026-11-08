@@ -58,8 +58,9 @@ test('les scenarios : UNE rangee qui defile, tous dedans ; le chemin vers la vue
   // ressemblait a un scenario sans en etre un.
   const s = bloc('function ScenariosAccueil(', NL + '}');
   assert.ok(!s.includes('liste.slice(') && !s.includes('useWide('), 'plus de coupe a cinq : tous les scenarios de l’Accueil sont dans la rangee');
-  assert.ok(s.includes(`<div ref={rangee} className="grid-qscenes" inert={edit ? '' : undefined}>`) && s.includes("{liste.map(s => <CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} />)}"), 'la rangee ne contient QUE des scenarios');
-  const rangee = s.slice(s.indexOf(`<div ref={rangee} className="grid-qscenes" inert={edit ? '' : undefined}>`));
+  // ASSERTION MODIFIÉE (05/11, étape 5) : hors édition, la rangée se range par un appui long (`{...ranger}`), chaque carte porte sa clé (`dataId`).
+  assert.ok(s.includes(`<div ref={rangee} {...ranger} className="grid-qscenes" inert={edit ? '' : undefined}>`) && s.includes("{liste.map(s => <CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} dataId={s.id} />)}"), 'la rangee ne contient QUE des scenarios');
+  const rangee = s.slice(s.indexOf(`<div ref={rangee} {...ranger} className="grid-qscenes" inert={edit ? '' : undefined}>`));
   assert.ok(!rangee.includes("onNav('scenes')") && !rangee.includes('dashed'), 'plus de fausse carte dans la rangee');
   assert.ok(s.includes("? <button type=\"button\" onClick={() => onNav('scenes')} aria-label={tr('Tous les scénarios')}") && s.includes("{nScenarios ? compte : tr('Tous les scénarios')}<Fi i=\"angle-right\" size={10} color=\"var(--o-text3)\" />"), 'le lien de l’en-tete : « 9 scenarios → », ou « Tous les scenarios » quand aucun n’est sur l’Accueil');
   // Par `trN` (relecture du 03/10) : la règle française `n > 1` tranchait

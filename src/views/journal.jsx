@@ -35,6 +35,8 @@ const NOM_MODULE = () => ({
   chauffage: tr('Planning de chauffe'),
   // Les cycles de l'électroménager et la pose d'un minuteur (chantier Prises, le contrat du plan 1).
   prises: tr('Prises'), minuteurs: tr('Minuteurs'),
+  // « Me prévenir » d'un conseil d'énergie (usage étape 11).
+  rappels: tr('Rappels'),
 });
 
 export function JournalReglages({ hass, tel = false }) {

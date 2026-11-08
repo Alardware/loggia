@@ -19,6 +19,9 @@ import { ecartDe, cvEstLumiere, priseDe, indexLu } from '../app/noyau.jsx';
 import { FichePrise } from '../appareils/fiches.jsx';
 import { PIECES } from '../app/pieces.jsx';
 import { scenarios, nomsLiens, lancerScenario } from '../app/scenarios.jsx';
+import { FicheEntite } from '../aidepanne.jsx';
+// Les réglages eux-mêmes, dans la recherche (07/11, usage étape 12 ; son choix : « les deux »).
+import { optionsReglages, sectionOuverte, demanderReglage, SECTIONS_REGLAGES } from '../reglagesindex.js';
 
 /* L'orbe seule, pour la miniature de l'appui long. Meme module que celui de
  * la popup : le paquet n'est telecharge qu'une fois, quel que soit celui des
@@ -172,6 +175,16 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
       if (!match(label)) return;
       results.push({ group: tr('Réglages'), label, icon: <Fi i="settings" color="var(--o-text2)" />, act: (close) => { try { sessionStorage.setItem('loggia-par-section', id); } catch {} onNav('parametres'); close(); } });
     });
+    /* Et chaque réglage (07/11, usage étape 12) : « veille » trouve « Écran de veille », sa section en dessous ; le
+     * choisir ouvre les Paramètres sur sa rangée, allumée (`demanderReglage`). Dès deux lettres, comme les appareils ;
+     * jamais d'une section que ce profil n'ouvre pas. */
+    if (nq.length >= 2) {
+      const dispo = Object.keys(SECTIONS_REGLAGES).filter(s => sectionOuverte(s, droits));
+      optionsReglages(dispo, { sections: false }).forEach(o => {
+        if (!match(o.label)) return;
+        results.push({ group: tr('Réglages'), label: o.label, sub: o.groupe, icon: <Fi i="settings-sliders" color="var(--o-text2)" />, act: (close) => { demanderReglage(o.id); onNav('parametres'); close(); } });
+      });
+    }
   }
   const selIdx = results.length ? Math.min(sel, results.length - 1) : -1;
   useEffect(() => { setSel(0); }, [nq]);
@@ -355,7 +368,7 @@ function Header() {
     <>
     {/* hors du <header> : son transform (auto-hide) ferait de lui le containing block du position:fixed du sheet */}
     {searchOpen && <SearchSheet onClose={() => setSearchOpen(false)} onNav={onNav} customViews={customViews} rooms={rooms} droits={droits} onFiche={setFichePrise} />}
-    {fichePrise && <FichePrise id={fichePrise} hass={getHass()} onClose={() => setFichePrise(null)} />}
+    {fichePrise && <FicheEntite.Provider value={{ id: fichePrise, hass: getHass(), prise: true }}><FichePrise id={fichePrise} hass={getHass()} onClose={() => setFichePrise(null)} /></FicheEntite.Provider>}
     <header ref={hdrRef} className="loggia-hdr" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 'calc(14px + var(--o-safe-top,0px)) 28px 14px', borderBottom: '1px solid var(--o-s1)', position: 'sticky', top: 0, background: 'var(--o-header)', backdropFilter: 'blur(12px)', zIndex: 40, transform: hidden ? 'translateY(-100%)' : 'translateY(0)', transition: REDUCE_MOTION ? 'none' : 'transform .3s ease', willChange: 'transform' }}>
       <button onClick={onToggleNav} title={tr('Afficher / masquer le menu')} style={{ width: 42, height: 42, borderRadius: 14, background: 'var(--o-s1)', border: LISERE, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--o-text1)', cursor: 'pointer', flexShrink: 0 }}><Ico name="menu-burger" size={20} /></button>
       {/* Sa largeur minimale vit dans index.css (`.o-hdr-search`) : elle

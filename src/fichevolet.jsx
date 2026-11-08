@@ -72,7 +72,7 @@ function Choix({ nom, options, choisi, onChoisir, hauteur = 36, taille = 12, ine
         return (
           <button key={o.id} type="button" aria-pressed={on} aria-disabled={inerte || undefined}
             onClick={() => { if (inerte) { if (surInerte) surInerte(); } else if (!on) onChoisir(o.id); }}
-            style={{ minHeight: hauteur, padding: '0 6px', borderRadius: 9, border: 'none', fontFamily: 'inherit', fontSize: taille, fontWeight: 700, lineHeight: 1.15,
+            style={{ minHeight: hauteur, padding: '0 6px', borderRadius: 9, border: 'none', fontFamily: 'inherit', fontSize: `calc(${taille}px * var(--o-texte, 1))`, fontWeight: 700, lineHeight: 1.15,
               cursor: inerte ? 'default' : 'pointer', background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text1)',
               opacity: inerte && !on ? 0.4 : 1, overflowWrap: 'anywhere', hyphens: 'auto' }}>{o.label}</button>
         );

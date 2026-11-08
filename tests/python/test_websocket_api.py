@@ -43,6 +43,9 @@ ADMIN_SEULEMENT = [
     # ASSERTION MODIFIÉE (30/10, G2-1 ; ADR 0301) : qui recoit quoi — les personnes, leurs telephones et
     # les corrections de `loggia_alertes`, que seuls les administrateurs corrigent.
     "WS_NOT_DESTINATAIRES",
+    # ASSERTION MODIFIEE (06/11, etape 8) : la capture de la maison telle qu'elle est - elle ne sert qu'a composer
+    # un scenario, ce que seuls les administrateurs font.
+    "WS_SCN_CAPTURER",
 ]
 # Ce qui se LIT, ou se fait, depuis tout compte connecte — a dessein.
 OUVERTES = [
@@ -96,6 +99,9 @@ OUVERTES = [
     # ASSERTION MODIFIÉE (30/10, G2-1 ; ADR 0301) : « C'est sorti » depuis le bandeau de l'Accueil —
     # sortir les bacs n'est pas un privilege ; il n'ecrit que le jour, dans la partie commune.
     "WS_COL_SORTI",
+    # ASSERTION MODIFIÉE (07/11, étape 11) : « Me prévenir » d'un conseil d'énergie — comme un minuteur, le geste
+    # de tout compte ; chacun ne lit, ne pose et n'annule que SES rappels (le compte vient de la session).
+    "WS_RAP_ETAT", "WS_RAP_POSER", "WS_RAP_ANNULER",
 ]
 # Ce qui s'ouvre au CODE DE LA MAISON (chantier Mode enfant, E2 B) : les gestes
 # du parent. Pas de `require_admin` - une tablette de famille porte un compte

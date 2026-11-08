@@ -12,6 +12,9 @@ import { tr, locale, trN } from '../i18n.js';
 import { lavisCarte, SURF_CARTE } from './noyau.jsx';
 import { useCoarse, useWide } from './ecran.jsx';
 import { fxTap } from '../chrome/entete.jsx';
+import { resteQuelqueChose } from '../depart.js';
+import { restesMaintenant, AVANT_DE_LANCER } from './depart.jsx';
+import { annulable } from '../annuler.js';
 
 /* ════════════ SCÉNARIOS — composés par Loggia, lancés par le serveur (ADR 0027) ════════════ */
 /* L'état des scénarios tel que le serveur l'a dit en dernier. La veille, la
@@ -23,7 +26,15 @@ const nomsLiens = () => { const o = {}; ((SCN_ETAT && SCN_ETAT.liens) || []).for
 /* Lancer : le serveur résout et commande avec la main de l'utilisateur. Sans
  * serveur — composant trop ancien —, une scène liée part quand même par le
  * service standard ; un scénario composé, lui, ne peut rien sans lui. */
+/* Tout lancement passe ici — les cartes, la feuille « Avant de partir », les actions du moment, la recherche — et se
+ * rattrape cinq secondes (06/11, étape 7 ; annuler.js) : les lumières, les volets, les thermostats reviennent comme
+ * avant ; jamais l'alarme, les serrures ni les médias. */
 function lancerScenario(h, id) {
+  if (!h) return Promise.resolve(null);
+  const s = scenarios().find(x => x.id === id);
+  return annulable(tr('{nom} lancé', { nom: nomScenario(s || { id }) }), () => lancerDirect(h, id));
+}
+function lancerDirect(h, id) {
   if (!h) return Promise.resolve(null);
   if (typeof h.callWS === 'function') {
     // Le composant dit ce qu'il a refusé ou raté ; le geste ne doit pas
@@ -57,7 +68,18 @@ function useScenarios(hass) {
   const [enCours, setEnCours] = useState(null); // retour visuel immédiat, le temps que le serveur réponde
   const fRef = useRef(null);
   useEffect(() => () => clearTimeout(fRef.current), []);
+  /* « Je pars » regarde d'abord ce qui restera ouvert (04/11, étape 2 du
+   * rapport sur l'usage) : une fenêtre, une porte, un garage ou un portail
+   * ouverts, et la feuille « Avant de partir » le dit — c'est elle qui lance
+   * (`partir`). Rien d'ouvert : « Je pars » part aussitôt, comme avant.
+   * « Bonne nuit » fait de même depuis le 05/11 (étape 4). */
+  const [avant, setAvant] = useState(null);
   const lancer = (id) => {
+    if (AVANT_DE_LANCER.includes(id) && resteQuelqueChose(restesMaintenant(hass))) { setAvant(id); return; }
+    partir(id);
+  };
+  const partir = (id) => {
+    setAvant(null);
     setEnCours(id); clearTimeout(fRef.current); fRef.current = setTimeout(() => setEnCours(null), 2500);
     // Le refus remonte à l'écoute globale : pas de `catch` ici non plus.
     lancerScenario(hass, id).then(r => { if (r) setEtat(e => e ? { ...e, scenarios: e.scenarios.map(s => s.id === id ? { ...s, dernier: Date.now() / 1000 } : s) } : e); });
@@ -91,23 +113,34 @@ function useScenarios(hass) {
     cfgSet({ loggia_scnordre: n });
     return null;
   };
+  /* « Enregistrer la maison telle qu'elle est » (06/11, étape 8) : l'état des lumières et des volets maintenant, lu au
+   * serveur, que la fiche montre puis envoie avec le scénario. Rien n'est écrit ici. */
+  const capturer = async (familles, portee = 'maison', piece = null) => {
+    const h = hass && typeof hass.callWS === 'function' ? hass : null;
+    if (!h) throw new Error(tr('Home Assistant n’est pas joignable.'));
+    const msg = { type: 'loggia/scenarios/capturer', familles, portee };
+    if (portee === 'piece' && piece) msg.piece = piece;
+    const r = await h.callWS(msg);
+    return (r && r.etats) || {};
+  };
   const noms = {};
   ((etat && etat.liens) || []).forEach(l => { noms[l.haid] = l.nom; });
-  return { etat, err, lancer, enCours, enregistrer, ordonner, noms, tous, liste: scenariosVisibles(tous) };
+  return { etat, err, lancer, enCours, enregistrer, ordonner, capturer, noms, tous, liste: scenariosVisibles(tous), avant, partir, renoncer: () => setAvant(null) };
 }
 
 /* `lineHeight` est ÉCRIT, parce que la rangée compte dessus : 15 de ligne plus
  * 4 et 4 de rembourrage font 23 px, la hauteur d'UNE pastille — et la rangée
  * s'y borne pour ne montrer qu'une seule ligne (voir `CarteScenario`). Laissé
- * au défaut de la police, ce nombre changerait avec la langue. */
-const H_PUCE_SCN = 23;
+ * au défaut de la police, ce nombre changerait avec la langue. La ligne suit la
+ * taille du texte (07/11, étape 10) : la rangée aussi, ou la pastille est rognée. */
+const H_PUCE_SCN = 'calc(8px + 15px * var(--o-texte, 1))';
 const PUCE_SCN = { fontSize: 11, fontWeight: 700, padding: '4px 9px', borderRadius: 9, lineHeight: '15px', background: 'var(--o-s1)', color: 'var(--o-text1)', whiteSpace: 'nowrap' };
 /* La carte d'un scénario, au gabarit maison : l'icône en haut à gauche dans
  * un disque teinté, le dernier lancement en haut à droite, le titre sous
  * l'icône ; compacte (88) sur l'Accueil, standard (184) dans la vue, où elle
  * dit aussi ce qu'elle fait. La teinte s'applique en entier — lavis, icône,
  * repère —, sans bordure. En cours : le lavis se renforce. */
-function CarteScenario({ s, noms = {}, compacte = false, enCours = false, onLancer, style = null, className = null, sansDernier = false }) {
+function CarteScenario({ s, noms = {}, compacte = false, enCours = false, onLancer, style = null, className = null, sansDernier = false, dataId = null }) {
   const t = teinteScenario(s);
   const nom = nomScenario(s);
   const cibles = nombreCibles(s);
@@ -117,11 +150,12 @@ function CarteScenario({ s, noms = {}, compacte = false, enCours = false, onLanc
    * signal « ça tourne » au lieu d'être la décoration de tout le monde. */
   const fond = enCours ? lavisCarte(t.rgb, .26) : SURF_CARTE;
   const nActions = nombreActions(s);
+  // Sa hauteur est fixe : son texte grandit d'au plus 15 % (`--o-texte-carte`, tailletexte.js).
   return (
-    <button type="button" onClick={(e) => { fxTap(e); if (onLancer) onLancer(s.id); }} aria-label={tr('Lancer {x}', { x: nom })} className={className}
+    <button type="button" onClick={(e) => { fxTap(e); if (onLancer) onLancer(s.id); }} aria-label={tr('Lancer {x}', { x: nom })} className={className} data-id={dataId || undefined}
       style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%', height: compacte ? 88 : 184, padding: compacte ? '12px 13px' : '14px 15px', boxSizing: 'border-box', borderRadius: 'var(--o-radius,18px)', border: LISERE, cursor: 'pointer', textAlign: 'left', overflow: 'hidden', transition: 'background .25s, box-shadow .25s', color: 'var(--o-text)',
         background: fond,
-        boxShadow: enCours ? `0 10px 26px rgba(${t.rgb},.35)` : 'var(--o-shadow,0 6px 16px rgba(0,0,0,.26))', ...(style || {}) }}>
+        boxShadow: enCours ? `0 10px 26px rgba(${t.rgb},.35)` : 'var(--o-shadow,0 6px 16px rgba(0,0,0,.26))', '--o-texte': 'var(--o-texte-carte, 1)', ...(style || {}) }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', width: '100%' }}>
         <span aria-hidden="true" style={{ width: compacte ? 34 : 38, height: compacte ? 34 : 38, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: `rgba(${t.rgb},.22)`, color: t.col, flexShrink: 0 }}><Ico name={s.icone || 'sparkles'} size={compacte ? 18 : 20} color={t.col} /></span>
         {/* En édition, la place du repère revient aux outils de la carte (voir ScenariosView). */}
@@ -146,7 +180,7 @@ function CarteScenario({ s, noms = {}, compacte = false, enCours = false, onLanc
          *
          * Mesuré : 1 pastille sur une carte de 141 px, 2 sur 176, 3 sur 236. */
         <div style={{ position: 'absolute', left: 15, right: 15, bottom: 14, display: 'flex', flexWrap: 'wrap', alignContent: 'flex-start', gap: 6, height: H_PUCE_SCN, overflow: 'hidden' }}>
-          <span style={PUCE_SCN}>{trN(nActions, '{n} action', '{n} actions')}</span>
+          <span style={PUCE_SCN}>{s.etats ? trN(Object.keys(s.etats).length, '{n} appareil', '{n} appareils') : trN(nActions, '{n} action', '{n} actions')}</span>
           {cibles != null && <span style={PUCE_SCN}>{trN(cibles, '{n} cible', '{n} cibles')}</span>}
           <span style={PUCE_SCN}>{s.lien ? tr('scène HA') : 'Loggia'}</span>
         </div>

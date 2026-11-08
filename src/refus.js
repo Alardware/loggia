@@ -140,6 +140,8 @@ const REFUS = {
    * l'appelant retombe sur son dernier recours. */
   trop_de_scenarios: (k, n) => (typeof n === 'number' ? tr('Scénario non enregistré — {n} scénarios personnels au plus', { n }) : null),
   trop_d_actions: (k, n) => (typeof n === 'number' ? tr('Scénario non enregistré — {n} actions au plus', { n }) : null),
+  // La maison telle qu'elle est (06/11, étape 8) : cent appareils au plus — une pièce en retient moins.
+  trop_d_etats: (k, n) => (typeof n === 'number' ? tr('Scénario non enregistré — {n} appareils au plus : choisissez une pièce', { n }) : null),
   trop_de_plannings: (k, n) => (typeof n === 'number' ? tr('Planning non enregistré — {n} plannings au plus', { n }) : null),
   /* Le planning de Loggia du distributeur (ADR 0155, 05/10). `trop_de_repas`
    * nomme sa limite (MAX_REPAS, distributeurs.py), comme les plannings du robot. */

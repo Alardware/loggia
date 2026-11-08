@@ -191,7 +191,7 @@ automation:
 - **Commands go through Home Assistant**, with its permissions: an account
   can't do anything in Loggia that it couldn't already do elsewhere. What
   changes the configuration of the house is reserved for administrators
-  (`require_admin`, on the nineteen WebSocket commands concerned).
+  (`require_admin`, on the twenty WebSocket commands concerned).
 - **The administrator code is hashed** by the integration and never sent back
   to a screen. Failed attempts are limited.
 - The Home Assistant access token is only read **for images**: cameras and a

@@ -1195,9 +1195,10 @@ test('la température de la pièce : 25 px / 800, un « ° » de 15 px décalé 
   const html = rendre();
   assert.ok(html.includes('<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px"><div style="min-width:0"><div data-grand=""'),
     'le mode à gauche, la pièce à droite, 16 px entre les deux');
+  // ASSERTION MODIFIÉE (07/11, étape 10) : les petites capitales suivent la taille du texte (tailletexte.js).
   assert.ok(html.includes('<div data-piece="" style="flex-shrink:0;text-align:right"><div style="display:flex;align-items:flex-start;justify-content:flex-end;font-weight:800;line-height:1">'
     + '<span style="font-size:25px;letter-spacing:-.02em">19,5</span><span style="font-size:15px;margin-top:2px">°</span></div>'
-    + '<div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--o-text3);margin-top:6px">Pièce</div></div>'));
+    + '<div style="font-size:calc(10px * var(--o-texte, 1));font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--o-text3);margin-top:6px">Pièce</div></div>'));
   // Jamais un chiffre inventé : sans sonde, sans mesure lisible, rien — pas même « PIÈCE ».
   assert.ok(!rendre({ sonde: null }).includes('data-piece'));
   for (const rien of ['unavailable', '', 'abc']) {
@@ -1213,7 +1214,8 @@ test('une reprise : « Garder ce mode jusqu’à », ses fins en Puces dans le p
   const ch = radiateur({ mode: 'eco', source: 'main', fin: r.fin, puis: 'confort', reprise: r, jour: JOUR_CHAMBRE });
   const html = rendre({ ch });
   // 18 px sous ce qui précède, le libellé en petites capitales, qui nomme le groupe des fins.
-  assert.match(html, /<div data-reprise="" style="margin-top:18px"><div id="[^"]+-fin" style="font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var\(--o-text3\)">Garder ce mode jusqu’à<\/div><div style="margin-top:8px"><div role="group" aria-labelledby="[^"]+-fin"/);
+  // ASSERTION MODIFIÉE (07/11, étape 10) : les petites capitales suivent la taille du texte (tailletexte.js).
+  assert.match(html, /<div data-reprise="" style="margin-top:18px"><div id="[^"]+-fin" style="font-size:calc\(10\.5px \* var\(--o-texte, 1\)\);font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var\(--o-text3\)">Garder ce mode jusqu’à<\/div><div style="margin-top:8px"><div role="group" aria-labelledby="[^"]+-fin"/);
   const f = groupe(html, 'fin');
   assert.equal(f.libelle, 'Garder ce mode jusqu’à');
   // Le prochain changement par son heure — 23:00 —, une, deux, quatre heures, sans limite ; la choisie, celle qu'elle a reçue.
@@ -2197,7 +2199,8 @@ test('Températures des modes (thermostat), sous les changements : − / + carr�
   const poeleRegle = poele({ semaine: SEMAINE });
   const html = rendre({ ongletDepart: 'planning', ch: poeleRegle, sonde: null });
   assert.ok(html.indexOf('>Températures des modes<') > html.indexOf('data-rangee="copier"'), 'sous les changements');
-  assert.match(html, /<div style="margin-top:18px"><div id="([^"]+)-temperatures" style="font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var\(--o-text3\)">Températures des modes<\/div><div role="group" aria-labelledby="\1-temperatures" data-panneau="temperatures"/);
+  // ASSERTION MODIFIÉE (07/11, étape 10) : les petites capitales suivent la taille du texte (tailletexte.js).
+  assert.match(html, /<div style="margin-top:18px"><div id="([^"]+)-temperatures" style="font-size:calc\(10\.5px \* var\(--o-texte, 1\)\);font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var\(--o-text3\)">Températures des modes<\/div><div role="group" aria-labelledby="\1-temperatures" data-panneau="temperatures"/);
   const p = panneau(html, 'temperatures');
   assert.deepEqual(p.style, { ...PANNEAU_MAQUETTE, 'margin-top': '10px', overflow: 'hidden' });
   for (const nom of ['Confort', 'Éco', 'Hors-gel']) {
@@ -2473,8 +2476,9 @@ test('Historique (3d) : la courbe de la pièce — « Température », min · ma
   const c = panneau(html, 'courbe');
   assert.ok(c, 'le panneau de la courbe');
   assert.deepEqual(c.style, { ...PANNEAU_MAQUETTE, padding: '16px 16px 14px' });
+  // ASSERTION MODIFIÉE (07/11, étape 10) : les petites capitales suivent la taille du texte (tailletexte.js).
   assert.ok(c.corps.startsWith('<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">'
-    + '<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--o-text3)">Température</div>'
+    + '<div style="font-size:calc(10.5px * var(--o-texte, 1));font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--o-text3)">Température</div>'
     + '<div style="font-size:11.5px;font-weight:700;color:var(--o-text2)">min 19,4° · max 21,2°</div></div>'), c.corps.slice(0, 400));
   // 14 px plus bas, 34 px à gauche : les repères — haut, milieu, bas — dans une colonne de 28 px, alignés à droite.
   assert.ok(c.corps.includes('<div style="position:relative;margin-top:14px;padding-left:34px">'
@@ -2528,8 +2532,9 @@ test('Historique (3d) : le temps par mode — « sur 24 h », la barre de 10 px 
   assert.ok(t, 'le panneau du temps');
   assert.deepEqual(t.style, { ...PANNEAU_MAQUETTE, padding: '16px 18px' });
   assert.ok(html.indexOf('data-panneau="courbe"') < html.indexOf('data-panneau="temps"'), 'sous la courbe');
+  // ASSERTION MODIFIÉE (07/11, étape 10) : les petites capitales suivent la taille du texte (tailletexte.js).
   assert.ok(t.corps.startsWith('<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">'
-    + '<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--o-text3)">Temps par mode</div>'
+    + '<div style="font-size:calc(10.5px * var(--o-texte, 1));font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--o-text3)">Temps par mode</div>'
     + '<div style="font-size:11.5px;font-weight:700;color:var(--o-text2)">sur 24 h</div></div>'), t.corps.slice(0, 300));
   // La barre : 10 px, écart 2, arrondi 5, débord caché ; une part par mode vu, de l'Arrêt au Confort, puis « à la main ».
   const barre = /<div aria-hidden="true" style="display:flex;gap:2px;height:10px;margin-top:12px;border-radius:5px;overflow:hidden">((?:<span style="[^"]*"><\/span>)+)<\/div>/.exec(t.corps);

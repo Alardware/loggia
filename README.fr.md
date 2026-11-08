@@ -201,7 +201,7 @@ automation:
 - **Les commandes passent par Home Assistant**, avec ses autorisations :
   un compte ne peut rien faire dans Loggia qu'il ne puisse déjà faire ailleurs.
   Ce qui modifie la configuration de la maison est réservé aux
-  administrateurs (`require_admin`, sur les dix-neuf commandes WebSocket
+  administrateurs (`require_admin`, sur les vingt commandes WebSocket
   concernées).
 - **Le code administrateur est haché** par l'intégration et n'est jamais
   renvoyé à un écran. Les essais ratés sont limités.

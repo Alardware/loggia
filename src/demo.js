@@ -678,7 +678,8 @@ function etatsInitiaux() {
      * Home Assistant ne publie jamais les CRENEAUX d'un contrat — la barre des
      * vingt-quatre heures se reconstitue depuis l'historique de ce binaire
      * (tarif.js), ce que la demo doit donc savoir rendre. */
-    'binary_sensor.heures_creuses': s('off', { friendly_name: etiquette('Heures creuses actives') }),
+    // Il suit l'heure (usage étape 11) : figé à « off », il contredisait ses propres créneaux de 2 h à 7 h et de 13 h à 16 h.
+    'binary_sensor.heures_creuses': s(enCreuse(new Date().getHours() + new Date().getMinutes() / 60) ? 'on' : 'off', { friendly_name: etiquette('Heures creuses actives') }),
     'sensor.prix_hc': s(0.1605, { friendly_name: etiquette('Prix heures creuses'), unit_of_measurement: '€/kWh', device_class: 'monetary' }),
     'sensor.prix_hp': s(0.2092, { friendly_name: etiquette('Prix heures pleines'), unit_of_measurement: '€/kWh', device_class: 'monetary' }),
     'sensor.abonnement_mois': s(16.73, { friendly_name: etiquette('Abonnement'), unit_of_measurement: '€/mois', device_class: 'monetary' }),
@@ -1136,7 +1137,7 @@ function scnEffectifs() {
   const out = SCN_INTEGRES.map(b => {
     const o = SCN_CFG().integres[b.id] || {};
     return { id: b.id, integre: true, nom: o.nom || null, icone: o.icone || b.icone, teinte: o.teinte || b.teinte, masque: !!o.masque, accueil: o.accueil !== false,
-      lien: o.lien || null, piece: o.piece || null, actions: (Array.isArray(o.actions) ? o.actions : b.actions).map(a => ({ ...a })), modifie: Object.keys(o).length > 0 };
+      lien: o.lien || null, piece: o.piece || null, actions: (Array.isArray(o.actions) ? o.actions : b.actions).map(a => ({ ...a })), etats: o.etats || null, modifie: Object.keys(o).length > 0 };
   }).concat(SCN_CFG().persos.map(p => ({ ...p, integre: false, modifie: true, actions: (p.actions || []).map(a => ({ ...a })) })));
   if (SCN_CFG().ordre.length) { const rang = {}; SCN_CFG().ordre.forEach((id, i) => { rang[id] = i; }); out.sort((a, b) => (rang[a.id] == null ? 99 : rang[a.id]) - (rang[b.id] == null ? 99 : rang[b.id])); }
   return out;
@@ -1190,13 +1191,14 @@ function scenariosDemo(states) {
   const liens = Object.keys(states).filter(id => /^(scene|script)\./.test(id)).sort().map(id => ({ haid: id, nom: (states[id].attributes || {}).friendly_name || id }));
   const scenarios = scnEffectifs().map(s => {
     const piece = scnPieceDe(s);
-    const resume = s.lien ? [] : s.actions.map(a => ({ famille: a.famille, geste: a.geste, portee: a.portee || 'maison', piece: a.piece || (a.portee === 'piece' ? piece : null), valeur: a.valeur, si: a.si, n: scnCibles(a, states, piece).length }));
+    const resume = s.lien ? [] : s.actions.map(a => ({ famille: a.famille, geste: a.geste, portee: a.portee || 'maison', piece: a.piece || (a.portee === 'piece' ? piece : null), valeur: a.valeur, si: a.si, n: scnCibles(a, states, piece).length }))
+      .concat(s.etats ? [{ famille: 'etat', geste: 'appliquer', portee: s.piece ? 'piece' : 'maison', piece: s.piece || null, valeur: null, si: null, n: Object.keys(s.etats).filter(id => scnDiffere(id, s.etats[id], states)).length }] : []);
     // La suggestion suit la même règle de mots-clés que le serveur : « je_rentre » va à Je rentre, « nuit » à Bonne nuit.
     const suggestion = s.integre && !s.lien ? ({ retour: 'scene.je_rentre', nuit: 'scene.nuit' }[s.id] || null) : null;
     return { ...s, piece_effective: piece, resume, dernier: SCN_DERNIERS[s.id] || null, suggestion: suggestion && states[suggestion] ? suggestion : null, lien_absent: !!s.lien && !states[s.lien] };
   });
   return { scenarios, liens, pieces: ['Bureau', 'Chambre', 'Cuisine', 'Entrée', 'Salle de bain', 'Salon'].map(lieu).sort(), alarme: 'alarm_control_panel.maison', journal: [],
-    lampes: scnCapacites(states) };
+    lampes: scnCapacites(states), instantane: true };
 }
 function scenariosPatch(patch) {
   const p = patch || {};
@@ -1212,7 +1214,7 @@ function scenariosPatch(patch) {
         const base = 'perso_' + String(s.nom || 'scenario').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
         let id = base, n = 2;
         while (SCN_CFG().persos.some(x => x.id === id)) { id = base + '_' + n; n += 1; }
-        SCN_CFG().persos.push({ id, nom: s.nom || id, icone: s.icone || 'sparkles', teinte: s.teinte || 'accent', lien: s.lien || null, piece: s.piece || null, actions: s.actions || [], accueil: s.accueil !== false, masque: !!s.masque });
+        SCN_CFG().persos.push({ id, nom: s.nom || id, icone: s.icone || 'sparkles', teinte: s.teinte || 'accent', lien: s.lien || null, piece: s.piece || null, actions: s.actions || [], etats: s.etats || null, accueil: s.accueil !== false, masque: !!s.masque });
       }
     }
   }
@@ -1221,11 +1223,79 @@ function scenariosPatch(patch) {
   if (Array.isArray(p.ordre)) SCN_CFG().ordre = p.ordre.slice();
   return SCN_CFG();
 }
+/* « Enregistrer la maison telle qu'elle est » (06/11, étape 8) : comme au serveur (`capturer`, scenarios.py) — les
+ * lampes joignables sauf la veilleuse de la règle Nuit, leur niveau et leur blanc ou leur couleur ; les volets par leur
+ * classe, leur position ; toute la maison, ou une pièce. */
+/* Ce qu'un état retenu ferait bouger maintenant, comme `ordres_etats` au serveur (étape 8) : juste enregistré, rien. Une
+ * lampe à éteindre qui l'est déjà, non ; allumée, son niveau à un point et demi près, son blanc à 50 K, sa couleur à un
+ * degré ; un volet à un point près, et pas en course. */
+function scnDiffere(id, v, states) {
+  const st = states[id];
+  if (!st || !v || st.state === 'unavailable' || st.state === 'unknown') return false;
+  const a = st.attributes || {};
+  if (id.indexOf('cover.') === 0) {
+    if (v.position != null) return typeof a.current_position !== 'number' || Math.abs(a.current_position - v.position) > 1 || /ing$/.test(st.state);
+    return (st.state === 'open' || st.state === 'opening') !== !!v.ouvert;
+  }
+  if (!v.on) return st.state !== 'off';
+  if (st.state !== 'on') return true;
+  if (v.niveau && (a.brightness == null || Math.abs(a.brightness * 100 / 255 - v.niveau) > 1.5)) return true;
+  if (v.blanc) return a.color_mode !== 'color_temp' || Math.abs((Number(a.color_temp_kelvin) || 0) - v.blanc) > 50;
+  if (v.couleur) return a.color_mode === 'color_temp' || !Array.isArray(a.hs_color) || Math.abs(((a.hs_color[0] - v.couleur[0] + 540) % 360) - 180) > 1 || Math.abs(a.hs_color[1] - v.couleur[1]) > 1;
+  return false;
+}
+function scenariosCapturer(msg, states) {
+  const familles = (msg && Array.isArray(msg.familles)) ? msg.familles : ['lumieres', 'volets'];
+  const portee = (msg && msg.portee) || 'maison', ou = msg && msg.piece;
+  if (portee === 'piece' && !ou) return { etats: {} };
+  const dedans = (id) => portee !== 'piece' || (!!SCN_PIECE[id] && lieu(SCN_PIECE[id]).toLowerCase() === String(ou).toLowerCase());
+  const etats = {};
+  Object.keys(states).sort().forEach(id => {
+    const st = states[id], a = (st && st.attributes) || {};
+    if (!st || !dedans(id)) return;
+    if (id.indexOf('light.') === 0 && familles.includes('lumieres')) {
+      if ((st.state !== 'on' && st.state !== 'off') || scnEpargnee(id, states)) return;
+      const v = { on: st.state === 'on' };
+      if (v.on) {
+        if (Number(a.brightness) > 0) v.niveau = Math.max(1, Math.min(100, Math.round(a.brightness * 100 / 255)));
+        if (a.color_mode === 'color_temp' && Number(a.color_temp_kelvin) > 0) v.blanc = Math.round(a.color_temp_kelvin);
+        else if (['hs', 'xy', 'rgb', 'rgbw', 'rgbww'].includes(a.color_mode) && Array.isArray(a.hs_color)) v.couleur = a.hs_color.map(x => Math.round(Number(x) * 10) / 10);
+      }
+      etats[id] = v;
+    } else if (id.indexOf('cover.') === 0 && familles.includes('volets')) {
+      if (!estVolet(st) || estMuetVolet(st)) return;
+      etats[id] = typeof a.current_position === 'number' ? { position: a.current_position } : { ouvert: st.state === 'open' || st.state === 'opening' };
+    }
+  });
+  return { etats };
+}
 function scenariosLancer(id, states) {
   const s = scnEffectifs().find(x => x.id === id);
   if (!s) return null;
   const fait = []; let n = 0;
   if (s.lien) { fait.push({ famille: 'lien', geste: s.lien.split('.')[0], n: 1 }); n = 1; }
+  else if (s.etats) {
+    // La maison telle qu'elle était (étape 8) : chaque lampe par le même chemin qu'un appui (`appliquerLumiereDemo`), chaque volet à sa place.
+    Object.keys(s.etats).forEach(hid => {
+      const st = states[hid], v = s.etats[hid];
+      if (!st || !v || st.state === 'unavailable') return;
+      if (hid.indexOf('cover.') === 0) {
+        const pos = v.position != null ? v.position : (v.ouvert ? 100 : 0);
+        const avecPos = typeof (st.attributes || {}).current_position === 'number';
+        states[hid] = { ...st, state: pos > 0 ? 'open' : 'closed', attributes: avecPos ? { ...st.attributes, current_position: pos } : st.attributes, last_changed: new Date().toISOString() };
+      } else {
+        const data = {};
+        if (v.niveau) data.brightness_pct = v.niveau;
+        if (v.blanc) data.color_temp_kelvin = v.blanc; else if (v.couleur) data.hs_color = v.couleur;
+        const r = appliquerLumiereDemo(st, hid, v.on ? 'turn_on' : 'turn_off', data);
+        if (!r) return;
+        states[hid] = { ...st, ...r, last_changed: new Date().toISOString() };
+        minuteurSiEteint(hid, r.state);
+      }
+      n += 1;
+    });
+    fait.push({ famille: 'etat', geste: 'appliquer', n });
+  }
   else {
     const piece = scnPieceDe(s);
     s.actions.forEach(a => {
@@ -1458,6 +1528,34 @@ function historiqueTemperatureDemo(id, cur, t0, t1) {
   return [pts];
 }
 
+/* « Pendant votre absence » (05/11, étape 3 du rapport sur l'usage) : la maison se vide il y a sept heures, Camille et
+ * Démo rentrent il y a quarante minutes, Léa juste après. Entre-temps : deux coups de sonnette, la porte de service
+ * ouverte une fois, la caméra de l'entrée qui voit passer trois fois quelqu'un. Alex reste au travail et Sam est muet :
+ * ni l'un ni l'autre ne retient la maison. Le reste de la maison ne bouge pas. */
+const HEURE_MS = 3600000;
+function histoireAbsenceDemo(t) {
+  const iso = (ms) => new Date(ms).toISOString();
+  return {
+    'person.camille': [[t - 7 * HEURE_MS, 'not_home'], [t - 40 * MINUTE_MS, 'home']],
+    'person.demo': [[t - 6.9 * HEURE_MS, 'not_home'], [t - 40 * MINUTE_MS, 'home']],
+    'person.lea': [[t - 7.2 * HEURE_MS, 'not_home'], [t - 36 * MINUTE_MS, 'home']],
+    'event.camera_entree_sonnette': [[t - 5.2 * HEURE_MS, iso(t - 5.2 * HEURE_MS)], [t - 2.4 * HEURE_MS, iso(t - 2.4 * HEURE_MS)]],
+    'binary_sensor.porte_service': [[t - 4.1 * HEURE_MS, 'on'], [t - 4.08 * HEURE_MS, 'off']],
+    'binary_sensor.camera_entree_mouvement': [[t - 5.21 * HEURE_MS, 'on'], [t - 5.19 * HEURE_MS, 'off'], [t - 3.3 * HEURE_MS, 'on'],
+      [t - 3.28 * HEURE_MS, 'off'], [t - 2.41 * HEURE_MS, 'on'], [t - 2.39 * HEURE_MS, 'off']],
+  };
+}
+function historiqueAbsenceDemo(ids, t0, t1, states) {
+  const scripts = histoireAbsenceDemo(Date.now());
+  const avant = (id) => (id.indexOf('person.') === 0 ? 'home' : id.indexOf('event.') === 0 ? new Date(t0 - 86400000).toISOString() : 'off');
+  return ids.filter(id => states[id]).map(id => {
+    const s = scripts[id];
+    const debut = s ? (s.filter(([ms]) => t0 >= ms).pop() || [0, avant(id)])[1] : String(states[id].state);
+    const changements = (s || []).filter(([ms]) => ms > t0 && ms <= t1);
+    return [{ entity_id: id, state: debut, last_changed: new Date(t0).toISOString() }, ...changements.map(([ms, etat]) => ({ state: etat, last_changed: new Date(ms).toISOString() }))];
+  });
+}
+
 /* L'historique de la démo, au format de `history/period` : exportée pour
  * tests/demo_chauffage.test.mjs, qui tient la température plausible. */
 export function historiqueDemo(chemin, states) {
@@ -1470,6 +1568,8 @@ export function historiqueDemo(chemin, states) {
   const t0 = d ? Date.parse(decodeURIComponent(d[1])) : Date.now() - 86400000;
   const finVoulue = String(chemin).match(/end_time=([^&]+)/);
   const t1 = Math.min(Date.now(), finVoulue ? Date.parse(decodeURIComponent(finVoulue[1])) : Date.now());
+  // « Pendant votre absence » (05/11, étape 3) : la présence de la maison, puis ce qui s'est passé pendant l'absence.
+  if (plusieurs.some(x => /^(person|event)\./.test(x))) return historiqueAbsenceDemo(plusieurs, t0, t1, states);
   // Les capteurs binaires de sa maquette « Cartes capteurs » (chantier Capteurs, § 9, § 12) : l'histoire du jour, plusieurs d'un coup, à l'horloge des capteurs.
   if (plusieurs.length && plusieurs.every(x => CAPTEURS_DEMO.has(x))) return historiqueCapteursDemo(plusieurs, t0, Math.min(horlogeCapteurs(), t1), states);
   // Un chauffage : ses modes et sa consigne n'ont rien d'une courbe à multiplier (tâche 10 du plan 2).
@@ -2009,7 +2109,8 @@ const puissanceCycleLv = (m) => (m < 0 || m >= DUREE_CYCLE_LV ? 0 : m < 15 ? 38 
  */
 function histoirePrises(t, passe = false) {
   const avant = (h, m, recul) => (passe ? aJour(t, 0, h, m) : Math.min(aJour(t, 0, h, m), t - recul * MINUTE_MS));
-  const finLv = avant(16, 14, 20);
+  // `prises=soir` (usage étape 11) : le lave-vaisselle d'aujourd'hui tourne le soir, en heures pleines — le conseil qui le dit.
+  const finLv = !passe && VARIANTE_PRISES === 'soir' ? avant(20, 40, 20) : avant(16, 14, 20);
   const muet = passe ? Infinity : avant(14, 20, 60);
   const jour = Math.round(aJour(t, 0, 12, 0) / 86400000);
   return {
@@ -2400,7 +2501,9 @@ export function appliquerLumiereDemo(cur, id, service, data = {}, memoire = null
   if (id.indexOf('light.') !== 0) return { state: 'on', attributes: a };
   const modes = Array.isArray(a.supported_color_modes) ? a.supported_color_modes : [];
   const avant = cur.state === 'on' && a.brightness != null ? a.brightness : memoire && memoire.bri ? Math.round(memoire.bri * 255 / 100) : 255;
+  // `brightness` (0 à 255) aussi, comme Home Assistant : « Annuler » rend le niveau exact d'avant (06/11, étape 8).
   let brightness = data.brightness_pct != null ? Math.round(Math.max(1, Math.min(100, Number(data.brightness_pct))) * 255 / 100)
+    : data.brightness != null ? Math.round(Math.max(1, Math.min(255, Number(data.brightness))))
     : data.brightness_step_pct != null ? Math.round(Math.max(1, Math.min(100, avant / 2.55 + Number(data.brightness_step_pct))) * 2.55) : avant;
   if (!modes.some(m => m !== 'onoff')) brightness = null;
   let couleur = cur.state === 'on' ? { color_mode: a.color_mode, color_temp_kelvin: a.color_temp_kelvin, hs_color: a.hs_color, rgb_color: a.rgb_color }
@@ -3981,6 +4084,21 @@ const MIN_DEMO = {};
  *  rallumée, une lampe ou une prise ne retrouve donc pas son « S'éteint à ». */
 export function minuteurSiEteint(id, etat) {
   if (String(etat).toLowerCase() === 'off') delete MIN_DEMO[id];
+}
+/* Les rappels (07/11, usage étape 11), comme le vrai composant (`rappels.py`) : ceux du compte de la démo, à venir, l'heure
+ * du serveur, et un téléphone où les recevoir (`peut`). Un rappel reposé pour le même appareil remplace le précédent. Rien
+ * ne sonne : la démo n'a pas de téléphone. */
+const RAP_DEMO = [];
+function rappelsDemo() {
+  const t = Date.now() / 1000;
+  for (let i = RAP_DEMO.length - 1; i >= 0; i--) if (RAP_DEMO[i].quand <= t) RAP_DEMO.splice(i, 1);
+  return { rappels: RAP_DEMO.map(r => ({ ...r })).sort((a, b) => a.quand - b.quand), maintenant: t, peut: true, calme: null };
+}
+function rappelPoserDemo(msg) {
+  const entite = msg.entity_id || null;
+  for (let i = RAP_DEMO.length - 1; i >= 0; i--) if ((RAP_DEMO[i].entite || null) === entite) RAP_DEMO.splice(i, 1);
+  RAP_DEMO.push({ id: 'demo' + (RAP_DEMO.length + 1) + '-' + Math.round(Number(msg.quand)), quand: Number(msg.quand), entite, sorte: msg.sorte });
+  return rappelsDemo();
 }
 function minuteursDemo() {
   const maintenant = Date.now() / 1000;
@@ -6339,6 +6457,10 @@ let VARIANTE_EAU = null;
  * « Le moins cher : 13:00–15:00 ». */
 const VARIANTES_TARIF = ['dynamique'];
 let VARIANTE_TARIF = null;
+/* `prises=soir` (usage étape 11) : le cycle du lave-vaisselle d'aujourd'hui finit le soir — au plus tard vingt minutes avant
+ * l'ouverture —, en heures pleines : « Dernier cycle en heures pleines » dans les conseils de la vue Énergie. */
+const VARIANTES_PRISES = ['soir'];
+let VARIANTE_PRISES = null;
 /* `vigilance=orange|rouge` (lot 6 Gladys, ADR 0310) : la vigilance de Météo-France passe à l'orange — une ligne en tête
  * d'« En ce moment » — ou au rouge — un point d'attention —, aux orages. Sans elle, la vigilance jaune reste dans la popup. */
 const VARIANTES_VIGILANCE = { orange: 'Orange', rouge: 'Rouge' };
@@ -6465,6 +6587,7 @@ export function installerDemo(langue) {
     // `eau=fuite|mouillee|fermee|plusieurs|prise|gaz|muet` (chantier IoT, étape 3 ; § 10) : l'arrivée d'eau, cas par cas.
     if (VARIANTES_EAU.indexOf(q.get('eau')) >= 0) VARIANTE_EAU = q.get('eau');
     if (VARIANTES_TARIF.indexOf(q.get('tarif')) >= 0) VARIANTE_TARIF = q.get('tarif');
+    if (VARIANTES_PRISES.indexOf(q.get('prises')) >= 0) VARIANTE_PRISES = q.get('prises');
     if (Object.prototype.hasOwnProperty.call(VARIANTES_VIGILANCE, q.get('vigilance'))) VARIANTE_VIGILANCE = q.get('vigilance');
     ordinaire = q.get('compte') === 'ordinaire';
     /* `heure=HH:MM` (chantier Mode enfant, § 10) : l'horloge des médias figée à cette heure du jour — les trois situations du mode
@@ -6545,7 +6668,12 @@ export function installerDemo(langue) {
      * fermeture finit `open` à 1 %, la chambre du 09/10. Ni `opening` ni
      * `closing` : l'écran joue la course lui-même (voletcourse.js, source 4). */
     if (VOLETS_NETATMO_DEMO.has(x)) {
-      if (voulue === depart || (voulue === 0 && depart <= 1)) return;   // déjà en butée : rien ne bascule
+      if (voulue === depart || (voulue === 0 && depart <= 1)) {
+        /* Déjà en butée : rien ne bascule — sauf une course reprise avant son terme (« Annuler », 06/11, étape 7) : la
+         * position n'a pas encore bougé, le moteur repart vers elle et l'état revient. */
+        if (voulue === depart && voulue > 0 && cur.state !== 'open') toucher(x, 'open', { current_position: depart });
+        return;
+      }
       toucher(x, voulue > 0 ? 'open' : 'closed', { current_position: depart });
       const arrivee = voulue === 0 ? 1 : voulue;
       moteurs.set(x, setTimeout(() => { moteurs.delete(x); toucher(x, 'open', { current_position: arrivee }); }, Math.abs(voulue - depart) / 6 * 1000));
@@ -6801,6 +6929,7 @@ export function installerDemo(langue) {
       // Ranger (audit du 03/10) : la commande ouverte a tout compte ne touche qu'a l'ordre.
       if (msg && msg.type === 'loggia/scenarios/ordre') return Promise.resolve({ ordre: scenariosPatch({ ordre: msg.ordre }).ordre, etat: scenariosDemo(states) });
       if (msg && msg.type === 'loggia/scenarios/lancer') return Promise.resolve(scenariosLancer(msg.scenario, states));
+      if (msg && msg.type === 'loggia/scenarios/capturer') return Promise.resolve(scenariosCapturer(msg, states));
       if (msg && msg.type === 'loggia/interrupteurs/etat') return Promise.resolve(interDemo());
       if (msg && msg.type === 'loggia/interrupteurs/ecouter') {
         const duree = Math.max(0, Math.min(900, Number(msg.duree) || 0));
@@ -6883,6 +7012,14 @@ export function installerDemo(langue) {
         return Promise.resolve(r);
       }
       if (msg && msg.type === 'loggia/minuteurs/annuler') { delete MIN_DEMO[msg.entity_id]; return Promise.resolve(minuteursDemo()); }
+      // Les rappels d'un conseil d'énergie (usage étape 11), comme le vrai composant (`rappels.py`).
+      if (msg && msg.type === 'loggia/rappels/etat') return Promise.resolve(rappelsDemo());
+      if (msg && msg.type === 'loggia/rappels/poser') return Promise.resolve(rappelPoserDemo(msg));
+      if (msg && msg.type === 'loggia/rappels/annuler') {
+        const i = RAP_DEMO.findIndex(r => r.id === msg.id_rappel);
+        if (i >= 0) RAP_DEMO.splice(i, 1);
+        return Promise.resolve(rappelsDemo());
+      }
       /* Le test d'une sirene, comme le vrai composant (`sirene.py`) : le
        * serveur l'allume et l'eteint trois secondes plus tard, ecran ouvert
        * ou non. La sirene de la demo ne gere pas la duree : c'est le cas tenu. */
@@ -7146,7 +7283,8 @@ export function installerDemo(langue) {
    * « Mentions légales » prenait les clics destinés aux boutons du pied. */
   badge.setAttribute('data-demo-badge', '');
   const effacement = document.createElement('style');
-  effacement.textContent = 'html:has([role="dialog"]) [data-demo-badge]{display:none!important}';
+  // Et pendant les cinq secondes de « Annuler » (06/11, étape 7) : posé au même endroit, il en couvrait le bas et le bouton.
+  effacement.textContent = 'html:has([role="dialog"]) [data-demo-badge],html:has(.o-annuler) [data-demo-badge]{display:none!important}';
   document.head.appendChild(effacement);
   /* Sur le site en ligne seulement, le badge mène aux pages légales
    * (`site/legal/`, ADR 0062) : la loi veut que l'éditeur et l'hébergeur d'un

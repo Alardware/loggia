@@ -193,8 +193,9 @@ test('la surface nomme la carte de ce qu’elle affiche : le nom, la famille et 
 
 test('C13 : le nom passe sur deux lignes au plus, entre deux mots, et la carte garde ses 184 px', () => dans(() => {
   const nom = classe(carte('sensor.sejour_temperature'), 'o-mesure-nom').props.style;
+  // ASSERTION MODIFIÉE (07/11, étape 10) : les lignes de 18 px suivent la taille du texte.
   assert.deepEqual([nom.fontSize, nom.whiteSpace, nom.overflowWrap, nom.display, nom.WebkitBoxOrient, nom.WebkitLineClamp, nom.lineHeight],
-    [15, 'normal', 'normal', '-webkit-box', 'vertical', 2, 'var(--o-nom-ligne, 18px)'], 'deux lignes de 18 px, jamais un mot coupé');
+    [15, 'normal', 'normal', '-webkit-box', 'vertical', 2, 'var(--o-nom-ligne, calc(18px * var(--o-texte, 1)))'], 'deux lignes de 18 px, jamais un mot coupé');
   assert.ok(!/break-word|anywhere/.test(JSON.stringify(nom)), 'aucun mot ne se coupe');
   const barre = de(carte('sensor.chambre_co2'), 'BarreMesure');
   assert.equal(monter(F.BarreMesure, barre.props).arbre.props.style.paddingTop, 'var(--o-pied-haut, 8px)', '8 px d’air au moins au-dessus de la barre');

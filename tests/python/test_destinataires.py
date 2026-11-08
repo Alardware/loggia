@@ -526,3 +526,38 @@ def test_chaque_envoi_dit_pour_qui(nom):
             assert pour, f"{nom}.py ligne {n.lineno} : prevenir sans pour="
             vus.update(pour)
     assert vus == ATTENDU[nom], (nom, vus)
+
+
+# ── Un rappel ne sonne que chez celui qui l'a pose (07/11, usage etape 11) ──
+
+def test_un_rappel_part_vers_les_telephones_du_compte_seul(regles, monkeypatch):
+    hass = maison(monkeypatch)
+    r = socle(regles, hass)
+    assert lancer(r.services_du_compte("u-c")) == ["mobile_app_pixel_7"]
+    assert lancer(r.services_du_compte("u-m")) == ["mobile_app_galaxy_de_marie"], "son application, sans traceur"
+    assert lancer(r.prevenir("rappels", "rappel", "HC", compte="u-c")) is True
+    assert envoyes(hass) == ["mobile_app_pixel_7"], "ni les autres, ni le repli"
+
+
+def test_un_rappel_sans_telephone_ne_part_pas_au_repli(regles, monkeypatch):
+    hass = maison(monkeypatch)
+    r = socle(regles, hass)
+    assert lancer(r.services_du_compte("u-l")) == []
+    assert lancer(r.services_du_compte("inconnu")) == []
+    assert lancer(r.prevenir("rappels", "rappel", "HC", compte="u-l")) is False
+    assert envoyes(hass) == []
+
+
+def test_un_rappel_suit_les_exclusions_ordinaires(regles, monkeypatch):
+    hass = maison(monkeypatch)
+    corr = {"person.camille": {"exclus": {"admins": [], "presents": ["mobile_app_pixel_7"]}}}
+    r = socle(regles, hass, {"service": "repli", "personnes": corr})
+    assert lancer(r.services_du_compte("u-c")) == []
+
+
+def test_les_heures_calmes_ne_se_lisent_qu_actives(regles, monkeypatch):
+    hass = maison(monkeypatch)
+    eteintes = socle(regles, hass, {"calme": {"actif": False, "debut": "22:00", "fin": "07:00"}})
+    assert lancer(eteintes.plage_calme()) is None
+    actives = socle(regles, hass, {"calme": {"actif": True, "debut": "22:30", "fin": "06:00"}})
+    assert lancer(actives.plage_calme()) == {"debut": "22:30", "fin": "06:00"}

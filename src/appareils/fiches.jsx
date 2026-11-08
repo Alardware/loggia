@@ -50,6 +50,8 @@ import { useDemandeCoupure, RoomPriseCard } from '../cartes/prise.jsx';
 import { useVueRobot, localiserRobot, plaqueRobot, RoomRobotCard } from '../cartes/robot.jsx';
 import { RoomVoletCard, RoomCoverCard } from '../cartes/volet.jsx';
 import { useSeconde, armChips, texteDate, CV_CADRE, FAN_FR, CvAlarm, CvCard, cvIcoEntite, FeuilleCalendrier, CamSheet, PlugIcon, SaisieCodeAlarme } from '../cartescustom/cartes.jsx';
+import { annulable } from '../annuler.js';
+import { AidePanne, FicheEntite } from '../aidepanne.jsx';
 
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
@@ -159,6 +161,7 @@ function FicheEntete({ titre, sous, id = null, droite = null }) {
    * fiche (audit du 27/09). `id` reste celui de l'entité, pour l'épingle. */
   const idTitre = useIdTitreFeuille();
   return (
+    <>
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div id={idTitre || undefined} style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 24, fontWeight: 500, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{titre}</div>
@@ -168,6 +171,9 @@ function FicheEntete({ titre, sous, id = null, droite = null }) {
       {id && <BoutonEpingle id={id} />}
       <CroixFeuille />
     </div>
+    {/* La panne s'explique sous l'en-tête (06/11, étape 9). */}
+    {id && <AidePanne id={id} />}
+    </>
   );
 }
 const FicheLibelle = ({ children, droite = null }) => (
@@ -569,7 +575,7 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
     );
   } else if (dom === 'button' || dom === 'input_button' || dom === 'scene' || dom === 'script') {
     const svc = dom === 'scene' || dom === 'script' ? [dom, 'turn_on'] : [dom, 'press'];
-    controle = <button onClick={() => call(svc[0], svc[1])} style={{ padding: '7px 13px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{tr('Exécuter')}</button>;
+    controle = <button onClick={() => (dom === 'scene' || dom === 'script' ? annulable(tr('{nom} lancé', { nom: label }), () => call(svc[0], svc[1])) : call(svc[0], svc[1]))} style={{ padding: '7px 13px', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}>{tr('Exécuter')}</button>;
   } else if (dom === 'binary_sensor') {
     const on = !!st && st.state === 'on';
     const grave = ['smoke', 'gas', 'moisture', 'problem', 'safety', 'carbon_monoxide'].indexOf(a.device_class) >= 0;
@@ -888,6 +894,8 @@ function FicheAppareil({ id, hass, onClose }) {
           <BoutonEpingle id={id} />
           <CroixFeuille />
         </div>
+        {/* La panne s'explique sous l'en-tête (06/11, étape 9). */}
+        <AidePanne id={id} hass={hass} />
         {pilotables.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
             {/* Alarme : la carte à trois modes (et le code si le panneau
@@ -1215,8 +1223,11 @@ function useDomainCards(hass, { onNav = null } = {}) {
               : ROOM_GENERIQUES.indexOf(d) >= 0 ? <RoomGenericCard id={id} hass={hass} onOpen={ouvrir} label={label} />
                 : <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} />;
   };
+  /* L'entité de la fiche ouverte — une seule à la fois —, pour l'aide d'une panne sous l'en-tête commun (06/11, étape 9 ;
+   * aidepanne.jsx). Une prise dit la sienne elle-même. */
+  const ouverte = lightPop || climPop || coverPop || mediaPop || meteoPop || sensPop || appPop || camPop || (prisePop && prisePop.id) || lockPop || binPop || robotPop || eauPop || traceurPop || null;
   const sheets = (
-    <>
+    <FicheEntite.Provider value={ouverte ? { id: ouverte, hass, prise: !!(prisePop && prisePop.id === ouverte) } : null}>
       {lightPop && <FicheLumiere id={lightPop} hass={hass} onClose={() => setLightPop(null)} />}
       {/* Un thermostat, ou un module fil pilote découvert, que l'état du
         * planning de chauffe connaît ouvre SA fiche à onglets, planning
@@ -1251,7 +1262,7 @@ function useDomainCards(hass, { onNav = null } = {}) {
       {eauPop && <FicheEauChaude id={eauPop} hass={hass} onClose={() => setEauPop(null)} />}
       {bornePop && <FicheBorne hass={hass} onClose={() => setBornePop(false)} />}
       {traceurPop && <Suspense fallback={null}><FicheTraceur id={traceurPop} hass={hass} onClose={() => setTraceurPop(null)} /></Suspense>}
-    </>
+    </FicheEntite.Provider>
   );
   const fermer = () => { setLightPop(null); setClimPop(null); setPilotPop(null); setCoverPop(null); setMediaPop(null); setSensPop(null); setAppPop(null); setCamPop(null); setPrisePop(null); setLockPop(null); setBinPop(null); setRobotPop(null); setGroupePop(null); setFeederPop(false); setPlantPop(null); setEauPop(null); setBornePop(false); setTraceurPop(null); };
   /* La COMPACTE d'une entite : une rangee — icone, nom, etat, le controle —

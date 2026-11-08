@@ -190,6 +190,8 @@ test('audit du 19/10 — le faux moteur : un volet muet ne bouge pas, un rideau 
   assert.ok(netatmo.includes("toucher(x, voulue > 0 ? 'open' : 'closed', { current_position: depart });"), 'la bascule, la position d’avant');
   assert.ok(!netatmo.includes("'opening'") && !netatmo.includes("'closing'"), 'jamais opening ni closing');
   assert.ok(netatmo.includes("const arrivee = voulue === 0 ? 1 : voulue;") && netatmo.includes("toucher(x, 'open', { current_position: arrivee });"), 'une fermeture finit open à 1 %');
+  // Une fermeture reprise avant son terme (« Annuler », 06/11, étape 7) : la position n'a pas bougé, l'état revient.
+  assert.ok(netatmo.includes("if (voulue === depart && voulue > 0 && cur.state !== 'open') toucher(x, 'open', { current_position: depart });"), 'une course reprise revient');
   // Ce 1 % se lit « fermé », à l'écran (seuil fixe de 2 %).
   const sdb = { state: 'open', attributes: { current_position: 1, device_class: 'shutter' } };
   assert.equal(coverFerme(sdb, positionDe(sdb)), true);

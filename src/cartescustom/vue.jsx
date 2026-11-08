@@ -1,6 +1,7 @@
 /* Une vue personnalisée, chargée à la demande.
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
 import { useState, useEffect, useRef } from 'react';
+import { useRangerLibre } from '../glisser.js';
 import { cvKey, cvInp, Fi, cvEstTpl, BottomSheet, TitreFeuille, TplForm } from '../ui.jsx';
 import { tr, trN } from '../i18n.js';
 import { useDomainCards } from '../appareils/fiches.jsx';
@@ -42,6 +43,14 @@ function CustomView({ cv, hass, edit = false, onSave }) {
   const [fiche, setFiche] = useState(null);
   useEffect(() => { setNameDraft(cv.name); setRenaming(false); setAdding(false); setTplEdit(null); setRetype(null); }, [cv.id, edit]);
   const setEnts = (ents) => onSave && onSave({ ...cv, ents });
+  // Hors édition, un appui long range les cartes (05/11, étape 5), comme le glisser de l'édition.
+  const ranger = useRangerLibre({ attribut: 'data-cvk', actif: !edit, onRanger: (cle, cible) => {
+    const a = [...cv.ents], i = a.findIndex(y => cvKey(y) === cle), j = a.findIndex(y => cvKey(y) === cible);
+    if (i < 0 || j < 0) return;
+    const [pris] = a.splice(i, 1);
+    a.splice(j, 0, pris);
+    setEnts(a);
+  } });
   const dc = useDomainCards(hass);
   /* ── Déplacement : saisir la carte ─────────────────────────────────────────
    * Pointer capture sur le wrapper ; au mouvement, la carte sous le doigt
@@ -189,7 +198,7 @@ function CustomView({ cv, hass, edit = false, onSave }) {
         </div>
         {/* Grille DENSE : chaque carte déclare sa hauteur en rangées (.grid-custom
           * pose l'auto-flow dense et l'unité de rangée) — les trous se comblent. */}
-        <div ref={grilleRef} className="grid-custom" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', columnGap: 16, rowGap: 8 }}>
+        <div ref={grilleRef} {...ranger} className="grid-custom" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', columnGap: 16, rowGap: 8 }}>
           {liste.map((x) => {
             const cle = cvKey(x);
             const saisie = dragCle === cle;

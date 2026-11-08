@@ -52,10 +52,11 @@ export function useTilt(max = 4) {
 // <Anim i base>…</Anim> : enveloppe tilt (pointeur fin) + entrée en cascade, sans toucher au JSX de la carte.
 // Conteneur de carte. L'apparition en cascade a été retirée (21/08) : les cartes
 // s'affichent immédiatement. i/base sont conservés pour ne pas toucher les ~200 appels.
-export function Anim({ i = 0, base = 0, children, style, className = '' }) {
+export function Anim({ i = 0, base = 0, children, style, className = '', id = null }) {
   const tilt = useTilt(4);
   return (
-    <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel}
+    /* `id` : la clé de la carte, pour la ranger hors édition (`data-id`, 05/11, étape 5). */
+    <div ref={tilt.ref} data-id={id || undefined} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel}
       className={(tilt.className || '') + (className ? ' ' + className : '')} style={{ position: 'relative', borderRadius: 'var(--o-radius,18px)', minWidth: 0, ...style }}>
       {children}
     </div>
@@ -1322,7 +1323,7 @@ export function RegleEntete({ nom, desc, on, cb, plie = false, onPlier = null, z
   const teinte = 'var(--o-regle-teinte, var(--o-accent))';
   const pliable = !!(on && onPlier);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+    <div className="o-regle-tete" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
       {/* `aria-expanded` dit l'etat, `aria-controls` dit DE QUOI.
         *
         * Le second n'est pose QUE deplie, et c'est voulu : replier ne masque

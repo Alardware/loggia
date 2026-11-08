@@ -123,7 +123,7 @@ test('l’électroménager : Prévenir, l’appel d’Alertes sans téléphone, 
 test('muette : « Indisponible », depuis quand, l’encart ; le minuteur attend la prise', async () => {
   await poser();
   const html = fiche(maison({ pc: 'unavailable', depuis: a(14, 20) }), PC);
-  assert.ok(/<span style="font-size:clamp\(20px, calc\(100cqi \/ \(0\.64 \* 12\)\), 34px\);font-weight:800;color:var\(--o-bad\)">Indisponible<\/span>/.test(html), '34 px, moins quand la place manque');
+  assert.ok(/<span style="font-size:clamp\(20px, calc\(100cqi \/ \(0\.64 \* 12\)\), calc\(34px \* var\(--o-texte, 1\)\)\);font-weight:800;color:var\(--o-bad\)">Indisponible<\/span>/.test(html), '34 px (agrandis avec le texte), moins quand la place manque');
   assert.ok(html.includes('>Depuis 14:20 · la prise ne répond plus<'));
   assert.ok(html.includes('Vérifiez qu’elle est branchée et à portée du réseau. Loggia la reprendra dès qu’elle répond.'), 'pas Zigbee : « du réseau »');
   assert.ok(html.includes('fi-rr-signal-alt-slash'));
@@ -138,7 +138,7 @@ test('muette : « Indisponible », depuis quand, l’encart ; le minuteur attend
 test('coupée : « Coupée », depuis quand ; un minuteur qui tourne : sa fin, +15 min, +1 h, Annuler', async () => {
   await poser();
   const coupee = fiche(maison({ pc: 'off', depuis: a(20, 40) }), PC);
-  assert.ok(/<span style="font-size:clamp\(20px, calc\(100cqi \/ \(0\.64 \* 6\)\), 34px\);font-weight:800;color:var\(--o-text2\)">Coupée<\/span>/.test(coupee) && coupee.includes('>Depuis 20:40<'));
+  assert.ok(/<span style="font-size:clamp\(20px, calc\(100cqi \/ \(0\.64 \* 6\)\), calc\(34px \* var\(--o-texte, 1\)\)\);font-weight:800;color:var\(--o-text2\)">Coupée<\/span>/.test(coupee) && coupee.includes('>Depuis 20:40<'));
   const fin = Math.floor(Date.now() / 1000) + 30 * 60;   // à la seconde : « dans 30 min », pas 31
   await poser({ minuteurs: { [PC]: { fin, duree: 30 } } });
   // Coupée, le minuteur que le sondage tient encore est périmé (B3) : « Disponible… », les durées inertes, ni « Se coupe à » ni « +1 h ».

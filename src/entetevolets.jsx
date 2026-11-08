@@ -20,6 +20,7 @@ import { commander } from './actions.js';
 import { estMuetVolet, vueVolet } from './voletecran.js';
 import { useCoursesVolets, afficherCourse, lancerCourse, arreterCourse, oublierCourse, ordreSuivi } from './voletcourse.js';
 import { gestesCover } from './outils.js';
+import { annulable } from './annuler.js';
 
 // Une puce de sa maquette (`ChipButton`) : 40 px de haut, le gris doux, sans bordure.
 const PUCE = { position: 'relative', height: 40, padding: '0 12px', borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text1)',
@@ -96,7 +97,9 @@ export default function EnteteVolets({ hass, titre, ids }) {
     ouverts ? trN(ouverts, '{n} ouvert', '{n} ouverts') : muets ? null : tr('tous fermés'),
     muets ? trN(muets, '{n} indisponible', '{n} indisponibles') : null].filter(Boolean).join(' · ') : '';
   const commanderUn = commanderGeste(hass, S);
-  const tous = (capacite, cible) => commanderTous(vues, capacite, cible, { commanderUn, lancer: lancerCourse, oublier: oublierCourse });
+  // Rattrapable cinq secondes (06/11, étape 7) ; « Tout arrêter » n'a rien à défaire.
+  const tous = (capacite, cible) => annulable(capacite === 'open' ? tr('Volets ouverts') : tr('Volets fermés'),
+    () => commanderTous(vues, capacite, cible, { commanderUn, lancer: lancerCourse, oublier: oublierCourse }));
   const arreter = () => arreterTous(vues, { commanderUn, arreter: arreterCourse, oublier: oublierCourse });
   return (
     <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px 12px', minHeight: 40 }}>

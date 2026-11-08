@@ -299,11 +299,18 @@ test('8. la santé : des incidents, pas des symptômes ; les résidus sont du br
   ] };
   const pts = pointsAttention({ sante });
   assert.deepEqual(pts.map(p => [p.cle, p.niveau, p.icone, p.titre, p.sous, p.vue, p.haid]), [
-    ['sante:integration:zha', 'alerte', 'exclamation', 'Intégration muette', 'zha · 12 entités', 'systeme', null],
+    // ASSERTION MODIFIÉE (06/11, étape 9) : « … ne répond plus », rangé à son titre ; sans l'écran, l'identifiant et des entités.
     ['sante:passerelle:d1', 'alerte', 'exclamation', 'Passerelle hors service', 'Pont Hue', 'systeme', null],
+    ['sante:integration:zha', 'alerte', 'exclamation', 'zha ne répond plus', '12 entités', 'systeme', null],
   ], 'appareils tombés et chute simultanée ne sont plus des points (16/09, « prend de la place pour rien »)');
   assert.deepEqual(pointsAttention({ sante: { incidents: [{ kind: 'appareils', count: 1, devices: [{ id: 'x' }] }] } }), []);
-  assert.equal(pointsAttention({ sante: { incidents: [{ kind: 'integration', scope: 'mqtt', entities: ['a', 'b'] }] } })[0].sous, 'mqtt · 2 entités', 'sans count, les entités');
+  // ASSERTION MODIFIÉE (06/11, étape 9) : le compte seul ; le nom de l'intégration est dans le titre.
+  assert.equal(pointsAttention({ sante: { incidents: [{ kind: 'integration', scope: 'mqtt', entities: ['a', 'b'] }] } })[0].sous, '2 entités', 'sans count, les entités');
+  // Avec l'index : des APPAREILS, et MQTT derrière un pont Zigbee2MQTT se dit Zigbee2MQTT (06/11, étape 9).
+  const pont = { fabricant: 'Zigbee2MQTT', modele: 'Bridge' };
+  const nomIntegration = (p, pt) => (p === 'mqtt' && pt && pt.fabricant === 'Zigbee2MQTT' ? 'Zigbee2MQTT' : p);
+  const z = pointsAttention({ appareil: (e) => ({ id: e.slice(0, 2), pont }), nomIntegration, sante: { incidents: [{ kind: 'integration', scope: 'mqtt', entities: ['d1a', 'd1b', 'd2a'] }] } })[0];
+  assert.deepEqual([z.titre, z.sous], ['Zigbee2MQTT ne répond plus', '2 appareils']);
   assert.deepEqual(pointsAttention({ sante: { incidents: 'non' } }), []);
 });
 
@@ -330,8 +337,9 @@ test('l’ordre : danger, alerte, info — puis le titre ; les clés sont unique
   const pts = pointsAttention(ctx);
   assert.deepEqual(pts.map(p => [p.niveau, p.titre]), [
     ['danger', 'Alarme déclenchée'], ['danger', 'Fumée détectée'],
-    ['alerte', 'Caméra hors ligne'], ['alerte', 'CO₂ élevé'], ['alerte', 'Fuite détectée'], ['alerte', 'Intégration muette'],
-    ['alerte', 'Pile faible'], ['info', 'Chauffage coupé'],
+    // ASSERTION MODIFIÉE (06/11, étape 9) : « zha ne répond plus » se range à son titre.
+    ['alerte', 'Caméra hors ligne'], ['alerte', 'CO₂ élevé'], ['alerte', 'Fuite détectée'],
+    ['alerte', 'Pile faible'], ['alerte', 'zha ne répond plus'], ['info', 'Chauffage coupé'],
   ]);
   assert.equal(new Set(pts.map(p => p.cle)).size, pts.length, 'clés uniques');
   for (const p of pts) {

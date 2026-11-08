@@ -1338,6 +1338,11 @@ h1[tabindex="-1"]:focus, h1[tabindex="-1"]:focus-visible { outline: none; }
    à la fois, et elle est alors à demi effacée. Le fantôme d'un glisser copie
    la classe, mais son `outline: none` en ligne l'emporte toujours. */
 .o-pointille { outline: 1px dashed rgba(var(--o-accent-rgb), var(--o-pointille, .4)); outline-offset: var(--o-pointille-ecart, 3px); }
+/* Ranger hors édition (05/11, étape 5 ; `useRangerLibre`, glisser.js) : sous l'appui long, la grille ne choisit pas de texte et le
+ * navigateur n'ouvre pas sa bulle ; la carte prise s'efface, la place visée s'allume. */
+[data-rangeable] { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+[data-range="prise"] { opacity: .35; transition: opacity .15s; }
+[data-range="visee"] { outline: 2px solid var(--o-accent); outline-offset: 3px; border-radius: var(--o-radius, 18px); }
 .o-pointille.o-saisie, .o-pointille:focus-visible { outline: 2px solid var(--o-accent); }
 /* Relecture du 04/10 : rangées à 8 px dans les grilles denses et les vues
    perso — à 3 px d'écart, les pointillés de deux cartes empilées se
@@ -1570,6 +1575,12 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
  * pour les kWh, qui les ont alors). Sous 140 px de contenu, la pastille ne garde que le
  * cadenas (26 px), et les kWh reprennent la place (36 : la pastille, l'écart, 2 px d'air). */
 .o-gabarit { container-type: inline-size; }
+/* La taille du texte (07/11, étape 10 ; tailletexte.js) : une carte garde sa hauteur, son texte grandit d'au plus 15 %. */
+.o-gabarit, .o-rmcard { --o-texte: var(--o-texte-carte, 1); }
+/* La carte d'une plante, la plus dense : quand son texte grandit, elle garde sa première rangée de mesures (sol, lumière) et
+ * la fiche les montre toutes ; un nom sur deux lignes poussait la seconde contre le bord. Sans `@container style()`
+ * (Firefox), elle reste, au ras du bord. */
+@container style(--o-texte-carte: 1.15) { [data-plante] [data-grille] > :nth-child(n+3) { display: none !important; } }
 @supports not (container-type: inline-size) { .o-seul-etroit { display: none !important; } }
 @container (width >= 188px) { .o-seul-etroit { display: none !important; } }
 /* La plaque-interrupteur d'une lumière (T12) : une zone de toucher de 44 × 44, 3 px autour de ses 38 ; plus forte que
@@ -1615,7 +1626,7 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
  * de contenu (le téléphone de 320 px), ceux qui toucheraient leur voisin se taisent (`data-serre`, que la carte pose
  * d'après leur place sur la barre : le « 1 600 » du CO₂, le « 17 » d'une température, le « 80 » d'une humidité). */
 @container (width < 188px) {
-  .o-mesure-nom { --o-nom-ligne: 16px; }
+  .o-mesure-nom { --o-nom-ligne: calc(16px * var(--o-texte, 1)); }
   .o-mesure-reperes { font-size: 9.5px !important; }
 }
 @container (width < 120px) { .o-mesure-reperes > [data-serre] { display: none; } }
@@ -2152,3 +2163,8 @@ html.loggia-light .o-vacances { color-scheme: light; }
   .o-recherche-long { display: none; }
   .o-recherche-court { display: block; }
 }
+
+/* Le réglage trouvé par la recherche (07/11, usage étape 12 ; reglagesindex.js) : un liseré et un lavis d'accent,
+ * 1,8 s — le temps de le repérer. Sans mouvement : le fondu seul, que « réduire les animations » coupe. */
+.o-reglage-trouve { box-shadow: inset 0 0 0 2px var(--o-accent) !important; background-color: rgba(var(--o-accent-rgb), .1) !important; border-radius: 12px; transition: box-shadow .3s, background-color .3s; }
+@media (prefers-reduced-motion: reduce) { .o-reglage-trouve { transition: none; } }

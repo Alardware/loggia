@@ -156,7 +156,8 @@ test('l’Accueil : la rangee des scenarios, et « Gerer » cliquable malgre le 
   const a = bloc('function ScenariosAccueil(', NL + '}');
   // Dans l'ordre de CE type d'ecran (ADR 0052) : `sc.tous`.
   assert.ok(a.includes('const liste = scenariosAccueil(sc.tous);'), 'seuls les scenarios cochés « Sur l’Accueil »');
-  assert.ok(a.includes('<CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} />'), 'des cartes compactes');
+  // ASSERTION MODIFIÉE (05/11, étape 5) : hors édition, la rangée se range par un appui long (`{...ranger}`), chaque carte porte sa clé (`dataId`).
+  assert.ok(a.includes('<CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} dataId={s.id} />'), 'des cartes compactes');
   // En edition, `Sec` pose pointer-events none sur le contenu d'une section :
   // le bouton doit se remettre en auto, sinon le clic tombe sur la section
   // et part en glisser (bug vu sur HA le 16/09).
@@ -192,7 +193,8 @@ test('les puces de la carte ne se coupent pas en plein mot sur un telephone', ()
     'la rangée ne tient plus sur UNE ligne : une seconde rangée de puces apparaîtra');
   // La hauteur est calculée, pas devinée : 15 de ligne + 4 + 4 de
   // rembourrage. `lineHeight` doit donc rester écrit dans la puce.
-  assert.ok(app.includes('const H_PUCE_SCN = 23;'), 'la hauteur d’une puce n’est plus nommée');
+  // ASSERTION MODIFIÉE (07/11, étape 10) : la ligne de 15 px suit la taille du texte, la rangée aussi.
+  assert.ok(app.includes("const H_PUCE_SCN = 'calc(8px + 15px * var(--o-texte, 1))';"), 'la hauteur d’une puce n’est plus nommée');
   assert.ok(app.includes("lineHeight: '15px'"),
     'la puce n’impose plus sa hauteur de ligne : 23 px ne veut plus rien dire, et la langue la ferait varier');
 });

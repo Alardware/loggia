@@ -1,6 +1,7 @@
 /* La vue Scénarios et la fiche d’un scénario.
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
 import { useState, Suspense } from 'react';
+import { useRangerLibre } from '../glisser.js';
 import { lazyRecharge } from '../recharge.js';
 import { Fi } from '../ui.jsx';
 import { libelleDernier, nomScenario } from '../scenarios.js';
@@ -8,7 +9,9 @@ import { tr, locale } from '../i18n.js';
 import { RmBascule } from '../cartes/briques.jsx';
 import { FicheRangee } from '../appareils/fiches.jsx';
 import { useScenarios, CarteScenario } from '../app/scenarios.jsx';
+import { FeuilleDepart } from '../app/depart.jsx';
 import { Header } from '../chrome/entete.jsx';
+import { compteOrdinaire } from '../state.js';
 import { boutonEdition, BOUTON_PETIT, BandeauEdition, ChoixIcone } from '../edition/briques.jsx';
 
 /* Les ambiances Hue (11/10, tâche 6 bis du chantier Chauffage) : la
@@ -25,7 +28,7 @@ function ScenariosView({ hass, edit = false }) {
   const sc = useScenarios(hass);
   // En édition, les scénarios masqués se montrent, estompés : c'est là qu'on les remontre.
   const liste = edit ? sc.tous.filter(s => s && s.id) : sc.liste;
-  const [fiche, setFiche] = useState(null); // un scénario, ou 'nouveau'
+  const [fiche, setFiche] = useState(null); // un scénario, 'nouveau', ou 'maison' (étape 8)
   const deplacer = (id, delta) => {
     const ids = liste.map(s => s.id); const i = ids.indexOf(id); const j = i + delta;
     if (i < 0 || j < 0 || j >= ids.length) return;
@@ -36,8 +39,14 @@ function ScenariosView({ hass, edit = false }) {
     // remonte à l'écoute globale, comme celui d'un scénario lancé.
     sc.ordonner(ids);
   };
+  // Hors édition, un appui long range les scénarios (05/11, étape 5) : le même ordre que les flèches de l'édition.
+  const ranger = useRangerLibre({ actif: !edit, onRanger: (cle, cible) => deplacer(cle, liste.findIndex(s => s.id === cible) - liste.findIndex(s => s.id === cle)) });
   const pieces = (sc.etat && sc.etat.pieces) || [];
   const liens = (sc.etat && sc.etat.liens) || [];
+  /* « Enregistrer la maison » (06/11, étape 8) : hors édition, à droite du titre — on règle, on touche, on nomme. Un
+   * composant qui ne sait pas encore retenir l'état (pas `instantane`, Home Assistant pas redémarré) ne le montre pas ;
+   * un compte ordinaire non plus : composer un scénario reste aux administrateurs. */
+  const peutCapturer = !!(sc.etat && sc.etat.instantane) && !compteOrdinaire(hass);
   const dernier = liste.reduce((m, s) => (s.dernier && (!m || s.dernier > m)) ? s.dernier : m, null);
   const outil = (actif) => ({ ...boutonEdition(false), ...BOUTON_PETIT, width: 28, height: 28, opacity: actif ? 1 : .35 });
   return (
@@ -51,14 +60,20 @@ function ScenariosView({ hass, edit = false }) {
             <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Scénarios')}</h1>
             <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{sc.err && !liste.length ? sc.err : tr('{n} scénarios · dernier lancement {x}', { n: liste.length, x: libelleDernier(dernier, Date.now(), locale()).toLowerCase() })}</div>
           </div>
+          {peutCapturer && (
+            <button type="button" onClick={() => setFiche('maison')} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 14px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' }}>
+              <Fi i="camera" size={13} />{tr('Enregistrer la maison')}
+            </button>
+          )}
         </div>
-        <div className="grid-scenarios" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(205px,1fr))', gap: 12 }}>
+        <div {...ranger} className="grid-scenarios" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(205px,1fr))', gap: 12 }}>
           {liste.map((s, i) => (
             <div key={s.id} style={{ position: 'relative', minWidth: 0 }}>
               {/* Le pointillé d'édition passe par la classe `o-pointille` : en
                 * style en ligne, il cachait le focus du bouton au clavier
                 * (audit du 03/10). */}
-              <CarteScenario s={s} noms={sc.noms} enCours={sc.enCours === s.id} onLancer={sc.lancer} sansDernier={edit} className={edit ? 'o-pointille' : undefined} style={edit ? { '--o-pointille': '.45', opacity: s.masque ? .45 : 1 } : null} />
+              {/* La clé sur la CARTE, un bouton : son appui long la range, son clic la lance (05/11, étape 5). */}
+              <CarteScenario s={s} noms={sc.noms} enCours={sc.enCours === s.id} onLancer={sc.lancer} dataId={s.id} sansDernier={edit} className={edit ? 'o-pointille' : undefined} style={edit ? { '--o-pointille': '.45', opacity: s.masque ? .45 : 1 } : null} />
               {/* Les outils prennent la place du repere « dernier lancement » : en bas,
                 * ils mordaient sur les puces des cartes etroites (vu en demo, 16/09). */}
               {edit && (
@@ -87,7 +102,8 @@ function ScenariosView({ hass, edit = false }) {
           <ScenesContent hass={hass} />
         </Suspense>
       </div>
-      {fiche && <Suspense fallback={null}><FicheScenario key={fiche === 'nouveau' ? 'nouveau' : fiche.id} scenario={fiche === 'nouveau' ? null : fiche} pieces={pieces} liens={liens} lampes={(sc.etat && sc.etat.lampes) || null} onEnregistrer={sc.enregistrer} onClose={() => setFiche(null)} briques={BRIQUES_SCENARIO} /></Suspense>}
+      {fiche && <Suspense fallback={null}><FicheScenario key={typeof fiche === 'string' ? fiche : fiche.id} scenario={typeof fiche === 'string' ? null : fiche} natureInitiale={fiche === 'maison' ? 'maison' : null} capturer={peutCapturer ? sc.capturer : null} pieces={pieces} liens={liens} lampes={(sc.etat && sc.etat.lampes) || null} onEnregistrer={sc.enregistrer} onClose={() => setFiche(null)} briques={BRIQUES_SCENARIO} /></Suspense>}
+      <FeuilleDepart hass={hass} sc={sc} />
     </main>
   );
 }

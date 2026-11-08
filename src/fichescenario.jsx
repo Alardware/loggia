@@ -10,12 +10,12 @@
  * sur l'Accueil ou non, masqué ou non ; « Remettre d'origine » pour un
  * scénario de Loggia qu'on a touché, « Supprimer » pour un des siens.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { tr } from './i18n.js';
 import { BottomSheet, TitreFeuille, ListeChoix, Fi } from './ui.jsx';
 import { estRefus, raisonEchec } from './refus.js';
 import { GESTES_SCENARIO as GESTES_SCN, FAMILLES as FAMILLES_SCN, PORTEES as PORTEES_SCN, NOMS_INTEGRES, NOMS_FAMILLES, NOMS_GESTES, NOMS_PORTEES, NOMS_CONDITIONS,
-  ICONES_FAMILLES, TEINTES_SCENARIO, ICONES_SCENARIO, teinteScenario, actionVide, scenarioVide, versEnregistrement } from './scenarios.js';
+  ICONES_FAMILLES, TEINTES_SCENARIO, ICONES_SCENARIO, teinteScenario, actionVide, scenarioVide, versEnregistrement, compterEtats, libelleEtats } from './scenarios.js';
 
 /* Le fondu et le blanc d'une action lumières (ADR 0304), facultatifs : la lampe fait le fondu elle-même (`transition`), le blanc
  * va aux lampes qui le prennent, borné par chacune — au serveur. Des secondes ; des kelvins, ceux des blancs nommés de la fiche
@@ -35,14 +35,38 @@ function capacitesVisees(a, lampes, pieceScenario) {
 const puce = (on) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700,
   border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' });
 
-export default function FicheScenario({ scenario = null, pieces = [], liens = [], lampes = null, onEnregistrer, onClose, briques }) {
+export default function FicheScenario({ scenario = null, pieces = [], liens = [], lampes = null, onEnregistrer, onClose, briques, natureInitiale = null, capturer = null }) {
   const { ChoixIcone, FicheRangee, RmBascule, boutonEdition, BOUTON_PETIT } = briques;
   const existant = !!scenario;
   const [s, setS] = useState(() => scenario ? { ...scenario, nom: scenario.nom || '', actions: (scenario.actions || []).map(a => ({ ...a })) } : scenarioVide());
   const maj = (patch) => setS(v => ({ ...v, ...patch }));
-  const [nature, setNature] = useState(scenario && scenario.lien ? 'lie' : 'compose');
+  const [nature, setNature] = useState(natureInitiale || (scenario && scenario.lien ? 'lie' : scenario && scenario.etats ? 'maison' : 'compose'));
   const [err, setErr] = useState('');
   const [attente, setAttente] = useState(false);
+  /* « La maison telle qu'elle est » (06/11, étape 8 du rapport sur l'usage) : on règle lumières et volets à la main, on
+   * ouvre la fiche, on donne un nom. L'état est lu au serveur (`capturer`, les règles d'un scénario composé : jamais une
+   * veilleuse), montré ici, envoyé avec le scénario ; chaque choix — l'étendue, les familles — relit la maison. */
+  const etatsInit = (scenario && scenario.etats) || null;
+  const [familles, setFamilles] = useState(() => {
+    const ids = Object.keys(etatsInit || {});
+    const f = ['lumieres', 'volets'].filter(x => !ids.length || ids.some(id => (id.indexOf('cover.') === 0) === (x === 'volets')));
+    return f.length ? f : ['lumieres', 'volets'];
+  });
+  const [etendue, setEtendue] = useState(etatsInit && scenario.piece ? 'piece' : 'maison');
+  const [pieceCap, setPieceCap] = useState((etatsInit && scenario.piece) || '');
+  const [lecture, setLecture] = useState('');   // '' : lue ; 'attente' ; sinon le refus, dit
+  const reprendre = async (f = familles, e = etendue, p = pieceCap) => {
+    if (!capturer) return;
+    if (!f.length || (e === 'piece' && !p)) { maj({ etats: {} }); setLecture(''); return; }
+    setLecture('attente');
+    try { maj({ etats: await capturer(f, e, e === 'piece' ? p : null) }); setLecture(''); }
+    catch (x) { setLecture(estRefus(x) ? raisonEchec(x) : ((x && x.message) || tr('Lecture impossible.'))); }
+  };
+  useEffect(() => { if (nature === 'maison' && !etatsInit) reprendre(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+  const choisirNature = (n) => { setNature(n); if (n === 'maison' && !(s.etats && Object.keys(s.etats).length)) reprendre(); };
+  const basculerFamille = (f) => { const v = familles.includes(f) ? familles.filter(x => x !== f) : [...familles, f]; setFamilles(v); reprendre(v); };
+  const choisirEtendue = (e) => { setEtendue(e); reprendre(familles, e); };
+  const choisirPiece = (p) => { setPieceCap(p); reprendre(familles, 'piece', p); };
   const t = teinteScenario(s);
   const nomIntegre = existant && scenario.integre ? NOMS_INTEGRES()[scenario.id] : '';
   const valide = existant ? true : !!(s.nom || '').trim();
@@ -67,19 +91,43 @@ export default function FicheScenario({ scenario = null, pieces = [], liens = []
     catch (e) { setErr(estRefus(e) ? raisonEchec(e) : ((e && e.message) || tr('Enregistrement impossible.'))); setAttente(false); }
   };
   const valider = (close) => {
-    if (!valide || attente) return;
-    const doc = versEnregistrement({ ...s, lien: nature === 'lie' ? s.lien : null });
+    if (!valide || attente || lecture === 'attente') return;
+    const maison = nature === 'maison';
+    if (maison && !(s.etats && Object.keys(s.etats).length)) { setErr(tr('Rien à retenir : aucune lumière ni aucun volet joignable.')); return; }
+    const doc = versEnregistrement({ ...s, lien: nature === 'lie' ? s.lien : null, etats: maison ? s.etats : null,
+      piece: maison ? (etendue === 'piece' ? pieceCap || null : null) : s.piece });
     if (nature === 'lie' && !doc.lien) { setErr(tr('Choisissez une scène ou un script.')); return; }
     envoyer(close, { enregistrer: doc });
   };
   const optionsLiens = [{ id: '', label: tr('— choisir —') }, ...liens.map(l => ({ id: l.haid, label: l.nom, sub: l.haid }))];
   const optionsPieces = [{ id: '', label: tr('Pièce de la TV ou de l’enceinte') }, ...pieces.map(p => ({ id: p, label: p }))];
   const famillesNoms = NOMS_FAMILLES(), gestesNoms = NOMS_GESTES(), porteesNoms = NOMS_PORTEES(), conditionsNoms = NOMS_CONDITIONS();
+  const nEtats = compterEtats(s.etats);
+  const texteLecture = lecture === 'attente' ? tr('Lecture de la maison…') : lecture
+    || (nEtats.lampes || nEtats.volets ? libelleEtats(s.etats) : etendue === 'piece' && !pieceCap ? tr('Choisissez une pièce.') : tr('Rien à retenir : aucune lumière ni aucun volet joignable.'));
+  const blocMaison = (
+    <>
+      <div style={etiquette}>{tr('ÉTENDUE')}</div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        {['maison', 'piece'].map(e => <button key={e} aria-pressed={etendue === e} onClick={() => choisirEtendue(e)} style={puce(etendue === e)}>{porteesNoms[e]}</button>)}
+        {etendue === 'piece' && <ListeChoix value={pieceCap} options={[{ id: '', label: tr('— choisir —') }, ...pieces.map(p => ({ id: p, label: p }))]} onChange={(v) => choisirPiece(v || '')} label={tr('Pièce')} />}
+      </div>
+      <div style={etiquette}>{tr('RETENIR')}</div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {['lumieres', 'volets'].map(f => { const on = familles.includes(f); return <button key={f} aria-pressed={on} onClick={() => basculerFamille(f)} style={puce(on)}><Fi i={ICONES_FAMILLES[f]} size={12} />{famillesNoms[f]}</button>; })}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12, padding: '10px 12px', borderRadius: 12, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
+        <span role="status" style={{ flex: 1, minWidth: 160, fontSize: 13, fontWeight: 700, color: lecture && lecture !== 'attente' ? 'var(--o-bad)' : 'var(--o-text1)' }}>{texteLecture}</span>
+        {capturer && <button onClick={() => reprendre()} disabled={lecture === 'attente'} style={{ ...secondaire, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', fontSize: 12.5 }}><Fi i="refresh" size={12} />{tr('Reprendre l’état actuel')}</button>}
+      </div>
+      <div style={note}>{tr('Réglez lumières et volets comme vous les aimez, puis enregistrez : au lancement, chacun reprend cet état. Les veilleuses ne sont jamais touchées.')}</div>
+    </>
+  );
   return (
     <BottomSheet onClose={onClose}>
       {close => (
         <div style={{ padding: '0 0 8px' }}>
-          <TitreFeuille style={{ fontSize: 15, fontWeight: 800 }}>{existant ? tr('Modifier le scénario') : tr('Ajouter un scénario')}</TitreFeuille>
+          <TitreFeuille style={{ fontSize: 15, fontWeight: 800 }}>{existant ? tr('Modifier le scénario') : natureInitiale === 'maison' ? tr('Enregistrer la maison') : tr('Ajouter un scénario')}</TitreFeuille>
           <div style={{ ...note, marginTop: 4 }}>{existant && scenario.integre ? tr('Un scénario de Loggia : modifiez-le, ou remettez-le d’origine.') : tr('Composez-le à partir de ce que la maison possède, ou liez une scène ou un script.')}</div>
 
           <label htmlFor="o-scn-nom" style={etiquette}>{tr('NOM')}</label>
@@ -104,8 +152,9 @@ export default function FicheScenario({ scenario = null, pieces = [], liens = []
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button aria-pressed={nature === 'compose'} onClick={() => setNature('compose')} style={puce(nature === 'compose')}>{tr('Composé par Loggia')}</button>
             <button aria-pressed={nature === 'lie'} onClick={() => setNature('lie')} style={puce(nature === 'lie')}>{tr('Lié à Home Assistant')}</button>
+            {(capturer || nature === 'maison') && <button aria-pressed={nature === 'maison'} onClick={() => choisirNature('maison')} style={puce(nature === 'maison')}>{tr('La maison telle qu’elle est')}</button>}
           </div>
-          {nature === 'lie' ? (
+          {nature === 'maison' ? blocMaison : nature === 'lie' ? (
             <div style={{ marginTop: 10 }}>
               <ListeChoix value={s.lien || ''} options={optionsLiens} onChange={(v) => maj({ lien: v || null })} label={tr('Scène ou script')} />
               {existant && scenario.suggestion && !s.lien && <div style={{ marginTop: 8 }}><button onClick={() => maj({ lien: scenario.suggestion })} style={puce(false)}><Fi i="sparkles" size={12} />{tr('Suggestion : {x}', { x: scenario.suggestion })}</button></div>}

@@ -1,6 +1,7 @@
 /* La vue d’une pièce, sa navigation, ses fiches de confort et du dehors.
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
 import { Suspense, useState, useEffect, useRef, cloneElement, useMemo } from 'react';
+import { useRangerLibre } from '../glisser.js';
 import { lazyRecharge } from '../recharge.js';
 import { LOGGIA_INDEX, normRooms, cfgVal, ctxLumieres } from '../state.js';
 import { uniteTemp, uniteVent, versCelsius, versKmh, signeTemp } from '../unites.js';
@@ -254,6 +255,8 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
   const derived = useMemo(() => roomEntitiesBrutes(hass, room), [hass, room]);
   // Meme editeur que la vue Objets : retrait, ajout, ordre, intertitres.
   const ed = useLayoutEditor(ROOM_LAYOUT_KEY, room, derived);
+  // Hors édition, un appui long range les cartes (05/11, étape 5) : le même ordre que les flèches de l'édition.
+  const ranger = useRangerLibre({ actif: !edit, onRanger: (cle, cible) => ed.move(cle, ed.ids.indexOf(cible) - ed.ids.indexOf(cle)) });
   const ents = ed.ids;
   const addSection = () => ed.toggle('sect:' + Date.now().toString(36));
 
@@ -335,7 +338,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
         {ents.length > 0 && <div style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Appareils de la pièce')}</div>}
         {/* appareils de la pièce — mêmes cartes que les vues dédiées */}
         {ents.length
-          ? <div ref={ed.gridRef} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          ? <div ref={ed.gridRef} {...ranger} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {blocs.map((bloc, bi) => (
               // Hors édition, un intertitre sans carte ne s'affiche pas.
               (!edit && bloc.titre && !bloc.cartes.length) ? null : (
@@ -355,7 +358,7 @@ function RoomView({ room, rooms = [], piece, hass, onNav, edit = false }) {
                 const lbl = roomLabelOf(room, id);
                 const compacte = !zone && ed.estCompact(id);
                 const card = compacte ? dc.compact(id, lbl) : dc.card(id, lbl, zone);
-                if (!edit) return <Anim key={id} i={ents.indexOf(id)} className={(ed.estLarge(id) ? 'o-cvw2 ' : '') + (compacte ? 'o-cvrow1' : '')}>{card}</Anim>;
+                if (!edit) return <Anim key={id} id={id} i={ents.indexOf(id)} className={(ed.estLarge(id) ? 'o-cvw2 ' : '') + (compacte ? 'o-cvrow1' : '')}>{card}</Anim>;
                 return <EditableCard key={id} ed={ed} id={id} nom={nomDe(id)} onEdit={setCardEdit} hass={hass}>{card}</EditableCard>;
               })}
               {edit && bi === blocs.length - 1 && <CarteAjout onClick={() => setAddSheet(true)} />}

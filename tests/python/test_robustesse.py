@@ -283,7 +283,8 @@ def test_chaque_module_vivant_sait_s_arreter():
     # enfant) : son ecoute, son tic de minute, ses echeances, son etat differe.
     # ASSERTION MODIFIEE (chantier Mode enfant, tache 3) : 17 -> 18.
     # ASSERTION MODIFIEE (etape 3 IoT, 25/10 ; I28) : 18 -> 19, le carnet de l'eau - son ecoute, son ecriture differee.
-    assert len(noms) == 19, noms
+    # ASSERTION MODIFIÉE (07/11, étape 11) : 19 -> 20, les rappels — leurs rendez-vous.
+    assert len(noms) == 20, noms
     for nom in noms:
         src = (dossier / (nom + ".py")).read_text(encoding="utf-8")
         assert "def async_arreter" in src or "def arreter" in src, nom

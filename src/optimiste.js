@@ -30,10 +30,20 @@
 import { useState, useEffect, useRef, useCallback, useSyncExternalStore } from 'react';
 
 const OPTIMISTE_MS = 6000;
+/* « Annuler » (06/11, étape 7 ; annuler.js) remet la maison comme avant : l'optimiste posé par le geste annulé n'a plus rien à
+ * dire. Sans ce signal, un Annuler plus rapide que le relevé suivant laissait la carte sur le geste jusqu'au filet — l'état
+ * réel, lui, n'avait pas bougé entre-temps. Le nom vit ici : annuler.js tire déjà ce module par lumieresetat.js. */
+export const OUBLIER_OPTIMISTES = 'loggia:oublier-optimistes';
 export function useOptimiste(reel, delai = OPTIMISTE_MS) {
   const [ov, setOv] = useState(null);
   const minuteur = useRef(0);
   useEffect(() => () => clearTimeout(minuteur.current), []);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const oublier = () => { clearTimeout(minuteur.current); setOv(null); };
+    window.addEventListener(OUBLIER_OPTIMISTES, oublier);
+    return () => window.removeEventListener(OUBLIER_OPTIMISTES, oublier);
+  }, []);
   /* L'etat reel a REPONDU : le filet n'a plus de raison d'attendre.
    *
    * Mais « je ne sais pas » n'est pas une reponse. Une carte de piece rend

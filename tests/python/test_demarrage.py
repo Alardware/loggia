@@ -139,7 +139,9 @@ def test_le_demarrage_cree_les_quinze_modules_le_service_et_le_panneau(composant
     # ASSERTION MODIFIEE (ADR 0276, 27/10) : 54 -> 55, `loggia/profils/moi`.
     # ASSERTION MODIFIEE (29/10, versions) : 55 -> 57
     # ASSERTION MODIFIÉE (30/10, G2-1 ; ADR 0301) : 57 -> 59, la collecte et qui recoit quoi.
-    assert data.get("ws") is True and len(hass.commandes) == 59
+    # ASSERTION MODIFIÉE (06/11, étape 8) : 59 -> 60, `loggia/scenarios/capturer`.
+    # ASSERTION MODIFIÉE (07/11, étape 11) : 60 -> 63, les rappels.
+    assert data.get("ws") is True and len(hass.commandes) == 63
     assert hass.services.has_service(composant.DOMAIN, "scenario")
     assert "loggia" in hass.data.get("frontend_panels", {}), "le panneau n'est pas dans le menu"
     hass.executer()
@@ -191,7 +193,9 @@ def test_un_rechargement_rebatit_les_modules_sans_rien_reenregistrer(composant, 
     # ASSERTION MODIFIEE (ADR 0276, 27/10) : 54 -> 55, le profil du compte.
     # ASSERTION MODIFIEE (29/10, versions) : 55 -> 57
     # ASSERTION MODIFIÉE (30/10, G2-1 ; ADR 0301) : 57 -> 59, la collecte et qui recoit quoi.
-    assert len(hass.commandes) == 59
+    # ASSERTION MODIFIÉE (06/11, étape 8) : 59 -> 60, `loggia/scenarios/capturer`.
+    # ASSERTION MODIFIÉE (07/11, étape 11) : 60 -> 63, les rappels.
+    assert len(hass.commandes) == 63
     assert "loggia" in hass.data.get("frontend_panels", {})
     # La vue du plan 3D vit jusqu'a l'arret du process : une seule fois.
     # ASSERTION MODIFIEE (ADR 0289, 30/10) : et celle de la photo de fond, au meme regime.

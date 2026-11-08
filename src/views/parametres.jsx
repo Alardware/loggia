@@ -5,7 +5,7 @@
  * que volontairement. Le module ne remonte jamais vers App.jsx — un cycle
  * ramenerait le monolithe entier dans ce morceau et annulerait le decoupage.
  */
-import { useState, useEffect, useRef, useMemo, useId } from 'react';
+import { useState, useEffect, useRef, useMemo, useId, useCallback } from 'react';
 import { puce } from '../styles.js';
 import { AppareilsReglages } from './appareils.jsx';
 import { appareilsConnus, ficheAppareil } from '../state.js';
@@ -32,6 +32,9 @@ import { viewReason } from '../views.js';
 import { detecterCapteursPieces } from '../resolve.js';
 import { autoFamille, FAMILLES_AUTO } from '../autos.js';
 import { sansAccents } from '../outils.js';
+// La recherche des réglages (07/11, usage étape 12).
+import { REGLAGE_PAR_ID, optionsReglages, sectionDe, trouverRangee, montrerRangee } from '../reglagesindex.js';
+import { filtrerChoix } from '../choix.js';
 import { croqAncienneListe, plantsCfg } from '../lectures.js';
 import { soeursDistributeur, commandeDistribuer, lireDistributeur, niveauDuBac } from '../distributeur.js';
 import { mesurePortion, scriptsCandidats } from '../distributeurfiche.js';
@@ -62,6 +65,7 @@ import { poserEtatEnfant } from '../enfantetat.js';
 import { uniteTemp, wattsDe } from '../unites.js';
 import { CarteTel, LignesTel, LigneTel, ChoixTel, BasculeTel, btnTel, lienTel, pasTel } from './partel.jsx';
 import { Panneau, Ligne, Pastille, GrilleCartes, CarteGens, CAPITALES, MONO, FILET, btnPrimaire, btnSecondaire, btnDiscret, btnDanger } from './parcommun.jsx';
+import { useTailleTexte } from '../tailletexte.js';
 
 /* « Verre des cartes » : l'écriture, ici et pas dans verre.js — le démarrage
  * n'a besoin que de lire (ADR 0284). La classe suit sur-le-champ. Exportée
@@ -778,7 +782,7 @@ function AlertesTele({ hass, tel = false, tailleTitre = 34 }) {
       {/* L'en-tête de la section, avec sa bascule à droite : « Actives ». */}
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 280px', minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: tailleTitre, fontWeight: 500 }}>{tr('Alertes')}</h1>
+          <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: `calc(${tailleTitre}px * var(--o-texte, 1))`, fontWeight: 500 }}>{tr('Alertes')}</h1>
           <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 4 }}>{cfg.actif ? tr('Ce que la maison vous dit, et à qui. La sûreté passe toujours.') : tr('Coupées. La maison réagit quand même aux dangers.')}</div>
         </div>
         <span style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 2 }}>
@@ -2092,6 +2096,9 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
    *
    * `hub` reste le point de depart d'un onglet neuf : la memoire est propre a
    * la session, et on n'ouvre pas Loggia le lendemain au milieu d'un reglage. */
+  // La taille du texte de CET écran (07/11, étape 10 ; tailletexte.js).
+  const [tailleTexte, poserTailleTexte] = useTailleTexte();
+  const cransTexte = [['normal', tr('Normale')], ['grand', tr('Grande')]];
   const [tabEtat, setTab] = useState(() => {
     try { return window.sessionStorage.getItem('loggia-par-section') || 'hub'; } catch { return 'hub'; }
   });
@@ -2381,6 +2388,57 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   // l'une n'empeche pas de compter l'autre.
   const [nbVolRegles, setNbVolRegles] = useState(0);
   const [ongletRegle, setOngletRegle] = useState('volets');
+  /* LA RECHERCHE DES RÉGLAGES (07/11, usage étape 12 ; reglagesindex.js). Un réglage choisi ouvre sa section — et
+   * l'onglet des Règles, et « Avancé », quand il y vit —, puis sa rangée se cherche dans le contenu et s'allume. Le
+   * contenu se monte au rendu suivant : on la cherche quelques fois, puis on se contente du haut de la section. */
+  const [avance, setAvance] = useState(false);
+  const [rechercheReglage, setRechercheReglage] = useState('');
+  const [cibleReglage, setCibleReglage] = useState(null);
+  const contenuRef = useRef(null);
+  const allerAuReglage = useCallback((id) => {
+    const s = sectionDe(id);
+    if (!s) return;
+    const e = REGLAGE_PAR_ID[id] || null;
+    setTab(s);
+    if (e && e.o) setOngletRegle(e.o);
+    if (e && e.a) setAvance(true);
+    setCibleReglage({ id, n: Date.now() });
+  }, []);
+  useEffect(() => {
+    if (!cibleReglage) return undefined;
+    const e = REGLAGE_PAR_ID[cibleReglage.id] || null;
+    let essais = 0;
+    let t = null;
+    const chercher = () => {
+      const el = e ? trouverRangee(contenuRef.current, e) : null;
+      if (el || !e || essais >= 12) {
+        if (el) montrerRangee(el);
+        else if (contenuRef.current) { try { contenuRef.current.scrollIntoView({ block: 'start' }); } catch { /* un vieux moteur */ } }
+        setCibleReglage(null);
+        return;
+      }
+      essais += 1;
+      t = setTimeout(chercher, 120);
+    };
+    t = setTimeout(chercher, 60);
+    return () => clearTimeout(t);
+  }, [cibleReglage, tab, ongletRegle, avance]);
+  // Ctrl+K y mène d'ailleurs (`demanderReglage`) : à l'ouverture des Paramètres, ou quand ils sont déjà ouverts.
+  useEffect(() => {
+    const lire = () => {
+      let id = null;
+      let s = null;
+      try {
+        id = window.sessionStorage.getItem('loggia-par-reglage');
+        window.sessionStorage.removeItem('loggia-par-reglage');
+        s = window.sessionStorage.getItem('loggia-par-section');
+      } catch { /* stockage indisponible */ }
+      if (id) allerAuReglage(id); else if (s && s !== 'hub') setTab(s);
+    };
+    lire();
+    window.addEventListener('loggia-par-reglage', lire);
+    return () => window.removeEventListener('loggia-par-reglage', lire);
+  }, [allerAuReglage]);
   /* Observer sans agir : UN interrupteur pour les modules qui commandent
    * quelque chose — volets, chauffage, depart, nuit (maquettes du 18/09), et
    * le planning de chauffe (plan 2 du chantier Chauffage). Chaque module garde
@@ -2494,6 +2552,25 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   ].filter(x => !x.admin || aD(x.id));
   // Interrupteur du bandeau (Tgl n'existe que dans la portée d'Apparence)
   const curSection = SECTIONS.find(x => x.id === tab);
+  /* Le champ « Rechercher un réglage » : les menus de la maison (`ChampSuggere`), les réglages groupés par section,
+   * ceux des seules sections que ce profil ouvre. Choisir y mène ; le champ se vide et rend le focus. */
+  const optionsRecherche = optionsReglages(SECTIONS.map(x => x.id));
+  const champReglage = (style) => (
+    <div style={{ position: 'relative', minWidth: 0, ...style }}>
+      <span aria-hidden="true" style={{ position: 'absolute', left: 12, top: 19, transform: 'translateY(-50%)', display: 'inline-flex', pointerEvents: 'none' }}><Fi i="search" size={13} color="var(--o-text3)" /></span>
+      <ChampSuggere value={rechercheReglage} label={tr('Rechercher un réglage')} placeholder={tr('Rechercher un réglage')} suggestions={optionsRecherche}
+        onChange={(v) => {
+          if (!sectionDe(v)) { setRechercheReglage(v); return; }
+          setRechercheReglage('');
+          try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch { /* rien */ }
+          allerAuReglage(v);
+        }}
+        style={{ width: '100%', boxSizing: 'border-box', height: 38, padding: '0 12px 0 32px', borderRadius: 11, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s1)', color: 'var(--o-text)', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }} />
+      {rechercheReglage.trim() && !filtrerChoix(optionsRecherche, rechercheReglage).length && (
+        <div role="status" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', marginTop: 6, padding: '0 4px' }}>{tr('Aucun résultat pour « {q} »', { q: rechercheReglage.trim() })}</div>
+      )}
+    </div>
+  );
   /* L'en-tete d'une section : ce qu'elle compte, et ses actions a droite
    * (maquettes du 18/09). Chaque section le dit a sa facon ; par defaut, sa
    * phrase du sommaire. */
@@ -2671,6 +2748,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     <div ref={racineRef} className="loggia-content" style={{ padding: '26px 28px 56px', display: 'grid', gridTemplateColumns: avecRail ? '210px minmax(0,1fr)' : 'minmax(0,1fr)', gap: 28, alignItems: 'start' }}>
       {avecRail && (
         <nav aria-label={tr('Sections des paramètres')} style={{ position: 'sticky', top: 'calc(var(--o-safe-top, 0px) + 18px)', display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 2 }}>
+          {champReglage({ marginBottom: 10 })}
           {railItem('hub', tr('Vue d’ensemble'), 'apps', 'var(--o-text2)')}
           {GROUPES_PAR.map(g => (
             <div key={g.id} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -2686,7 +2764,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           )}
         </nav>
       )}
-      <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div ref={contenuRef} style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 20 }}>
       {tab === 'hub' && avecRail ? (
         <>
           <div style={{ minWidth: 0, paddingBottom: 6 }}>
@@ -2734,6 +2812,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               <div>
                 <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 30, fontWeight: 500, lineHeight: 1.1, letterSpacing: '-.01em' }}>{tr('Paramètres')}</h1>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}>{tr('Profil de {nom} · réglages suivis sur tous ses écrans', { nom: prenom })}</div>
+                {champReglage({ marginTop: 14 })}
                 <nav aria-label={tr('Sections des paramètres')} style={{ display: 'flex', gap: 2, overflowX: 'auto', scrollbarWidth: 'none', marginTop: 18 }}>
                   {SECTIONS.map(sec => {
                     const on = tab === sec.id;
@@ -2814,6 +2893,10 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             </OptRow>
             <OptRow title={tr('Suivre Home Assistant')} desc={tr('Calque le thème actif de Home Assistant, et son mode.')}>
               <Tgl on={haTheme === 'FOLLOW'} cb={onFollowHa} label={tr('Suivre le thème Home Assistant')} />
+            </OptRow>
+            {/* La taille du texte (07/11, étape 10) : cet écran seulement — le texte grandit, la disposition reste. */}
+            <OptRow ici title={tr('Taille du texte')} desc={tr('Le texte grandit, la disposition ne bouge pas ; sur cet écran seulement.')}>
+              <Seg label={tr('Taille du texte')} value={tailleTexte} opts={cransTexte} onPick={poserTailleTexte} />
             </OptRow>
           </Panneau>
 
@@ -2923,7 +3006,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             )}
           </Panneau>
 
-          <Panneau titre={tr('Langue et démarrage')}>
+          <Panneau titre={tr('Langue et navigation')}>
             <OptRow title={tr('Langue')} desc={tr('Les noms des pièces viennent de Home Assistant.')}>
               {/* Un menu, pas une rangée de boutons : dès six langues, la rangée
                 * débordait (demande du 22/09). Chaque langue se lit dans sa
@@ -2931,23 +3014,34 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 * traduit en petit dessous, comme le sélecteur de HA. */}
               {menuLangue({ gap: 12, minWidth: 0, width: 268, maxWidth: '100%', padding: '9px 14px', borderRadius: 14, background: 'var(--o-s2)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)' })}
             </OptRow>
-            <OptRow title={tr('Ouvrir Loggia au démarrage')}
-              desc={accueilDefaut === null
-                ? tr('Réglage indisponible : la page qui affiche Loggia n’a pas pu être identifiée.')
-                : tr('Le sélecteur de Home Assistant ne propose que ses tableaux de bord : ce bouton fait le réglage à sa place.')}>
-              {accueilDefaut === true
-                ? <Pastille niveau="ok" icone="check" capitales>{tr('Fait')}</Pastille>
-                : <button onClick={mettreEnAccueil} disabled={accueilDefaut !== false} style={{ ...btnSecondaire, opacity: accueilDefaut === false ? 1 : .5, cursor: accueilDefaut === false ? 'pointer' : 'default' }}>{tr('Le faire')}</button>}
-            </OptRow>
             <OptRow title={tr('Barre du bas')} desc={tr('Les raccourcis, sur tablette et téléphone.')}>
               <Tgl on={!!navbar} cb={onToggleNavbar} label={tr('Barre de navigation mobile')} />
             </OptRow>
-            <OptRow title={tr('Plan 3D')} desc={tr('Le bouton « Plan » des pièces, sur l’Accueil.')}>
-              <Tgl on={look.plan !== false} cb={() => onLook({ plan: look.plan === false })} label={tr('Plan 3D de la maison')} />
-            </OptRow>
-            <MargesAvancees navbar={navbar} navMargin={navMargin} navAuto={navAuto} onNavOffset={onNavOffset}
-              topMargin={topMargin} topAuto={topAuto} onTopOffset={onTopOffset}
-              onReset={() => { onNavOffsetReset && onNavOffsetReset(); onTopOffsetReset && onTopOffsetReset(); }} />
+          </Panneau>
+
+          {/* « Avancé » (07/11, usage étape 12 ; son choix) : ce qu'on règle une fois — la page de démarrage, le plan 3D,
+            * les marges —, replié. La recherche l'ouvre quand elle y mène. */}
+          <Panneau titre={tr('Avancé')} desc={tr('Rarement utile : la page de démarrage, le plan 3D, les marges de l’écran.')}
+            droite={<button type="button" onClick={() => setAvance(o => !o)} aria-expanded={avance} aria-label={avance ? tr('Replier') : tr('Déplier')}
+              style={{ width: 34, height: 34, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', border: 'none', color: 'var(--o-text2)', cursor: 'pointer' }}>
+              <Fi i={avance ? 'angle-small-up' : 'angle-small-down'} size={15} />
+            </button>}>
+            {avance && (<>
+              <OptRow title={tr('Ouvrir Loggia au démarrage')}
+                desc={accueilDefaut === null
+                  ? tr('Réglage indisponible : la page qui affiche Loggia n’a pas pu être identifiée.')
+                  : tr('Le sélecteur de Home Assistant ne propose que ses tableaux de bord : ce bouton fait le réglage à sa place.')}>
+                {accueilDefaut === true
+                  ? <Pastille niveau="ok" icone="check" capitales>{tr('Fait')}</Pastille>
+                  : <button onClick={mettreEnAccueil} disabled={accueilDefaut !== false} style={{ ...btnSecondaire, opacity: accueilDefaut === false ? 1 : .5, cursor: accueilDefaut === false ? 'pointer' : 'default' }}>{tr('Le faire')}</button>}
+              </OptRow>
+              <OptRow title={tr('Plan 3D')} desc={tr('Le bouton « Plan » des pièces, sur l’Accueil.')}>
+                <Tgl on={look.plan !== false} cb={() => onLook({ plan: look.plan === false })} label={tr('Plan 3D de la maison')} />
+              </OptRow>
+              <MargesAvancees navbar={navbar} navMargin={navMargin} navAuto={navAuto} onNavOffset={onNavOffset}
+                topMargin={topMargin} topAuto={topAuto} onTopOffset={onTopOffset}
+                onReset={() => { onNavOffsetReset && onNavOffsetReset(); onTopOffsetReset && onTopOffsetReset(); }} />
+            </>)}
           </Panneau>
         </div>
         ) : (
@@ -3006,16 +3100,12 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 {menuLangue({ gap: 3, minWidth: 0, maxWidth: '100%', padding: '4px 0', background: 'none', border: 'none', color: 'var(--o-accent-soft)', fontSize: 12, fontWeight: 800 })}
               </LigneTel>
               <LigneTel ici titre={tr('Barre de navigation')} desc={tr('Accès rapide en bas de l’écran, sur tablette et téléphone.')}><BasculeTel on={!!navbar} cb={onToggleNavbar} nom={tr('Barre de navigation mobile')} /></LigneTel>
-              <LigneTel titre={tr('Plan 3D de la maison')} desc={tr('Le bouton « Plan » de la section Pièces de l’Accueil. Coupé, les pièces restent en cartes.')}><BasculeTel on={look.plan !== false} cb={() => onLook({ plan: look.plan === false })} nom={tr('Plan 3D de la maison')} /></LigneTel>
-              <LigneTel titre={tr("Page d'accueil")}
-                desc={accueilDefaut === true ? tr('Home Assistant ouvre Loggia au démarrage, sur ce compte.')
-                  : accueilDefaut === null ? tr('Réglage indisponible : la page qui affiche Loggia n’a pas pu être identifiée.')
-                    : tr('Home Assistant ouvre un autre écran au démarrage : ce bouton fait le réglage à sa place.')}>
-                {accueilDefaut === true
-                  ? <span style={pasTel('ok')}>{tr('Fait')}</span>
-                  : <button type="button" onClick={mettreEnAccueil} disabled={accueilDefaut !== false} style={{ ...btnTel, opacity: accueilDefaut === false ? 1 : .45 }}>{tr('Ouvrir Loggia au démarrage')}</button>}
-              </LigneTel>
             </LignesTel>
+          </CarteTel>
+
+          {/* La taille du texte (07/11, étape 10) : cet écran seulement. */}
+          <CarteTel ici titre={tr('Taille du texte')} desc={tr('Le texte grandit, la disposition ne bouge pas ; sur cet écran seulement.')}>
+            <ChoixTel titre={tr('Taille')} label={tr('Taille du texte')} value={tailleTexte} opts={cransTexte} onPick={poserTailleTexte} />
           </CarteTel>
 
           <CarteTel ici titre={tr('Effets')} desc={tr('Coût GPU modéré.')} gap={20}>
@@ -3060,12 +3150,28 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             </div>
           </CarteTel>
 
-          <CarteTel ici style="tirets" titre={tr('Avancé — marges de l’écran')} desc={navAuto && topAuto ? tr('« Auto » convient dans la quasi-totalité des cas.') : tr('Réglées à la main.')}>
-            <LignesTel>
-              <LigneTel titre={tr('Marge du haut')} desc={tr('Auto lit la zone sûre de l’écran : encoche, barre d’état.')}><PasTel px={topMargin} auto={topAuto} onStep={onTopOffset} label={tr('Marge du haut')} /></LigneTel>
-              {navbar && <LigneTel titre={tr('Marge du bas')} desc={tr('Sous la barre de navigation.')}><PasTel px={navMargin} auto={navAuto} onStep={onNavOffset} label={tr('Marge du bas')} /></LigneTel>}
-              {!(navAuto && topAuto) && <LigneTel><button type="button" onClick={() => { onNavOffsetReset && onNavOffsetReset(); onTopOffsetReset && onTopOffsetReset(); }} style={btnTel}>{tr('Rétablir « auto »')}</button></LigneTel>}
-            </LignesTel>
+          {/* « Avancé » (07/11, usage étape 12 ; son choix) : la page de démarrage, le plan 3D et les marges, repliés —
+            * les mêmes que sur l'ordinateur. Les marges gardent leur marque « Cet écran » ; le reste suit le profil. */}
+          <CarteTel style="tirets" titre={tr('Avancé')} desc={tr('Rarement utile : la page de démarrage, le plan 3D, les marges de l’écran.')}>
+            <button type="button" onClick={() => setAvance(o => !o)} aria-expanded={avance} style={{ ...btnTel, alignSelf: 'flex-start' }}>
+              <Fi i={avance ? 'angle-small-up' : 'angle-small-down'} size={12} />{avance ? tr('Replier') : tr('Afficher')}
+            </button>
+            {avance && (
+              <LignesTel>
+                  <LigneTel titre={tr('Plan 3D de la maison')} desc={tr('Le bouton « Plan » de la section Pièces de l’Accueil. Coupé, les pièces restent en cartes.')}><BasculeTel on={look.plan !== false} cb={() => onLook({ plan: look.plan === false })} nom={tr('Plan 3D de la maison')} /></LigneTel>
+                  <LigneTel titre={tr("Page d'accueil")}
+                    desc={accueilDefaut === true ? tr('Home Assistant ouvre Loggia au démarrage, sur ce compte.')
+                      : accueilDefaut === null ? tr('Réglage indisponible : la page qui affiche Loggia n’a pas pu être identifiée.')
+                        : tr('Home Assistant ouvre un autre écran au démarrage : ce bouton fait le réglage à sa place.')}>
+                    {accueilDefaut === true
+                      ? <span style={pasTel('ok')}>{tr('Fait')}</span>
+                      : <button type="button" onClick={mettreEnAccueil} disabled={accueilDefaut !== false} style={{ ...btnTel, opacity: accueilDefaut === false ? 1 : .45 }}>{tr('Ouvrir Loggia au démarrage')}</button>}
+                  </LigneTel>
+                  <LigneTel ici titre={tr('Marge du haut')} desc={tr('Auto lit la zone sûre de l’écran : encoche, barre d’état.')}><PasTel px={topMargin} auto={topAuto} onStep={onTopOffset} label={tr('Marge du haut')} /></LigneTel>
+                  {navbar && <LigneTel ici titre={tr('Marge du bas')} desc={tr('Sous la barre de navigation.')}><PasTel px={navMargin} auto={navAuto} onStep={onNavOffset} label={tr('Marge du bas')} /></LigneTel>}
+                  {!(navAuto && topAuto) && <LigneTel><button type="button" onClick={() => { onNavOffsetReset && onNavOffsetReset(); onTopOffsetReset && onTopOffsetReset(); }} style={btnTel}>{tr('Rétablir « auto »')}</button></LigneTel>}
+              </LignesTel>
+            )}
           </CarteTel>
         </div>
         );

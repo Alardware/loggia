@@ -102,6 +102,10 @@ test('la rangée des scénarios garde sa place — vide — jusqu’à la répon
     bordsDefilement: () => ({ avant: false, apres: false }), REDUCE_MOTION: false,
     trN: (n, un, plusieurs) => (n > 1 ? plusieurs : un).replace('{n}', n), tr: (s) => s, sectionTitle: {},
     Fi: () => null, CarteScenario: ({ s }) => createElement('button', { type: 'button' }, s.nom),
+    // La feuille « Avant de partir » (04/11, étape 2) : fermée tant qu'aucun départ n'attend, elle ne rend rien ici.
+    FeuilleDepart: () => null,
+    // Le rangement hors édition (05/11, étape 5) : sans pointeur, il ne pose rien.
+    useRangerLibre: () => null,
   }, 'ScenariosAccueil');
   const CONNECTE = { callWS: () => new Promise(() => {}) };
   const rendu = (hass = CONNECTE) => renderToStaticMarkup(createElement(ScenariosAccueil, { hass, onNav: () => {} }));

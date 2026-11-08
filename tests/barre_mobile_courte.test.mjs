@@ -61,9 +61,10 @@ test('une case ne rétrécit pas sous son libellé tant que le texte reste lisib
   assert.ok(nav.includes("padding: '9px ' + corps.marge + 'px 7px'"), 'la marge de la case vient de la mesure');
   // Lot 7 de l'audit du 28/10 (V1) : 2 px de part et d'autre, 3 sous 360 px — 6 px entre deux libellés au lieu de 4.
   assert.ok(nav.includes('const marge = nav.clientWidth <= 360 ? 3 : 2;') && nav.includes('const place = nav.clientWidth - autres - 2 * marge * libelles.length - 2;'), 'la place des libellés compte la marge');
-  assert.ok(nav.includes('fontSize: corps.px,'));
-  assert.ok(nav.includes('const px = Math.max(9.5, Math.min(11, Math.floor(110 * place / naturel) / 10));'), 'le corps s’ajuste de 11 à 9,5 px');
-  assert.ok(nav.includes('if (naturel * px / 11 > place) {'), 'la coupe « … » seulement sous 9,5 px');
+  assert.ok(nav.includes('fontSize: `calc(${corps.px}px * var(--o-texte, 1))`,'), 'le libellé suit la taille du texte');
+  assert.ok(nav.includes("const t = parseFloat(getComputedStyle(nav).getPropertyValue('--o-texte')) || 1;"));
+  assert.ok(nav.includes('const px = Math.max(9.5 / t, Math.min(11, Math.floor(110 * place / (naturel * t)) / 10));'), 'le corps s’ajuste de 11 à 9,5 px écrits');
+  assert.ok(nav.includes('if (naturel * px * t / 11 > place) {'), 'la coupe « … » seulement sous 9,5 px');
   assert.ok(nav.includes('if (tri[i] > part) { cap = Math.floor(part) + 2 * marge; break; }'), 'les courts entiers, les longs se partagent le reste');
   assert.equal((nav.match(/<span data-libelle="" style=\{libelle\}>/g) || []).length, 2, 'les cinq vues et le Menu');
   assert.ok(nav.includes('if (!nav.clientWidth) return;'), 'cachée, elle ne mesure rien');

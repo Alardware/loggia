@@ -76,12 +76,18 @@ EPINGLE = {
     'loggia/prises/config': ('admin', 'patch'),
     'loggia/prises/etat': ('ouverte', ''),
     'loggia/profils/moi': ('ouverte', ''),
+    # ASSERTION MODIFIÉE (07/11, étape 11) : « Me prévenir » d'un conseil d'énergie, les rappels du compte.
+    'loggia/rappels/annuler': ('ouverte', 'id_rappel'),
+    'loggia/rappels/etat': ('ouverte', ''),
+    'loggia/rappels/poser': ('ouverte', '?entity_id quand sorte'),
     'loggia/regles/degeler': ('admin', 'entity_id'),
     'loggia/regles/etat': ('ouverte', '?limite ?module'),
     'loggia/robots/config': ('admin', 'patch'),
     'loggia/robots/etat': ('ouverte', ''),
     'loggia/robots/lancer': ('ouverte', '?localiser robot ?role ?script ?zones'),
     'loggia/robots/scripts': ('admin', 'role script'),
+    # ASSERTION MODIFIEE (06/11, etape 8) : la capture de la maison telle qu'elle est, pour composer.
+    'loggia/scenarios/capturer': ('admin', 'familles ?piece ?portee'),
     'loggia/scenarios/config': ('admin', 'patch'),
     'loggia/scenarios/etat': ('ouverte', ''),
     'loggia/scenarios/lancer': ('ouverte', 'scenario'),
@@ -168,7 +174,9 @@ def inscrites(creer_store):
 def test_chaque_commande_garde_son_nom_son_niveau_et_ses_champs(inscrites):
     assert sorted(inscrites.commandes) == sorted(EPINGLE), "une commande est apparue ou a disparu"
     # ASSERTION MODIFIÉE (30/10, G2-1) : 57 + « C'est sorti » + qui recoit quoi (ADR 0301).
-    assert len(inscrites.commandes) == 59
+    # ASSERTION MODIFIÉE (06/11, étape 8) : 59 -> 60, `loggia/scenarios/capturer` (la maison telle qu'elle est).
+    # ASSERTION MODIFIÉE (07/11, étape 11) : 60 -> 63, les rappels (etat, poser, annuler).
+    assert len(inscrites.commandes) == 63
     for nom, gestionnaire in sorted(inscrites.commandes.items()):
         niveau, champs = EPINGLE[nom]
         assert _niveau(inscrites, gestionnaire, nom) == niveau, nom + " a change de niveau d'acces"

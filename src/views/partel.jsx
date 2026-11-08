@@ -56,9 +56,10 @@ export function LigneTel({ titre = null, desc = null, ico = null, icoCouleur = '
     </>
   );
   const style = { display: 'flex', alignItems: 'center', gap: '10px 12px', flexWrap: onClick ? 'nowrap' : 'wrap', padding: '10px 0 10px ' + (retrait ? 26 : 0) + 'px', borderTop: '1px solid var(--o-bd3)', opacity: eteint ? .5 : 1, transition: 'opacity .2s', width: '100%', minWidth: 0 };
+  // `o-ligne-tel` : la rangée que la recherche des réglages allume (reglagesindex.js).
   return onClick
-    ? <button type="button" onClick={onClick} aria-label={label} style={{ ...style, background: 'none', border: 'none', borderTop: style.borderTop, color: 'inherit', font: 'inherit', cursor: 'pointer' }}>{corps}</button>
-    : <div style={style}>{corps}</div>;
+    ? <button type="button" className="o-ligne-tel" onClick={onClick} aria-label={label} style={{ ...style, background: 'none', border: 'none', borderTop: style.borderTop, color: 'inherit', font: 'inherit', cursor: 'pointer' }}>{corps}</button>
+    : <div className="o-ligne-tel" style={style}>{corps}</div>;
 }
 
 /** Un choix : son titre, sa phrase, puis ses options en boutons, à la ligne
@@ -67,7 +68,7 @@ export function LigneTel({ titre = null, desc = null, ico = null, icoCouleur = '
  *  grise sans verrouiller : on peut préparer un réglage avant de l'allumer. */
 export function ChoixTel({ titre, desc = null, opts, value, onPick = () => {}, off = false, eteint = false, lecture = false, label = undefined }) {
   return (
-    <div>
+    <div className="o-choix-tel">
       <div style={TITRE}>{titre}</div>
       {desc && <div style={DESC}>{desc}</div>}
       <div role="group" aria-label={label || titre} style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10, opacity: off || eteint ? .45 : 1, transition: 'opacity .2s' }}>

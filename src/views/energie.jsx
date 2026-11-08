@@ -9,6 +9,7 @@
  * celui d'App.jsx, déplacé sans retouche. */
 
 import { useState, useEffect, Suspense } from 'react';
+import { useRangerLibre } from '../glisser.js';
 import { lazyRecharge } from '../recharge.js';
 import { formatEcran } from '../disposition.js';
 import { wattsDe, kwhDe, facteurKwh } from '../unites.js';
@@ -93,14 +94,19 @@ const SCENE = { x0: 133.33, w: CHIP_RESEAU_X + 46 + 6 - 133.33, h: 250, mx: 133.
 const SCENE_RATIO = (SCENE.w / SCENE.h).toFixed(4);
 
 /* Le mot d'une pastille s'écrit à l'encre de l'îlot sombre (`o-sombre`, index.css) : son fond est sombre dans tous les thèmes. */
+/* La taille du texte (tailletexte.js) : la pilule est tracée à la mesure de son mot, elle grandit donc avec lui, en entier,
+ * autour de son centre. */
+const PASTILLE_GRANDIT = { transform: 'scale(var(--o-texte, 1))', transformBox: 'fill-box', transformOrigin: 'center' };
 const Chip = ({ x, y, color, txt, icon, live = false }) => {
   const w = 22 + txt.length * 6.4 + 12;
   return (
     <g transform={`translate(${x - w / 2} ${y - 11})`}>
-      {live && !REDUCE_MOTION && <rect x="-3" y="-3" width={w + 6} height="28" rx="14" fill="none" stroke={color} strokeWidth="1.4" opacity=".45"><animate attributeName="opacity" values=".45;.08;.45" dur="2.4s" repeatCount="indefinite" /><animate attributeName="x" values="-3;-6;-3" dur="2.4s" repeatCount="indefinite" /><animate attributeName="y" values="-3;-6;-3" dur="2.4s" repeatCount="indefinite" /><animate attributeName="width" values={`${w + 6};${w + 12};${w + 6}`} dur="2.4s" repeatCount="indefinite" /><animate attributeName="height" values="28;34;28" dur="2.4s" repeatCount="indefinite" /></rect>}
-      <rect width={w} height="22" rx="11" fill="rgba(8,13,22,.9)" stroke={color} strokeWidth="1.6" />
-      <g transform="translate(13 11)">{(CHIP_ICONS[icon] || CHIP_ICONS.sun)(color)}</g>
-      <text x={(w + 22) / 2 - 1} y="15" textAnchor="middle" fontSize="11" fontWeight="800" className="o-sombre" fill="var(--o-text)" fontFamily="var(--o-font)">{txt}</text>
+      <g style={PASTILLE_GRANDIT}>
+        {live && !REDUCE_MOTION && <rect x="-3" y="-3" width={w + 6} height="28" rx="14" fill="none" stroke={color} strokeWidth="1.4" opacity=".45"><animate attributeName="opacity" values=".45;.08;.45" dur="2.4s" repeatCount="indefinite" /><animate attributeName="x" values="-3;-6;-3" dur="2.4s" repeatCount="indefinite" /><animate attributeName="y" values="-3;-6;-3" dur="2.4s" repeatCount="indefinite" /><animate attributeName="width" values={`${w + 6};${w + 12};${w + 6}`} dur="2.4s" repeatCount="indefinite" /><animate attributeName="height" values="28;34;28" dur="2.4s" repeatCount="indefinite" /></rect>}
+        <rect width={w} height="22" rx="11" fill="rgba(8,13,22,.9)" stroke={color} strokeWidth="1.6" />
+        <g transform="translate(13 11)">{(CHIP_ICONS[icon] || CHIP_ICONS.sun)(color)}</g>
+        <text x={(w + 22) / 2 - 1} y="15" textAnchor="middle" fontSize="11" fontWeight="800" className="o-sombre" fill="var(--o-text)" fontFamily="var(--o-font)">{txt}</text>
+      </g>
     </g>
   );
 };
@@ -147,9 +153,11 @@ const HouseChip = ({ x, y, color, txt, glyph }) => {
   const k = CHIP_K, w = (22 + txt.length * 6.4 + 12) * k;
   return (
     <g transform={`translate(${x - w / 2} ${y - 11 * k})`}>
-      <rect width={w} height={22 * k} rx={11 * k} fill="rgba(8,13,22,.9)" stroke={color} strokeWidth={1.6 * k} />
-      <g transform={`translate(${13 * k} ${11 * k}) scale(${k})`}>{glyph}</g>
-      <text x={(w + 22 * k) / 2 - k} y={15 * k} textAnchor="middle" fontSize={11 * k} fontWeight="800" className="o-sombre" fill="var(--o-text)" fontFamily="var(--o-font)">{txt}</text>
+      <g style={PASTILLE_GRANDIT}>
+        <rect width={w} height={22 * k} rx={11 * k} fill="rgba(8,13,22,.9)" stroke={color} strokeWidth={1.6 * k} />
+        <g transform={`translate(${13 * k} ${11 * k}) scale(${k})`}>{glyph}</g>
+        <text x={(w + 22 * k) / 2 - k} y={15 * k} textAnchor="middle" fontSize={11 * k} fontWeight="800" className="o-sombre" fill="var(--o-text)" fontFamily="var(--o-font)">{txt}</text>
+      </g>
     </g>
   );
 };
@@ -330,6 +338,8 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   const postes = enDevices((hass && hass.states) || null);
   const derived = postes.map(d => 'dev:' + d.power).filter(k => k !== 'dev:undefined');
   const ed = useLayoutEditor(EN_LAYOUT_KEY, 'energie', derived);
+  // Hors édition, un appui long range les cartes (05/11, étape 5) : le même ordre que les flèches de l'édition.
+  const ranger = useRangerLibre({ actif: !edit, onRanger: (cle, cible) => ed.move(cle, ed.ids.indexOf(cible) - ed.ids.indexOf(cle)) });
   const [enAdd, setEnAdd] = useState(false);
   const [cardEdit, setCardEdit] = useState(null);
   // Les piles et batteries de la maison (19/09) : leurs cartes a cinq barres,
@@ -791,7 +801,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
             <div style={{ flex: 1, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 500, color: 'var(--o-text2)' }}>{tr('Postes de consommation')}</div>
             {ed.ids.length > 0 && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums' }}>{tr('{v} suivis en direct', { v: fmtW(totalPostes) })}</div>}
           </div>
-          <div ref={ed.gridRef} className="grid-edevices" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 14 }}>
+          <div ref={ed.gridRef} {...ranger} className="grid-edevices" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 14 }}>
             {ed.ids.map((k) => { const d = posteDe(k); const di = ed.ids.indexOf(k); const w = Math.round(numW(d.power)); const kwh = avail(d.kwh) ? numKwh(d.kwh) : null; const on = w > 5;
               const carte = (
               /* Le gabarit de la maquette : l'illustration ou l'icône en grand,
@@ -809,7 +819,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
                 <div style={{ position: 'relative', marginTop: 4, fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{avail(d.power) ? <Num v={w} fmt={fmtW} /> : '—'}</div>
                 <div style={{ position: 'relative', marginTop: 3, fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{kwh != null ? tr('{n} kWh jour', { n: dec(kwh, 2) }) : '—'}</div>
               </div>);
-              if (!edit) return <Anim key={k} i={di} base={160} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
+              if (!edit) return <Anim key={k} id={k} i={di} base={160} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
               return <EditableCard key={k} ed={ed} id={k} nom={d.name} onEdit={setCardEdit} hass={hass} taille={false}>{carte}</EditableCard>;
             })}
             {edit && <CarteAjout onClick={() => setEnAdd(true)} label={tr('Ajouter un poste')} />}

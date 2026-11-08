@@ -127,7 +127,8 @@ test('c’est le FANTÔME qui coupe et entraîne, pas la carte', () => {
   /* Le fantôme est posé par les cinq démarrages de glisser, et seulement quand
    * la carte est vraiment prise. Poser le blocage plus tôt — au `pointerdown` —
    * casserait le défilement en mode édition, où les cartes couvrent l'écran. */
-  assert.ok(APP.includes("import { bloquerDefilement, defileurAuto } from './glisser.js';"), 'App.jsx n’importe plus le secours du glisser');
+  // ASSERTION MODIFIÉE (05/11, étape 5) : les favoris et les scénarios de l'Accueil se rangent hors édition par l'outil commun.
+  assert.ok(APP.includes("import { bloquerDefilement, defileurAuto, useRangerLibre } from './glisser.js';"), 'App.jsx n’importe plus le secours du glisser');
   const i = APP.indexOf('function poserFantome(');
   const j = APP.indexOf('\nfunction ', i + 1);
   const f = APP.slice(i, j < 0 ? undefined : j);

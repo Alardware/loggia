@@ -7,6 +7,7 @@
  * sans retouche. */
 
 import { useState } from 'react';
+import { useRangerLibre } from '../glisser.js';
 import { formatEcran } from '../disposition.js';
 import { useLoggia, useEntities } from '../runtime.js';
 import { Fi, Anim, editBtn, nomCarte } from '../ui.jsx';
@@ -182,6 +183,8 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
   const ouvrantsIds = [...ouvrantsDe(S)].sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0)).map(o => o.id);
   const derivesSec = [...(alarmId ? [alarmId] : []), ...sirenes, ...(people.length ? ['carte:presence'] : []), ...(ouvrantsIds.length ? ['sect:ouvrants', ...ouvrantsIds] : [])];
   const ed = useLayoutEditor('loggia_seclayout', 'securite', derivesSec);
+  // Hors édition, un appui long range les cartes (05/11, étape 5) : le même ordre que les flèches de l'édition.
+  const ranger = useRangerLibre({ actif: !edit, onRanger: (cle, cible) => ed.move(cle, ed.ids.indexOf(cible) - ed.ids.indexOf(cle)) });
   const [cardEdit, setCardEdit] = useState(null);
   const [addSheet, setAddSheet] = useState(false);
   const origineDe = (k) => {
@@ -233,7 +236,7 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
         * fenetre dessinee en fond. En edition : glisser, retirer, renommer,
         * elargir, ajouter une carte ou un titre. Le bandeau est en tete de
         * la vue, comme partout (17/09). */}
-      <div ref={ed.gridRef} id={ed.ids.indexOf('sect:ouvrants') < 0 ? 'sec-ouvrants' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div ref={ed.gridRef} {...ranger} id={ed.ids.indexOf('sect:ouvrants') < 0 ? 'sec-ouvrants' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {blocs.map((bloc, bi) => {
           if (!edit && bloc.titre && !bloc.cartes.length) return null;
           const titre = bloc.titre ? (
@@ -249,7 +252,7 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
               <div className="grid-objets" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gridAutoRows: 'minmax(184px, auto)', gap: 16, alignItems: 'stretch' }}>
                 {bloc.cartes.map(k => edit
                   ? <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit} hass={hass} taille={false} />
-                  : <Anim key={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}><div style={{ height: '100%', minHeight: 184 }}>{carteSec(k)}</div></Anim>)}
+                  : <Anim key={k} id={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}><div style={{ height: '100%', minHeight: 184 }}>{carteSec(k)}</div></Anim>)}
                 {edit && bi === blocs.length - 1 && <CarteAjout onClick={() => setAddSheet(true)} />}
               </div>
             </div>
