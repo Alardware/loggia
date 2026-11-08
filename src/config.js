@@ -66,6 +66,8 @@ export const CLES_APPAREIL = new Set([
   'loggia_favlecture', 'loggia_appsrecentes', 'loggia_icorecents',
   // L'ecran de veille de CET appareil : une tablette murale, pas un telephone.
   'loggia-ambient', 'loggia-ambientplage', 'loggia-ambphotos', 'loggia-ambmotion',
+  // La taille du texte de CET écran (07/11, étape 10 ; tailletexte.js) : la tablette lue de loin, pas le téléphone.
+  'loggia-texte',
 ]);
 // Les traductions de Home Assistant mises en cache, une cle par langue.
 // Le tiret final compte : `loggia-ha`, lui, est le theme HA choisi.

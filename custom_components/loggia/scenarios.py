@@ -122,6 +122,15 @@ BORNES_VALEUR = {"lumieres": (1, 100), "chauffage": (5, 30)}
 # (`color_temp_kelvin`) va aux lampes qui le prennent, borne par chacune.
 FONDU_MAX_S = 3600
 BORNES_BLANC = (1500, 10000)
+# « La maison telle qu'elle est » (06/11, etape 8 du rapport sur l'usage) : un scenario peut retenir, appareil par
+# appareil, l'etat des lumieres et des volets au moment ou on l'enregistre. Cent appareils au plus : vingt-quatre
+# scenarios ainsi pleins tiennent sous le plafond d'une cle du magasin (256 Ko).
+MAX_ETATS = 100
+FAMILLES_ETAT = ("lumieres", "volets")
+MODES_COULEUR = ("hs", "xy", "rgb", "rgbw", "rgbww")
+ENTITE_ETAT = re.compile(r"^(light|switch|cover)\.[a-z0-9_]{1,120}$")
+# Le bit SET_POSITION de CoverEntityFeature.
+COVER_POSITION = 4
 
 SLUG = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
 
@@ -298,6 +307,46 @@ def _nombre_facultatif(x: Any, refus: str) -> float | None:
     return round(v)
 
 
+def valider_etats(brut: Any) -> dict[str, dict[str, Any]] | None:
+    """L'etat retenu d'un scenario « maison telle qu'elle est » (etape 8), nettoye, ou ValueError ; None pour aucun.
+
+    Une lampe : allumee ou non ; allumee, son niveau (%), son blanc (K) OU sa couleur (teinte, saturation). Un
+    interrupteur declare lumiere : allume ou non. Un volet : sa position (%), ou ouvert / ferme s'il n'en a pas."""
+    if brut is None:
+        return None
+    if not isinstance(brut, dict):
+        raise ValueError("etats illisibles")
+    if len(brut) > MAX_ETATS:
+        raise RefusNomme("trop_d_etats", f"trop d'appareils retenus ({len(brut)}), au plus", MAX_ETATS)
+    out: dict[str, dict[str, Any]] = {}
+    for haid, e in brut.items():
+        if not isinstance(haid, str) or not ENTITE_ETAT.fullmatch(haid) or not isinstance(e, dict):
+            raise ValueError(f"etat illisible : {haid!r}")
+        if haid.startswith("cover."):
+            position = _nombre_facultatif(e.get("position"), "position illisible")
+            out[haid] = ({"position": int(max(0, min(100, position)))} if position is not None
+                         else {"ouvert": bool(e.get("ouvert"))})
+            continue
+        v: dict[str, Any] = {"on": bool(e.get("on"))}
+        if v["on"] and haid.startswith("light."):
+            niveau = _nombre_facultatif(e.get("niveau"), "niveau illisible")
+            if niveau is not None and niveau > 0:
+                v["niveau"] = int(max(1, min(100, niveau)))
+            blanc = _nombre_facultatif(e.get("blanc"), "blanc illisible")
+            couleur = e.get("couleur")
+            if blanc is not None and blanc > 0:
+                v["blanc"] = int(max(BORNES_BLANC[0], min(BORNES_BLANC[1], blanc)))
+            elif couleur is not None:
+                if not isinstance(couleur, (list, tuple)) or len(couleur) != 2:
+                    raise ValueError("couleur illisible")
+                teinte, saturation = lu(couleur[0]), lu(couleur[1])
+                if teinte is None or saturation is None:
+                    raise ValueError("couleur illisible")
+                v["couleur"] = [round(teinte % 360, 1), round(max(0.0, min(100.0, saturation)), 1)]
+        out[haid] = v
+    return out
+
+
 def valider_scenario(brut: Any) -> dict[str, Any]:
     """Un scenario tel que l'ecran l'envoie, nettoye, ou ValueError."""
     if not isinstance(brut, dict):
@@ -348,6 +397,8 @@ def valider_scenario(brut: Any) -> dict[str, Any]:
                 # que l'ecran dit dans sa langue (audit du 03/10).
                 raise RefusNomme("trop_d_actions", f"trop d'actions ({len(actions)}), au plus", MAX_ACTIONS)
             s["actions"] = [valider_action(a) for a in actions]
+    if "etats" in brut:
+        s["etats"] = valider_etats(brut["etats"])
     return s
 
 
@@ -394,6 +445,7 @@ def effectifs(cfg: dict[str, Any]) -> list[dict[str, Any]]:
             "piece": o.get("piece") or None,
             "piece_auto": base.get("piece"),
             "actions": copy.deepcopy(actions if isinstance(actions, list) else base["actions"]),
+            "etats": copy.deepcopy(o["etats"]) if isinstance(o.get("etats"), dict) else None,
             "modifie": bool(o),
         })
     for p in cfg.get("persos") or []:
@@ -409,6 +461,7 @@ def effectifs(cfg: dict[str, Any]) -> list[dict[str, Any]]:
             "piece": p.get("piece") or None,
             "piece_auto": None,
             "actions": copy.deepcopy(actions) if isinstance(actions, list) else [],
+            "etats": copy.deepcopy(p["etats"]) if isinstance(p.get("etats"), dict) else None,
             "modifie": True,
         })
     ordre = cfg.get("ordre") or []
@@ -544,6 +597,162 @@ def cibles(action: dict[str, Any], maison: dict[str, Any], piece: str | None,
             if etat == "locked":
                 continue
         out.append(haid)
+    return out
+
+
+def sait_la_couleur(attrs: Any) -> bool:
+    """La lampe prend-elle une couleur (`hs_color`) ? Un mode couleur parmi les siens."""
+    modes = attrs.get("supported_color_modes") if isinstance(attrs, dict) else None
+    return isinstance(modes, (list, tuple, set)) and any(m in MODES_COULEUR for m in modes)
+
+
+def sait_la_position(attrs: Any) -> bool:
+    """Le volet recoit-il `set_cover_position` ? Sans `supported_features` lisible, on se fie a la position publiee."""
+    f = lu((attrs or {}).get("supported_features")) if isinstance(attrs, dict) else None
+    return f is None or f == 0 or (int(f) & COVER_POSITION) != 0
+
+
+def lampe_deja_ainsi(v: dict[str, Any], a: Any) -> bool:
+    """La lampe ALLUMEE est-elle deja comme l'etat retenu le veut ? Son niveau a un point pres, son blanc a 50 K
+    pres, sa couleur a un degre et un point pres - ce qu'elle ne sait pas faire ne compte pas."""
+    a = a if isinstance(a, dict) else {}
+    b = lu(a.get("brightness"))
+    if v.get("niveau") and (b is None or abs(b * 100 / 255 - v["niveau"]) > 1.5):
+        return False
+    if v.get("blanc") and sait_le_blanc(a):
+        k = lu(a.get("color_temp_kelvin"))
+        return a.get("color_mode") == "color_temp" and k is not None and abs(k - blanc_borne(a, v["blanc"])) <= 50
+    if v.get("couleur") and sait_la_couleur(a):
+        hs = a.get("hs_color")
+        if a.get("color_mode") == "color_temp" or not isinstance(hs, (list, tuple)) or len(hs) != 2:
+            return False
+        teinte, saturation = lu(hs[0]), lu(hs[1])
+        if teinte is None or saturation is None:
+            return False
+        return abs((teinte - v["couleur"][0] + 180) % 360 - 180) <= 1 and abs(saturation - v["couleur"][1]) <= 1
+    return True
+
+
+def capturer(maison: dict[str, Any], veilleuses=(), familles=FAMILLES_ETAT, portee: str = "maison",
+             piece: str | None = None) -> dict[str, dict[str, Any]]:
+    """L'etat des lumieres et des volets MAINTENANT, appareil par appareil (06/11, etape 8) : ce que « Enregistrer la
+    maison telle qu'elle est » retient. Les definitions d'un scenario compose : les lumieres de la maison
+    (interrupteurs declares compris, un groupe efface devant ses membres), les volets par leur classe et s'ils
+    s'ouvrent et se ferment. Jamais une veilleuse de la regle Nuit, ni le groupe qui en contient une (sa decision,
+    R6) : la relancer l'allumerait ou l'eteindrait. Un appareil injoignable n'est pas retenu."""
+    entites = maison.get("entites") or {}
+    etats: dict[str, dict[str, Any]] = {}
+    if portee == "piece" and not piece:
+        return etats
+    if "lumieres" in familles:
+        lampes = maison.get("lumieres")
+        if lampes is None:
+            lampes = [h for h in entites if h.startswith("light.")]
+        attributs = {h: (e.get("attrs") or {}) for h, e in entites.items()
+                     if h.startswith("light.") and isinstance(e, dict)}
+        epargnees = a_epargner(attributs, veilleuses or ())
+        for haid in sorted(lampes):
+            e = entites.get(haid)
+            if not isinstance(e, dict) or haid in epargnees or not dans_la_portee(e, portee, piece):
+                continue
+            etat = str(e.get("etat") or "").lower()
+            if etat not in ("on", "off"):
+                continue
+            v: dict[str, Any] = {"on": etat == "on"}
+            a = e.get("attrs") or {}
+            if v["on"] and haid.startswith("light."):
+                b = lu(a.get("brightness"))
+                if b is not None and b > 0:
+                    v["niveau"] = int(max(1, min(100, round(b * 100 / 255))))
+                k, hs = lu(a.get("color_temp_kelvin")), a.get("hs_color")
+                if a.get("color_mode") == "color_temp" and k:
+                    v["blanc"] = int(round(k))
+                elif (a.get("color_mode") in MODES_COULEUR and isinstance(hs, (list, tuple)) and len(hs) == 2
+                      and lu(hs[0]) is not None and lu(hs[1]) is not None):
+                    v["couleur"] = [round(lu(hs[0]), 1), round(lu(hs[1]), 1)]
+            etats[haid] = v
+    if "volets" in familles:
+        for haid in sorted(entites):
+            e = entites[haid]
+            if not haid.startswith("cover.") or not isinstance(e, dict) or not est_volet(e.get("classe")):
+                continue
+            a = e.get("attrs") or {}
+            etat = str(e.get("etat") or "").lower()
+            if (etat in ("unavailable", "unknown", "") or not dans_la_portee(e, portee, piece)
+                    or not ouvre_et_ferme(a.get("supported_features"))):
+                continue
+            p = lu(a.get("current_position"))
+            etats[haid] = ({"position": int(max(0, min(100, round(p))))} if p is not None and sait_la_position(a)
+                           else {"ouvert": etat in ("open", "opening")})
+    return etats
+
+
+def ordres_etats(etats: dict[str, dict[str, Any]],
+                 maison: dict[str, Any]) -> list[tuple[str, str, list[str], dict[str, Any]]]:
+    """Les appels qui remettent la maison dans l'etat retenu (etape 8) - seulement ce qui en differe, comme un
+    scenario compose : on n'eteint pas une lampe eteinte, on ne renvoie pas un volet a la position ou il est. Un
+    appareil disparu ou injoignable est passe. Les lampes dont l'ordre est le meme partent ensemble ; le blanc va
+    a la lampe qui le prend, borne par elle, la couleur a celle qui la prend."""
+    entites = maison.get("entites") or {}
+    eteindre: list[str] = []
+    allumer_tels_quels: list[str] = []
+    lampes: dict[str, tuple[list[str], dict[str, Any]]] = {}
+    positions: dict[int, list[str]] = {}
+    ouvrir: list[str] = []
+    fermer: list[str] = []
+    for haid in sorted(etats or {}):
+        v, e = etats[haid], entites.get(haid)
+        if not isinstance(v, dict) or not isinstance(e, dict):
+            continue
+        etat = str(e.get("etat") or "").lower()
+        if etat in ("unavailable", "unknown", ""):
+            continue
+        a = e.get("attrs") or {}
+        if haid.startswith("cover."):
+            p = lu(a.get("current_position"))
+            if "position" in v:
+                cible = int(v["position"])
+                if p is not None and abs(p - cible) <= 1 and not etat.endswith("ing"):
+                    continue
+                if sait_la_position(a):
+                    positions.setdefault(cible, []).append(haid)
+                else:
+                    (ouvrir if cible > SEUIL_FERME else fermer).append(haid)
+            elif v.get("ouvert"):
+                if not volet_deja_au_bout("ouvrir", etat, a):
+                    ouvrir.append(haid)
+            elif not volet_deja_au_bout("fermer", etat, a):
+                fermer.append(haid)
+            continue
+        if not v.get("on"):
+            if etat != "off":
+                eteindre.append(haid)
+            continue
+        if not haid.startswith("light."):
+            if etat != "on":
+                allumer_tels_quels.append(haid)
+            continue
+        if etat == "on" and lampe_deja_ainsi(v, a):
+            continue
+        data: dict[str, Any] = {}
+        if v.get("niveau"):
+            data["brightness_pct"] = int(v["niveau"])
+        if v.get("blanc") and sait_le_blanc(a):
+            data["color_temp_kelvin"] = blanc_borne(a, v["blanc"])
+        elif v.get("couleur") and sait_la_couleur(a):
+            data["hs_color"] = list(v["couleur"])
+        lampes.setdefault(repr(sorted(data.items())), ([], data))[0].append(haid)
+    out: list[tuple[str, str, list[str], dict[str, Any]]] = []
+    for d, s, lot in par_service(eteindre, False):
+        out.append((d, s, lot, {}))
+    for d, s, lot in par_service(allumer_tels_quels, True):
+        out.append((d, s, lot, {}))
+    out.extend(("light", "turn_on", lot, data) for lot, data in lampes.values())
+    out.extend(("cover", "set_cover_position", lot, {"position": p}) for p, lot in sorted(positions.items()))
+    if ouvrir:
+        out.append(("cover", "open_cover", ouvrir, {}))
+    if fermer:
+        out.append(("cover", "close_cover", fermer, {}))
     return out
 
 
@@ -872,6 +1081,11 @@ class LoggiaScenarios:
             resume.append({"famille": a["famille"], "geste": a["geste"], "portee": a.get("portee") or "maison",
                            "piece": a.get("piece") or (piece if (a.get("portee") == "piece") else None),
                            "valeur": a.get("valeur"), "si": a.get("si"), "n": len(haids)})
+        if s.get("etats"):
+            # La maison telle qu'elle etait (etape 8) : combien d'appareils il ferait bouger maintenant.
+            n = sum(len(lot) for _, _, lot, _ in ordres_etats(s["etats"], ctx["maison"]))
+            resume.append({"famille": "etat", "geste": "appliquer", "portee": "piece" if s.get("piece") else "maison",
+                           "piece": s.get("piece"), "valeur": None, "si": None, "n": n})
         return piece, resume
 
     # ── Lancer ──────────────────────────────────────────────────────────────
@@ -918,38 +1132,54 @@ class LoggiaScenarios:
         else:
             c = await self._contexte()
             piece = piece_de(s, c["maison"])
-            for a in s["actions"]:
+
+            async def executer(domaine: str, service: str, cibles_: list[str], data: dict[str, Any]) -> int:
+                """Un ordre, d'une action ou de l'etat retenu (etape 8) ; rend le nombre d'entites touchees."""
+                nonlocal erreurs
+                # Un scenario ne ROUVRE jamais l'eau (passe bis 2 de l'etape 3 IoT ; ADR 0217) : la prise designee, une
+                # vanne d'eau, sont retenues et comptees au journal ; le reste de l'ordre part.
+                eau = await self.regles.eau_retenue(service, cibles_, data) if self.regles is not None else []
+                if eau:
+                    eau_retenue.extend(eau)
+                    cibles_ = [h for h in cibles_ if h not in eau]
+                    if not cibles_:
+                        return 0
+                charge: dict[str, Any] = {"entity_id": list(cibles_)}
+                charge.update(data)
+                # Un ordre de fondu a SON contexte, enfant de celui du lancement et au nom du meme compte : seul
+                # lui est annonce au carnet (ADR 0304). Partage, il faisait avaler un autre ordre du scenario -
+                # « allumer le salon a 20 % » apres « eteindre en 10 s » (contre-relecture du 31/10).
+                contexte_ordre = ctx
+                if domaine == "light" and data.get("transition"):
+                    contexte_ordre = Context(user_id=user_id, parent_id=ctx.id) if user_id else Context(parent_id=ctx.id)
+                    self._annoncer_fondu(cibles_, data["transition"], service == "turn_off", user_id, contexte_ordre.id)
+                try:
+                    await self.hass.services.async_call(domaine, service, charge,
+                                                        blocking=False, context=contexte_ordre)
+                except Exception:  # noqa: BLE001
+                    _LOGGER.exception("Loggia scenarios : %s.%s a echoue", domaine, service)
+                    erreurs += 1
+                    return 0
+                touchees.extend(cibles_)
+                return len(cibles_)
+
+            if s.get("etats"):
+                # La maison telle qu'elle etait (06/11, etape 8) : appareil par appareil, ce qui differe de l'etat
+                # retenu ; les permissions du compte filtrent chaque ordre, comme celles d'une action.
+                n = 0
+                for domaine, service, cibles_, data in ordres_etats(s["etats"], c["maison"]):
+                    cibles_, ecartees = filtrer_autorisees(cibles_, controle)
+                    refusees.extend(ecartees)
+                    if cibles_:
+                        n += await executer(domaine, service, cibles_, data)
+                fait.append({"famille": "etat", "geste": "appliquer", "n": n, "piece": s.get("piece")})
+            for a in ([] if s.get("etats") else s["actions"]):
                 haids = cibles(a, c["maison"], piece, c["veilleuses"], c["alarme"], c["nuit"])
                 haids, ecartees = filtrer_autorisees(haids, controle)
                 refusees.extend(ecartees)
                 n = 0
                 for domaine, service, cibles_, data in ordres(a, haids, c["maison"]):
-                    # Un scenario ne ROUVRE jamais l'eau (passe bis 2 de l'etape 3 IoT ; ADR 0217) : la prise designee, une
-                    # vanne d'eau, sont retenues et comptees au journal ; le reste de l'ordre part.
-                    eau = await self.regles.eau_retenue(service, cibles_, data) if self.regles is not None else []
-                    if eau:
-                        eau_retenue.extend(eau)
-                        cibles_ = [h for h in cibles_ if h not in eau]
-                        if not cibles_:
-                            continue
-                    charge: dict[str, Any] = {"entity_id": list(cibles_)}
-                    charge.update(data)
-                    # Un ordre de fondu a SON contexte, enfant de celui du lancement et au nom du meme compte : seul
-                    # lui est annonce au carnet (ADR 0304). Partage, il faisait avaler un autre ordre du scenario -
-                    # « allumer le salon a 20 % » apres « eteindre en 10 s » (contre-relecture du 31/10).
-                    contexte_ordre = ctx
-                    if domaine == "light" and data.get("transition"):
-                        contexte_ordre = Context(user_id=user_id, parent_id=ctx.id) if user_id else Context(parent_id=ctx.id)
-                        self._annoncer_fondu(cibles_, data["transition"], service == "turn_off", user_id, contexte_ordre.id)
-                    try:
-                        await self.hass.services.async_call(domaine, service, charge,
-                                                            blocking=False, context=contexte_ordre)
-                    except Exception:  # noqa: BLE001
-                        _LOGGER.exception("Loggia scenarios : %s.%s a echoue", domaine, service)
-                        erreurs += 1
-                        continue
-                    n += len(cibles_)
-                    touchees.extend(cibles_)
+                    n += await executer(domaine, service, cibles_, data)
                 fait.append({"famille": a["famille"], "geste": a["geste"], "n": n,
                              "piece": a.get("piece") or (piece if a.get("portee") == "piece" else None)})
         self._derniers[s["id"]] = time.time()
@@ -1069,8 +1299,20 @@ class LoggiaScenarios:
 
         capacites = {"maison": capacites_lumieres(maison, lampes), "vie": capacites_lumieres(maison, dans("vie")),
                      "pieces": {z: capacites_lumieres(maison, dans("piece", z)) for z in maison["zones"]}}
+        # `instantane` (etape 8) : ce composant sait retenir la maison telle qu'elle est - l'ecran n'offre le bouton
+        # qu'a ce signe ; un composant d'avant ne garderait pas l'etat, et le scenario partirait vide.
         return {"scenarios": scenarios, "liens": liens, "pieces": maison["zones"],
-                "alarme": c["alarme"], "journal": journal, "lampes": capacites}
+                "alarme": c["alarme"], "journal": journal, "lampes": capacites, "instantane": True}
+
+    async def async_capturer(self, familles: Any = FAMILLES_ETAT, portee: str = "maison",
+                             piece: str | None = None) -> dict[str, Any]:
+        """L'etat des lumieres et des volets maintenant (06/11, etape 8), pour la fiche : elle le montre, puis
+        l'envoie avec le scenario, et `valider_etats` le relit. Rien n'est ecrit ici."""
+        familles = tuple(f for f in (familles or ()) if f in FAMILLES_ETAT)
+        if portee not in ("maison", "piece"):
+            raise ValueError(f"portee inconnue : {portee!r}")
+        c = await self._contexte()
+        return {"etats": capturer(c["maison"], c["veilleuses"], familles, portee, piece)}
 
     def _verrou_config(self) -> asyncio.Lock:
         """Un seul « lire, changer, ecrire » a la fois sur `loggia_scenarios`
@@ -1168,7 +1410,7 @@ class LoggiaScenarios:
                         ident, n = f"{base}_{n}", n + 1
                     neuf = {"id": ident, "nom": s.get("nom") or ident, "icone": s.get("icone") or "sparkles",
                             "teinte": s.get("teinte") or "accent", "lien": s.get("lien"),
-                            "piece": s.get("piece"), "actions": s.get("actions") or [],
+                            "piece": s.get("piece"), "actions": s.get("actions") or [], "etats": s.get("etats"),
                             "masque": bool(s.get("masque")), "accueil": bool(s.get("accueil", True))}
                     persos.append(neuf)
                 else:

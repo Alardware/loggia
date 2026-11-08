@@ -24,6 +24,8 @@ import { useEtatsHist } from '../historique.jsx';
 import { EnHistoBarres, EnCalendrier, CalendrierMois } from '../engraphes.jsx';
 // La production de TOUS les onduleurs (chantier G3, D3) : la clé seule, sinon ses parts.
 import { idsDe } from '../energieparts.js';
+// Les conseils et le moment le moins cher (07/11, usage étape 11).
+import { ConseilsEnergie, useMomentEco } from '../conseilsui.jsx';
 
 const CARTE = {
   background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))',
@@ -164,7 +166,13 @@ export function CarteTarif({ hass, EN = {}, tour = 0, devise = '€', etroit = f
     .map(p => (p.valeur != null ? p.valeur : num(p.entite)))
     .filter(v => typeof v === 'number' && isFinite(v));
   const prixVente = vendu.length ? Math.max(...vendu) : null;
-  const bascule = prochainTarif(plages, Date.now(), enHc);
+  /* LA PROCHAINE BASCULE (07/11, usage étape 11). `prochainTarif` la cherchait
+   * dans l'historique du jour, qui s'arrête à maintenant : « Heures creuses à
+   * partir de… » ne s'affichait jamais. Les plages annoncées ou apprises
+   * (tarif.js, `useMomentEco`) disent l'avenir ; sans elles, la règle d'avant. */
+  const eco = useMomentEco(hass, EN, prixHa, tour);
+  const mo = eco.moment && eco.moment.sorte === 'hc' ? eco.moment : null;
+  const bascule = mo ? { versHc: !mo.enCours, instant: mo.enCours ? mo.fin : mo.debut } : prochainTarif(plages, Date.now(), enHc);
   const heure = (ms) => new Date(ms).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   const maintenant = Math.max(0, Math.min(100, (Date.now() - t0) / (t1 - t0) * 100));
   const parKwh = unite(EN.hcPrice) || unite(EN.hpPrice) || (devise + '/kWh');
@@ -262,6 +270,8 @@ export function CarteTarif({ hass, EN = {}, tour = 0, devise = '€', etroit = f
           </div>
         </>
       )}
+      {/* Ce qu'on peut en faire, sous la barre (usage étape 11) : le jour rouge, l'électroménager à lancer, « Me prévenir ». */}
+      <ConseilsEnergie hass={hass} EN={EN} eco={eco} devise={devise} />
       {lignes.length > 0 && (
         <div style={{ marginTop: 18 }}>
           {lignes.map(r => (

@@ -7,7 +7,7 @@
  * donc testable a sec. Une exception, `rangerScenarios` : elle recoit sa
  * connexion en argument, et une doublure suffit a la rejouer (audit du 03/10).
  */
-import { tr } from './i18n.js';
+import { tr, trN } from './i18n.js';
 import { texteRefus } from './refus.js';
 
 export const FAMILLES = ['lumieres', 'volets', 'medias', 'chauffage', 'alarme', 'serrures'];
@@ -99,6 +99,7 @@ export function libelleAction(a) {
 export function resumeScenario(s, nomsLiens = {}) {
   if (!s) return '';
   if (s.lien) return tr('Lance {x}', { x: (nomsLiens && nomsLiens[s.lien]) || s.lien });
+  if (s.etats && Object.keys(s.etats).length) return [tr('État enregistré'), s.piece || '', libelleEtats(s.etats)].filter(Boolean).join(' · ');
   const actions = (Array.isArray(s.resume) && s.resume.length) ? s.resume : (s.actions || []);
   const mots = actions.map(libelleAction).filter(Boolean);
   return mots.length ? mots.join(' · ') : tr('Aucune action');
@@ -144,6 +145,24 @@ export function libelleDernier(ts, maintenant = Date.now(), locale = 'fr-FR') {
   return tr('Il y a {n} j', { n: Math.max(1, Math.floor(d / 86400)) });
 }
 
+/** Ce qu'un état retenu compte (06/11, étape 8) : les lampes, celles qu'il allumera, les volets. */
+export function compterEtats(etats) {
+  const n = { lampes: 0, allumees: 0, volets: 0 };
+  Object.keys(etats || {}).forEach(id => {
+    if (id.indexOf('cover.') === 0) n.volets += 1;
+    else { n.lampes += 1; if (etats[id] && etats[id].on) n.allumees += 1; }
+  });
+  return n;
+}
+/** « 2 lumières allumées · 3 volets » : ce qu'un état retenu remettra. */
+export function libelleEtats(etats) {
+  const n = compterEtats(etats);
+  const mots = [];
+  if (n.lampes) mots.push(trN(n.allumees, '{n} lumière allumée', '{n} lumières allumées'));
+  if (n.volets) mots.push(trN(n.volets, '{n} volet', '{n} volets'));
+  return mots.join(' · ');
+}
+
 export function scenariosVisibles(liste) {
   return (Array.isArray(liste) ? liste : []).filter(s => s && s.id && !s.masque);
 }
@@ -156,16 +175,18 @@ export function actionVide(famille) {
   return { famille: f, geste: GESTES_SCENARIO[f][0], portee: 'maison' };
 }
 export function scenarioVide() {
-  return { nom: '', icone: 'sparkles', teinte: 'accent', lien: null, piece: null, actions: [], accueil: true, masque: false, integre: false };
+  return { nom: '', icone: 'sparkles', teinte: 'accent', lien: null, piece: null, actions: [], etats: null, accueil: true, masque: false, integre: false };
 }
 
 /** Ce que la fiche envoie au serveur : le scenario sans ce qu'il a calcule.
  * Un nom vide vaut `null` — pour un scenario de Loggia, « celui d'origine ». */
 export function versEnregistrement(s) {
+  // La maison telle qu'elle est (06/11, étape 8) : l'état retenu remplace les actions.
+  const maison = !s.lien && !!s.etats && typeof s.etats === 'object' && Object.keys(s.etats).length > 0;
   const out = {
     nom: (s.nom || '').trim() || null, icone: s.icone || 'sparkles', teinte: s.teinte || 'accent',
     lien: s.lien || null, piece: s.piece || null, accueil: s.accueil !== false, masque: !!s.masque,
-    actions: s.lien ? [] : (s.actions || []).map(a => {
+    actions: (s.lien || maison) ? [] : (s.actions || []).map(a => {
       const b = { famille: a.famille, geste: a.geste, portee: a.portee || 'maison' };
       if (b.portee === 'piece' && a.piece) b.piece = a.piece;
       if (a.valeur != null && (a.famille === 'lumieres' || a.famille === 'chauffage')) b.valeur = a.valeur;
@@ -176,6 +197,8 @@ export function versEnregistrement(s) {
       return b;
     }),
   };
+  // Envoyé dès que le scénario en parle — `null` l'efface : redevenu composé ou lié, il ne le garde pas.
+  if ('etats' in s) out.etats = maison ? s.etats : null;
   if (s.id) out.id = s.id;
   return out;
 }

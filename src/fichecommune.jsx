@@ -30,6 +30,7 @@ import { petitesCapitales, LISERE } from './styles.js';
 import { ongletVoisin } from './choix.js';
 import { nomJour, heureValide } from './robots.js';
 import { SOUS } from './fichekit.js';
+import { AidePanneFiche } from './aidepanne.jsx';
 
 /* ════════════ Les styles (copies de ficherobot.jsx) ════════════ */
 
@@ -238,6 +239,7 @@ export function focaliser(...ids) {
  */
 export function EnteteFiche({ nom, reglages = false, enReglages = false, onReglages = null, epingle = null, panne = null, idRoue = undefined, plaque = null, sousNom = null }) {
   return (
+    <>
     <div className={panne ? 'o-panne' : undefined}
       style={{ display: 'flex', alignItems: 'center', gap: 12, ...(panne ? { padding: '6px 6px 6px 14px', borderRadius: 30 } : null) }}>
       {plaque && (
@@ -268,6 +270,9 @@ export function EnteteFiche({ nom, reglages = false, enReglages = false, onRegla
       )}
       <CroixFeuille />
     </div>
+    {/* Une panne s'explique sous l'en-tête (06/11, étape 9 ; aidepanne.jsx) — pas dans les réglages. */}
+    {!enReglages && <AidePanneFiche />}
+    </>
   );
 }
 

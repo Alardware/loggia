@@ -11,6 +11,7 @@
  * morceau chargé à la demande n'importe jamais App.jsx.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { useRangerLibre } from '../glisser.js';
 import { Anim, Fi, editBtn } from '../ui.jsx';
 import { commanderService } from '../actions.js';
 import { compteOrdinaire } from '../state.js';
@@ -22,6 +23,7 @@ import { rafraichirVolets } from '../voletsetat.js';
 import { tr, trN } from '../i18n.js';
 import { useOptimiste } from '../optimiste.js';
 import { voletMode } from '../lectures.js';
+import { annulable } from '../annuler.js';
 
 /* Ce qu'App.jsx pose avant le premier rendu. */
 let BandeauEdition, BarGroup, CardEditSheet, CarteAjout, ComposeurCartes, EditableCard, ViewBar, ViewHead, barBtn, envoyerGeste, useDomainCards, useLayoutEditor, voletCovers, voletModes, voletsCommandables;
@@ -106,6 +108,8 @@ export function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
     return [...dejaLa, ...Object.keys(S).filter(k => k.indexOf('cover.') === 0 && dejaLa.indexOf(k) < 0).sort()];
   }, [nbEntites, csig]);
   const ed = useLayoutEditor('loggia_coverlayout', 'volets', derivedX);
+  // Hors édition, un appui long range les cartes (05/11, étape 5) : le même ordre que les flèches de l'édition.
+  const ranger = useRangerLibre({ actif: !edit, onRanger: (cle, cible) => ed.move(cle, ed.ids.indexOf(cible) - ed.ids.indexOf(cle)) });
   const dc = useDomainCards(hass);
   const [cardEdit, setCardEdit] = useState(null);
   const [addSheet, setAddSheet] = useState(false);
@@ -131,8 +135,9 @@ export function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
    * oublie la course de ce volet ; Stop fige celles qui bougent. */
   const chaqueVolet = (cle, faire) => voletsCommandables(S).filter(c => !estMuetVolet(S[c.haid]) && gestesCover(S[c.haid])[cle])
     .filter(c => faire(c.haid, S[c.haid], envoyerGeste(hass, c.haid, gestesCover(S[c.haid])[cle])) != null).length;
-  const allOpen = () => { if (chaqueVolet('monter', (id, st, envoi) => ordreEtCourse(id, 100, st, envoi))) poserPos(100); };
-  const allClose = () => { if (chaqueVolet('descendre', (id, st, envoi) => ordreEtCourse(id, 0, st, envoi))) poserPos(0); };
+  // Rattrapables cinq secondes (06/11, étape 7) ; Stop n'a rien à défaire.
+  const allOpen = () => annulable(tr('Volets ouverts'), () => { if (chaqueVolet('monter', (id, st, envoi) => ordreEtCourse(id, 100, st, envoi))) poserPos(100); });
+  const allClose = () => annulable(tr('Volets fermés'), () => { if (chaqueVolet('descendre', (id, st, envoi) => ordreEtCourse(id, 0, st, envoi))) poserPos(0); });
   const allStop = () => { chaqueVolet('stop', ordreEtArret); };
   /* Le mode de LOGGIA s'écrit dans `loggia/volets/config`, réservé aux administrateurs : un compte ordinaire le lit, ses
    * boutons sont inertes, et un appui dit le refus, qui nomme la clé — comme la fiche d'un volet (V10, ADR 0144). */
@@ -200,7 +205,7 @@ export function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
       {!embarque && (edit || ed.ids.length > 0) && (
         <div style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{tr('Volet par volet')}</div>
       )}
-      <div ref={ed.gridRef} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div ref={ed.gridRef} {...ranger} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {blocs.map((bloc, bi) => {
           if (!edit && bloc.titre && !bloc.cartes.length) return null;
           return (
@@ -220,7 +225,7 @@ export function VoletsContent({ hass, edit = false, onEnt, embarque = false }) {
                 {bloc.cartes.map(k => {
                   const compacte = ed.estCompact(k);
                   const carte = compacte ? dc.compact(k, ed.labelOf(k)) : dc.card(k, ed.labelOf(k));
-                  if (!edit) return <Anim key={k} i={ed.ids.indexOf(k)} className={(ed.estLarge(k) ? 'o-cvw2 ' : '') + (compacte ? 'o-cvrow1' : '')}>{carte}</Anim>;
+                  if (!edit) return <Anim key={k} id={k} i={ed.ids.indexOf(k)} className={(ed.estLarge(k) ? 'o-cvw2 ' : '') + (compacte ? 'o-cvrow1' : '')}>{carte}</Anim>;
                   return <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit} hass={hass}>{carte}</EditableCard>;
                 })}
                 {edit && bi === blocs.length - 1 && <CarteAjout onClick={() => setAddSheet(true)} label={tr('Ajouter un volet')} />}

@@ -5,8 +5,8 @@ import { lazyRecharge } from '../recharge.js';
 import { cfgSet, getHass } from '../state.js';
 import { REDUCE_MOTION, useTilt, nomCarte, Fi, FlipText, Surface, cvEstTpl, cvId, cvKey, cvName } from '../ui.jsx';
 import { NOMS_PRISE } from '../prises.js';
-import { useOptimiste } from '../optimiste.js';
-import { bloquerDefilement, defileurAuto } from '../glisser.js';
+import { useOptimiste, OUBLIER_OPTIMISTES } from '../optimiste.js';
+import { bloquerDefilement, defileurAuto, useRangerLibre } from '../glisser.js';
 import { niveauMax, couleurNiveau, resumeAttention } from '../attention.js';
 import { LISERE, sectionTitle } from '../styles.js';
 import { Ico } from '../icones.jsx';
@@ -20,6 +20,7 @@ import { FicheRangee, useDomainCards } from '../appareils/fiches.jsx';
 import { PlugIcon } from '../cartescustom/cartes.jsx';
 import { habillagePiece, TEINTES_PIECE, ICONES_PIECE } from '../app/pieces.jsx';
 import { useScenarios, CarteScenario } from '../app/scenarios.jsx';
+import { FeuilleDepart } from '../app/depart.jsx';
 import { BOUTON_COIN, boutonEdition, ChoixIcone, EditableCard } from '../edition/briques.jsx';
 import { CV_TYPE_NOMS, cvTypeDe, cvW, cvAvecW, cvRowsDe, cvAvecH, nomCv, CvTyped, FicheCarte, CarteAjoutSheet, ChipsEditSheet } from '../cartescustom/galerie.jsx';
 
@@ -157,6 +158,19 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
   const realOn = (mains && mains.length) ? mains.some(l => l.on) : (mains && lights && lights.length ? false : null);
   // Le filet des 6 s est celui d'`useOptimiste`, comme partout ailleurs.
   const [ov, setOv] = useOptimiste(realOn);
+  /* « Annuler » (06/11, étape 7) : la tuile montre tout de suite ce que ses lampes redeviennent — la photo d'avant le geste —,
+   * sans attendre le relevé suivant de l'Accueil ; l'état réel reprend la main dès qu'il répond, comme après un appui. */
+  const mainsRef = useRef(mains);
+  mainsRef.current = mains;
+  useEffect(() => {
+    const surAnnule = (e) => {
+      const photo = e && e.detail && e.detail.photo, ls = mainsRef.current;
+      if (!photo || !ls || !ls.length || !ls.some(l => photo[l.id])) return;
+      setOv(ls.some(l => (photo[l.id] ? photo[l.id].etat === 'on' : l.on)));
+    };
+    window.addEventListener(OUBLIER_OPTIMISTES, surAnnule);
+    return () => window.removeEventListener(OUBLIER_OPTIMISTES, surAnnule);
+  }, [setOv]);
   /* `attente` (audit du 19/10, B15 — les veilleuses sont épargnées PARTOUT) : la règle Nuit n'est pas encore lue, on ne sait pas
    * quelles lampes épargner. L'interrupteur est dessiné à sa place, grisé et inerte : un appui ne touche aucune lampe, et ne
    * bascule pas l'affichage. La règle lue, il reste là, actif — sauf dans une pièce qui n'a QUE sa veilleuse : `mains` se vide,
@@ -395,6 +409,13 @@ function elaguerHisto(liste) {
  * édition, l'en-tête porte « Gérer les scénarios ». */
 function ScenariosAccueil({ hass, edit = false, onNav = null }) {
   const sc = useScenarios(hass);
+  // Hors édition, un appui long range les scénarios de la rangée (05/11, étape 5) : l'ordre de tous, à ce format d'écran.
+  const ranger = useRangerLibre({ actif: !edit, onRanger: (cle, cible) => {
+    const ids = sc.tous.map(s => s.id), i = ids.indexOf(cle), j = ids.indexOf(cible);
+    if (i < 0 || j < 0) return;
+    ids.splice(j, 0, ids.splice(i, 1)[0]);
+    sc.ordonner(ids);
+  } });
   const liste = scenariosAccueil(sc.tous);
   const nScenarios = liste.length;
   /* La rangée qu'on attend (lot 14 de l'audit du 03/10). Les scénarios
@@ -470,11 +491,11 @@ function ScenariosAccueil({ hass, edit = false, onNav = null }) {
             </div>}
       </div>
       {nScenarios > 0 && (
-        <div ref={rangee} className="grid-qscenes" inert={edit ? '' : undefined}>
+        <div ref={rangee} {...ranger} className="grid-qscenes" inert={edit ? '' : undefined}>
           {/* En édition, la rangée est inerte au clavier aussi : la section ne
             * l'est plus, pour laisser « Gérer les scénarios » joignable
             * (relecture du lot 13 de l'audit du 03/10). */}
-          {liste.map(s => <CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} />)}
+          {liste.map(s => <CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} dataId={s.id} />)}
         </div>
       )}
       {/* La réserve (voir `rangeeVue`) : rien ne s'y dessine, elle part à la
@@ -488,6 +509,7 @@ function ScenariosAccueil({ hass, edit = false, onNav = null }) {
       {!nScenarios && !repondu && rangeeVue && !!(hass && typeof hass.callWS === 'function') && (
         <div className="grid-qscenes" aria-hidden="true" style={{ overflowX: 'scroll' }}><span style={{ height: 88 }} /></div>
       )}
+      <FeuilleDepart hass={hass} sc={sc} />
     </>
   );
 }
@@ -858,6 +880,17 @@ function FavorisAccueil({ hass, edit = false }) {
     estCompact: (cle) => cvRowsDe(de(cle)) === 1,
     basculerCompact: (cle) => majCarte(de(cle), cvAvecH),
   };
+  /* RANGER hors édition (05/11, étape 5 du rapport sur l'usage) : un appui long — doigt ou souris — saisit le favori, on le
+   * glisse sur la place d'un autre, il s'y pose au lâcher (`useRangerLibre`, glisser.js). Un toucher court ou un clic ouvrent
+   * toujours sa fiche ; les flèches du clavier rangent en édition. */
+  const rangerFav = useRangerLibre({ actif: !edit, onRanger: (cle, cible) => {
+    const cles = liste.map(cvKey), i = cles.indexOf(cle), j = cles.indexOf(cible);
+    if (i < 0 || j < 0) return;
+    const ordre = [...liste];
+    const [pris] = ordre.splice(i, 1);
+    ordre.splice(j, 0, pris);
+    poser([...ordre, ...eps.filter(y => liste.indexOf(y) < 0)]);
+  } });
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -874,7 +907,7 @@ function FavorisAccueil({ hass, edit = false }) {
         ? null
         /* Les favoris DÉFILENT (retour 01/09) : ils s'ajoutent sans repousser
          * le reste de l'accueil, et la rangée reste d'un seul tenant. */
-        : <div className="o-favrow" style={{ display: 'flex', gap: edit ? 16 : 10, overflowX: 'auto', scrollSnapType: 'x proximity' }}>
+        : <div {...rangerFav} className="o-favrow" style={{ display: 'flex', gap: edit ? 16 : 10, overflowX: 'auto', scrollSnapType: 'x proximity' }}>
             {liste.map(x => {
               const cle = cvKey(x);
               const taille = { width: cvW(x) === 2 ? 466 : 225, height: cvRowsDe(x) === 1 ? 88 : 184 };
@@ -891,7 +924,7 @@ function FavorisAccueil({ hass, edit = false }) {
                 );
               }
               return (
-                <div key={cle} className={'o-favtuile' + (cvW(x) === 2 ? ' o-favlarge' : '')} style={{ position: 'relative', flex: '0 0 auto', ...taille, scrollSnapAlign: 'start' }}>
+                <div key={cle} data-id={cle} className={'o-favtuile' + (cvW(x) === 2 ? ' o-favlarge' : '')} style={{ position: 'relative', flex: '0 0 auto', ...taille, scrollSnapAlign: 'start' }}>
                   <div className="o-cvfit" style={{ height: '100%' }}>
                     <CvTyped x={x} hass={hass} dc={dc} />
                   </div>

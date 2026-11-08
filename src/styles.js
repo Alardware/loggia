@@ -17,8 +17,8 @@ export const CARTE_RAIL = { background: 'var(--o-surfA)', border: 'var(--o-bw,1p
  * restent exacts. Même valeur que la bordure de CARTE_RAIL. */
 export const LISERE = 'var(--o-bw,1px) solid var(--o-bd2)';
 
-/** Le repère en petites capitales au-dessus d'une valeur. */
-export const petitesCapitales = (taille = 10.5) => ({ fontSize: taille, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-text3)' });
+/** Le repère en petites capitales au-dessus d'une valeur ; sa taille suit celle du texte (tailletexte.js). */
+export const petitesCapitales = (taille = 10.5) => ({ fontSize: `calc(${taille}px * var(--o-texte, 1))`, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-text3)' });
 
 /* Le gabarit d'une carte de la maison — l'icône en haut à gauche, le titre
  * SOUS l'icône, le contenu ensuite ; hauteur standard, le liseré du réglage

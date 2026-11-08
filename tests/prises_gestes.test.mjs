@@ -983,7 +983,8 @@ test('audit, point 12 : Entrée sur une prise gardée ouvre SA fiche par-dessus 
   r[0].act(() => fermees.push(1));
   assert.deepEqual([ouvertes, fermees.length, w.appels], [[NAS], 1, []], 'la fiche, qui demande ; rien n’est coupé');
   const hote = APP_SRC.slice(APP_SRC.indexOf('const [fichePrise, setFichePrise] = useState(null);'));
-  assert.ok(hote.includes('onFiche={setFichePrise} />}') && hote.includes('{fichePrise && <FichePrise id={fichePrise} hass={getHass()} onClose={() => setFichePrise(null)} />}'));
+  // ASSERTION MODIFIÉE (06/11, étape 9) : la fiche s'ouvre dans `FicheEntite`, qui pose son entité pour l'aide d'une panne (aidepanne.jsx).
+  assert.ok(hote.includes('onFiche={setFichePrise} />}') && hote.includes('<FichePrise id={fichePrise} hass={getHass()} onClose={() => setFichePrise(null)} /></FicheEntite.Provider>}'));
 });
 
 test('audit, point 13 : « Couper la prise ? » s’annonce — une région polie, montée AVANT la question, sur la carte, la compacte et le gros interrupteur', () => dans(() => {

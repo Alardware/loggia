@@ -1,6 +1,7 @@
 /* La vue Objets : ses filtres, ses en-têtes chargés à la demande, ses objets.
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
 import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useRangerLibre } from '../glisser.js';
 import { lazyRecharge } from '../recharge.js';
 import { LOGGIA_INDEX, medPlayers, loggiaEnt, enBorne, estTraceur } from '../state.js';
 import { borneEnCharge } from '../borne.js';
@@ -407,6 +408,8 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
     () => trierObjets(tousObjets.filter(o => ajoutes.indexOf(o.cle) < 0), ordrePieces).map(o => o.cle),
     [tousObjets, ajoutes, ordrePieces]);
   const ed = useLayoutEditor(OBJ_LAYOUT_KEY, 'objets', derived);
+  // Hors édition, un appui long range les cartes (05/11, étape 5) : le même ordre que les flèches de l'édition.
+  const ranger = useRangerLibre({ actif: !edit, onRanger: (cle, cible) => ed.move(cle, ed.ids.indexOf(cible) - ed.ids.indexOf(cle)) });
   const parCle = useMemo(() => new Map(tousObjets.map(o => [o.cle, o])), [tousObjets]);
   const objets = useMemo(() => ed.ids.map(cle => parCle.get(cle)).filter(Boolean), [ed.ids, parCle]);
   const puces = useMemo(() => pucesObjets(objets), [objets]);
@@ -451,7 +454,7 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
     return compacte ? dc.compact(cle, ed.labelOf(o.cle) || null) : dc.card(cle, ed.labelOf(o.cle) || o.nomCarte || null);
   };
   // La cellule d'une carte, dans la grille ou dans une section de Capteurs : sa largeur et sa compacité, celles de l'éditeur.
-  const cellule = (o) => <div key={o.cle} className={((ed.estLarge(o.cle) ? 'o-cvw2 ' : '') + (ed.estCompact(o.cle) ? 'o-cvrow1' : '')) || undefined}>{carte(o)}</div>;
+  const cellule = (o) => <div key={o.cle} data-id={o.cle} className={((ed.estLarge(o.cle) ? 'o-cvw2 ' : '') + (ed.estCompact(o.cle) ? 'o-cvrow1' : '')) || undefined}>{carte(o)}</div>;
   // Sous le filtre Capteurs, hors édition, la grille se range en sections (chantier Capteurs, § 5) ; l'édition garde la grille, qu'elle range.
   const enSections = actuel === 'capteurs' && !edit;
   const titreFiltre = (OBJ_FILTRES().find(f => f.id === actuel) || {}).label || tr('Tous');
@@ -570,7 +573,7 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
         )}
         {barreMaison && <Suspense fallback={<div style={{ minHeight: 59 }} />}><BarreMaison hass={hass} etat={etatCh} /></Suspense>}
         {enSections ? null : (visibles.length || edit)
-          ? <div ref={ed.gridRef} className="grid-objets grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', columnGap: 16, rowGap: 8 }}>
+          ? <div ref={ed.gridRef} {...ranger} className="grid-objets grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', columnGap: 16, rowGap: 8 }}>
               {visibles.map(o => (edit
                 ? <EditableCard key={o.cle} ed={ed} id={o.cle} nom={nomDe(o)} onEdit={setCardEdit} hass={hass} />
                 : cellule(o)))}

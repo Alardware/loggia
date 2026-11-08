@@ -785,6 +785,36 @@ class Regles:
         cfg = await self._alertes()
         return bool(str(cfg.get("service") or "").strip()) or bool(await self._cibles(pour, cfg))
 
+    async def services_du_compte(self, user_id: Any, cfg: dict | None = None) -> list[str]:
+        """Les telephones d'UN compte (07/11, usage etape 11) : ceux des personnes
+        qu'il porte (`person.user_id`), pour les notifications ordinaires — ses
+        exclusions de Parametres > Alertes comprises (`presents`). Ce que lit le
+        rappel qu'il a demande (rappels.py), et `peut` : l'ecran ne propose le
+        bouton que si ce compte a ou le recevoir."""
+        if not isinstance(user_id, str) or not user_id:
+            return []
+        cfg = cfg if cfg is not None else await self._alertes()
+        try:
+            siennes = {haid for haid in self.hass.states.async_entity_ids("person")
+                       if (getattr(self.hass.states.get(haid), "attributes", None) or {}).get("user_id") == user_id}
+            gens = await destinataires.personnes(self.hass, cfg.get("personnes")) if siennes else []
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Loggia regles : telephones du compte illisibles", exc_info=True)
+            return []
+        out: list[str] = []
+        for p in gens:
+            if p.get("person") in siennes:
+                out += [s for s in destinataires.recoit(p, "presents") if s not in out]
+        return out
+
+    async def plage_calme(self) -> dict[str, str] | None:
+        """Les heures calmes, quand elles sont actives : `{debut, fin}` (« 22:00 »).
+        Un rappel qui y tombe part sans sonner — l'ecran le dit avant."""
+        c = (await self._alertes()).get("calme")
+        if not isinstance(c, dict) or not c.get("actif"):
+            return None
+        return {"debut": str(c.get("debut") or "22:00"), "fin": str(c.get("fin") or "07:00")}
+
     async def _pousser(self, service: str, charge: dict) -> bool:
         """Un envoi, et ce que Home Assistant en dit tout de suite. L'appel ne
         bloque pas : l'application compagnon note elle-meme un echec de push
@@ -799,7 +829,8 @@ class Regles:
     async def prevenir(self, module: str, regle: str, message: str, *,
                        titre: str = "Loggia", critique: bool = False,
                        motif: str = "", simuler: bool = False,
-                       data: dict | None = None, pour: str = "tous") -> bool:
+                       data: dict | None = None, pour: str = "tous",
+                       compte: str | None = None) -> bool:
         """Previent les bonnes personnes, sur leur telephone (ADR 0301).
 
         `pour` : `tous` (la surete), `admins` (le mode enfant), `presents` (la
@@ -828,6 +859,10 @@ class Regles:
         l'appui renvoie en `mobile_app_notification_action`. Il s'ajoute au
         regime du son, sans l'ecraser.
 
+        `compte` (07/11, usage etape 11) : les telephones de CE compte seuls, et
+        jamais le repli — le rappel qu'il a demande (rappels.py) ne sonne pas
+        chez les autres. Sans telephone a lui, rien ne part, le journal le dit.
+
         Le son critique, le silence des heures calmes et les boutons sont des
         cles de l'application compagnon : ils ne partent que vers un service
         `mobile_app_*` — et vers le repli, qui les recevait deja et peut etre
@@ -848,14 +883,14 @@ class Regles:
         # garde le francais rendu et les parties que l'ecran traduit.
         langue = langue_serveur(self.hass)
         texte = traduire(message, langue)
-        cibles = await self._cibles(pour, cfg)
+        cibles = await self._cibles(pour, cfg) if compte is None else await self.services_du_compte(compte, cfg)
         doublons = False
-        if (pour == "tous" and cibles and repli and repli not in cibles
+        if (compte is None and pour == "tous" and cibles and repli and repli not in cibles
                 and self.hass.services.has_service("notify", repli)):
             cibles = [*cibles, repli]
             doublons = True
         if not cibles:
-            if not repli:
+            if not repli or compte is not None:
                 await self.noter(module, regle, quoi, n=0, motif=motif,
                                  detail=("personne a qui parler · {message}", {"message": texte}))
                 return False

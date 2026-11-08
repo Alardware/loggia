@@ -56,6 +56,7 @@ import { REFUS_CHAUFFAGE } from './refuschauffage.js';
 import { commanderChauffage } from './chauffageetat.js';
 import { regimeMaison } from './chauffageecran.js';
 import { petitesCapitales } from './styles.js';
+import { annulable } from './annuler.js';
 
 // Les refus du planning de chauffe, que seules la fiche et la barre reçoivent : enregistrés au chargement.
 enregistrerRefus(REFUS_CHAUFFAGE);
@@ -200,7 +201,12 @@ export default function BarreMaison({ hass, etat }) {
   const envoyer = (m, fin) => {
     setErr('');
     poserOv(m);
-    return commanderChauffage(hass, messageMaison(m, fin)).then(() => '', (e) => { poserOv(null); return raisonEchec(e); });
+    /* Rattrapable cinq secondes (06/11, étape 7) : le serveur applique le mode, Annuler lui remet celui d'avant — pas les
+     * consignes une à une. */
+    const avant = { mode: lu, fin: maison.vacances_fin || null };
+    const defaire = () => { poserOv(avant.mode); return commanderChauffage(hass, messageMaison(avant.mode, avant.fin)).catch(() => { poserOv(null); }); };
+    return annulable(tr('Mode de la maison changé'), () => commanderChauffage(hass, messageMaison(m, fin)), defaire)
+      .then(() => '', (e) => { poserOv(null); return raisonEchec(e); });
   };
   const choisir = (m) => {
     if (m === 'vacances') { setFeuille(true); return; }

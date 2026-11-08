@@ -265,7 +265,7 @@ export default function FicheLumiereContent({ id, vue: v, piece = null, epingle 
   const plaque = { icone: 'bulb', glyphe, fond: v.on ? 'rgba(' + v.couleurs.rgb + ',.22)' : 'var(--o-s1)', encre: v.on ? v.encre : v.muette ? 'var(--o-text3)' : 'var(--o-text2)' };
   /* Un mot en grand — « Éteinte », « Indisponible » — : 34 px, moins quand la place manque, d'après sa longueur et la
    * largeur du bloc (une requête de conteneur), comme la fiche des prises : « Niedostępny » ne passe pas sous la bascule. */
-  const motGrand = (mot, couleur) => <span style={{ fontSize: 'clamp(20px, calc(100cqi / (0.64 * ' + Math.max(1, mot.length) + ')), 34px)', fontWeight: 800, color: couleur }}>{mot}</span>;
+  const motGrand = (mot, couleur) => <span style={{ fontSize: 'clamp(20px, calc(100cqi / (0.64 * ' + Math.max(1, mot.length) + ')), calc(34px * var(--o-texte, 1)))', fontWeight: 800, color: couleur }}>{mot}</span>;
   /* Sous le doigt (passe bis 3 du 17/10, point 3), le grand pourcentage suit la barre (`v.glisse`, `v.bri`) — une lampe éteinte comprise :
    * il paraît dès le glisser, et rien ne part avant le relâcher. */
   const grand = v.muette ? motGrand(tr('Indisponible'), 'var(--o-bad)')

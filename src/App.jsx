@@ -149,6 +149,7 @@ import { useConnexionApp, useToastApp, useMeteoApp, useAccueilApp, useJournalApp
 import { priseDe } from './app/noyau.jsx';
 // eslint-disable-next-line no-unused-vars -- les tests les exportent d’ici (ADR 0282)
 import { lireNombre } from './cartes/mesure.jsx';
+import { BandeauAnnuler } from './chrome/bandeauannuler.jsx';
 /* Le groupe des reglages se reconnait a un DRAPEAU, pas a son titre.
  *
  * Il etait repere par `g.group === NAV_REGLAGES`, une comparaison de texte. Des
@@ -1351,6 +1352,8 @@ export default function App() {
         * par hasard, inséré après coup. Elle reste donc ICI, au premier
         * niveau, sœur des vues : c'est là que la règle la voit. */}
       <div className="o-vh" role="alert" data-annonce="">{toast || ''}</div>
+      {/* « Annuler » cinq secondes après un geste groupé (06/11, étape 7 ; annuler.js). */}
+      <BandeauAnnuler />
       {toast && <div aria-hidden="true" style={{ position: 'fixed', left: '50%', bottom: 'calc(24px + var(--o-safe-bottom,0px))', transform: 'translateX(-50%)', zIndex: 400, background: 'var(--o-surfA)', color: 'var(--o-bad)', border: '1px solid rgba(var(--o-bad-rgb),.4)', borderRadius: 14, padding: '10px 16px', fontSize: 12, fontWeight: 700, boxShadow: 'var(--o-shadow,0 10px 30px rgba(0,0,0,.4))' }}>{toast}</div>}
       <Sidebar view={view} vuesAutorisees={vuesAutorisees} editMode={editMode} onToggleEdit={peutEditer ? () => setEditMode(e => !e) : null} tactile={tactile} users={users} userIdx={userIdx} onSwitchUser={switchUser} notifs={notifs} onLireNotifs={lireNotifs} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} open={navOpen} customViews={customViews} ha={!wasConnectedRef.current && patienceHa ? null : (() => {
         const ok = !!(hass && hass.states && (hass.connected === undefined || hass.connected));

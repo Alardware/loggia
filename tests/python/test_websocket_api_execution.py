@@ -124,7 +124,9 @@ def test_toutes_les_commandes_sont_enregistrees(banc):
     # 55 avec le profil du compte connecte (ADR 0276, 27/10).
     # ASSERTION MODIFIEE (29/10, versions) : 55 -> 57
     # ASSERTION MODIFIÉE (30/10, G2-1 ; ADR 0301) : 57 -> 59, `loggia/collecte/sorti` et `loggia/notifications/destinataires`.
-    assert len(banc.hass.commandes) == 59, sorted(banc.hass.commandes)
+    # ASSERTION MODIFIÉE (06/11, étape 8) : 59 -> 60, `loggia/scenarios/capturer` (la maison telle qu'elle est).
+    # ASSERTION MODIFIÉE (07/11, étape 11) : 60 -> 63, les rappels (etat, poser, annuler).
+    assert len(banc.hass.commandes) == 63, sorted(banc.hass.commandes)
 
 
 def test_aucune_commande_ne_declare_id(banc):

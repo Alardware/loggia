@@ -41,6 +41,9 @@ import {
 import { fileEcritures } from './voletsfiche.js';
 import { EnteteFiche, PETITES_CAPITALES, filet } from './fichecommune.jsx';
 import { PANNEAU, RANGEE, EN_BOUTON, TITRE, SOUS, ALERTE } from './fichekit.js';
+import { LienPanne } from './aidepanne.jsx';
+// Le moment le moins cher et « Me prévenir » (07/11, usage étape 11).
+import { RangeeMomentEco } from './conseilsui.jsx';
 
 /* Le contenu de la popup d'une vanne (fichevanne.jsx), pour la prise désignée comme vanne d'eau : chargé à la demande, seulement
  * quand une fiche de prise s'ouvre sur elle (passe bis de l'étape 3 IoT, point 9). Par vanne.jsx, le MÊME morceau que la carte : un
@@ -416,7 +419,7 @@ export default function FichePriseContent({ hass, id, prise = null, piece = null
   /* Un mot en grand — « Coupée », « Indisponible » — : 34 px, moins quand la place manque, d'après sa
    * longueur et la largeur du bloc (une requête de conteneur) : « Niedostępny » prenait 214 px des 176 du
    * téléphone de 320 px, sous la bascule (mesuré). */
-  const motGrand = (mot, couleur) => <span style={{ fontSize: 'clamp(20px, calc(100cqi / (0.64 * ' + Math.max(1, mot.length) + ')), 34px)', fontWeight: 800, color: couleur }}>{mot}</span>;
+  const motGrand = (mot, couleur) => <span style={{ fontSize: 'clamp(20px, calc(100cqi / (0.64 * ' + Math.max(1, mot.length) + ')), calc(34px * var(--o-texte, 1)))', fontWeight: 800, color: couleur }}>{mot}</span>;
   // « Indisponible » d'une prise a SA clé (point 11e) : le polonais la dit au neutre, « Niedostępne », comme la carte.
   const grand = muette ? motGrand(trSens('Indisponible · prise'), 'var(--o-bad)')
     : !on ? motGrand(tr('Coupée'), 'var(--o-text2)')
@@ -463,6 +466,8 @@ export default function FichePriseContent({ hass, id, prise = null, piece = null
             <span style={{ color: 'var(--o-bad)', display: 'flex', marginTop: 1 }}><Fi i="signal-alt-slash" size={14} /></span>
             <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)' }}>
               {(estZigbee(LOGGIA_INDEX, id) ? tr('Vérifiez qu’elle est branchée et à portée du réseau Zigbee.') : tr('Vérifiez qu’elle est branchée et à portée du réseau.')) + ' ' + tr('Loggia la reprendra dès qu’elle répond.')}
+              {/* « Ouvrir dans Home Assistant », à un administrateur (06/11, étape 9 ; aidepanne.jsx). */}
+              <br /><LienPanne id={id} hass={hass} />
             </span>
           </div>
         )}
@@ -498,6 +503,7 @@ export default function FichePriseContent({ hass, id, prise = null, piece = null
             <B on={prevenir} nom={tr('Prévenir à la fin du cycle')} cb={() => ecrire('prevenir', () => patchPrevenir(id, !prevenir))} />
           </div>
           {alerte('prevenir')}
+          <RangeeMomentEco hass={hass} id={id} enCycle={!!(e && e.cycle)} />
         </>)}
         {(() => {
           const corps = (<>

@@ -6,7 +6,7 @@ Assistant. Le client ne peut pas designer un autre utilisateur — aucune comman
 n'accepte de champ `user_id`. Un utilisateur ne lit et n'ecrit donc que sa propre
 configuration, et les permissions Home Assistant restent celles de sa session.
 
-Les 59 commandes, toutes prefixees `loggia/`, chacune une ligne de la table
+Les 63 commandes, toutes prefixees `loggia/`, chacune une ligne de la table
 `COMMANDES` (lot 8, ADR 0291). Le compte et la repartition entre ouvertes,
 reservees et ouvertes au code de la maison sont verrouilles par
 `test_websocket_api.py` et `test_websocket_registre.py` : une commande
@@ -76,6 +76,9 @@ nouvelle doit y etre rangee d'un cote ou de l'autre.
   Les gestes, ouverts a tout compte mais bornes a ce qu'il a le droit de
   piloter
     scenarios/lancer        -> lancer un scenario
+    scenarios/capturer      -> l'etat des lumieres et des volets maintenant, pour
+                               « la maison telle qu'elle est » ; rien n'est
+                               ecrit (admin ; etape 8, 06/11)
     robots/lancer           -> le depart d'un robot : des pieces, des aires,
                                ou tout ; le carnet des passages le note
                                (chantier IoT, I3 A) ; un script maison de
@@ -85,6 +88,8 @@ nouvelle doit y etre rangee d'un cote ou de l'autre.
                                description de la maison (admin ; passe bis 2
                                de la tranche robots 2, 20/10)
     minuteurs/etat|poser|annuler -> le minuteur d'extinction d'un appareil
+    rappels/etat|poser|annuler -> « me prevenir a 22 h 30 » : SES rappels,
+                               vers SES telephones (usage etape 11, 07/11)
     sirene/tester           -> sonner trois secondes, tenu ici
   L'agencement, ouvert a tout compte (ADR 0125)
     scenarios/ordre         -> ranger les scenarios, et rien d'autre : des
@@ -162,6 +167,8 @@ WS_SCN_ETAT = "loggia/scenarios/etat"
 WS_SCN_CONFIG = "loggia/scenarios/config"
 WS_SCN_LANCER = "loggia/scenarios/lancer"
 WS_SCN_ORDRE = "loggia/scenarios/ordre"
+# « Enregistrer la maison telle qu'elle est » (06/11, etape 8) : l'etat des lumieres et des volets, sans rien ecrire.
+WS_SCN_CAPTURER = "loggia/scenarios/capturer"
 WS_ROB_ETAT = "loggia/robots/etat"
 WS_ROB_CONFIG = "loggia/robots/config"
 WS_ROB_LANCER = "loggia/robots/lancer"
@@ -189,6 +196,9 @@ WS_MIN_ETAT = "loggia/minuteurs/etat"
 WS_MIN_POSER = "loggia/minuteurs/poser"
 WS_MIN_ANNULER = "loggia/minuteurs/annuler"
 WS_SIR_TESTER = "loggia/sirene/tester"
+WS_RAP_ETAT = "loggia/rappels/etat"
+WS_RAP_POSER = "loggia/rappels/poser"
+WS_RAP_ANNULER = "loggia/rappels/annuler"
 WS_PIN_VERIFIER = "loggia/pin/verifier"
 WS_PIN_DEFINIR = "loggia/pin/definir"
 WS_PROF_MOI = "loggia/profils/moi"
@@ -289,6 +299,7 @@ INDISPONIBLE = {
     "enfant": "mode enfant indisponible",
     "minuteurs": "minuteurs indisponibles",
     "sirene": "test de sirene indisponible",
+    "rappels": "rappels indisponibles",
 }
 
 # Les roles qu'un script d'aspirateur peut tenir dans la roue de la popup.
@@ -700,6 +711,18 @@ async def handle_scn_lancer(ctx, connection, msg, scenarios):
     connection.send_result(msg["id"], resultat)
 
 
+# Ce que la maison est maintenant, lumieres et volets (06/11, etape 8) : la fiche le montre et l'envoie avec le
+# scenario, que `loggia/scenarios/config` - aux administrateurs - relit. Aux administrateurs aussi : il ne sert qu'a
+# composer. Une portee inconnue : `invalid_format`, comme une action illisible.
+async def handle_scn_capturer(ctx, connection, msg, scenarios):
+    try:
+        resultat = await scenarios.async_capturer(msg["familles"], msg.get("portee", "maison"), msg.get("piece"))
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_format", str(err))
+        return
+    connection.send_result(msg["id"], resultat)
+
+
 # ── Le code administrateur (18/09) : verifie ICI, jamais renvoye ───────────
 async def handle_pin_verifier(ctx, connection, msg, module):
     limiteur, verrous_pin, laissez_passer = ctx.limiteur, ctx.verrous_pin, ctx.laissez_passer
@@ -1080,6 +1103,32 @@ async def handle_sir_tester(ctx, connection, msg, sirene):
     connection.send_result(msg["id"], etat)
 
 
+# ── Les rappels (07/11, usage etape 11) ─────────────────────────────────────
+# Le geste d'un conseil de la vue Energie : ouvert a tout compte, comme un
+# minuteur, mais chacun ne lit, ne pose et n'annule que SES rappels — qui pose
+# vient de la session, jamais du message. Un rappel ne commande rien ; il nomme
+# une prise, que le compte doit pouvoir piloter.
+async def handle_rap_etat(ctx, connection, msg, rappels):
+    connection.send_result(msg["id"], await rappels.async_etat(connection.user.id))
+
+
+async def handle_rap_poser(ctx, connection, msg, rappels):
+    try:
+        etat = await rappels.async_poser(msg["quand"], msg["sorte"], msg.get("entity_id"), par=connection.user.id,
+                                         controle=controle_de(connection.user))
+    except PermissionError as err:
+        connection.send_error(msg["id"], "unauthorized", str(err))
+        return
+    except ValueError as err:
+        _relayer(connection, msg, err)
+        return
+    connection.send_result(msg["id"], etat)
+
+
+async def handle_rap_annuler(ctx, connection, msg, rappels):
+    connection.send_result(msg["id"], await rappels.async_annuler(msg["id_rappel"], par=connection.user.id))
+
+
 # ── La table : chaque commande, une ligne ──────────────────────────────────
 # `patch: dict` est le schema de toutes les commandes `config` d'un module.
 _PATCH = {vol.Required("patch"): dict}
@@ -1146,6 +1195,11 @@ COMMANDES: tuple[Commande, ...] = (
              module="scenarios"),
     Commande(WS_SCN_LANCER, handle_scn_lancer, {vol.Required("scenario"): vol.All(str, vol.Length(min=1, max=64))},
              module="scenarios"),
+    Commande(WS_SCN_CAPTURER, handle_scn_capturer, {
+        vol.Required("familles"): vol.All([vol.In(["lumieres", "volets"])], vol.Length(min=1, max=2)),
+        vol.Optional("portee", default="maison"): vol.In(["maison", "piece"]),
+        vol.Optional("piece"): vol.All(str, vol.Length(max=60)),
+    }, acces=ADMIN, module="scenarios"),
     # Le code administrateur, et le profil du compte (ADR 0276)
     Commande(WS_PIN_VERIFIER, handle_pin_verifier, {vol.Required("pin"): str}),
     Commande(WS_PIN_DEFINIR, handle_pin_definir, {vol.Required("pin"): str}, acces=ADMIN),
@@ -1232,4 +1286,9 @@ COMMANDES: tuple[Commande, ...] = (
              module="minuteurs"),
     Commande(WS_MIN_ANNULER, handle_min_annuler, {vol.Required("entity_id"): str}, module="minuteurs"),
     Commande(WS_SIR_TESTER, handle_sir_tester, {vol.Required("entity_id"): str}, module="sirene"),
+    # Les rappels (usage etape 11)
+    Commande(WS_RAP_ETAT, handle_rap_etat, module="rappels"),
+    Commande(WS_RAP_POSER, handle_rap_poser, {vol.Required("quand"): vol.Coerce(float), vol.Required("sorte"): str,
+                                              vol.Optional("entity_id"): str}, module="rappels"),
+    Commande(WS_RAP_ANNULER, handle_rap_annuler, {vol.Required("id_rappel"): str}, module="rappels"),
 )

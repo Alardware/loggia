@@ -2,6 +2,7 @@ import { cpSync, readFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { greffonTailleDuTexte as tailleDuTexte } from './scripts/taille_du_texte.mjs';
 
 /* L'orbe (src/orbe.jsx) nait dans un effet a dependances vides : le
  * remplacement a chaud de Vite echange le module sans rejouer cet effet, et
@@ -100,10 +101,12 @@ const prechargerBoot = {
   },
 };
 
+/* La taille du texte (07/11, étape 10) : chaque taille de police écrite en chiffres passe par `var(--o-texte)`, que
+ * `src/tailletexte.js` pose sur la page — scripts/taille_du_texte.mjs. */
 // base relative : le dashboard est servi depuis /local/loggia/ (www de Home Assistant)
 const config = {
   base: './',
-  plugins: [react(), orbeRechargee, prechargerBoot],
+  plugins: [react(), orbeRechargee, prechargerBoot, tailleDuTexte],
   // Pré-bundler les grosses dépendances dès le démarrage du serveur dev,
   // plutôt qu'à leur découverte au premier chargement de page.
   optimizeDeps: { include: ['react', 'react-dom', 'three'] },

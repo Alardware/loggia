@@ -9,10 +9,14 @@ import { tr } from './i18n.js';
 import { alerter, HoteAlertes } from './ui.jsx';
 import { ecouterPrechargement } from './recharge.js';
 import { ecouterHorsEcran } from './horsecran.js';
+import { appliquerTailleTexte, lireTailleTexte } from './tailletexte.js';
 
 // Avant toute lecture, donc avant le rendu : sans cela, une installation qui
 // vient d'Orion demarre sur des reglages vides et les reecrit aussitot.
 migrerAnciennesCles();
+
+// La taille du texte de cet écran (07/11, étape 10) : posée avant le premier rendu, l'écran ne saute pas.
+appliquerTailleTexte(lireTailleTexte());
 
 /* Un import à la demande que Vite n'a pas pu charger — un fichier qu'une
  * mise à jour HACS a retiré pendant que la page restait ouverte — recharge la

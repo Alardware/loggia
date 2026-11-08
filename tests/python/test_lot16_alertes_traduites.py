@@ -97,7 +97,9 @@ def gabarits_de(nom: str) -> list[str]:
 # ASSERTION MODIFIEE (chantier Mode enfant, tache 2 ; E13, E22) : le mode enfant parle au telephone — la demande
 # de l'enfant, l'insistance — et a l'Echo (« Parler », un `notify` qui n'est pas le telephone) ; ses gabarits
 # sont des constantes `MSG_*`, dans CLES_TELEPHONE.
-MODULES = ("alertes", "veilles", "prises", "enfant")
+# ASSERTION MODIFIÉE (07/11, étape 11) : les rappels parlent au telephone — « Me prévenir » d'un conseil
+# d'énergie ; leurs gabarits sont une table `MESSAGES`, dans CLES_TELEPHONE.
+MODULES = ("alertes", "veilles", "prises", "enfant", "rappels")
 
 
 def gabarits_produits() -> list[str]:

@@ -43,6 +43,7 @@ import { useVuePrise, useDemandeCoupure } from '../cartes/prise.jsx';
 import { useVueRobot } from '../cartes/robot.jsx';
 import { envoyerGeste } from '../cartes/volet.jsx';
 import { retenirModeVentilo, chargeAllumage } from '../ventilo.js';
+import { annulable } from '../annuler.js';
 
 /* Une FONCTION, pas une table.
  *
@@ -441,7 +442,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
           * Exécuter, la serrure et l'alarme portent leur mot ET leur icône
           * (`o-cvact`) : sur une carte étroite, compacte ou standard, l'icône
           * remplace le mot (index.css) et le nom garde sa place (05/10). */}
-        {runnable && !dead && <button className="o-cvact" aria-label={runnable[2] + ' ' + name} title={runnable[2]} onClick={(e) => { e.stopPropagation(); call(runnable[0], runnable[1]); }} style={{ position: 'relative', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}><span className="o-cvact-ico"><Ico name={icoRun} size={14} /></span><span className="o-cvact-mot">{runnable[2]}</span></button>}
+        {runnable && !dead && <button className="o-cvact" aria-label={runnable[2] + ' ' + name} title={runnable[2]} onClick={(e) => { e.stopPropagation(); const lancer = () => call(runnable[0], runnable[1]); if (dom === 'scene' || dom === 'script') annulable(tr('{nom} lancé', { nom: name }), lancer); else lancer(); }} style={{ position: 'relative', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}><span className="o-cvact-ico"><Ico name={icoRun} size={14} /></span><span className="o-cvact-mot">{runnable[2]}</span></button>}
         {dom === 'lock' && !dead && <button className="o-cvact" aria-label={(s === 'locked' ? tr('Déverrouiller') : tr('Verrouiller')) + ' ' + name} title={s === 'locked' ? tr('Déverrouiller') : tr('Verrouiller')} onClick={(e) => { e.stopPropagation(); call('lock', s === 'locked' ? 'unlock' : 'lock'); }} style={{ position: 'relative', borderRadius: 10, background: s === 'locked' ? 'rgba(var(--o-ok-rgb),.14)' : 'rgba(var(--o-warn2-rgb),.16)', border: 'none', color: s === 'locked' ? 'var(--o-ok)' : 'var(--o-warn2)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}><span className="o-cvact-ico"><Ico name={s === 'locked' ? 'unlock' : 'lock'} size={14} /></span><span className="o-cvact-mot">{s === 'locked' ? tr('Déverrouiller') : tr('Verrouiller')}</span></button>}
         {/* Alarme : le geste attendu, comme la serrure — armer quand elle
           * dort, désarmer sinon. Si le panneau réclame un code, le bouton

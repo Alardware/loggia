@@ -122,7 +122,8 @@ test('les chiffres sous la barre : 9,5 px sur une carte étroite ; ceux qui se t
   const b = monter(F.BarreMesure, { barre: barreMesure('co2', 1659) });
   assert.deepEqual(b.trouver(e => e.props && e.props.style && e.props.style.transform === 'translateX(-50%)').map(e => [e.props.children, e.props['data-serre']]),
     [['900', undefined], [mille(1150), undefined], [mille(1400), undefined], [mille(1600), '']], 'la carte pose `data-serre`, la feuille le lit');
-  assert.ok(CSS.includes('@container (width < 188px) {\n  .o-mesure-nom { --o-nom-ligne: 16px; }\n  .o-mesure-reperes { font-size: 9.5px !important; }\n}'), 'sur une carte étroite : le nom sur des lignes de 16 px, les chiffres en 9,5 px');
+  // ASSERTION MODIFIÉE (07/11, étape 10) : les lignes de 16 px suivent la taille du texte.
+  assert.ok(CSS.includes('@container (width < 188px) {\n  .o-mesure-nom { --o-nom-ligne: calc(16px * var(--o-texte, 1)); }\n  .o-mesure-reperes { font-size: 9.5px !important; }\n}'), 'sur une carte étroite : le nom sur des lignes de 16 px, les chiffres en 9,5 px');
   assert.ok(CSS.includes('@container (width < 120px) { .o-mesure-reperes > [data-serre] { display: none; } }'), 'sous 120 px de contenu, les chiffres serrés se taisent');
   // Le bloc vient APRÈS la grille commune : ses règles étroites ne la touchent pas (tests/chiffre_carte_etroite.test.mjs lit la première).
   assert.ok(CSS.indexOf('.o-mesure-reperes { font-size: 9.5px') > CSS.indexOf('.o-gabarit { container-type: inline-size; }'));

@@ -1207,6 +1207,32 @@ export function entitesAppareilDe(id) {
   return out.sort();
 }
 
+/** L'appareil d'une entité tel que l'index le connaît (06/11, étape 9) : son identifiant, son intégration, et l'appareil par
+ * lequel il passe (`pont` : `{ fabricant, modele }` — un pont Zigbee2MQTT) ; null sans appareil connu. */
+export function appareilDe(id) {
+  const I = LOGGIA_INDEX;
+  const m = I && I.entityMeta && typeof I.entityMeta.get === 'function' ? I.entityMeta.get(id) : null;
+  if (!m || !m.deviceId) return null;
+  const D = I.deviceMeta && typeof I.deviceMeta.get === 'function' ? I.deviceMeta : null;
+  const d = D ? D.get(m.deviceId) : null;
+  const via = d && d.via && D ? D.get(d.via) : null;
+  return { id: m.deviceId, integration: (d && d.integration) || null, pont: via ? { fabricant: via.manufacturer || null, modele: via.model || null } : null };
+}
+
+/** Toute une intégration se tait-elle ? (06/11, étape 9) Comme `health.js` : trois entités au moins, hors configuration et
+ * diagnostic, toutes injoignables. */
+export function plateformeMuette(p, S) {
+  const meta = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta;
+  if (!p || !S || !meta || typeof meta.forEach !== 'function') return false;
+  let total = 0, muettes = 0;
+  meta.forEach((m, eid) => {
+    if (!m || m.platform !== p || m.category === 'config' || m.category === 'diagnostic' || !S[eid]) return;
+    total += 1;
+    if (S[eid].state === 'unavailable') muettes += 1;
+  });
+  return total >= 3 && muettes === total;
+}
+
 /** Le bouton qui réarme un appareil en défaut, que le composant a reconnu à sa clé stable (`rearmer`, ADR 0307) ; null sinon. */
 export function estRearmement(id) {
   const m = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && typeof LOGGIA_INDEX.entityMeta.get === 'function' ? LOGGIA_INDEX.entityMeta.get(id) : null;

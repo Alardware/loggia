@@ -53,6 +53,11 @@ export const CLES_TELEPHONE = [
   '{appareil} se rallume après l’heure',
   /* Le rappel de collecte, la veille au soir (chantier G2, S2 ; ADR 0301). */
   'Demain : {types}',
+  /* « Me prévenir » d'un conseil d'énergie (07/11, usage étape 11 ; rappels.py). */
+  '{nom} : les heures creuses commencent',
+  'Les heures creuses commencent',
+  '{nom} : le moment le moins cher commence',
+  'Le moment le moins cher commence',
 ];
 
 /* Ce que le serveur dit ou montre SANS passer par le telephone (chantier Mode

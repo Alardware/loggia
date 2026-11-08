@@ -2,7 +2,7 @@
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
 import { useState, useMemo, useRef, useEffect, useCallback, Suspense } from 'react';
 import { formatEcran, vuePiecesDe, poserVuePieces, grilleDuFormat, poserGrille, sansPart } from '../disposition.js';
-import { cfgVal, cfgSet, accueilDuProfil, cfgRecue, appareilPropre, LOGGIA_RESOLVED, compteOrdinaire, plateformeDe, voisinsDe, nomAppareilDe, medPlayers, LOGGIA_INDEX, secAlarm, switchLights, ficheAppareil, enHaids } from '../state.js';
+import { cfgVal, cfgSet, accueilDuProfil, cfgRecue, appareilPropre, LOGGIA_RESOLVED, compteOrdinaire, plateformeDe, appareilDe, voisinsDe, nomAppareilDe, medPlayers, LOGGIA_INDEX, secAlarm, switchLights, ficheAppareil, enHaids } from '../state.js';
 import { CIEL_HA, CIEL_SOMBRES } from '../wxpresets.js';
 import { enPanne, gestesCover } from '../outils.js';
 import { uniteTemp } from '../unites.js';
@@ -57,9 +57,15 @@ import { Header } from '../chrome/entete.jsx';
 import { OutdoorModal, RoomComfortModal } from '../vues/piece.jsx';
 import { zonesQuiChauffent } from '../vues/objets.jsx';
 import { voletsCommandables } from '../vues/volets.jsx';
+import { ActionsMoment } from './actionsmoment.jsx';
+import { useAbsence, CarteAbsence } from './absence.jsx';
+import { APPUI_LONG_MS, avalerProchainClic } from '../glisser.js';
+import { phraseAbsence } from '../absence.js';
 import { motCo2, zoneCo2, ChoixCamDispo, EDIT_BTN } from '../cartescustom/galerie.jsx';
 import { motPresence } from '../presence.js';
 import { ACC_CACHES_DEFAUT, ACC_AJOUTEES_DEFAUT, elaguerHisto, ACC_MAIN, ACC_RAIL, ACC_RENOMME, poserFantome, tailleParDefaut, cielSoleil, heureLocale, APPAREIL_ACTIF, LigneMoment, nomDuCycle, WeatherFx, Num, Skel, CartePieceEdition, PieceCard, FavorisAccueil, ScenariosAccueil, PlanPieces, CarteAttention, OngletsAccueil, ACC_NOMS, WeatherGL, FeuilleAgenda, FichePiece, BRIQUES_PIECE } from './briques.jsx';
+import { annulable } from '../annuler.js';
+import { nomIntegration, integrationDeLaPanne } from '../pannes.js';
 
 /* L’agenda de l’Accueil : la plage demandée, le jour choisi, la feuille ouverte.
  * Sorti de `Dashboard` tel quel (lot 5 de l’audit du 28/10, étape d ; ADR 0283) : ses entrées et ses sorties sont nommées. */
@@ -564,21 +570,26 @@ function useGlisserPieces({ editMode, grille, saveGrille, tactile, wide }) {
   const pieceSouris = useRef(null);
   const ordrePieces =(noms) => { const sauve = (grille.piecesOrdre || []).filter(n => noms.indexOf(n) >= 0); return [...sauve, ...noms.filter(n => sauve.indexOf(n) < 0)]; };
   const debutPiece = (e, id, noms) => {
-    if (!editMode) return;
+    /* Hors édition (05/11, étape 5 du rapport sur l'usage) : un appui long — au doigt comme à la souris — range la tuile ; un
+     * toucher court ou un clic l'ouvrent comme avant. Le pointeur n'est capturé qu'à la saisie : capturé dès l'appui, le clic
+     * partait vers la tuile, et la pièce ne s'ouvrait plus. */
+    const libre = !editMode;
+    if (libre && e.button > 0) return;
     // La surface de la tuile EST la tuile (lot 13) : son appui la saisit.
     if (e.target.closest && e.target.closest('button:not(.o-surface), [role="switch"], input')) return;
-    e.stopPropagation();
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    if (!libre) { e.stopPropagation(); try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} }
     const hote = e.currentTarget;
-    if (e.pointerType === 'touch') {
+    const doigt = e.pointerId;
+    if (e.pointerType === 'touch' || libre) {
       pieceDebut.current = { x: e.clientX, y: e.clientY, id, noms };
       clearTimeout(pieceTimer.current);
       pieceTimer.current = setTimeout(() => {
         if (!pieceDebut.current) return;
+        if (libre) { try { hote.setPointerCapture(doigt); } catch { /* le doigt est parti */ } }
         try { if (navigator.vibrate) navigator.vibrate(35); } catch {}
         pieceFantome.current = poserFantome(hote, pieceDebut.current.x, pieceDebut.current.y);
         setPieceDrag({ id: pieceDebut.current.id, noms: pieceDebut.current.noms, c: 0, r: 0 });
-      }, 200);
+      }, libre ? APPUI_LONG_MS : 200);
       return;
     }
     e.preventDefault();
@@ -614,7 +625,11 @@ function useGlisserPieces({ editMode, grille, saveGrille, tactile, wide }) {
   const finPiece = () => {
     clearTimeout(pieceTimer.current); pieceDebut.current = null;
     pieceSouris.current = null;
-    if (pieceFantome.current) { pieceFantome.current.lever(); pieceFantome.current = null; }
+    if (pieceFantome.current) {
+      pieceFantome.current.lever(); pieceFantome.current = null;
+      // Hors édition, la tuile rangée ne s'ouvre pas au lâcher (étape 5).
+      if (!editMode) avalerProchainClic();
+    }
     if (pieceDrag && pieceDrag.c) {
       const noms = pieceDrag.noms;
       saveGrille({ places: nettoyer(poser(grille.places, noms, taillesDe(noms), pieceDrag.id, pieceDrag.c, pieceDrag.r, piecesCols), noms) });
@@ -741,6 +756,9 @@ function useAttentionAccueil({ a, dashHass, sante, sectionMasquee }) {
     voisins: voisinsDe,
     // Un défaut d'appareil (`problem`, ADR 0307) se dit au nom de l'appareil.
     nomAppareil: nomAppareilDe,
+    // L'appareil d'une entité (06/11, étape 9) : « Zigbee2MQTT ne répond plus · 5 appareils ».
+    appareil: appareilDe,
+    nomIntegration: (p, pont) => nomIntegration(integrationDeLaPanne(p, pont)),
     // La couleur Tempo du lendemain (chantier G3, E4) : « Demain : jour rouge », seulement s'il l'est.
     tempoDemain: enHaids().tempoDemain || null,
     // La vigilance de la maison, celle du widget (ADR 0310) : rouge, un point ; l'orange va à « En ce moment ».
@@ -931,7 +949,9 @@ function useLumieresAccueil({ a, dashHass, lightsSig, noms }) {
     const svc = (libres.length ? libres : ms).some(l => l.on) ? 'turn_off' : 'turn_on';
     const ids = (svc === 'turn_off' ? libres : ms).map(l => l.id);
     if (!ids.length) return;
-    commanderService(dashHass, ids, 'homeassistant', svc, { entity_id: ids });
+    // Rattrapable cinq secondes (06/11, étape 7).
+    annulable(svc === 'turn_off' ? tr('{piece} : lumières éteintes', { piece: name }) : tr('{piece} : lumières allumées', { piece: name }),
+      () => commanderService(dashHass, ids, 'homeassistant', svc, { entity_id: ids }));
   };
   // ── Volets et clim par pièce : les minis des tuiles ──────────────────────
   // Agir sans ouvrir la pièce. Double chemin de rattachement, comme les
@@ -977,7 +997,7 @@ function useLumieresAccueil({ a, dashHass, lightsSig, noms }) {
       const p = st.attributes && st.attributes.current_position;
       return !coverFerme(st, p != null ? Math.round(p) : (st.state === 'open' ? 100 : 0));
     });
-    return { open, onToggle: () => { commanderService(dashHass, ex.covers, 'cover', open ? 'close_cover' : 'open_cover', { entity_id: ex.covers }); } };
+    return { open, onToggle: () => { annulable(open ? tr('Volets fermés') : tr('Volets ouverts'), () => commanderService(dashHass, ex.covers, 'cover', open ? 'close_cover' : 'open_cover', { entity_id: ex.covers })); } };
   };
   // ── Héros contextuel : « ce qui compte maintenant » ──────────────────────
   // TOUS les candidats, par intérêt : les lecteurs qui jouent (les plus
@@ -1172,6 +1192,8 @@ function BanniereAccueil({ a, actifsStat, alarmeTuile, attentionLigne, avatars, 
                 * ligne. La pastille s'aligne donc sur la PREMIERE ligne, et le
                 * texte garde sa colonne. */}
               <span className="o-greet-facts" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}>{attentionLigne && <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 5, background: couleurAcc, boxShadow: '0 0 8px ' + couleurAcc, animation: animationNiveau(niveauMax(points)) }} />}<span style={{ flex: 1, minWidth: 0 }}>{[...(attentionLigne ? [resumeAttention(points)] : []), ...faits.txt].join(' · ')}{a && a.inTemp != null ? ` · ${dec(a.inTemp, 1)} °${a.inTempUnite}` : ''}</span></span>
+              {/* Les actions du moment (04/11, étape 1) : ce qu'on fait d'habitude à cette heure-là, seulement si c'est utile. */}
+              {!editMode && <ActionsMoment hass={a && a.hass} lumieres={(faits && faits.lum) || 0} />}
           </div>
           {(() => {
             /* Une metrique a zero ne dit rien : « 0 / 4 ouvrants ouverts »
@@ -1269,7 +1291,7 @@ function BanniereAccueil({ a, actifsStat, alarmeTuile, attentionLigne, avatars, 
 
 /* Les sections personnalisables de l’Accueil : scènes rapides, pièces, caméras, et le rail. Ce bloc était une fonction appelée sur place dans le rendu ; il en garde le corps.
  * Sorti de `Dashboard` tel quel (lot 5 de l’audit du 28/10, étape d ; ADR 0283) : ses entrées et ses sorties sont nommées. */
-function SectionsAccueil({ Sec, a, agenda, ambianceDe, bandeauCollecte, camDispo, cams, clavierPiece, dashHass, dc, debutPiece, editMode, etageChoisi, etatsAcc, etroitPieces, finPiece, formatGrille, grille, jourChoisi, momentRows, mouvPiece, nEnCours, onNav, onOpenRoom, ordinaire, ordreDe, ordrePieces, pageDemandee, pieceDrag, pieces, piecesCols, planActif, points, poserCam, poserGrillePieces, poserRail, relireTodos, retirerPiece, roomClimInfo, roomCoversInfo, roomLightsOf, roomMainsOf, saveGrille, setAgendaOuvert, setEtageChoisi, setJourChoisi, setPageDemandee, setPieceSheet, setVuePieces, taches, taillesDe, toggleRoomLights, veillesEtat, veilleuses, vuePieces, wide, wideXL }) {
+function SectionsAccueil({ Sec, a, absence = null, agenda, ambianceDe, bandeauCollecte, camDispo, cams, clavierPiece, dashHass, dc, debutPiece, editMode, etageChoisi, etatsAcc, etroitPieces, finPiece, formatGrille, grille, jourChoisi, momentRows, mouvPiece, nEnCours, onNav, onOpenRoom, ordinaire, ordreDe, ordrePieces, pageDemandee, pieceDrag, pieces, piecesCols, planActif, points, poserCam, poserGrillePieces, poserRail, relireTodos, retirerPiece, roomClimInfo, roomCoversInfo, roomLightsOf, roomMainsOf, saveGrille, setAgendaOuvert, setEtageChoisi, setJourChoisi, setPageDemandee, setPieceSheet, setVuePieces, taches, taillesDe, toggleRoomLights, veillesEtat, veilleuses, vuePieces, wide, wideXL }) {
           const inner = pieces;
           /* LES ETAGES (05/10). Home Assistant tient un registre d'etages et
             * Loggia le lisait deja sans jamais s'en servir. Il FILTRE les pieces
@@ -1372,10 +1394,12 @@ function SectionsAccueil({ Sec, a, agenda, ambianceDe, bandeauCollecte, camDispo
                    * au pointeur ; le focus, le nom et les flèches sont à sa
                    * surface. */
                   <div key={p.name} data-piece={p.name} className={[t === 'c' ? 'o-chiprow1' : '', editMode ? 'o-pointille' : '', saisie ? 'o-saisie' : ''].filter(Boolean).join(' ') || undefined}
-                    onPointerDown={editMode ? (e) => debutPiece(e, p.name, inner.map(x => x.name)) : undefined}
-                    onPointerMove={editMode ? mouvPiece : undefined}
-                    onPointerUp={editMode ? finPiece : undefined}
-                    onPointerCancel={editMode ? finPiece : undefined}
+                    /* Hors édition aussi (05/11, étape 5) : un appui long — doigt ou souris — range la tuile ; `debutPiece` laisse
+                      * le toucher court et le clic ouvrir la pièce. */
+                    onPointerDown={(e) => debutPiece(e, p.name, inner.map(x => x.name))}
+                    onPointerMove={mouvPiece}
+                    onPointerUp={finPiece}
+                    onPointerCancel={finPiece}
                     /* Mosaique tablette : la COLONNE est imposee, la rangee
                       * non.
                       *
@@ -1397,7 +1421,7 @@ function SectionsAccueil({ Sec, a, agenda, ambianceDe, bandeauCollecte, camDispo
                         * (index.css) : en ligne, ils battaient `:focus-visible`
                         * et la tuile au focus ne se voyait plus au clavier
                         * (audit du 03/10). */
-                      ...(editMode ? { '--o-pointille-ecart': '2px', borderRadius: 14, cursor: 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' } : {}) }}>
+                      ...(editMode ? { '--o-pointille-ecart': '2px', borderRadius: 14, cursor: 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' } : { userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }) }}>
                     {/* La SURFACE de la tuile en édition (lot 13 de l'audit du
                       * 03/10) : le focus, le nom et les flèches, que portait
                       * l'enveloppe en `role="button"` — un rôle qui taisait la
@@ -1420,7 +1444,7 @@ function SectionsAccueil({ Sec, a, agenda, ambianceDe, bandeauCollecte, camDispo
               })}
               {/* La case visée pendant qu'on déplace : elle se montre, rien
                 * d'autre ne bouge. Au lâcher, la carte s'y pose. */}
-              {editMode && pieceDrag && pieceDrag.c > 0 && (
+              {pieceDrag && pieceDrag.c > 0 && (
                 <div aria-hidden="true" style={{ gridColumn: pieceDrag.c, gridRow: pieceDrag.r + ' / span ' + hauteurCarte(piecesTailles[pieceDrag.id]),
                   borderRadius: 14, border: '2px dashed var(--o-accent)', background: 'rgba(var(--o-accent-rgb),.12)', pointerEvents: 'none' }} />
               )}
@@ -1585,7 +1609,7 @@ function SectionsAccueil({ Sec, a, agenda, ambianceDe, bandeauCollecte, camDispo
           const co2Maison = seuilCo2(veillesEtat);
           const co2Pire = pireCapteur((a && a.rooms) ? a.rooms.filter(r => r.co2Id).map(r => ({ id: r.co2Id, piece: r.name, valeur: r.co2, seuil: r.co2Seuil })) : [], co2Maison);
           const co2Action = co2Pire ? actionAerer({ ventilation: ventilationVeille(veillesEtat, etatsAcc), volets: voletsDeLaZone(LOGGIA_INDEX, etatsAcc, co2Pire.id) }) : null;
-          const aerer = (act) => commanderService(dashHass, act.ids, act.domaine, act.service, { entity_id: act.ids });
+          const aerer = (act) => annulable(tr('Aération lancée'), () => commanderService(dashHass, act.ids, act.domaine, act.service, { entity_id: act.ids }));
           const secsRail = {
             attention: points.length ? <CarteAttention points={points} onNav={onNav} /> : null,
             meteo: meteoRailId ? <CarteMeteo hass={dashHass} onOpen={dc.ouvrir} /> : null,
@@ -1596,6 +1620,8 @@ function SectionsAccueil({ Sec, a, agenda, ambianceDe, bandeauCollecte, camDispo
           };
           const renduMain = ordreDe('main').map(id => secsMain[id] ? Sec('main', id, secsMain[id]) : null).filter(Boolean);
           const renduRail = ordreDe('rail').map(id => secsRail[id] ? Sec('rail', id, secsRail[id]) : null).filter(Boolean);
+          // « Pendant votre absence » (05/11, étape 3) : en tête du rail, hors édition, jusqu'à ce qu'on la ferme — pas une section qu'on range.
+          if (absence && !editMode) renduRail.unshift(<CarteAbsence key="absence" absence={absence} />);
           // Mobile et tablette : deux onglets, « Maison » et « En ce moment ».
           if (!wide) return <OngletsAccueil maison={renduMain} moment={renduRail} edit={editMode} demande={pageDemandee} onDemande={() => setPageDemandee(null)} />;
           return (
@@ -1761,7 +1787,7 @@ function Dashboard({ planActif = true, editMode = false, onEnt, onToggleEdit, sa
     const al = (cfgAl && S[cfgAl] && S[cfgAl].state !== 'unavailable') ? cfgAl
       : Object.keys(S).find(x => x.indexOf('alarm_control_panel.') === 0 && S[x] && S[x].state !== 'unavailable');
     if (al && S[al].state === 'triggered') alerte = true;
-    return { txt: out, alerte };
+    return { txt: out, alerte, lum };
   }, [a]);
   const { cams } = useCamerasAccueil({ a });
   const _dLv = { label: tr('Lave-vaisselle'), iconKey: 'dishwasher', phase: tr('Éteint'), color: 'var(--o-text3)', active: false, valueIcon: 'timer', valueText: '--:--', bar: null };
@@ -1773,6 +1799,9 @@ function Dashboard({ planActif = true, editMode = false, onEnt, onToggleEdit, sa
   // ── Layout PC (≥1180) : rail « En cours / Rappels » accolé à la zone Pièces+Caméras ──
   const wideXL = useWide(1440); // tablette paysage (1180-1439) : rail plus étroit, cartes pièces prioritaires
   const dashHass = a && a.hass;
+  /* « Pendant votre absence » (05/11, étape 3) : la carte en tête du rail, et un mot dans la phrase du bandeau — au
+   * téléphone, le rail est la seconde page. Rien en édition. */
+  const absence = useAbsence(dashHass, !editMode);
   const { ordinaire, veillesEtat, etatsAcc, points, couleurAcc, attentionLigne } = useAttentionAccueil({ a, dashHass, sante, sectionMasquee });
   const { pageDemandee, setPageDemandee, pieceCo2Max, poserRail, voirMoment } = useRailAccueil({ a, wide });
   /* L'AMBIANCE de chaque piece (ADR 0029) : une passe sur les etats — lecteurs
@@ -1938,14 +1967,14 @@ function Dashboard({ planActif = true, editMode = false, onEnt, onToggleEdit, sa
           * plus bas que le titre des autres vues, qui n ont que celui de la
           * page. « Remonte Pieces au meme niveau que les autres vues, et fais
           * de meme pour l accueil. » Le bas garde le sien. */}
-        <BanniereAccueil a={a} actifsStat={actifsStat} alarmeTuile={alarmeTuile} attentionLigne={attentionLigne} avatars={avatars} couleurAcc={couleurAcc} editMode={editMode} faits={faits} metricDiv={metricDiv} modes={modes} nEnCours={nEnCours} onNav={onNav} onOpenRoom={onOpenRoom} ouvStat={ouvStat} pieceCo2Max={pieceCo2Max} points={points} salut={salut} setOverride={setOverride} userName={userName} voirMoment={voirMoment} wx={wx} wxFx={wxFx} />
+        <BanniereAccueil a={a} actifsStat={actifsStat} alarmeTuile={alarmeTuile} attentionLigne={attentionLigne} avatars={avatars} couleurAcc={couleurAcc} editMode={editMode} faits={absence && faits ? { ...faits, txt: [...faits.txt, phraseAbsence(absence)] } : faits} metricDiv={metricDiv} modes={modes} nEnCours={nEnCours} onNav={onNav} onOpenRoom={onOpenRoom} ouvStat={ouvStat} pieceCo2Max={pieceCo2Max} points={points} salut={salut} setOverride={setOverride} userName={userName} voirMoment={voirMoment} wx={wx} wxFx={wxFx} />
 
         {/* Les favoris sont une SECTION comme les autres depuis le 01/09 :
             déplaçable, masquable, et éditable en place (voir secsMain). */}
 
         {/* SECTIONS PERSONNALISABLES — scènes rapides, pièces, caméras, et le rail.
             PC ≥1180 : rail accolé à droite. Mobile/tablette : empilement. */}
-        <SectionsAccueil Sec={Sec} a={a} agenda={agenda} ambianceDe={ambianceDe} bandeauCollecte={bandeauCollecte} camDispo={camDispo} cams={cams} clavierPiece={clavierPiece} dashHass={dashHass} dc={dc} debutPiece={debutPiece} editMode={editMode} etageChoisi={etageChoisi} etatsAcc={etatsAcc} etroitPieces={etroitPieces} finPiece={finPiece} formatGrille={formatGrille} grille={grille} jourChoisi={jourChoisi} momentRows={momentRows} mouvPiece={mouvPiece} nEnCours={nEnCours} onNav={onNav} onOpenRoom={onOpenRoom} ordinaire={ordinaire} ordreDe={ordreDe} ordrePieces={ordrePieces} pageDemandee={pageDemandee} pieceDrag={pieceDrag} pieces={pieces} piecesCols={piecesCols} planActif={planActif} points={points} poserCam={poserCam} poserGrillePieces={poserGrillePieces} poserRail={poserRail} relireTodos={relireTodos} retirerPiece={retirerPiece} roomClimInfo={roomClimInfo} roomCoversInfo={roomCoversInfo} roomLightsOf={roomLightsOf} roomMainsOf={roomMainsOf} saveGrille={saveGrille} setAgendaOuvert={setAgendaOuvert} setEtageChoisi={setEtageChoisi} setJourChoisi={setJourChoisi} setPageDemandee={setPageDemandee} setPieceSheet={setPieceSheet} setVuePieces={setVuePieces} taches={taches} taillesDe={taillesDe} toggleRoomLights={toggleRoomLights} veillesEtat={veillesEtat} veilleuses={veilleuses} vuePieces={vuePieces} wide={wide} wideXL={wideXL} />
+        <SectionsAccueil Sec={Sec} a={a} absence={absence} agenda={agenda} ambianceDe={ambianceDe} bandeauCollecte={bandeauCollecte} camDispo={camDispo} cams={cams} clavierPiece={clavierPiece} dashHass={dashHass} dc={dc} debutPiece={debutPiece} editMode={editMode} etageChoisi={etageChoisi} etatsAcc={etatsAcc} etroitPieces={etroitPieces} finPiece={finPiece} formatGrille={formatGrille} grille={grille} jourChoisi={jourChoisi} momentRows={momentRows} mouvPiece={mouvPiece} nEnCours={nEnCours} onNav={onNav} onOpenRoom={onOpenRoom} ordinaire={ordinaire} ordreDe={ordreDe} ordrePieces={ordrePieces} pageDemandee={pageDemandee} pieceDrag={pieceDrag} pieces={pieces} piecesCols={piecesCols} planActif={planActif} points={points} poserCam={poserCam} poserGrillePieces={poserGrillePieces} poserRail={poserRail} relireTodos={relireTodos} retirerPiece={retirerPiece} roomClimInfo={roomClimInfo} roomCoversInfo={roomCoversInfo} roomLightsOf={roomLightsOf} roomMainsOf={roomMainsOf} saveGrille={saveGrille} setAgendaOuvert={setAgendaOuvert} setEtageChoisi={setEtageChoisi} setJourChoisi={setJourChoisi} setPageDemandee={setPageDemandee} setPieceSheet={setPieceSheet} setVuePieces={setVuePieces} taches={taches} taillesDe={taillesDe} toggleRoomLights={toggleRoomLights} veillesEtat={veillesEtat} veilleuses={veilleuses} vuePieces={vuePieces} wide={wide} wideXL={wideXL} />
 
       </div>
       {roomPop && (() => {

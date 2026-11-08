@@ -62,7 +62,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 MODULES_VIVANTS = (
     "rechargement",
     "alertes", "chauffage", "distributeurs", "eau", "enfant", "fenetres", "interrupteurs", "lumieres", "minuteurs",
-    "nuit", "presence", "prises", "robots", "scenarios", "sirene", "veilles", "volets", "regles",
+    "nuit", "presence", "prises", "rappels", "robots", "scenarios", "sirene", "veilles", "volets", "regles",
 )
 
 
@@ -130,6 +130,10 @@ MODULES = (
     # Les prises (chantier Prises) : leur configuration, et le cycle de
     # l'electromenager suivi meme ecran ferme.
     Module("prises", "LoggiaPrises", _REGLES, _REGLES, "prises indisponibles"),
+    # Les rappels (07/11, usage etape 11) : « me prevenir a 22 h 30 », le geste
+    # d'un conseil de la vue Energie, tenu ICI et non dans l'onglet. Apres les
+    # prises, qu'il regarde au moment de prevenir (un cycle deja lance).
+    Module("rappels", "LoggiaRappels", _REGLES, _REGLES, "rappels indisponibles"),
     # Le carnet des lumieres (chantier Lumieres, L1) : chaque allumage,
     # extinction et reglage, avec son niveau et son contexte, note ecran
     # ferme. Il ne commande rien : le magasin lui suffit.

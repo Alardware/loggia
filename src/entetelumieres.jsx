@@ -32,6 +32,7 @@ import { commanderService } from './actions.js';
 import { enPanne } from './outils.js';
 import { veilleusesDe, veilleusesLues, estEpargnee } from './lumieres.js';
 import { avancerLumieres, avanceDe, useAvancesLumieres } from './lumieresetat.js';
+import { annulable } from './annuler.js';
 
 /* Allumée à l'écran : l'avance d'un geste d'abord (« Tout éteindre »), puis la maison. Une muette ne l'est jamais. */
 const allumee = (id, st, maintenant) => {
@@ -96,7 +97,7 @@ export default function EnteteLumieres({ hass, titre, ids }) {
         {allumees ? trN(allumees, '{n} allumée sur {t}', '{n} allumées sur {t}', { t: total }) : tr('Toutes éteintes')}
       </span>
       {cibles.length > 0 && (
-        <button type="button" ref={refPuce} onClick={() => toutEteindre(hass, cibles)} aria-label={tr('Tout éteindre')} title={tr('Tout éteindre')} style={PUCE}>
+        <button type="button" ref={refPuce} onClick={() => annulable(tr('Lumières éteintes'), () => toutEteindre(hass, cibles))} aria-label={tr('Tout éteindre')} title={tr('Tout éteindre')} style={PUCE}>
           <Fi i="power" size={12} /><span className="o-lumieres-tout-mot">{tr('Tout éteindre')}</span>
         </button>
       )}

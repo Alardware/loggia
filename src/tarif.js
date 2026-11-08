@@ -292,3 +292,128 @@ export function fenetreMoinsChere(points, maintenant, dureeMin = 120) {
   }
   return meilleur;
 }
+
+/* ── Les heures creuses À VENIR (07/11, usage étape 11) ───────────────────────
+ *
+ * `prochainTarif` ne disait jamais « Heures creuses à partir de… » : il
+ * cherchait la prochaine plage dans l'historique du JOUR, qui s'arrête à
+ * maintenant — l'avenir n'y est pas. Pour l'annoncer, deux sources, dans cet
+ * ordre :
+ *
+ *  1. les plages ANNONCÉES : une intégration qui publie ses créneaux en
+ *     attribut de son capteur (« 22:30 - 06:30 ») — lues par leur FORME, sans
+ *     liste d'intégrations, comme la prévision d'un prix (`lirePrevision`) ;
+ *  2. les plages APPRISES : celles d'hier, quand avant-hier a eu les mêmes à
+ *     dix minutes près. Un contrat qui change le week-end ne se devine pas :
+ *     sans accord des deux jours, on se tait.
+ *
+ * Et le capteur a le dernier mot : des plages qui disent « creuses » quand il
+ * dit « pleines » (ou l'inverse) sont fausses, rien ne s'annonce.
+ *
+ * Une plage d'un jour s'écrit en minutes depuis minuit : `{ de, a }`. Celle qui
+ * passe minuit s'annonce `a <= de` (22:30 → 06:30) ; apprise, elle est coupée
+ * en deux à minuit, et les deux morceaux se refondent une fois posés sur le
+ * calendrier (`plagesAutour`).
+ */
+const JOUR_MS = 86400000;
+const HEURE = String.raw`(\d{1,2})\s*[:hH]\s*(\d{2})(?::\d{2})?`;
+const PLAGE = new RegExp(String.raw`^\s*${HEURE}\s*[-–—]\s*${HEURE}\s*$`);
+const SEULE = new RegExp(String.raw`^\s*${HEURE}\s*$`);
+const BORNES = [['start', 'end'], ['debut', 'fin'], ['from', 'to']];
+
+const minutes = (h, m) => { const n = Number(h) * 60 + Number(m); return Number(m) < 60 && n <= 1440 ? n : null; };
+const plage = (de, a) => (de != null && a != null && de !== a ? { de, a: a === 0 ? 1440 : a } : null);
+/** Minuit (heure locale) du jour de `ms`. */
+const minuitDe = (ms) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
+/** L'instant à `min` minutes de minuit, à l'heure locale — un jour de changement d'heure compris. */
+const aMinute = (minuit, min) => { const d = new Date(minuit); d.setHours(0, min, 0, 0); return d.getTime(); };
+
+function plageDeTexte(v) {
+  const m = typeof v === 'string' ? PLAGE.exec(v) : null;
+  return m ? plage(minutes(m[1], m[2]), minutes(m[3], m[4])) : null;
+}
+
+function plageDObjet(o) {
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+  for (const [x, y] of BORNES) {
+    const a = typeof o[x] === 'string' ? SEULE.exec(o[x]) : null, b = typeof o[y] === 'string' ? SEULE.exec(o[y]) : null;
+    if (a && b) return plage(minutes(a[1], a[2]), minutes(b[1], b[2]));
+  }
+  return null;
+}
+
+/** Les plages qu'annoncent les attributs d'un capteur de créneau : `[{ de, a }]`, triées, sans doublon. */
+export function plagesAnnoncees(attributs) {
+  if (!attributs || typeof attributs !== 'object') return [];
+  const vues = new Map();
+  const prendre = (p) => { if (p) vues.set(p.de + '-' + p.a, p); };
+  for (const v of Object.values(attributs)) {
+    if (typeof v === 'string') prendre(plageDeTexte(v));
+    else if (Array.isArray(v)) v.forEach(x => prendre(typeof x === 'string' ? plageDeTexte(x) : plageDObjet(x)));
+    else prendre(plageDObjet(v));
+  }
+  return [...vues.values()].sort((x, y) => x.de - y.de);
+}
+
+/** Les plages d'un jour, en minutes, coupées à ses deux minuits. */
+function plagesDuJour(plages, minuit) {
+  const fin = minuitDe(minuit + JOUR_MS + 3 * 3600e3);
+  const enMinutes = (ms) => (ms >= fin ? 1440 : new Date(ms).getHours() * 60 + new Date(ms).getMinutes());
+  return plages.filter(p => p.fin > minuit && p.debut < fin)
+    .map(p => ({ de: enMinutes(Math.max(p.debut, minuit)), a: enMinutes(Math.min(p.fin, fin)) }))
+    .filter(p => p.a > p.de);
+}
+
+/**
+ * Les plages APPRISES : celles d'hier, quand avant-hier a eu les mêmes à dix
+ * minutes près. `etats` : l'historique du capteur depuis minuit d'avant-hier.
+ */
+export function plagesApprises(etats, maintenant) {
+  const aujourdhui = minuitDe(maintenant);
+  const hier = minuitDe(aujourdhui - 12 * 3600e3), avant = minuitDe(hier - 12 * 3600e3);
+  const plages = plagesVraies(etats, avant, aujourdhui);
+  const j1 = plagesDuJour(plages, hier), j2 = plagesDuJour(plages, avant);
+  if (!j1.length || j1.length !== j2.length) return [];
+  return j1.every((p, i) => Math.abs(p.de - j2[i].de) <= 10 && Math.abs(p.a - j2[i].a) <= 10) ? j1 : [];
+}
+
+/** Les plages d'un jour posées sur le calendrier, de la veille au lendemain : `[{ debut, fin }]`, celles qui se touchent fondues. */
+export function plagesAutour(plages, maintenant) {
+  const aujourdhui = minuitDe(maintenant);
+  const posees = [];
+  for (let d = -1; d <= 1; d++) {
+    const minuit = minuitDe(aujourdhui + d * JOUR_MS + 3 * 3600e3);
+    for (const p of plages || []) posees.push({ debut: aMinute(minuit, p.de), fin: aMinute(minuit, p.a > p.de ? p.a : 1440 + p.a) });
+  }
+  posees.sort((x, y) => x.debut - y.debut);
+  const fondues = [];
+  for (const p of posees) {
+    const der = fondues[fondues.length - 1];
+    if (der && p.debut <= der.fin + 60e3) der.fin = Math.max(der.fin, p.fin); else fondues.push({ ...p });
+  }
+  return fondues;
+}
+
+/**
+ * Les heures creuses en cours ou à venir : `{ enHc, debut, fin }` — en cours,
+ * la plage où l'on est ; sinon la prochaine. `null` quand rien ne le dit, ou
+ * quand les plages contredisent le capteur (`enHc`).
+ */
+export function heuresCreusesAVenir({ annoncees = [], apprises = [], enHc = null, maintenant } = {}) {
+  const jour = annoncees && annoncees.length ? annoncees : apprises || [];
+  if (!jour.length || enHc == null || !Number.isFinite(maintenant)) return null;
+  const plages = plagesAutour(jour, maintenant);
+  const ici = plages.find(p => maintenant >= p.debut && maintenant < p.fin) || null;
+  if (!!ici !== enHc) return null;
+  if (ici) return { enHc: true, debut: ici.debut, fin: ici.fin };
+  const suivante = plages.find(p => p.debut > maintenant);
+  return suivante ? { enHc: false, debut: suivante.debut, fin: suivante.fin } : null;
+}
+
+/** La part (0 à 1) de l'intervalle `[debut, fin[` passée dans des plages `[{ debut, fin }]`. */
+export function partDans(debut, fin, plages) {
+  if (!(fin > debut)) return 0;
+  let dans = 0;
+  for (const p of plages || []) dans += Math.max(0, Math.min(fin, p.fin) - Math.max(debut, p.debut));
+  return Math.min(1, dans / (fin - debut));
+}

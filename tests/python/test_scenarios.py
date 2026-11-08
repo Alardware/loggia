@@ -792,3 +792,125 @@ def test_seul_l_ordre_du_fondu_porte_le_contexte_annonce_au_carnet(creer):
     assert carnet.origines == [fondu.id]
     assert allumage.id != fondu.id, "l'allumage n'est pas le fondu : le carnet le note"
     assert fondu.parent_id == lancement.id and fondu.user_id == "u-papa" == allumage.user_id
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# « Enregistrer la maison telle qu'elle est » (06/11, etape 8 du rapport sur l'usage) : on regle les lumieres et les
+# volets a la main, on enregistre, et le scenario les remet ainsi - appareil par appareil, ce qui differe seulement.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def etats_film():
+    e = etats_de_base()
+    e["light.salon"] = FauxEtat("on", {"brightness": 51, "color_mode": "color_temp", "color_temp_kelvin": 2700,
+                                       "supported_color_modes": ["color_temp", "hs"],
+                                       "min_color_temp_kelvin": 2200, "max_color_temp_kelvin": 6500})
+    e["light.chambre"] = FauxEtat("on", {"brightness": 255, "color_mode": "hs", "hs_color": [30.04, 80.0],
+                                         "supported_color_modes": ["hs"]})
+    e["light.sdb"] = FauxEtat("off", {"supported_color_modes": ["brightness"]})
+    e["light.jardin"] = FauxEtat("unavailable")
+    e["cover.volet_salon"] = FauxEtat("open", {"current_position": 20, "supported_features": 15})
+    return e
+
+
+NUIT_VEILLEUSE = {"loggia_nuit": {"veilleuse": {"actif": True, "lampes": ["light.veilleuse"]}}}
+
+
+def test_la_maison_telle_qu_elle_est_retient_chaque_lampe_et_chaque_volet(creer):
+    s = creer(etats=etats_film(), partage=NUIT_VEILLEUSE)
+    etats = lancer(s.async_capturer())["etats"]
+    assert etats["light.salon"] == {"on": True, "niveau": 20, "blanc": 2700}
+    assert etats["light.chambre"] == {"on": True, "niveau": 100, "couleur": [30.0, 80.0]}
+    assert etats["light.sdb"] == {"on": False}
+    assert "light.veilleuse" not in etats, "jamais la veilleuse de la regle Nuit"
+    assert "light.jardin" not in etats, "un appareil injoignable n'est pas retenu"
+    assert "light.borne_led" not in etats, "une entite de configuration n'est pas une lampe"
+    assert etats["cover.volet_salon"] == {"position": 20}
+    assert etats["cover.volet_cuisine"] == {"ouvert": True}, "sans position : ouvert ou ferme"
+    assert "cover.garage" not in etats, "un garage n'est pas un volet"
+    # Une piece seulement, ou une famille seulement ; une piece sans nom ne retient rien.
+    assert set(lancer(s.async_capturer(["lumieres", "volets"], "piece", "Salon"))["etats"]) == {"light.salon", "cover.volet_salon"}
+    assert all(h.startswith("cover.") for h in lancer(s.async_capturer(["volets"]))["etats"])
+    assert lancer(s.async_capturer(["lumieres"], "piece", None))["etats"] == {}
+    with pytest.raises(ValueError):
+        lancer(s.async_capturer(["lumieres"], "vie"))
+
+
+def test_un_etat_retenu_se_valide(module):
+    v = module.valider_etats({"light.a": {"on": True, "niveau": 250, "blanc": 99999},
+                              "light.b": {"on": True, "couleur": [400, 120]},
+                              "switch.c": {"on": True, "niveau": 50},
+                              "cover.d": {"position": 140}, "cover.e": {"ouvert": 1}})
+    assert v == {"light.a": {"on": True, "niveau": 100, "blanc": 10000}, "light.b": {"on": True, "couleur": [40.0, 100.0]},
+                 "switch.c": {"on": True}, "cover.d": {"position": 100}, "cover.e": {"ouvert": True}}
+    assert module.valider_etats(None) is None
+    for mauvais in ({"lock.entree": {"on": True}}, {"alarm_control_panel.maison": {"on": False}}, {"light.a": "on"},
+                    {"light.a": {"on": True, "couleur": [1]}}, {"light.a": {"on": True, "niveau": "fort"}}, []):
+        with pytest.raises(ValueError):
+            module.valider_etats(mauvais)
+    with pytest.raises(module.RefusNomme):
+        module.valider_etats({f"light.l{i}": {"on": False} for i in range(module.MAX_ETATS + 1)})
+    s = module.valider_scenario({"nom": "Film", "actions": [], "etats": {"light.a": {"on": False}}})
+    assert s["etats"] == {"light.a": {"on": False}}
+    assert module.valider_scenario({"nom": "Film", "etats": None})["etats"] is None
+
+
+def test_lancer_la_maison_enregistree_ne_change_que_ce_qui_differe(creer, module):
+    s = creer(etats=etats_film())
+    lancer(s.async_enregistrer({"enregistrer": {"nom": "Film", "actions": [], "etats": {
+        "light.salon": {"on": True, "niveau": 20, "blanc": 2700},       # deja ainsi : rien
+        "light.chambre": {"on": False},                                  # allumee : on l'eteint
+        "light.sdb": {"on": True, "niveau": 40, "couleur": [200, 50]},   # sans couleur, elle : son niveau seul
+        "cover.volet_salon": {"position": 0},
+        "cover.volet_cuisine": {"ouvert": False},
+        "light.jardin": {"on": True},                                    # injoignable : passe
+    }}}))
+    film = next(x for x in module.effectifs(lancer(s.async_config())) if x["nom"] == "Film")
+    assert film["etats"]["cover.volet_salon"] == {"position": 0} and film["actions"] == []
+    r = lancer(s.async_lancer(film["id"], user_id="u1"))
+    assert all(ctx is not None and ctx.user_id == "u1" for *_, ctx in s.hass.services.appels), "une main, pas une regle"
+    assert [(d, sv, data) for d, sv, data, _ in s.hass.services.appels] == [
+        ("light", "turn_off", {"entity_id": ["light.chambre"]}),
+        ("light", "turn_on", {"entity_id": ["light.sdb"], "brightness_pct": 40}),
+        ("cover", "set_cover_position", {"entity_id": ["cover.volet_salon"], "position": 0}),
+        ("cover", "close_cover", {"entity_id": ["cover.volet_cuisine"]}),
+    ]
+    assert r["fait"] == [{"famille": "etat", "geste": "appliquer", "n": 4, "piece": None}] and r["n"] == 4
+
+
+def test_la_couleur_et_le_blanc_reviennent_quand_ils_ont_change(module):
+    maison = {"entites": {
+        "light.c": {"etat": "on", "attrs": {"brightness": 255, "color_mode": "color_temp", "color_temp_kelvin": 4000,
+                                            "supported_color_modes": ["color_temp", "hs"]}},
+        "light.w": {"etat": "on", "attrs": {"brightness": 128, "color_mode": "color_temp", "color_temp_kelvin": 6000,
+                                            "supported_color_modes": ["color_temp"], "max_color_temp_kelvin": 6500,
+                                            "min_color_temp_kelvin": 2700}},
+    }}
+    o = module.ordres_etats({"light.c": {"on": True, "niveau": 100, "couleur": [30, 80]},
+                             "light.w": {"on": True, "niveau": 50, "blanc": 2000}}, maison)
+    assert o == [("light", "turn_on", ["light.c"], {"brightness_pct": 100, "hs_color": [30, 80]}),
+                 ("light", "turn_on", ["light.w"], {"brightness_pct": 50, "color_temp_kelvin": 2700})]
+
+
+def test_la_maison_enregistree_respecte_les_droits_du_compte(creer, module):
+    s = creer(etats=etats_film(), config={"persos": [{"id": "perso_film", "nom": "Film", "actions": [],
+                                                        "etats": {"light.chambre": {"on": False},
+                                                                  "cover.volet_salon": {"position": 0}}}]})
+    ctrl = module.controle_de(_Compte(refusees=["light.chambre"]))
+    r = lancer(s.async_lancer("perso_film", user_id="u2", controle=ctrl))
+    assert [(d, sv) for d, sv, _, _ in s.hass.services.appels] == [("cover", "set_cover_position")]
+    assert r["refusees"] == 1 and r["n"] == 1
+
+
+def test_l_ecran_sait_que_le_serveur_retient_la_maison(creer):
+    s = creer(etats=etats_film(), config={"persos": [{"id": "perso_film", "nom": "Film", "actions": [],
+                                                        "etats": {"light.chambre": {"on": False},
+                                                                  "light.salon": {"on": True, "niveau": 20, "blanc": 2700}}}]})
+    e = lancer(s.async_etat())
+    assert e["instantane"] is True
+    film = next(x for x in e["scenarios"] if x["id"] == "perso_film")
+    assert film["etats"]["light.chambre"] == {"on": False}
+    assert film["resume"][-1] == {"famille": "etat", "geste": "appliquer", "portee": "maison", "piece": None,
+                                  "valeur": None, "si": None, "n": 1}
+    # Un scenario compose n'a pas d'etat retenu.
+    assert next(x for x in e["scenarios"] if x["id"] == "depart")["etats"] is None

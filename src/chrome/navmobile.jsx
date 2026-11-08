@@ -70,7 +70,7 @@ function MobileNav({ view, onNav, onMenu, menuOuvert = false, onAssistant = null
    * mots) et le bouton de l'assistant rend 8 px (index.css, `.o-nav-assist`) : le corps cède un demi-point, le polonais garde
    * ses mots entiers. */
   const [corps, setCorps] = useState({ px: 11, cap: null, marge: 2 });
-  const cell = (on) => ({ position: 'relative', flex: corps.cap ? '1 1 auto' : 1, minWidth: corps.cap ? 0 : 'auto', ...(corps.cap ? { maxWidth: corps.cap } : {}), display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '9px ' + corps.marge + 'px 7px', background: 'none', border: 'none', cursor: 'pointer', color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)', fontSize: corps.px, fontWeight: 700, WebkitTapHighlightColor: 'transparent' });
+  const cell = (on) => ({ position: 'relative', flex: corps.cap ? '1 1 auto' : 1, minWidth: corps.cap ? 0 : 'auto', ...(corps.cap ? { maxWidth: corps.cap } : {}), display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '9px ' + corps.marge + 'px 7px', background: 'none', border: 'none', cursor: 'pointer', color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)', fontSize: `calc(${corps.px}px * var(--o-texte, 1))`, fontWeight: 700, WebkitTapHighlightColor: 'transparent' });
   const libelle = { whiteSpace: 'nowrap', ...(corps.cap ? { maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' } : {}) };
   /* Sa hauteur RÉELLE, mesurée, pour que les feuilles du bas s'arrêtent
    * au-dessus d'elle : elle varie avec la zone sûre et la taille du texte,
@@ -87,6 +87,11 @@ function MobileNav({ view, onNav, onMenu, menuOuvert = false, onAssistant = null
       if (!libelles.length) return;
       // Largeurs NATURELLES à 11 px : le texte grandit en proportion du corps.
       const f = parseFloat(getComputedStyle(libelles[0]).fontSize) || 11;
+      /* La taille du texte (tailletexte.js) multiplie le corps : à « Grande », 11 px s'écrivent 12,65. Le corps choisi est
+       * celui d'AVANT ce facteur, pour que le texte écrit tienne ; le plancher, lui, reste 9,5 px ÉCRITS. À 320 px, le
+       * français tient à 10,6 et la « Grande » garde ces 10,6 entiers — un plancher agrandi (10,9) coupait « Scénar… »
+       * pour 3 % de texte en plus (démo, 08/11). Dès qu'il y a la place (375 px), la barre grandit en entier. */
+      const t = parseFloat(getComputedStyle(nav).getPropertyValue('--o-texte')) || 1;
       /* `scrollWidth` est arrondi à l'entier INFÉRIEUR : sur six libellés, jusqu'à 5 px de trop peu — à 320 px, « Menu »
        * sortait d'1 px de l'écran (lot 7). La largeur exacte du texte, quand il n'est pas coupé. */
       const naturels = libelles.map(el => Math.max(el.scrollWidth, el.getBoundingClientRect().width) * 11 / f);
@@ -96,11 +101,11 @@ function MobileNav({ view, onNav, onMenu, menuOuvert = false, onAssistant = null
       // Deux marges par case, et 2 px pour l'arrondi des mesures.
       const marge = nav.clientWidth <= 360 ? 3 : 2;
       const place = nav.clientWidth - autres - 2 * marge * libelles.length - 2;
-      const px = Math.max(9.5, Math.min(11, Math.floor(110 * place / naturel) / 10));
+      const px = Math.max(9.5 / t, Math.min(11, Math.floor(110 * place / (naturel * t)) / 10));
       let cap = null;
-      if (naturel * px / 11 > place) {
+      if (naturel * px * t / 11 > place) {
         // Les courts d'abord, entiers ; ce qui reste se partage entre les longs.
-        const tri = naturels.map(w => w * px / 11).sort((a, b) => a - b);
+        const tri = naturels.map(w => w * px * t / 11).sort((a, b) => a - b);
         let reste = place;
         for (let i = 0; i < tri.length; i++) {
           const part = reste / (tri.length - i);

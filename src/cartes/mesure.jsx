@@ -163,8 +163,9 @@ function useVueMesure(hass, id, label = null, actif = true) {
 /* Le nom d'une carte de mesure (C13) : deux lignes au plus, passé à la ligne ENTRE deux mots ; une troisième ligne, ou
  * un mot plus large que la carte, finit en « … ». Ses lignes font 18 px : deux tiennent dans les 184 de la carte, avec la
  * phrase et la barre (38 + 14 + 2 × 18 + 18 + 8 + 34 = 148 px de contenu, pour 150). Sur une carte étroite, la grille
- * commune le règle (`o-gab-nom`, 14 px), sur des lignes de 16 (`--o-nom-ligne`, index.css). */
-const NOM_MESURE = { ...RM_NAME, fontSize: 15, lineHeight: 'var(--o-nom-ligne, 18px)', whiteSpace: 'normal', overflowWrap: 'normal', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2 };
+ * commune le règle (`o-gab-nom`, 14 px), sur des lignes de 16 (`--o-nom-ligne`, index.css). Ses lignes suivent la taille
+ * du texte (07/11, étape 10 ; tailletexte.js) : fixes, elles rognaient le bas des lettres. */
+const NOM_MESURE = { ...RM_NAME, fontSize: 15, lineHeight: 'var(--o-nom-ligne, calc(18px * var(--o-texte, 1)))', whiteSpace: 'normal', overflowWrap: 'normal', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2 };
 
 /* La largeur d'une PHRASE de carte large, en em (Manrope 600 ; mesurée le 16/10, « Idéal · 47 % d’humidité » à 1 % près), plus
  * 3 % de marge : la phrase d'une carte large rétrécit de 12 à 10,5 px dans sa colonne, puis cède la place à sa forme de repli

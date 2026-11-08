@@ -118,7 +118,8 @@ test('le branchement : en option dans le rail, rien sans capteur, la couleur dit
   assert.ok(app.includes("co2: co2Pire ? <Co2Rail hass={dashHass} capteur={co2Pire} seuil={co2Pire.seuil} action={co2Action} onAgir={aerer} /> : null,"), 'sans capteur, pas de section — même en option');
   assert.ok(app.includes("a.rooms.filter(r => r.co2Id).map(r => ({ id: r.co2Id, piece: r.name, valeur: r.co2, seuil: r.co2Seuil }))"), 'les capteurs sont ceux des pièces, avec leur seuil');
   assert.ok(app.includes('const co2Maison = seuilCo2(veillesEtat);'), 'le seuil de la maison sert de defaut a qui n’en a pas');
-  assert.ok(app.includes("const aerer = (act) => commanderService(dashHass, act.ids, act.domaine, act.service, { entity_id: act.ids });"));
+  // ASSERTION MODIFIÉE (06/11, étape 7) : l'aération se rattrape cinq secondes (annuler.js), la commande reste la même.
+  assert.ok(app.includes("const aerer = (act) => annulable(tr('Aération lancée'), () => commanderService(dashHass, act.ids, act.domaine, act.service, { entity_id: act.ids }));"));
   const vue = lire('src', 'widgetsrail.jsx');
   const carte = vue.slice(vue.indexOf('export function Co2Rail('));
   assert.ok(!/#[0-9a-fA-F]{6}\b/.test(carte.replace(/#fff\b/g, '')), 'les teintes du rail, pas celles de la capture');

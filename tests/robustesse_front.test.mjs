@@ -141,7 +141,11 @@ test('les heures du journal et des règles suivent la langue choisie, pas celle 
 });
 
 test('un scénario refusé ou raté ne rend pas `null` : il remonte à l’écoute globale', () => {
-  const debut = app.indexOf('function lancerScenario(h, id) {');
+  /* ASSERTION MODIFIÉE (06/11, étape 7) : `lancerScenario` enveloppe désormais le lancement dans `annulable` (« Annuler »
+   * cinq secondes) ; l'appel au serveur et son refus vivent dans `lancerDirect`. Ni l'un ni l'autre n'avale le refus. */
+  const enveloppe = app.slice(app.indexOf('function lancerScenario(h, id) {'), app.indexOf('function lancerDirect(h, id) {'));
+  assert.ok(enveloppe.includes('() => lancerDirect(h, id)') && !enveloppe.includes('.catch('));
+  const debut = app.indexOf('function lancerDirect(h, id) {');
   const corps = app.slice(debut, app.indexOf('\n}', debut));
   assert.ok(!corps.includes('.catch(() => null)'));
   assert.ok(corps.includes("e.code = 'scenario_incomplet'"));

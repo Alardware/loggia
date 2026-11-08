@@ -29,6 +29,7 @@ import { hueScripts } from './lectures.js';
 import { dimmableLights, ctxLumieres, LOGGIA_INDEX } from './state.js';
 import { lumieresDe, veilleusesLues, sansEpargnees, capacitesLumiere } from './lumieres.js';
 import { ordresAmbiance, luminositeAmbiance } from './lumieresfiche.js';
+import { annulable } from './annuler.js';
 
 /* Le blanc chaud du repli « Blanc chaud » sans script, en kelvins : chaque lampe le borne à son propre blanc — l'ordre part par
  * `commander` (`set_color_temp`), donc par `planAction`, qui le ramène aux `min_` / `max_color_temp_kelvin` de l'ampoule (R7). */
@@ -211,7 +212,8 @@ export default function ScenesContent({ hass }) {
     const lampes = variablesRepli().map(id => ({ id, a: (S && S[id] && S[id].attributes) || {} }));
     for (const o of ordresAmbiance(sc, lampes, { bri })) commander(hass, o.id, o.capacite, o.valeur, null, o.options);
   };
-  const pickScene = (sc) => { setSel(sc.name); setBriOv(null); applyScene(sc, sc.brightness); };
+  // Rattrapables cinq secondes (06/11, étape 7) : l'ambiance, le blanc chaud, Éteindre.
+  const pickScene = (sc) => { setSel(sc.name); setBriOv(null); annulable(tr('Ambiance appliquée'), () => applyScene(sc, sc.brightness)); };
   const pickRoom = (r) => { setRoomState(r); if (anciennes) call('input_select', 'select_option', { entity_id: idPieces, option: r }); };
   /* Deux gestes sans équivalent standard : on garde le script quand il existe. Sans lui (ADR 0261) :
    *  - « Éteindre » éteint les lumières de la maison, veilleuses épargnées — `light.turn_off` pour un `light.*`,
@@ -220,21 +222,21 @@ export default function ScenesContent({ hass }) {
    *    (`capacitesLumiere`), par le moteur — `commander(…, 'set_color_temp')`, donc `planAction`, qui borne 2 700 K au
    *    blanc de chaque ampoule, en haut comme en bas (R7) —, et n'envoie rien aux autres. */
   const sansScript = (key) => { const svc = scriptSvc(hueScripts()[key]); if (svc) { call('script', svc, {}); return false; } return true; };
-  const warmWhite = () => {
+  const warmWhite = () => annulable(tr('Blanc chaud'), () => {
     setSel('');
     if (!sansScript('off')) return;
     for (const id of lampesRepli()) {
       if (capacitesLumiere(id, (S && S[id] && S[id].attributes) || null).blancs) commander(hass, id, 'set_color_temp', BLANC_CHAUD_K);
     }
-  };
-  const allOff = () => {
+  });
+  const allOff = () => annulable(tr('Lumières éteintes'), () => {
     setSel('');
     if (!sansScript('allOff')) return;
     const ids = lampesRepli();
     const lampes = ids.filter(id => id.indexOf('light.') === 0), autres = ids.filter(id => id.indexOf('light.') !== 0);
     if (lampes.length) call('light', 'turn_off', { entity_id: lampes });
     if (autres.length) call('homeassistant', 'turn_off', { entity_id: autres });
-  };
+  });
 
   const scenes = HUE_SCENES[cat] ? HUE_SCENES[cat].scenes : [];
   /* Les images de la collection affichee, demandees une seule fois. `cat` suffit

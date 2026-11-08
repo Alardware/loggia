@@ -73,11 +73,11 @@ export const CSS_CARTE = [
   '.o-geo-z{stroke:var(--o-accent);fill:var(--o-accent);stroke-opacity:.7;fill-opacity:.12;stroke-width:2}',
   '.o-geo-z.o-geo-maison{stroke:var(--o-ok);fill:var(--o-ok)}',
   '.o-geo-i{background:none;border:none}',
-  '.o-geo-m{box-sizing:border-box;width:100%;height:100%;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--o-surfA);color:var(--o-text1);font-size:13px;font-weight:800;border:2px solid var(--o-bd1);box-shadow:0 2px 6px rgba(0,0,0,.35)}',
+  '.o-geo-m{box-sizing:border-box;width:100%;height:100%;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--o-surfA);color:var(--o-text1);font-size:calc(13px * var(--o-texte, 1));font-weight:800;border:2px solid var(--o-bd1);box-shadow:0 2px 6px rgba(0,0,0,.35)}',
   '.o-geo-m img{width:100%;height:100%;object-fit:cover;display:block}',
   '.o-geo-m.o-geo-ici{border-color:var(--o-ok)}',
   '.o-geo-m.o-geo-choisi{border-color:var(--o-accent);box-shadow:0 0 0 3px var(--o-accent),0 2px 8px rgba(0,0,0,.45)}',
-  '.o-geo .leaflet-tooltip{background:var(--o-surfA);color:var(--o-text);border:var(--o-bw,1px) solid var(--o-bd2);border-radius:10px;font-weight:700;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.3)}',
+  '.o-geo .leaflet-tooltip{background:var(--o-surfA);color:var(--o-text);border:var(--o-bw,1px) solid var(--o-bd2);border-radius:10px;font-weight:700;font-size:calc(12px * var(--o-texte, 1));box-shadow:0 4px 14px rgba(0,0,0,.3)}',
   '.o-geo .leaflet-tooltip-top:before{border-top-color:var(--o-surfA)}',
 ].join('\n');
 

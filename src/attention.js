@@ -21,7 +21,7 @@
  * Pur : pas de React, pas de Home Assistant, testable à sec. Le seul import
  * est `tr`, le test le vérifie aussi.
  */
-import { tr, comparerTextes, locale } from './i18n.js';
+import { tr, trN, comparerTextes, locale } from './i18n.js';
 
 /* LA table des classes de capteurs binaires (audit du 19/10) : l'Accueil, les groupes d'Objets (groupes.js), la vue d'une pièce, la
  * journée d'un binaire et la vue Présence lisent ces listes, et n'en recopient plus. `gate` n'est pas une classe de `binary_sensor` :
@@ -551,13 +551,23 @@ export function pointsAttention(ctx) {
    * simultanée » ont été retirés le 16/09 à la demande de l'utilisateur —
    * « prend de la place pour rien » : un appareil à piles ou une imprimante
    * qui dort n'est pas une panne, et une pile faible, la veille le dit. */
+  // L'appareil d'une entité (06/11, étape 9) : on compte des APPAREILS, et MQTT derrière un pont Zigbee2MQTT se dit Zigbee2MQTT.
+  const appareil = typeof c.appareil === 'function' ? c.appareil : () => null;
+  // Son nom lisible, donné par l'écran (`pannes.js`) : le module reste pur ; sans lui, l'identifiant.
+  const nomIntegration = typeof c.nomIntegration === 'function' ? c.nomIntegration : (p) => p;
   const incidents = (estObjet(c.sante) && Array.isArray(c.sante.incidents)) ? c.sante.incidents : [];
   incidents.forEach((i) => {
     if (!estObjet(i)) return;
     const n = compteIncident(i);
     const scope = i.scope != null ? String(i.scope) : '';
     if (i.kind === 'integration') {
-      ajouter('sante:integration:' + scope, 'alerte', tr('Intégration muette'), tr('{x} · {n} entités', { x: scope, n }), 'systeme', null);
+      /* Lisible (06/11, étape 9 ; toujours l'intégration ENTIÈRE, sa décision redite) : « Zigbee2MQTT ne répond plus ·
+       * 5 appareils » plutôt que « Intégration muette · mqtt · 12 entités ». */
+      const apps = (Array.isArray(i.entities) ? i.entities : []).map(e => appareil(e)).filter(x => estObjet(x) && x.id);
+      const nom = nomIntegration(scope, apps.length ? apps[0].pont : null) || scope;
+      const nApps = new Set(apps.map(x => x.id)).size;
+      ajouter('sante:integration:' + scope, 'alerte', tr('{x} ne répond plus', { x: nom }),
+        nApps ? trN(nApps, '{n} appareil', '{n} appareils') : trN(n, '{n} entité', '{n} entités'), 'systeme', null);
     } else if (i.kind === 'passerelle') {
       ajouter('sante:passerelle:' + (i.deviceId || scope), 'alerte', tr('Passerelle hors service'), scope, 'systeme', null);
     }

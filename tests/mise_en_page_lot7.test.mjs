@@ -66,7 +66,8 @@ test('Paramètres au téléphone : plus de sommaire en tuiles, les sections en p
 test('le badge de la démo s’efface pendant qu’une fenêtre est ouverte', () => {
   const demo = lire('src', 'demo.js');
   assert.ok(demo.includes("badge.setAttribute('data-demo-badge', '');"));
-  assert.ok(demo.includes(`effacement.textContent = 'html:has([role="dialog"]) [data-demo-badge]{display:none!important}';`));
+  // ASSERTION MODIFIÉE (06/11, étape 7) : le badge s'efface aussi pendant le bandeau « Annuler », posé au même endroit.
+  assert.ok(demo.includes(`effacement.textContent = 'html:has([role="dialog"]) [data-demo-badge],html:has(.o-annuler) [data-demo-badge]{display:none!important}';`));
   // Les deux fenêtres qui le portent : les feuilles, et le code administrateur.
   assert.ok(lire('src', 'ui.jsx').includes(`className={'o-sheet' + (opaque ? ' o-sheet-opaque' : '') + (onglets ? ' o-sheet-onglets' : '')} role="dialog"`));
   assert.ok(lire('src', 'pinmodal.jsx').includes('<div ref={boiteRef} role="dialog"'));

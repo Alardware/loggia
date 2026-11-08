@@ -28,6 +28,8 @@
  * blocage : `preventDefault` n'arrête que le geste du doigt.
  */
 
+import { useEffect, useRef } from 'react';
+
 /* La bande, en haut et en bas, où le doigt entraîne la page ; et la vitesse au
  * bord même. Plus on s'enfonce dans la bande, plus ça va vite — un seuil sec
  * donnerait une page qui part d'un coup. */
@@ -117,4 +119,132 @@ export function bloquerDefilement(doc) {
   const stop = (e) => { if (e.cancelable) e.preventDefault(); };
   d.addEventListener('touchmove', stop, { passive: false });
   return () => { try { d.removeEventListener('touchmove', stop, { passive: false }); } catch { /* deja parti */ } };
+}
+
+/* L'APPUI LONG qui range hors édition (05/11, étape 5 du rapport sur l'usage) : une demi-seconde. Plus court, un doigt qui
+ * hésite avant de faire défiler la page saisirait la carte ; en édition, où l'on vient pour ranger, 200 ms suffisent. */
+export const APPUI_LONG_MS = 500;
+
+/**
+ * Le clic qui suit un glisser, avalé (05/11, étape 5).
+ *
+ * Hors édition, une tuile qu'on vient de ranger ne doit pas s'ouvrir au lâcher : le navigateur envoie quand même un
+ * `click` après le `pointerup`. On l'arrête à la capture, une fois, et l'écoute part d'elle-même peu après — un clic qui
+ * ne vient pas ne la laisse pas traîner.
+ */
+export function avalerProchainClic(doc) {
+  const d = doc || (typeof document !== 'undefined' ? document : null);
+  if (!d || typeof d.addEventListener !== 'function') return;
+  let minuteur = null;
+  const stop = (e) => { e.stopPropagation(); e.preventDefault(); fin(); };
+  const fin = () => { clearTimeout(minuteur); try { d.removeEventListener('click', stop, true); } catch { /* deja parti */ } };
+  d.addEventListener('click', stop, true);
+  minuteur = setTimeout(fin, 450);
+}
+
+/* ── RANGER HORS ÉDITION, partout (05/11, étape 5 du rapport sur l'usage) ─────
+ *
+ * « Déplacer les cartes, ça ne fonctionne que sur les cartes pièces à l'Accueil :
+ * pourquoi les autres non ? Et sur PC, pourquoi ça ne marche pas du tout ? »
+ * (05/11). Un seul outil pour toutes les grilles qu'on range en édition : un
+ * appui long — une demi-seconde, au doigt comme à la souris — saisit la carte
+ * sous le pointeur ; elle suit le pointeur, la place visée s'allume, le lâcher
+ * l'y pose. Un toucher court et un clic gardent leur geste (la fiche, la
+ * commande) ; un pointeur qui bouge avant la demi-seconde fait défiler, il ne
+ * range pas ; le clic qui suit le lâcher est avalé.
+ *
+ * La GRILLE porte les gestes (délégués : `{...ranger}` sur son conteneur) ;
+ * chaque carte porte sa clé (`data-id`, ou l'attribut choisi). L'appui sur une
+ * commande de la carte — une bascule, une barre, un bouton qui n'est ni la
+ * carte ni sa surface — ne saisit rien. La prise et la place visée se marquent
+ * sur le DOM (`data-range`, index.css) : rien à redessiner pendant le geste,
+ * et l'ordre ne s'écrit qu'au lâcher (`onRanger(cle, cible)` : la carte prend
+ * la place de la cible). En édition, la vue ne pose pas ces gestes : les
+ * siens restent.
+ */
+const SANS_PRISE = 'button, [role="switch"], [role="slider"], input, select, textarea, a[href]';
+const SEUIL_PRISE_PX = 10;
+
+/* La copie qui suit le pointeur — la même que celle de l'Accueil (`poserFantome`) : le défilement du doigt coupé le temps du
+ * geste, la page qui suit près des bords. */
+function copieFlottante(el, x0, y0) {
+  const doc = el.ownerDocument || document;
+  const f = el.cloneNode(true);
+  const r = el.getBoundingClientRect();
+  Object.assign(f.style, { position: 'fixed', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px', margin: '0',
+    pointerEvents: 'none', zIndex: '9999', opacity: '.96', transform: 'scale(1.02)', transition: 'none', outline: 'none', boxShadow: '0 22px 48px rgba(0,0,0,.55)' });
+  doc.body.appendChild(f);
+  const rendre = bloquerDefilement(doc);
+  const defileur = defileurAuto(el);
+  return {
+    suivre: (x, y) => { f.style.transform = 'translate(' + (x - x0) + 'px,' + (y - y0) + 'px) scale(1.02)'; defileur.viser(y); },
+    lever: () => { defileur.arreter(); rendre(); try { f.remove(); } catch { /* deja partie */ } },
+  };
+}
+
+/** Les gestes à poser sur une grille rangeable hors édition ; null quand `actif` est faux. */
+export function useRangerLibre({ onRanger, attribut = 'data-id', actif = true } = {}) {
+  const geste = useRef(null);
+  const rappel = useRef(onRanger);
+  /* Sans tableau : à chaque rendu, l'ordre écrit au lâcher est celui du moment (le motif de `useEtatServeur`). */
+  useEffect(() => { rappel.current = onRanger; });
+  if (!actif) return null;
+  const sel = '[' + attribut + ']';
+  const finir = (ranger) => {
+    const g = geste.current;
+    geste.current = null;
+    if (!g) return;
+    clearTimeout(g.minuteur);
+    if (!g.copie) return;
+    g.copie.lever();
+    g.carte.removeAttribute('data-range');
+    if (g.cible) g.cible.removeAttribute('data-range');
+    avalerProchainClic(g.carte.ownerDocument);
+    const cible = g.cible && g.cible.getAttribute(attribut);
+    if (ranger && cible && cible !== g.cle && rappel.current) rappel.current(g.cle, cible);
+  };
+  return {
+    'data-rangeable': '',
+    onPointerDown: (e) => {
+      if (e.button > 0 || geste.current) return;
+      const t = e.target;
+      const carte = t && t.closest ? t.closest(sel) : null;
+      if (!carte || !e.currentTarget.contains(carte)) return;
+      const commande = t.closest(SANS_PRISE);
+      if (commande && commande !== carte && carte.contains(commande) && !commande.classList.contains('o-surface')) return;
+      const grille = e.currentTarget, doigt = e.pointerId, x0 = e.clientX, y0 = e.clientY;
+      const g = { cle: carte.getAttribute(attribut), carte, grille, x0, y0, cible: null, copie: null };
+      g.minuteur = setTimeout(() => {
+        if (geste.current !== g) return;
+        try { carte.setPointerCapture(doigt); } catch { /* le pointeur est parti */ }
+        try { if (navigator.vibrate) navigator.vibrate(35); } catch { /* pas de vibreur */ }
+        try { const s = carte.ownerDocument.getSelection(); if (s) s.removeAllRanges(); } catch { /* rien de choisi */ }
+        g.copie = copieFlottante(carte, x0, y0);
+        carte.setAttribute('data-range', 'prise');
+      }, APPUI_LONG_MS);
+      geste.current = g;
+    },
+    onPointerMove: (e) => {
+      const g = geste.current;
+      if (!g) return;
+      if (!g.copie) {
+        if (Math.abs(e.clientX - g.x0) > SEUIL_PRISE_PX || Math.abs(e.clientY - g.y0) > SEUIL_PRISE_PX) { clearTimeout(g.minuteur); geste.current = null; }
+        return;
+      }
+      g.copie.suivre(e.clientX, e.clientY);
+      // Les places se lisent à chaque mouvement : la page défile près des bords, et rien ne bouge dans la grille.
+      const sous = Array.prototype.find.call(g.grille.querySelectorAll(sel), (el) => {
+        const r = el.getBoundingClientRect();
+        return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      });
+      if (!sous || sous === g.cible) return;
+      if (g.cible && g.cible !== g.carte) g.cible.removeAttribute('data-range');
+      g.cible = sous;
+      if (sous !== g.carte) sous.setAttribute('data-range', 'visee');
+    },
+    onPointerUp: () => finir(true),
+    onPointerCancel: () => finir(false),
+    // Un appui long au doigt ouvre parfois le menu du navigateur : pas pendant un rangement.
+    onContextMenu: (e) => { if (geste.current) e.preventDefault(); },
+  };
 }
