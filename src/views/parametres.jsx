@@ -2095,7 +2095,9 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
    * Parametres ne suffisait pas — il fallait rouvrir la section a la main.
    *
    * `hub` reste le point de depart d'un onglet neuf : la memoire est propre a
-   * la session, et on n'ouvre pas Loggia le lendemain au milieu d'un reglage. */
+   * la session, et on n'ouvre pas Loggia le lendemain au milieu d'un reglage.
+   * Quitter les Parametres pour une autre vue l'efface aussi (08/11, App.jsx) :
+   * on y revient par `hub`, au telephone par Apparence. */
   // La taille du texte de CET écran (07/11, étape 10 ; tailletexte.js).
   const [tailleTexte, poserTailleTexte] = useTailleTexte();
   const cransTexte = [['normal', tr('Normale')], ['grand', tr('Grande')]];

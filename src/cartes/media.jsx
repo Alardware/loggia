@@ -193,6 +193,18 @@ const BRIQUES_MEDIA = { RmBascule, RmJauge, Segment, gradeVolume: GRADE_VOLUME }
 const resteTexte = (budget, bloque, reprise) => (bloque === 'coucher' ? tr('Reprise à {h}', { h: reprise || '—' })
   : bloque === 'temps' || !budget.reste_s ? tr('Écoulé') : tr('{t} restantes', { t: dureeTexte(budget.reste_s / 60) }));
 
+/* Le bouton d'une TV (sa capture du 08/11), à la place de la bascule : « Allumer » ou « Éteindre », 44 de haut, toute la largeur qui reste —
+ * jamais l'icône seule ni la barre du volume à côté (son « ça non » du 08/11) : le volume d'une TV se règle dans sa fiche. Positionné par `RM_BTN` : il passe au-dessus de la surface. */
+function BoutonMarche({ on, nom, onToggle, sansIcone = false }) {
+  const mot = on ? tr('Éteindre') : tr('Allumer');
+  return (
+    <button type="button" className={CLASSE_PUCE_LECTEUR} aria-label={mot + ' ' + nom} title={mot} onClick={(e) => { e.stopPropagation(); onToggle(); }}
+      style={{ ...RM_MEDIA_PUCE, flex: 1, width: 'auto', minWidth: 0, padding: sansIcone ? '0 4px' : '0 14px', gap: 8, fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, whiteSpace: 'nowrap', ...(on ? { background: 'var(--o-accent-fond)', color: '#fff' } : null) }}>
+      {sansIcone ? null : <Fi i="power" size={13} />}<span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{mot}</span>
+    </button>
+  );
+}
+
 function RoomMediaCard({ id, hass, onOpen, label = null }) {
   const v = useVueLecteur(hass, id, label);
   const l = v.l;
@@ -212,11 +224,13 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
   const puce = v.cmd.lecture && v.reprenable;
   const piedEtroit = v.on && !v.indispo && (puce || v.vol != null);
   const pied = temps ? !v.indispo : piedEtroit;
+  const motPastille = v.pastille && !v.indispo ? (v.levee ? tr('Limites levées') : tr('Mode enfant')) : null;
+  // La TV : ni bascule ni barre, le bouton au pied, dans les deux formats. Sous un profil du mode enfant (budget, pastille, blocage), ses écrans restent (E15, E16).
+  const tvMarche = l.classe === 'tv' && !v.indispo && v.cmd.marche && !bloque && !temps && !motPastille;
   // Les mots du pied : « Volume 30 % » ; sous profil « Volume 30 % · max 40 % », et « Limité à 40 % » quatre secondes après un geste qui a buté.
   const texteVolume = v.vol == null ? null : v.bute && v.plafond != null ? tr('Limité à {m}', { m: pourcentTexte(v.plafond) })
     : v.plafond != null && !v.muted ? tr('Volume {n} · max {m}', { n: pourcentTexte(v.vol), m: pourcentTexte(v.plafond) }) : volumeTexte(v.vol, v.muted);
   const texteTemps = temps ? resteTexte(temps, bloque, v.reprise) : null;
-  const motPastille = v.pastille && !v.indispo ? (v.levee ? tr('Limites levées') : tr('Mode enfant')) : null;
   return (
     /* La carte n'est pas un bouton (ADR 0074) : la surface, premier enfant, dit ce que la carte affiche — le nom, la phrase, le
      * volume — et les commandes, positionnées, passent au-dessus d'elle. */
@@ -240,7 +254,7 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
           * de 38 px tient déjà la hauteur de la ligne, la carte garde ses 184 px, rien ne saute. */}
         {motPastille ? <Suspense fallback={null}><CarteEnfant quoi="pastille" className="o-seul-large" levee={v.levee} /></Suspense>
           : v.on && !v.indispo && l.app && <span className="o-seul-large" data-source="" style={{ fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', lineHeight: '26px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 104 }}>{l.app}</span>}
-        {!v.indispo && v.cmd.marche && !bloque && <RmBascule className="o-seul-large" on={v.on} nom={v.nom} onToggle={() => v.marche(!v.on)} />}
+        {!tvMarche && !v.indispo && v.cmd.marche && !bloque && <RmBascule className="o-seul-large" on={v.on} nom={v.nom} onToggle={() => v.marche(!v.on)} />}
         {/* Le chiffre de la carte ÉTROITE (§ 6.2, la grille commune) : le volume, « 30 » et « % » ; « Muet » quand le son est coupé ; rien
           * éteinte ou indisponible. Caché au lecteur d'écran : la barre le dit. Sous profil (E16) : le temps qui reste sur un écran à
           * budget (« 35 min », « 1 h 25 »), la lune ou le sablier quand il est bloqué. */}
@@ -260,20 +274,21 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
         * rien ne se déclenche en touchant la carte hors de cette ligne. */}
       {/* Bloquée et éteinte (E16) : pas d'« Allumer » — la maison déferait le `turn_on` vingt secondes plus tard ; « Revient à 07:30 »,
         * inerte, à sa place. La barre, elle, porte le plafond (hachurée). */}
-      {!v.indispo && (v.on ? piedEtroit : (bloque || v.cmd.marche)) && (
+      {!v.indispo && (v.on ? piedEtroit || tvMarche : (bloque || v.cmd.marche)) && (
         <div className="o-seul-etroit" data-commandes="" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto', paddingTop: 'var(--o-pied-haut, 9px)', minHeight: 'calc(var(--o-pied-haut, 9px) + 44px)' }}>
           {v.on ? (<>
             {puce && <PuceLecture v={v} />}
-            {v.vol != null && (
+            {v.vol != null && !tvMarche && (
               <div style={{ flex: 1, minWidth: 0 }}>
                 {/* `etatVolume` : « Muet », « max 40 % » sous un plafond, pour le lecteur d'écran (passe bis du 17/10, point 9). */}
                 <RmJauge v={v.vol} couleur={v.muted ? 'var(--o-text3)' : 'var(--o-accent)'} grade={v.muted ? 'transparent' : GRADE_VOLUME} eteinte={false} zone={44} marge={0} plafond={v.plafond}
                   etat={etatVolume(v.muted, v.plafond)} label={tr('Volume') + ' ' + v.nom} onCommit={v.volume} onGlisse={v.suivre} />
               </div>
             )}
+            {tvMarche && <BoutonMarche on={v.on} nom={v.nom} onToggle={() => v.marche(!v.on)} sansIcone={!!puce} />}
           </>) : bloque ? (
             <Suspense fallback={null}><CarteEnfant quoi="revient" bloque={bloque} reprise={v.reprise} style={RM_MEDIA_PUCE} /></Suspense>
-          ) : (
+          ) : tvMarche ? <BoutonMarche on={v.on} nom={v.nom} onToggle={() => v.marche(!v.on)} /> : (
             <button type="button" className={CLASSE_PUCE_LECTEUR} aria-label={tr('Allumer') + ' ' + v.nom} title={tr('Allumer')} onClick={(e) => { e.stopPropagation(); v.marche(true); }}
               style={{ ...RM_MEDIA_PUCE, width: 'auto', padding: '0 14px', gap: 8, fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, whiteSpace: 'nowrap' }}>
               <Fi i="power" size={13} /><span>{tr('Allumer')}</span>
@@ -284,17 +299,18 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
       {/* Le pied d'une carte large, allumée : la puce lecture/pause (s'il y a quelque chose à reprendre) et la zone du volume (44 px),
         * collées au pied par la marge auto. Un écran à budget (E15) : le TEMPS à la place du volume, même éteint ; la barre reçoit le
         * plafond (hachurée), et le mot du volume dit le plafond. */}
-      {pied && (
+      {(pied || tvMarche) && (
         <div className="o-seul-large" style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginTop: 'auto', paddingTop: 'var(--o-pied-haut, 8px)' }}>
           {v.on && puce && <PuceLecture v={v} />}
           {temps ? <Suspense fallback={null}><CarteEnfant quoi="pied" budget={temps} bloque={bloque} texte={texteTemps} /></Suspense>
-            : v.vol != null && (
+            : pied && !tvMarche && v.vol != null && (
             <div style={{ flex: 1, minWidth: 0 }}>
               <div data-volume="" style={{ fontSize: 11.5, fontWeight: 800, lineHeight: '14px', color: v.muted ? 'var(--o-text2)' : v.bute && v.plafond != null ? 'var(--o-accent-soft)' : v.plafond != null ? 'var(--o-text2)' : 'var(--o-accent-soft)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{texteVolume}</div>
               <RmJauge v={v.vol} couleur={v.muted ? 'var(--o-text3)' : 'var(--o-accent)'} grade={v.muted ? 'transparent' : GRADE_VOLUME} eteinte={false} marge={6} plafond={v.plafond}
                 etat={etatVolume(v.muted, v.plafond)} label={tr('Volume') + ' ' + v.nom} onCommit={v.volume} onGlisse={v.suivre} />
             </div>
           )}
+          {tvMarche && <BoutonMarche on={v.on} nom={v.nom} onToggle={() => v.marche(!v.on)} />}
         </div>
       )}
     </div>

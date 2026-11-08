@@ -14,6 +14,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { MONOLITHE } from './monolithe.mjs';
 
 Object.defineProperty(globalThis, 'navigator', { value: { language: 'fr-FR', languages: ['fr-FR'] }, configurable: true });
 const I = await import('../src/reglagesindex.js');
@@ -22,18 +23,19 @@ const SOURCES = ['src/views/parametres.jsx', 'src/views/appareils.jsx', 'src/vie
   'src/views/nuit.jsx', 'src/views/veilles.jsx', 'src/views/journal.jsx'].map(lire).join('\n');
 const PAR = lire('src/views/parametres.jsx');
 const EN = lire('src/langues/en.js');
-const ecrit = (cle) => SOURCES.includes("tr('" + cle.replace(/'/g, "\\'") + "'") || SOURCES.includes('tr("' + cle + '"');
+const echappe = (s) => s.replace(/[\\']/g, '\\$&');
+const ecrit = (cle) => SOURCES.includes("tr('" + echappe(cle) + "'") || SOURCES.includes('tr("' + cle + '"');
 
 test('chaque mot de l’index est écrit dans les Paramètres, et chaque nom se traduit', () => {
   const absents = I.REGLAGES.flatMap(e => e.t.filter(m => !ecrit(m)).map(m => e.id + ' : ' + m));
   assert.deepEqual(absents, [], 'un mot que l’écran ne montre plus : la rangée ne se trouverait pas');
   for (const e of I.REGLAGES) {
     assert.ok(I.SECTIONS_REGLAGES[e.s], e.id + ' : section inconnue');
-    assert.ok(EN.includes("\n  '" + (e.l || e.t[0]).replace(/'/g, "\\'") + "':") || EN.includes('\n  "' + (e.l || e.t[0]) + '":'), e.id + ' : son nom n’a pas de traduction');
+    assert.ok(EN.includes("\n  '" + echappe(e.l || e.t[0]) + "':") || EN.includes('\n  "' + (e.l || e.t[0]) + '":'), e.id + ' : son nom n’a pas de traduction');
   }
   assert.equal(new Set(I.REGLAGES.map(e => e.id)).size, I.REGLAGES.length, 'deux réglages sous le même identifiant');
   // Les sections de l'index sont celles du sommaire, et leurs noms aussi.
-  for (const [id, nom] of Object.entries(I.SECTIONS_REGLAGES)) assert.ok(PAR.includes("{ id: '" + id + "', name: tr('" + nom.replace(/'/g, "\\'") + "')"), id);
+  for (const [id, nom] of Object.entries(I.SECTIONS_REGLAGES)) assert.ok(PAR.includes("{ id: '" + id + "', name: tr('" + echappe(nom) + "')"), id);
   // Les onglets des Règles existent ; « veille » trouve l'écran de veille ET la veilleuse.
   for (const e of I.REGLAGES.filter(x => x.o)) assert.ok(PAR.includes("['" + e.o + "', "), e.id + ' : onglet ' + e.o);
   const veille = I.optionsReglages(Object.keys(I.SECTIONS_REGLAGES)).filter(o => o.label.toLowerCase().includes('veille')).map(o => o.id);
@@ -130,4 +132,23 @@ test('Ctrl+K propose les réglages et y mène ; les rangées portent la classe q
   assert.ok(lire('src/views/partel.jsx').includes('className="o-ligne-tel"') && lire('src/views/partel.jsx').includes('<div className="o-choix-tel">'));
   assert.ok(lire('src/ui.jsx').includes('<div className="o-regle-tete" style'));
   assert.match(lire('src/index.css'), /\.o-reglage-trouve \{ box-shadow: inset 0 0 0 2px var\(--o-accent\) !important;/);
+});
+
+test('quitter les Paramètres les referme ; y rester ou y être mené garde la section (08/11)', () => {
+  const memoire = new Map();
+  const vrai = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+  Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: { getItem: k => memoire.get(k) ?? null, setItem: (k, v) => memoire.set(k, v), removeItem: k => memoire.delete(k) } });
+  try {
+    memoire.set('loggia-par-section', 'apparence');
+    I.oublierSectionSiQuittee('parametres', 'parametres');
+    assert.equal(memoire.get('loggia-par-section'), 'apparence', 'toucher à un réglage ne quitte pas la vue');
+    I.oublierSectionSiQuittee('accueil', 'parametres');
+    assert.equal(memoire.get('loggia-par-section'), 'apparence', 'Ctrl+K pose la section avant de naviguer : on ne l’efface pas en arrivant');
+    I.oublierSectionSiQuittee('parametres', 'accueil');
+    assert.equal(memoire.has('loggia-par-section'), false, 'on revient par la vue d’ensemble');
+  } finally {
+    if (vrai) Object.defineProperty(globalThis, 'sessionStorage', vrai); else delete globalThis.sessionStorage;
+  }
+  assert.ok(MONOLITHE.includes('oublierSectionSiQuittee(vueQuittee.current, view);'), 'au changement de vue');
+  assert.ok(!PAR.includes("removeItem('loggia-par-section')"), 'jamais au démontage : un remontage ramènerait au sommaire à chaque réglage touché');
 });

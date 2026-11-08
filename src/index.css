@@ -508,6 +508,16 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
   /* !important : le display:flex est pose inline par la carte. */
   .o-piecestd .o-piece-minis { display: none !important; }
 }
+/* Carte pièce, sa maquette du 08/11. L'humidité dit « 48 % d'humidité » quand il y a la place à côté de la plaque, « 48 % » sinon ;
+ * sur une carte de téléphone, l'ampoule et son nombre s'effacent : la ligne d'état les dit déjà. */
+.o-piece-hum-court { display: none; }
+@container (max-width: 205px) {
+  .o-piecestd .o-piece-hum-long, .o-piecestd .o-piece-co2-mot { display: none; }
+  .o-piecestd .o-piece-hum-court { display: inline; }
+}
+@container (max-width: 175px) {
+  .o-piecestd .o-piece-lampes { display: none !important; }
+}
 /* Chip pièce : maquette 1b (03/10) — la température vit dans la ligne
  * d'état, sous le nom ; plus de bascule par container query. */
 

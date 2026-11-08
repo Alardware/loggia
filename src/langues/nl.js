@@ -1569,6 +1569,8 @@ export default {
   'mouvement': 'beweging',
   'Ouvert, alarme armée': 'Open, alarm ingeschakeld',
   'CO₂ élevé': 'CO₂ hoog',
+  'pensez à aérer': 'tijd om te luchten',
+  'Musique en cours': 'Muziek speelt',
   'Chauffage coupé': 'Verwarming uit',
   '{x} · fenêtre ouverte': '{x} · raam open',
   'Intégration muette': 'Integratie reageert niet',

@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ambiancePiece, ambiancesParPiece, COULEURS_PIECE, NIVEAUX_PIECE } from '../src/ambiance.js';
+import { ambiancePiece, ambiancesParPiece, phrasePiece, COULEURS_PIECE, NIVEAUX_PIECE } from '../src/ambiance.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const police = readFileSync(join(RACINE, 'public', 'fonts', 'uicons-regular-rounded.css'), 'utf8');
@@ -94,4 +94,15 @@ test('sans etats ni zones : rien, sans erreur', () => {
   assert.deepEqual(ambiancesParPiece(null, null), {});
   assert.deepEqual(ambiancesParPiece(S, null), {}, 'sans zones, aucune piece');
   assert.deepEqual(ambiancesParPiece({ 'media_player.x': etat('playing') }, () => 'Salon'), { salon: { medias: [{ id: 'media_player.x', tv: false }], chauffe: false, froid: false, ouverts: [] } }, 'la normalisation par defaut : minuscules');
+});
+
+test('la phrase de la carte standard : en toutes lettres (sa maquette du 08/11)', () => {
+  assert.equal(phrasePiece({ lumieres: 4, medias: [{ tv: false }] }).texte, '4 lumières allumées · Musique en cours');
+  assert.equal(phrasePiece({ lumieres: 1 }).texte, '1 lumière allumée');
+  assert.equal(phrasePiece({ co2: 5000 }).texte, 'CO₂ élevé · pensez à aérer');
+  assert.equal(phrasePiece({ co2: 5000, ouverts: [{ famille: 'fenetre' }] }).texte, 'Fenêtre ouverte · CO₂ élevé', 'déjà ouverte : pas de conseil');
+  assert.equal(phrasePiece({ medias: [{ tv: false }] }).couleur, 'var(--o-accent-soft)', 'la musique seule, en bleu');
+  assert.equal(phrasePiece({ lumieres: 2, medias: [{ tv: false }] }).couleur, COULEURS_PIECE.actif, 'une lampe : l’ambre');
+  assert.equal(phrasePiece({ lampes: 0 }).texte, 'Tout est calme');
+  assert.equal(ambiancePiece({ lumieres: 4, medias: [{ tv: false }] }).texte, '4 lumières · Musique', 'la compacte garde sa ligne courte');
 });

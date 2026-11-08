@@ -140,24 +140,11 @@ test('l’interrupteur d’une tuile pièce ne dépend pas de ses voisins', () =
   const i = src.indexOf('function PieceCard(');
   assert.notEqual(i, -1, 'PieceCard introuvable');
   const c = src.slice(i, src.indexOf('\nfunction ', i + 20));
-  // PieceCard rend DEUX interrupteurs — un par format. Seul celui du pied
-  // standard (38 × 21) partage sa rangée avec les minis masquables ; le chip,
-  // lui, n'utilise pas `space-between` et n'a jamais eu le défaut. On vise
-  // donc le bon par sa taille, pas par son rôle.
-  // Depuis l'audit du 27/09, la ZONE touchable fait 24 de haut et la pastille
-  // en garde 21 : `marginLeft: 'auto'` vit donc sur l'enveloppe, la taille du
-  // dessin sur la pastille. On vérifie les deux, et qu'elles restent liées.
-  const j = c.indexOf('width: 38, height: 21, borderRadius: 999');
-  assert.notEqual(j, -1, 'la pastille du pied standard introuvable');
-  const k = c.lastIndexOf('role="switch"', j);
-  assert.notEqual(k, -1, 'l’interrupteur du pied standard introuvable');
-  const enveloppe = c.slice(k, j);
-  assert.match(enveloppe, /marginLeft: 'auto'/,
+  // L'interrupteur du pied standard (sa maquette du 08/11 : l'ampoule et son nombre, puis 44 × 25) partage sa rangée avec les
+  // minis masquables : `marginLeft: 'auto'` vit sur l'enveloppe, qui tient l'ampoule et l'interrupteur.
+  assert.ok(c.includes("gap: 8, flexShrink: 0, marginLeft: 'auto' }}>" + String.fromCharCode(10) + '              <span className="o-piece-lampes"'),
     'sans marginLeft:auto, l’interrupteur repasse à gauche dès que les minis sont masqués');
-  assert.match(enveloppe, /height: 24/,
-    'la zone touchable retombe sous les 24 px que demande la règle');
-  assert.match(enveloppe, /margin: '-1\.5px 0'/,
-    'sans la marge négative, les trois pixels empruntés font descendre la rangée');
+  assert.equal(c.split("width: 44, height: 25, borderRadius: 14").length - 1, 2, 'la zone touchable retombe sous les 24 px que demande la règle');
 });
 
 test('les minis ne cèdent que lorsque la place manque vraiment', () => {

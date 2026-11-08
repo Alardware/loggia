@@ -1569,6 +1569,8 @@ export default {
   'mouvement': 'movimiento',
   'Ouvert, alarme armée': 'Abierto, alarma armada',
   'CO₂ élevé': 'CO₂ alto',
+  'pensez à aérer': 'ventila un poco',
+  'Musique en cours': 'Música sonando',
   'Chauffage coupé': 'Calefacción cortada',
   '{x} · fenêtre ouverte': '{x} · ventana abierta',
   'Intégration muette': 'Integración muda',

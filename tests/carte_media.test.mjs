@@ -160,14 +160,15 @@ test('M13 : la barre envoie `volume_set` au relâcher, sur l’entité du volume
   assert.deepEqual(w2.appels, ['media_player.volume_mute ' + HACS + ' is_volume_muted=false', 'media_player.volume_set ' + HACS + ' volume_level=0.5']);
 }));
 
-test('M10 : l’interrupteur s’il sert — la TV l’a, en haut à droite, avec sa source ; `turn_off` / `turn_on` selon l’état affiché, jamais `toggle`', () => dans(() => {
+test('M10 : la TV a sa source en haut à droite et, à la place de l’interrupteur (sa capture du 08/11), un bouton au pied ; `turn_off` / `turn_on` selon l’état affiché, jamais `toggle`', () => dans(() => {
   const w = poser();
   const tv = carte(w, TV);
   assert.equal(attribut(tv, 'data-source').props.children, 'Netflix', '`app_name` seulement : la source à la place de l’interrupteur d’une Echo');
   assert.equal(attribut(tv, 'data-source').props.className, 'o-seul-large');
   assert.equal(phrase(tv).props.children, 'Stranger Things · S4 - E1', 'une série : ce que le lecteur met dans l’artiste');
-  const b = de(tv, 'RmBascule');
-  assert.deepEqual([b.props.on, b.props.className, b.props.nom], [true, 'o-seul-large', 'TV du salon']);
+  assert.equal(de(tv, 'RmBascule'), undefined, 'une TV n’a plus de bascule');
+  const b = de(tv, 'BoutonMarche');
+  assert.deepEqual([b.props.on, b.props.nom], [true, 'TV du salon']);
   tv.appuyer(b, 'onToggle');
   assert.deepEqual(w.appels, ['media_player.turn_off ' + TV]);
   assert.equal(phrase(tv).props.children, 'Éteinte', 'le geste d’abord');
@@ -181,8 +182,8 @@ test('M10 : l’interrupteur s’il sert — la TV l’a, en haut à droite, ave
   assert.equal(de(atv, 'RmJauge'), undefined);
   assert.equal(de(atv, 'ProgressionLecteur'), undefined);
   assert.equal(attribut(atv, 'data-source'), undefined, 'éteinte, aucune source');
-  assert.equal(de(atv, 'RmBascule').props.on, false);
-  atv.appuyer(de(atv, 'RmBascule'), 'onToggle');
+  assert.equal(de(atv, 'BoutonMarche').props.on, false);
+  atv.appuyer(de(atv, 'BoutonMarche'), 'onToggle');
   assert.deepEqual(w.appels.slice(1), ['media_player.turn_on ' + ATV]);
   assert.equal(phrase(atv).props.children, 'Rien en lecture', 'allumée par le geste, sans titre');
   assert.ok(!w.appels.some(x => /toggle/.test(x)));
@@ -305,7 +306,7 @@ test('passe bis, § 5 : une TV inactive (`idle`) dans le menu d’une appli dit 
   /* ASSERTION MODIFIÉE (passe bis 2, 17/10 ; M11) : la puce inerte (`reprenable` faux) n'est plus dessinée du tout ; « ni en pause, ni
    * en lecture » se lit à la phrase et au lavis absent, le volume reste. */
   assert.equal(de(m, 'PuceLecture'), undefined, 'rien à reprendre : pas de puce');
-  assert.deepEqual([de(m, 'RmJauge').props.v, attribut(m, 'data-volume').props.children], [40, 'Volume 40' + NBSP + '%'], 'le volume reste');
+  assert.equal(de(m, 'RmJauge'), undefined, 'le volume d’une TV se règle dans sa fiche (08/11)');
   assert.ok(!String(m.arbre.props.style.background).includes('rgba('), 'ni en lecture ni en pause : pas de lavis, la surface des cartes');
   assert.equal(de(m, 'ProgressionLecteur'), undefined, 'pas de progression');
   // `on` (une TV allumée hors lecture, LG) : la même chose.
@@ -318,15 +319,13 @@ test('§ 6.2, M10 : éteinte, la ligne porte UNE puce « Allumer » (`turn_on`) 
   const atv = carte(w, ATV);
   assert.equal(de(atv, 'ChiffreHaut'), undefined, 'éteinte : pas de chiffre');
   const ligne = etroite(atv);
-  const allumer = atv.trouver(e => e.type === 'button' && e.props['aria-label'] === 'Allumer Apple TV Chambre')[0];
-  assert.ok(ligne && allumer, 'la puce « Allumer », avec son mot');
-  // `o-puce-lecteur` : la vue Pièce au téléphone serre les `o-rmbtn` (index.css) ; les puces d'un lecteur gardent leur rembourrage (passe bis).
-  assert.equal(allumer.props.className, 'o-rmbtn o-puce-lecteur');
-  assert.equal(allumer.props.title, 'Allumer');
-  atv.appuyer(allumer);
+  const allumer = de(atv, 'BoutonMarche');
+  assert.ok(ligne && allumer, 'le bouton « Allumer », avec son mot');
+  assert.deepEqual([allumer.props.on, allumer.props.nom, allumer.props.seulIcone], [false, 'Apple TV Chambre', undefined]);
+  atv.appuyer(allumer, 'onToggle');
   assert.deepEqual(w.appels, ['media_player.turn_on ' + ATV]);
   assert.equal(phrase(atv).props.children, 'Rien en lecture', 'le geste d’abord');
-  assert.equal(de(atv, 'RmBascule').props.className, 'o-seul-large', 'la bascule, à la carte large seule');
+  assert.equal(de(atv, 'RmBascule'), undefined, 'une TV n’a plus de bascule, à aucun format');
   /* ASSERTION MODIFIÉE (passe bis du 17/10, marquée à la passe bis 2 ; M7, M14) : indisponible, la carte étroite ne dessine plus rien
    * vers une entité morte — ni ligne de commandes, ni chiffre en haut —, comme la carte large (un jumeau mort ne commande pas). */
   const bureau = carte(w, BUREAU);
@@ -577,9 +576,9 @@ test('E14 : les limites levées — la pastille « Limites levées » en accent 
   const tv = carte(w2, TV);
   assert.equal(lazyDe(tv, 'PastilleEnfant'), undefined, 'un profil désactivé n’a pas de pastille (§ 6.3)');
   assert.equal(attribut(tv, 'data-source').props.children, 'Netflix', 'la source revient');
-  assert.deepEqual(tv.trouver(e => e.type && e.type.name === 'RmJauge').map(j => j.props.plafond), [null, null]);
+  assert.deepEqual(tv.trouver(e => e.type && e.type.name === 'RmJauge').map(j => j.props.plafond), [], 'profil désactivé : une TV comme les autres, son bouton (08/11)');
   assert.equal(lazyDe(tv, 'PiedTemps'), undefined, 'désactivé : ni « Temps d’écran » ni « Écoulé » (§ 6.3)');
-  assert.equal(attribut(tv, 'data-volume').props.children, 'Volume 40' + NBSP + '%', 'le volume reprend le pied');
+  assert.equal(attribut(tv, 'data-volume'), undefined, 'une TV : le volume est dans sa fiche (08/11)');
   assert.equal(de(tv, 'Surface').props.label, 'TV du salon, Stranger Things · S4 - E1, Volume 40 %', 'la surface ne dit plus le temps ni le profil');
   // Levées : de même, le temps d'écran ne se dessine pas — les limites ne tiennent pas.
   const w3 = poserEnfant({ [ATV]: VUE({ leve_jusqua: leve, plafond: null, ecran: ECRAN }) }, tvAllumee);
@@ -777,10 +776,10 @@ test('passe bis 2, point 2 : un écran bloqué n’offre plus d’interrupteur �
   // Les limites levées, ou le profil éteint : la carte est celle d'avant — la bascule revient, même si le serveur parlait encore de blocage.
   const leve = Math.round(Date.now() / 1000) + 1800;
   assert.ok(bascule({ [ATV]: VUE({ ...ecoule, leve_jusqua: leve, plafond: null }) }), 'limites levées');
-  assert.ok(bascule({ [ATV]: VUE({ ...ecoule, actif: false, plafond: null }) }), 'profil désactivé');
+  assert.ok(de(carte(poserEnfant({ [ATV]: VUE({ ...ecoule, actif: false, plafond: null }) }), ATV), 'BoutonMarche'), 'profil désactivé : une TV comme les autres');
   // Sans profil dans la maison, rien ne change.
   fini();
-  assert.ok(de(carte(poser(), ATV), 'RmBascule'), 'sans profil : la bascule d’avant');
+  assert.ok(de(carte(poser(), ATV), 'BoutonMarche'), 'sans profil : le bouton');
   fini();
 }));
 
@@ -832,4 +831,15 @@ test('passe bis 3, point 1 : pas de chiffre fantôme — un geste à 80 % sur un
   m2.proprietes({ hass: w2.hass() });
   assert.deepEqual([motVolume(m2), barreLarge(m2).v], ['Volume 35' + NBSP + '%', 35], 'le volume revenu est celui de l’Echo');
   assert.deepEqual(w2.appels, []);
+}));
+
+test('le bouton d’une TV (sa capture du 08/11, son « ça non ») : toute la largeur, jamais l’icône seule ni la barre du volume à côté ; une enceinte garde sa bascule', () => dans(() => {
+  const boutons = (m) => m.trouver(e => e.type && e.type.name === 'BoutonMarche');
+  const tv = carte(poser(), TV);
+  const [e, l] = boutons(tv);
+  assert.deepEqual([e.props.on, l.props.on], [true, true], 'les deux formats');
+  assert.equal(de(tv, 'RmJauge'), undefined, 'le volume d’une TV se règle dans sa fiche');
+  assert.ok(de(tv, 'PuceLecture'), 'la lecture reste à côté');
+  assert.deepEqual(boutons(carte(poser(), SHOW)), [], 'une enceinte n’a pas ce bouton');
+  assert.ok(de(carte(poser(), SHOW), 'RmJauge'), 'et garde sa barre');
 }));

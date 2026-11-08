@@ -49,6 +49,29 @@ export function ambiancePiece({ lumieres = 0, lampes = null, medias = [], chauff
   return { niveau: 'calme', texte, couleur: COULEURS_PIECE.calme, icone: null };
 }
 
+/** La meme ligne en toutes lettres, pour la carte standard de l'Accueil (sa maquette du 08/11) : « 4 lumières allumées · Musique
+ * en cours », « CO₂ élevé · pensez à aérer ». La carte compacte garde `ambiancePiece`, plus courte. Une fenetre deja ouverte :
+ * pas de conseil d'aerer. Les medias seuls se disent en bleu ; des qu'une lampe brule, l'ambre de l'activite. */
+export function phrasePiece(args = {}) {
+  const amb = ambiancePiece(args);
+  if (amb.niveau === 'calme') return amb;
+  if (amb.niveau === 'probleme') {
+    const ppm = Number(args.co2);
+    const aerer = args.co2 != null && !isNaN(ppm) && ppm >= SEUIL_CO2 && !(Array.isArray(args.ouverts) && args.ouverts.some(Boolean));
+    return aerer ? { ...amb, texte: amb.texte + ' · ' + tr('pensez à aérer') } : amb;
+  }
+  const { lumieres = 0, medias = [], chauffe = false, froid = false } = args;
+  const n = Number(lumieres) || 0;
+  const lecteurs = Array.isArray(medias) ? medias.filter(Boolean) : [];
+  const parties = [];
+  if (n > 0) parties.push(trN(n, '{n} lumière allumée', '{n} lumières allumées'));
+  if (lecteurs.some(m => m.tv)) parties.push(tr('TV'));
+  if (lecteurs.some(m => !m.tv)) parties.push(tr('Musique en cours'));
+  if (chauffe) parties.push(tr('Chauffe'));
+  else if (froid) parties.push(tr('Rafraîchit'));
+  return { ...amb, texte: parties.join(' · '), couleur: n === 0 && lecteurs.length && !chauffe && !froid ? 'var(--o-accent-soft)' : amb.couleur };
+}
+
 /** Une passe sur les etats : ce que chaque zone a de vivant — lecteurs en
  * lecture (et s'ils sont une television), chauffage qui chauffe ou
  * rafraichit, portes et fenetres ouvertes. Cle = zone normalisee par `norm`

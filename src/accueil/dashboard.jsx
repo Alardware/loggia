@@ -63,7 +63,7 @@ import { APPUI_LONG_MS, avalerProchainClic } from '../glisser.js';
 import { phraseAbsence } from '../absence.js';
 import { motCo2, zoneCo2, ChoixCamDispo, EDIT_BTN } from '../cartescustom/galerie.jsx';
 import { motPresence } from '../presence.js';
-import { ACC_CACHES_DEFAUT, ACC_AJOUTEES_DEFAUT, elaguerHisto, ACC_MAIN, ACC_RAIL, ACC_RENOMME, poserFantome, tailleParDefaut, cielSoleil, heureLocale, APPAREIL_ACTIF, LigneMoment, nomDuCycle, WeatherFx, Num, Skel, CartePieceEdition, PieceCard, FavorisAccueil, ScenariosAccueil, PlanPieces, CarteAttention, OngletsAccueil, ACC_NOMS, WeatherGL, FeuilleAgenda, FichePiece, BRIQUES_PIECE } from './briques.jsx';
+import { PuceToutEteindre, ACC_CACHES_DEFAUT, ACC_AJOUTEES_DEFAUT, elaguerHisto, ACC_MAIN, ACC_RAIL, ACC_RENOMME, poserFantome, tailleParDefaut, cielSoleil, heureLocale, APPAREIL_ACTIF, LigneMoment, nomDuCycle, WeatherFx, Num, Skel, CartePieceEdition, PieceCard, FavorisAccueil, ScenariosAccueil, PlanPieces, CarteAttention, OngletsAccueil, ACC_NOMS, WeatherGL, FeuilleAgenda, FichePiece, BRIQUES_PIECE } from './briques.jsx';
 import { annulable } from '../annuler.js';
 import { nomIntegration, integrationDeLaPanne } from '../pannes.js';
 
@@ -953,6 +953,17 @@ function useLumieresAccueil({ a, dashHass, lightsSig, noms }) {
     annulable(svc === 'turn_off' ? tr('{piece} : lumières éteintes', { piece: name }) : tr('{piece} : lumières allumées', { piece: name }),
       () => commanderService(dashHass, ids, 'homeassistant', svc, { entity_id: ids }));
   };
+  /* « Tout éteindre » de l'en-tête des Pièces (sa maquette du 08/11) : les lampes allumées des pièces à l'écran, par les règles du
+   * bouton d'une pièce — veilleuses épargnées (`roomMainsOf`), switch gardé laissé allumé, rien tant que les veilleuses ne sont pas
+   * lues —, et rattrapable cinq secondes. */
+  const lampesAEteindre = (noms) => {
+    if (veilleuses == null || !dashHass) return [];
+    const S = dashHass.states || {};
+    const lecture = lireEtatPrises();
+    const gardee = (l) => String(l.id).indexOf('switch.') === 0 && !cvEstLumiere(l.id) && gardeDeSwitch(lecture, l.id, { reconnue: priseDe(S, l.id).prise, indexLu: indexLu() });
+    return [...new Set(noms.flatMap(n => (roomMainsOf(n) || []).filter(l => l.on && !gardee(l)).map(l => l.id)))];
+  };
+  const eteindrePieces = (ids) => annulable(tr('Lumières éteintes'), () => commanderService(dashHass, ids, 'homeassistant', 'turn_off', { entity_id: ids }));
   // ── Volets et clim par pièce : les minis des tuiles ──────────────────────
   // Agir sans ouvrir la pièce. Double chemin de rattachement, comme les
   // lumières : la ZONE HA de la pièce (byArea) d'abord, le nom ensuite —
@@ -1022,7 +1033,7 @@ function useLumieresAccueil({ a, dashHass, lightsSig, noms }) {
       commanderService(dashHass, ex.clim, 'climate', 'set_hvac_mode', { entity_id: ex.clim, hvac_mode: cible });
     } };
   };
-  return { veilleuses, roomLightsOf, roomMainsOf, toggleRoomLights, roomCoversInfo, dc, roomClimInfo };
+  return { veilleuses, roomLightsOf, roomMainsOf, toggleRoomLights, lampesAEteindre, eteindrePieces, roomCoversInfo, dc, roomClimInfo };
 }
 
 /* « En ce moment » : les appareils actifs de la maison.
@@ -1291,7 +1302,7 @@ function BanniereAccueil({ a, actifsStat, alarmeTuile, attentionLigne, avatars, 
 
 /* Les sections personnalisables de l’Accueil : scènes rapides, pièces, caméras, et le rail. Ce bloc était une fonction appelée sur place dans le rendu ; il en garde le corps.
  * Sorti de `Dashboard` tel quel (lot 5 de l’audit du 28/10, étape d ; ADR 0283) : ses entrées et ses sorties sont nommées. */
-function SectionsAccueil({ Sec, a, absence = null, agenda, ambianceDe, bandeauCollecte, camDispo, cams, clavierPiece, dashHass, dc, debutPiece, editMode, etageChoisi, etatsAcc, etroitPieces, finPiece, formatGrille, grille, jourChoisi, momentRows, mouvPiece, nEnCours, onNav, onOpenRoom, ordinaire, ordreDe, ordrePieces, pageDemandee, pieceDrag, pieces, piecesCols, planActif, points, poserCam, poserGrillePieces, poserRail, relireTodos, retirerPiece, roomClimInfo, roomCoversInfo, roomLightsOf, roomMainsOf, saveGrille, setAgendaOuvert, setEtageChoisi, setJourChoisi, setPageDemandee, setPieceSheet, setVuePieces, taches, taillesDe, toggleRoomLights, veillesEtat, veilleuses, vuePieces, wide, wideXL }) {
+function SectionsAccueil({ Sec, a, absence = null, agenda, ambianceDe, bandeauCollecte, camDispo, cams, clavierPiece, dashHass, dc, debutPiece, editMode, etageChoisi, etatsAcc, etroitPieces, finPiece, formatGrille, grille, jourChoisi, momentRows, mouvPiece, nEnCours, onNav, onOpenRoom, ordinaire, ordreDe, ordrePieces, pageDemandee, pieceDrag, pieces, piecesCols, planActif, points, poserCam, poserGrillePieces, poserRail, relireTodos, retirerPiece, roomClimInfo, roomCoversInfo, roomLightsOf, roomMainsOf, saveGrille, setAgendaOuvert, setEtageChoisi, setJourChoisi, setPageDemandee, setPieceSheet, setVuePieces, taches, taillesDe, toggleRoomLights, lampesAEteindre, eteindrePieces, veillesEtat, veilleuses, vuePieces, wide, wideXL }) {
           const inner = pieces;
           /* LES ETAGES (05/10). Home Assistant tient un registre d'etages et
             * Loggia le lisait deja sans jamais s'en servir. Il FILTRE les pieces
@@ -1341,11 +1352,12 @@ function SectionsAccueil({ Sec, a, absence = null, agenda, ambianceDe, bandeauCo
             /* Plus d'air sous CET en-tete que sous les autres (30/09) : le
                segment le rend plus haut, et la premiere carte venait presque
                le toucher — « la c'est presque colle ». */
-            <div style={{ marginBottom: 12 }}>
+            <div data-pieces-tete="1" style={{ marginBottom: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                 <h2 style={sectionTitle}>{tr('Pièces')}</h2>
                 <div style={{ display: 'flex', alignItems: 'center', gap: serre ? 6 : 10, minWidth: 0 }}>
                   {!serre && <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>{tr('{n} pièces', { n: piecesVues.length })}</span>}
+                  {!editMode && <PuceToutEteindre ids={lampesAEteindre(piecesVues.map(p => p.name))} mot={!etroitPieces} onEteindre={eteindrePieces} />}
                   {etagesPuces}
                   {planActif && segmentPlan(serre)}
                 </div>
@@ -1421,7 +1433,7 @@ function SectionsAccueil({ Sec, a, absence = null, agenda, ambianceDe, bandeauCo
                         * (index.css) : en ligne, ils battaient `:focus-visible`
                         * et la tuile au focus ne se voyait plus au clavier
                         * (audit du 03/10). */
-                      ...(editMode ? { '--o-pointille-ecart': '2px', borderRadius: 14, cursor: 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' } : { userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }) }}>
+                      ...(editMode ? { '--o-pointille-ecart': '2px', borderRadius: 'var(--o-radius,18px)', cursor: 'grab', touchAction: 'pan-y', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' } : { userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }) }}>
                     {/* La SURFACE de la tuile en édition (lot 13 de l'audit du
                       * 03/10) : le focus, le nom et les flèches, que portait
                       * l'enveloppe en `role="button"` — un rôle qui taisait la
@@ -1446,7 +1458,7 @@ function SectionsAccueil({ Sec, a, absence = null, agenda, ambianceDe, bandeauCo
                 * d'autre ne bouge. Au lâcher, la carte s'y pose. */}
               {pieceDrag && pieceDrag.c > 0 && (
                 <div aria-hidden="true" style={{ gridColumn: pieceDrag.c, gridRow: pieceDrag.r + ' / span ' + hauteurCarte(piecesTailles[pieceDrag.id]),
-                  borderRadius: 14, border: '2px dashed var(--o-accent)', background: 'rgba(var(--o-accent-rgb),.12)', pointerEvents: 'none' }} />
+                  borderRadius: 'var(--o-radius,18px)', border: '2px dashed var(--o-accent)', background: 'rgba(var(--o-accent-rgb),.12)', pointerEvents: 'none' }} />
               )}
               {editMode && !ordinaire && (
                 <div style={{ gridColumn: piecesApres.c, gridRow: piecesApres.r + ' / span 1', minWidth: 0 }}>
@@ -1756,7 +1768,7 @@ function Dashboard({ planActif = true, editMode = false, onEnt, onToggleEdit, sa
     out.temp = r.temp != null ? dec(r.temp, 1) + '°' : '—';
     out.hum = r.hum != null ? Math.round(r.hum) + '%' : '—';
     const z = zoneCo2(r.co2);
-    if (r.co2 != null) { out.badge = nombre(r.co2, 0) + '\u00a0ppm'; out.bc = z && !z.bon ? z.c : 'var(--o-text2)'; out.bbg = z && !z.bon ? 'rgba(' + z.rgb + ',.14)' : 'var(--o-s1)'; }
+    if (r.co2 != null) { out.badge = nombre(r.co2, 0) + '\u00a0ppm'; out.bc = z && !z.bon ? z.c : 'var(--o-text2)'; out.bbg = z && !z.bon ? 'rgba(' + z.rgb + ',.14)' : 'var(--o-s1)'; out.co2Zone = z ? { mot: z.t, c: z.c } : null; }
     else out.badge = null;
     out.live = r; // valeurs brutes + entity ids → popup confort
     return out;
@@ -1884,7 +1896,7 @@ function Dashboard({ planActif = true, editMode = false, onEnt, onToggleEdit, sa
     for (const id of switchLights()) { const e = S[id]; if (e) out += id + e.state + '|'; }
     return out;
   }, [dashHass]);
-  const { veilleuses, roomLightsOf, roomMainsOf, toggleRoomLights, roomCoversInfo, dc, roomClimInfo } = useLumieresAccueil({ a, dashHass, lightsSig, noms });
+  const { veilleuses, roomLightsOf, roomMainsOf, toggleRoomLights, lampesAEteindre, eteindrePieces, roomCoversInfo, dc, roomClimInfo } = useLumieresAccueil({ a, dashHass, lightsSig, noms });
 
   const { ficheCh, setFicheCh, momentRows, nEnCours } = useMomentAccueil({ a, cyclesPrises, dashHass, dc, mLv, onNav, ordinaire });
   return (
@@ -1974,7 +1986,7 @@ function Dashboard({ planActif = true, editMode = false, onEnt, onToggleEdit, sa
 
         {/* SECTIONS PERSONNALISABLES — scènes rapides, pièces, caméras, et le rail.
             PC ≥1180 : rail accolé à droite. Mobile/tablette : empilement. */}
-        <SectionsAccueil Sec={Sec} a={a} absence={absence} agenda={agenda} ambianceDe={ambianceDe} bandeauCollecte={bandeauCollecte} camDispo={camDispo} cams={cams} clavierPiece={clavierPiece} dashHass={dashHass} dc={dc} debutPiece={debutPiece} editMode={editMode} etageChoisi={etageChoisi} etatsAcc={etatsAcc} etroitPieces={etroitPieces} finPiece={finPiece} formatGrille={formatGrille} grille={grille} jourChoisi={jourChoisi} momentRows={momentRows} mouvPiece={mouvPiece} nEnCours={nEnCours} onNav={onNav} onOpenRoom={onOpenRoom} ordinaire={ordinaire} ordreDe={ordreDe} ordrePieces={ordrePieces} pageDemandee={pageDemandee} pieceDrag={pieceDrag} pieces={pieces} piecesCols={piecesCols} planActif={planActif} points={points} poserCam={poserCam} poserGrillePieces={poserGrillePieces} poserRail={poserRail} relireTodos={relireTodos} retirerPiece={retirerPiece} roomClimInfo={roomClimInfo} roomCoversInfo={roomCoversInfo} roomLightsOf={roomLightsOf} roomMainsOf={roomMainsOf} saveGrille={saveGrille} setAgendaOuvert={setAgendaOuvert} setEtageChoisi={setEtageChoisi} setJourChoisi={setJourChoisi} setPageDemandee={setPageDemandee} setPieceSheet={setPieceSheet} setVuePieces={setVuePieces} taches={taches} taillesDe={taillesDe} toggleRoomLights={toggleRoomLights} veillesEtat={veillesEtat} veilleuses={veilleuses} vuePieces={vuePieces} wide={wide} wideXL={wideXL} />
+        <SectionsAccueil Sec={Sec} a={a} absence={absence} agenda={agenda} ambianceDe={ambianceDe} bandeauCollecte={bandeauCollecte} camDispo={camDispo} cams={cams} clavierPiece={clavierPiece} dashHass={dashHass} dc={dc} debutPiece={debutPiece} editMode={editMode} etageChoisi={etageChoisi} etatsAcc={etatsAcc} etroitPieces={etroitPieces} finPiece={finPiece} formatGrille={formatGrille} grille={grille} jourChoisi={jourChoisi} momentRows={momentRows} mouvPiece={mouvPiece} nEnCours={nEnCours} onNav={onNav} onOpenRoom={onOpenRoom} ordinaire={ordinaire} ordreDe={ordreDe} ordrePieces={ordrePieces} pageDemandee={pageDemandee} pieceDrag={pieceDrag} pieces={pieces} piecesCols={piecesCols} planActif={planActif} points={points} poserCam={poserCam} poserGrillePieces={poserGrillePieces} poserRail={poserRail} relireTodos={relireTodos} retirerPiece={retirerPiece} roomClimInfo={roomClimInfo} roomCoversInfo={roomCoversInfo} roomLightsOf={roomLightsOf} roomMainsOf={roomMainsOf} saveGrille={saveGrille} setAgendaOuvert={setAgendaOuvert} setEtageChoisi={setEtageChoisi} setJourChoisi={setJourChoisi} setPageDemandee={setPageDemandee} setPieceSheet={setPieceSheet} setVuePieces={setVuePieces} taches={taches} taillesDe={taillesDe} toggleRoomLights={toggleRoomLights} lampesAEteindre={lampesAEteindre} eteindrePieces={eteindrePieces} veillesEtat={veillesEtat} veilleuses={veilleuses} vuePieces={vuePieces} wide={wide} wideXL={wideXL} />
 
       </div>
       {roomPop && (() => {
