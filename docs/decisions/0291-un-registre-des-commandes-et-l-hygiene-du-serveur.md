@@ -1,6 +1,6 @@
 # 0291 — Un registre des commandes, et l'hygiène du serveur
 
-*30 octobre 2026 — à l'essai (audit de consolidation du 28/10, lot 8 : M12, B3, B5, B10)*
+*30 octobre 2026 — appliqué (v3.96.0) (audit de consolidation du 28/10, lot 8 : M12, B3, B5, B10)*
 
 ## Le problème
 

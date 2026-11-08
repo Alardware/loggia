@@ -1,6 +1,6 @@
 # 0281 — Des filets sous la CI
 
-*28 octobre 2026 — à l'essai (audit de consolidation du 28/10, lot 3 : H4, M14, M13, M9, B6)*
+*28 octobre 2026 — appliqué (v3.96.0) (audit de consolidation du 28/10, lot 3 : H4, M14, M13, M9, B6)*
 
 ## Le problème
 

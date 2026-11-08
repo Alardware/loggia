@@ -1,6 +1,6 @@
 # 0179 — Le corps d'une carte de pièce n'a pas de marge
 
-*9 octobre 2026 — accepté, déployé chez lui (rien de publié)*
+*9 octobre 2026 — appliqué (v3.94.0)*
 
 ## Le problème
 

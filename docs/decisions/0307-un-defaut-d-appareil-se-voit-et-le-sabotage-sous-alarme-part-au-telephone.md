@@ -1,6 +1,6 @@
 # 0307 — Un défaut d'appareil se voit à l'Accueil et dans sa popup, et le sabotage sous alarme part au téléphone
 
-*1er novembre 2026 — à l'essai (rien de publié) (lot 3 du rapport « Gladys comparé au catalogue », 31/10 : D13, P1, fin du S4 du 30/10)*
+*1er novembre 2026 — appliqué (v3.97.0) (lot 3 du rapport « Gladys comparé au catalogue », 31/10 : D13, P1, fin du S4 du 30/10)*
 
 *Complète l'ADR [0305](0305-la-surete-lit-l-appareil-qui-porte-le-binaire.md) : `voisins.py` lit aussi le bouton qui réarme un appareil.*
 

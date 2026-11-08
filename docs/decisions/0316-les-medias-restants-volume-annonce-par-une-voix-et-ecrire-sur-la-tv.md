@@ -1,6 +1,6 @@
 # 0316 — Les médias restants : le volume au pavé, l'annonce par une voix de synthèse, écrire sur la TV
 
-*1er novembre 2026 — à l'essai (rien de publié) (lot 12 du rapport « Gladys comparé au catalogue », 31/10 : M1, M2, M3 ; les points du 30/10)*
+*1er novembre 2026 — appliqué (v3.97.0) (lot 12 du rapport « Gladys comparé au catalogue », 31/10 : M1, M2, M3 ; les points du 30/10)*
 
 *Complète l'ADR [0207](0207-la-carte-et-la-popup-d-un-lecteur.md) : la fiche d'un lecteur gagne trois gestes.*
 

@@ -1,6 +1,6 @@
 # 0284 — Le même verre, à moindre coût
 
-*29 octobre 2026 — à l'essai (sa réponse : « Réglage par appareil (Recommandé) »)*
+*29 octobre 2026 — appliqué (v3.96.0) (sa réponse : « Réglage par appareil (Recommandé) »)*
 
 ## Le problème
 

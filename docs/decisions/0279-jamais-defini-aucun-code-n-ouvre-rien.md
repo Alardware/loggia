@@ -1,6 +1,6 @@
 # 0279 — Jamais défini, aucun code n'ouvre rien
 
-*28 octobre 2026 — à l'essai (audit de consolidation du 28/10, lot 1 : H1, B4, M5 ; complète l'ADR du code administrateur haché, 18/09, et l'ADR 0278)*
+*28 octobre 2026 — appliqué (v3.96.0) (audit de consolidation du 28/10, lot 1 : H1, B4, M5 ; complète l'ADR du code administrateur haché, 18/09, et l'ADR 0278)*
 
 ## Le problème
 

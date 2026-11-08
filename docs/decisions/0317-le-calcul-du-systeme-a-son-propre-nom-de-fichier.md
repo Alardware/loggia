@@ -1,6 +1,6 @@
 # 0317 — Le calcul du Système a son propre nom de fichier
 
-*1er novembre 2026 — à l'essai (rien de publié) (lot 10 bis du rapport « Gladys comparé au catalogue » : correctif du lot 10, ADR 0314)*
+*1er novembre 2026 — appliqué (v3.97.0) (lot 10 bis du rapport « Gladys comparé au catalogue » : correctif du lot 10, ADR 0314)*
 
 *Corrige l'ADR [0314](0314-ce-que-l-administrateur-doit-savoir-sauvegardes-disque-plein-et-mises-a-jour.md) : le chargement à la demande de `systeme.js`.*
 

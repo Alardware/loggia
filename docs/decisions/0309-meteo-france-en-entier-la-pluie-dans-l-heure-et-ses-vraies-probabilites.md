@@ -1,6 +1,6 @@
 # 0309 — Météo-France en entier : la pluie dans l'heure, ses vraies probabilités, plus jamais un « 0 % » inventé
 
-*1er novembre 2026 — à l'essai (rien de publié) (lot 5 du rapport « Gladys comparé au catalogue », 31/10 : D14, W1, W2)*
+*1er novembre 2026 — appliqué (v3.97.0) (lot 5 du rapport « Gladys comparé au catalogue », 31/10 : D14, W1, W2)*
 
 *Complète l'ADR [0303](0303-l-air-et-les-uv-dans-la-meteo.md) : après l'air et les UV, la pluie de la fiche météo.*
 

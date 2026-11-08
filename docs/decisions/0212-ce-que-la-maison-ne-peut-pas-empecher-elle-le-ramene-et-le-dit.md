@@ -1,6 +1,6 @@
 # 0212 — Ce que la maison ne peut pas empêcher, elle le ramène et le dit
 
-*17 octobre 2026 — accepté, à l'essai (chantier Mode enfant ; rien de publié). La conception : `docs/chantier-mode-enfant.md`, E3 C et E4 B + C tranchés par lui le 17/10, E22, E24 ; § 4 (ce que la maquette montre et qui ne se construit pas) ; § 9 (les limites honnêtes) ; § 10 (la démo).*
+*17 octobre 2026 — appliqué (v3.94.0) (chantier Mode enfant). La conception : `docs/chantier-mode-enfant.md`, E3 C et E4 B + C tranchés par lui le 17/10, E22, E24 ; § 4 (ce que la maquette montre et qui ne se construit pas) ; § 9 (les limites honnêtes) ; § 10 (la démo).*
 
 ## Le problème
 

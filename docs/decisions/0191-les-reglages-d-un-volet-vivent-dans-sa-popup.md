@@ -1,6 +1,6 @@
 # 0191 — Les réglages d'un volet vivent dans sa popup
 
-*13 octobre 2026 — accepté, à l'essai (chantier Volets : plan 1, tâche 7 ; plan 2, tâche 13 ; rien de publié)*
+*13 octobre 2026 — appliqué (v3.94.0) (chantier Volets : plan 1, tâche 7 ; plan 2, tâche 13)*
 
 À la question « que fait-on de Paramètres › Règles › Volets, et des jours d'un
 volet "Heures à lui" ? », il a répondu le 13/10 : « Les deux ».

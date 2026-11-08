@@ -1,6 +1,6 @@
 # 0218 — Les pièces d'un robot sont celles de Home Assistant
 
-*19 octobre 2026 — accepté, à l'essai (chantier IoT, tranche « robots 2 : les pièces sans rien configurer » ; rien de publié ; un redémarrage de Home Assistant à l'installation). La conception : `docs/chantier-iot.md`, « Tranche robots 2 », et son document de conception du 19/10 (R1 à R16, ses choix Q1 A, Q2 A, Q3 A) ; le plan : `docs/chantier-iot-plan-3-robots-pieces.md`. Passe bis du 20 octobre, sur sa décision du 20/10 à 08:05 (« Mon script garde la main ») et les deux relectures (conformité, qualité) : les corrections sont tenues ici, section par section ; passe bis 2 du même jour, sur la relecture de contrôle (la roue qui pouvait effacer la description de la maison) : sa section ci-dessous. 0219 reste réservée à sa relecture.*
+*19 octobre 2026 — appliqué (v3.94.0) (chantier IoT, tranche « robots 2 : les pièces sans rien configurer » ; un redémarrage de Home Assistant à l'installation). La conception : `docs/chantier-iot.md`, « Tranche robots 2 », et son document de conception du 19/10 (R1 à R16, ses choix Q1 A, Q2 A, Q3 A) ; le plan : `docs/chantier-iot-plan-3-robots-pieces.md`. Passe bis du 20 octobre, sur sa décision du 20/10 à 08:05 (« Mon script garde la main ») et les deux relectures (conformité, qualité) : les corrections sont tenues ici, section par section ; passe bis 2 du même jour, sur la relecture de contrôle (la roue qui pouvait effacer la description de la maison) : sa section ci-dessous. 0219 reste réservée à sa relecture.*
 
 ## Le problème
 

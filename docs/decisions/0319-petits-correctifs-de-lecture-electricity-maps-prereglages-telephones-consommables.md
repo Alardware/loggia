@@ -1,6 +1,6 @@
 # 0319 — Petits correctifs de lecture : Electricity Maps à sa clé, préréglages traduits, rien d'un téléphone dans Objets, un seuil sans plafond
 
-*1er novembre 2026 — à l'essai (rien de publié) (lot 14 du rapport « Gladys comparé au catalogue », 31/10 : D15, D16, E1, Z1, D21 ; plus une demande ajoutée)*
+*1er novembre 2026 — appliqué (v3.97.0) (lot 14 du rapport « Gladys comparé au catalogue », 31/10 : D15, D16, E1, Z1, D21 ; plus une demande ajoutée)*
 
 ## Le problème
 

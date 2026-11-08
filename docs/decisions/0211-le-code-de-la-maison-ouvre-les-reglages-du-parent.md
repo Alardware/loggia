@@ -1,6 +1,6 @@
 # 0211 — Le code de la maison ouvre les réglages du parent
 
-*17 octobre 2026 — accepté, à l'essai (chantier Mode enfant ; rien de publié). La conception : `docs/chantier-mode-enfant.md`, E2 B tranché par lui le 17/10, E12, E13, E14 ; § 7.4 ; § 8.*
+*17 octobre 2026 — appliqué (v3.94.0) (chantier Mode enfant). La conception : `docs/chantier-mode-enfant.md`, E2 B tranché par lui le 17/10, E12, E13, E14 ; § 7.4 ; § 8.*
 
 ## Le problème
 

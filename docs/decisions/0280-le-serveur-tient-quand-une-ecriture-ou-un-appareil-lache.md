@@ -1,6 +1,6 @@
 # 0280 — Le serveur tient quand une écriture ou un appareil lâche
 
-*28 octobre 2026 — à l'essai (audit de consolidation du 28/10, lot 2 : M1, M2, M3, M4, B1, B2)*
+*28 octobre 2026 — appliqué (v3.96.0) (audit de consolidation du 28/10, lot 2 : M1, M2, M3, M4, B1, B2)*
 
 ## Le problème
 

@@ -1,6 +1,6 @@
 # 0252 — Les fiches des capteurs disent la même chose que leurs cartes
 
-*19 octobre 2026 — accepté, à l'essai (audit des capteurs, lot 4, le dernier ; rien de publié). Complète les ADR 0031 (le dernier événement vient du journal), 0048 (le liseré qui respire), 0200 (la fiche d'une mesure) et 0251 (le lot 3).*
+*19 octobre 2026 — appliqué (v3.94.0) (audit des capteurs, lot 4, le dernier). Complète les ADR 0031 (le dernier événement vient du journal), 0048 (le liseré qui respire), 0200 (la fiche d'une mesure) et 0251 (le lot 3).*
 
 ## Le problème
 

@@ -1,6 +1,6 @@
 # 0305 — La sûreté lit l'appareil qui porte le binaire : la pluie d'un robot n'est pas une fuite, ce qu'une caméra entend ne fait pas réagir la maison
 
-*31 octobre 2026 — à l'essai (rien de publié) (lot 1 du rapport « Gladys comparé au catalogue », 31/10 : D10, D11)*
+*31 octobre 2026 — appliqué (v3.97.0) (lot 1 du rapport « Gladys comparé au catalogue », 31/10 : D10, D11)*
 
 *Complète l'ADR [0022](0022-sur-un-danger-la-maison-reagit.md), § 16/10 (un `moisture` calculé n'est pas une fuite).*
 

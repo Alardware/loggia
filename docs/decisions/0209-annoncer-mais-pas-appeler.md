@@ -1,6 +1,6 @@
 # 0209 — Annoncer, mais pas appeler
 
-*17 octobre 2026 — accepté, à l'essai (chantier Médias ; rien de publié). La conception : `docs/chantier-medias.md`, M3 A et M9, § 6.7, § 7.2 ; tranché par lui le 17/10 (« M3 A, les appels hors chantier »).*
+*17 octobre 2026 — appliqué (v3.94.0) (chantier Médias). La conception : `docs/chantier-medias.md`, M3 A et M9, § 6.7, § 7.2 ; tranché par lui le 17/10 (« M3 A, les appels hors chantier »).*
 
 ## Le problème
 

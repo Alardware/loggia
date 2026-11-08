@@ -1,6 +1,6 @@
 # 0214 — La popup d'un robot : où, puis go
 
-*18 octobre 2026 — accepté, à l'essai (chantier IoT, étape 1 ; rien de publié). La conception : `docs/chantier-iot.md`, I2 A, I4 A, I15 à I20, I32, I33 ; sa maquette « Cartes IoT », cadres 1b (Accueil), 1c (Planning), 1d (Entretien et Historique) ; le plan : `docs/chantier-iot-plan-1-robots.md`, tâches 8 et 9, sa « Passe bis du 18/10 » et sa « Passe bis 2 du 18/10 ».*
+*18 octobre 2026 — appliqué (v3.94.0) (chantier IoT, étape 1). La conception : `docs/chantier-iot.md`, I2 A, I4 A, I15 à I20, I32, I33 ; sa maquette « Cartes IoT », cadres 1b (Accueil), 1c (Planning), 1d (Entretien et Historique) ; le plan : `docs/chantier-iot-plan-1-robots.md`, tâches 8 et 9, sa « Passe bis du 18/10 » et sa « Passe bis 2 du 18/10 ».*
 
 ## Le problème
 

@@ -1,6 +1,6 @@
 # 0204 — La carte d'un binaire dit le calme en neutre ; sa fiche perd les lignes de Home Assistant
 
-*16 octobre 2026 — accepté, à l'essai (chantier Capteurs, étapes 2 et 3 ; rien de publié). C26 de `docs/chantier-capteurs-etapes-2-3.md`.*
+*16 octobre 2026 — appliqué (v3.94.0) (chantier Capteurs, étapes 2 et 3). C26 de `docs/chantier-capteurs-etapes-2-3.md`.*
 
 ## Le problème
 

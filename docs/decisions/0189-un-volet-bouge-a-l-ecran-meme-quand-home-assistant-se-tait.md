@@ -1,6 +1,6 @@
 # 0189 — Un volet bouge à l'écran même quand Home Assistant se tait
 
-*12 octobre 2026 — accepté, à l'essai (plan 2 du chantier Volets, rien de publié)*
+*12 octobre 2026 — appliqué (v3.94.0) (plan 2 du chantier Volets)*
 
 ## Le problème
 

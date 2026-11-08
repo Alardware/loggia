@@ -1,6 +1,6 @@
 # 0320 — Un numéro de série anonymisé, et l'aspirateur mort de l'Accueil retiré
 
-*1er novembre 2026 — à l'essai (rien de publié) (lot 15 du rapport « Gladys comparé au catalogue » : deux décisions restées ouvertes après le lot 14)*
+*1er novembre 2026 — appliqué (v3.97.0) (lot 15 du rapport « Gladys comparé au catalogue » : deux décisions restées ouvertes après le lot 14)*
 
 *Complète l'ADR [0319](0319-petits-correctifs-de-lecture-electricity-maps-prereglages-telephones-consommables.md) : après la tondeuse, l'aspirateur.*
 

@@ -1,6 +1,6 @@
 # 0208 — Un appareil, une carte : le jumeau
 
-*17 octobre 2026 — accepté, à l'essai (chantier Médias ; rien de publié). La conception : `docs/chantier-medias.md`, M1 B et M14, § 7.3 ; tranché par lui le 17/10 (« M1 B, un appareil, une carte »).*
+*17 octobre 2026 — appliqué (v3.94.0) (chantier Médias). La conception : `docs/chantier-medias.md`, M1 B et M14, § 7.3 ; tranché par lui le 17/10 (« M1 B, un appareil, une carte »).*
 
 ## Le problème
 

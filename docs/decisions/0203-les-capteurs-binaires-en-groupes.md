@@ -1,6 +1,6 @@
 # 0203 — Les capteurs binaires en groupes : Ouvertures, Sécurité, Présence
 
-*16 octobre 2026 — accepté, à l'essai (chantier Capteurs, étapes 2 et 3 ; rien de publié). La conception : `docs/chantier-capteurs-etapes-2-3.md`, C20 à C25, C27, C28, et le § 19, tranché le 16/10.*
+*16 octobre 2026 — appliqué (v3.94.0) (chantier Capteurs, étapes 2 et 3). La conception : `docs/chantier-capteurs-etapes-2-3.md`, C20 à C25, C27, C28, et le § 19, tranché le 16/10.*
 
 ## Le problème
 

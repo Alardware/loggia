@@ -1,6 +1,6 @@
 # 0321 — La carte des personnes et des traceurs est une popup, Leaflet sur le fond de Home Assistant
 
-*1er novembre 2026 — à l'essai (rien de publié) (lot 16 du rapport « Gladys comparé au catalogue » : sa demande)*
+*1er novembre 2026 — appliqué (v3.97.0) (lot 16 du rapport « Gladys comparé au catalogue » : sa demande)*
 
 *Complétée par l'ADR [0322](0322-la-demo-en-ligne-a-un-fond-de-carte-openstreetmap.md) (01/11) : la démo en ligne a un fond OpenStreetMap.*
 

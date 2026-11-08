@@ -1,6 +1,6 @@
 # 0213 — Les cartes IoT : un chiffre qui dit ce qu'il mesure, une phrase qui dit la suite
 
-*18 octobre 2026 — accepté, à l'essai (chantier IoT, étape 1 : les robots ; rien de publié). La conception : `docs/chantier-iot.md`, I5 à I9, I12 à I14, I33 à I35, § 6, § 12 ; sa maquette « Cartes IoT », cadre 1a ; le plan : `docs/chantier-iot-plan-1-robots.md`, tâches 1, 2, 5, 6 et 7 ; sa « Passe bis du 18/10 » (après deux relectures) et sa « Passe bis 2 du 18/10 » (après la relecture de contrôle). Complétée à l'étape 2 (le distributeur, 19/10 : « L'étape 2 », à la fin) ; à compléter à l'étape 3 (l'eau).*
+*18 octobre 2026 — appliqué (v3.94.0) (chantier IoT, étape 1 : les robots). La conception : `docs/chantier-iot.md`, I5 à I9, I12 à I14, I33 à I35, § 6, § 12 ; sa maquette « Cartes IoT », cadre 1a ; le plan : `docs/chantier-iot-plan-1-robots.md`, tâches 1, 2, 5, 6 et 7 ; sa « Passe bis du 18/10 » (après deux relectures) et sa « Passe bis 2 du 18/10 » (après la relecture de contrôle). Complétée à l'étape 2 (le distributeur, 19/10 : « L'étape 2 », à la fin) ; à compléter à l'étape 3 (l'eau).*
 
 ## Le problème
 

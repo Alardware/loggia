@@ -1,6 +1,6 @@
 # 0303 — L'air et les UV dans la météo, seulement sur une échelle connue
 
-*30 octobre 2026 — à l'essai, rien de publié (chantier G4, d'après la comparaison des intégrations Gladys du 30/10 : A1 à A6)*
+*30 octobre 2026 — appliqué (v3.96.0) (chantier G4, d'après la comparaison des intégrations Gladys du 30/10 : A1 à A6)*
 
 *Complète l'ADR [0272](0272-la-meteo-repond-a-la-question-qu-on-se-pose.md) : la fiche météo de sa maquette « Cartes météo ».*
 

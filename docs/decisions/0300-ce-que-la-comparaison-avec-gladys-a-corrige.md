@@ -1,6 +1,6 @@
 # 0300 — Ce que la comparaison avec Gladys a corrigé : télécommande, chiffre et zone, monoxyde, chauffe-eau, présence ; l'alarme à secteurs, NON corrigée
 
-*30 octobre 2026 — à l'essai (rien de publié) ; chantier G1, d'après `audit/gladys-integrations-3010.md` (« Oui, les 9 »)*
+*30 octobre 2026 — appliqué (v3.96.0) ; chantier G1, d'après `audit/gladys-integrations-3010.md` (« Oui, les 9 »)*
 
 ## Le problème
 

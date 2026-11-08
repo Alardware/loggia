@@ -1,6 +1,6 @@
 # 0302 — Le tableau Énergie en entier : toutes les sources, l'eau chaude, la borne, Tempo et le prix qui varie
 
-*30 octobre 2026 — à l'essai (rien de publié) (chantier G3, « Énergie complète », d'après la comparaison des intégrations Gladys du 30/10 : D3, D4, E1 à E7)*
+*30 octobre 2026 — appliqué (v3.96.0) (chantier G3, « Énergie complète », d'après la comparaison des intégrations Gladys du 30/10 : D3, D4, E1 à E7)*
 
 ## Le problème
 

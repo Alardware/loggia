@@ -1,6 +1,6 @@
 # 0193 — La carte et la fiche d'une prise
 
-*13 octobre 2026 — accepté, à l'essai (chantier Prises, plan 2, rien de publié). Remplace en partie l'ADR 0095, § 4.*
+*13 octobre 2026 — appliqué (v3.94.0) (chantier Prises, plan 2). Remplace en partie l'ADR 0095, § 4.*
 
 *14 octobre 2026 — la puissance passe en bas. Sa demande, « oui aligne aussi la
 puissance des prises en bas » : sur la carte large, elle n'est plus posée sur la

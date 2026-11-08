@@ -1,6 +1,6 @@
 # 0188 — La carte et la fiche du volet
 
-*12 octobre 2026 — accepté, à l'essai (plan 2 du chantier Volets, rien de publié)*
+*12 octobre 2026 — appliqué (v3.94.0) (plan 2 du chantier Volets)*
 
 ## Le problème
 

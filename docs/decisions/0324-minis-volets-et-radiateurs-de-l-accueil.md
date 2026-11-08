@@ -1,6 +1,6 @@
 # 0324 — Les minis volets et radiateurs des cartes de pièce
 
-*3 novembre 2026 — à l'essai (rien de publié)*
+*3 novembre 2026 — appliqué (v3.97.0)*
 
 ## Le problème
 

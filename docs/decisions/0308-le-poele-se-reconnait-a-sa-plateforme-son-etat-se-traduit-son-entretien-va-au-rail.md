@@ -1,6 +1,6 @@
 # 0308 — Le poêle se reconnaît à sa plateforme : son état se traduit, son entretien va au rail, le conseil Éco n'est que pour lui
 
-*1er novembre 2026 — à l'essai (rien de publié) (lot 4 du rapport « Gladys comparé au catalogue », 31/10 : P2, P3, P4)*
+*1er novembre 2026 — appliqué (v3.97.0) (lot 4 du rapport « Gladys comparé au catalogue », 31/10 : P2, P3, P4)*
 
 *Complète l'ADR [0307](0307-un-defaut-d-appareil-se-voit-et-le-sabotage-sous-alarme-part-au-telephone.md) : après l'alarme du poêle, ce qu'il fait et son entretien.*
 

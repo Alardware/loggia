@@ -1,6 +1,6 @@
 # 0261 — L'écran a une seule idée de la lumière
 
-*19 octobre 2026 — accepté (gestion des lumières, première tranche : l'audit qu'il a validé)*
+*19 octobre 2026 — appliqué (v3.94.0) (gestion des lumières, première tranche : l'audit qu'il a validé)*
 
 ## Le problème
 

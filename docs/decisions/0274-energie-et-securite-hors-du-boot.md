@@ -1,6 +1,6 @@
 # 0274 — Énergie et Sécurité hors du boot
 
-*25 octobre 2026 — à l'essai (rien de publié)*
+*25 octobre 2026 — appliqué (v3.94.0)*
 
 ## Le problème
 

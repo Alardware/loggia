@@ -1,6 +1,6 @@
 # 0325 — Des diagnostics qui disent la forme, jamais la maison
 
-*4 novembre 2026 — à l'essai (rien de publié)*
+*4 novembre 2026 — appliqué (v3.98.0)*
 
 ## Le problème
 

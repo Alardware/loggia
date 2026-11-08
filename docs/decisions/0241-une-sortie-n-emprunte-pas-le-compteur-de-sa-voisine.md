@@ -1,6 +1,6 @@
 # 0241 — Une sortie n'emprunte pas le compteur de sa voisine
 
-*19 octobre 2026 — accepté, à l'essai (audit des prises, rien de publié). Complète l'ADR 0193 (P1, P2).*
+*19 octobre 2026 — appliqué (v3.94.0) (audit des prises). Complète l'ADR 0193 (P1, P2).*
 
 ## Le problème
 

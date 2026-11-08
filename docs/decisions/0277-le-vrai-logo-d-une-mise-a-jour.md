@@ -1,6 +1,6 @@
 # 0277 — Le vrai logo d'une mise à jour
 
-*27 octobre 2026 — à l'essai (rien de publié)*
+*27 octobre 2026 — appliqué (v3.95.0)*
 
 ## Le problème
 

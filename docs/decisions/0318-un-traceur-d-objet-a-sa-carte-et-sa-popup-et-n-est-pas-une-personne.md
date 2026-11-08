@@ -1,6 +1,6 @@
 # 0318 — Un traceur d'objet a sa carte et sa popup, et ce n'est pas une personne
 
-*1er novembre 2026 — à l'essai (rien de publié) (lot 13 du rapport « Gladys comparé au catalogue », 31/10 : H2)*
+*1er novembre 2026 — appliqué (v3.97.0) (lot 13 du rapport « Gladys comparé au catalogue », 31/10 : H2)*
 
 ## Le problème
 

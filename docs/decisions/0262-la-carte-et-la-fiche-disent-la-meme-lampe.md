@@ -1,6 +1,6 @@
 # 0262 — La carte et la fiche disent la même lampe
 
-*19 octobre 2026 — accepté (gestion des lumières, seconde tranche : la carte et la fiche, d'après l'audit qu'il a validé)*
+*19 octobre 2026 — appliqué (v3.94.0) (gestion des lumières, seconde tranche : la carte et la fiche, d'après l'audit qu'il a validé)*
 
 ## Le problème
 
