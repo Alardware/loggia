@@ -190,6 +190,17 @@ export function montrerRangee(el) {
   return rangee;
 }
 
+/**
+ * Quitter les Paramètres les referme : on y revient par la vue d'ensemble, pas
+ * sur la dernière section ouverte (08/11). Seul le passage à une AUTRE vue
+ * l'efface : ce qui mène à une section (Ctrl+K, le pont Zigbee) la pose avant de
+ * naviguer, et un rechargement (changer de langue) doit la retrouver.
+ */
+export function oublierSectionSiQuittee(avant, vue) {
+  if (avant !== 'parametres' || vue === 'parametres') return;
+  try { sessionStorage.removeItem('loggia-par-section'); } catch { /* stockage indisponible */ }
+}
+
 /** Demander les Paramètres sur un réglage, d'ailleurs (Ctrl+K) : la section et le réglage dans la mémoire de session, et un signal pour des Paramètres déjà ouverts. */
 export function demanderReglage(id) {
   const s = sectionDe(id);

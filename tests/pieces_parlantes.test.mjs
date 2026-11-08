@@ -26,7 +26,9 @@ test('la carte piece : une ligne d’etat a priorite, dans ses deux variantes, s
   assert.equal(c.split(calcul).length - 1, 2, 'compacte et standard calculent la meme ligne (lumieres de la carte + ambiance + CO2 de la piece)');
   assert.ok(c.includes("const etat = amb ? amb.texte : '—';") && c.includes("color: amb ? amb.couleur : 'var(--o-text2)'"), 'compacte : le texte et sa couleur — le gris SECONDAIRE, lisible sur le lavis de la pièce');
   assert.ok(c.includes("{amb && amb.icone ? <Fi i={amb.icone} size={11} style={{ marginRight: 4 }} /> : null}{etat}"), 'compacte : le triangle devant un probleme');
-  assert.ok(c.includes("{amb ? <span style={{ color: amb.couleur }}>{amb.icone ? <Fi i={amb.icone} size={11} style={{ marginRight: 4 }} /> : null}<FlipText text={amb.texte} /></span> : <Skel w={92} h={12} />}"), 'standard : le texte anime, colore, l’humidite a cote');
+  assert.ok(c.includes("{phrase ? <span style={{ color: phrase.couleur }}><FlipText text={phrase.texte} /></span> : <Skel w={92} h={12} />}"), 'standard : la phrase en toutes lettres, animee, coloree (sa maquette du 08/11)');
+  assert.ok(c.includes('{p.co2Zone && <span') && c.includes('{p.badge}') && DASHBOARD.includes('out.co2Zone = z ? { mot: z.t, c: z.c } : null;'), 'standard : le CO₂, sa valeur, son point et le mot de sa zone (sa capture du 08/11)');
+  assert.ok(c.includes("flexDirection: 'column', borderRadius: 'var(--o-radius,18px)', padding: '14px 15px 12px'") && !c.includes("flexDirection: 'column', borderRadius: 14"), 'standard : le réglage Arrondi vaut pour elle aussi (08/11)');
   assert.ok(!c.includes("tr('{n} lampes allumées'"), 'le compteur seul n’existe plus : il vit dans la ligne d’activite');
   assert.ok(c.includes('minHeight: 49') && c.includes('aria-checked={on}'), 'en-tete reserve et interrupteur inchanges');
 });

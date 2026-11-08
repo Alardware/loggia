@@ -10,7 +10,7 @@ import { bloquerDefilement, defileurAuto, useRangerLibre } from '../glisser.js';
 import { niveauMax, couleurNiveau, resumeAttention } from '../attention.js';
 import { LISERE, sectionTitle } from '../styles.js';
 import { Ico } from '../icones.jsx';
-import { ambiancePiece } from '../ambiance.js';
+import { ambiancePiece, phrasePiece } from '../ambiance.js';
 import { ecartJours } from '../agenda.js';
 import { scenariosAccueil, bordsDefilement } from '../scenarios.js';
 import { tr, trN, locale } from '../i18n.js';
@@ -146,6 +146,30 @@ function lavisPiece(p, on) {
 // Mini-pilule d'action des tuiles pièces — même gabarit 38×26 r9 que les
 // minis des cartes denses.
 const MINI_PIECE = { width: 38, height: 26, borderRadius: 10, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text2)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 };
+/* « Tout éteindre » de l'en-tête des Pièces (sa maquette du 08/11). 44 de haut au doigt, 30 dessinés, comme les puces d'étage
+ * voisines. Il disparaît sous le doigt : s'il avait le focus, le focus va au titre de la section — il ne tombe pas sur la page
+ * (la leçon de l'en-tête des volets). React détache la référence AVANT de retirer le bouton : le focus s'y lit encore. */
+function PuceToutEteindre({ ids, mot = true, onEteindre }) {
+  const puce = useRef(null);
+  const refPuce = useCallback((noeud) => {
+    if (noeud) { puce.current = noeud; return; }
+    const partie = puce.current;
+    puce.current = null;
+    if (!partie || typeof document === 'undefined' || document.activeElement !== partie) return;
+    const tete = partie.closest('[data-pieces-tete]');
+    const titre = tete && tete.querySelector('h2');
+    if (titre) queueMicrotask(() => { const ici = document.activeElement; if (!ici || ici === document.body || ici === partie) { titre.tabIndex = -1; titre.focus(); } });
+  }, []);
+  if (!ids.length) return null;
+  return (
+    <button type="button" ref={refPuce} onClick={() => onEteindre(ids)} aria-label={tr('Tout éteindre')} title={tr('Tout éteindre')}
+      style={{ height: 44, margin: '-7px 0', padding: 0, border: 'none', background: 'none', cursor: 'pointer', font: 'inherit', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+      <span style={{ height: 30, padding: '0 11px', borderRadius: 10, background: 'rgba(var(--o-warn-rgb),.14)', color: 'var(--o-warn)', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+        <Fi i="power" size={12} />{mot ? tr('Tout éteindre') : null}
+      </span>
+    </button>
+  );
+}
 function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, mains = null, attente = false, onToggleLights, covers = null, clim = null, idx = 0, ambiance = null }) {
   // Format compact (PC ≥1180) : compteur = toutes les lumières de la pièce ; interrupteur = `mains`, les lampes du bouton (sans les veilleuses, ADR 0261)
   const tilt = useTilt(4);
@@ -248,6 +272,10 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
      * `etat`, qui vaut « — » sans ambiance. Elles changent de vue : pas
      * d'`aria-haspopup`. */
     const temp = p.live && p.live.temp != null ? decMax(p.live.temp, 1) + '°' : null;
+    // Sa maquette du 08/11 : la ligne d'état en toutes lettres, l'humidité sous la température, la plaque à la teinte de la pièce.
+    const phrase = lights ? phrasePiece({ lumieres: n, lampes: lights.length, ...(ambiance || {}), co2: p.live && p.live.co2 }) : null;
+    const hum = p.live && p.live.hum != null ? decMax(p.live.hum, 0) + '\u00a0%' : null;
+    const rgb = rgbDePiece(p);
     return (
       /* La carte n'est PLUS un `role="button"` qui englobe tout (23/09, plan
        * M7). Un rôle bouton rend sa descendance présentationnelle : les deux
@@ -258,7 +286,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
        * À la place : un bouton de SURFACE, frère des contrôles, qui porte le
        * geste « ouvrir la pièce » et se laisse couvrir par eux. Rien ne bouge
        * à l'œil, et la tabulation passe sur quatre choses distinctes. */
-      <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel} className={'o-piece o-piecestd o-stag ' + (tilt.className || '')} style={{ ...card, position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: 14, padding: '14px 15px 12px', overflow: 'hidden',
+      <div ref={tilt.ref} onPointerMove={tilt.onPointerMove} onPointerLeave={tilt.onPointerLeave} onPointerCancel={tilt.onPointerCancel} className={'o-piece o-piecestd o-stag ' + (tilt.className || '')} style={{ ...card, position: 'relative', display: 'flex', flexDirection: 'column', borderRadius: 'var(--o-radius,18px)', padding: '14px 15px 12px', overflow: 'hidden',
         // Direction « teinte pièce » (choix 31/08) : le lavis de la pièce
         // baigne la surface en permanence, l'icône est nue, la température en
         // héros. Sans halo doré (retour 01/09) : l'interrupteur allumé dit
@@ -271,25 +299,32 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
           * du pied (positionnés, donc peints après lui) et porte le nom de
           * la carte. `inset: 0` plutôt qu'un `onClick` sur la carte : un bouton
           * réel se tabule, s'annonce et répond à Entrée comme à l'Espace. */}
-        <button type="button" className="o-surface" onClick={onOpen} aria-label={nomCarte(p.name, temp, amb && amb.texte)}
-          style={{ position: 'absolute', inset: 0, border: 'none', background: 'transparent', padding: 0, margin: 0, borderRadius: 14, cursor: 'pointer' }} />
+        <button type="button" className="o-surface" onClick={onOpen} aria-label={nomCarte(p.name, temp, phrase && phrase.texte)}
+          style={{ position: 'absolute', inset: 0, border: 'none', background: 'transparent', padding: 0, margin: 0, borderRadius: 'var(--o-radius,18px)', cursor: 'pointer' }} />
         {/* calque de flash séparé : ne touche ni au transform du tilt ni au box-shadow de la carte */}
-        <span ref={flashRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: 14, pointerEvents: 'none' }} />
-        {/* En-tête à hauteur RÉSERVÉE (49 = température 26 + 5 + badge 18) :
-          * avec ou sans badge d'air, le nom et le pied tombent au même endroit
-          * — sinon deux pièces voisines n'ont pas le même rythme (retour
-          * 01/09). */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', minHeight: 49 }}>
-          <span style={{ display: 'flex', alignItems: 'center', minHeight: 38 }}>{cloneElement(p.icon, { size: 34 })}</span>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-            <span style={{ fontSize: 25, fontWeight: 800, color: p.tc, lineHeight: 1 }}>{p.live ? (p.live.temp != null ? <Num v={p.live.temp} d={1} suffix="°" /> : '—') : <Skel w={52} h={22} />}</span>
-            {p.live && p.badge && <span style={{ fontSize: 11, fontWeight: 800, color: p.bc, background: p.bbg, padding: '2px 8px', borderRadius: 10 }}>{p.badge}</span>}
+        <span ref={flashRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: 'var(--o-radius,18px)', pointerEvents: 'none' }} />
+        {/* Sa maquette du 08/11 : la plaque teintée à gauche ; à droite la température, en blanc, et l'humidité sous elle. Hauteur
+          * RÉSERVÉE : avec ou sans humidité, le nom et le pied tombent au même endroit (retour 01/09). */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, minHeight: 49, maxHeight: 'calc(50px * var(--o-texte, 1))' }}>
+          <span style={{ width: 42, height: 42, borderRadius: 'calc(var(--o-radius,18px) * .72)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: rgb ? 'rgba(' + rgb + ',.18)' : 'var(--o-s1)' }}>{cloneElement(p.icon, { size: 22 })}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5, minWidth: 0 }}>
+            <span style={{ fontSize: 30, fontWeight: 800, color: 'var(--o-text)', lineHeight: 1 }}>{p.live ? (p.live.temp != null ? <Num v={p.live.temp} d={1} suffix="°" /> : '—') : <Skel w={60} h={26} />}</span>
+            {hum && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', whiteSpace: 'nowrap' }}>
+              <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M12 3s7 6.4 7 11.4a7 7 0 0 1-14 0C5 9.4 12 3 12 3Z" /></svg>
+              <span className="o-piece-hum-long">{tr('{h} d’humidité', { h: hum })}</span><span className="o-piece-hum-court">{hum}</span>
+            </span>}
+            {/* Le CO₂, comme ailleurs dans Loggia (sa capture du 08/11) : la valeur, le point et le mot de la zone. Il déborde de l'en-tête,
+              * de hauteur réservée, dans l'air au-dessus du nom : une pièce sans capteur garde le même rythme que sa voisine. */}
+            {p.live && p.badge && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: -2, fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', whiteSpace: 'nowrap' }}>
+              {p.badge}
+              {p.co2Zone && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: p.co2Zone.c }}><span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} /><span className="o-piece-co2-mot">{p.co2Zone.mot}</span></span>}
+            </span>}
           </div>
         </div>
-        <div style={{ fontSize: 15, fontWeight: 800, marginTop: 12 }}>{p.name}</div>
-        <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {amb ? <span style={{ color: amb.couleur }}>{amb.icone ? <Fi i={amb.icone} size={11} style={{ marginRight: 4 }} /> : null}<FlipText text={amb.texte} /></span> : <Skel w={92} h={12} />}
-          {p.live && p.live.hum != null ? <> · <Num v={p.live.hum} suffix="%" /></> : null}
+        <div style={{ fontSize: 15, fontWeight: 800, marginTop: 18 }}>{p.name}</div>
+        {/* Deux lignes au plus : « 4 lumières allumées · Musique en cours » ne se coupe plus d'un « … ». */}
+        <div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600, marginTop: 3, lineHeight: 1.35, display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden' }}>
+          {phrase ? <span style={{ color: phrase.couleur }}><FlipText text={phrase.texte} /></span> : <Skel w={92} h={12} />}
         </div>
         {/* Pied : minis d'action (volets violet, clim ROUGE — des `button`, le
           * drag d'édition les ignore) à gauche, switch lumière à droite.
@@ -319,17 +354,15 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
             )}
           </div> : <span />}
           {canToggle && (
-            /* La zone touchable fait 24 de haut, la pastille en garde 21
-              * (audit du 27/09). C'est le premier geste d'une carte de pièce,
-              * et il mesurait 38 × 21 — sous les 24 que demande la règle. La
-              * marge négative rend les trois pixels empruntés : la rangée ne
-              * bouge pas d'un cheveu, et le dessin est le même. */
-            <span role="switch" aria-checked={on} aria-label={tr('Lumières') + ' ' + p.name} tabIndex={0} {...inerte}
-              onClick={e => { e.stopPropagation(); doToggle(); }}
-              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
-              style={{ display: 'inline-flex', alignItems: 'center', height: 24, cursor: 'pointer', flexShrink: 0, margin: '-1.5px 0', marginLeft: 'auto', ...(attente ? { cursor: 'default', opacity: .5 } : null) }}>
-              <span aria-hidden="true" style={{ display: 'block', width: 38, height: 21, borderRadius: 999, background: on ? 'linear-gradient(135deg,var(--o-lampe),var(--o-lampe-b))' : 'var(--o-s1)', border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), transition: 'background .2s' }}>
-                <span style={{ display: 'block', position: 'relative', top: 2, left: on ? 18 : 2, width: 15, height: 15, borderRadius: '50%', background: on ? '#fff' : 'var(--o-text3)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} />
+            /* Sa maquette du 08/11 : l'ampoule, le nombre de lampes allumées, puis l'interrupteur de la carte compacte (44 × 25,
+             * rond blanc). Sur une carte étroite l'ampoule s'efface (index.css) : la ligne d'état dit déjà le nombre. */
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 'auto' }}>
+              <span className="o-piece-lampes" aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 800, color: on ? 'var(--o-lampe)' : 'var(--o-text3)' }}><Fi i="bulb" size={13} />{on && n > 0 ? n : null}</span>
+              <span role="switch" aria-checked={on} aria-label={tr('Lumières') + ' ' + p.name} tabIndex={0} {...inerte}
+                onClick={e => { e.stopPropagation(); doToggle(); }}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
+                style={{ width: 44, height: 25, borderRadius: 14, position: 'relative', zIndex: 1, cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,var(--o-lampe),var(--o-lampe-b))' : 'var(--o-bd1)', transition: 'background .25s', ...(attente ? { cursor: 'default', opacity: .5 } : null) }}>
+                <span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
               </span>
             </span>
           )}
@@ -1055,4 +1088,4 @@ function nomDuCycle(c, cycles, S) {
   return cycles.filter(x => x.type === c.type).length > 1 ? cvName(S[c.id], c.id) : NOMS_PRISE()[c.type];
 }
 
-export { WeatherGL, PlanPieces, FeuilleAgenda, WeatherFx, Num, Skel, tailleParDefaut, PieceCard, elaguerHisto, ScenariosAccueil, CartePieceEdition, FichePiece, BRIQUES_PIECE, jourAgenda, LigneMoment, OngletsAccueil, CarteAttention, ACC_MAIN, ACC_RAIL, ACC_AJOUTEES_DEFAUT, ACC_CACHES_DEFAUT, ACC_NOMS, ACC_RENOMME, FavorisAccueil, APPAREIL_ACTIF, poserFantome, sunInfo, cielSoleil, heureLocale, nomDuCycle };
+export { WeatherGL, PlanPieces, FeuilleAgenda, WeatherFx, Num, Skel, tailleParDefaut, PieceCard, PuceToutEteindre, elaguerHisto, ScenariosAccueil, CartePieceEdition, FichePiece, BRIQUES_PIECE, jourAgenda, LigneMoment, OngletsAccueil, CarteAttention, ACC_MAIN, ACC_RAIL, ACC_AJOUTEES_DEFAUT, ACC_CACHES_DEFAUT, ACC_NOMS, ACC_RENOMME, FavorisAccueil, APPAREIL_ACTIF, poserFantome, sunInfo, cielSoleil, heureLocale, nomDuCycle };

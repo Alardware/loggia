@@ -1569,6 +1569,8 @@ export default {
   'mouvement': 'Bewegung',
   'Ouvert, alarme armée': 'Offen, Alarm scharf',
   'CO₂ élevé': 'CO₂ hoch',
+  'pensez à aérer': 'denk ans Lüften',
+  'Musique en cours': 'Musik läuft',
   'Chauffage coupé': 'Heizung aus',
   '{x} · fenêtre ouverte': '{x} · Fenster offen',
   'Intégration muette': 'Integration stumm',

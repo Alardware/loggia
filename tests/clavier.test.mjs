@@ -192,9 +192,8 @@ test('rien ne se vise sous 24 px', () => {
   assert.ok(!/width: 8, height: 8, padding: 0, borderRadius: 4/.test(app), 'un point de 8 px est revenu à découvert');
   // Les deux points de page de l'Accueil : gabarit 44 depuis le lot 7 de l'audit du 28/10 (V5), rangée toujours à 6.
   assert.match(app, /minWidth: 44, height: 44, margin: '-19px 0'/, 'les points de l’Accueil ont reperdu leur zone');
-  // L'interrupteur d'une tuile pièce : zone de 24, pastille de 21.
-  assert.match(app, /alignItems: 'center', height: 24, cursor: 'pointer', flexShrink: 0, margin: '-1\.5px 0'/,
-    'l’interrupteur d’une tuile pièce a reperdu sa zone de 24');
+  // L'interrupteur d'une tuile pièce : 44 × 25, pour les deux formats (sa maquette du 08/11).
+  assert.equal(app.split("width: 44, height: 25, borderRadius: 14, position: 'relative', zIndex: 1").length - 1, 2, 'l’interrupteur d’une tuile pièce a reperdu sa zone de 24');
   // Les boutons « − / + » : 22 avant, 24 depuis — ceux de la luminosité des
   // Scènes compris, qui vivent depuis le 11/10 dans scenes.jsx (chargé à la demande).
   const scenes = readFileSync(join(RACINE, 'src', 'scenes.jsx'), 'utf8');

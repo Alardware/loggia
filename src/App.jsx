@@ -103,6 +103,7 @@ import { ChoixIcone, EditableCard, BandeauEdition, CarteAjout, DOMAINES_EDITION 
 import { Header, HeaderCtx } from './chrome/entete.jsx';
 // eslint-disable-next-line no-unused-vars -- les tests les exportent d’ici (ADR 0282)
 import { appareilsRecherche } from './chrome/entete.jsx';
+import { oublierSectionSiQuittee } from './reglagesindex.js';
 import { RoomView } from './vues/piece.jsx';
 // eslint-disable-next-line no-unused-vars -- les tests les exportent d’ici (ADR 0282)
 import { Sparkline } from './vues/piece.jsx';
@@ -756,6 +757,14 @@ export default function App() {
   });
   useEffect(() => {
     try { window.sessionStorage.setItem('loggia-vue', view); } catch { /* stockage indisponible */ }
+  }, [view]);
+  /* Quitter les Paramètres les referme (08/11, reglagesindex.js) : au CHANGEMENT
+   * de vue, jamais au démontage — un remontage de la vue ou un rechargement
+   * garde la section où l'on réglait quelque chose. */
+  const vueQuittee = useRef(view);
+  useEffect(() => {
+    oublierSectionSiQuittee(vueQuittee.current, view);
+    vueQuittee.current = view;
   }, [view]);
   /* Le focus suit la vue (audit du 03/10).
    *

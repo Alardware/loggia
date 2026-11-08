@@ -1602,6 +1602,8 @@ export default {
   'mouvement': 'motion',
   'Ouvert, alarme armée': 'Open, alarm armed',
   'CO₂ élevé': 'High CO₂',
+  'pensez à aérer': 'time to air the room',
+  'Musique en cours': 'Music playing',
   'Chauffage coupé': 'Heating cut',
   '{x} · fenêtre ouverte': '{x} · window open',
   'Intégration muette': 'Silent integration',

@@ -140,7 +140,8 @@ test('les cartes de pièce : l’anneau de focus de leur surface se trace en ded
   assert.ok(piece.includes('aria-label={nomCarte(p.name, statut, p.temp)}'));
   // Relecture du lot 13 : les deux tuiles RENDUES suivent la même règle —
   // « Salon, 20,4°, Tout est éteint » ; elles changent de vue, sans fiche.
-  assert.equal(piece.split('aria-label={nomCarte(p.name, temp, amb && amb.texte)}').length - 1, 2, 'la chip et la compact : le nom, la température, l’état affichés');
+  assert.equal(piece.split('aria-label={nomCarte(p.name, temp, amb && amb.texte)}').length - 1, 1, 'la chip : le nom, la température, l’état affichés');
+  assert.equal(piece.split('aria-label={nomCarte(p.name, temp, phrase && phrase.texte)}').length - 1, 1, 'la standard : sa phrase en toutes lettres');
   assert.ok(!piece.includes("tr('Ouvrir la pièce {piece}'") && !piece.includes('aria-haspopup='), '« Ouvrir la pièce Salon » taisait l’état ; une pièce n’ouvre pas de fiche');
 });
 

@@ -1575,6 +1575,8 @@ export default {
   'mouvement': 'ruch',
   'Ouvert, alarme armée': 'Otwarte, alarm uzbrojony',
   'CO₂ élevé': 'Wysokie CO₂',
+  'pensez à aérer': 'czas przewietrzyć',
+  'Musique en cours': 'Gra muzyka',
   'Chauffage coupé': 'Ogrzewanie wyłączone',
   '{x} · fenêtre ouverte': '{x} · otwarte okno',
   'Intégration muette': 'Integracja milczy',
