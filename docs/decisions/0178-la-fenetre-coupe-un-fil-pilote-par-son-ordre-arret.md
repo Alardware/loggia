@@ -1,6 +1,6 @@
 # 0178 — La fenêtre coupe un fil pilote par son ordre Arrêt
 
-*9 octobre 2026 — accepté, à l'essai (plan 1 du chantier Chauffage, rien de publié)*
+*9 octobre 2026 — appliqué (v3.94.0) (plan 1 du chantier Chauffage)*
 
 ## Le problème
 

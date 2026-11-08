@@ -1,6 +1,6 @@
 # 0251 — L'audit des capteurs, à l'écran
 
-*19 octobre 2026 — accepté, à l'essai (audit des capteurs, lot 3 ; rien de publié). Décisions D3 et D5 de l'utilisateur, déjà tranchées. Complète les ADR 0200 (la fiche d'une mesure), 0206 (une seule règle des piles) et 0250 (le lot 2, côté serveur).*
+*19 octobre 2026 — appliqué (v3.94.0) (audit des capteurs, lot 3). Décisions D3 et D5 de l'utilisateur, déjà tranchées. Complète les ADR 0200 (la fiche d'une mesure), 0206 (une seule règle des piles) et 0250 (le lot 2, côté serveur).*
 
 ## Le problème
 

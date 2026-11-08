@@ -1,6 +1,6 @@
 # 0283 — App.jsx se découpe sans cycle
 
-*29 octobre 2026 — à l'essai (audit de consolidation du 28/10, lot 5 : le découpage d'`App.jsx`)*
+*29 octobre 2026 — appliqué (v3.96.0) (audit de consolidation du 28/10, lot 5 : le découpage d'`App.jsx`)*
 
 ## Le problème
 

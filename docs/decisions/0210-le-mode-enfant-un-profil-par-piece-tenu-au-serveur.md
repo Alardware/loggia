@@ -1,6 +1,6 @@
 # 0210 — Le mode enfant des médias : un profil par pièce, tenu au serveur
 
-*17 octobre 2026 — accepté, à l'essai (chantier Mode enfant ; rien de publié). La conception : `docs/chantier-mode-enfant.md`, E1 A tranché par lui le 17/10, E5 à E11 et E15 à E21 ; § 5, § 6, § 7, § 12 ; sa maquette, écrans 2a à 2d.*
+*17 octobre 2026 — appliqué (v3.94.0) (chantier Mode enfant). La conception : `docs/chantier-mode-enfant.md`, E1 A tranché par lui le 17/10, E5 à E11 et E15 à E21 ; § 5, § 6, § 7, § 12 ; sa maquette, écrans 2a à 2d.*
 
 ## Le problème
 

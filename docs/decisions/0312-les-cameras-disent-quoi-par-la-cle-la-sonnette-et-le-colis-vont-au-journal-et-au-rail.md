@@ -1,6 +1,6 @@
 # 0312 — Les caméras disent quoi par la clé de leur intégration ; la sonnette et le colis vont au journal et au rail
 
-*1er novembre 2026 — à l'essai (rien de publié) (lot 8 du rapport « Gladys comparé au catalogue », 31/10 : D19, C1, C2)*
+*1er novembre 2026 — appliqué (v3.97.0) (lot 8 du rapport « Gladys comparé au catalogue », 31/10 : D19, C1, C2)*
 
 *Complète l'ADR [0031](0031-les-cameras-disent-leur-dernier-evenement.md) : les détecteurs d'une caméra et son dernier événement.*
 

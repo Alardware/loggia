@@ -1,6 +1,6 @@
 # 0314 — Ce que l'administrateur doit savoir : les sauvegardes, le disque plein et les mises à jour
 
-*1er novembre 2026 — à l'essai (rien de publié) (lot 10 du rapport « Gladys comparé au catalogue », 31/10 : D17, D18, K2, K3, K4)*
+*1er novembre 2026 — appliqué (v3.97.0) (lot 10 du rapport « Gladys comparé au catalogue », 31/10 : D17, D18, K2, K3, K4)*
 
 *Complète l'ADR [0037](0037-la-vue-systeme-d-une-machine-haos.md) : ce que la vue Système dit des sauvegardes, et ce qui en sort vers l'Accueil.*
 

@@ -1,6 +1,6 @@
 # 0196 — Protéger une prise ; ce qu'elle alimente
 
-*13 octobre 2026 — accepté, à l'essai (chantier Prises, plans 1 et 2, rien de publié).*
+*13 octobre 2026 — appliqué (v3.94.0) (chantier Prises, plans 1 et 2).*
 
 *15 octobre 2026 — la carte étroite ne demande pas sur place (passe téléphone, ADR 0202).
 Protégée, elle n'a pas d'interrupteur : une pastille, le cadenas et « Protégée », dont

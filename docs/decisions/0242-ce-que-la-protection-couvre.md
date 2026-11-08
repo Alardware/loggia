@@ -1,6 +1,6 @@
 # 0242 — Ce que la protection couvre, et ce que l'Accueil lit
 
-*19 octobre 2026 — accepté, à l'essai (audit des prises, rien de publié). Complète les ADR 0193, 0194 et 0196.*
+*19 octobre 2026 — appliqué (v3.94.0) (audit des prises). Complète les ADR 0193, 0194 et 0196.*
 
 ## Le problème
 

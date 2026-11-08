@@ -1,6 +1,6 @@
 # 0198 — Le carnet des lumières
 
-*14 octobre 2026 — accepté, à l'essai (chantier Lumières, plans 1 et 2, rien de publié).*
+*14 octobre 2026 — appliqué (v3.94.0) (chantier Lumières, plans 1 et 2).*
 
 ## Le problème
 

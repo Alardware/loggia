@@ -1,6 +1,6 @@
 # 0201 — Objets › Capteurs en sections ; la table gagne la lumière, les particules, les COV et le vent
 
-*15 octobre 2026 — accepté, à l'essai (chantier Capteurs, plan 1, rien de publié). Revu le 16 octobre : le nom d'une carte (C13), le capteur sans pièce (C14), le dehors (C15) ; puis la passe de corrections « bis » : les sections en direct, ce qu'une section a le droit de dire, la barrière locale, le nom d'une zone qui n'est pas une pièce ; puis la passe « bis 2 » : ce que coûtent les sections en direct, « {k} à regarder » dès que k > 0.*
+*15 octobre 2026 — appliqué (v3.94.0) (chantier Capteurs, plan 1). Revu le 16 octobre : le nom d'une carte (C13), le capteur sans pièce (C14), le dehors (C15) ; puis la passe de corrections « bis » : les sections en direct, ce qu'une section a le droit de dire, la barrière locale, le nom d'une zone qui n'est pas une pièce ; puis la passe « bis 2 » : ce que coûtent les sections en direct, « {k} à regarder » dès que k > 0.*
 
 **16/10, passe 1 ter (C15 révisé, C16)** : une carte de mesure demande un appareil PHYSIQUE, dans une pièce de Loggia comme ailleurs — la prévision de Météo-France et l'« Humidité extérieure » calculée, posées dans sa pièce « Extérieur », sortent de Capteurs ; le bandeau de confort des pièces n'en change pas — ; dehors, une mesure a ses zones mais n'est jamais une alerte : Dehors n'a rien « à regarder » et ne dit jamais « Rien à signaler », qui y serait permanent ; l'enveloppe ne s'abonne plus aux mesures du dehors (`docs/chantier-capteurs.md`, C15, C16, § 5).
 

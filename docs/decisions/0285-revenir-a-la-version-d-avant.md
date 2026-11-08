@@ -1,6 +1,6 @@
 # 0285 — Revenir à la version d'avant
 
-*29 octobre 2026 — à l'essai (idée validée par le propriétaire, vue dans « Glass Cards » ; complète l'export, l'import et la remise à zéro, et l'ADR 0280)*
+*29 octobre 2026 — appliqué (v3.96.0) (idée validée par le propriétaire, vue dans « Glass Cards » ; complète l'export, l'import et la remise à zéro, et l'ADR 0280)*
 
 ## Le problème
 

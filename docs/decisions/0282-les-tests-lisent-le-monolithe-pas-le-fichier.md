@@ -1,6 +1,6 @@
 # 0282 — Les tests lisent le monolithe, pas le fichier
 
-*28 octobre 2026 — à l'essai (audit de consolidation du 28/10, lot 4 : H3 ; prépare le lot 5, le découpage d'`App.jsx`)*
+*28 octobre 2026 — appliqué (v3.96.0) (audit de consolidation du 28/10, lot 4 : H3 ; prépare le lot 5, le découpage d'`App.jsx`)*
 
 ## Le problème
 

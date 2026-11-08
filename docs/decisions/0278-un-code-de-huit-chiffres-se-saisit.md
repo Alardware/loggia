@@ -1,6 +1,6 @@
 # 0278 — Un code de huit chiffres se saisit
 
-*27 octobre 2026 — accepté (ticket #38 ; complète l'ADR du code administrateur haché, 18/09)*
+*27 octobre 2026 — appliqué (v3.95.1) (ticket #38 ; complète l'ADR du code administrateur haché, 18/09)*
 
 ## Le problème
 

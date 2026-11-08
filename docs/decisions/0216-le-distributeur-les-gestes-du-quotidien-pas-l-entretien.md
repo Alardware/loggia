@@ -1,6 +1,6 @@
 # 0216 — Le distributeur : les gestes du quotidien, pas l'entretien
 
-*19 octobre 2026 — accepté, à l'essai (chantier IoT, étape 2 : le distributeur ; rien de publié). La consigne : « go le distributeur », dans le chantier « go cartes iot ». La conception : `docs/chantier-iot.md`, I8, I10, I21 à I26, § 6, § 7.8, § 10, § 11 ; sa maquette « Cartes IoT », cadres 1a (la carte) et 1e (la popup : Accueil, Repas, Historique) ; le plan : `docs/chantier-iot-plan-2-distributeur.md`, tâches 1 à 9. Complétée par sa passe bis du 19/10 (deux relectures, ses décisions D1 et D2 : « La passe bis », à la fin) : le serveur change (`distributeur_appareil.py`, la règle de la portion et l'erreur sans classe) — Home Assistant doit être REDÉMARRÉ à l'installation.*
+*19 octobre 2026 — appliqué (v3.94.0) (chantier IoT, étape 2 : le distributeur). La consigne : « go le distributeur », dans le chantier « go cartes iot ». La conception : `docs/chantier-iot.md`, I8, I10, I21 à I26, § 6, § 7.8, § 10, § 11 ; sa maquette « Cartes IoT », cadres 1a (la carte) et 1e (la popup : Accueil, Repas, Historique) ; le plan : `docs/chantier-iot-plan-2-distributeur.md`, tâches 1 à 9. Complétée par sa passe bis du 19/10 (deux relectures, ses décisions D1 et D2 : « La passe bis », à la fin) : le serveur change (`distributeur_appareil.py`, la règle de la portion et l'erreur sans classe) — Home Assistant doit être REDÉMARRÉ à l'installation.*
 
 ## Le problème
 

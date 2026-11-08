@@ -1,6 +1,6 @@
 # 0322 — La démo en ligne a un fond de carte OpenStreetMap, et sa politique de confidentialité le dit
 
-*1er novembre 2026 — à l'essai (rien de publié) (lot 17 du rapport « Gladys comparé au catalogue » : sa réponse au point 1 du lot 16)*
+*1er novembre 2026 — appliqué (v3.97.0) (lot 17 du rapport « Gladys comparé au catalogue » : sa réponse au point 1 du lot 16)*
 
 *Complète l'ADR [0321](0321-la-carte-des-personnes-et-des-traceurs-est-une-popup-leaflet-au-fond-de-home-assistant.md) : le fond de la carte, dans la démo en ligne.*
 

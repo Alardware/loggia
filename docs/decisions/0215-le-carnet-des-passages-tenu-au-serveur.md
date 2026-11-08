@@ -1,6 +1,6 @@
 # 0215 — Le carnet des passages, tenu au serveur
 
-*18 octobre 2026 — accepté, à l'essai (chantier IoT, étape 1 ; rien de publié ; un redémarrage de Home Assistant à l'installation). La conception : `docs/chantier-iot.md`, I3 A, § 8, § 9 ; sa maquette « Cartes IoT », cadres 1a, 1b, 1d ; le plan : `docs/chantier-iot-plan-1-robots.md`, tâches 3 et 4, sa « Passe bis du 18/10 » et sa « Passe bis 2 du 18/10 ».*
+*18 octobre 2026 — appliqué (v3.94.0) (chantier IoT, étape 1 ; un redémarrage de Home Assistant à l'installation). La conception : `docs/chantier-iot.md`, I3 A, § 8, § 9 ; sa maquette « Cartes IoT », cadres 1a, 1b, 1d ; le plan : `docs/chantier-iot-plan-1-robots.md`, tâches 3 et 4, sa « Passe bis du 18/10 » et sa « Passe bis 2 du 18/10 ».*
 
 ## Le problème
 

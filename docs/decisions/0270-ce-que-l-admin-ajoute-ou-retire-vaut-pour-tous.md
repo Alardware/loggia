@@ -1,6 +1,6 @@
 # 0270 — Ce que l'admin ajoute ou retire vaut pour tous
 
-*20 octobre 2026 — à l'essai (rien de publié)*
+*20 octobre 2026 — appliqué (v3.94.0)*
 
 ## Le problème
 

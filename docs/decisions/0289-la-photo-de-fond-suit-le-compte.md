@@ -1,6 +1,6 @@
 # 0289 — La photo de fond suit le compte
 
-*30 octobre 2026 — à l'essai (rien de publié)*
+*30 octobre 2026 — appliqué (v3.96.0)*
 
 ## Le problème
 

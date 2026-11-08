@@ -1,6 +1,6 @@
 # 0192 — La vérification attend un volet qui a répondu
 
-*12 octobre 2026 — accepté, à l'essai (plan 1 du chantier Volets, rien de publié). Nuance l'ADR 0007.*
+*12 octobre 2026 — appliqué (v3.94.0) (plan 1 du chantier Volets). Nuance l'ADR 0007.*
 
 ## Le problème
 

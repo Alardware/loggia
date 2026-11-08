@@ -1,6 +1,7 @@
 # Loggia pour Home Assistant
 
 [![Release](https://img.shields.io/github/v/release/Alardware/loggia?label=version&color=4da3ff)](https://github.com/Alardware/loggia/releases)
+[![Téléchargements](https://img.shields.io/github/downloads/Alardware/loggia/total?label=t%C3%A9l%C3%A9chargements&color=4da3ff)](https://github.com/Alardware/loggia/releases)
 [![CI](https://github.com/Alardware/loggia/actions/workflows/validate.yml/badge.svg)](https://github.com/Alardware/loggia/actions)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-soutenir%20le%20projet-ff5f5f?logo=ko-fi&logoColor=white)](https://ko-fi.com/alardware)
 

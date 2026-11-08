@@ -1,6 +1,6 @@
 # 0313 — La tondeuse dit son avance, et sa dernière erreur reste visible 24 h
 
-*1er novembre 2026 — à l'essai (rien de publié) (lot 9 du rapport « Gladys comparé au catalogue », 31/10 : R2, R3)*
+*1er novembre 2026 — appliqué (v3.97.0) (lot 9 du rapport « Gladys comparé au catalogue », 31/10 : R2, R3)*
 
 *Complète l'ADR [0042](0042-une-vue-par-robot-aspirateur-et-tondeuse.md) : ce que la carte et la popup d'un robot disent.*
 

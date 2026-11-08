@@ -1,6 +1,6 @@
 # 0301 — Les notifications vont aux bonnes personnes, et la collecte se rappelle la veille
 
-*30 octobre 2026 — à l'essai (rien de publié) (chantier G2 : rapport « 24 intégrations Gladys », défaut D2, améliorations S1 et S2 ; ses choix « Notifications par personne » et « Poubelles : rappel la veille »)*
+*30 octobre 2026 — appliqué (v3.96.0) (chantier G2 : rapport « 24 intégrations Gladys », défaut D2, améliorations S1 et S2 ; ses choix « Notifications par personne » et « Poubelles : rappel la veille »)*
 
 ## Le problème
 

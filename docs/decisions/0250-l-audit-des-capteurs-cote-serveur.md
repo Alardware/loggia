@@ -1,6 +1,6 @@
 # 0250 — L'audit des capteurs, côté serveur
 
-*19 octobre 2026 — accepté, à l'essai (audit des capteurs, lot 2 ; rien de publié). Décisions de l'utilisateur, déjà tranchées. Amende l'ADR 0022 ; complète l'ADR 0004 et l'ADR 0206.*
+*19 octobre 2026 — appliqué (v3.94.0) (audit des capteurs, lot 2). Décisions de l'utilisateur, déjà tranchées. Amende l'ADR 0022 ; complète l'ADR 0004 et l'ADR 0206.*
 
 ## Le problème
 

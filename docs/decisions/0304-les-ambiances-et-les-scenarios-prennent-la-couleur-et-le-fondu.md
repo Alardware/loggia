@@ -1,6 +1,6 @@
 # 0304 — Les ambiances et les scénarios prennent la couleur, le blanc et le fondu
 
-*30 octobre 2026 — à l'essai, rien de publié (chantier G5, d'après la comparaison des intégrations Gladys du 30/10, section « Éclairage » : propositions 1 et 2)*
+*30 octobre 2026 — appliqué (v3.96.0) (chantier G5, d'après la comparaison des intégrations Gladys du 30/10, section « Éclairage » : propositions 1 et 2)*
 
 *Complète les ADR [0261](0261-l-ecran-a-une-seule-idee-de-la-lumiere.md) (le repli des Scènes) et [0198](0198-le-carnet-des-lumieres.md) (le carnet des lumières).*
 

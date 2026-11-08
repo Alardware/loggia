@@ -1,6 +1,6 @@
 # 0275 — Un identifiant se valide en entier
 
-*26 octobre 2026 — à l'essai (rien de publié). Le composant change : un redémarrage de Home Assistant à l'installation.*
+*26 octobre 2026 — appliqué (v3.95.0). Le composant change : un redémarrage de Home Assistant à l'installation.*
 
 ## Le problème
 

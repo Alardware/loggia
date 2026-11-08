@@ -1,6 +1,6 @@
 # 0221 — La mise en page s'hérite réglage par réglage
 
-*17 octobre 2026 — accepté (tranche 2 de `docs/chantier-synchronisation.md`)*
+*17 octobre 2026 — appliqué (v3.94.0) (tranche 2 de `docs/chantier-synchronisation.md`)*
 
 ## Le problème
 

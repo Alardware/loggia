@@ -1,6 +1,6 @@
 # 0290 — Finitions au téléphone
 
-*30 octobre 2026 — à l'essai (audit de consolidation du 28/10, lot 7 : V1 à V7, et V9)*
+*30 octobre 2026 — appliqué (v3.96.0) (audit de consolidation du 28/10, lot 7 : V1 à V7, et V9)*
 
 ## Le problème
 

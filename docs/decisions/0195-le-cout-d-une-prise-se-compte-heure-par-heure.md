@@ -1,6 +1,6 @@
 # 0195 — Le coût d'une prise se compte heure par heure
 
-*13 octobre 2026 — accepté, à l'essai (chantier Prises, plan 2, rien de publié). Applique l'ADR 0173 heure par heure.*
+*13 octobre 2026 — appliqué (v3.94.0) (chantier Prises, plan 2). Applique l'ADR 0173 heure par heure.*
 
 ## Le problème
 

@@ -1,6 +1,6 @@
 # 0240 — Un cycle ne se compte pas à travers un trou
 
-*19 octobre 2026 — accepté, à l'essai (audit des prises, rien de publié). Complète l'ADR 0194.*
+*19 octobre 2026 — appliqué (v3.94.0) (audit des prises). Complète l'ADR 0194.*
 
 ## Le problème
 

@@ -1,6 +1,6 @@
 # 0310 — La vigilance rouge est un point d'attention, l'orange va au rail, et le niveau se lit en un seul endroit
 
-*1er novembre 2026 — à l'essai (rien de publié) (lot 6 du rapport « Gladys comparé au catalogue », 31/10 : W3)*
+*1er novembre 2026 — appliqué (v3.97.0) (lot 6 du rapport « Gladys comparé au catalogue », 31/10 : W3)*
 
 *Complète l'ADR [0309](0309-meteo-france-en-entier-la-pluie-dans-l-heure-et-ses-vraies-probabilites.md) : après la pluie de la fiche météo, la vigilance sur l'Accueil.*
 

@@ -1,6 +1,6 @@
 # 0311 — La fraîcheur des mesures se juge au serveur, sur `last_reported`, et la carte dit « Dernier relevé il y a 7 h »
 
-*1er novembre 2026 — à l'essai (rien de publié) (lot 7 du rapport « Gladys comparé au catalogue », 31/10 : A4 bis, F1)*
+*1er novembre 2026 — appliqué (v3.97.0) (lot 7 du rapport « Gladys comparé au catalogue », 31/10 : A4 bis, F1)*
 
 *Complète l'ADR [0303](0303-l-air-et-les-uv-dans-la-meteo.md), § A4 : ce qui n'y était pas fait.*
 

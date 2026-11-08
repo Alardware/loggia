@@ -1,6 +1,6 @@
 # 0306 — Les capteurs d'une caméra ne sont pas des indices de présence
 
-*31 octobre 2026 — à l'essai (rien de publié) (lot 2 du rapport « Gladys comparé au catalogue », 31/10 : D12, H1)*
+*31 octobre 2026 — appliqué (v3.97.0) (lot 2 du rapport « Gladys comparé au catalogue », 31/10 : D12, H1)*
 
 *Complète l'ADR [0305](0305-la-surete-lit-l-appareil-qui-porte-le-binaire.md) : la même lecture de l'appareil qui porte un binaire.*
 

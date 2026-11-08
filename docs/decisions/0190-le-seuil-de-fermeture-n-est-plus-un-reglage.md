@@ -1,6 +1,6 @@
 # 0190 — Le seuil de fermeture n'est plus un réglage
 
-*12 octobre 2026 — accepté, à l'essai (plan 2 du chantier Volets, rien de publié). Remplace en partie l'ADR 0105.*
+*12 octobre 2026 — appliqué (v3.94.0) (plan 2 du chantier Volets). Remplace en partie l'ADR 0105.*
 
 ## Le problème
 

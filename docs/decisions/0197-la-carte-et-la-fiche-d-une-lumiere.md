@@ -1,6 +1,6 @@
 # 0197 — La carte et la fiche d'une lumière
 
-*14 octobre 2026 — accepté, à l'essai (chantier Lumières, plan 2, rien de publié).*
+*14 octobre 2026 — appliqué (v3.94.0) (chantier Lumières, plan 2).*
 
 ## Le problème
 

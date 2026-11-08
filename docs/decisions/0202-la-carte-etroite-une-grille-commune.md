@@ -1,6 +1,6 @@
 # 0202 — La carte étroite : le modèle 1c, une grille commune
 
-*15 octobre 2026 — accepté, à l'essai (passe téléphone, rien de publié). Remplace, pour la carte étroite, ce que les ADR 0188, 0193, 0196 et 0197 en disaient.*
+*15 octobre 2026 — appliqué (v3.94.0) (passe téléphone). Remplace, pour la carte étroite, ce que les ADR 0188, 0193, 0196 et 0197 en disaient.*
 
 ## Le problème
 

@@ -1,6 +1,6 @@
 # 0315 — La liste de courses a sa carte, à part des rappels
 
-*1er novembre 2026 — à l'essai (rien de publié) (lot 11 du rapport « Gladys comparé au catalogue », 31/10 : D20, K1)*
+*1er novembre 2026 — appliqué (v3.97.0) (lot 11 du rapport « Gladys comparé au catalogue », 31/10 : D20, K1)*
 
 *Complète l'ADR [0133](0133-les-rappels-sont-les-listes-de-taches-de-la-maison.md) : une liste d'achats n'est pas une liste de rappels.*
 

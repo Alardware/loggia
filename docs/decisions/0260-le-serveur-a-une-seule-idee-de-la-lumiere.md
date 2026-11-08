@@ -1,6 +1,6 @@
 # 0260 — Le serveur a une seule idée de la lumière
 
-*19 octobre 2026 — accepté (audit du 19/10, côté serveur du chantier Lumières)*
+*19 octobre 2026 — appliqué (v3.94.0) (audit du 19/10, côté serveur du chantier Lumières)*
 
 ## Le problème
 

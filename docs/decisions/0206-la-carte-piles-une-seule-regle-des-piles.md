@@ -1,6 +1,6 @@
 # 0206 — La carte Piles ; une seule règle des piles
 
-*16 octobre 2026 — accepté, à l'essai (chantier Capteurs, étapes 2 et 3 ; rien de publié). C32 et C33 de `docs/chantier-capteurs-etapes-2-3.md` ; § 19.2 et 19.8, tranchés le 16/10.*
+*16 octobre 2026 — appliqué (v3.94.0) (chantier Capteurs, étapes 2 et 3). C32 et C33 de `docs/chantier-capteurs-etapes-2-3.md` ; § 19.2 et 19.8, tranchés le 16/10.*
 
 ## Le problème
 

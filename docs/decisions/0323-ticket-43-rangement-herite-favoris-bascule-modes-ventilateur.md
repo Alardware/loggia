@@ -1,6 +1,6 @@
 # 0323 — Le rangement des pièces s'hérite, les favoris tiennent au téléphone, une lampe simple garde sa bascule, un ventilateur garde son mode
 
-*2 novembre 2026 — à l'essai (rien de publié) (ticket #43)*
+*2 novembre 2026 — appliqué (v3.97.0) (ticket #43)*
 
 *Complète les ADR [0221](0221-la-mise-en-page-s-herite-reglage-par-reglage.md), [0202](0202-la-carte-etroite-une-grille-commune.md) et [0276](0276-un-compte-home-assistant-son-profil.md).*
 

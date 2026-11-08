@@ -1,6 +1,6 @@
 # 0287 — Un écran mural qui s'efface la nuit
 
-*29 octobre 2026 — à l'essai (idée validée : « un écran mural qui n'éclaire pas la pièce »)*
+*29 octobre 2026 — appliqué (v3.96.0) (idée validée : « un écran mural qui n'éclaire pas la pièce »)*
 
 ## Le problème
 
