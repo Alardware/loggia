@@ -3540,22 +3540,14 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         const telechargerDiag = () => telechargerDiagnostics(hass)
           .catch((err) => alerter({ titre: tr('Diagnostics'), texte: tr('Téléchargement impossible : ') + motifEchec(err) }));
         // Des noms propres, qui ne se traduisent pas.
-        const POLICES = 'Manrope · Newsreader', DEPOT = 'github.com/Alardware/loggia';
+        const POLICES = 'Manrope · Newsreader';
         const valeur = { ...MONO, fontSize: 13, fontWeight: 700, color: 'var(--o-text)', whiteSpace: 'nowrap' };
         const texte = { fontSize: 13.5, fontWeight: 800, color: 'var(--o-text1)', whiteSpace: 'nowrap' };
-        /* Liens du projet : navigation volontaire au clic — rien n'est charge
-         * depuis GitHub tant qu'on ne tape pas. */
-        const ouvrir = (url, nom) => (
-          <a href={url} target="_blank" rel="noopener noreferrer" aria-label={nom}
-            style={{ width: 34, height: 34, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text2)' }}>
-            <Fi i="arrow-up-right-from-square" size={13} />
-          </a>
-        );
         return avecRail ? (
         <>
           {/* Maquette v3 (02/11) : le nom et la version en grand, à la place du
-            * titre de la section ; puis Installation, Revenir en arrière, les
-            * liens et la remise à zéro. */}
+            * titre de la section ; puis le projet (monté ici le 08/11),
+            * Installation, Revenir en arrière et la remise à zéro. */}
           <div style={{ maxWidth: '60ch' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
               {avecRail
@@ -3566,6 +3558,16 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             </div>
             <div style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.5, color: 'var(--o-text2)', marginTop: 8 }}>{tr('Un tableau de bord pour Home Assistant, servi par sa propre intégration. Rien ne sort de chez vous.')}</div>
           </div>
+
+          {/* Le projet (08/11, son choix) : juste sous le titre, et deux boutons
+            * qui portent leur mot. Les liens étaient deux petits carrés gris
+            * plus bas que l'écran : « ça saute pas aux yeux ». */}
+          <Panneau titre={tr('Le projet')} desc={tr('Tout se passe sur GitHub : le code, et les tickets que je lis.')}>
+            <div className="o-panneau-corps" style={{ padding: '0 22px 18px' }}><BoutonsProjet /></div>
+            {peutDiag && <Ligne ico="download" titre={tr('Diagnostics')} desc={tr('À joindre à un ticket : la forme de votre configuration, sans aucun nom ni adresse.')}>
+              <button type="button" onClick={telechargerDiag} style={btnSecondaire}>{tr('Télécharger')}</button>
+            </Ligne>}
+          </Panneau>
 
           {/* Toujours affichée : l'installation N'EST PAS un réglage, c'est la
             * réponse à « quelle version ai-je ? » (retour 02/09). */}
@@ -3592,18 +3594,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             * comme l'import — les mêmes comptes, la même garde. */}
           {isAdmin && <VersionsPrecedentes hass={hass} motif={motifEchec} alerter={alerter} />}
 
-          <Panneau>
-            <Ligne ico="code-branch" titre={tr('Le code')} desc={<span style={MONO}>{DEPOT}</span>} style={{ borderTop: 'none' }}>
-              {ouvrir('https://github.com/Alardware/loggia', tr('Le code'))}
-            </Ligne>
-            <Ligne ico="exclamation" titre={tr('Signaler un problème')}>
-              {ouvrir('https://github.com/Alardware/loggia/issues', tr('Signaler un problème'))}
-            </Ligne>
-            {peutDiag && <Ligne ico="download" titre={tr('Diagnostics')} desc={tr('À joindre à un ticket : la forme de votre configuration, sans aucun nom ni adresse.')}>
-              <button type="button" onClick={telechargerDiag} style={btnSecondaire}>{tr('Télécharger')}</button>
-            </Ligne>}
-          </Panneau>
-
           {/* La remise a zero vide la configuration de la MAISON — vues,
             * profils, regles, scenarios — et non ce seul appareil. */}
           {isAdmin && (
@@ -3617,7 +3607,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         </>
         ) : (
         /* Le téléphone (maquette v4) : le nom et la version dans une carte,
-         * les sauvegardes, l'installation, le projet, la remise à zéro. La
+         * le projet, les sauvegardes, l'installation, la remise à zéro. La
          * pastille Ko-fi reste seule, en bas, sous la zone rouge (sa règle). */
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 18, borderRadius: 20, background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: 'var(--o-shadow,0 14px 36px rgba(0,0,0,.34))' }}>
@@ -3628,6 +3618,12 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
               {etatVersion && <div style={{ marginTop: 6 }}>{etatVersion}</div>}
             </div>
           </div>
+          <CarteTel titre={tr('Le projet')} desc={tr('Tout se passe sur GitHub : le code, et les tickets que je lis.')}>
+            <BoutonsProjet />
+            {peutDiag && <LigneTel ico="download" titre={tr('Diagnostics')} desc={tr('À joindre à un ticket : la forme de votre configuration, sans aucun nom ni adresse.')}>
+              <button type="button" onClick={telechargerDiag} style={btnTel}>{tr('Télécharger')}</button>
+            </LigneTel>}
+          </CarteTel>
           {isAdmin && <VersionsPrecedentes hass={hass} motif={motifEchec} alerter={alerter} tel />}
           <CarteTel titre={tr('Installation')}>
             <LignesTel>
@@ -3641,19 +3637,6 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
                 <button type="button" onClick={exporter} style={btnTel}><Fi i="download" size={11} />{tr('Exporter')}</button>
                 {isAdmin && <ImportConfigBtn />}
               </LigneTel>
-            </LignesTel>
-          </CarteTel>
-          <CarteTel titre={tr('Le projet')}>
-            <LignesTel>
-              <LigneTel ico="code-branch" titre={tr('Code source')} desc={DEPOT} mono>
-                <a href="https://github.com/Alardware/loggia" target="_blank" rel="noopener noreferrer" style={lienTel}>{tr('Ouvrir')}<Fi i="angle-small-right" size={13} /></a>
-              </LigneTel>
-              <LigneTel ico="exclamation" titre={tr('Signaler un problème')}>
-                <a href="https://github.com/Alardware/loggia/issues" target="_blank" rel="noopener noreferrer" style={lienTel}>{tr('Ouvrir')}<Fi i="angle-small-right" size={13} /></a>
-              </LigneTel>
-              {peutDiag && <LigneTel ico="download" titre={tr('Diagnostics')} desc={tr('À joindre à un ticket : la forme de votre configuration, sans aucun nom ni adresse.')}>
-                <button type="button" onClick={telechargerDiag} style={btnTel}>{tr('Télécharger')}</button>
-              </LigneTel>}
             </LignesTel>
           </CarteTel>
           {isAdmin && (
@@ -3670,6 +3653,29 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
         </div>
       )}
       </div>
+    </div>
+  );
+}
+
+/* Les deux boutons du projet, dans « À propos » (08/11, son choix). Rien n'est
+ * chargé depuis GitHub tant qu'on ne tape pas : le logo est dessiné ici, comme
+ * la tasse de Ko-fi. Le mot est dans un `span` : la recherche des réglages ne
+ * lit pas les liens (`trouverRangee`). Côte à côte tant qu'il y a la place. */
+const BOUTON_PROJET = { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48, padding: '8px 14px', borderRadius: 12, fontSize: 13, fontWeight: 800, lineHeight: 1.25, textAlign: 'center', textDecoration: 'none' };
+function BoutonsProjet() {
+  return (
+    <div className="o-boutons-projet" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(220px,100%),1fr))', gap: 10 }}>
+      <a href="https://github.com/Alardware/loggia/issues/new?template=probleme.yml" target="_blank" rel="noopener noreferrer"
+        style={{ ...BOUTON_PROJET, background: 'var(--o-accent-fond)', color: '#fff' }}>
+        <Fi i="exclamation" size={15} /><span>{tr('Signaler un problème')}</span>
+      </a>
+      <a href="https://github.com/Alardware/loggia" target="_blank" rel="noopener noreferrer"
+        style={{ ...BOUTON_PROJET, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' }}>
+        <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style={{ flexShrink: 0 }}>
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+        </svg>
+        <span>{tr('Voir le code sur GitHub')}</span>
+      </a>
     </div>
   );
 }

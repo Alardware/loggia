@@ -112,7 +112,7 @@ export function lireLecteur(S, lecteur) {
     vol: vol.vol, hasVol: vol.vol != null, muted: vol.muted,
     shuffle: meta.shuffle, repeat: meta.repeat,
     bits, bitsCtl: c.bits, bitsHaid: a.bits, bitsVol: vol.bits,
-    classe: a.classe || (b && b.classe) || null, alexa: !!(lecteur && lecteur.alexa),
+    classe: a.classe || (b && b.classe) || (lecteur && lecteur.boitierTv ? 'tv' : null), alexa: !!(lecteur && lecteur.alexa),
     // « Depuis » : le dernier changement de celle qui est tombée la dernière.
     depuis: indispo ? [a.depuis, b && b.depuis].filter(Boolean).sort().pop() || null : a.depuis,
   };

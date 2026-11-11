@@ -109,6 +109,7 @@ export const REGLAGES = [
   r('about', 'installation', ['Installation']),
   r('about', 'diagnostics', ['Diagnostics']),
   r('about', 'signaler', ['Signaler un problème']),
+  r('about', 'code', ['Voir le code sur GitHub']),
   r('about', 'cache', ['Cache de cet écran', 'Cache local'], { l: 'Cache de cet écran' }),
   r('about', 'remise', ['Tout remettre à zéro']),
 ];

@@ -552,6 +552,7 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
    * gras, marges de 18, lignes plus serrées. */
   .o-panneau { border-radius: 20px !important; }
   .o-panneau-tete { padding: 18px 18px 10px !important; }
+  .o-panneau-corps { padding: 0 18px 14px !important; }
   .o-panneau-titre { font-family: var(--o-font) !important; font-style: normal !important; font-size: 13px !important; font-weight: 800 !important; letter-spacing: 0 !important; }
   .o-panneau-desc { font-size: 11.5px !important; margin-top: 2px !important; line-height: 1.4 !important; }
   .o-panneau-pied { padding: 12px 18px !important; }
@@ -783,13 +784,13 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
    * marge négative l'annule dans la mise en page. */
   .grid-qscenes {
     display: flex !important;
-    gap: 10px !important;
+    gap: 8px !important;
     overflow-x: auto;
     scroll-snap-type: x proximity;
     -webkit-overflow-scrolling: touch;
     padding: 4px 4px 6px; margin: -4px -4px 0; scroll-padding-inline: 4px;
   }
-  .grid-qscenes > button { flex: 0 0 150px; scroll-snap-align: start; }
+  .grid-qscenes > button { flex: 0 0 auto; scroll-snap-align: start; }
   /* Vue Pièce : 2 cartes par ligne, compactées pour tenir sans déborder. */
   .grid-roomdev { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
   .grid-roomdev .o-rmcard { min-height: 150px !important; padding: 13px !important; }
@@ -891,6 +892,17 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 @container (max-width: 540px) {
   .o-hdr-search { min-width: 0; }
   .o-hdr-kbd { display: none; }
+}
+/* Le petit sapin de fin d'année (ADR 0342) : près de la date de l'en-tête, et
+ * il s'efface avec elle ; au téléphone, il passe à côté du bonjour de
+ * l'Accueil. Jamais les deux à la fois. Une fenêtre de PC trop étroite pour la
+ * date n'a ni l'un ni l'autre. */
+.o-noel { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.o-noel-salut { display: none; }
+@container (max-width: 700px) { .o-noel-entete { display: none; } }
+@media (max-width: 560px) {
+  .o-noel-entete { display: none; }
+  .o-noel-salut { display: inline-flex; }
 }
 @media (max-width: 560px) {
   /* Les tuiles Securite (portes, fenetres, mouvement, cameras) restent sur
@@ -1484,6 +1496,7 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
 .o-confort-val .pt { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 .o-confort-val .mot { font-size: 11.5px; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 @media (hover: hover) and (pointer: fine) { .o-confort:hover { filter: brightness(1.06); } }
+@media (hover: hover) and (pointer: fine) { .o-boutons-projet a:hover { filter: brightness(1.12); } }
 @media (max-width: 900px) {
   .o-confort { flex-direction: column; align-items: stretch; gap: 12px; }
   .o-confort-sep { display: none; }
@@ -1974,21 +1987,21 @@ html.loggia-tactile .o-rail-cell:not(.o-rail-edit) > .o-rail-col { overscroll-be
 @media (prefers-reduced-motion: reduce) { .o-rail-cell { transition: none !important; } }
 
 /* ── Les scenarios de l'Accueil : UNE rangee qui defile (17/09) ──
- * Six cartes visibles sur PC — jamais sous 116 px : un nom ne se tronque pas
- * pour en loger une de plus —, les autres d'un glissement ou d'un clic sur les
- * fleches de l'en-tete ; sous 821 px la regle du telephone (150 px
- * par carte) prend le relais, plus haut. La barre de defilement est masquee :
+ * Des pastilles, chacune a sa largeur (ADR 0343, 11/11) : autant qu'il en
+ * tient, un nom jamais tronque, les autres d'un glissement ou d'un clic sur les
+ * fleches de l'en-tete ; sous 821 px la regle du telephone prend le relais,
+ * plus haut. La barre de defilement est masquee :
  * les fleches et le clavier (chaque carte est un bouton) en tiennent lieu. Le
  * rembourrage laisse vivre les ombres des cartes, que le defilement couperait ;
  * la marge negative le rend sans effet sur la mise en page. */
 @media (min-width: 821px) {
   .grid-qscenes {
-    display: grid; grid-auto-flow: column; grid-auto-columns: max(116px, calc((100% - 60px) / 6)); gap: 12px;
+    display: flex; gap: 8px;
     overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: none;
     padding: 6px 6px 26px; margin: -6px -6px -26px; scroll-padding-inline: 6px;
   }
   .grid-qscenes::-webkit-scrollbar { display: none; }
-  .grid-qscenes > button { scroll-snap-align: start; min-width: 0; }
+  .grid-qscenes > button { flex: 0 0 auto; scroll-snap-align: start; }
 }
 /* ── L'ombre des cartes d'une rangée qui défile, à TOUTES les largeurs ──
  * `overflow-x: auto` rogne aussi en hauteur : l'ombre du thème (32 px de
@@ -2178,3 +2191,19 @@ html.loggia-light .o-vacances { color-scheme: light; }
  * 1,8 s — le temps de le repérer. Sans mouvement : le fondu seul, que « réduire les animations » coupe. */
 .o-reglage-trouve { box-shadow: inset 0 0 0 2px var(--o-accent) !important; background-color: rgba(var(--o-accent-rgb), .1) !important; border-radius: 12px; transition: box-shadow .3s, background-color .3s; }
 @media (prefers-reduced-motion: reduce) { .o-reglage-trouve { transition: none; } }
+
+/* ── Spotify dans les Médias (ADR 0344) ──
+ * Sur PC, « Écouter sur », « Ajouter par lien » et les flèches à droite du
+ * titre. Au téléphone, le menu prend sa ligne entière, à la largeur du doigt,
+ * et le lien reste à côté du titre, le menu à 44 px pour le doigt. La rangée
+ * défile, sans barre ni aimantation : les flèches à la souris, le doigt
+ * ailleurs. */
+.o-spotify-tete { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 14px; }
+.o-spotify-sortie { display: inline-flex; align-items: center; gap: 8px; }
+@media (max-width: 560px) {
+  .o-spotify-sortie { order: 3; flex: 1 0 100%; }
+  .o-spotify-sortie > :last-child { flex: 1; min-width: 0; }
+}
+@media (max-width: 560px), (pointer: coarse) { .o-spotify-sortie button { min-height: 44px; } }
+.o-spotify-rangee { display: flex; gap: 14px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: 2px 2px 8px; margin: -2px -2px 0; }
+.o-spotify-rangee::-webkit-scrollbar { display: none; }

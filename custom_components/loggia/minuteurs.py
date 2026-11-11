@@ -26,7 +26,11 @@ Ce qui se passe quand...
     ADR 0280) ;
   * on le pose sur un appareil deja eteint : il est refuse (`minuteur_deja_eteint`) —
     garde, il couperait l'appareil une fois rallume, a l'heure d'un geste
-    oublie (audit du 19/10).
+    oublie (audit du 19/10) ;
+  * c'est un lecteur (10/11, ADR 0341) : la TV et la barre de son s'eteignent ;
+    ce qui ne s'eteint pas vraiment — une Echo annonce `turn_off` et ne coupe
+    rien — s'arrete de jouer (`media_pause`, sinon `media_stop`), et seulement
+    s'il joue encore a l'heure dite.
 
 L'extinction est la MAIN de celui qui a pose le minuteur, differee : elle part
 avec son contexte (`Context(user_id=...)`), comme un scenario, et laisse une
@@ -76,6 +80,14 @@ COUPE = {"off", "standby"}
 # geste oublie (ADR 0280).
 MUET = {"unavailable", "unknown"}
 ATTENTE_MAX = 24 * 3600
+
+# La fin d'un minuteur de LECTEUR (10/11, ADR 0341). Les bits de
+# `supported_features` (MediaPlayerEntityFeature), et la regle de l'ecran
+# (lecteur.js, `commandesLecteur`) : s'eteint ce qui sait `turn_off` et n'est
+# pas une Echo — ses bits on/off ne coupent rien. Le reste s'arrete de jouer.
+PAUSE, TURN_OFF, STOP = 1, 256, 4096
+ALEXA = ("alexa_devices", "alexa_media")
+LECTURE = {"playing", "buffering"}
 
 
 # ── Ce qui se calcule, sans Home Assistant ──────────────────────────────────
@@ -143,6 +155,24 @@ def reste(table: dict, haid: str, maintenant: float) -> float | None:
 
 def echus(table: dict, maintenant: float) -> list[str]:
     return sorted(h for h, e in (table or {}).items() if e["fin"] <= maintenant)
+
+
+def fin_lecteur(bits: Any, plateforme: Any) -> tuple[str, str, str]:
+    """Ce que la fin d'un minuteur fait d'un lecteur : `(quoi, domaine, service)`.
+    « eteindre » par `homeassistant.turn_off`, comme une lampe ; « arreter »
+    par `media_pause`, ou `media_stop` a defaut. Un lecteur qui ne sait ni
+    l'un ni l'autre garde l'extinction d'avant."""
+    try:
+        b = int(bits or 0)
+    except (TypeError, ValueError):
+        b = 0
+    if b & TURN_OFF and plateforme not in ALEXA:
+        return ("eteindre", "homeassistant", "turn_off")
+    if b & PAUSE:
+        return ("arreter", "media_player", "media_pause")
+    if b & STOP:
+        return ("arreter", "media_player", "media_stop")
+    return ("eteindre", "homeassistant", "turn_off")
 
 
 def motif(entree: dict, rattrape: bool = False) -> str:
@@ -286,15 +316,19 @@ class LoggiaMinuteurs:
             self._armer(haid)
             return
         self.table.pop(haid, None)
-        eteint = False
-        if etat is not None and etat not in MUET and etat not in COUPE:
+        quoi, domaine, service = "eteindre", "homeassistant", "turn_off"
+        if haid.startswith("media_player.") and st is not None:
+            quoi, domaine, service = fin_lecteur((st.attributes or {}).get("supported_features"), self._plateforme(haid))
+        fait = False
+        # Un lecteur qu'on arrete et qui ne joue plus (en pause, inactif) : rien a faire, rien au journal.
+        if etat is not None and etat not in MUET and etat not in COUPE and (quoi == "eteindre" or etat in LECTURE):
             ctx = Context(user_id=entree["par"]) if entree.get("par") else Context()
             try:
-                await self.hass.services.async_call("homeassistant", "turn_off", {"entity_id": [haid]},
+                await self.hass.services.async_call(domaine, service, {"entity_id": [haid]},
                                                     blocking=False, context=ctx)
-                eteint = True
+                fait = True
             except Exception:  # noqa: BLE001
-                _LOGGER.exception("Loggia minuteurs : l'extinction de %s a echoue", haid)
+                _LOGGER.exception("Loggia minuteurs : la fin du minuteur de %s a echoue", haid)
         elif etat is None or etat in MUET:
             _LOGGER.info("Loggia minuteurs : %s n'est pas revenu dans les %d h, l'extinction est abandonnee",
                          haid, ATTENTE_MAX // 3600)
@@ -303,9 +337,19 @@ class LoggiaMinuteurs:
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia minuteurs : la table n'a pas pu etre sauvegardee apres %s", haid)
         self._reecouter()
-        if eteint and self.regles is not None:
-            await self.regles.noter(MODULE, "minuteur", "eteindre", cibles=[haid], n=1,
+        if fait and self.regles is not None:
+            await self.regles.noter(MODULE, "minuteur", quoi, cibles=[haid], n=1,
                                     motif=motif(entree, rattrape))
+
+    def _plateforme(self, haid: str) -> str | None:
+        """L'integration d'une entite, lue au registre — None s'il ne la dit pas."""
+        try:
+            from homeassistant.helpers import entity_registry as er
+
+            entree = er.async_get(self.hass).async_get(haid)
+        except Exception:  # noqa: BLE001
+            return None
+        return getattr(entree, "platform", None)
 
     async def _sauver(self) -> None:
         # Une COPIE au magasin (28/10, ADR 0280) : la table vivante, rangee

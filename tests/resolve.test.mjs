@@ -178,6 +178,15 @@ test('media : une enceinte exposee deux fois n’apparait qu’une, avec son com
   assert.deepEqual([echo.haid, echo.alexa, echo.modele, echo.annonce, echo.annonceHacs], ['media_player.echo_salon', false, null, null, null]);
 });
 
+test('media : un boîtier à télécommande est un écran, même sans classe (Apple TV, 09/11)', () => {
+  const m = resolveMedia(ctxOf(alexaHome()));
+  const par = (h) => m.list.find(x => x.haid === h);
+  assert.equal(par('media_player.apple_tv_salon').boitierTv, true);
+  assert.equal(par('media_player.bureau_echo_dot').boitierTv, false);
+  const mine = resolveMedia(ctxOf(alexaHome(), { loggia_medias: [{ haid: 'media_player.apple_tv_salon', name: 'Apple TV' }] }));
+  assert.equal(mine.list[0].boitierTv, true, 'choisie à la main aussi');
+});
+
 test('media : un lecteur seul n’invente pas de compagnon', () => {
   const ampli = resolveMedia(ctxOf(mediaHome())).list.find(x => x.haid === 'media_player.ampli');
   assert.equal(ampli.ma, null);

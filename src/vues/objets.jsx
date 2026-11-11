@@ -43,6 +43,8 @@ const EntetePrises = lazyRecharge(() => import('../enteteprises.jsx'));
 const EnteteLumieres = lazyRecharge(() => import('../entetelumieres.jsx'));
 // L'en-tête d'Objets › Multimédia (chantier Médias, tâche 8 ; M15).
 const EnteteMedias = lazyRecharge(() => import('../entetemedias.jsx'));
+// Spotify dans les Médias (ADR 0344) : ses playlists, chargées à la première ouverture du filtre.
+const RangeeSpotify = lazyRecharge(() => import('../spotifymedias.jsx'));
 // L'en-tête d'Objets › IoT (chantier IoT, tâche 7 ; I14) : le compte de sa maquette, à la première ouverture du filtre.
 const EnteteIot = lazyRecharge(() => import('../enteteiot.jsx'));
 // Objets › Capteurs en sections (chantier Capteurs, § 5) : son en-tête et ses sections, à la première ouverture du filtre.
@@ -514,6 +516,9 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
               <span className="o-objfiltre-nb" aria-hidden="true" style={{ fontWeight: 800, color: on ? 'inherit' : 'var(--o-text3)' }}>{n}</span>
             </button>); })}
         </div>
+        {/* Spotify (ADR 0344) : ses playlists au-dessus des lecteurs. Rien sans compte Spotify ; une barrière LOCALE, introuvable,
+          * le module rend la place aux cartes. */}
+        {actuel === 'multimedia' && <Barriere repli={null}><Suspense fallback={null}><RangeeSpotify hass={hass} edit={edit} /></Suspense></Barriere>}
         {actuel === 'volets' ? (
           /* Le repli a la hauteur de l'en-tête (40 px) et son titre : rien ne saute. */
           <Suspense fallback={<div style={{ minHeight: 40, display: 'flex', alignItems: 'center' }}><h2 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 400, color: 'var(--o-text2)' }}>{titreFiltre}</h2></div>}>

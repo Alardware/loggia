@@ -18,7 +18,7 @@ import { trouverCreneau, trouverCouleurDemain } from './creneau.js';
 import { trouverBorne } from './borne.js';
 // L'appariement d'une Echo exposée deux fois (chantier Médias, M1, M14) : la jumelle que `cibleAlexa` retrouve, et ce que chaque intégration sait.
 import { cibleAlexa, estEcho } from './favlecture.js';
-import { integrationDe } from './telecommande.js';
+import { integrationDe, TOUCHES_TV } from './telecommande.js';
 import { BITS, estAlexa } from './lecteur.js';
 import { horsAir, sondeDAppareil, sondeDeLaPiece } from './horsair.js';
 
@@ -401,8 +401,10 @@ export function resolveMedia({ index, caps, states = {}, userCfg = {} } = {}) {
     const alexa = estAlexa(integration(haid)) || (!!ma && estAlexa(integration(ma)));
     const annonce = annonceDe(haid) || annonceDe(ma);
     const annonceHacs = [haid, ma].find(e => e && estEcho(integration(e))) || null;
+    // Un boîtier à télécommande est un écran, même sans classe : une Apple TV n'en a aucune dans Home Assistant (09/11).
+    const boitierTv = Object.prototype.hasOwnProperty.call(TOUCHES_TV, integration(haid) || '');
     return {
-      ...p, ma, alexa,
+      ...p, ma, alexa, boitierTv,
       modele: (d && d.model) || null,
       annonce, annonceHacs,
       groupe: alexa && !!(annonce || annonceHacs) && groupeDe(haid, ma),

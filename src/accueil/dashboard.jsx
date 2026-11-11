@@ -65,6 +65,7 @@ import { motCo2, zoneCo2, ChoixCamDispo, EDIT_BTN } from '../cartescustom/galeri
 import { motPresence } from '../presence.js';
 import { PuceToutEteindre, ACC_CACHES_DEFAUT, ACC_AJOUTEES_DEFAUT, elaguerHisto, ACC_MAIN, ACC_RAIL, ACC_RENOMME, poserFantome, tailleParDefaut, cielSoleil, heureLocale, APPAREIL_ACTIF, LigneMoment, nomDuCycle, WeatherFx, Num, Skel, CartePieceEdition, PieceCard, FavorisAccueil, ScenariosAccueil, PlanPieces, CarteAttention, OngletsAccueil, ACC_NOMS, WeatherGL, FeuilleAgenda, FichePiece, BRIQUES_PIECE } from './briques.jsx';
 import { annulable } from '../annuler.js';
+import { SapinNoel } from '../sapin.jsx';
 import { nomIntegration, integrationDeLaPanne } from '../pannes.js';
 
 /* L’agenda de l’Accueil : la plage demandée, le jour choisi, la feuille ouverte.
@@ -1167,7 +1168,9 @@ function BanniereAccueil({ a, actifsStat, alarmeTuile, attentionLigne, avatars, 
                 * vues en ont un, l'Accueil n'en avait pas — son en-tête dit
                 * bonjour, pas où l'on est. Hors flux (`.o-vh`), rien ne bouge. */}
               <h1 className="o-vh">{tr('Accueil')}</h1>
-              <span className="o-greet-hi" style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>{salut}</span>
+              {/* Le petit sapin (ADR 0342) : ici au téléphone seulement, où la date de l'en-tête s'efface. Il prend la couleur
+                * du bonjour, blanche sur le ciel. */}
+              <span className="o-greet-hi" style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', display: 'flex', alignItems: 'center', gap: 10 }}>{salut}<SapinNoel className="o-noel-salut" /></span>
               {/* Les avatars SUR la ligne du nom, a droite, sur tous les
                 * ecrans (retour user du 15/09 : « ils sont en dessous du
                 * texte au lieu d'etre alignes avec le nom »). La vignette

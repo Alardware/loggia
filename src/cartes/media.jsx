@@ -1,6 +1,6 @@
 /* La carte d'un lecteur, et le mode enfant qui s'y pose.
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
-import { useState, Suspense } from 'react';
+import { useState, useEffect, useSyncExternalStore, Suspense } from 'react';
 import { lazyRecharge } from '../recharge.js';
 import { medPlayers } from '../state.js';
 import { LAVIS } from '../theme.js';
@@ -8,6 +8,8 @@ import { commanderService } from '../actions.js';
 import { Fi, Surface, nomCarte } from '../ui.jsx';
 import { lireLecteur, titreLecteur, nomLecteur, phraseLecteur, commandesLecteur, posLecteur, pourcentTexte, volumeTexte, glypheLecteur, etatVolume } from '../lecteur.js';
 import { useAnnonces, useTeintePochette, annonceDe } from '../lecteuretat.js';
+import { abonnerMinuteurs, ecouterMinuteurs, lireMinuteurs, finMinuteur } from '../prisesetat.js';
+import { minuteurDe, minuteurEnCours, phraseAvecMinuteur } from '../minuteurmedia.js';
 import { maisonAvecEnfant, useEtatEnfant, lecteurEnfant, budgetEcran, dureeTexte } from '../enfantetat.js';
 import { cleTeinte, TEINTE_REPLI } from '../pochette.js';
 import { useOptimiste } from '../optimiste.js';
@@ -90,6 +92,10 @@ function useVueLecteur(hass, id, label = null, actif = true) {
   // « Limité à 40 % » quatre secondes après un geste qui a buté sur le plafond (§ 6.1).
   const [bute, poserBute] = useOptimiste(null, 4000);
   const teinte = useTeintePochette(l && l.on && !l.indispo && l.art ? l.art : null, l ? cleTeinte(l) : null);
+  /* Le minuteur (10/11, ADR 0341) : l'heure de fin que tient le serveur, lue au relevé des lampes et des prises — un seul pour tout
+   * l'écran. */
+  useEffect(() => (actif ? abonnerMinuteurs() : undefined), [actif]);
+  const { etat: minuteurs } = useSyncExternalStore(ecouterMinuteurs, lireMinuteurs, lireMinuteurs);
   if (!l) return null;
   const maintenant = Date.now();
   const on = !l.indispo && (ovMarche != null ? ovMarche : l.on);
@@ -113,11 +119,18 @@ function useVueLecteur(hass, id, label = null, actif = true) {
   const appel = (ent, service, data) => commanderService(H, ent, 'media_player', service, { entity_id: ent, ...(data || {}) });
   // Inactive (`idle`, `on` : le menu d'une appli), rien n'est en pause ni à reprendre — l'état prime sur un titre prêté par l'appli (§ 5).
   const titre = l.idle ? null : titreLecteur(l);
+  const cmd = commandesLecteur(l);
+  const minuteur = minuteurDe(l, cmd);
+  const enCours = minuteur ? minuteurEnCours((x) => finMinuteur(minuteurs, x, maintenant), l) : null;
+  // L'heure de fin en tête de la phrase : allumée, sans annonce en vol, hors blocage du mode enfant (sa phrase prime).
+  const finPhrase = enCours && on && !annonce && !(limite && limite.bloque) ? enCours.fin : null;
   return {
     id: lecteur.haid, lecteur, l, hass: H, nom: nomLecteur(S, lecteur, label), piece: zoneDe(lecteur.haid),
     on, playing, paused: on && !playing && !l.idle && !!(l.paused || titre), indispo: l.indispo, vol, muted, annonce,
-    phrase: phraseLecteur(l, { annonce, marche: ovMarche, lecture: ovLecture, maintenant, enfant: limite }),
-    cmd: commandesLecteur(l),
+    phrase: phraseAvecMinuteur(phraseLecteur(l, { annonce, marche: ovMarche, lecture: ovLecture, maintenant, enfant: limite }), minuteur && minuteur.geste, finPhrase),
+    cmd,
+    // Le minuteur que ce lecteur peut porter (`cible`, `geste`), et celui qui tourne : sa fin, l'entité qui le porte (la fiche l'annule là).
+    minuteur: minuteur && { ...minuteur, fin: enCours ? enCours.fin : null, porteur: enCours ? enCours.id : minuteur.cible },
     // « r,g,b » de la pochette ; la dernière teinte connue le temps de la lecture ; le rose de la maison sans pochette (M8).
     teinte: teinte || TEINTE_REPLI,
     /* Rien à reprendre : ni en lecture, ni en pause, ni un titre — la puce lecture/pause n'est PAS dessinée (M11 : rien d'inerte à

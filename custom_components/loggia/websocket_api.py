@@ -6,7 +6,7 @@ Assistant. Le client ne peut pas designer un autre utilisateur — aucune comman
 n'accepte de champ `user_id`. Un utilisateur ne lit et n'ecrit donc que sa propre
 configuration, et les permissions Home Assistant restent celles de sa session.
 
-Les 63 commandes, toutes prefixees `loggia/`, chacune une ligne de la table
+Les 66 commandes, toutes prefixees `loggia/`, chacune une ligne de la table
 `COMMANDES` (lot 8, ADR 0291). Le compte et la repartition entre ouvertes,
 reservees et ouvertes au code de la maison sont verrouilles par
 `test_websocket_api.py` et `test_websocket_registre.py` : une commande
@@ -41,6 +41,8 @@ nouvelle doit y etre rangee d'un cote ou de l'autre.
     chauffage/config        -> plannings, temperatures, fenetre (admin)
     chauffage/historique    -> l'historique RESUME d'un chauffage, 1 ou 7 jours
                                (tous, sous leurs droits de lecture)
+    chauffage/montees       -> les montees en temperature mesurees (tous,
+                               sous leurs droits de lecture)
   Les prises (chantier Prises, spec 6.1)
     prises/etat             -> la configuration, et ce que chaque prise
                                publie : son type, sa protection, ses cycles
@@ -136,6 +138,8 @@ from .code_admin import LaissezPasser, Limiteur, VerrousParCompte, code_valide, 
 from .discovery import async_index
 from .refus import RefusNomme
 from .scenarios import ScenariosInconnusError, controle_de
+from .spotify import async_jouer as spotify_jouer
+from .spotify import async_playlists as spotify_playlists
 from .store import MAX_TOTAL_BYTES, MAX_VALUE_BYTES, SIGNAL_CONFIG, LoggiaStore, MaisonReserveeError
 
 _LOGGER = logging.getLogger(__name__)
@@ -180,6 +184,7 @@ WS_CHA_MAIN = "loggia/chauffage/main"
 WS_CHA_MAISON = "loggia/chauffage/maison"
 WS_CHA_CONFIG = "loggia/chauffage/config"
 WS_CHA_HISTORIQUE = "loggia/chauffage/historique"
+WS_CHA_MONTEES = "loggia/chauffage/montees"
 WS_PRI_ETAT = "loggia/prises/etat"
 WS_PRI_CONFIG = "loggia/prises/config"
 WS_LUM_ETAT = "loggia/lumieres/etat"
@@ -196,6 +201,8 @@ WS_MIN_ETAT = "loggia/minuteurs/etat"
 WS_MIN_POSER = "loggia/minuteurs/poser"
 WS_MIN_ANNULER = "loggia/minuteurs/annuler"
 WS_SIR_TESTER = "loggia/sirene/tester"
+WS_SPOTIFY_JOUER = "loggia/spotify/jouer"
+WS_SPOTIFY_PLAYLISTS = "loggia/spotify/playlists"
 WS_RAP_ETAT = "loggia/rappels/etat"
 WS_RAP_POSER = "loggia/rappels/poser"
 WS_RAP_ANNULER = "loggia/rappels/annuler"
@@ -917,6 +924,24 @@ async def handle_cha_historique(ctx, connection, msg, chauffage):
     connection.send_result(msg["id"], resultat)
 
 
+# Les montees en temperature d'un chauffage (ADR 0340) : ce que le moteur a
+# mesure, sous les droits de LECTURE du compte, comme l'historique.
+async def handle_cha_montees(ctx, connection, msg, chauffage):
+    try:
+        resultat = await chauffage.async_montees(msg["chauffage"], connection.user)
+    except PermissionError as err:
+        connection.send_error(msg["id"], "unauthorized", str(err))
+        return
+    except ValueError as err:
+        _relayer(connection, msg, err)
+        return
+    except Exception:  # noqa: BLE001
+        _LOGGER.warning("Loggia chauffage : montees illisibles", exc_info=True)
+        connection.send_error(msg["id"], "historique_indisponible", "montees illisibles")
+        return
+    connection.send_result(msg["id"], resultat)
+
+
 # ── Le carnet des lumieres (chantier Lumieres, spec 6.2) ───────────────────
 # Deux lectures, ouvertes a tout compte connecte, sous ses droits de
 # LECTURE (`_lecture_autorisee`, la garde de l'etat du chauffage) : `etat`
@@ -1061,6 +1086,35 @@ async def handle_ver_rendre(ctx, connection, msg, module):
 # (audit 18/09). Qui pose le minuteur vient de la session, jamais du message.
 async def handle_min_etat(ctx, connection, msg, minuteurs):
     connection.send_result(msg["id"], minuteurs.async_etat(controle_de(connection.user)))
+
+
+async def handle_spotify_jouer(ctx, connection, msg, _module):
+    """Spotify (ADR 0344) : l'enceinte, puis la playlist — au nom du compte de la session, s'il pilote ce lecteur."""
+    try:
+        resultat = await spotify_jouer(ctx.hass, msg["entity_id"], msg["uri"], msg.get("sortie"),
+                                       par=connection.user.id, controle=controle_de(connection.user))
+    except PermissionError as err:
+        connection.send_error(msg["id"], "unauthorized", str(err))
+        return
+    except ValueError as err:
+        _relayer(connection, msg, err)
+        return
+    connection.send_result(msg["id"], resultat)
+
+
+async def handle_spotify_playlists(ctx, connection, msg, _module):
+    """Spotify (ADR 0346) : les playlists du compte, que Spotify joue ou non — sous les droits de LECTURE de la session."""
+    from .discovery import _lecture_autorisee
+
+    try:
+        noeud = await spotify_playlists(ctx.hass, msg["entity_id"], lecture=_lecture_autorisee(connection.user))
+    except PermissionError as err:
+        connection.send_error(msg["id"], "unauthorized", str(err))
+        return
+    except ValueError as err:
+        _relayer(connection, msg, err)
+        return
+    connection.send_result(msg["id"], noeud)
 
 
 async def handle_min_poser(ctx, connection, msg, minuteurs):
@@ -1250,6 +1304,7 @@ COMMANDES: tuple[Commande, ...] = (
         vol.Required("chauffage"): _NOM_128,
         vol.Optional("jours", default=1): vol.In([1, 7]),
     }, module="chauffage"),
+    Commande(WS_CHA_MONTEES, handle_cha_montees, {vol.Required("chauffage"): _NOM_128}, module="chauffage"),
     # Les prises (chantier Prises, spec 6.1) : `etat` ne dit rien que
     # `config/get` ne donne deja ; `config` - proteger, imposer le type,
     # l'alerte de fin de cycle - aux administrateurs (P4).
@@ -1291,4 +1346,9 @@ COMMANDES: tuple[Commande, ...] = (
     Commande(WS_RAP_POSER, handle_rap_poser, {vol.Required("quand"): vol.Coerce(float), vol.Required("sorte"): str,
                                               vol.Optional("entity_id"): str}, module="rappels"),
     Commande(WS_RAP_ANNULER, handle_rap_annuler, {vol.Required("id_rappel"): str}, module="rappels"),
+    # Spotify : l'enceinte, puis la playlist (ADR 0344)
+    Commande(WS_SPOTIFY_JOUER, handle_spotify_jouer, {vol.Required("entity_id"): str, vol.Required("uri"): str,
+                                                      vol.Optional("sortie"): str}),
+    # Ses playlists, que Spotify joue ou non (ADR 0346)
+    Commande(WS_SPOTIFY_PLAYLISTS, handle_spotify_playlists, {vol.Required("entity_id"): str}),
 )

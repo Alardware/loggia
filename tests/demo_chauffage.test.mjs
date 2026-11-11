@@ -871,3 +871,19 @@ test('l’historique d’un thermostat de la démo : ce que Home Assistant ENREG
     }
   }
 });
+
+test('les montées de la démo : des mesures pour les radiateurs, un cas sans sonde', async () => {
+  const m = maisonChauffageDemo({ quand: LUNDI_10H });
+  const r = await m.ws({ type: 'loggia/chauffage/montees', chauffage: BUREAU });
+  assert.equal(r.chauffage, BUREAU);
+  assert.equal(r.sonde, 'sensor.bureau_temperature');
+  assert.ok(r.nom_sonde);
+  assert.equal(r.montees.length, 5);
+  assert.equal(r.rythme, 0.9);
+  assert.match(r.aujourdhui, /^\d{4}-\d{2}-\d{2}$/);
+  const sans = await m.ws({ type: 'loggia/chauffage/montees', chauffage: 'select.radiateur_grenier_fil_pilote' });
+  assert.deepEqual([sans.sonde, sans.montees, sans.rythme], [null, [], null]);
+  const clim = await m.ws({ type: 'loggia/chauffage/montees', chauffage: 'climate.climatisation' });
+  assert.deepEqual([clim.sonde, clim.montees, clim.rythme], ['climate.climatisation', [], null], 'un thermostat se mesure lui-même');
+  await assert.rejects(m.ws({ type: 'loggia/chauffage/montees', chauffage: BUREAU, jours: 1 }));
+});

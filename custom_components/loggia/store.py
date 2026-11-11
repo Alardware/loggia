@@ -168,6 +168,9 @@ AGENCEMENT: frozenset[str] = frozenset(
         "loggia_vuepieces",
         "loggia_scnordre",
         "loggia_epingles",
+        # Les playlists Spotify qu un profil a decochees (ADR 0345) : une coche
+        # se remet, rien ne s y commande.
+        "loggia_spotify_cachees",
         "loggia-hiddenviews",
         "loggia-shownviews",
         "loggia-vueordre",

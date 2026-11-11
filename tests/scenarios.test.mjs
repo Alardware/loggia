@@ -157,7 +157,8 @@ test('l’Accueil : la rangee des scenarios, et « Gerer » cliquable malgre le 
   // Dans l'ordre de CE type d'ecran (ADR 0052) : `sc.tous`.
   assert.ok(a.includes('const liste = scenariosAccueil(sc.tous);'), 'seuls les scenarios cochés « Sur l’Accueil »');
   // ASSERTION MODIFIÉE (05/11, étape 5) : hors édition, la rangée se range par un appui long (`{...ranger}`), chaque carte porte sa clé (`dataId`).
-  assert.ok(a.includes('<CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} dataId={s.id} />'), 'des cartes compactes');
+  // ASSERTION MODIFIÉE (11/11, ADR 0343) : des pastilles, plus des cartes compactes.
+  assert.ok(a.includes('<PastilleScenario key={s.id} s={s} enCours={sc.enCours === s.id} onLancer={sc.lancer} dataId={s.id} />'), 'des pastilles');
   // En edition, `Sec` pose pointer-events none sur le contenu d'une section :
   // le bouton doit se remettre en auto, sinon le clic tombe sur la section
   // et part en glisser (bug vu sur HA le 16/09).

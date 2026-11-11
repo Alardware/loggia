@@ -36,7 +36,7 @@ function lecteurs(m) {
 test('§ 8 : chaque état de la maquette, à 20:40', () => {
   const m = maisonMediasDemo({ quand: A(20, 40) });
   const S = m.states;
-  assert.deepEqual([S[ATV].state, S[ATV].attributes.device_class, S[ATV].attributes.source_list.length, S['remote.apple_tv_chambre'].state], ['off', 'tv', 19, 'off'], 'l’Apple TV éteinte, ses dix-neuf applis, sa télécommande');
+  assert.deepEqual([S[ATV].state, S[ATV].attributes.device_class, S[ATV].attributes.source_list.length, S['remote.apple_tv_chambre'].state], ['off', undefined, 19, 'off'], 'l’Apple TV éteinte, ses dix-neuf applis, sa télécommande');
   assert.deepEqual([S[OFF].state, S[OFF].attributes.supported_features, S[OFF].attributes.volume_level], ['playing', 5644, .3], 'l’officielle : les bits de chez lui, 30 %');
   const h = S[HACS].attributes;
   assert.deepEqual([S[HACS].state, h.supported_features, h.media_title, h.media_artist, h.media_duration, h.media_position, h.app_name, heure(Date.parse(h.media_position_updated_at))], ['playing', 318399, 'Bin K’uchul Xibalba', 'Metal_Chaos', 256, 91, 'Amazon Music', '20:40'], 'la jumelle HACS joue le premier morceau de la file, à 1:31');

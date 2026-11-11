@@ -15,6 +15,7 @@
  *    et la puce « Allumer ». Puis le volume : le muet, la barre de la maison
  *    (piste 32), « 30 % » ou « Muet ». Indisponible : le mot, la phrase, et plus
  *    aucune commande (M7) ;
+ *  - le minuteur (10/11, ADR 0341) : six durées en un appui, « Autre durée » ; en cours, le décompte, +15 min, +1 h, Annuler ;
  *  - le panneau d'une Echo (§ 6.7) : « Dire à Alexa / Annonce ». Les phrases
  *    gardées en puces (M19), le champ, l'étoile « Garder » ; l'annonce (M9) :
  *    « Sur » — toute la maison ou les Echo choisies —, le champ, quatre annonces
@@ -50,7 +51,7 @@ import { LOGGIA_INDEX, medPlayers, cfgVal, compteOrdinaire, plateformeDe } from 
 import { lazyRecharge } from './recharge.js';
 import { useEtatEnfant, maisonAvecEnfant, profilEnfant, dureeTexte, poserEtatEnfant } from './enfantetat.js';
 import { PinModal } from './pinmodal.jsx';
-import { raisonEchec } from './refus.js';
+import { raisonEchec, texteRefus } from './refus.js';
 import { annoncer, ANNONCE_MS } from './lecteuretat.js';
 import { useOptimiste } from './optimiste.js';
 import { appelPourJouer, phraseAlexa, TYPE_PHRASE } from './favlecture.js';
@@ -63,6 +64,10 @@ import { genreLecteur, glypheLecteur, posLecteur, fmtTemps, pourcentTexte, etatV
 import { EnteteFiche, PETITES_CAPITALES, filet } from './fichecommune.jsx';
 import { LISERE } from './styles.js';
 import { PANNEAU, RANGEE, TITRE, SOUS } from './fichekit.js';
+import { abonnerMinuteurs, poserMinuteurs, useHorloge } from './prisesetat.js';
+import { dureePrise } from './prises.js';
+import { DUREES_MEDIA, AJOUTS_MEDIA, AUTRE_DUREE, consigneMinuteur, phraseMinuteurMedia } from './minuteurmedia.js';
+import { PanneauSpotify } from './spotifymedias.jsx';
 
 /* La feuille « Réglages parent » du mode enfant (chantier Mode enfant, E19) : la seconde feuille de cette fiche, montée après son
  * contenu, chargée à l'ouverture seulement — le motif du plan du robot (ficherobot.jsx). Son contenu seul est à la demande
@@ -802,6 +807,77 @@ function PanneauEnfant({ v, etat, profil, cfgProfil, admin, onReglages, onDemand
   );
 }
 
+/* ── Le minuteur (10/11, ADR 0341) ──────────────────────────────────────────────
+ *
+ * Sa demande : « un minuteur configurable et activable à la demande pour les médias ». Le serveur le tient (minuteurs.py, ADR 0064) :
+ * il part même la fiche fermée, et chaque écran lit la même heure de fin. Six durées en un appui, « Autre durée » de 5 en 5 min (−, +,
+ * « Démarrer ») ; en cours, « S’éteint à 22:40 · dans 29 min 41 s », +15 min, +1 h, Annuler — le serveur AJOUTE à ce qui reste. À la
+ * fin, la TV et la barre de son s'éteignent, une Echo s'arrête de jouer (`minuteurDe`, minuteurmedia.js). Éteinte — ou, pour ce qui
+ * s'arrête, sans rien en lecture —, les puces sont inertes et la phrase dit quand elles servent. Toutes attendent la réponse d'un appel
+ * en vol. La fiche ne le monte pas sur un écran bloqué par le mode enfant : la maison le tient déjà. */
+function PanneauMinuteur({ v, maintenant }) {
+  const m = v.minuteur;
+  const t = maintenant == null ? Date.now() : Number(maintenant);
+  // La fiche ouverte, les minuteurs se relisent toutes les 15 s (le relevé des lampes et des prises).
+  useEffect(() => abonnerMinuteurs({ rapide: true }), []);
+  const vivant = useVivant();
+  const [enVol, envoyer] = useEnVol();
+  const [erreur, setErreur] = useState('');
+  const [autre, setAutre] = useState(false);
+  const [libre, setLibre] = useState(AUTRE_DUREE.depart);
+  // Une fin passée, pas encore relue, n'est plus un minuteur — jamais « dans 0 s ».
+  const fin = m.fin && m.fin > t ? m.fin : null;
+  // Le décompte à la seconde tant qu'il tourne ; jamais quand l'heure est fixée (les tests).
+  useHorloge(maintenant == null && !!fin);
+  const peut = m.geste === 'arreter' ? v.on && (v.playing || v.paused) : v.on;
+  const H = v.hass;
+  const appel = (msg) => {
+    if (!H || typeof H.callWS !== 'function') return;
+    setErreur('');
+    envoyer(() => new Promise((ok) => ok(H.callWS(msg))).then((r) => { if (r && r.minuteurs) poserMinuteurs(r); if (vivant.current) setAutre(false); },
+      // Un refus nommé du serveur (`minuteur_deja_eteint`) se dit en clair ; le reste, la phrase générale.
+      (x) => { if (vivant.current) setErreur(x && x.code === 'unauthorized' ? tr('Ce compte ne pilote pas cet appareil.') : texteRefus(x) || tr('Le minuteur n’a pas pu être enregistré.')); }));
+  };
+  // En cours, sur l'entité qui le porte (un jumeau qui a pris la main garde le sien) ; sinon sur la cible.
+  const poser = (n) => { if (!enVol && (fin || peut)) appel({ type: 'loggia/minuteurs/poser', entity_id: fin ? m.porteur : m.cible, minutes: n }); };
+  const annuler = () => { if (!enVol) appel({ type: 'loggia/minuteurs/annuler', entity_id: m.porteur }); };
+  const actif = peut && !enVol;
+  const inerte = (ok) => (ok ? undefined : true);
+  const phrase = fin ? phraseMinuteurMedia(m.geste, fin, t) : consigneMinuteur(m.geste, { tv: !!v.l && v.l.classe === 'tv', peut });
+  return (
+    <div data-panneau="minuteur" style={{ ...PANNEAU, padding: '14px 18px 16px' }}>
+      <span style={TITRE}>{tr('Minuteur')}</span>
+      <span style={SOUS}>{phrase}</span>
+      {fin ? (
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          {AJOUTS_MEDIA.map(n => <button key={n} type="button" aria-disabled={inerte(!enVol)} onClick={() => poser(n)} style={LARGE(false, !enVol)}>{'+' + dureePrise(n)}</button>)}
+          <button type="button" aria-disabled={inerte(!enVol)} onClick={annuler} style={{ ...LARGE(false, !enVol), marginLeft: 'auto' }}>{tr('Annuler')}</button>
+        </div>
+      ) : (
+        <>
+          <div style={{ ...QUATRE_COLONNES, marginTop: 12 }}>
+            {DUREES_MEDIA.map(n => <button key={n} type="button" aria-disabled={inerte(actif)} onClick={() => poser(n)} style={LARGE(false, actif)}>{dureePrise(n)}</button>)}
+            <button type="button" aria-expanded={autre && peut} aria-disabled={inerte(actif)} onClick={() => { if (actif) setAutre(!autre); }}
+              style={{ ...LARGE(autre && peut, actif), gridColumn: 'span 2' }}>{tr('Autre durée')}</button>
+          </div>
+          {/* La durée libre : −, la durée, +, « Démarrer ». À 320 px, « Démarrer » passe à la ligne plutôt que de déborder. */}
+          {autre && peut && (
+            <div data-autre-duree="" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+              <button type="button" aria-label={tr('{n} min de moins', { n: AUTRE_DUREE.pas })} aria-disabled={inerte(libre > AUTRE_DUREE.min)}
+                onClick={() => setLibre(Math.max(AUTRE_DUREE.min, libre - AUTRE_DUREE.pas))} style={RONDE(44, false, libre > AUTRE_DUREE.min)}><Fi i="minus-small" size={16} /></button>
+              <span aria-live="polite" style={{ minWidth: 64, textAlign: 'center', fontSize: 16, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{dureePrise(libre)}</span>
+              <button type="button" aria-label={tr('{n} min de plus', { n: AUTRE_DUREE.pas })} aria-disabled={inerte(libre < AUTRE_DUREE.max)}
+                onClick={() => setLibre(Math.min(AUTRE_DUREE.max, libre + AUTRE_DUREE.pas))} style={RONDE(44, false, libre < AUTRE_DUREE.max)}><Fi i="plus-small" size={16} /></button>
+              <button type="button" aria-disabled={inerte(!enVol)} onClick={() => poser(libre)} style={{ ...LARGE(true, !enVol), marginLeft: 'auto', padding: '0 18px' }}>{tr('Démarrer')}</button>
+            </div>
+          )}
+        </>
+      )}
+      {erreur && <div role="alert" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)', marginTop: 10 }}>{erreur}</div>}
+    </div>
+  );
+}
+
 /**
  * Le contenu de la feuille d'un lecteur. `vue` : celle de sa carte (`useVueLecteur`, App.jsx) ; `briques` : `RmBascule`,
  * `RmJauge`, `Segment` et `gradeVolume` d'App.jsx ; `glyphe` : le glyphe de sa carte (l'icône choisie devant) ; `epingle` : son
@@ -827,6 +903,9 @@ export default function FicheMediaContent({ id, vue: v, briques, glyphe = null, 
    * garde ses bits, mais `play_media` partirait dans le vide — pas de « Dire à Alexa », et l'annonce ne la vise pas (passe bis, 17/10). */
   const cibleHacs = vivante && lecteur.alexa && lecteur.annonceHacs && !enPanne(lecteur.annonceHacs, S[lecteur.annonceHacs]) ? lecteur.annonceHacs : null;
   const peutAnnoncer = vivante && !!lecteur.alexa && !!(lecteur.annonce || cibleHacs);
+  /* Spotify sur cette Echo (ADR 0344) : ses noms — le sien, ceux de sa jumelle HACS et de l'entité qui commande —, que la liste de
+   * Spotify Connect reconnaît mot pour mot. */
+  const nomsSpotify = [id, lecteur.annonceHacs, lecteur.ctl].filter(Boolean).map(x => S[x] && S[x].attributes && S[x].attributes.friendly_name).filter(Boolean);
   /* L'annonce de `tts.speak` (M2) : une enceinte d'une plateforme qui lit la voix (`cast`), qui sait jouer un média (le bit PLAY_MEDIA,
    * 512), et au moins un moteur de synthèse qui répond. Une Echo n'est pas de `cast` : elle garde la sienne, par Alexa. */
   const moteurs = vivante && litUneVoix(plateformeDe(id)) && (Number((S[id] && S[id].attributes && S[id].attributes.supported_features) || 0) & 512) ? moteursVoix(S) : [];
@@ -947,6 +1026,11 @@ export default function FicheMediaContent({ id, vue: v, briques, glyphe = null, 
             </>
           )}
         </div>
+
+        {/* Le minuteur (ADR 0341), sous ce qui joue : pas sur un écran bloqué par le mode enfant, qui le tient déjà. */}
+        {/* Spotify (ADR 0344), avant le minuteur : une pochette, et la playlist part sur cette Echo. */}
+        {vivante && !v.bloque && lecteur.alexa && <PanneauSpotify hass={v.hass} noms={nomsSpotify} />}
+        {vivante && !v.bloque && v.minuteur && <PanneauMinuteur v={v} maintenant={maintenant} />}
 
         {/* Le mode enfant (E18) : son panneau quand le profil agit ou que ses limites sont levées ; sinon, un lecteur qui a une zone porte
           * la rangée « Mode enfant · Désactivé », qui ouvre la feuille des réglages (E20) — le pavé d'abord pour un compte ordinaire. */}

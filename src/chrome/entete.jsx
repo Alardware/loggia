@@ -22,6 +22,7 @@ import { scenarios, nomsLiens, lancerScenario } from '../app/scenarios.jsx';
 import { FicheEntite } from '../aidepanne.jsx';
 // Les réglages eux-mêmes, dans la recherche (07/11, usage étape 12 ; son choix : « les deux »).
 import { optionsReglages, sectionOuverte, demanderReglage, SECTIONS_REGLAGES } from '../reglagesindex.js';
+import { SapinNoel } from '../sapin.jsx';
 
 /* L'orbe seule, pour la miniature de l'appui long. Meme module que celui de
  * la popup : le paquet n'est telecharge qu'une fois, quel que soit celui des
@@ -395,6 +396,8 @@ function Header() {
           chercher la scène. Le clic court navigue, comme avant. */}
       {/* La pilule « N allumées » a quitté l'en-tête (retour 01/09) : la
           carte Chips et les résumés le disent déjà. */}
+      {/* Le petit sapin de fin d'année (ADR 0342), du 1er novembre à Noël : près de la date, et il s'efface avec elle. */}
+      <SapinNoel date={clock} className="o-noel-entete" style={{ fontSize: 13, color: 'var(--o-text2)' }} />
       <div className="o-hdr-date" style={{ textAlign: 'right', lineHeight: 1.15 }}><div style={{ fontSize: 14, fontWeight: 700 }}>{dateStr}</div><div style={{ fontSize: 12, color: 'var(--o-text2)', fontWeight: 600 }}><FlipText text={timeStr} /></div></div>
       <div className="o-hdr-div" style={{ width: 1, height: 30, background: 'var(--o-bd1)' }} />
       <div data-hdr-menu style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>

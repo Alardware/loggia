@@ -189,4 +189,21 @@ function CarteScenario({ s, noms = {}, compacte = false, enCours = false, onLanc
   );
 }
 
-export { scenarios, nomsLiens, lancerScenario, useScenarios, CarteScenario };
+/* La pastille d'un scénario, sur l'Accueil (ADR 0343) : la capture du 11/11, à la lettre — l'icône et le nom sur
+ * UNE ligne, l'icône dans la couleur du texte, 44 px de haut pour le doigt. Un scénario est un geste, pas un
+ * appareil : la pastille le dit en deux fois moins de hauteur que la carte de 88. Le dernier lancement reste à la
+ * carte de la vue Scénarios. Ce qui tourne prend sa teinte — lavis, icône — et le dit au survol. */
+function PastilleScenario({ s, enCours = false, onLancer, dataId = null }) {
+  const t = teinteScenario(s);
+  const nom = nomScenario(s);
+  return (
+    <button type="button" onClick={(e) => { fxTap(e); if (onLancer) onLancer(s.id); }} aria-label={tr('Lancer {x}', { x: nom })} title={enCours ? tr('En cours') : undefined} data-id={dataId || undefined}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 9, height: 44, padding: '0 16px 0 14px', boxSizing: 'border-box', borderRadius: 999, border: LISERE, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'background .25s', color: 'var(--o-text)',
+        background: enCours ? lavisCarte(t.rgb, .26) : 'var(--o-s1)', fontSize: 'calc(13px * var(--o-texte, 1))', fontWeight: 700, '--o-texte': 'var(--o-texte-carte, 1)' }}>
+      <Ico name={s.icone || 'sparkles'} size={16} color={enCours ? t.col : 'var(--o-text)'} />
+      {nom}
+    </button>
+  );
+}
+
+export { scenarios, nomsLiens, lancerScenario, useScenarios, CarteScenario, PastilleScenario };

@@ -990,6 +990,8 @@ function configDemo() {
     loggia_enfant: ENFANT_CFG,
     /* L'applique extérieure est une prise que la maison déclare lumière, comme chez lui (chantier Lumières, § 9). */
     loggia_switchlights: ['switch.applique_exterieur'],
+    /* Une playlist de Spotify lui-même, ajoutée par son lien (ADR 0344) : son nom écrit à la main. */
+    loggia_spotify: { ajoutees: [{ t: 'Top Hits Kids', i: 'spotify:playlist:37i9dQZF1DX2jdUWwSgTho' }] },
     /* Les quatre phrases de sa maquette, gardées pour l'Echo de la cuisine (chantier Médias, § 8 ; M19) : des boutons de « Dire à
      * Alexa », rangés comme le navigateur de l'utilisateur les range — par lecteur, la phrase entière pour identifiant (favlecture.js). */
     loggia_favlecture: { 'media_player.echo_cuisine': PHRASES_MEDIAS_DEMO.map(([phrase]) => ({ t: phrase, i: phrase, c: 'custom', v: null })) },
@@ -1168,7 +1170,7 @@ function scnCibles(a, states, piece) {
     /* Des volets par leur CLASSE, comme le serveur (`est_volet`, scenarios.py) : le garage et le portail de la démo
      * gardent leur carte, mais « fermer les volets » ne les touche pas ; un volet muet ne reçoit rien. */
     if (a.famille === 'volets') return estVolet(states[id]) && !estMuetVolet(states[id]) && (a.geste === 'fermer' ? st !== 'closed' : st !== 'open');
-    if (a.famille === 'medias') { const tv = (states[id].attributes || {}).device_class === 'tv'; return a.geste === 'eteindre' ? st !== 'off' : a.geste === 'pause' ? st === 'playing' : a.geste === 'lecture' ? (!tv && st !== 'playing') : tv; }
+    if (a.famille === 'medias') { const tv = ecranDemo(states, id); return a.geste === 'eteindre' ? st !== 'off' : a.geste === 'pause' ? st === 'playing' : a.geste === 'lecture' ? (!tv && st !== 'playing') : tv; }
     if (a.famille === 'serrures') return st !== 'locked';
     return true;
   }).sort();
@@ -3191,6 +3193,17 @@ const APPAREILS_MEDIAS_DEMO = {
   echo_dot_bureau: ['bureau', 'Echo Dot - Bureau', 'Echo Dot (3e génération)', 'alexa_devices', ['media_player.bureau_echo_dot']],
   partout: [null, 'Partout', 'Speaker Group', 'alexa_devices', ['media_player.partout', 'notify.partout_annoncer']],
 };
+/* La fin d'un minuteur de lecteur (ADR 0341), comme le serveur (`fin_lecteur`, minuteurs.py) : `turn_off` si l'entité le sait et
+ * n'est pas une Echo, sinon `media_pause`, sinon `media_stop`. Recopiée de `finServeur` (minuteurmedia.js), que la démo n'importe
+ * pas : un module du démarrage tiré par la démo sortirait du boot dans un morceau à part (tests/minuteurmedia.test.mjs les compare). */
+export function finMinuteurLecteurDemo(bits, plateforme) {
+  const b = Number(bits) || 0;
+  const alexa = plateforme === 'alexa_devices' || plateforme === 'alexa_media';
+  if ((b & 256) && !alexa) return { quoi: 'eteindre', service: 'turn_off' };
+  if (b & 1) return { quoi: 'arreter', service: 'media_pause' };
+  if (b & 4096) return { quoi: 'arreter', service: 'media_stop' };
+  return { quoi: 'eteindre', service: 'turn_off' };
+}
 const appareilMediaDemo = (id) => Object.keys(APPAREILS_MEDIAS_DEMO).find(d => APPAREILS_MEDIAS_DEMO[d][4].includes(id)) || null;
 /* La jumelle d'un lecteur de la démo : l'autre entité `media_player` qui partage son empreinte. Le faux serveur fait miroiter l'état
  * d'un geste sur les deux (lecture, pause, le volume) : chez lui, les deux intégrations lisent la même enceinte. */
@@ -3234,7 +3247,7 @@ function etatsMediasDemo() {
   const soeur = (nom, quoi, attrs = {}) => s('unknown', { friendly_name: etiquette(nom) + ' ' + etiquette(quoi), ...attrs });
   return {
     // L'Apple TV de la chambre : éteinte, ses applications, sa télécommande sur le même appareil.
-    'media_player.apple_tv_chambre': s('off', { friendly_name: 'Apple TV Chambre', supported_features: 450487, device_class: 'tv', source_list: APPLIS_ATV_DEMO }),
+    'media_player.apple_tv_chambre': s('off', { friendly_name: 'Apple TV Chambre', supported_features: 450487, source_list: APPLIS_ATV_DEMO }),
     'remote.apple_tv_chambre': s('off', { friendly_name: 'Apple TV Chambre', supported_features: 0 }),
     // L'Echo Dot de la chambre, deux fois : l'officielle (le volume, le muet, les annonces ; ni lecture ni pause) et la jumelle HACS, qui joue.
     // Son volume suit le mode enfant (§ 10) : 30 % dans les heures du profil, déjà ramené au plafond du coucher (20 %) en dehors.
@@ -3254,6 +3267,8 @@ function etatsMediasDemo() {
     // « Partout », le groupe : officiel, rien en lecture, et sa `notify` « Annoncer » — toute la maison.
     'media_player.partout': s('idle', { friendly_name: 'Partout', supported_features: 5644, volume_level: .4 }),
     'notify.partout_annoncer': soeur('Partout', 'Annoncer'),
+    // Le compte Spotify (ADR 0344) : l'entité de l'intégration officielle, rien en lecture ; sa liste, les enceintes que Spotify Connect voit.
+    'media_player.spotify_demo': s('idle', { friendly_name: 'Spotify', supported_features: 444983, volume_level: .3, source: null, source_list: ['Echo Show Salon', 'Echo de la cuisine', 'Echo Dot - Chambre', 'Partout'] }),
   };
 }
 
@@ -3354,6 +3369,9 @@ function gesteMediaSeul(states, domaine, service, data, t) {
  * après le geste, un écran bloqué rallumé s'éteint vingt secondes après ; chaque geste s'écrit au journal de la maison avec les mots
  * du serveur. La notification de la demande (E13) se note au journal : la démo ne sonne pas et ne parle pas. */
 const ENFANT_ZONE_DEMO = 'chambre';
+/* L'Apple TV de la démo n'a aucune classe, comme les vraies (09/11) : c'est sa télécommande qui en fait un écran. */
+function ecranDemo(states, id) { return id === 'media_player.apple_tv_chambre' || ((states[id] || {}).attributes || {}).device_class === 'tv'; }
+
 const ENFANT_OFF_DEMO = 'media_player.chambre_echo_dot', ENFANT_HACS_DEMO = 'media_player.echo_dot_chambre', ENFANT_ECRAN_DEMO = 'media_player.apple_tv_chambre';
 const ENFANT_SOEURS_DEMO = { parler: 'notify.chambre_echo_dot_parler', annonces: 'switch.chambre_echo_dot_annonces' };
 // Les réglages par défaut de `profil_defaut` (enfant_calcul.py), sur la chambre ; le prénom de la maquette ne se traduit pas.
@@ -3403,7 +3421,7 @@ function enfantDemo(states) {
   const lecteurs = { [ENFANT_OFF_DEMO]: vue(false), [ENFANT_HACS_DEMO]: vue(false) };
   for (const haid of p.ajouts) {
     if (!states[haid] || lecteurs[haid]) continue;
-    const ecran = (states[haid].attributes || {}).device_class === 'tv';
+    const ecran = ecranDemo(states, haid);
     appareils.push({ entite: haid, ajoute: true, ecran, parler: null, annonces: null, hacs: null });
     lecteurs[haid] = vue(ecran);
   }
@@ -3664,6 +3682,8 @@ function indexDemo(states) {
     const at = states[id].attributes || {};
     entities.push({ id, name: at.friendly_name || id, device: d, area: null, ...metaCapteurDemo(id), ...metaMediaDemo(id), device_class: at.device_class || null, unit: at.unit_of_measurement || null, hidden: false });
   }));
+  // Le compte Spotify (ADR 0344) : un appareil de SERVICE, sans pièce, comme l'intégration officielle le pose.
+  if (states['media_player.spotify_demo']) entities.push({ id: 'media_player.spotify_demo', name: 'Spotify', device: 'spotify_demo', area: null, platform: 'spotify', device_class: null, unit: null, hidden: false });
   /* Tempo (chantier G3, E4) : sans appareil, comme `rtetempo` ; le rôle que le composant pose dans l'index (`tarifs.py`) — la couleur
    * du lendemain se reconnaît à sa forme et à son identifiant stable, que l'écran ne voit jamais. */
   [['sensor.rte_tempo_couleur_actuelle', 'couleur'], ['sensor.rte_tempo_prochaine_couleur', 'couleur_demain']].forEach(([id, tarif]) => {
@@ -3807,6 +3827,7 @@ function indexDemo(states) {
         ...(APPAREILS_MEDIAS_DEMO[id][5] ? { empreintes: APPAREILS_MEDIAS_DEMO[id][5] } : {}) })),
       { id: 'cam_entree', name: etiquette('Caméra entrée'), area: 'entree', manufacturer: 'Démo', model: etiquette('Caméra'), firmware: null, via: null, entry_type: null, integration: 'demo' },
       { id: 'sysmon', name: 'System Monitor', area: null, manufacturer: 'Démo', model: 'System Monitor', firmware: null, via: null, entry_type: 'service', integration: 'systemmonitor' },
+      { id: 'spotify_demo', name: 'Spotify', area: null, manufacturer: 'Spotify AB', model: 'Spotify Premium', firmware: null, via: null, entry_type: 'service', integration: 'spotify' },
       { id: 'atmo_paris', name: 'Atmo France', area: null, manufacturer: 'Atmo France', model: 'Atmo France API', firmware: null, via: null, entry_type: 'service', integration: 'atmofrance' },
       { id: 'meteo_maison', name: etiquette('Météo'), area: null, manufacturer: 'Météo-France', model: 'Météo-France API', firmware: null, via: null, entry_type: 'service', integration: 'meteo_france' },
       { id: 'robot_aspirateur', name: etiquette('Aspirateur'), area: null, manufacturer: 'Démo', model: 'Orbit V3', firmware: null, via: null, entry_type: null, integration: 'ecovacs' },
@@ -6018,6 +6039,26 @@ function cleEnDesordreCha(t, touchees) {
   return changees.length === 1 ? changees[0] : 'eco';
 }
 
+/* ── Les montées en température (`async_montees`) : inventées pour les deux
+ * radiateurs au planning, posées sur l'heure de la démo. Un thermostat se
+ * mesure lui-même et n'a encore rien de mesuré ; le reste n'a pas de sonde. ── */
+const MONTEES_DEMO_CHA = [[0, 6, 0, 17.1, 1.0, 59], [1, 20, 30, 17.8, 1.4, 120], [1, 7, 30, 16.6, 1.3, 90], [2, 20, 30, 17.9, 0.7, 120], [2, 7, 0, 17.2, 1.2, 90]];
+function monteesCha(msg, ctx) {
+  const quand = ctx.horloge();
+  const module = MODULES_CHA.find(x => x.select === msg.chauffage);
+  const sonde = module ? 'sensor.' + module.appareil.replace('radiateur_', '') + '_temperature' : null;
+  const lue = sonde ? ctx.states[sonde] : null;
+  const propre = String(msg.chauffage).indexOf('climate.') === 0 && ctx.states[msg.chauffage] ? msg.chauffage : null;
+  const choisie = lue ? sonde : propre;
+  const etat = choisie ? ctx.states[choisie] : null;
+  const montees = !lue ? [] : MONTEES_DEMO_CHA.map(([n, h, mi, t0, gain, duree]) => ({
+    debut: isoCha(new Date(quand.getFullYear(), quand.getMonth(), quand.getDate() - n, h, mi)), de: 'eco', a: 'confort_1', t0, gain, duree,
+    pour_un_degre: gain >= 1 ? Math.round(duree / gain) : null, ext: 7.2,
+  }));
+  return copieCha({ chauffage: msg.chauffage, sonde: choisie, nom_sonde: etat ? (etat.attributes || {}).friendly_name || choisie : null,
+    montees, rythme: montees.length ? 0.9 : null, nombre: montees.length, aujourdhui: isoCha(quand).slice(0, 10) });
+}
+
 /* ── Le bouchon : ce que `callWS` passe au moteur ── */
 /* Les champs que chaque commande accepte, `id` compris : le schéma de Home
  * Assistant refuse tout autre champ (« extra keys not allowed »). */
@@ -6026,6 +6067,7 @@ const CHAMPS_CHA = {
   'loggia/chauffage/main': ['type', 'id', 'chauffage', 'mode', 'temperature', 'fin', 'reprendre'],
   'loggia/chauffage/maison': ['type', 'id', 'mode', 'fin'],
   'loggia/chauffage/config': ['type', 'id', 'patch'],
+  'loggia/chauffage/montees': ['type', 'id', 'chauffage'],
 };
 /**
  * La réponse du faux moteur à une commande du chauffage — une promesse, qui
@@ -6039,6 +6081,7 @@ function repondreChauffageDemo(envoye, ctx) {
     if (!CHA_) demarrerChauffageDemo(ctx.states, ctx.horloge, ctx.ecrire);
     const etranger = Object.keys(msg).find(k => !CHAMPS_CHA[msg.type].includes(k));
     if (etranger) throw invalideCha("extra keys not allowed @ data['" + etranger + "']");
+    if (msg.type === 'loggia/chauffage/montees') return Promise.resolve(monteesCha(msg, ctx));
     if (msg.type === 'loggia/chauffage/config') {
       const config = configCha(msg, ctx);
       return Promise.resolve({ config, etat: etatCha(ctx) });
@@ -6201,6 +6244,21 @@ export function climatApresServiceDemo(id, courant, service, data, gardees) {
 /* L'arbre que la demonstration fait parcourir. Les radios viennent en
  * premier : c'est ce qu'une maison lance le plus souvent, et c'est ce que
  * `radio_browser` expose sur une vraie installation. */
+/* Le compte Spotify de la démo (ADR 0344) : la racine, puis « Playlists » — les identifiants ont la forme de l'intégration
+ * officielle (`spotify://<entrée>/…`), et chaque playlist porte son URI. Pas de pochette : la démo ne va rien chercher dehors. */
+const PLAYLISTS_SPOTIFY_DEMO = [['Ma playlist', '1dXkQc3mOvD0nJpSk2Lb4M'], ['Dîner au calme', '4aQqG0r9Xg2wS7LpT1nVbE'], ['Footing', '6mHqR2Zt8KcYw3fNvJ0pLd'], ['Voiture', '2tVb9LxQe7RkPz4HwM1sGa'], ['Sieste', '0pLs5YdW3vQx8NcTr6KjHb']];
+function parcoursSpotifyDemo(cid) {
+  if (!cid) {
+    return { title: 'Spotify', children: [
+      { title: 'Playlists', media_content_id: 'spotify://demo/current_user_playlists', media_content_type: 'spotify://current_user_playlists', media_class: 'directory', can_expand: true, can_play: false },
+      { title: 'Artists', media_content_id: 'spotify://demo/current_user_followed_artists', media_content_type: 'spotify://current_user_followed_artists', media_class: 'directory', can_expand: true, can_play: false },
+    ] };
+  }
+  if (/current_user_playlists$/.test(cid)) {
+    return { title: 'Playlists', children: PLAYLISTS_SPOTIFY_DEMO.map(([title, id]) => ({ title, media_content_id: 'spotify://demo/spotify:playlist:' + id, media_content_type: 'spotify://playlist', media_class: 'playlist', can_expand: true, can_play: true, thumbnail: null })) };
+  }
+  return { title: 'Spotify', children: [] };
+}
 function parcoursDemo(cid) {
   const dossier = (title, id) => ({ title, media_content_id: id, media_content_type: 'directory', media_class: 'directory', can_expand: true, can_play: false });
   const piste = (title, id, cls) => ({ title, media_content_id: id, media_content_type: 'music', media_class: cls || 'music', can_expand: false, can_play: true });
@@ -6852,11 +6910,22 @@ export function installerDemo(langue) {
   /* Le minuteur d'une prise ou d'une lumière (chantiers Prises, § 6.3 et 10 ; Lumières, § 9) : sa pose se
    * note au journal de Loggia ; à l'échéance, l'appareil s'éteint et le journal le dit. Une lumière, éteinte
    * par le serveur, n'a aucun compte au carnet : c'est la ligne du minuteur qui dit « Loggia ». */
+  const lecteurDemo = (x) => x.indexOf('media_player.') === 0;
+  // Allumé : `on` pour une lampe ou une prise ; un lecteur, tout sauf éteint, en veille ou muet.
+  const allumeDemo = (x) => !!states[x] && (lecteurDemo(x) ? ['off', 'standby', 'unavailable', 'unknown'].indexOf(states[x].state) < 0 : states[x].state === 'on');
   const armerMinuteurDemo = (x) => {
     const fin = MIN_DEMO[x] ? MIN_DEMO[x].fin : 0;
     setTimeout(() => {
-      if (!MIN_DEMO[x] || MIN_DEMO[x].fin !== fin || !states[x] || states[x].state !== 'on') return;
+      if (!MIN_DEMO[x] || MIN_DEMO[x].fin !== fin || !allumeDemo(x)) return;
       delete MIN_DEMO[x];
+      if (lecteurDemo(x)) {
+        // Un lecteur (ADR 0341) : la règle du serveur — la TV s'éteint, une Echo s'arrête de jouer, et seulement si elle joue encore.
+        const f = finMinuteurLecteurDemo(states[x].attributes.supported_features, metaMediaDemo(x).platform);
+        if (f.quoi === 'arreter' && ['playing', 'buffering'].indexOf(states[x].state) < 0) return;
+        gesteMediaDemo(states, 'media_player', f.service, { entity_id: x }, Date.now()).forEach(([y, etat, attrs]) => toucher(y, etat, attrs));
+        PRISES_JOURNAL.push(ligneJournal({ module: 'minuteurs', regle: 'minuteur', quoi: f.quoi, cibles: [x], n: 1, motif: 'minuteur', detail: '', simule: false, ts: Date.now() / 1000 }));
+        return;
+      }
       if (lampeDemo(x)) { if (gesteLumiereDemo(states, x, 'turn_off', {}, { utilisateur: null })) el.hass = { ...el.hass, states }; }
       else toucher(x, 'off');
       gestePriseDemo(x);
@@ -6864,7 +6933,7 @@ export function installerDemo(langue) {
     }, Math.max(0, fin * 1000 - Date.now()));
   };
   const minuteurDemo = (x, minutes) => {
-    if (!PRISES_DEMO.includes(x) && !lampeDemo(x)) return;
+    if (!PRISES_DEMO.includes(x) && !lampeDemo(x) && !lecteurDemo(x)) return;
     const n = Math.max(1, Math.min(24 * 60, Number(minutes) || 30));
     PRISES_JOURNAL.push(ligneJournal({ module: 'minuteurs', regle: 'minuteur', quoi: 'poser', cibles: [x], n: 1, motif: [['{n} min', { n }]], detail: '', simule: false, ts: Date.now() / 1000 }));
     armerMinuteurDemo(x);
@@ -6922,6 +6991,13 @@ export function installerDemo(langue) {
         return Promise.resolve({ response: { [cible]: { items: todosDemo(cible) } } });
       }
       if (msg && msg.type === 'media_player/browse_media') {
+        if (msg.entity_id === 'media_player.spotify_demo') {
+          /* Comme l'intégration officielle (ADR 0346) : à l'arrêt, le lecteur ne déclare plus que le choix de l'enceinte, et
+           * Home Assistant refuse de le parcourir. Les playlists passent par le composant (`loggia/spotify/playlists`). */
+          const lu = states[msg.entity_id];
+          if (!lu || (lu.state !== 'playing' && lu.state !== 'paused')) return Promise.reject({ code: 'not_supported', message: 'Player does not support browsing media' });
+          return Promise.resolve(parcoursSpotifyDemo(msg.media_content_id));
+        }
         return Promise.resolve(parcoursDemo(msg.media_content_id));
       }
       if (msg && msg.type === 'loggia/scenarios/etat') return Promise.resolve(scenariosDemo(states));
@@ -7012,6 +7088,24 @@ export function installerDemo(langue) {
         return Promise.resolve(r);
       }
       if (msg && msg.type === 'loggia/minuteurs/annuler') { delete MIN_DEMO[msg.entity_id]; return Promise.resolve(minuteursDemo()); }
+      // Les playlists du compte Spotify (ADR 0346), comme le vrai composant : que Spotify joue ou non.
+      if (msg && msg.type === 'loggia/spotify/playlists') {
+        if (!states[msg.entity_id]) return Promise.reject(refusDemo('spotify_compte_absent', 'compte Spotify introuvable'));
+        return Promise.resolve(parcoursSpotifyDemo('spotify://demo/current_user_playlists'));
+      }
+      /* Spotify (ADR 0344), comme le vrai composant (`spotify.py`) : l'enceinte choisie, puis la playlist ; une enceinte que
+       * Spotify ne voit pas est refusée par son code, sans rien jouer. */
+      if (msg && msg.type === 'loggia/spotify/jouer') {
+        const cur = states[msg.entity_id];
+        if (!cur) return Promise.reject(refusDemo('spotify_compte_absent', 'compte Spotify introuvable'));
+        // L'écran envoie une URI déjà lue (spotify.js) : la démo n'importe rien de plus, elle est dans le boot.
+        const uri = (String(msg.uri || '').match(/spotify:(?:playlist|album):[A-Za-z0-9]{10,40}/) || [])[0] || null;
+        if (!uri) return Promise.reject(refusDemo('spotify_lien', 'lien Spotify illisible'));
+        if (msg.sortie && (cur.attributes.source_list || []).indexOf(msg.sortie) < 0) return Promise.reject(refusDemo('spotify_enceinte_absente', 'enceinte absente de Spotify Connect : ' + msg.sortie));
+        const titre = (PLAYLISTS_SPOTIFY_DEMO.find(([, id]) => uri === 'spotify:playlist:' + id) || [])[0] || 'Top Hits Kids';
+        toucher(msg.entity_id, 'playing', { source: msg.sortie || cur.attributes.source, media_title: titre, media_playlist: titre, media_content_id: uri, media_content_type: 'playlist' });
+        return Promise.resolve({ uri, sortie: msg.sortie || null });
+      }
       // Les rappels d'un conseil d'énergie (usage étape 11), comme le vrai composant (`rappels.py`).
       if (msg && msg.type === 'loggia/rappels/etat') return Promise.resolve(rappelsDemo());
       if (msg && msg.type === 'loggia/rappels/poser') return Promise.resolve(rappelPoserDemo(msg));

@@ -531,3 +531,88 @@ def test_le_magasin_recoit_une_copie_de_la_table(creer):
     lancer(m.async_poser("light.a", 30))
     assert recus and recus[-1] == m.table and recus[-1] is not m.table
     assert recus[-1]["light.a"] is not m.table["light.a"]
+
+
+# ── Un lecteur (10/11, ADR 0341) ────────────────────────────────────────────
+# Les bits d'une Apple TV et de la barre de son (relus au registre le 09/11) :
+# PAUSE, STOP, PLAY, TURN_ON, TURN_OFF.
+BITS_TV = 1 | 4096 | 16384 | 128 | 256
+
+
+class FauxRegistre:
+    def __init__(self, plateformes):
+        self.plateformes = plateformes
+
+    def async_get(self, haid):
+        p = self.plateformes.get(haid)
+        return type("Entree", (), {"platform": p})() if p else None
+
+
+@pytest.fixture
+def registre(monkeypatch):
+    er = sys.modules["homeassistant.helpers.entity_registry"]
+
+    def poser(plateformes):
+        monkeypatch.setattr(er, "async_get", lambda hass: FauxRegistre(plateformes), raising=False)
+    return poser
+
+
+def lecteur(m, haid, bits):
+    m.hass.states.table[haid].attributes = {"supported_features": bits}
+
+
+def test_la_fin_d_un_lecteur_suit_ce_qu_il_sait(module):
+    assert module.fin_lecteur(BITS_TV, "apple_tv") == ("eteindre", "homeassistant", "turn_off")
+    # Une Echo annonce `turn_off` et ne s'eteint pas : elle s'arrete de jouer.
+    assert module.fin_lecteur(BITS_TV, "alexa_media") == ("arreter", "media_player", "media_pause")
+    assert module.fin_lecteur(4096, "alexa_devices") == ("arreter", "media_player", "media_stop")
+    assert module.fin_lecteur(1 | 16384, None) == ("arreter", "media_player", "media_pause")
+    # Ni l'un ni l'autre, ou des bits illisibles : l'extinction d'avant.
+    for bits in (0, None, "x", 16384):
+        assert module.fin_lecteur(bits, None) == ("eteindre", "homeassistant", "turn_off"), bits
+
+
+def test_a_l_heure_la_tv_s_eteint(creer, registre):
+    registre({"media_player.salon": "apple_tv"})
+    m = creer({"media_player.salon": "playing"})
+    lecteur(m, "media_player.salon", BITS_TV)
+    lancer(m.async_poser("media_player.salon", 45, par="u1"))
+    m.table["media_player.salon"]["fin"] = 1.0
+    lancer(m._async_echoir("media_player.salon"))
+    assert m.hass.services.appels == [("homeassistant", "turn_off", {"entity_id": ["media_player.salon"]}, "u1")]
+    assert journal(m)[0] == ("eteindre", "minuteur de 45 min", ["media_player.salon"])
+
+
+def test_a_l_heure_une_echo_qui_joue_s_arrete(creer, registre):
+    registre({"media_player.echo": "alexa_media"})
+    m = creer({"media_player.echo": "playing"})
+    lecteur(m, "media_player.echo", BITS_TV)
+    lancer(m.async_poser("media_player.echo", 30, par="u1"))
+    m.table["media_player.echo"]["fin"] = 1.0
+    lancer(m._async_echoir("media_player.echo"))
+    assert m.hass.services.appels == [("media_player", "media_pause", {"entity_id": ["media_player.echo"]}, "u1")]
+    assert m.table == {}
+    assert journal(m)[0] == ("arreter", "minuteur de 30 min", ["media_player.echo"])
+
+
+def test_une_echo_deja_en_pause_n_a_plus_rien_a_arreter(creer, registre):
+    registre({"media_player.echo": "alexa_media"})
+    m = creer({"media_player.echo": "playing"})
+    lecteur(m, "media_player.echo", BITS_TV)
+    lancer(m.async_poser("media_player.echo", 30))
+    m.hass.states.table["media_player.echo"].state = "paused"
+    m.table["media_player.echo"]["fin"] = 1.0
+    lancer(m._async_echoir("media_player.echo"))
+    assert m.hass.services.appels == []
+    assert m.table == {}
+    assert [q for q, _, _ in journal(m)] == ["poser"]
+
+
+def test_un_registre_illisible_garde_l_extinction(creer):
+    # La doublure du registre ne repond pas : la plateforme est inconnue, les bits decident.
+    m = creer({"media_player.barre": "playing"})
+    lecteur(m, "media_player.barre", BITS_TV)
+    lancer(m.async_poser("media_player.barre", 15))
+    m.table["media_player.barre"]["fin"] = 1.0
+    lancer(m._async_echoir("media_player.barre"))
+    assert m.hass.services.appels == [("homeassistant", "turn_off", {"entity_id": ["media_player.barre"]}, None)]

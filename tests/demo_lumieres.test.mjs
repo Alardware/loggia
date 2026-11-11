@@ -127,9 +127,11 @@ test('§ 9 : le faux serveur répond au carnet, et son minuteur éteint aussi le
   assert.ok(DEMO.includes("if (msg && msg.type === 'loggia/lumieres/journal') return journalLumiereDemo(msg, states);"));
   assert.ok(DEMO.includes('if (lampes.filter(x => gesteLumiereDemo(states, x, service, data || {})).length) el.hass = { ...el.hass, states };'));
   assert.ok(DEMO.includes("if (lampeDemo(x)) { if (gesteLumiereDemo(states, x, 'turn_off', {}, { utilisateur: null })) el.hass = { ...el.hass, states }; }"));
-  assert.ok(DEMO.includes('if (!PRISES_DEMO.includes(x) && !lampeDemo(x)) return;'));
+  // Un lecteur se minute aussi (ADR 0341).
+  assert.ok(DEMO.includes('if (!PRISES_DEMO.includes(x) && !lampeDemo(x) && !lecteurDemo(x)) return;'));
   assert.ok(DEMO.includes("loggia_switchlights: ['switch.applique_exterieur'],"), 'l’applique est déclarée lumière');
   assert.ok(!/from '\.\/lumieres(etat)?\.js'/.test(DEMO), 'la démo n’importe pas les modules du démarrage');
+  assert.ok(!/from '\.\/(lecteur|minuteurmedia)\.js'/.test(DEMO), 'ni ceux du minuteur d’un lecteur (ADR 0341)');
 });
 
 test('le contrat du plan 1 : `maintenant` en secondes, chaque lampe suivie, `dernier` null tant qu’elle n’a pas été vue allumée ; le journal ouvre sur la note d’avant', async () => {

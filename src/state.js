@@ -111,6 +111,8 @@ export const estPersonnelle = (cle) => {
 const PAR_PROFIL = new Set([
   'loggia_accueil', 'loggia_histo', 'loggia_vuepieces', 'loggia_camdispo',
   'loggia_scnordre', 'loggia_epingles',
+  // Les playlists Spotify qu'on a décochées en édition (ADR 0345).
+  'loggia_spotify_cachees',
   'loggia_roomlayout', 'loggia_objlayout', 'loggia_coverlayout',
   'loggia_enlayout', 'loggia_seclayout',
   'loggia-hiddenviews', 'loggia-shownviews', 'loggia-vueordre',

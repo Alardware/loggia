@@ -93,7 +93,7 @@ import {
   modePropose, ajouterChangement, retirerChangement, changerHeure, changerMode, copierJour, semaineAdaptee, heureDecalee,
   estMuet, PRESETS_VTHERM, modesHvac, modeDeChauffe, modesAppliques, temperaturesDe, temperatureDuMode, pasTemperature, plageVoisine,
   modeApplique, PERIODES, echantillons, courbe, chauffeAppliquee, tempsParMode, tempsDeChauffe, placeBande, dater, actionDite, bandesAppliquees,
-  ecartMesure,
+  ecartMesure, ligneMontee, ecartSigne,
 } from './chauffageplanning.js';
 import {
   PETITES_CAPITALES, filet, BoutonConfirme, ChampHeure, EnteteFiche, FicheOnglets, PanneauOnglet, focaliser, useHistoriquePeriode,
@@ -1595,11 +1595,13 @@ function jourDuMilieu(minute) {
  */
 function OngletHistorique({ hass, ch, sonde = null, minute = [0, 0], periode = '24h', onPeriode = null, t, compteurs = null }) {
   const p = PERIODES[periode] ? periode : '24h';
+  // Hors de la clé de période : changer de période ne relit pas les montées.
+  const montees = useMontees(hass, ch.cle, ch.planning === true && !!(hass && typeof hass.callWS === 'function'));
   return (
     <div className="rb-histo" style={{ gap: 12 }}>
       <Puces nom={tr('Période')} options={[{ id: '24h', label: tr('{n} h', { n: 24 }) }, { id: '7j', label: tr('7 jours') }]} choisi={p}
         onChoisir={(x) => { if (onPeriode) onPeriode(x); }} />
-      <DonneesHistorique key={p} hass={hass} ch={ch} sonde={sonde} minute={minute} periode={p} t={t} compteurs={compteurs} />
+      <DonneesHistorique key={p} hass={hass} ch={ch} sonde={sonde} minute={minute} periode={p} t={t} compteurs={compteurs} montees={montees} />
     </div>
   );
 }
@@ -1666,7 +1668,7 @@ function calculHistorique({ dateesSonde, dateesAppareil, fin, jours, pas, attrib
  * sur 7 jours, jamais : des milliers de lignes, et l'état vivant ferme déjà
  * la période.
  */
-function DonneesHistorique({ hass, ch, sonde = null, minute = [0, 0], periode = '24h', t, compteurs = null }) {
+function DonneesHistorique({ hass, ch, sonde = null, minute = [0, 0], periode = '24h', t, compteurs = null, montees = null }) {
   const p = PERIODES[periode] ? periode : '24h';
   const { jours, pas } = PERIODES[p];
   const S = (hass && hass.states) || {};
@@ -1756,6 +1758,7 @@ function DonneesHistorique({ hass, ch, sonde = null, minute = [0, 0], periode = 
           </>)}
         </div>
       </div>
+      {ch.planning === true && <PanneauMontees lu={montees} unite={unite} />}
       {(compte || echecAppareil) && (
         <div data-panneau="temps" style={{ ...PANNEAU, padding: '16px 18px' }}>
           <div style={TETE_HISTO}>
@@ -1780,6 +1783,59 @@ function DonneesHistorique({ hass, ch, sonde = null, minute = [0, 0], periode = 
       )}
       {compteurs && (compteurs.energie || compteurs.puissance) && <PanneauEnergie hass={hass} compteurs={compteurs} jours={jours} t={t} reperesX={reperesX} />}
     </>
+  );
+}
+
+/* Ce que le moteur a mesuré, lu une fois par chauffage (ADR 0340). */
+function useMontees(hass, cle, actif) {
+  const [lu, setLu] = useState(null);
+  const hRef = useRef(hass);
+  useEffect(() => { hRef.current = hass; });
+  useEffect(() => {
+    if (!actif || !cle) return undefined;
+    let vivant = true;
+    Promise.resolve().then(() => hRef.current.callWS({ type: 'loggia/chauffage/montees', chauffage: cle }))
+      .then((r) => { if (vivant) setLu(r && typeof r === 'object' ? r : 'erreur'); })
+      .catch(() => { if (vivant) setLu('erreur'); });
+    return () => { vivant = false; };
+  }, [actif, cle]);
+  return lu;
+}
+
+/* Les montées en température, sous la courbe (ADR 0340). `lu` : null pendant la
+ * lecture, 'erreur', ou la réponse de `loggia/chauffage/montees`. Une liste,
+ * jamais de cartes dans le panneau. Rien d'inventé : chaque cas sans liste se dit. */
+function PanneauMontees({ lu, unite = 'C' }) {
+  const pret = !!lu && typeof lu === 'object';
+  const liste = pret && Array.isArray(lu.montees) ? lu.montees : [];
+  const vide = lu === null ? tr('Chargement…') : !pret ? tr('Historique indisponible pour le moment')
+    : !lu.sonde ? tr('Pas de sonde dans cette pièce : la montée ne peut pas se mesurer.')
+      : !liste.length ? tr('Pas encore de montée mesurée : la première viendra au prochain passage du planning à un mode plus chaud.') : null;
+  const rythme = !vide && typeof lu.rythme === 'number' ? (unite === 'F' ? lu.rythme * 1.8 : lu.rythme) : null;
+  return (
+    <div data-panneau="montees" style={{ ...PANNEAU, padding: '16px 18px' }}>
+      <div style={TETE_HISTO}>
+        <div style={PETITES_CAPITALES}>{tr('Montées en température')}</div>
+        {rythme !== null && <div style={{ ...VALEUR_HISTO, whiteSpace: 'nowrap' }}>{tr('{v} par heure', { v: ecartSigne(rythme) + ' °' + (unite === 'F' ? 'F' : 'C') })}</div>}
+      </div>
+      {vide ? <div data-vide="" style={{ ...MOT, marginTop: 12 }}>{vide}</div> : (<>
+        <ul style={{ listStyle: 'none', margin: '6px 0 0', padding: 0 }}>
+          {liste.map(m => ligneMontee(m, lu.aujourdhui, unite)).map((x, i) => (
+            <li key={x.cle} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: i ? '1px solid var(--o-bd3)' : 'none' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 800 }}>{x.moment}</div>
+                <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 }}>{x.modes}</div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div data-gain={x.chaud ? 'chaud' : 'froid'} style={{ fontSize: 16, fontWeight: 800, color: x.chaud ? 'var(--o-warn2)' : 'var(--o-text3)' }}>{x.gain}</div>
+                <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--o-text2)', marginTop: 1 }}>{tr('{a} → {b} en {duree}', { a: x.depart, b: x.arrivee, duree: dureeLisible(x.duree) })}</div>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <div style={{ ...MOT, fontSize: 11.5, marginTop: 6, color: 'var(--o-text3)' }}>{tr('Mesuré par {sonde}, à chaque passage du planning à un mode plus chaud.', { sonde: lu.nom_sonde || lu.sonde })}</div>
+      </>)}
+    </div>
   );
 }
 

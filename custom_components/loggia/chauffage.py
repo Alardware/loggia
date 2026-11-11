@@ -62,13 +62,16 @@ from .chauffage_familles import (MUETS, commande, consigne_en_unite, deja, famil
                                  historique_resume, mode_applicable, mode_chauffe, modes_permis, options_du_module,
                                  est_poele, pas_revele, programmes_de_l_appareil, puissance_fixe, refroidit, temperature_du_mode,
                                  trame_fausse)
+from .chauffage_montees import (AGE_DEPART, ajouter as ajouter_montee, choisir_sonde, garder as garder_montees,
+                                lire_fichier as lire_fichier_montees, passage_du_planning, plus_chaud, points_lus,
+                                resume_montee, rythme as rythme_montees)
 from .const import DOMAIN
 from .eau_chaude import ESSAIS_LEVEE, RELANCE as RELANCE_EAU, RELANCE_MAX as RELANCE_EAU_MAX, absence_voulue, levee_a, option_active, ordres_absence, sait_absence
 from .refus import RefusNomme
 from .regles import demarrer
 from .store import MaisonReserveeError
 from .textes import joindre
-from .unites import unite_temperature
+from .unites import unite_temperature, vers_celsius
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
     from .store import LoggiaStore
@@ -80,6 +83,8 @@ MODULE = "chauffage"
 # les reprises en main — dans SON fichier de `.storage`, comme le journal.
 CLE = "loggia_chauffage"
 CLE_ETAT = "loggia_chauffage_etat"
+# Les montees en temperature mesurees (ADR 0340) : un fichier a part, comme les reprises.
+CLE_MONTEES = "loggia_chauffage_montees"
 # Les chauffe-eau que Loggia a mis en mode absence pour les Vacances (eau_chaude.py) :
 # ce qu'il levera, et rien d'autre. Un fichier a part, comme les reprises.
 CLE_EAU = "loggia_eau_chaude_etat"
@@ -300,6 +305,9 @@ class LoggiaChauffage:
         # Depuis quand un ballon pose attend d'etre leve (muet) : le reveil court est borne.
         self._eau_attente: datetime | None = None
         self._depot_eau = None
+        # Les montees en cours et leur resume, avec leur fichier (ADR 0340).
+        self.montees: dict[str, Any] = {"en_cours": {}, "montees": {}}
+        self._depot_montees = None
         self._registre_dit = False
         # Arrete (`async_arreter`) : plus rien ne se programme, ne s'abonne ni ne
         # commande, meme pour une tache deja en vol. Sans lui, un rechargement
@@ -323,6 +331,7 @@ class LoggiaChauffage:
             if brut is not None and brut != self.reprises:
                 await self._sauver_reprises()
             await self._lire_eau()
+            await self._lire_montees()
             if self._arrete:
                 return                              # arrete pendant l'ecriture
             # Le rattrapage attend que Home Assistant ait FINI de demarrer : avant,
@@ -655,6 +664,8 @@ class LoggiaChauffage:
                 self.hass.async_create_task(self.async_evaluer([prog], raison="programme"))
             return
         if cle is None or neuf is None or str(neuf.state).lower() in MUETS:
+            if cle is not None and neuf is not None and cle in self.montees["en_cours"]:
+                self.hass.async_create_task(self._async_montee_muette(cle))
             return
         c = self.cfg["chauffages"].get(cle) or {}
         fam = c.get("famille")
@@ -815,6 +826,7 @@ class LoggiaChauffage:
                                         motif="fin de la reprise en main")
         etat, attrs = self._attributs(entite)
         voulu = self._voulu(cle, c, entite, maintenant)
+        await self._suivre_montee(cle, c, voulu, etat, attrs, maintenant)
         r = self.reprises.get(cle)
         if voulu["source"] == "main" and r is not None:
             if r.get("programme"):
@@ -909,6 +921,142 @@ class LoggiaChauffage:
         local = fin.astimezone(self.fuseau)
         return ("jusqu’à {heure}", {"heure": "%02d:%02d" % (local.hour, local.minute)})
 
+    # ── Les montees en temperature (ADR 0340) : mesurer, jamais commander ───
+    async def _ouvrir_montee(self, cle: str, c: dict[str, Any], entite: str, cible: dict[str, Any],
+                             voulu: dict[str, Any], maintenant: datetime) -> None:
+        """L'ordre accepte est-il le passage du planning a un mode plus chaud ?
+        Alors une montee commence. Une panne de la mesure ne touche pas au chauffage."""
+        try:
+            if voulu["source"] != "planning" or voulu["fin"] is None:
+                return
+            jour, minute = heure_murale(maintenant, self.fuseau)
+            _, attrs = self._attributs(entite)
+            quitte = passage_du_planning(c["semaine"], jour, minute)
+            de = mode_applicable(quitte, modes_permis(c["famille"], attrs)) if quitte else None
+            if not plus_chaud(de, cible.get("mode")):
+                return
+            sonde = await self._sonde_de(c, entite)
+            if sonde is None:
+                return
+            prevue = instant_de(voulu["fin"][0], voulu["fin"][1], maintenant, self.fuseau)
+            self.montees["en_cours"][cle] = {
+                "debut": self._a_l_heure_de_la_maison(maintenant), "fin_prevue": self._a_l_heure_de_la_maison(prevue),
+                "de": de, "a": cible["mode"], **sonde, "ext": await self._exterieur()}
+            await self._sauver_montees()
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia chauffage : la montee de %s n'a pas pu commencer", cle)
+
+    def _lieux(self, entite: str) -> dict[str, Any]:
+        """Les capteurs de temperature de son appareil et de sa zone, tries, et le
+        NOM de sa zone. Un registre illisible : rien, la sonde se cherche sans."""
+        vide = {"sur_appareil": [], "dans_zone": [], "nom_zone": None}
+        try:
+            from homeassistant.helpers import area_registry as ar, device_registry as dr
+
+            appareils = dr.async_get(self.hass)
+
+            def zone_de(e: Any) -> Any:
+                if getattr(e, "area_id", None):
+                    return e.area_id
+                d = appareils.async_get(e.device_id) if getattr(e, "device_id", None) else None
+                return getattr(d, "area_id", None)
+
+            entrees = self._entrees()
+            moi = next((e for e in entrees if getattr(e, "entity_id", None) == entite), None)
+            if moi is None:
+                return vide
+            appareil, zone = getattr(moi, "device_id", None), zone_de(moi)
+            capteurs = [e for e in entrees if str(e.entity_id).startswith("sensor.") and not getattr(e, "disabled_by", None)
+                        and self._attributs(e.entity_id)[1].get("device_class") == "temperature"]
+            return {"sur_appareil": sorted(e.entity_id for e in capteurs if appareil and e.device_id == appareil),
+                    "dans_zone": sorted(e.entity_id for e in capteurs if zone and zone_de(e) == zone),
+                    "nom_zone": getattr(dict(ar.async_get(self.hass).areas).get(zone), "name", None) if zone else None}
+        except Exception:  # noqa: BLE001
+            return vide
+
+    async def _sonde_de(self, c: dict[str, Any] | None, entite: str) -> dict[str, Any] | None:
+        """La sonde qui mesure ce chauffage (`choisir_sonde`), ou None."""
+        lieux = self._lieux(entite)
+        mesure = self._attributs(entite)[1].get("current_temperature")
+        propre = entite.startswith("climate.") and isinstance(mesure, (int, float)) and not isinstance(mesure, bool)
+        return choisir_sonde(entite, (c or {}).get("famille"), await self.store.async_get_shared("loggia_climate", None),
+                             await self.store.async_get_shared("loggia_rooms", None), lieux["nom_zone"],
+                             lieux["sur_appareil"], lieux["dans_zone"],
+                             lambda x: self.hass.states.get(x) is not None, propre)
+
+    async def _exterieur(self) -> float | None:
+        """La temperature de la meteo choisie, en °C : elle ne se retrouve pas apres coup."""
+        choisie = await self.store.async_get_shared("loggia_weather", None)
+        entite = choisie if isinstance(choisie, str) and choisie else next(iter(sorted(self.hass.states.async_entity_ids("weather"))), None)
+        _, attrs = self._attributs(entite)
+        t = attrs.get("temperature")
+        if not isinstance(t, (int, float)) or isinstance(t, bool):
+            return None
+        return round(vers_celsius(float(t), "F" if attrs.get("temperature_unit") in ("°F", "F") else "C"), 1)
+
+    async def _suivre_montee(self, cle: str, c: dict[str, Any], voulu: dict[str, Any], etat: Any, attrs: dict,
+                             maintenant: datetime) -> None:
+        """A chaque evaluation : la laisser, l'ecarter (une autre source commande) ou la clore."""
+        m = self.montees["en_cours"].get(cle)
+        if m is None:
+            return
+        try:
+            prevue = lire_instant(m.get("fin_prevue"))
+            fini = prevue is not None and maintenant >= prevue
+            muet = etat is None or str(etat).lower() in MUETS
+            if voulu["source"] != "planning":
+                await self._ecarter_montee(cle)
+            elif fini or (not muet and mode_applicable(voulu["mode"], modes_permis(c["famille"], attrs)) != m["a"]):
+                self.montees["en_cours"].pop(cle, None)
+                await self._sauver_montees()
+                self.hass.async_create_task(self._async_mesurer(cle, m, maintenant))
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia chauffage : la montee de %s n'a pas pu etre suivie", cle)
+
+    async def _ecarter_montee(self, cle: str) -> None:
+        if self.montees["en_cours"].pop(cle, None) is not None:
+            await self._sauver_montees()
+
+    async def _async_montee_muette(self, cle: str) -> None:
+        """L'appareil vient de se taire : sa montee ne dit plus rien. Sauf juste
+        apres un demarrage : un module zigbee met ce temps a revenir."""
+        demarre_a = getattr(self, "_demarre_a", None)
+        if self._hors_service() or (demarre_a is not None and self.maintenant() - demarre_a < SILENCE_AU_DEMARRAGE):
+            return
+        async with self._verrou:
+            await self._ecarter_montee(cle)
+
+    async def _points_de_sonde(self, m: dict[str, Any], debut: datetime, fin: datetime) -> list:
+        """La courbe de la sonde, en °C. `get_significant_states` avec tous les changements :
+        `state_changes_during_period` ne rend pas une mesure portee par un attribut."""
+        from homeassistant.components.recorder import get_instance, history
+
+        sonde, attribut = m["sonde"], m.get("attribut")
+        lus = await get_instance(self.hass).async_add_executor_job(partial(
+            history.get_significant_states, self.hass, debut, fin, entity_ids=[sonde], include_start_time_state=False,
+            significant_changes_only=False, no_attributes=attribut is None))
+        mesure = self._attributs(sonde)[1].get("unit_of_measurement")
+        unite = unite_temperature(self.hass) if attribut else ("F" if mesure in ("°F", "F") else "C")
+        return points_lus((lus or {}).get(sonde, []), attribut, unite)
+
+    async def _async_mesurer(self, cle: str, m: dict[str, Any], maintenant: datetime) -> None:
+        """Hors du verrou : la courbe se relit, il n'en reste qu'un resume. La fin est
+        bornee a l'heure prevue. Une lecture ratee ecarte la montee, et rien d'autre."""
+        if self._hors_service():
+            return
+        try:
+            debut, prevue = lire_instant(m["debut"]), lire_instant(m.get("fin_prevue"))
+            fin = min(maintenant, prevue) if prevue is not None else maintenant
+            resume = resume_montee(await self._points_de_sonde(m, debut - AGE_DEPART, fin), debut, fin)
+            if resume is None or self._arrete:
+                return
+            self.montees["montees"][cle] = ajouter_montee(
+                self.montees["montees"].get(cle, []),
+                {"debut": m["debut"], "de": m["de"], "a": m["a"], **resume, "ext": m.get("ext")})
+            await self._sauver_montees()
+        except Exception:  # noqa: BLE001
+            _LOGGER.warning("Loggia chauffage : la montee de %s n'a pas pu se mesurer", cle, exc_info=True)
+
     async def _commander(self, cle: str, c: dict[str, Any], entite: str, cible: dict[str, Any],
                          voulu: dict[str, Any], appels: list, maintenant: datetime,
                          raison: str | None, relance: bool) -> None:
@@ -958,6 +1106,7 @@ class LoggiaChauffage:
         self._notes.pop(cle, None)
         await self.regles.noter(MODULE, regle, quoi, cibles=[entite], motif=motif, detail=detail)
         self._verifier_plus_tard(cle, ordre)
+        await self._ouvrir_montee(cle, c, entite, cible, voulu, maintenant)
 
     # ── Un ordre refuse se retente une fois (§ 5.6) ────────────────────────
     def _relancer(self, cle: str) -> None:
@@ -1054,6 +1203,7 @@ class LoggiaChauffage:
                     if pas is not None:
                         self._pas[entite] = pas     # pris a SON pas, sans que son echo soit passe par nous (30/10)
                         return
+                await self._ecarter_montee(cle)     # l'appareil n'a pas garde l'ordre : plus rien a mesurer
                 relancer = not ordre.get("relance")
                 if not relancer:
                     # Perdu deux fois : ce qu'il fait a la place se DIT, jusqu'a ce qu'un ordre tienne (30/10).
@@ -1495,6 +1645,7 @@ class LoggiaChauffage:
         self._ordres.clear()
         self._notes.clear()
         self.reprises.clear()
+        self.montees["en_cours"].clear()
         for cle in list(self._relances):
             self._annuler_relance(cle)
         for cle in list(self._verifications):
@@ -1547,6 +1698,12 @@ class LoggiaChauffage:
             self.reprises.pop(cle, None)
         if bascule or orphelines:
             await self._sauver_reprises()
+        eteints = [cle for cle in self.montees["en_cours"]
+                   if not (self.cfg["chauffages"].get(cle) or {}).get("planning")]
+        for cle in eteints:
+            self.montees["en_cours"].pop(cle, None)
+        if bascule or eteints:
+            await self._sauver_montees()
         self._reabonner()
         for entite, (pieces, rendre, laisse) in coupures.items():
             if not self.pilote(entite):
@@ -1583,6 +1740,28 @@ class LoggiaChauffage:
         points = [(getattr(e, "state", None), instant(e), dict(getattr(e, "attributes", None) or {}))
                   for e in (lus or {}).get(entite, [])]
         return {"chauffage": cle, "entite": entite, "points": historique_resume(points)}
+
+    async def async_montees(self, cle: str, user: Any = None) -> dict[str, Any]:
+        """`loggia/chauffage/montees` : ce que le moteur a mesure. Un compte restreint
+        ne lit que ce qu'il a le droit de lire, la sonde comprise."""
+        from .discovery import _lecture_autorisee
+
+        c = self.cfg["chauffages"].get(cle)
+        entite = (self.candidats().get(cle) or {}).get("entite") or self._entite(cle, c, self._entrees_par_id())
+        if not entite:
+            raise RefusNomme("chauffage_inconnu", "chauffage inconnu", cle)
+        autorise = _lecture_autorisee(user)
+        if autorise is not None and not autorise(entite):
+            raise PermissionError("pas le droit de lire %s" % entite)
+        choisie = await self._sonde_de(c, entite)
+        if choisie is not None and autorise is not None and not autorise(choisie["sonde"]):
+            choisie = None
+        sonde = choisie["sonde"] if choisie else None
+        liste = self.montees["montees"].get(cle, []) if choisie else []
+        return {"chauffage": cle, "sonde": sonde,
+                "nom_sonde": (self._attributs(sonde)[1].get("friendly_name") or sonde) if sonde else None,
+                "montees": liste[:-6:-1], "rythme": rythme_montees(liste), "nombre": len(liste),
+                "aujourdhui": self.maintenant().astimezone(self.fuseau).date().isoformat()}
 
     async def async_etat(self, user: Any = None) -> dict[str, Any]:
         """L'etat calcule de chaque chauffage, pour l'ecran (§ 8.2). Un compte
@@ -1805,6 +1984,32 @@ class LoggiaChauffage:
             await self._store_etat().async_save(copy.deepcopy(self.reprises))
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Loggia chauffage : reprises en main non enregistrees")
+
+    def _store_montees(self):
+        if self._depot_montees is None:
+            from homeassistant.helpers.storage import Store
+
+            self._depot_montees = Store(self.hass, VERSION_ETAT, CLE_MONTEES)
+        return self._depot_montees
+
+    async def _lire_montees(self) -> None:
+        """Le fichier des montees ; illisible, on repart de zero sans gener le moteur."""
+        try:
+            brut = await self._store_montees().async_load()
+        except Exception:  # noqa: BLE001
+            _LOGGER.warning("Loggia chauffage : montees illisibles, on repart de zero", exc_info=True)
+            return
+        self.montees = garder_montees(lire_fichier_montees(brut), set(self.cfg["chauffages"]))
+        if brut is not None and brut != self.montees:
+            await self._sauver_montees()
+
+    async def _sauver_montees(self) -> None:
+        if self._rate():
+            return
+        try:
+            await self._store_montees().async_save(copy.deepcopy(self.montees))
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia chauffage : montees non enregistrees")
 
     @callback
     def async_arreter(self) -> None:

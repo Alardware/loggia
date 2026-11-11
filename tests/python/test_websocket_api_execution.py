@@ -126,7 +126,10 @@ def test_toutes_les_commandes_sont_enregistrees(banc):
     # ASSERTION MODIFIÉE (30/10, G2-1 ; ADR 0301) : 57 -> 59, `loggia/collecte/sorti` et `loggia/notifications/destinataires`.
     # ASSERTION MODIFIÉE (06/11, étape 8) : 59 -> 60, `loggia/scenarios/capturer` (la maison telle qu'elle est).
     # ASSERTION MODIFIÉE (07/11, étape 11) : 60 -> 63, les rappels (etat, poser, annuler).
-    assert len(banc.hass.commandes) == 63, sorted(banc.hass.commandes)
+    # ASSERTION MODIFIÉE (09/11, ADR 0340) : 63 -> 64, les montees en temperature.
+    # ASSERTION MODIFIÉE (11/11, ADR 0344) : 64 -> 65, Spotify.
+    # ASSERTION MODIFIÉE (11/11, ADR 0346) : 65 -> 66, les playlists Spotify.
+    assert len(banc.hass.commandes) == 66, sorted(banc.hass.commandes)
 
 
 def test_aucune_commande_ne_declare_id(banc):

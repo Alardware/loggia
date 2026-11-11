@@ -18,6 +18,12 @@ enceintes gardent leur interrupteur et leur barre. Une TV sous un profil du
 mode enfant (budget, pastille, blocage) garde ses écrans : interrupteur, barre
 au plafond, temps restant.
 
+Le 9 novembre, sur sa capture : une Apple TV n'a aucune classe dans Home Assistant et
+gardait donc l'interrupteur, sans « Éteindre » à côté de la pause. Un boîtier à
+télécommande (les intégrations de `TOUCHES_TV`) sans classe compte désormais comme
+une TV ; la classe de Home Assistant prime quand elle existe. La démo déclarait son
+Apple TV en `tv`, ce qui cachait le cas : elle n'a plus de classe, comme les vraies.
+
 ## Les conséquences
 
-Écran seulement. Test `carte_media`.
+Écran seulement. Tests `carte_media`, `lecteur`, `resolve`, `demo_medias`.

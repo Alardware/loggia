@@ -75,7 +75,8 @@ test('la rangee des scenarios ne rogne plus d’ombre en rectangle, a TOUTES les
   assert.ok(d >= 0, 'la regle du telephone');
   const bloc = css.slice(d, css.indexOf('/* Vue Pièce', d));
   assert.ok(bloc.includes('padding: 4px 4px 6px; margin: -4px -4px 0; scroll-padding-inline: 4px;'), 'de l’air pour l’anneau de focus, sans rien deplacer');
-  assert.ok(bloc.includes('.grid-qscenes > button { flex: 0 0 150px; scroll-snap-align: start; }'), 'toujours 150 px par carte');
+  // ASSERTION MODIFIÉE (11/11, ADR 0343) : des pastilles, chacune à sa largeur.
+  assert.ok(bloc.includes('.grid-qscenes > button { flex: 0 0 auto; scroll-snap-align: start; }'), 'chaque pastille a sa largeur');
   /* Une ombre COURTE (ADR 0060), et desormais HORS du media du telephone
    * (20/09) : sur l'ordinateur la rangee defile aussi, et l'ombre longue du
    * theme — 32 px de flou pour 26 px de rembourrage — etait coupee net par

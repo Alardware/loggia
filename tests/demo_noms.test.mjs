@@ -53,7 +53,9 @@ const TELS_QUELS = new Set(['Camille', 'Alex', 'Léa', 'Sam', 'Démo', 'Orbit V3
  * Assistant — son service, son modèle (« Atmo France API »), « Qualité globale-<ville> », « Niveau <plante>-<ville> ». */
 /* ASSERTION MODIFIÉE (01/11, ADR 0309) : Météo-France aussi — son modèle (« Météo-France API ») et les noms de ses capteurs
  * (« Rain chance », « Next rain »), que l'intégration écrit en anglais dans toutes les langues. */
-const INTEGRATION = /^(System Monitor|Home Assistant|ESPHome|Zigbee2MQTT|Mosquitto broker|MariaDB|Samba share|Studio Code Server|Atmo France|Météo-France)( |$)|^homeassistant\.|^(Qualité globale|Niveau [^-]+)(-| Pollen-)/;
+/* ASSERTION MODIFIÉE (11/11, ADR 0344) : Spotify aussi — le nom de son compte et son modèle (« Spotify Premium »), que
+ * l'intégration écrit tels quels dans toutes les langues. */
+const INTEGRATION = /^(System Monitor|Spotify|Home Assistant|ESPHome|Zigbee2MQTT|Mosquitto broker|MariaDB|Samba share|Studio Code Server|Atmo France|Météo-France)( |$)|^homeassistant\.|^(Qualité globale|Niveau [^-]+)(-| Pollen-)/;
 const telQuel = (n) => TELS_QUELS.has(n) || INTEGRATION.test(n);
 const litteraux = (avant) => [...demo.matchAll(new RegExp(avant + LIT, 'g'))].map(m => m[1] ?? m[2]);
 

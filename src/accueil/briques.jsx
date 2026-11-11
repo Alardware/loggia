@@ -19,7 +19,7 @@ import { RM_ICO, RM_CARD, RM_NAME, RM_SUB, RmBascule } from '../cartes/briques.j
 import { FicheRangee, useDomainCards } from '../appareils/fiches.jsx';
 import { PlugIcon } from '../cartescustom/cartes.jsx';
 import { habillagePiece, TEINTES_PIECE, ICONES_PIECE } from '../app/pieces.jsx';
-import { useScenarios, CarteScenario } from '../app/scenarios.jsx';
+import { useScenarios, PastilleScenario } from '../app/scenarios.jsx';
 import { FeuilleDepart } from '../app/depart.jsx';
 import { BOUTON_COIN, boutonEdition, ChoixIcone, EditableCard } from '../edition/briques.jsx';
 import { CV_TYPE_NOMS, cvTypeDe, cvW, cvAvecW, cvRowsDe, cvAvecH, nomCv, CvTyped, FicheCarte, CarteAjoutSheet, ChipsEditSheet } from '../cartescustom/galerie.jsx';
@@ -433,10 +433,10 @@ function elaguerHisto(liste) {
   return h;
 }
 
-/* La rangée de l'Accueil : TOUS les scénarios qui s'y montrent, en cartes
- * compactes, sur UNE rangée qui défile — six visibles sur PC et tablette, les
- * autres d'un clic sur les flèches ou d'un glissement ; 150 px par carte sur
- * téléphone (`.grid-qscenes`). Le chemin vers la vue vit dans l'EN-TÊTE
+/* La rangée de l'Accueil : TOUS les scénarios qui s'y montrent, en
+ * pastilles (ADR 0343), sur UNE rangée qui défile — autant qu'il en tient, les
+ * autres d'un clic sur les flèches ou d'un glissement ; chacune à sa largeur
+ * (`.grid-qscenes`). Le chemin vers la vue vit dans l'EN-TÊTE
  * (« 9 scénarios → ») : la tuile « Tous les scénarios », posée en bout de
  * rangée, ressemblait à un scénario sans en être un (retour du 17/09). En
  * édition, l'en-tête porte « Gérer les scénarios ». */
@@ -528,7 +528,7 @@ function ScenariosAccueil({ hass, edit = false, onNav = null }) {
           {/* En édition, la rangée est inerte au clavier aussi : la section ne
             * l'est plus, pour laisser « Gérer les scénarios » joignable
             * (relecture du lot 13 de l'audit du 03/10). */}
-          {liste.map(s => <CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} dataId={s.id} />)}
+          {liste.map(s => <PastilleScenario key={s.id} s={s} enCours={sc.enCours === s.id} onLancer={sc.lancer} dataId={s.id} />)}
         </div>
       )}
       {/* La réserve (voir `rangeeVue`) : rien ne s'y dessine, elle part à la
@@ -540,7 +540,7 @@ function ScenariosAccueil({ hass, edit = false, onNav = null }) {
         * garde ce court saut : rare, et une bande vide sous « Scénarios
         * indisponibles » serait pire. */}
       {!nScenarios && !repondu && rangeeVue && !!(hass && typeof hass.callWS === 'function') && (
-        <div className="grid-qscenes" aria-hidden="true" style={{ overflowX: 'scroll' }}><span style={{ height: 88 }} /></div>
+        <div className="grid-qscenes" aria-hidden="true" style={{ overflowX: 'scroll' }}><span style={{ height: 44 }} /></div>
       )}
       <FeuilleDepart hass={hass} sc={sc} />
     </>

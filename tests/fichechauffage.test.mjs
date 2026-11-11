@@ -918,6 +918,74 @@ function rendreHistorique(lu, props = {}, h = maison()) {
   return { html, lectures };
 }
 
+test('le moment d’une montée se lit sur l’heure de la maison', () => {
+  const a = '2026-11-09';
+  assert.equal(PLAN.momentMontee('2026-11-09T06:00:04+01:00', a), 'Aujourd’hui · 06:00');
+  assert.equal(PLAN.momentMontee('2026-11-08T20:30:00+01:00', a), 'Hier · 20:30');
+  assert.equal(PLAN.momentMontee('2026-11-07T07:00:00+01:00', a), 'Sam. · 07:00');
+  assert.equal(PLAN.momentMontee('2026-10-25T06:00:00+01:00', a), '25 oct. · 06:00');
+  assert.equal(PLAN.momentMontee('n’importe quoi', a), '');
+});
+
+test('une ligne de montée : le gain signé, les modes, le départ et l’arrivée, en °F aussi', () => {
+  const m = { debut: '2026-11-09T06:00:04+01:00', de: 'eco', a: 'confort_1', t0: 17.1, gain: 1, duree: 59 };
+  const c = PLAN.ligneMontee(m, '2026-11-09');
+  assert.deepEqual([c.modes, c.gain, c.chaud, c.depart, c.arrivee, c.duree], ['Éco → Confort −1', '+1,0°', true, '17,1°', '18,1°', 59]);
+  const f = PLAN.ligneMontee(m, '2026-11-09', 'F');
+  assert.deepEqual([f.gain, f.depart, f.arrivee], ['+1,8°', '62,8°', '64,6°']);
+  const n = PLAN.ligneMontee({ ...m, gain: -0.2 }, '2026-11-09');
+  assert.deepEqual([n.gain, n.chaud], ['−0,2°', false]);
+  assert.equal(PLAN.ligneMontee({ ...m, gain: 0 }, '2026-11-09').gain, '0,0°');
+});
+
+const MONTEES = {
+  chauffage: MODULE, sonde: 'sensor.chambre_temperature', nom_sonde: 'Capteur chambre', rythme: 0.9, nombre: 2, aujourdhui: '2026-11-09',
+  montees: [
+    { debut: '2026-11-09T06:00:04+01:00', de: 'eco', a: 'confort_1', t0: 17.1, gain: 1, duree: 59, pour_un_degre: 59, ext: 7.2 },
+    { debut: '2026-11-08T20:30:00+01:00', de: 'eco', a: 'confort_1', t0: 18.2, gain: -0.2, duree: 120, pour_un_degre: null, ext: null },
+  ],
+};
+const panneauMontees = (lu, unite = 'C') => {
+  const { PanneauMontees } = FICHE({}, '{ PanneauMontees }');
+  return renderToStaticMarkup(createElement(PanneauMontees, { lu, unite }));
+};
+
+test('les montées : le rythme, la liste, le gain orange ou gris, la phrase qui nomme la sonde', () => {
+  const html = panneauMontees(MONTEES);
+  const t = texte(html);
+  for (const mot of ['Montées en température', '+0,9 °C par heure', 'Aujourd’hui · 06:00', 'Éco → Confort −1', '+1,0°', '17,1° → 18,1° en 59 min',
+    'Hier · 20:30', '−0,2°', 'Mesuré par Capteur chambre, à chaque passage du planning à un mode plus chaud.']) assert.ok(t.includes(mot), mot);
+  assert.match(html, /<ul\b/, 'une liste, pas des cartes');
+  assert.deepEqual([...html.matchAll(/data-gain="([^"]+)"/g)].map(m => m[1]), ['chaud', 'froid']);
+});
+
+test('les montées : chaque cas sans liste se dit en une phrase', () => {
+  assert.ok(texte(panneauMontees(null)).includes('Chargement…'));
+  assert.ok(texte(panneauMontees('erreur')).includes('Historique indisponible pour le moment'));
+  assert.ok(texte(panneauMontees({ ...MONTEES, sonde: null, montees: [] })).includes('Pas de sonde dans cette pièce : la montée ne peut pas se mesurer.'));
+  assert.ok(texte(panneauMontees({ ...MONTEES, montees: [], rythme: null })).includes('Pas encore de montée mesurée : la première viendra au prochain passage du planning à un mode plus chaud.'));
+});
+
+test('les montées : pas de rythme sans chiffre, et en °F le rythme se multiplie par 1,8', () => {
+  assert.ok(!texte(panneauMontees({ ...MONTEES, rythme: null })).includes('par heure'));
+  assert.ok(texte(panneauMontees(MONTEES, 'F')).includes('+1,6 °F par heure'));
+});
+
+test('les montées : seulement pour un chauffage au planning, sous la courbe, avant le temps par mode', () => {
+  const lu = [[{ state: 'comfort', last_updated: ilYA(2), attributes: {} }]];
+  const { html } = rendreHistorique(lu);
+  assert.ok(html.indexOf('data-panneau="courbe"') < html.indexOf('data-panneau="montees"'));
+  const temps = html.indexOf('data-panneau="temps"');
+  assert.ok(temps < 0 || html.indexOf('data-panneau="montees"') < temps);
+  assert.ok(!rendreHistorique(lu, { ch: radiateur({ planning: false }) }).html.includes('data-panneau="montees"'));
+});
+
+test('les montées se lisent une fois par chauffage, hors de la clé de période', () => {
+  const onglet = SOURCE.slice(SOURCE.indexOf('function OngletHistorique('), SOURCE.indexOf('const premiere ='));
+  assert.ok(onglet.includes('useMontees(hass, ch.cle'), 'le choix 24 h / 7 jours ne relit rien');
+  assert.ok(SOURCE.includes("type: 'loggia/chauffage/montees', chauffage: cle"));
+});
+
 /* Un groupe de puces nommé par le libellé VISIBLE qui le précède
  * (`aria-labelledby`, l'identifiant finissant par `-suffixe`) : ce libellé,
  * le style du groupe, et chaque puce — son état, son mot, ses attributs. */
