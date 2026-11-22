@@ -8,7 +8,7 @@
  * reste dans le monolithe et lui est prêté par `OUTILS_VUES`. Le code est
  * celui d'App.jsx, déplacé sans retouche. */
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRangerLibre } from '../glisser.js';
 import { lazyRecharge } from '../recharge.js';
 import { formatEcran } from '../disposition.js';
@@ -18,8 +18,9 @@ import { pilesMaison } from '../piles.js';
 import { AnneauEnergie } from '../anneau.jsx';
 import { armerReleve } from '../releve.js';
 import { consoJourKwh, autosuffisance, resumeEnergie } from '../bilan.js';
-import { compteurDuJour, useTotauxJour } from '../jourstat.js';
-import { fmtWatts } from '../format.js';
+import { compteurDuJour, useTotauxJour, totalDuJour } from '../jourstat.js';
+import { tuileEau, tuileGaz } from '../energievolumes.js';
+import { fmtWatts, symboleMonnaie } from '../format.js';
 import { LOGGIA_INDEX, enPrix, enVente, enHaids, enBatteries, enPrevisionSolaire } from '../state.js';
 // Les sources qui se comptent à plusieurs, et la batterie au sens de Loggia (chantier G3, ADR 0302).
 import { idsDe, sommeLue } from '../energieparts.js';
@@ -44,6 +45,24 @@ const {
  * statistiques longue duree et de graphes, que l'Accueil n'affiche pas. Les
  * deux composants viennent du MEME module : un seul chargement pour les deux
  * (ADR 0104, 0145). */
+/* Demandé DÈS QUE CETTE VUE SE CHARGE (19/11, fluidité, point 5) : il attendait que la vue soit dessinée pour partir,
+ * second temps derrière un écran vide. Un échec retombe sur les chargements à la demande ci-dessous, qui le redisent. */
+import('./energiehisto.jsx').catch(() => {});
+
+/* Un morceau de page rendu seulement en approchant de l'écran (point 4) : à sa place, un bloc de sa hauteur, pour que
+ * rien ne saute. Sans `IntersectionObserver`, tout de suite. */
+function QuandVisible({ hauteur, children }) {
+  const ref = useRef(null);
+  const [vu, setVu] = useState(() => typeof IntersectionObserver === 'undefined');
+  useEffect(() => {
+    if (vu || !ref.current) return undefined;
+    const o = new IntersectionObserver((es) => { if (es.some(e => e.isIntersecting)) { setVu(true); o.disconnect(); } }, { rootMargin: '400px 0px' });
+    o.observe(ref.current);
+    return () => o.disconnect();
+  }, [vu]);
+  return vu ? children : <div ref={ref} aria-hidden="true" style={{ minHeight: hauteur }} />;
+}
+
 const CarteTarif = lazyRecharge(() => import('./energiehisto.jsx').then(m => ({ default: m.CarteTarif })));
 
 const BilansEnergie = lazyRecharge(() => import('./energiehisto.jsx').then(m => ({ default: m.BilansEnergie })));
@@ -128,7 +147,7 @@ const FlowCable = ({ d, color, power, reverse, arrow }) => {
   return (
     <g>
       {/* conduit gris (statique) */}
-      <path d={d} fill="none" stroke="rgba(223,230,247,.16)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={d} fill="none" stroke="var(--o-bd1)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
       {/* câble énergisé, tamisé (cable toujours "allumé") */}
       <path d={d} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: .34, filter: `drop-shadow(0 0 4px ${color})` }} />
       {/* charge qui circule + flèche directionnelle (départ si import, arrivée sinon) */}
@@ -312,8 +331,12 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   // valeur soit lisible a l'instant. Une borne de recharge repasse a
   // `unavailable` des qu'on debranche : lier les deux faisait disparaitre le
   // calque, le cable et la pastille d'un bloc, par intermittence.
-  const evBranche = !!EN.evNow;
-  const evW = avail(EN.evNow) ? Math.max(0, Math.round(numW(EN.evNow))) : null;
+  /* Plusieurs bornes (A7) : la clé seule quand il n'y en a qu'une (ou que la fiche la nomme), sinon leurs PARTS — la puissance
+   * du véhicule est ce que TOUTES chargent, jamais l'une élue pour le tout (comme les onduleurs). */
+  const evIds = idsDe(EN, 'evNow');
+  const evBranche = evIds.length > 0;
+  const evSomme = sommeLue(evIds, (id) => (avail(id) ? numW(id, null) : null));
+  const evW = evSomme != null ? Math.max(0, Math.round(evSomme)) : null;
   /* LA BATTERIE, DANS LES DEUX SENS (07/10). `batNow` suppose un capteur
    * SIGNE — positif en charge, negatif en decharge —, et beaucoup d'onduleurs
    * en publient un. Mais le tableau de bord Energie nomme souvent les deux
@@ -409,7 +432,9 @@ function EnergieContent({ hass, edit = false, onEnt }) {
    * pour tous (`jourstat.js`). Quand ni l'un ni l'autre ne repond, on ne rend
    * rien : un tiret vaut mieux qu'un index pris pour une journee.
    */
-  const CPT_JOUR = [EN.consoJour, EN.consoJourHc, EN.consoJourHp, EN.consoReseauToday,
+  /* Le gaz et l'eau aussi, en tête (chantier du 20/11, F2 ; ADR 0381) : leur tuile lisait l'ÉTAT, souvent l'index
+   * d'un compteur posé depuis des années — « Eau 1 235 m³ » pour la journée. */
+  const CPT_JOUR = [EN.gasJour, EN.waterJour, EN.consoJour, EN.consoJourHc, EN.consoJourHp, EN.consoReseauToday,
     EN.consoHcToday, EN.consoHpToday, ...idsDe(EN, 'prodJour'), EN.injectionJour, EN.coutJour, EN.revenuJour];
   const cumulatifs = CPT_JOUR.filter(id => id && S && S[id] && !compteurDuJour(S[id]));
   const totauxJour = useTotauxJour(hass, cumulatifs, tourEn);
@@ -418,7 +443,9 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   const valJour = (id, kwh) => {
     if (!id || !S || !S[id]) return null;
     if (compteurDuJour(S[id])) return avail(id) ? (kwh ? numKwh(id, null) : num(id, null)) : null;
-    const v = totauxJour[id];
+    /* L'état, quand il est plus petit que le total calculé : un compteur du
+     * jour qui ne dit pas sa remise à zéro (`totalDuJour`, ADR 0347). */
+    const v = totalDuJour(avail(id) ? num(id, null) : null, totauxJour[id]);
     if (v == null || !isFinite(v)) return null;
     const u = (S[id].attributes && S[id].attributes.unit_of_measurement) || '';
     return kwh ? v * facteurKwh(u) : v;
@@ -448,8 +475,9 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   const revenuJour = euroJour(EN.revenuJour);
   // La devise suit l'entite, puis l'installation — jamais suppose en euros.
   const uniteDe = (id) => (id && S[id] && S[id].attributes && S[id].attributes.unit_of_measurement) || null;
-  const deviseJour = uniteDe(EN.coutJour) || uniteDe(EN.ecoJour)
-    || (hass && hass.config && hass.config.currency) || '€';
+  // En symbole (« € », pas « EUR ») : le même que les montants que Loggia écrit lui-même (audit du 12/11).
+  const deviseJour = symboleMonnaie(uniteDe(EN.coutJour) || uniteDe(EN.ecoJour)
+    || (hass && hass.config && hass.config.currency) || '€');
   /* Le total du jour n'existe que si un compteur se lit (audit du 03/10).
    * `num()` rend 0 pour une entité muette : heures creuses + heures pleines
    * valaient 0 kWh avec un Linky indisponible, `totalToday` n'était jamais
@@ -569,10 +597,14 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   /* Les quatre chiffres de la colonne droite. Chacun n'apparaît que s'il se
    * lit — une maison sans panneaux n'a pas de « Production du jour » à zéro. */
   /* LE TELEPHONE REORGANISE, il ne retrecit pas (maquette mobile du 07/10).
-   * Sur la LARGEUR et non sur le type d'appareil : les regles CSS de la vue
-   * basculent au meme endroit, et un navigateur de bureau retreci doit lire la
-   * meme page qu'un telephone. */
-  const etroit = !useWide(760);
+   * Sur la LARGEUR et non sur le type d'appareil : un navigateur de bureau
+   * retreci doit lire la meme page qu'un telephone. Etroit jusqu'a 760 px
+   * INCLUS, comme le « telephone » de la feuille (`@media (max-width: 760px)`,
+   * dont la rangee `.o-favrow` des mesures) : `useWide(761)` — a 760, `760`
+   * disait « large » pendant que la feuille disait « telephone » (audit du
+   * 12/11, lot 5b). Les regles `.o-en-*` de la vue, elles, basculent plus tot,
+   * a 820 px (`@media (max-width: 820px)`). */
+  const etroit = !useWide(761);
 
   const statsJour = [
     prodJour != null && { l: tr('Production du jour'), v: dec(prodJour, 1), u: 'kWh' },
@@ -587,13 +619,16 @@ function EnergieContent({ hass, edit = false, onEnt }) {
   /* Les tuiles de mesure, sous l'historique. Le gaz et l'eau viennent du
    * tableau de bord Énergie quand la maison en déclare — sinon ils n'existent
    * pas, et on ne les invente pas. */
+  const tuileVolume = (caption, t, uniteBrute, icon, tone) => ({ caption, value: t ? dec(t.valeur, t.decimales) : '—', unit: t ? t.unite : uniteBrute, icon, tone, pct: null });
   const mesures = [
     autoPct != null && { caption: tr('Autosuffisance'), value: String(autoPct), unit: '%', icon: 'leaf', tone: 'var(--o-ok)', pct: autoPct },
-    basCarbonePct != null && { caption: tr('Électricité bas-carbone'), value: String(basCarbonePct), unit: '%', icon: 'bolt', tone: 'var(--o-cyan)', pct: basCarbonePct },
+    // Au téléphone, des libellés COURTS (audit du 12/11) : les tuiles tiennent sur UNE ligne, et « ÉLECTRICITÉ BAS-C… » se coupait.
+    basCarbonePct != null && { caption: etroit ? tr('Bas-carbone') : tr('Électricité bas-carbone'), value: String(basCarbonePct), unit: '%', icon: 'bolt', tone: 'var(--o-cyan)', pct: basCarbonePct },
     // L'intensité carbone du réseau, à côté de sa part bas-carbone (E1) : ce que pèse un kWh acheté en ce moment.
-    intensite != null && { caption: tr('Intensité carbone'), value: String(Math.round(intensite)), unit: uniteCarbone(uniteDe(carbone.intensite)), icon: 'leaf', tone: 'var(--o-cyan)', pct: null },
-    avail(EN.gasJour) && { caption: tr('Gaz'), value: dec(numKwh(EN.gasJour), 1), unit: uniteDe(EN.gasJour) || 'kWh', icon: 'flame', tone: 'var(--o-orange)', pct: null },
-    avail(EN.waterJour) && { caption: tr('Eau'), value: dec(num(EN.waterJour), 0), unit: uniteDe(EN.waterJour) || 'L', icon: 'raindrops', tone: 'var(--o-cold)', pct: null },
+    intensite != null && { caption: etroit ? tr('Carbone') : tr('Intensité carbone'), value: String(Math.round(intensite)), unit: uniteCarbone(uniteDe(carbone.intensite)), icon: 'leaf', tone: 'var(--o-cyan)', pct: null },
+    // La JOURNÉE du compteur, écrite par `energievolumes.js` (F2) ; sans elle, un tiret — jamais l'index.
+    avail(EN.gasJour) && tuileVolume(tr('Gaz'), tuileGaz(valJour(EN.gasJour, false), uniteDe(EN.gasJour)), uniteDe(EN.gasJour) || 'kWh', 'flame', 'var(--o-orange)'),
+    avail(EN.waterJour) && tuileVolume(tr('Eau'), tuileEau(valJour(EN.waterJour, false), uniteDe(EN.waterJour)), uniteDe(EN.waterJour) || 'L', 'raindrops', 'var(--o-cold)'),
   ].filter(Boolean);
 
   /* La CONSOMMATION DU JOUR et ses quatre chiffres : a droite de l'anneau sur
@@ -684,7 +719,11 @@ function EnergieContent({ hass, edit = false, onEnt }) {
         * de postes et de piles, elles, la gardent : la, c'est le geste commun. */}
       {/* L'APERÇU et LE TARIF, côte à côte. */}
       <div className="grid-ehero" style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'stretch' }}>
-        <div style={{ flex: '2 1 620px', minWidth: 0, display: 'flex' }}><section style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', borderRadius: 'var(--o-radius,18px)', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: 'var(--o-shadow)', padding: '22px 24px 24px' }}>
+        {/* Les deux voisins gardent la même hauteur ; quand le tarif est plus
+          * haut, l'aperçu s'étire. Il prend cette hauteur en COLONNE et donne
+          * le surplus à ses deux faces, qui se centrent dedans : plus une
+          * centaine de pixels vides sous les bilans (audit du 12/11, lot 4, R3). */}
+        <div style={{ flex: '2 1 620px', minWidth: 0, display: 'flex' }}><section style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', boxSizing: 'border-box', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', borderRadius: 'var(--o-radius,18px)', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: 'var(--o-shadow)', padding: '22px 24px 24px' }}>
           <div className="o-en-cartehead" style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
             <div className="o-en-cartetitre" style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--o-text2)' }}>{tr('Aperçu')}</div>
@@ -704,7 +743,7 @@ function EnergieContent({ hass, edit = false, onEnt }) {
           {/* Les deux faces de l'aperçu occupent la MÊME place : la synthèse
             * reste en flux (elle donne sa hauteur), le schéma se pose dessus.
             * Bascule sans que la carte change de taille. */}
-          <div style={{ position: 'relative', marginTop: 20 }}>
+          <div style={{ position: 'relative', marginTop: 20, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <div style={{ display: (etroit && faceApercu === 'maison') ? 'none' : 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 28, visibility: faceApercu === 'maison' ? 'hidden' : 'visible' }}>
               <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 26, padding: '14px 0 4px' }}>
                 <AnneauEnergie classe="o-en-anneau" pct={partPropre} couleur={couleurAnneau} mix={mix} taille={216}>
@@ -785,7 +824,16 @@ function EnergieContent({ hass, edit = false, onEnt }) {
         <SectionHistorique hass={hass} EN={EN} tour={tourEn} devise={deviseJour} etroit={etroit} />
       </Suspense>
 
-      {mesures.length > 0 && (
+      {/* UNE RANGÉE DE TUILES RESTE SUR UNE LIGNE (audit du 12/11, sa règle). Au téléphone, la grille passait trois tuiles sur deux
+        * rangées (2 + 1) : elles se partagent la ligne, serrées (`serre` : moins de rembourrage, le libellé sans capitales ni glyphe),
+        * et au-delà de trois — le gaz, l'eau —, la rangée DÉFILE plutôt que de passer à la ligne. */}
+      {mesures.length > 0 && etroit && (
+        <div className={mesures.length > 3 ? 'o-favrow' : undefined} style={{ display: 'flex', gap: 8, overflowX: mesures.length > 3 ? 'auto' : 'visible', overscrollBehaviorX: 'contain' }}>
+          {mesures.map(m => <MetricTile key={m.caption} caption={m.caption} value={m.value} unit={m.unit} icon={m.icon} tone={m.tone} pct={m.pct} serre
+            style={mesures.length > 3 ? { flex: '0 0 auto', minWidth: 104 } : { flex: '1 1 0%' }} />)}
+        </div>
+      )}
+      {mesures.length > 0 && !etroit && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,150px),1fr))', gap: 16 }}>
           {mesures.map(m => <MetricTile key={m.caption} caption={m.caption} value={m.value} unit={m.unit} icon={m.icon} tone={m.tone} pct={m.pct} />)}
         </div>
@@ -817,7 +865,8 @@ function EnergieContent({ hass, edit = false, onEnt }) {
                 </div>
                 <div style={{ position: 'relative', marginTop: 'auto', paddingTop: 16, fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name}</div>
                 <div style={{ position: 'relative', marginTop: 4, fontSize: 17, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: on ? 'var(--o-accent-soft)' : 'var(--o-text2)' }}>{avail(d.power) ? <Num v={w} fmt={fmtW} /> : '—'}</div>
-                <div style={{ position: 'relative', marginTop: 3, fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{kwh != null ? tr('{n} kWh jour', { n: dec(kwh, 2) }) : '—'}</div>
+                {/* L'énergie du jour inconnue, la ligne se tait (audit du 12/11) : un « — » seul sous la puissance ne disait rien. */}
+                {kwh != null && <div style={{ position: 'relative', marginTop: 3, fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tr('{n} kWh jour', { n: dec(kwh, 2) })}</div>}
               </div>);
               if (!edit) return <Anim key={k} id={k} i={di} base={160} className={ed.estLarge(k) ? 'o-cvw2' : ''}>{carte}</Anim>;
               return <EditableCard key={k} ed={ed} id={k} nom={d.name} onEdit={setCardEdit} hass={hass} taille={false}>{carte}</EditableCard>;
@@ -829,10 +878,13 @@ function EnergieContent({ hass, edit = false, onEnt }) {
       {enAdd && <ComposeurCartes hass={hass} entete={tr('Ajouter un poste')} domaines={['sensor']} composites={false} present={ed.ids.map(k => k.indexOf('dev:') === 0 ? k.slice(4) : k)} onToggle={(id) => ed.toggle('dev:' + id)} onClose={() => setEnAdd(false)} />}
       {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={posteDe(cardEdit).name} origine={posteOrigine(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}
 
-      {/* LE CALENDRIER, du même module à la demande que l'historique. */}
-      <Suspense fallback={<div style={{ minHeight: 280 }} />}>
-        <EnergieCalendrier hass={hass} EN={EN} tour={tourEn} devise={deviseJour} etroit={etroit} />
-      </Suspense>
+      {/* LE CALENDRIER, du même module à la demande que l'historique — et seulement en approchant de l'écran (point 4) :
+        * il lit douze mois de compteurs, tout en bas de la page. */}
+      <QuandVisible hauteur={280}>
+        <Suspense fallback={<div style={{ minHeight: 280 }} />}>
+          <EnergieCalendrier hass={hass} EN={EN} tour={tourEn} devise={deviseJour} etroit={etroit} />
+        </Suspense>
+      </QuandVisible>
       </>)}
 
       {/* LES PILES, dans leur onglet, au gabarit de la maquette. */}
@@ -843,7 +895,10 @@ function EnergieContent({ hass, edit = false, onEnt }) {
               <div style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 500, color: 'var(--o-text2)' }}>{tr('Piles et batteries')}</div>
               <div style={{ marginTop: 4, fontSize: 12.5, fontWeight: 600, color: 'var(--o-text3)' }}>{trN(piles.length, '{n} capteur', '{n} capteurs')}</div>
             </div>
-            {pilesSurveiller > 0 && (
+            {/* Le filtre reste là tant qu'il est posé : une pile qui se remet
+              * vidait « À surveiller », et le choix disparaissait avec — plus
+              * moyen de revenir à « Toutes » (audit du 12/11, lot 4, I1). */}
+            {(pilesSurveiller > 0 || pilesFiltre === 'surveiller') && (
               <div style={{ display: 'inline-flex', gap: 2, padding: 3, borderRadius: 12, background: 'var(--o-well)', border: 'var(--o-bw,1px) solid var(--o-bd2)', flexShrink: 0 }}>
                 {[['toutes', tr('Toutes'), piles.length], ['surveiller', tr('À surveiller'), pilesSurveiller]].map(([id, lb, n]) => (
                   <button key={id} onClick={() => setPilesFiltre(id)} aria-pressed={pilesFiltre === id}
@@ -857,6 +912,10 @@ function EnergieContent({ hass, edit = false, onEnt }) {
           <div className="o-piles grid-objets grid-dense" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', columnGap: 16, rowGap: 8 }}>
             {pilesVues.map((p, i) => <Anim key={p.id} i={i} base={200}>{dc.card(p.id)}</Anim>)}
           </div>
+          {/* Une liste vide le DIT, au lieu de rester blanche (I1). */}
+          {pilesVues.length === 0 && (
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Tout va bien')}</div>
+          )}
         </>
       )}
       {dc.sheets}

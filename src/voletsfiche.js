@@ -40,6 +40,17 @@ export function sousNomVolet(piece, classe) {
 // SET_POSITION (4) — SET_TILT_POSITION (128) d'un store qui ne fait que s'incliner : le volet sait se placer, sa fenêtre se glisse.
 export const saitSePlacer = (st) => !!st && !!gestesCover(st).placer;
 
+/* Les positions favorites (chantier du 20/11, A9 ; ADR 0385) : deux repères de plus que les cinq de la fenêtre, d'un
+ * toucher — « Aérer 30 % », « Ombre 60 % ». FIXES : une position à soi se rangerait dans la configuration de l'interface (`cfgSet`,
+ * par profil), mais le composant n'accepte que des clés qu'il connaît (`AGENCEMENT`, store.py) — un réglage de plus demande un
+ * changement du serveur, que ce lot n'a pas fait. Seulement pour un volet qui sait se placer ; `ici` : où il est, hors course. */
+const FAVORIS_VOLET = Object.freeze([{ cle: 'aerer', valeur: 30 }, { cle: 'ombre', valeur: 60 }]);
+export function favorisVolet({ place = false, pos = null, enCourse = false } = {}) {
+  if (!place) return [];
+  return FAVORIS_VOLET.map(f => ({ ...f, mot: f.cle === 'aerer' ? tr('Aérer {n} %', { n: f.valeur }) : tr('Ombre {n} %', { n: f.valeur }),
+    ici: !enCourse && pos != null && Math.round(pos) === f.valeur }));
+}
+
 /* ════════════ La phrase longue (§ 4) et le prochain mouvement ════════════ */
 
 /* « +30 », « −15 » (le vrai signe moins), « 0 » : un décalage en minutes. */

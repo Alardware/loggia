@@ -146,6 +146,10 @@ const REFUS = {
   /* Le planning de Loggia du distributeur (ADR 0155, 05/10). `trop_de_repas`
    * nomme sa limite (MAX_REPAS, distributeurs.py), comme les plannings du robot. */
   trop_de_repas: (k, n) => (typeof n === 'number' ? tr('Planning non enregistré — {n} repas au plus', { n }) : null),
+  /* Les deux plafonds des rappels (rappels.py, audit du 12/11, S7d) : celui du compte et celui de la maison, chacun sa
+   * phrase — un seul refus disait « 10 rappels au plus » à un compte qui n'en avait aucun, la maison étant pleine. */
+  trop_de_rappels: (k, n) => (typeof n === 'number' ? tr('Rappel non enregistré — vous avez déjà {n} rappels, le maximum', { n }) : null),
+  trop_de_rappels_maison: (k, n) => (typeof n === 'number' ? tr('Rappel non enregistré — la maison a déjà {n} rappels, le maximum', { n }) : null),
   /* `ajout_refuse` nomme sa RAISON : `commande` (Loggia ne sait pas commander
    * ce distributeur) ou `source` (le programme de l'appareil ou une
    * automatisation distribue déjà). Le geste ordinaire qui le provoque : une
@@ -172,6 +176,9 @@ const REFUS = {
   /* Un minuteur posé sur un appareil déjà éteint (`off`, `standby`) : le serveur le refuse (minuteurs.py, audit du 19/10) —
    * il le couperait de nouveau une fois rallumé. La fiche le sait souvent un sondage trop tard. */
   minuteur_deja_eteint: () => tr('L’appareil est déjà éteint.'),
+  // Le planning d'un purificateur (ADR 0387) : une semaine que le composant ne lit pas, un purificateur qu'il ne trouve pas.
+  purificateur_semaine: () => tr('Planning refusé : une plage est illisible.'),
+  purificateur_inconnu: () => tr('Ce purificateur est introuvable dans Home Assistant.'),
   /* Spotify (ADR 0344) : le serveur fait les deux gestes, l'enceinte puis la playlist (spotify.py), et nomme ce qui manque. */
   spotify_compte_absent: () => tr('Ce compte Spotify est introuvable.'),
   spotify_lien: () => tr('Ce lien n’est pas une playlist Spotify.'),

@@ -36,20 +36,27 @@ export default function WeatherGL({ condition = 'partlycloudy', heure = null, le
    * plus bas, reste sur le fond clair. L'ordre des sections se règle : on
    * mesure donc lesquelles sont dans le haut du ciel, et on le refait quand
    * l'Accueil change de taille. Le CSS n'en tient compte qu'en thème clair. */
+  /* PAR TOUT CIEL (audit du 12/11) : de jour aussi, un titre posé sur la photo — « Favoris », « Scénarios », et ce qui les
+   * accompagne à droite — se perdait, gris sur un ciel clair, surtout sur tablette, où le ciel descend plus bas. Toute ligne de
+   * titre posée sur le ciel reçoit donc `o-ciel-titre`, par ciel clair comme sombre : l'encre du texte posé sur le ciel et une
+   * ombre douce, tirées du thème (index.css). `o-sur-ciel` garde son sens : sur un ciel SOMBRE seulement. */
   useEffect(() => {
     const contenu = document.querySelector('.loggia-content');
     const ciel = document.querySelector('.o-wx3d');
     const lignes = () => [...document.querySelectorAll('.loggia-content h2')].map((h) => h.parentElement);
-    if (!sombre || !contenu || !ciel) { lignes().forEach((l) => l.classList.remove('o-sur-ciel')); return undefined; }
+    const effacer = () => lignes().forEach((l) => { l.classList.remove('o-sur-ciel'); l.classList.remove('o-ciel-titre'); });
+    if (!contenu || !ciel) { effacer(); return undefined; }
+    if (!sombre) lignes().forEach((l) => l.classList.remove('o-sur-ciel'));
     const marque = () => {
-      // Le ciel clair de nuit reste aux trois quarts sombre jusqu'à 85 % de sa hauteur (mesuré dans la démo).
+      // Le ciel clair de nuit reste aux trois quarts sombre jusqu'à 85 % de sa hauteur (mesuré dans la démo) ; plus bas, il se fond dans la page.
       const c = ciel.getBoundingClientRect(), lim = c.top + c.height * 0.85;
-      lignes().forEach((l) => { const r = l.getBoundingClientRect(); l.classList.toggle('o-sur-ciel', (r.top + r.bottom) / 2 < lim); });
+      lignes().forEach((l) => { const r = l.getBoundingClientRect(); l.classList.toggle('o-ciel-titre', (r.top + r.bottom) / 2 < lim); });
+      if (sombre) lignes().forEach((l) => { const r = l.getBoundingClientRect(); l.classList.toggle('o-sur-ciel', (r.top + r.bottom) / 2 < lim); });
     };
     marque();
     const ro = new ResizeObserver(marque);
     ro.observe(contenu);
-    return () => { ro.disconnect(); lignes().forEach((l) => l.classList.remove('o-sur-ciel')); };
+    return () => { ro.disconnect(); effacer(); };
   }, [sombre]);
   return (
     <loggia-ciel aria-hidden="true" meteo={condition} heure={heure == null ? 'auto' : String(heure)}

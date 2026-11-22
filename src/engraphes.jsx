@@ -13,7 +13,7 @@
  * largeur de la carte —, mais les étiquettes des axes sont du HTML posé en
  * pourcentage par-dessus : étirées, elles seraient illisibles.
  */
-import { useState, useId } from 'react';
+import { useState, useId, useRef, useEffect } from 'react';
 import { tr, locale } from './i18n.js';
 import { nombre } from './format.js';
 import { nomJour } from './robots.js';
@@ -77,6 +77,18 @@ export function EnHistoBarres({ series = [], cases = [], unite = 'kWh', veille =
   /* Un identifiant par graphe : deux graphes sur la même page partageraient
    * sinon leurs dégradés, et le second effacerait le premier. */
   const idGraphe = useId().replace(/[^a-zA-Z0-9]/g, '');
+  /* AU DOIGT, LA BULLE RESTE (audit du 12/11, lot 4, R2). Un doigt qui se
+   * lève « quitte » le graphe : la valeur s'effaçait dès qu'on la lâchait, il
+   * fallait la lire sous son propre doigt. Elle reste donc jusqu'au toucher
+   * suivant — sur une autre barre, elle passe à celle-ci ; ailleurs dans la
+   * page, elle s'en va. La souris, elle, garde son survol. */
+  const cadre = useRef(null);
+  useEffect(() => {
+    if (survol == null) return undefined;
+    const ailleurs = (e) => { if (cadre.current && !cadre.current.contains(e.target)) setSurvol(null); };
+    document.addEventListener('pointerdown', ailleurs, true);
+    return () => document.removeEventListener('pointerdown', ailleurs, true);
+  }, [survol]);
   const vraies = (series || []).filter(s => s && Array.isArray(s.valeurs));
   const n = cases.length;
   if (!n || !vraies.length) {
@@ -285,10 +297,24 @@ export function EnHistoBarres({ series = [], cases = [], unite = 'kWh', veille =
   const chaque = n > 14 ? Math.ceil(n / 7) : 1;
   const bulle = survol != null && cases[survol] ? survol : null;
   const gauche = bulle != null ? ((bulle + 0.5) / n) * 100 : 0;
+  /* LE RÉSUMÉ EN TEXTE (R2) : par série, le total de la période et sa case la
+   * plus haute. Le lecteur d'écran l'a d'un trait, sans passer les barres une
+   * à une ; posé hors de l'écran (`o-vh`), il ne change rien au dessin. */
+  const resume = vraies.map((s) => {
+    let total = 0, iMax = -1;
+    s.valeurs.forEach((v, i) => {
+      if (v == null || !isFinite(v)) return;
+      total += v;
+      if (iMax < 0 || v > s.valeurs[iMax]) iMax = i;
+    });
+    return iMax < 0 ? null : tr('{nom} : {total} au total, au plus haut {max} ({quand})',
+      { nom: s.nom, total: fmt(total), max: fmt(s.valeurs[iMax]), quand: (cases[iMax] && cases[iMax].titre) || '' });
+  }).filter(Boolean);
 
   return (
-    <div style={{ position: 'relative', height: hauteur, marginTop: 18 }}
-      onPointerLeave={() => setSurvol(null)}>
+    <div ref={cadre} style={{ position: 'relative', height: hauteur, marginTop: 18 }}
+      onPointerLeave={(e) => { if (e.pointerType === 'mouse') setSurvol(null); }}>
+      <p className="o-vh">{resume.length ? resume.join(' · ') : tr('pas encore de données')}</p>
       <div style={{ position: 'absolute', left: 46, right: 4, top: 8, bottom: 28 }}>
         {vals.map((v, i) => (
           <span key={'y' + i} aria-hidden="true" style={{ position: 'absolute', left: -46, width: 38, textAlign: 'right', top: ((1 - v / haut) * 100).toFixed(2) + '%', transform: 'translateY(-50%)', fontSize: 10.5, fontWeight: 700, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
@@ -482,7 +508,7 @@ export function CalendrierMois({ cases = [], serie = null, rgb = 'var(--o-accent
           const finSemaine = semaines && ((vides + i) % 7 === 6 || i === cases.length - 1);
           const tSem = finSemaine ? totalSemaine(i) : null;
           const jour = (
-            <Case key={c.debut} type={ouvrable ? 'button' : undefined} title={c.titre + (v != null ? ' \u00b7 ' + fmt(v) : '')}
+            <Case key={c.debut} type={ouvrable ? 'button' : undefined} className={ouvrable ? 'o-doigt' : undefined} title={c.titre + (v != null ? ' \u00b7 ' + fmt(v) : '')}
               aria-label={ouvrable ? c.titre : undefined} onClick={ouvrable ? () => onJour(c.debut) : undefined}
               style={{ position: 'relative', ...(hauteur ? { height: hauteur, padding: '7px 9px' } : { aspectRatio: '1 / 1', padding: 5 }), minWidth: 0, borderRadius: 10, boxSizing: 'border-box',
                 border: 'none', font: 'inherit', color: encreTexte(v) || 'inherit', textAlign: 'left', cursor: ouvrable ? 'pointer' : 'default',

@@ -593,7 +593,8 @@ test('planning éteint ou en observation : le thermostat dit ce qu’il fait, à
   for (const muet of ['unavailable', 'unknown']) {
     const panne = { states: { [POELE]: { entity_id: POELE, state: muet, attributes: { friendly_name: 'Poêle', hvac_modes: ['off', 'heat'] } } } };
     const html = thermostat(panne);
-    assert.deepEqual(etatDe(html), { texte: 'Indisponible', couleur: 'var(--o-text3)' }, muet);
+    // ASSERTION MODIFIÉE (audit du 12/11, lot 4, E24) : la règle de la lumière — en rouge (sans `last_changed`, sans heure).
+    assert.deepEqual(etatDe(html), { texte: 'Indisponible', couleur: 'var(--o-bad)' }, muet);
     // ASSERTION MODIFIÉE (passe téléphone, tâche 4) : la classe de la grille commune précède celle de la panne.
     assert.ok(html.startsWith('<div class="o-rmcard o-gabarit o-panne" data-chauffage=""') && !html.includes('role="switch"'), muet + ' : le liseré de panne, sans bascule');
   }
@@ -666,7 +667,8 @@ test('un module muet se dit en panne : « Indisponible », le liseré, rien à t
    * module dont le `select` manque, vaut `unavailable` ou `unknown`, se dit
    * comme un thermostat en panne. */
   const panne = (html) => {
-    assert.deepEqual(etatDe(html), { texte: 'Indisponible', couleur: 'var(--o-text3)' });
+    // ASSERTION MODIFIÉE (audit du 12/11, lot 4, E24) : la règle de la lumière — en rouge (sans `last_changed`, sans heure).
+    assert.deepEqual(etatDe(html), { texte: 'Indisponible', couleur: 'var(--o-bad)' });
     // ASSERTION MODIFIÉE (passe téléphone, tâche 4) : la classe de la grille commune précède celle de la panne.
     assert.ok(html.startsWith('<div class="o-rmcard o-gabarit o-panne" data-chauffage=""'), 'le liseré de panne');
     assert.deepEqual(boutons(html).map(b => b.inerte), [true, true], '− et + ne répondent plus');
@@ -1198,7 +1200,8 @@ test('Objets, filtre Chauffage : « 5 appareils · 2 chauffent », comptés comm
   // L'en-tête : le compte des appareils, et « · n chauffent » sous le filtre Chauffage seulement.
   const vue = corps('ObjetsView');
   assert.ok(vue.includes("const chauffent = actuel === 'chauffage' ? chauffentParmi(visibles, S) : 0;"));
-  assert.ok(vue.includes("{trN(visibles.length, '{n} appareil', '{n} appareils')}{chauffent ? ' · ' + trN(chauffent, '{n} chauffe', '{n} chauffent') : null}"));
+  // ASSERTION MODIFIÉE (13/11, audit, E10) : le compte est celui de la puce (`compteObjets` : un groupe pèse ses membres), plus le nombre de cartes.
+  assert.ok(vue.includes("{trN(compteObjets(visibles, 'tous'), '{n} appareil', '{n} appareils')}{chauffent ? ' · ' + trN(chauffent, '{n} chauffe', '{n} chauffent') : null}"));
 });
 
 /* ── Passe de finition 11 bis (chantier Lumières), R8 : un mot ne se coupe jamais ───────────────────────────

@@ -11,7 +11,7 @@
  * testent à sec, audit du 03/10) — et, pour dire un volet, le seuil de
  * « fermé » de l'écran (`voletecran.js`, sans React lui non plus). */
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { tr } from './i18n.js';
+import { tr, trHA } from './i18n.js';
 import { dansLaFenetre, heureJournal } from './evenement.js';
 import { coverFerme, positionDe } from './voletecran.js';
 import { seriesRelues, GARDE_SERIE } from './releve.js';
@@ -105,6 +105,17 @@ const voletBute = (id, st, S, dernier) => {
   return !!(dernier && st === 'open' && id.indexOf('cover.') === 0 && ici && ici.state === 'open' && intact && coverFerme(ici, positionDe(ici)));
 };
 
+/* Le mode d'un thermostat, dit avec les mots de sa carte (audit du 12/11, lot 4, E19) : ceux de `motModeClimat`
+ * (cartes/chauffage.jsx) — Home Assistant d'abord, dans la langue de l'écran, sinon Loggia. Le journal écrivait
+ * « CONFORT » pour `heat` et `cool`, `auto`, `dry` en anglais brut. Recopiés, pas importés : ce module ne connaît
+ * pas les cartes. Un mode qu'aucun des deux ne connaît reste tel que l'appareil l'écrit. */
+function motModeJournal(mode) {
+  const ha = trHA('component.climate.entity_component._.state.' + mode);
+  if (ha) return ha;
+  const loggia = { heat: tr('Chauffage'), cool: tr('Froid'), auto: tr('Auto'), heat_cool: tr('Auto'), dry: tr('Sec'), fan_only: tr('Ventil') };
+  return Object.prototype.hasOwnProperty.call(loggia, mode) ? loggia[mode] : mode;
+}
+
 /** L'etat d'un evenement du journal, dit en un mot.
  *
  * `dernier` : cet evenement est le plus recent de l'entite — l'etat publie
@@ -136,7 +147,7 @@ export function etatJournal(id, st, S, dernier = false) {
   }
   // Un `event` (la sonnette, le colis ; ADR 0312) : son état est l'instant de l'événement, que l'heure de la ligne dit déjà.
   if (dom === 'event') return tr('Détecté');
-  if (dom === 'climate') return st === 'off' ? tr('Éteint') : st === 'heat' ? tr('CONFORT') : st;
+  if (dom === 'climate') return st === 'off' ? tr('Éteint') : motModeJournal(st);
   if (dom === 'vacuum') return st === 'cleaning' ? tr('Nettoyage') : st === 'docked' ? tr('À la base') : st === 'returning' ? tr('Retour base') : st === 'paused' ? tr('En pause') : st;
   return st + (a.unit_of_measurement ? ' ' + a.unit_of_measurement : '');
 }
@@ -177,7 +188,7 @@ export function RoomActivityCard({ hass, ids, titre = null, sous = null, max = 8
           <div key={(e.when || 0) + '|' + e.entity_id + '|' + i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i ? 'var(--o-bw,1px) solid var(--o-bd3)' : 'none' }}>
             <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: actif(e) ? 'var(--o-warn)' : 'var(--o-text3)', boxShadow: actif(e) ? '0 0 7px var(--o-warn)' : 'none' }} />
             <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.name || (S[e.entity_id] && S[e.entity_id].attributes && S[e.entity_id].attributes.friendly_name) || e.entity_id}</span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: actif(e) ? 'var(--o-warn)' : 'var(--o-text2)', whiteSpace: 'nowrap' }}>{e.state != null ? etatJournal(e.entity_id, e.state, S, dernieres.has(e)) : (e.message || '')}{e.n > 1 ? ' ·×' + e.n : ''}</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: actif(e) ? 'var(--o-warn)' : 'var(--o-text2)', whiteSpace: 'nowrap' }}>{e.state != null ? etatJournal(e.entity_id, e.state, S, dernieres.has(e)) : (e.message || '')}{e.n > 1 ? ' · ×' + e.n : '' /* « RAS · ×2 », plus « RAS ·×2 » (audit du 12/11) */}</span>
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)', flexShrink: 0, minWidth: 38, textAlign: 'right', whiteSpace: 'nowrap' }}>{heureJournal(e.when)}</span>
           </div>
         ))}

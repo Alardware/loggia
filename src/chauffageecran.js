@@ -13,6 +13,7 @@
 import { tr, trHA, locale } from './i18n.js';
 import { nombre } from './format.js';
 import { deCelsius } from './unites.js';
+import { vanneOuverte } from './chauffageseuils.js';
 
 /** Du plus froid au plus chaud : l'ordre de − et + sur la carte. Égal à
  * `FROID` du calcul (`chauffage.js`) — un test les tient ensemble. */
@@ -182,9 +183,11 @@ export function modeDOption(option) {
 }
 
 /** Le mot d'un préréglage (D15, ADR 0319) : celui de Home Assistant pour les siens (eco, comfort, away, boost…), sinon celui de
- * l'ordre fil pilote qu'il écrit (« frost_protection » : Hors-gel, « comfort-1 » : Confort −1), sinon tel que l'appareil l'écrit. */
+ * l'ordre fil pilote qu'il écrit (« frost_protection » : Hors-gel, « comfort-1 » : Confort −1), sinon tel que l'appareil l'écrit,
+ * une majuscule en tête (17/11 : « dynamic » s'affichait en minuscules dans la fiche). */
 export function motPreset(p) {
-  return trHA('component.climate.entity_component._.state_attributes.preset_mode.state.' + p) || motMode(modeDOption(p)) || String(p);
+  const brut = String(p);
+  return trHA('component.climate.entity_component._.state_attributes.preset_mode.state.' + p) || motMode(modeDOption(p)) || brut.charAt(0).toUpperCase() + brut.slice(1);
 }
 
 // Ce que Home Assistant publie d'un appareil qui ne répond pas (MUETS, chauffage_familles.py).
@@ -217,15 +220,20 @@ export function moduleMuet(st) {
  *    l'Arrêt (choix 8) ;
  *  - un thermostat : en marche (`marche` : son état n'est pas `off`), et
  *    `hvac_action` à `heating` (`action`) — ou `preheating` : préchauffer,
- *    c'est chauffer ;
+ *    c'est chauffer. Une tête qui NE PUBLIE PAS son action dit « chauffe »
+ *    tant que sa vanne est ouverte (`vanne`, son ouverture en %, 20/11, A10) ;
+ *    celle qui dit `idle` est crue ;
  *  - une zone décrite à la main : la règle de sa carte — en marche, la pièce
  *    (`mesure`) sous sa consigne (`consigne`), toutes deux lisibles.
  */
-export function enChauffe({ famille, muet = false, marche = false, watts = null, action = null, mesure = null, consigne = null } = {}) {
+export function enChauffe({ famille, muet = false, marche = false, watts = null, action = null, mesure = null, consigne = null, vanne = null } = {}) {
   if (muet) return false;
   if (famille === 'module') return typeof watts === 'number' && watts > SEUIL_CHAUFFE_W;
   if (!marche) return false;
-  if (famille === 'thermostat') return action === 'heating' || action === 'preheating';
+  if (famille === 'thermostat') {
+    if (action === 'heating' || action === 'preheating') return true;
+    return !(typeof action === 'string' && action !== '') && vanneOuverte(vanne);
+  }
   return typeof mesure === 'number' && Number.isFinite(mesure) && typeof consigne === 'number' && Number.isFinite(consigne) && mesure < consigne;
 }
 

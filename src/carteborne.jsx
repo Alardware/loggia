@@ -8,13 +8,15 @@
  *    et le courant se règlent dans la popup, qui demande avant d'agir ;
  *  - ÉTROITE (1c) : la plaque et la puissance en haut, le nom, la phrase ;
  *  - COMPACTE (88) : la plaque, le nom, la phrase, la puissance à droite.
- * Le vert de la charge, le gris au repos, le gris éteint quand elle se tait.
+ * Le vert de la charge, le gris au repos ; quand elle se tait, la plaque grise et la phrase rouge
+ * (« Indisponible depuis 14:20 », la règle de la lumière ; audit du 12/11, lot 4, E24).
  */
 import { Fi, Surface, nomCarte } from './ui.jsx';
 import { tr, locale } from './i18n.js';
+import { quandLumiere } from './lumieres.js';
 import { fmtWatts } from './format.js';
 import { LISERE } from './styles.js';
-import { RM_CARD, RM_ICO, RM_MILIEU, RM_NAME, RM_SUB } from './cartes/briques.jsx';
+import { RM_CARD_HAUT, RM_GAUCHE, RM_ICO, RM_MILIEU, RM_NAME, RM_SUB } from './cartes/briques.jsx';
 import { ChiffreNomme, ChiffreNommeHaut } from './cartes/robot.jsx';
 import { SURF_CARTE, lavisCarte } from './app/noyau.jsx';
 import { vueBorne } from './bornevue.js';
@@ -25,8 +27,14 @@ const chiffreDe = (w) => (w >= 1000 ? [(Math.round(w / 100) / 10).toLocaleString
 
 export default function CarteBorneContenu({ borne, hass, nom = null, chip = false, onOpen = null, Glyphe = Sans }) {
   const S = (hass && hass.states) || {};
-  const v = vueBorne({ borne, S, nom });
-  if (!v) return null;
+  const vue = vueBorne({ borne, S, nom });
+  if (!vue) return null;
+  /* Muette, la règle de la lumière (`phraseLumiere`, lumieres.js ; audit du 12/11, lot 4, E24) : « Indisponible depuis 14:20 »,
+   * en rouge — depuis que la DERNIÈRE de ses entités s'est tue ; sans heure lisible, « Indisponible ». La carte seule : la popup
+   * garde ce que `vueBorne` lui dit. */
+  const tues = vue.mort ? [borne.puissance, borne.prise, borne.statut].map(x => (x && S[x] ? Date.parse(S[x].last_changed || '') : NaN)).filter(Number.isFinite) : [];
+  const depuis = tues.length ? quandLumiere(Math.max(...tues)) : null;
+  const v = vue.mort ? { ...vue, phrase: { texte: depuis ? tr('Indisponible depuis {h}', { h: depuis }) : tr('Indisponible'), encre: 'var(--o-bad)' } } : vue;
   const id = borne.puissance;
   const [fond, encre] = v.plaque;
   const charge = v.etat === 'charge' && v.watts != null;
@@ -52,14 +60,16 @@ export default function CarteBorneContenu({ borne, hass, nom = null, chip = fals
   }
   return (
     <div className={'o-rmcard o-gabarit' + (v.mort ? ' o-panne' : '')} data-borne=""
-      style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default', background: fondCarte, border: LISERE }}>
+      style={{ ...RM_CARD_HAUT, position: 'relative', cursor: onOpen ? 'pointer' : 'default', background: fondCarte, border: LISERE }}>
       {onOpen && <Surface onClick={onOpen} label={label} />}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
         {plaque(RM_ICO(fond, encre), 17)}
         {charge && <ChiffreNommeHaut v={c} u={u} nom={tr('Puissance')} />}
       </div>
-      <div style={{ ...RM_MILIEU, marginTop: 'var(--o-milieu-haut, 10px)' }}>
-        <div style={{ minWidth: 0 }}>
+      {/* Le nom 14 px sous la plaque, comme sur toutes les cartes (audit du 12/11, `RM_MILIEU`) : 10 partout le posait 4 px plus haut
+        * que celui d'une lumière ; la carte étroite garde ses 10 (`--o-milieu-haut`). Sa colonne reste en haut (`RM_GAUCHE`). */}
+      <div style={RM_MILIEU}>
+        <div style={RM_GAUCHE}>
           <div className="o-gab-nom" style={{ ...RM_NAME, fontSize: 15 }}>{v.nom}</div>
           <div className="o-gab-phrase" style={{ ...RM_SUB, color: v.phrase.encre, '--o-n': Math.max(1, v.phrase.texte.length) }}>{v.phrase.texte}</div>
         </div>

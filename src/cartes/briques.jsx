@@ -31,6 +31,21 @@ const RM_SUB = SOUS_CARTE;
  * (`o-gabarit`, index.css ; passe téléphone) tait ce chiffre — elle l'écrit en
  * haut — et la colonne du nom et de la phrase prend toute la largeur. */
 const RM_MILIEU = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'end', marginTop: 'var(--o-milieu-haut, 14px)' };
+/* LE NOM SOUS LA PLAQUE, À LA MÊME HAUTEUR SUR TOUTES LES CARTES (audit du 12/11, validé sur aperçu). Mesuré dans une pièce au
+ * PC, sur des cartes de 184 px, le haut du nom tombait à 69 px sur une lumière, un chauffage, un volet ; à 65 sur un média ; à 72
+ * sur des particules ou des COV ; à 129 — au pied, sous un grand vide — sur une carte sans commandes : un interrupteur, un
+ * détecteur, un ouvrant, une borne, un chauffe-eau. Trois pièces du gabarit le fixent, sans nombre posé carte par carte :
+ *  - `RM_CARD_HAUT` : la carte range son contenu depuis le HAUT. En `space-between`, une carte de deux rangées (la plaque, le
+ *    nom) posait son nom au pied ; le pied d'une carte qui en a un — commandes, barre, jauge — descend par sa marge auto, et le
+ *    dessin d'un ouvrant est posé en absolu : ni l'un ni l'autre ne bouge ;
+ *  - `RM_SOUS_PLAQUE` : le nom part 14 px sous la plaque — la marge de `RM_MILIEU` —, 10 sur une carte étroite (`--o-milieu-haut`,
+ *    index.css) ; les cartes IoT et les médias en prenaient 10 partout ;
+ *  - `RM_GAUCHE` : la colonne du nom reste en haut de sa rangée quand le chiffre d'à côté, avec son nom dessous, est plus haut
+ *    qu'elle — alignée en bas, elle descendait de quelques pixels.
+ * La carte étroite du téléphone (1c) garde ses 10 px et sa ligne de commandes ; les compactes ne changent pas. */
+const RM_SOUS_PLAQUE = 'var(--o-milieu-haut, 14px)';
+const RM_CARD_HAUT = { ...RM_CARD, justifyContent: 'flex-start' };
+const RM_GAUCHE = { minWidth: 0, alignSelf: 'flex-start' };
 
 /* LA TOUCHE D'UN BOUTON N'EST PAS CELLE DE SA CARTE (audit du 03/10).
  *
@@ -53,19 +68,36 @@ const RM_MILIEU = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto',
  * 14/09 les dessinent partout pareil : une bascule rose en haut a droite, une
  * glissiere fine dont le remplissage EST la valeur, un curseur court juste
  * apres, un point au bout du rail. Une seule ecriture, donc. */
-const RM_ROSE = 'var(--o-rose)';
+/* Deux couleurs, et deux seulement (audit du 12/11, E14 ; ADR 0370). Les bascules en portaient trois : le rose des cartes
+ * d'appareil, l'ambre des tuiles de pièce, le bleu de Système et de Paramètres — et le rose ne disait rien : une prise et une lampe
+ * portaient le même. Sa décision : l'AMBRE pour une lumière (la carte d'une lampe, sa fiche, la tuile d'une pièce), le BLEU de la
+ * maison pour tout le reste, celui de `Bascule` (ui.jsx). L'ambre est un jeton de la feuille (`--o-bascule-lampe`) : en thème
+ * clair, `--o-lampe` est une encre brune, une bascule allumée y passait pour éteinte. */
+const RM_BLEU = 'var(--o-accent-fond)';
+const RM_AMBRE = 'var(--o-bascule-lampe)';
+/* Le DESSIN d'une bascule de la maison : son rail, son rond (audit du 12/11, lot 5c ; ADR 0374).
+ *
+ * Trois bascules le recopiaient en plus petit — 42 × 24, un rond de 18, sans ombre : le réglage d'un appareil dans sa fiche, la
+ * programmation automatique d'une zone de chauffage, « Ne pas juger cette mesure ». Elles portent chacune leur geste (une garde,
+ * un libellé qui change, une rangée entière qui bascule) et ne peuvent pas devenir `RmBascule` : elles lisent donc son dessin,
+ * écrit ici une seule fois, et elle aussi. L'appelant pose le curseur, l'effacement, et la couleur quand ce n'est pas le bleu. */
+const railBascule = (on, couleur = RM_BLEU) => ({ width: 46, height: 26, borderRadius: 14, background: on ? couleur : 'rgba(150,162,184,.2)', position: 'relative', flexShrink: 0, transition: 'background .25s' });
+const rondBascule = (on) => ({ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 5px rgba(0,0,0,.35)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' });
 /* `inerte` : la bascule reste dessinée, s'efface et ne répond plus — celle
  * d'une prise muette (chantier Prises, § 3.1). Elle garde son arrêt de
  * propagation : un appui sur elle n'ouvre pas la fiche non plus. `className` :
  * l'écriture où elle vit, quand une carte n'en montre qu'une (`o-seul-large`,
- * passe téléphone). */
-function RmBascule({ on, nom, onToggle, couleur = RM_ROSE, inerte = false, className = undefined }) {
+ * passe téléphone). Elle n'arrête que SES touches, Entrée et Espace (audit du 12/11, B8) : en les arrêtant toutes, une fiche
+ * dont le focus était sur elle ne recevait plus Échap — elle ne se fermait plus — ni Tab, qui n'y bouclait plus.
+ * Son dessin vient de `railBascule` et `rondBascule`, juste au-dessus (lot 5c). `position` reste ÉCRITE sur elle : c'est ce qui
+ * la fait passer au-dessus de la surface de sa carte (lot 13), et cela se lit ici, pas dans un dessin partagé. */
+function RmBascule({ on, nom, onToggle, couleur = RM_BLEU, inerte = false, className = undefined }) {
   return (
     <span className={className} role="switch" aria-checked={!!on} aria-disabled={inerte || undefined} tabIndex={0} aria-label={(on ? tr('Éteindre') : tr('Allumer')) + ' ' + nom}
-      onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!inerte) onToggle(e); } }}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); if (!inerte) onToggle(e); } }}
       onClick={(e) => { e.stopPropagation(); if (!inerte) onToggle(e); }}
-      style={{ width: 46, height: 26, borderRadius: 14, background: on ? couleur : 'rgba(150,162,184,.2)', position: 'relative', cursor: inerte ? 'default' : 'pointer', opacity: inerte ? .4 : 1, flexShrink: 0, display: 'inline-block', transition: 'background .25s' }}>
-      <span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 2px 5px rgba(0,0,0,.35)', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} />
+      style={{ ...railBascule(on, couleur), position: 'relative', cursor: inerte ? 'default' : 'pointer', opacity: inerte ? .4 : 1, display: 'inline-block' }}>
+      <span style={rondBascule(on)} />
     </span>
   );
 }
@@ -100,22 +132,6 @@ function ChiffreHaut({ v, u = null, degre = false, couleur = 'var(--o-text)', lu
       <span style={{ letterSpacing: '-.02em' }}>{v}</span>
       {degre ? <span style={{ fontSize: '.6em', marginTop: '.08em' }}>°</span> : u ? <span style={{ fontSize: '.545em', fontWeight: 700, color: 'var(--o-text2)' }}>{u}</span> : null}
     </span>
-  );
-}
-/* La PLAQUE d'une lumière est son interrupteur, sur la carte étroite seulement (T1, T12) : un vrai bouton
- * (`role="switch"`, `aria-checked`), nommé comme la bascule — « Allumer Plafonnier Bureau » —, qui n'ouvre pas la
- * fiche (`stopPropagation`) et passe au-dessus de la surface (positionné). Le bouton natif répond à Entrée et à
- * Espace : pas de `onKeyDown`. Muette, elle reste dessinée et ne répond plus : `aria-disabled`, et non `disabled`,
- * qui ferait tomber le focus. Au toucher elle se laisse traverser (`pointerEvents: 'none'`) : le toucher descend à la
- * surface de la carte, qui ouvre la fiche — comme avant que la plaque ne soit un bouton (correction bis, point 3) ; au
- * clavier, Entrée et Espace ne commandent rien. Sa zone de toucher fait 44 × 44 (`o-gab-plaque`, index.css), sans
- * l'allongement de ± 12 px des interrupteurs au téléphone : avec 10 px d'air sous la plaque, il mordrait sur le nom.
- * Elle ne contient que son glyphe. */
-function PlaqueBascule({ on, nom, fond, encre, inerte = false, onToggle, children }) {
-  return (
-    <button type="button" role="switch" aria-checked={!!on} aria-disabled={inerte || undefined} aria-label={(on ? tr('Éteindre') : tr('Allumer')) + ' ' + nom}
-      className="o-gab-plaque o-seul-etroit" onClick={(e) => { e.stopPropagation(); if (!inerte) onToggle(e); }}
-      style={{ ...RM_ICO(fond, encre), position: 'relative', border: 'none', padding: 0, cursor: inerte ? 'default' : 'pointer', pointerEvents: inerte ? 'none' : undefined }}>{children}</button>
   );
 }
 
@@ -352,4 +368,4 @@ const GlypheCarte = ({ id, size = 19, anime = false, selon = null, children }) =
   return mien ? <Ico name={selon ? selon(mien) : mien} size={size} anime={anime} /> : children;
 };
 
-export { RM_CARD, RM_ICO, RM_BTN, RM_NAME, RM_SUB, RM_MILIEU, RmBascule, EM_CHIFFRE, EM_UNITE, emChiffre, ChiffreHaut, PlaqueBascule, RmJauge, BIN_ETATS, FAMILLES_BINAIRES, IlluOuvrant, PileRepere, JaugePile, ROOM_GENERIQUES, GlypheCarte };
+export { RM_CARD, RM_CARD_HAUT, RM_SOUS_PLAQUE, RM_GAUCHE, RM_ICO, RM_BTN, RM_NAME, RM_SUB, RM_MILIEU, RM_AMBRE, railBascule, rondBascule, RmBascule, EM_CHIFFRE, EM_UNITE, emChiffre, ChiffreHaut, RmJauge, BIN_ETATS, FAMILLES_BINAIRES, IlluOuvrant, PileRepere, JaugePile, ROOM_GENERIQUES, GlypheCarte };

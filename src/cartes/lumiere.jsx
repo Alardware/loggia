@@ -9,10 +9,11 @@ import { finMinuteur } from '../prisesetat.js';
 import { luminosite, capacitesLumiere, teinteDeCarte, couleursLumiere, encreLumiere, lavisLumiere, phraseLumiere } from '../lumieres.js';
 import { useEtatLumieres, useAvancesLumieres, useRelireMinuteurs, avanceDe, dernierDe } from '../lumieresetat.js';
 import { useOptimistePartage, brutPartage, oublierPartage, poserPartage } from '../optimiste.js';
+import { coupeePar } from '../alimentation.js';
 import { LISERE } from '../styles.js';
 import { tr } from '../i18n.js';
 import { useHass, estClair, useFlash, lavisCarte, SURF_CARTE } from '../app/noyau.jsx';
-import { RM_CARD, RM_ICO, GlypheCarte, PlaqueBascule, RmBascule, ChiffreHaut, RM_MILIEU, RM_NAME, RM_SUB, RmJauge } from './briques.jsx';
+import { RM_CARD, RM_ICO, GlypheCarte, RmBascule, RM_AMBRE, RM_MILIEU, RM_NAME, RM_SUB, RmJauge } from './briques.jsx';
 import { hassQuiConnait } from './mesure.jsx';
 
 /* ── La carte d'une lumière (chantier Lumières, § 3.1, 3.2 ; L3 à L7, L11) ────
@@ -21,9 +22,11 @@ import { hassQuiConnait } from './mesure.jsx';
  * téléphone) : la plaque et la bascule en haut, seules ; le nom, la phrase d'état
  * (§ 4) et, allumée et variable, le pourcentage en grand à droite du nom ; la barre
  * au pied. Sur une carte étroite (le téléphone : passe téléphone, ADR 0202), le
- * modèle 1c de la grille commune : la plaque EST l'interrupteur (`PlaqueBascule`),
- * le pourcentage monte à droite, le nom passe sur toute la largeur et la phrase
- * s'écrit à l'encre de la lampe allumée.
+ * nom passe sur toute la largeur, la phrase s'écrit à l'encre de la lampe allumée,
+ * et la ligne du haut reste celle de la carte large — la plaque, dessin seul, et la
+ * bascule (sa décision du 20/11, ADR 0380 : la plaque n'est plus l'interrupteur) ;
+ * le pourcentage, qui n'a plus de place en haut, ouvre la phrase : « 45 % · depuis
+ * 18:05 ».
  * Elle prend la couleur de la VRAIE lumière (L6, `teinteDeCarte`) — la plaque, le
  * lavis, d'autant plus fort qu'elle éclaire, et la barre ; éteinte, elle se
  * tait : le gris, et le repère de la barre au dernier niveau que garde le
@@ -70,17 +73,24 @@ function useVueLumiere(hass, id, label = null, actif = true) {
   const suivre = (v) => { if (v == null) { const e = brutPartage(CLE_DOIGT(id)); if (e) oublierPartage(CLE_DOIGT(id), e.id); } else poserPartage(CLE_DOIGT(id), v, { filet: 60000 }); };
   // Muette : la règle de toutes les cartes (`enPanne`, 05/10) — absente, `unavailable` ou `unknown`.
   const muette = enPanne(id, st);
-  // Muette, plus de doigt sur sa barre (la garde du lecteur, passe bis 3, point 1) : la valeur glissée s'oublie, même si la barre n'a pas pu le dire.
-  useEffect(() => { if (actif && muette && glisse != null) suivre(null); });
+  /* Sans courant (audit du 12/11, X4 ; ADR 0369) : son interrupteur est coupé — le relevé la montre éteinte, marquée de ce qui la
+   * coupe (`getHass`, alimentation.js). Ce n'est pas une panne : ni rouge, ni liseré, ni « À surveiller ». Mais rien n'y commande
+   * plus : l'ordre se perdrait. `{ par, nom }` : l'interrupteur, et son nom pour la phrase. */
+  const source = coupeePar(st);
+  const coupee = source ? { par: source, nom: cvName(S[source], source) } : null;
+  const inerte = muette || !!coupee;
+  // Muette ou sans courant, plus de doigt sur sa barre (la garde du lecteur, passe bis 3, point 1) : la valeur glissée s'oublie, même si la barre n'a pas pu le dire.
+  useEffect(() => { if (actif && inerte && glisse != null) suivre(null); });
   if (!actif) return null;
   const maintenant = Date.now();
   const nom = label || cvName(st, id);
-  const doigt = muette ? null : glisse;
+  const doigt = inerte ? null : glisse;
   // Le geste d'abord : la marche posée pour la carte ET la fiche (B2), que seul l'état demandé lève (B3).
   const poser = (allumer) => poserPartage(CLE_LUMIERE(id), !!allumer, { reel: st ? st.state : undefined, change: st ? st.last_changed : null, cible: allumer ? 'on' : 'off' });
   const poserBri = (pct) => poserPartage(CLE_LUMINOSITE(id), pct, { reel: lue, change: st ? st.last_updated : null, filet: 4000, cible: pct });
   // Le geste de la carte d'abord, puis celui de l'en-tête (« Tout éteindre ») ; « depuis » prend l'heure du geste (§ 4).
-  const voulu = ov != null ? ov : muette ? null : avanceDe(id, st, maintenant);
+  // Sans courant, aucun geste d'abord ne tient : un appui d'avant la coupure ne la rallume pas à l'écran.
+  const voulu = coupee ? null : ov != null ? ov : muette ? null : avanceDe(id, st, maintenant);
   const enAvance = !muette && voulu != null && voulu !== (st.state === 'on');
   const vu = enAvance ? { ...st, state: voulu ? 'on' : 'off', last_changed: new Date(maintenant).toISOString() } : st;
   const on = !muette && vu.state === 'on';
@@ -93,16 +103,24 @@ function useVueLumiere(hass, id, label = null, actif = true) {
    * `brightness`, le dernier niveau que le carnet garde — celui de son dernier allumage avec un niveau, le serveur le tient à
    * jour —, sinon RIEN : plus de « 100 % » inventé (audit du 19/10, B12 — la fiche dit « Allumée », la carte tait son chiffre). */
   const bri = !cap.variable ? null : doigt != null ? doigt : ovBri != null ? ovBri : !on ? null : lue != null ? lue : dernier && dernier.bri ? dernier.bri : null;
+  /* La phrase de la carte étroite (ADR 0380) : allumée, le pourcentage l'ouvre (`court`, phraseLumiere) ; éteinte sous le doigt, le
+   * chiffre seul, le temps du glisser — la lampe reste dite éteinte partout ailleurs. */
+  const dite = coupee ? null : phraseLumiere({ st: vu, fin: finMinuteur(minuteurs, id), maintenant, bri: on ? bri : null });
+  const phrase = dite && !on && doigt != null && bri != null ? { ...dite, court: bri + ' %' } : dite;
   /* L'encre de la plaque et du repère, et le dégradé de la barre (lumieres.js) : la teinte vraie rendue lisible sur le
    * fond VRAI de la glyphe — la plaque (0,22) posée sur le lavis de la carte, au plus 0,22 en haut, fois le réglage « Teinte »
    * du thème (`lav`) —, tirée du blanc de 4 000 K au plus froid ; en thème clair, la barre se peint de cette encre. */
   const { encre, degrade } = encreLumiere(on ? a : null, on ? dernier : null, { clair: estClair(), lavis: lav(lavisLumiere(100).haut) });
   return {
     // `dernierMode` : le mode que le carnet garde (`color_temp`, `xy`…) — la fiche d'une lampe éteinte s'ouvre dessus (B13).
-    nom, muette, on, variable: cap.variable, bri, dernier: dernier ? dernier.bri : null, dernierMode: dernier ? dernier.mode : null, couleurs, encre, degrade,
-    phrase: phraseLumiere({ st: vu, fin: finMinuteur(minuteurs, id), maintenant }),
-    commander: (allumer) => { poser(allumer); commanderService(H, id, id.indexOf('light.') === 0 ? 'light' : 'homeassistant', allumer ? 'turn_on' : 'turn_off', { entity_id: id }); },
-    regler: (pct) => { poserBri(pct); poser(true); commander(H, id, 'set_brightness', pct); },
+    nom, muette, coupee, on, variable: cap.variable, bri, dernier: dernier ? dernier.bri : null, dernierMode: dernier ? dernier.mode : null, couleurs, encre, degrade,
+    // Sans courant : « Hors tension · coupée par Plafonnier Salon ». `court` : la carte étroite n'a pas la place du nom — elle
+    // écrirait « coupée par … » —, elle dit « Hors tension » ; la fiche, elle, dit qui.
+    phrase: coupee ? { texte: tr('Hors tension · coupée par {nom}', { nom: coupee.nom }), court: tr('Hors tension'), panne: false, on: false }
+      : phrase,
+    // Sans courant, rien ne part et aucun geste d'abord ne se pose : la carte ne s'allume pas à l'écran pour s'éteindre six secondes plus tard.
+    commander: (allumer) => { if (coupee) return; poser(allumer); commanderService(H, id, id.indexOf('light.') === 0 ? 'light' : 'homeassistant', allumer ? 'turn_on' : 'turn_off', { entity_id: id }); },
+    regler: (pct) => { if (coupee) return; poserBri(pct); poser(true); commander(H, id, 'set_brightness', pct); },
     // La luminosité sous le doigt (`RmJauge`, `onGlisse`) : la valeur du geste, `null` quand le doigt s'en va ; `glisse` la dit (null hors geste).
     glisse: doigt, suivre,
     // Pour la fiche (§ 3.6, 3.7) : le `hass` vivant, les attributs, l'heure de l'état montré, et le geste d'abord d'un blanc ou d'une couleur.
@@ -120,8 +138,8 @@ function useVueLumiere(hass, id, label = null, actif = true) {
  * 15/10 : « pourquoi le % et en haut entre l'icone et le toggle […] alors que les
  * radiateur lui c'est bien placé ») ; sa taille et son écart se lisent dans la feuille
  * (`--o-chiffre-taille`, `--o-chiffre-ecart`), la valeur large pour repli — 25 px sur
- * une carte large, 21 sur une carte moyenne. Une carte étroite l'écrit en haut
- * (`ChiffreHaut`, passe téléphone), et la feuille n'en montre qu'un (`o-seul-large`). */
+ * une carte large, 21 sur une carte moyenne. Une carte étroite le tait (`o-seul-large`) :
+ * sa phrase l'écrit en tête (ADR 0380). */
 function ChiffreLumiere({ bri }) {
   return (
     <span aria-hidden="true" className="o-lumiere-chiffre o-seul-large"
@@ -141,7 +159,9 @@ function RoomLightCard({ id, hass, onOpen, label = null }) {
   const chiffre = (v.on || v.glisse != null) && v.bri != null;
   // La plaque : la teinte de la lampe allumée, le gris lisible éteinte, le gris éteint muette — la même sur les deux écritures.
   const fond = v.on ? 'rgba(' + c.rgb + ',.22)' : 'var(--o-s1)';
-  const encre = v.on ? v.encre : v.muette ? 'var(--o-text3)' : 'var(--o-text2)';
+  // Sans courant (ADR 0369) : la carte se tait comme une lampe muette — le gris éteint, la bascule et la barre inertes —, sans le rouge ni le liseré d'une panne.
+  const inerte = v.muette || !!v.coupee;
+  const encre = v.on ? v.encre : inerte ? 'var(--o-text3)' : 'var(--o-text2)';
   // Allumer ou éteindre, d'après l'état AFFICHÉ — `turn_on` / `turn_off`, jamais `toggle` (`v.commander`) ; le halo du geste d'abord.
   const basculer = () => { flash(c.col); v.commander(!v.on); };
   return (
@@ -158,18 +178,13 @@ function RoomLightCard({ id, hass, onOpen, label = null }) {
         background: v.on && LAVIS ? lavisCarte(c.rgb, lavis.haut, lavis.bas) : SURF_CARTE,
         border: LISERE }}>
       {onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(v.nom, chiffre ? v.bri + ' %' : null, v.phrase.texte)} />}
-      {/* La ligne du haut. Carte LARGE : la plaque à gauche, la bascule à droite, rien d'autre — le pourcentage a sa place plus bas, à côté
-        * du nom (retour du 15/10). Carte ÉTROITE (passe téléphone, T12) : la plaque EST l'interrupteur, et le pourcentage monte à droite. La
-        * feuille ne montre qu'une écriture. */}
+      {/* La ligne du haut, la même sur toutes les cartes : la plaque à gauche, un dessin — un appui y ouvre la fiche, comme partout sur la
+        * carte —, la bascule à droite, rien d'autre. Le pourcentage a sa place plus bas : à côté du nom sur une carte large (retour du
+        * 15/10), en tête de la phrase sur une carte étroite (sa décision du 20/11, ADR 0380 : « la personne voulait le toggle »). */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 4 }}>
-        <span className="o-seul-large" style={RM_ICO(fond, encre)}>
+        <span style={RM_ICO(fond, encre)}>
           <GlypheCarte id={id} size={17}><Fi i="bulb" size={17} /></GlypheCarte></span>
-        <PlaqueBascule on={v.on} nom={v.nom} fond={fond} encre={encre} inerte={v.muette} onToggle={basculer}>
-          <GlypheCarte id={id} size={17}><Fi i="bulb" size={17} /></GlypheCarte></PlaqueBascule>
-        {/* Sans variateur, la carte étroite n'a ni chiffre ni barre : la bascule y reste, à droite (ticket #43) — la plaque
-          * commande toujours, mais rien ne le disait. */}
-        <RmBascule className={v.variable ? 'o-seul-large' : undefined} on={v.on} nom={v.nom} onToggle={basculer} inerte={v.muette} />
-        {chiffre && <ChiffreHaut v={v.bri} u="%" />}
+        <RmBascule on={v.on} nom={v.nom} onToggle={basculer} inerte={inerte} couleur={RM_AMBRE} />
       </div>
       {/* La rangée du radiateur (`RM_MILIEU`) : le nom et la phrase à gauche, le pourcentage d'une carte large à droite, aligné sur leur bas.
         * Sur une carte étroite il se tait : le nom et la phrase prennent toute la largeur (`o-gab-nom`, `o-gab-phrase`) — la longueur de la
@@ -179,14 +194,17 @@ function RoomLightCard({ id, hass, onOpen, label = null }) {
         <div style={{ minWidth: 0 }}>
           <div className="o-gab-nom" style={{ ...RM_NAME, fontSize: 15 }}>{v.nom}</div>
           <div className="o-gab-phrase" data-encre={v.on && !v.phrase.panne ? '' : undefined}
-            style={{ ...RM_SUB, color: v.phrase.panne ? 'var(--o-bad)' : 'var(--o-text2)', '--o-n': Math.max(1, v.phrase.texte.length), '--o-encre': v.on ? v.encre : undefined }}>{v.phrase.texte}</div>
+            style={{ ...RM_SUB, color: v.phrase.panne ? 'var(--o-bad)' : 'var(--o-text2)', '--o-n': Math.max(1, (v.phrase.court || v.phrase.texte).length), '--o-encre': v.on ? v.encre : undefined }}>
+            {/* Deux écritures quand la phrase a une forme courte — une ampoule sans courant (ADR 0369), une lampe allumée et variable, le
+              * pourcentage en tête (ADR 0380) : la feuille n'en montre qu'une. */}
+            {v.phrase.court ? <><span className="o-seul-large">{v.phrase.texte}</span><span className="o-seul-etroit">{v.phrase.court}</span></> : v.phrase.texte}</div>
         </div>
         {chiffre && <ChiffreLumiere bri={v.bri} />}
       </div>
       {/* La barre, variable seulement, collée au pied : de 1 à 100 %, la teinte allumée, le repère gris éteinte (L7). */}
       {v.variable && (
         <div style={{ marginTop: 'auto', paddingTop: 'var(--o-pied-haut, 14px)' }}>
-          <RmJauge v={v.on ? v.bri : v.dernier} couleur={v.encre} grade={v.degrade} actif={!v.muette} min={1} eteinte={!v.on} zone={44} marge={0}
+          <RmJauge v={v.on ? v.bri : v.dernier} couleur={v.encre} grade={v.degrade} actif={!inerte} min={1} eteinte={!v.on} zone={44} marge={0}
             label={tr('Luminosité') + ' ' + v.nom} onCommit={v.regler} onGlisse={v.suivre} rafale />
         </div>
       )}

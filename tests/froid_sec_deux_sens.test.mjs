@@ -136,6 +136,11 @@ test('la sensation et les blancs ne lisent plus la clé d’un mode', () => {
     'des noms de blancs, tous traduits');
   // `tr('Froid')` et `tr('Sec')` ne servent plus qu'aux modes, une fois chacun.
   const appels = (k) => SRC.split("tr('" + k + "')").length - 1;
-  assert.equal(appels('Froid'), 1, 'tr(Froid) sert de nouveau un autre sens que le mode');
-  assert.equal(appels('Sec'), 1, 'tr(Sec) sert de nouveau un autre sens que le mode');
+  /* ASSERTION MODIFIÉE (audit du 12/11, lot 4, E19) : le journal d'un thermostat dit ses modes avec les mots de sa carte
+   * (`motModeJournal`, historique.jsx, recopié de `motModeClimat`) — deux tables de MODES, et rien d'autre. */
+  assert.equal(appels('Froid'), 2, 'tr(Froid) sert de nouveau un autre sens que le mode');
+  assert.equal(appels('Sec'), 2, 'tr(Sec) sert de nouveau un autre sens que le mode');
+  const journal = lire('src', 'historique.jsx');
+  const table = journal.slice(journal.indexOf('function motModeJournal('), journal.indexOf('\n}\n', journal.indexOf('function motModeJournal(')));
+  assert.ok(table.includes("cool: tr('Froid')") && table.includes("dry: tr('Sec')"), 'le journal : des modes');
 });

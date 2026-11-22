@@ -55,6 +55,7 @@ import { VersionsPrecedentes } from './versions.jsx';
 import { weatherEntity } from '../wxutil.jsx';
 import { lireQualiteCiel, ecrireQualiteCiel, niveauCielIci } from '../wxpresets.js';
 import { CLE_VERRE, lireVerre, verreMesure, poserVerre } from '../verre.js';
+import { lireCalme, ecrireCalme } from '../calme.js';
 import { CLE_NUIT, CLE_ASSOMBRIR, lireNuit, poserNuit, suivreNuit, soleilCouche } from '../nuitecran.js';
 import { coursSoleil } from '../soleilcalc.js';
 import { tr, trN, locale, choixLangue, languesDisponibles, nomProfil, comparerTextes } from '../i18n.js';
@@ -66,6 +67,7 @@ import { uniteTemp, wattsDe } from '../unites.js';
 import { CarteTel, LignesTel, LigneTel, ChoixTel, BasculeTel, btnTel, lienTel, pasTel } from './partel.jsx';
 import { Panneau, Ligne, Pastille, GrilleCartes, CarteGens, CAPITALES, MONO, FILET, btnPrimaire, btnSecondaire, btnDiscret, btnDanger } from './parcommun.jsx';
 import { useTailleTexte } from '../tailletexte.js';
+import { accepteSauvegarde, donneesInstall } from '../miseajour.js';
 
 /* « Verre des cartes » : l'écriture, ici et pas dans verre.js — le démarrage
  * n'a besoin que de lire (ADR 0284). La classe suit sur-le-champ. Exportée
@@ -243,25 +245,22 @@ function installationReelle() {
  * Evaluee a l'import, cette liste figeait ses libelles dans la langue du
  * demarrage. C'est ce qui obligeait a recharger la page apres un changement de
  * langue. Appelee au rendu, elle se dit dans la langue du moment. */
-const PRESET_META = () => [
+export const PRESET_META = () => [
   { id: '', name: 'Loggia', desc: tr('Thème par défaut'), cols: ['#4f8cff', '#0b101b', '#6ea8ff'] },
-  { id: 'neumorphix', name: 'Neumorphix', desc: 'Doux, en relief', cols: ['#6c7ae0', '#1e2128', '#5de0d8'] },
-  { id: 'google', name: 'Google', desc: tr('Material épuré'), cols: ['#1a73e8', '#171717', '#8ab4f8'] },
-  { id: 'ios', name: 'iOS', desc: 'Apple, arrondi', cols: ['#ff9409', '#0d0d10', '#ff9f09'] },
+  { id: 'neumorphix', name: 'Neumorphix', desc: 'Doux, en relief', cols: ['#6c7ae0', '#1e2128', '#5de0d8'], opaque: true },
+  { id: 'google', name: 'Google', desc: tr('Material épuré'), cols: ['#1a73e8', '#171717', '#8ab4f8'], opaque: true },
+  { id: 'ios', name: 'iOS', desc: 'Apple, arrondi', cols: ['#ff9409', '#2c2c2e', '#ff9f09'], opaque: true },
   { id: 'frosted', name: 'Frosted Glass', desc: tr('Verre dépoli, flou'), cols: ['#6a74d3', '#1a2540', '#bcc8f0'] },
-  { id: 'onedark', name: 'One Dark Pro', desc: "L'esprit Atom", cols: ['#61afef', '#282c34', '#98c379'] },
-  { id: 'dracula', name: 'Dracula', desc: 'Violet vampirique', cols: ['#bd93f9', '#282a36', '#ff79c6'] },
-  { id: 'github', name: 'GitHub Dark', desc: tr('Sobre, façon GitHub'), cols: ['#58a6ff', '#0d1117', '#3fb950'] },
-  { id: 'tokyo', name: 'Tokyo Night', desc: tr('Néon nocturne'), cols: ['#7aa2f7', '#1a1b26', '#bb9af7'] },
-  { id: 'material', name: 'Material Theme', desc: tr('Océan Material'), cols: ['#80cbc4', '#263238', '#82aaff'] },
-  { id: 'nightowl', name: 'Night Owl', desc: 'Nuit profonde', cols: ['#82aaff', '#011627', '#c792ea'] },
-  { id: 'lavande', name: 'Lavande', desc: 'Charcoal, lavande douce', cols: ['#c3b5e6', '#2b2b2f', '#d6cdea'] },
-  { id: 'plum', name: 'Plum Wine', desc: tr('Prune, rose poudré'), cols: ['#eda4b6', '#341624', '#f2c6cf'] },
+  { id: 'onedark', name: 'One Dark Pro', desc: "L'esprit Atom", cols: ['#61afef', '#282c34', '#98c379'], opaque: true },
+  { id: 'dracula', name: 'Dracula', desc: 'Violet vampirique', cols: ['#bd93f9', '#282a36', '#ff79c6'], opaque: true },
+  { id: 'github', name: 'GitHub', desc: tr('Sobre, façon GitHub'), cols: ['#4493f8', '#0d1117', '#3fb950'], opaque: true },
+  { id: 'tokyo', name: 'Tokyo Night', desc: tr('Néon nocturne'), cols: ['#7aa2f7', '#1a1b26', '#bb9af7'], opaque: true },
+  { id: 'material', name: 'Material Theme', desc: tr('Océan Material'), cols: ['#009688', '#263238', '#80cbc4'], opaque: true },
+  { id: 'nightowl', name: 'Night Owl', desc: 'Nuit profonde', cols: ['#82aaff', '#011627', '#c792ea'], opaque: true },
   { id: 'atrium', name: 'Atrium', desc: tr('A plat, sans ombre'), cols: ['#5b8cff', '#050609', '#2dd4bf'] },
-  { id: 'projekt', name: 'The Projekt', desc: tr('Nuit bleue, lumière froide'), cols: ['#3ca2d9', '#020d12', '#bee8ff'] },
+  { id: 'prisme', name: 'Prisme', desc: tr('Verre, halo, tonal'), cols: ['#94bdff', '#05070d', '#3ddc97'] },
   { id: 'saphir', name: 'Saphir', desc: tr('Bleu roi sur nuit profonde'), cols: ['#24428f', '#02060a', '#63a7d4'] },
   { id: 'acier', name: 'Acier', desc: tr('Gris bleutés, sobre'), cols: ['#4e6a83', '#10161c', '#b7c6d3'] },
-  { id: 'givre', name: 'Givre', desc: tr("Bleus d'hiver, lumineux"), cols: ['#4d79a8', '#223a5e', '#d0e1f2'] },
 ];
 // Luminance 0..1 d'une couleur (hex/rgb) → choix sombre/clair
 
@@ -586,7 +585,8 @@ function AlertesTele({ hass, tel = false, tailleTitre = 34 }) {
       // Lecture ratee : on ne montre PAS les valeurs par defaut — un reglage
       // touche ensuite aurait ecrase la vraie configuration de surete (audit 18/09).
       setCfg(null);
-      setMsg(tr('Réglages de sûreté indisponibles pour le moment — rien n’a été chargé, ne modifie rien ici avant de réessayer.'));
+      // Au vouvoiement (audit du 12/11) : le français de Loggia vouvoie, et la phrase tutoyait.
+      setMsg(tr('Réglages de sûreté indisponibles pour le moment — rien n’a été chargé, ne modifiez rien ici avant de réessayer.'));
     });
     // La liste des cibles possibles : les services notify de l'installation.
     h.callWS({ type: 'get_services' }).then(r => {
@@ -881,8 +881,9 @@ function AlertesTele({ hass, tel = false, tailleTitre = 34 }) {
 /* Les couleurs d'accent et les deux collections de thèmes : une seule liste,
  * pour l'ordinateur et le téléphone. */
 const ACCENTS = [['', 'Du thème'], ['#2dd4bf', 'Cyan'], ['#a78bfa', 'Violet'], ['#f5a524', 'Ambre'], ['#f87171', 'Rouge']];
-const NATIFS = ['', 'projekt', 'saphir', 'acier', 'givre', 'atrium', 'ios', 'google', 'neumorphix'];
-const COMMU = ['frosted', 'onedark', 'dracula', 'github', 'tokyo', 'nightowl', 'plum', 'material', 'lavande'];
+/* Givre, Plum Wine, Lavande et The Projekt sont retirés depuis le 19/11 (sa demande) : voir `THEMES_RETIRES` (theme.js). */
+const NATIFS = ['', 'prisme', 'saphir', 'acier', 'atrium', 'ios', 'google', 'neumorphix'];
+const COMMU = ['frosted', 'onedark', 'dracula', 'github', 'tokyo', 'nightowl', 'material'];
 
 function ParPreview({ themeMode, loggiaTheme = '', hass, userName = '', look = LOOK_DEF, collante = false, cartesSeules = false }) {
   // Les rayons suivent le reglage « Arrondi », pour montrer ce que donnent Net / Doux / Rond.
@@ -1012,7 +1013,7 @@ function ResetLoggiaBtn() {
     }
     window.location.reload();
   };
-  return <button disabled={enCours} onClick={() => { if (arm) doReset(); else setArm(true); }} style={{ ...btnDanger, flexShrink: 0, background: arm ? 'var(--o-bad)' : 'transparent', color: arm ? '#fff' : 'var(--o-bad)', transition: 'background .2s, color .2s' }}>{etape === 'raz' ? tr('Remise à zéro…') : enCours ? tr('Sauvegarde…') : arm ? tr('Confirmer ?') : tr('Remettre à zéro…')}</button>;
+  return <button disabled={enCours} onClick={() => { if (arm) doReset(); else setArm(true); }} style={{ ...btnDanger, flexShrink: 0, background: arm ? 'var(--o-bad-fond)' : 'transparent', color: arm ? '#fff' : 'var(--o-bad)', transition: 'background .2s, color .2s' }}>{etape === 'raz' ? tr('Remise à zéro…') : enCours ? tr('Sauvegarde…') : arm ? tr('Confirmer ?') : tr('Remettre à zéro…')}</button>;
 }
 
 /* Ce qu'un echec veut dire, dans la langue de l'ecran.
@@ -1234,6 +1235,10 @@ function AdminPinEditor({ hass, admin = false, users = [], tel = false }) {
 
 
 
+// « Supprimer » armé, dans la feuille d'un profil : le rouge plein de « Remettre à zéro… », par-dessus son dessin au repos.
+// `--o-bad-fond` : le rouge qui porte du blanc (4,7:1), posé par la garde de contraste — `--o-bad` n'y tenait que 3,3:1 en sombre.
+const SUPPR_ARME = { background: 'var(--o-bad-fond)', color: '#fff' };
+
 // Modale ajout / modification d'un utilisateur (admin uniquement).
 function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
   const [name, setName] = useState(user ? user.name : '');
@@ -1246,11 +1251,20 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
   /* Autorisations : rien de coché = AUCUNE, l'inverse des vues juste
    * au-dessus. Une restriction se lève par défaut, un pouvoir se donne. */
   const [droits, setDroits] = useState(() => (user && Array.isArray(user.droits) ? user.droits : []));
+  /* Lumières, Climat, Volets et Médias (audit du 12/11, B19) : de vraies vues, que l'Accueil ouvre — un profil restreint en
+   * était renvoyé aussitôt, sans que l'admin puisse les lui accorder. Les clés de `HIDDEN_VIEWS()`, pas les libellés de HA.
+   * Cocher Objets les couvre aussi (`vuePermise`, views.js) : ce sont Objets avec un filtre. */
   const VUES_CHOIX = [
     ['pieces', tr('Pièces')], ['scenes', tr('Scénarios')], ['objets', tr('Objets')],
+    ['lumieres', tr('Lumières')], ['climat', tr('Climat')], ['volets', tr('Volets')], ['medias', tr('Médias')],
     ['energie', tr('Énergie')], ['securite', tr('Sécurité')], ['systeme', tr('Système')],
     ...customViews.map(cv => ['cv:' + cv.id, cv.name]),
   ];
+  /* Supprimer un profil ne se rattrape pas (audit du 12/11, à sa demande) : ses favoris, son menu et son thème partent avec
+   * lui, et le bouton partait d'un seul appui. Deux appuis, comme la remise à zéro de Loggia : le premier arme le bouton, qui
+   * passe au rouge plein et dit « Confirmer ? » ; sans second appui, il se désarme seul au bout de 4 s. */
+  const [armeSuppr, setArmeSuppr] = useState(false);
+  useEffect(() => { if (!armeSuppr) return undefined; const t = setTimeout(() => setArmeSuppr(false), 4000); return () => clearTimeout(t); }, [armeSuppr]);
   const basculeVue = (vid) => setVues(v => v.indexOf(vid) >= 0 ? v.filter(x => x !== vid) : [...v, vid]);
   const basculeDroit = (did) => setDroits(d => d.indexOf(did) >= 0 ? d.filter(x => x !== did) : [...d, did]);
   /* Les cases cochées dont le COMPOSANT garde l'écriture (DROITS_ADMIN_HA,
@@ -1335,7 +1349,7 @@ function UserEditor({ user, onSave, onDelete, onClose, customViews = [] }) {
         )}
       </>)}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {onDelete && <button onClick={onDelete} style={{ padding: '11px 15px', borderRadius: 14, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.4)', color: 'var(--o-bad)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Supprimer')}</button>}
+        {onDelete && <button onClick={() => { if (armeSuppr) onDelete(); else setArmeSuppr(true); }} style={{ padding: '11px 15px', borderRadius: 14, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.4)', color: 'var(--o-bad)', fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'background .2s, color .2s', ...(armeSuppr ? SUPPR_ARME : null) }}>{armeSuppr ? tr('Confirmer ?') : tr('Supprimer')}</button>}
         <div style={{ flex: 1 }} />
         <button onClick={save} style={{ padding: '11px 18px', borderRadius: 14, background: 'var(--o-accent-fond)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{tr('Enregistrer')}</button>
       </div>
@@ -2201,7 +2215,10 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     return c;
   });
   const [urlTest, setUrlTest] = useState({});
-  const [themeTab, setThemeTab] = useState(() => (['', 'atrium', 'ios', 'google', 'neumorphix'].indexOf(loggiaTheme || '') >= 0 ? 'natifs' : 'commu'));
+  /* L'onglet de départ (audit du 12/11, B18) : la liste écrite ici avait oublié Projekt, Saphir, Acier et Givre, arrivés
+   * après elle — Apparence s'ouvrait sur « Communauté », sans aucune carte cochée. On lit `COMMU` ; tout le reste, thème
+   * inconnu compris, ouvre sur Natifs. */
+  const [themeTab, setThemeTab] = useState(() => (COMMU.indexOf(loggiaTheme || '') >= 0 ? 'commu' : 'natifs'));
   const writeHaCfg = (c) => { try { localStorage.setItem('loggia_haCfg', JSON.stringify(c)); } catch {} };
   const toggleFallback = () => setHaDraft(d => { const n = { ...d, fallback: !d.fallback }; writeHaCfg(n); return n; });
   const testUrl = (key) => {
@@ -2292,6 +2309,13 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
    * Léger ; sans mesure en cours, Plein, comme avant. */
   const [verre, setVerre] = useState(lireVerre);
   const choisirVerre = (q) => { ecrireVerre(q); setVerre(q); };
+  /* Le réglage n'a de sens que si le thème est en verre (audit des thèmes du 13/11, D4a) : un thème repris d'ailleurs qui se dit
+   * opaque (Dracula) n'a ni flou ni voile à alléger. « Suivre Home Assistant » reste en verre. La fiche du thème (`PRESET_META()`,
+   * `opaque`) le dit ici : Paramètres ne charge pas le moteur des thèmes ; un test tient les deux d'accord (`matiere` de theme.js). */
+  const themeEnVerre = haTheme === 'FOLLOW' || !(PRESET_META().find(x => x.id === (loggiaTheme || '')) || {}).opaque;
+  // « Animations réduites » (audit des thèmes du 13/11, V4) : un réglage de l'appareil, comme le verre.
+  const [calme, setCalme] = useState(lireCalme);
+  const basculerCalme = () => { ecrireCalme(!calme); setCalme(!calme); };
   const veIci = verreMesure();
   const descVerre = verre === 'plein' ? tr('Flou calculé en direct derrière chaque carte')
     : verre === 'leger' ? tr('Fond flouté une seule fois, pour les tablettes anciennes')
@@ -2317,8 +2341,12 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
   const updTimer = useRef(null);
   useEffect(() => () => clearTimeout(updTimer.current), []);
   const updCall = (svc, id) => commanderService(hass, id, 'update', svc, { entity_id: id });
+  /* Sauvegarder d'abord (chantier du 20/11, P13 ; ADR 0382) : mis par défaut, le filet qu'offre Home Assistant ; envoyé
+   * seulement aux mises à jour qui savent le faire (`donneesInstall`, miseajour.js). */
+  const [updSauver, setUpdSauver] = useState(true);
+  const updInstaller = (u) => commanderService(hass, u.id, 'update', 'install', donneesInstall(u, updSauver));
   const askInstall = (u) => {
-    if (updConfirm === u.id) { setUpdConfirm(null); clearTimeout(updTimer.current); setUpdBusy(b => ({ ...b, [u.id]: Date.now() })); updCall('install', u.id); return; }
+    if (updConfirm === u.id) { setUpdConfirm(null); clearTimeout(updTimer.current); setUpdBusy(b => ({ ...b, [u.id]: Date.now() })); updInstaller(u); return; }
     setUpdConfirm(u.id); clearTimeout(updTimer.current); updTimer.current = setTimeout(() => setUpdConfirm(null), 4000);
   };
   const upsAll = (hass && hass.states) ? Object.keys(hass.states).filter(e => e.indexOf('update.') === 0).map(id => {
@@ -2329,7 +2357,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     // « Home Assistant Core Update » : le mot de la fin ne dit rien de plus
     // que la section ou il s'affiche.
     const nom = String(at.friendly_name || at.title || id.replace('update.', '').replace(/_/g, ' ')).replace(/\s+(update|mise à jour)$/i, '');
-    return { id, name: nom, avail: s.state === 'on', installed: at.installed_version, latest: at.latest_version, prog, pic: at.entity_picture, plateforme: plateformeDe(id), notes: lienSur(at.release_url) };
+    return { id, name: nom, avail: s.state === 'on', installed: at.installed_version, latest: at.latest_version, prog, pic: at.entity_picture, plateforme: plateformeDe(id), notes: lienSur(at.release_url), sauvegarde: accepteSauvegarde(s) };
   }) : [];
   // purge l'optimiste dès que HA prend le relais (in_progress réel) ou que la MàJ est terminée (state off)
   const connecte = !!hass;
@@ -2539,13 +2567,14 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       sub: tr('Boutons sans fil Zigbee'), big: String(nbInter), unit: nbInter ? tr('réglés') : tr('à régler'), admin: true },
     { id: 'regles', name: tr('Règles'), ico: 'bolt', col: 'var(--o-cyan)', bg: 'rgba(var(--o-cyan-rgb),.14)',
       sub: tr('Ce que Loggia fait tout seul'), big: String(nbVolRegles), unit: nbVolRegles ? tr('règles actives') : tr('à régler'), admin: true },
-    { id: 'vues', name: tr('Vues'), ico: 'layout-fluid', col: 'var(--o-cyan)', bg: 'rgba(var(--o-cyan-rgb),.14)',
+    // « Menu » et « Écrans », les noms du rail, partout (audit du 12/11) : la carte disait « Vues » et « Appareils ».
+    { id: 'vues', name: tr('Menu'), ico: 'layout-fluid', col: 'var(--o-cyan)', bg: 'rgba(var(--o-cyan-rgb),.14)',
       // Compté, plus écrit en dur : « 11 + les vues perso » était juste le jour
       // où on l'a tapé, et se serait démenti à la vue suivante (plan, M4).
       sub: tr('Menu latéral et vues perso'), big: String(1 + VUES_PRINCIPALES.length + HIDDEN_VIEWS().length + customViews.length), unit: tr('vues disponibles'), admin: true },
     /* Les écrans de la maison, et la mise en page de celui-ci (ADR 0222) :
      * ouverte à tous — chacun règle SON écran. */
-    { id: 'appareils', name: tr('Appareils'), ico: 'screen', col: 'var(--o-accent-soft)', bg: 'rgba(var(--o-accent-rgb),.14)',
+    { id: 'appareils', name: tr('Écrans'), ico: 'screen', col: 'var(--o-accent-soft)', bg: 'rgba(var(--o-accent-rgb),.14)',
       sub: tr('Cet écran et sa mise en page'), big: String(Math.max(1, Object.keys(appareilsConnus()).length)), unit: tr('écrans connus'), admin: false, small: true },
     { id: 'about', name: tr('À propos'), ico: 'info', col: 'var(--o-text2)', bg: 'var(--o-s1)',
       sub: tr('React + Vite · servi par l’intégration'),
@@ -2582,7 +2611,8 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       droite: null,
     };
     if (tab === 'appareils') return { sous: tr('Chaque écran garde son rangement ; le contenu, lui, se synchronise.'), droite: null };
-    if (tab === 'apparence') return { sous: tr('Pour vous, sur ce type d’écran. Tout s’applique tout de suite.'), droite: null };
+    // Le Nuancier (20/11) : tous les éléments de base sous le thème choisi ici.
+    if (tab === 'apparence') return { sous: tr('Pour vous, sur ce type d’écran. Tout s’applique tout de suite.'), droite: onNav ? <button onClick={() => onNav('nuancier')} style={btnSecondaire}>{tr('Nuancier')}</button> : null };
     if (tab === 'inter') {
       const c = compteInter;
       const t = c ? trN(c.telecommandes, '{n} télécommande', '{n} télécommandes') : null;
@@ -2605,7 +2635,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
       const toutInstaller = () => {
         if (!updAllConfirm) { setUpdAllConfirm(true); setTimeout(() => setUpdAllConfirm(false), 4000); return; }
         setUpdAllConfirm(false);
-        ups.filter(u => u.avail && u.prog === false).forEach(u => { setUpdBusy(b => ({ ...b, [u.id]: Date.now() })); updCall('install', u.id); });
+        ups.filter(u => u.avail && u.prog === false).forEach(u => { setUpdBusy(b => ({ ...b, [u.id]: Date.now() })); updInstaller(u); });
       };
       return {
         sous: (upsAvail ? tr('{n} en attente', { n: upsAvail }) : tr('Tout est à jour')) + (majVerifie ? ' · ' + tr('vérifié {quand}', { quand: depuisMin((Date.now() - majVerifie) / 60000) }) : ''),
@@ -2713,7 +2743,8 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
     ['maison', tr('La maison'), ['regles', 'alertes', 'inter', 'auto']],
     ['systeme', tr('Le système'), ['connexion', 'maj', 'appareils', 'vues', 'about']],
   ].map(([id, l, ids]) => ({ id, l, secs: ids.map(s => SECTIONS.find(x => x.id === s)).filter(Boolean) })).filter(g => g.secs.length);
-  const NOM_RAIL = { regles: tr('Règles'), vues: tr('Menu'), appareils: tr('Écrans'), connexion: tr('Connexion') };
+  // « Menu » et « Écrans » sont désormais le nom même des sections (audit du 12/11) : le rail n'a plus à les redire.
+  const NOM_RAIL = { regles: tr('Règles'), connexion: tr('Connexion') };
   const resumeSection = (sec) => (sec.small ? sec.big : sec.big + ' ' + sec.unit) + ' · ' + sec.sub;
   const prenom = nomProfil((users[userIdx] || {}).name || '');
   /* « À regarder » : seulement ce que cette page sait VRAIMENT, et que l'on
@@ -2858,7 +2889,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           <ParPreview themeMode={themeMode} loggiaTheme={loggiaTheme} hass={hass} userName={(users[userIdx] || {}).name || ''} look={look} collante={avecRail && !railEtroit} />
 
           <Panneau titre={tr('Thème')}
-            desc={themeTab === 'natifs' ? tr('Les neuf de Loggia, chacun en clair et en foncé.') : tr('Neuf thèmes partagés par la communauté.')}
+            desc={themeTab === 'natifs' ? tr('Les thèmes de Loggia, chacun en clair et en foncé.') : tr('Des thèmes partagés par la communauté.')}
             droite={<Seg label={tr('Collection de thèmes')} value={themeTab} opts={[['natifs', tr('Natifs')], ['commu', tr('Communauté')]]} onPick={setThemeTab} />}>
             {/* Chaque thème se montre en petit écran : son fond, sa barre
               * latérale, deux cartes et son accent. Choisi, la carte passe en
@@ -2939,24 +2970,28 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <OptRow title={tr('Liserés')} desc={tr('Un trait d’un pixel autour des cartes.')}>
               <Tgl on={!!look.hairline} cb={() => onLook({ hairline: !look.hairline })} label={tr('Liserés')} />
             </OptRow>
+            {themeEnVerre && (
             <OptRow ici title={tr('Verre')} desc={descVerre}>
               <Seg label={tr('Verre des cartes')} value={verre}
                 opts={[['auto', tr('Auto')], ['plein', tr('Plein')], ['leger', tr('Léger')]]}
                 onPick={choisirVerre} />
-            </OptRow>
+            </OptRow>)}
             <OptRow title={tr("Fond d'écran")} desc={tr('Une photo à vous, sous les cartes.')}>
               <FondPhotoBtn actif={(look.fond || 'aucun') === 'photo'} fondV={look.fondV} onLook={onLook} />
             </OptRow>
           </Panneau>
 
           <Panneau ici titre={tr('Mouvement')} droite={<span style={discret}>{tr('Demande un peu de puissance')}</span>}>
-            <OptRow title={tr('Ciel animé')} desc={tr('Les nuages derrière la bannière d’accueil.')}>
+            <OptRow title={tr('Ciel animé')} desc={tr('Les nuages derrière la bannière d’accueil.') + ' ' + tr('Coupé, les icônes météo ne bougent plus non plus') + '.'}>
               <Tgl on={!!wxFx} cb={onToggleWxFx} label={tr('Effets météo animés')} />
             </OptRow>
             <OptRow retrait eteint={!wxFx} title={tr('Fluidité')} desc={descCiel}>
               <Seg label={tr('Ciel animé')} value={qualiteCiel}
                 opts={[['auto', tr('Auto')], ['leger', tr('Léger')], ['fixe', tr('Fixe')]]}
                 onPick={choisirQualiteCiel} />
+            </OptRow>
+            <OptRow title={tr('Animations réduites')} desc={tr('Fige les icônes en marche, les flux d’énergie et les pulsations. Les fenêtres s’ouvrent comme avant.')}>
+              <Tgl on={calme} cb={basculerCalme} label={tr('Animations réduites')} />
             </OptRow>
           </Panneau>
 
@@ -3080,7 +3115,8 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
             <LignesTel>
               <LigneTel titre={tr('Liserés')} desc={tr('Un filet d’un pixel autour des cartes')}><BasculeTel on={!!look.hairline} cb={() => onLook({ hairline: !look.hairline })} nom={tr('Liserés')} /></LigneTel>
               <LigneTel titre={tr('Ombres portées')} desc={tr('Le relief des cartes')}><BasculeTel on={!!look.shadow} cb={() => onLook({ shadow: !look.shadow })} nom={tr('Ombres portées')} /></LigneTel>
-              <LigneTel ici titre={tr('Ciel animé')} desc={tr('Les nuages de l’Accueil bougent lentement')}><BasculeTel on={!!wxFx} cb={onToggleWxFx} nom={tr('Effets météo animés')} /></LigneTel>
+              <LigneTel ici titre={tr('Ciel animé')} desc={tr('Les nuages de l’Accueil bougent lentement') + ' · ' + tr('Coupé, les icônes météo ne bougent plus non plus')}><BasculeTel on={!!wxFx} cb={onToggleWxFx} nom={tr('Effets météo animés')} /></LigneTel>
+              <LigneTel ici titre={tr('Animations réduites')} desc={tr('Fige les icônes en marche, les flux d’énergie et les pulsations. Les fenêtres s’ouvrent comme avant.')}><BasculeTel on={calme} cb={basculerCalme} nom={tr('Animations réduites')} /></LigneTel>
             </LignesTel>
           </CarteTel>
 
@@ -3113,7 +3149,7 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           <CarteTel ici titre={tr('Effets')} desc={tr('Coût GPU modéré.')} gap={20}>
             <ChoixTel titre={tr('Ciel animé')} desc={wxFx ? descCiel : tr('Le ciel animé est coupé plus haut.')} value={qualiteCiel} eteint={!wxFx}
               opts={[['auto', tr('Auto')], ['leger', tr('Léger')], ['fixe', tr('Fixe')]]} onPick={choisirQualiteCiel} />
-            <ChoixTel titre={tr('Verre des cartes')} desc={descVerre} value={verre} opts={[['auto', tr('Auto')], ['plein', tr('Plein')], ['leger', tr('Léger')]]} onPick={choisirVerre} />
+            {themeEnVerre && <ChoixTel titre={tr('Verre des cartes')} desc={descVerre} value={verre} opts={[['auto', tr('Auto')], ['plein', tr('Plein')], ['leger', tr('Léger')]]} onPick={choisirVerre} />}
             <ChoixTel titre={tr('Nuit de l’écran')} desc={descNuit(nuit, hass)} value={nuit} opts={[['non', tr('Non')], ['soleil', tr('Soleil')]]} onPick={choisirNuit} />
             <ChoixTel titre={tr('Assombrir')} desc={tr('Un voile sur tout l’écran ; la photo de fond baisse aussi')} value={assombrir} eteint={!nuitOn}
               opts={[['peu', tr('Un peu')], ['moyen', tr('Moyen')], ['beaucoup', tr('Beaucoup')]]} onPick={choisirAssombrir} />
@@ -3478,6 +3514,11 @@ export function ParametresContent({ themeMode, loggiaTheme = '', haTheme, onMode
           background: arme ? 'var(--o-warn2)' : 'rgba(var(--o-accent-rgb),.14)', border: '1px solid ' + (arme ? 'var(--o-warn2)' : 'rgba(var(--o-accent-rgb),.5)'), color: arme ? '#fff' : 'var(--o-accent-soft)' });
         return (
         <Panneau>
+          {ups.some(u => u.avail && u.sauvegarde) && (
+            <Ligne titre={tr('Sauvegarder avant d’installer')} desc={tr('Home Assistant fait une sauvegarde avant chaque mise à jour qui le permet.')}>
+              <Tgl on={updSauver} cb={() => setUpdSauver(v => !v)} label={tr('Sauvegarder avant d’installer')} />
+            </Ligne>
+          )}
           {ups.length === 0
             ? <div style={{ padding: '28px 22px 24px', textAlign: 'center' }}>
                 <div style={{ width: 52, height: 52, borderRadius: '50%', margin: '0 auto 10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-ok-rgb),.14)' }}><Fi i="check" size={22} color="var(--o-ok)" /></div>

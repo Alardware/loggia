@@ -22,7 +22,8 @@ test('la carte piece : une ligne d’etat a priorite, dans ses deux variantes, s
   assert.ok(['ambiancePiece', 'ambiancesParPiece'].every(n => importsDe(src, './ambiance.js').has(n)), 'le module pur');
   const c = bloc('function PieceCard(', NL + '}');
   assert.ok(c.includes('idx = 0, ambiance = null })'), 'la carte recoit l’ambiance de sa piece');
-  const calcul = "const amb = lights ? ambiancePiece({ lumieres: n, lampes: lights.length, ...(ambiance || {}), co2: p.live && p.live.co2 }) : null;";
+  // ASSERTION MODIFIÉE (13/11, audit du 12/11, lot 2b, B12) : la ligne reçoit aussi le seuil de CO₂ de la pièce, sinon de la maison.
+  const calcul = "const amb = lights ? ambiancePiece({ lumieres: n, lampes: lights.length, ...(ambiance || {}), co2: p.live && p.live.co2, seuil: seuilPiece }) : null;";
   assert.equal(c.split(calcul).length - 1, 2, 'compacte et standard calculent la meme ligne (lumieres de la carte + ambiance + CO2 de la piece)');
   assert.ok(c.includes("const etat = amb ? amb.texte : '—';") && c.includes("color: amb ? amb.couleur : 'var(--o-text2)'"), 'compacte : le texte et sa couleur — le gris SECONDAIRE, lisible sur le lavis de la pièce');
   assert.ok(c.includes("{amb && amb.icone ? <Fi i={amb.icone} size={11} style={{ marginRight: 4 }} /> : null}{etat}"), 'compacte : le triangle devant un probleme');

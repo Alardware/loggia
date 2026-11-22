@@ -8,7 +8,7 @@
  */
 import { useState } from 'react';
 import { tr } from './i18n.js';
-import { Fi, ListeChoix } from './ui.jsx';
+import { Fi, ListeChoix, DESSIN_CROIX, CROIX } from './ui.jsx';
 import {
   champsDepuisEvenement, datesEvenement, finApresDebut, runPlan, actionCtx,
   planAction as actionsPlan,
@@ -90,10 +90,8 @@ export function NouvelEvenement({ hass, cals, jour, evenement = null, onFait, on
     <div style={{ marginBottom: 14, padding: 13, borderRadius: 16, background: 'var(--o-s1)', display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span style={{ flex: 1, fontSize: 13, fontWeight: 800 }}>{edition ? tr('Modifier l’événement') : tr('Nouvel événement')}</span>
-        <button onClick={onClose} aria-label={tr('Fermer')}
-          style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', background: 'var(--o-s2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Fi i="cross" size={12} />
-        </button>
+        {/* Le dessin de la croix commune (lot 5c, ADR 0374) ; le fond d'un cran plus clair, pour se lire SUR ce panneau. */}
+        <button onClick={onClose} aria-label={tr('Fermer')} className="o-doigt" style={{ ...DESSIN_CROIX, background: 'var(--o-s2)' }}>{CROIX}</button>
       </div>
 
       <div>

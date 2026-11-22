@@ -1,6 +1,7 @@
 /* La vue d’une pièce, sa navigation, ses fiches de confort et du dehors.
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
-import { Suspense, useState, useEffect, useRef, cloneElement, useMemo } from 'react';
+import { Suspense, useState, useEffect, useLayoutEffect, useRef, cloneElement, useMemo } from 'react';
+import { bordsDefilement } from '../scenarios.js';
 import { useRangerLibre } from '../glisser.js';
 import { lazyRecharge } from '../recharge.js';
 import { LOGGIA_INDEX, normRooms, cfgVal, ctxLumieres } from '../state.js';
@@ -71,16 +72,17 @@ function outdoorTips(mode, temp, wind, isNight, rainProb, windAffiche, uniteV) {
   if (mode === 'rain') T.push(['raindrops', 'var(--o-cyan)', tr('Pluie prévue, prenez un parapluie')]);
   else if (rainProb != null && rainProb >= 50) T.push(['raindrops', 'var(--o-cyan)', tr('Risque de pluie ({p} %), parapluie conseillé', { p: rainProb })]);
   if (mode === 'storm') T.push(['bolt', 'var(--o-purple)', tr('Orage, limitez les sorties')]);
-  if (mode === 'snow') T.push(['snowflake', '#bcd6f0', tr('Neige, prudence sur la route')]);
+  if (mode === 'snow') T.push(['snowflake', 'var(--o-cold)', tr('Neige, prudence sur la route')]);
   if (temp != null) {
     if (temp <= 2) T.push(['snowflake', 'var(--o-cold)', tr('Risque de gel, couvrez-vous bien')]);
-    else if (temp < 10) T.push(['thermometer-half', '#38bdf8', tr('Frais dehors, prenez une veste')]);
+    else if (temp < 10) T.push(['thermometer-half', 'var(--o-cyan)', tr('Frais dehors, prenez une veste')]);
     else if (temp >= 30) T.push(['humidity', 'var(--o-orange)', tr('Forte chaleur, pensez à vous hydrater')]);
     else if (temp >= 25) T.push(['sun', 'var(--o-lampe)', tr('Il fait chaud, vêtements légers conseillés')]);
   }
   if ((mode === 'sun' || mode === 'partly') && !isNight && temp != null && temp >= 22) T.push(['sun', 'var(--o-gold)', tr('Grand soleil, crème solaire et lunettes')]);
-  if (wind != null && wind >= 30) T.push(['wind', '#9fb4d6', tr('Vent fort ({v} {u}), sois prudent', { v: Math.round(windAffiche != null ? windAffiche : wind), u: uniteV || 'km/h' })]);
-  if (isNight) T.push(['moon-stars', '#aeb9e0', tr('Nuit tombée, pensez à l’éclairage extérieur')]);
+  // « soyez prudent », au vouvoiement comme ses voisines (audit du 12/11) : la phrase tutoyait.
+  if (wind != null && wind >= 30) T.push(['wind', 'var(--o-text2)', tr('Vent fort ({v} {u}), soyez prudent', { v: Math.round(windAffiche != null ? windAffiche : wind), u: uniteV || 'km/h' })]);
+  if (isNight) T.push(['moon-stars', 'var(--o-purple)', tr('Nuit tombée, pensez à l’éclairage extérieur')]);
   if (!T.length) T.push(['sun', 'var(--o-ok)', tr('Conditions agréables, profitez du dehors')]);
   return T;
 }
@@ -217,13 +219,49 @@ function RoomNav({ room, onNav, hass }) {
     try { w.scrollTo({ left: Math.max(0, cible), behavior: REDUCE_MOTION ? 'auto' : 'smooth' }); }
     catch { w.scrollLeft = Math.max(0, cible); }
   }, [room]);
+  /* LES FLÈCHES DE LA RANGÉE, celles des scénarios de l'Accueil (audit du
+   * 12/11, lot 4, R5). À la souris, la barre défilait sans que rien ne le
+   * dise : la dernière puce était coupée net au bord. Elles ne viennent que
+   * quand la barre déborde, actives du côté où il reste des pièces, et se
+   * cachent au doigt (`o-qscenes-fleche`), qui glisse. Mesuré avant la
+   * peinture, comme là-bas : elles naissent avec la barre, rien ne saute. La
+   * largeur se relit au défilement, au redimensionnement de la fenêtre ET par
+   * `ResizeObserver` — qui seul ne suffit pas (taille émulée de l'aperçu). */
+  const [bords, setBords] = useState({ avant: false, apres: false });
+  const mesure = useRef(null);
+  useLayoutEffect(() => {
+    const w = wrapRef.current;
+    if (!w) return undefined;
+    const mesurer = () => setBords(b => { const n = bordsDefilement(w.scrollLeft, w.scrollWidth, w.clientWidth); return n.avant === b.avant && n.apres === b.apres ? b : n; });
+    mesure.current = mesurer;
+    mesurer();
+    w.addEventListener('scroll', mesurer, { passive: true });
+    window.addEventListener('resize', mesurer);
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(mesurer) : null;
+    if (ro) ro.observe(w);
+    return () => { mesure.current = null; w.removeEventListener('scroll', mesurer); window.removeEventListener('resize', mesurer); if (ro) ro.disconnect(); };
+  }, [list.length]);
+  const glisser = (sens) => {
+    const w = wrapRef.current;
+    if (!w) return;
+    const depart = w.scrollLeft, pas = sens * w.clientWidth * 0.85;
+    w.scrollBy({ left: pas, behavior: REDUCE_MOTION ? 'auto' : 'smooth' });
+    // Le même filet que la rangée de l'Accueil : un moteur qui n'anime pas y va d'un coup, et les bords se relisent.
+    setTimeout(() => {
+      if (wrapRef.current !== w) return;
+      if (Math.abs(w.scrollLeft - depart) < 2) w.scrollBy({ left: pas, behavior: 'auto' });
+      if (mesure.current) mesure.current();
+    }, 350);
+  };
+  const fleche = (active) => ({ width: 26, height: 26, flexShrink: 0, borderRadius: 9, border: 'none', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text1)', cursor: active ? 'pointer' : 'default', opacity: active ? 1 : .35 });
   /* La piece choisie n'etait qu'un fond d'accent (audit du 03/10) : un
    * lecteur d'ecran lisait une suite de boutons sans nom commun ni
    * position. Le groupe porte le nom tr('Pièces') (cle existante, aucune
    * traduction neuve, le polonais reste tel que relu) et la puce ouverte
    * `aria-current="page"` : chaque piece est une vue, `room:` + son nom. */
   return (
-    <div ref={wrapRef} className="o-room-scroll" role="group" aria-label={tr('Pièces')} style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2, minWidth: 0 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+    <div ref={wrapRef} className="o-room-scroll" role="group" aria-label={tr('Pièces')} style={{ flex: 1, display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2, minWidth: 0 }}>
       {list.map(r => {
         const on = r.name === room;
         return (
@@ -234,6 +272,11 @@ function RoomNav({ room, onNav, hass }) {
           </button>
         );
       })}
+    </div>
+    {(bords.avant || bords.apres) && (<>
+      <button type="button" className="o-qscenes-fleche" onClick={() => glisser(-1)} disabled={!bords.avant} aria-label={tr('Pièces précédentes')} title={tr('Pièces précédentes')} style={fleche(bords.avant)}><Fi i="angle-small-left" size={13} /></button>
+      <button type="button" className="o-qscenes-fleche" onClick={() => glisser(1)} disabled={!bords.apres} aria-label={tr('Pièces suivantes')} title={tr('Pièces suivantes')} style={fleche(bords.apres)}><Fi i="angle-small-right" size={13} /></button>
+    </>)}
     </div>
   );
 }

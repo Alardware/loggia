@@ -6,7 +6,7 @@
  */
 import { useState } from 'react';
 import { tr } from './i18n.js';
-import { Fi, ListeChoix } from './ui.jsx';
+import { ListeChoix, DESSIN_CROIX, CROIX } from './ui.jsx';
 
 /**
  * Le panneau qu'ouvre le « + » de la maquette. Même air que celui d'un
@@ -54,10 +54,8 @@ export default function NouveauRappel({ listes = [], onAjouter = null, onClose =
     <div style={{ marginBottom: 12, padding: 13, borderRadius: 16, background: 'var(--o-s1)', display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span style={{ flex: 1, fontSize: 13, fontWeight: 800 }}>{tr('Nouveau rappel')}</span>
-        <button onClick={onClose} aria-label={tr('Fermer')}
-          style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', background: 'var(--o-s2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Fi i="cross" size={12} />
-        </button>
+        {/* Le dessin de la croix commune (lot 5c, ADR 0374) ; le fond d'un cran plus clair, pour se lire SUR ce panneau. */}
+        <button onClick={onClose} aria-label={tr('Fermer')} className="o-doigt" style={{ ...DESSIN_CROIX, background: 'var(--o-s2)' }}>{CROIX}</button>
       </div>
 
       <div>
@@ -89,8 +87,9 @@ export default function NouveauRappel({ listes = [], onAjouter = null, onClose =
 
       {erreur && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{erreur}</div>}
 
+      {/* Le blanc sur `--o-accent-fond`, fait pour le porter (audit du 12/11, lot 4, E25) : sur l'accent clair, 2,5 pour 1. */}
       <button onClick={valider} disabled={envoi}
-        style={{ minHeight: 44, borderRadius: 12, border: 'none', background: 'var(--o-accent)', color: '#fff', font: 'inherit', fontSize: 13, fontWeight: 800, cursor: envoi ? 'default' : 'pointer', opacity: envoi ? .6 : 1 }}>
+        style={{ minHeight: 44, borderRadius: 12, border: 'none', background: 'var(--o-accent-fond)', color: '#fff', font: 'inherit', fontSize: 13, fontWeight: 800, cursor: envoi ? 'default' : 'pointer', opacity: envoi ? .6 : 1 }}>
         {tr('Ajouter le rappel')}
       </button>
     </div>

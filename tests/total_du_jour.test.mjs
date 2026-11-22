@@ -115,7 +115,8 @@ test('l’aperçu ne lit plus l’état brut pour ce qui se compte par jour', ()
    * en `numKwh(EN.…)` ramènerait l'index entier. */
   // Et `minuitLocal`, le début de la courbe du jour d'une prise (chantier Prises, tâche 7).
   // ASSERTION MODIFIÉE (ADR 0274) : la vue Énergie, sortie du boot, importe elle-même ce qu'elle seule utilise.
-  assert.ok(APP.includes("import { minuitLocal } from './jourstat.js';") && APP.includes("import { compteurDuJour, useTotauxJour } from '../jourstat.js';"),
+  // ASSERTION MODIFIÉE (12/11, ADR 0347) : la vue importe aussi `totalDuJour`, qui lit l'état d'un compteur du jour muet sur sa remise à zéro.
+  assert.ok(APP.includes("import { minuitLocal } from './jourstat.js';") && APP.includes("import { compteurDuJour, useTotauxJour, totalDuJour } from '../jourstat.js';"),
     'App.jsx n’importe plus le lecteur du jour');
   // ASSERTION MODIFIÉE (30/10, G3-D3) : la production du jour de TOUS les onduleurs — chaque compteur par `kwhJour`.
   assert.ok(APP.includes("const prodJour = sommeLue(idsDe(EN, 'prodJour'), kwhJour);"), 'la production du jour');

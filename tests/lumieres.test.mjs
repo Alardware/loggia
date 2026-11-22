@@ -121,6 +121,18 @@ test('§ 4 : la phrase d’état, la première ligne qui s’applique', () => {
   assert.deepEqual(ph(ETAT('off'), fin), { texte: 'Éteinte', panne: false, on: false }, 'éteinte, le minuteur ne compte plus');
 });
 
+// TEST AJOUTÉ (sa décision du 20/11, ADR 0380) : la carte étroite a l'interrupteur en haut à droite ; le pourcentage ouvre sa phrase.
+test('ADR 0380 : allumée avec un pourcentage, la phrase a une forme courte — le chiffre en tête ; sans lui, rien ne change', () => {
+  const ph = (st, fin, bri) => L.phraseLumiere({ st, fin, maintenant: T, bri });
+  const fin = Date.parse('2026-10-14T21:10:00+02:00');
+  assert.deepEqual(ph(ETAT('on'), null, 45), { texte: 'Allumée depuis 18:05', court: '45 % · depuis 18:05', panne: false, on: true });
+  assert.deepEqual(ph(ETAT('on'), fin, 100), { texte: 'S’éteint à 21:10', court: '100 % · s’éteint à 21:10', panne: false, on: true });
+  assert.deepEqual(ph(ETAT('on', '2026-10-13T22:00:00+02:00'), null, 1), { texte: 'Allumée depuis hier', court: '1 % · depuis hier', panne: false, on: true });
+  assert.deepEqual(ph(ETAT('on'), null, null), { texte: 'Allumée depuis 18:05', panne: false, on: true }, 'sans pourcentage (un switch-lumière, une lampe sans `brightness`) : pas de forme courte');
+  assert.deepEqual(ph(ETAT('off'), null, 45), { texte: 'Éteinte', panne: false, on: false }, 'éteinte, rien');
+  assert.deepEqual(ph(ETAT('unavailable', '2026-10-14T14:20:00+02:00'), null, 45), { texte: 'Indisponible depuis 14:20', panne: true, on: false }, 'muette, rien');
+});
+
 test('la luminosité en pourcent', () => {
   assert.equal(L.luminosite({ brightness: 255 }), 100);
   assert.equal(L.luminosite({ brightness: 115 }), 45);
@@ -182,8 +194,11 @@ test('9 bis A, point 1 : la barre — la teinte vraie en thème sombre, l’encr
   assert.equal(L.encreLumiere(BLANC(6500), null, { clair: false }).degrade, L.couleursLumiere(vraie).degrade, 'sombre : le dégradé de la teinte vraie, comme avant');
   for (const [nom, a] of CAS_ENCRE) {
     const clair = L.encreLumiere(a, null, { clair: true });
-    assert.equal(clair.degrade, L.couleursLumiere(lireCouleur(clair.encre).slice(0, 3)).degrade, nom + ' : peinte depuis l’encre gardée');
-    // Le bout plein du remplissage est l'encre : il se voit sur la piste claire (la teinte vraie d'un blanc, à 1,1:1, ne s'y voyait pas).
+    /* ASSERTION MODIFIÉE (16/11, « la couleur de la barre en clair ça va pas », puis « Oui, les blancs aussi ») : la barre d'un BLANC ne se peint plus
+     * depuis l'encre (du beige au brun) — elle prend le dégradé de l'or, que la feuille peint de l'ambre de la bascule en thème clair. Une couleur garde le sien. */
+    assert.equal(clair.degrade, a.color_mode === 'color_temp' ? L.couleursLumiere(null).degrade : L.couleursLumiere(lireCouleur(clair.encre).slice(0, 3)).degrade,
+      nom + (a.color_mode === 'color_temp' ? ' : la barre de l’or, un blanc' : ' : peinte depuis l’encre gardée, une couleur'));
+    // L'encre — le repère au bout de la barre — se voit sur la piste claire (la teinte vraie d'un blanc, à 1,1:1, ne s'y voyait pas).
     // ASSERTION MODIFIÉE (chantier Lumières, 11 bis, R7) : le fond du repère est peint de la teinte de la carte (`teinteDeCarte`, plafonnée à 4 000 K en thème clair), non de la teinte vraie.
     assert.ok(contraste(lireCouleur(clair.encre).slice(0, 3), fondRepere(THEMES.clair, L.teinteDeCarte(a, null, true))) >= 3, nom + ' : le remplissage se voit sur la piste');
   }

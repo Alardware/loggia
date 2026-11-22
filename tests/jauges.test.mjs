@@ -122,5 +122,6 @@ test('une seule table : « Élevé » commence à 1 400 ppm partout', () => {
   assert.ok(!APP.includes("tr('Mauvais'), 'var(--o-bad)'"), 'plus de seconde échelle 800 / 1200 dans la carte « Qualité air »');
   const py = lire('custom_components', 'loggia', 'veilles.py');
   assert.ok(py.includes('"co2": {"actif": False, "seuil": ' + SEUIL_CO2 + ','), 'le défaut de la veille du serveur');
-  assert.ok(lire('src', 'views', 'veilles.jsx').includes('value={co2.seuil != null ? co2.seuil : SEUIL_CO2}'), 'l’écran des veilles');
+  // ASSERTION MODIFIÉE (13/11, audit du 12/11, lot 2a, B3) : le seuil se tape dans un `ChampNombre`, qui reçoit `valeur`.
+  assert.ok(lire('src', 'views', 'veilles.jsx').includes('valeur={co2.seuil != null ? co2.seuil : SEUIL_CO2}'), 'l’écran des veilles');
 });

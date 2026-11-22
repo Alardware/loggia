@@ -308,20 +308,22 @@ test('un thermostat, planning éteint : pas de puces de modes, sa consigne et sa
   // ASSERTION MODIFIÉE (cadre 3e) : la bascule s'appelle « En marche » (l'ancien « Chauffe »).
   assert.match(html, /role="switch" aria-checked="true" aria-label="En marche"/, 'sa marche');
   /* ASSERTION MODIFIÉE (« Celles de la maquette ») : « Chauffe » quitte le
-   * rouge des alertes pour l'orange de la chauffe. */
-  assert.match(html, /font-size:28px;[^"]*color:var\(--o-warn2\)[^"]*">Chauffe</, 'il chauffe : il le dit, en grand');
-  /* ASSERTION MODIFIÉE (cadre 3e) : dessous, la consigne qu'il vise — plus la
-   * phrase du planning éteint : la rangée « Planning » dit « Aucun ». */
-  assert.ok(html.includes('>Vers 20,5°<') && !html.includes('>Le planning de ce chauffage est éteint.<'));
-  // ASSERTION MODIFIÉE (cadre 3e) : la pièce, « 19,2 » et son « ° » à part.
-  assert.ok(html.includes('>19,2</span>'), 'il se mesure lui-même');
+   * rouge des alertes pour l'orange de la chauffe. ASSERTION MODIFIÉE (17/11) :
+   * il le dit dans la jauge, au-dessus de sa consigne. */
+  assert.match(html, /data-grand="" style="[^"]*color:var\(--o-warn2\)[^"]*">Chauffe</, 'il chauffe : il le dit');
+  /* ASSERTION MODIFIÉE (17/11) : la consigne se lit au milieu de la jauge ;
+   * dessous, qui commande — la rangée « Planning » dit « Aucun ». */
+  assert.ok(html.includes('>Manuel · planning désactivé<') && !html.includes('>Vers 20,5°<') && !html.includes('>Le planning de ce chauffage est éteint.<'));
+  // ASSERTION MODIFIÉE (17/11) : la pièce au-dessus de la jauge, « 19,2° ».
+  assert.ok(html.includes('>19,2°</span>'), 'il se mesure lui-même');
   assert.ok(!html.includes('Reprendre le planning') && !html.includes('data-rangee="maison"'), 'rien du planning');
   // Au planning : les puces des modes, et la consigne — une reprise en température ; plus de marche.
   const auPlanning = rendre({ ch: poele({ planning: true, mode: 'confort', source: 'planning', fin: '2026-10-12T22:00:00+02:00', puis: 'eco' }), sonde: null });
   assert.ok(puces(auPlanning) && auPlanning.includes('aria-label="Consigne : Plus"'));
   assert.ok(!auPlanning.includes('aria-label="En marche"'));
   // Le pas d'une reprise en température : celui de l'appareil, et rien à une borne (comme la carte).
-  assert.ok(SOURCE.includes('const vise = consigneVoisine(consigne, sens, a, uT);'));
+  // ASSERTION MODIFIÉE (17/11) : au pas que le moteur a appris, quand l'appareil n'en publie pas (`aPas`).
+  assert.ok(SOURCE.includes('const vise = consigneVoisine(consigne, sens, aPas, uT);'));
   assert.ok(SOURCE.includes('if (!p || !p.ok || p.data.temperature === consigne) return;'));
   // ASSERTION MODIFIÉE (30/10) : la consigne de la PIÈCE part, celle de l'appareil moins le décalage de son capteur.
   assert.ok(SOURCE.includes("auMoteur(messageMain(ch, { temperature: Math.round((versCelsius(p.data.temperature, uT) - decalageEn(ch, 'C')) * 10) / 10, fin: 'prochain' }), () => poserOvT(null));"),
@@ -348,7 +350,8 @@ test('une reprise en cours : sa fin, les puces pour la changer, et « Reprendre 
    * l'unité de la maison. ASSERTION MODIFIÉE (cadre 3b) : en grand, et la
    * phrase dessous. */
   const enDegres = rendre({ ch: poele({ planning: true, mode: null, source: 'main', fin: reprise.fin, puis: 'eco', reprise: { ...reprise, mode: null, temperature: 21.5 } }), sonde: null });
-  assert.ok(enDegres.includes('>21,5 °C<') && enDegres.includes('>À la main jusqu’à 21:00<'));
+  /* ASSERTION MODIFIÉE (17/11) : sur la jauge, la consigne au milieu, « Manuel » au-dessus (sa demande), la fin dessous. */
+  assert.ok(/data-grand="" style="[^"]*">Manuel</.test(enDegres) && enDegres.includes('>À la main jusqu’à 21:00<'));
   // Couverte par une fenêtre ouverte, la reprise reste là, et se rend.
   const sousFenetre = rendre({ ch: radiateur({ mode: 'arret', source: 'fenetre', fin: null, puis: null, fenetre_ouverte: true, reprise }) });
   assert.ok(sousFenetre.includes('>Fenêtre ouverte · arrêt automatique<') && sousFenetre.includes('Reprendre le planning'));
@@ -490,7 +493,8 @@ test('le moteur a raté son démarrage : la fiche le dit, et « − » descend d
   assert.ok(avertissements(html).includes('demarrage'));
   assert.ok(html.includes('>Le planning de chauffe n’a pas démarré : il ne commande rien. Redémarrez Home Assistant.<'));
   assert.ok(!avertissements(rendre({ ch: radiateur() })).includes('demarrage'), 'démarré : rien à dire');
-  assert.ok(SOURCE.includes("consigneVoisine(consigne, sens, a, uT) ?? consigne + sens * 0.5"), 'hors planning aussi, un vrai cran');
+  // ASSERTION MODIFIÉE (17/11) : le cran est calculé une fois (`vise`, au pas appris), pour les deux régimes.
+  assert.ok(SOURCE.includes('poserConsigne(auPlanning ? vise : vise ?? consigne + sens * 0.5);'), 'hors planning aussi, un vrai cran');
 });
 
 test('l’historique d’un thermostat passe par le serveur, résumé — et retombe sur history/period (audit du 19/10)', () => {
@@ -1036,7 +1040,8 @@ const climatisation = (o = {}) => poele({ cle: CLIM, entite: CLIM, nom: 'Climati
 
 test('un appareil qui sait refroidir, planning éteint : ses modes, ses préréglages, « Refroidit » — comme sa fiche d’avant', () => {
   const html = rendre({ ch: climatisation(), sonde: null, motHvac: motModeClimat }, maison({ states: [clim()] }));
-  assert.match(html, /font-size:28px;[^"]*color:var\(--o-cold\)[^"]*">Refroidit</, 'il refroidit : il le dit, en grand');
+  // ASSERTION MODIFIÉE (17/11) : il le dit dans la jauge, au-dessus de sa consigne.
+  assert.match(html, /data-grand="" style="[^"]*color:var\(--o-cold\)[^"]*">Refroidit</, 'il refroidit : il le dit');
   const modes = groupe(html, 'hvac');
   assert.equal(modes.libelle, 'Mode');
   assert.deepEqual(modes.puces.map(p => p.mot), ['Chauffage', 'Froid', 'Auto', 'Sec', 'Ventil', 'Arrêt'], 'les mots de la fiche d’avant');
@@ -1053,7 +1058,8 @@ test('un appareil qui sait refroidir, planning éteint : ses modes, ses prérég
   /* ASSERTION MODIFIÉE (01/11, ADR 0319) : sans les mots de Home Assistant (ce test ne les charge pas), un préréglage qui écrit un
    * ordre fil pilote se dit avec ceux de Loggia (`motPreset`, chauffageecran.js) — comme la fiche d'avant, désormais ; l'inconnu
    * (« boost ») reste tel que l'appareil l'écrit. */
-  assert.deepEqual(presets.puces.map(p => [p.mot, p.presse]), [['Éco', 'false'], ['Confort', 'true'], ['boost', 'false']]);
+  // ASSERTION MODIFIÉE (17/11) : l'inconnu prend une majuscule en tête (`motPreset`).
+  assert.deepEqual(presets.puces.map(p => [p.mot, p.presse]), [['Éco', 'false'], ['Confort', 'true'], ['Boost', 'false']]);
   /* Sa consigne et sa marche, comme avant ; pas de puces des modes du planning.
    * ASSERTIONS MODIFIÉES (cadre 3e) : la consigne s'écrit « 24,0° », la
    * bascule s'appelle « En marche ». */
@@ -1065,10 +1071,11 @@ test('un appareil qui sait refroidir, planning éteint : ses modes, ses prérég
   const p = rendre({ ch: poele(), sonde: null }, maison({ states: [poeleAPresets] }));
   assert.equal(groupe(p, 'hvac'), null);
   // ASSERTION MODIFIÉE (01/11, ADR 0319) : « comfort » se dit Confort ; les préréglages propres au poêle restent tels quels.
+  // ASSERTION MODIFIÉE (17/11) : une majuscule en tête — « dynamic » s'affichait en minuscules.
   assert.deepEqual(groupe(p, 'preset').puces.map(x => [x.mot, x.presse]),
-    [['turbo', 'false'], ['manual', 'true'], ['Confort', 'false'], ['auto', 'false'], ['overnight', 'false']]);
-  // ASSERTION MODIFIÉE (« Celles de la maquette ») : la chauffe à l'orange, plus au rouge.
-  assert.match(p, /font-size:28px;[^"]*color:var\(--o-warn2\)[^"]*">Chauffe</, 'témoin : il chauffe');
+    [['Turbo', 'false'], ['Manual', 'true'], ['Confort', 'false'], ['Auto', 'false'], ['Overnight', 'false']]);
+  // ASSERTION MODIFIÉE (« Celles de la maquette ») : la chauffe à l'orange, plus au rouge. (17/11) : dans la jauge.
+  assert.match(p, /data-grand="" style="[^"]*color:var\(--o-warn2\)[^"]*">Chauffe</, 'témoin : il chauffe');
   // Témoin : le poêle des autres tests, sans préréglage, n'a aucun groupe.
   assert.equal(groupe(rendre({ ch: poele(), sonde: null }), 'preset'), null);
 });
@@ -1148,6 +1155,13 @@ test('l’appareil qui refroidit, joué : l’ordre part à l’appareil ; au pl
 const declarations = (s) => Object.fromEntries(String(s).split(';').filter(Boolean).map(d => { const i = d.indexOf(':'); return [d.slice(0, i), d.slice(i + 1)]; }));
 // Le haut de l'Accueil : le mot en grand, son style, la phrase dessous et son encre.
 function grandDe(html) {
+  /* La jauge d'un thermostat (17/11) : son état au-dessus de la consigne, la phrase SOUS la jauge — les deux ne se suivent
+   * plus dans le HTML. Le reste, comme avant. */
+  if (html.includes('data-jauge=""')) {
+    const g = /<div data-grand="" style="([^"]*)">([^<]*)<\/div>/.exec(html);
+    const s = /<div data-sous="" style="([^"]*)">([^<]*)<\/div>/.exec(html);
+    return g ? { texte: g[2], style: declarations(g[1]), sous: s ? s[2] : null, encreSous: s ? declarations(s[1]).color : null } : null;
+  }
   const m = /<div data-grand=""(?: data-mode="[^"]*")? style="([^"]*)">([^<]*)<\/div>(?:<div data-sous="" style="([^"]*)">([^<]*)<\/div>)?/.exec(html);
   return m ? { texte: m[2], style: declarations(m[1]), sous: m[4] === undefined ? null : m[4], encreSous: m[3] ? declarations(m[3]).color : null } : null;
 }
@@ -1273,8 +1287,12 @@ test('la température de la pièce : 25 px / 800, un « ° » de 15 px décalé 
     const h = rendre({}, maison({ states: [st('sensor.chambre_temperature', rien, { unit_of_measurement: '°C' })] }));
     assert.ok(!h.includes('data-piece') && !h.includes('>Pièce<'), JSON.stringify(rien));
   }
-  // Un thermostat se mesure lui-même.
-  assert.ok(rendre({ ch: poele(), sonde: { id: POELE, attribut: 'current_temperature' } }).includes('>19,2</span><span style="font-size:15px;margin-top:2px">°<'));
+  /* Un thermostat se mesure lui-même. ASSERTION MODIFIÉE (17/11) : sa pièce se dit au-dessus de la jauge, centrée — « PIÈCE »
+   * en petites capitales, puis la mesure, 17 px / 800. */
+  assert.ok(rendre({ ch: poele(), sonde: { id: POELE, attribut: 'current_temperature' } }).includes(
+    '<div data-piece="" style="display:flex;align-items:baseline;justify-content:center;gap:6px;margin-bottom:2px">'
+    + '<span style="font-size:calc(10px * var(--o-texte, 1));font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--o-text3)">Pièce</span>'
+    + '<span style="font-size:17px;font-weight:800;letter-spacing:-.01em">19,2°</span></div>'));
 });
 
 test('une reprise : « Garder ce mode jusqu’à », ses fins en Puces dans le puits, « Reprendre le planning · Confort » au bleu doux — plus de menu ni de rouge', () => {
@@ -1580,19 +1598,22 @@ test('le réglage de la fenêtre refusé : l’avance se retire, le refus se dit
 test('un thermostat (3e), hors du planning : en grand ce qu’il fait, à sa couleur, et dessous ce qu’il vise', () => {
   const thermo = (attrs, etatHvac = 'heat') => grandDe(rendre({ ch: poele(), sonde: null }, maison({ states: [st(POELE, etatHvac, {
     hvac_modes: ['off', 'heat', 'cool'], temperature: 20.5, current_temperature: 19.2, min_temp: 5, max_temp: 35, target_temp_step: 0.5, ...attrs })] })));
+  /* ASSERTIONS MODIFIÉES (17/11) : la jauge dit la consigne au milieu — dessous, plus « Vers 20,5° », mais qui commande ; ce
+   * qu'il fait, en 13 px au-dessus de la consigne. */
+  const qui = 'Manuel · planning désactivé';
   const cas = [
-    [{ hvac_action: 'heating' }, 'heat', 'Chauffe', 'var(--o-warn2)', 'Vers 20,5°'],
-    [{ hvac_action: 'preheating' }, 'heat', 'Chauffe', 'var(--o-warn2)', 'Vers 20,5°'],
-    [{ hvac_action: 'cooling', temperature: 24, current_temperature: 26 }, 'cool', 'Refroidit', 'var(--o-cold)', 'Vers 24,0°'],
+    [{ hvac_action: 'heating' }, 'heat', 'Chauffe', 'var(--o-warn2)', qui],
+    [{ hvac_action: 'preheating' }, 'heat', 'Chauffe', 'var(--o-warn2)', qui],
+    [{ hvac_action: 'cooling', temperature: 24, current_temperature: 26 }, 'cool', 'Refroidit', 'var(--o-cold)', qui],
     [{ hvac_action: 'off' }, 'off', 'Éteint', 'var(--o-text2)', 'La consigne est gardée pour le rallumage'],
     [{ hvac_action: 'idle', current_temperature: 20.4 }, 'heat', 'Au repos', 'var(--o-text)', 'Consigne atteinte'],
     // « Consigne atteinte » se MESURE, comme sur la carte : à 16° pour 20,5, rien n'est atteint.
-    [{ hvac_action: 'idle', current_temperature: 16 }, 'heat', 'Au repos', 'var(--o-text)', null],
+    [{ hvac_action: 'idle', current_temperature: 16 }, 'heat', 'Au repos', 'var(--o-text)', qui],
   ];
   for (const [attrs, etatHvac, texte, encre, sous] of cas) {
     const g = thermo(attrs, etatHvac);
-    assert.deepEqual([g.texte, g.style.color, g.sous, g.encreSous], [texte, encre, sous, sous ? 'var(--o-text2)' : null], texte + ' ' + JSON.stringify(attrs));
-    assert.equal(g.style['font-size'], '28px');
+    assert.deepEqual([g.texte, g.style.color, g.sous, g.encreSous], [texte, encre, sous, 'var(--o-text2)'], texte + ' ' + JSON.stringify(attrs));
+    assert.equal(g.style['font-size'], '13px');
   }
   assert.ok(SOURCE.includes('consigneAtteinte(a.current_temperature, consigne, hvac, uT)'), 'la règle de mesure de la carte');
   // Au planning, le haut est celui du fil pilote : le mode, la phrase, la grille.
@@ -1603,26 +1624,28 @@ test('un thermostat (3e), hors du planning : en grand ce qu’il fait, à sa cou
 
 test('un thermostat (3e) : Consigne — − et + carrés de 44 px —, En marche, Planning, L’appareil', () => {
   const html = rendre({ ch: poele(), sonde: null });
-  assert.deepEqual(rangeesDe(html), ['consigne', 'marche', 'fenetre', 'planning', 'appareil']);
-  // La consigne : − et + carrés, arrondi 12, le gris doux, sans bordure, glyphes de 16 px ; la valeur 17 px / 800, 64 px au moins.
-  const c = /<div data-rangee="consigne" style="([^"]*)"><span style="display:block;font-size:14px;font-weight:700">Consigne<\/span><span style="display:inline-flex;align-items:center;gap:8px;flex-shrink:0"><button type="button" aria-label="Consigne : Moins" style="([^"]*)"><i aria-hidden="true" class="fi fi-rr-minus-small" style="font-size:16px;[^"]*"><\/i><\/button><span style="([^"]*)">20,5°<\/span><button type="button" aria-label="Consigne : Plus" style="([^"]*)"><i aria-hidden="true" class="fi fi-rr-plus-small" style="font-size:16px;/.exec(html);
-  assert.ok(c, 'la rangée « Consigne »');
-  assert.equal(declarations(c[1]).padding, '12px 14px 12px 18px');
-  for (const b of [c[2], c[4]]) {
+  /* ASSERTIONS MODIFIÉES (17/11, sa demande) : la rangée « Consigne » s'en va — la consigne se règle sur la JAUGE du haut,
+   * comme dans Home Assistant ; ses − / + ronds de 44 px gardent leurs noms et leur inertie. */
+  assert.deepEqual(rangeesDe(html), ['marche', 'fenetre', 'planning', 'appareil']);
+  const jg = /<div data-jauge="" style="[^"]*">[\s\S]*?<div data-consigne="" style="([^"]*)">20,5°<\/div><\/div><div style="[^"]*"><button type="button" aria-label="Consigne : Moins" style="([^"]*)"><i aria-hidden="true" class="fi fi-rr-minus-small" style="font-size:18px;[^"]*"><\/i><\/button><button type="button" aria-label="Consigne : Plus" style="([^"]*)"><i aria-hidden="true" class="fi fi-rr-plus-small" style="font-size:18px;/.exec(html);
+  assert.ok(jg, 'la jauge, sa consigne et ses − / +');
+  for (const b of [jg[2], jg[3]]) {
     const s = declarations(b);
-    assert.deepEqual([s.width, s.height, s['border-radius'], s.background, s.border, s.opacity], ['44px', '44px', '12px', 'var(--o-s1)', 'none', '1']);
+    assert.deepEqual([s.width, s.height, s['border-radius'], s.background, s.opacity], ['44px', '44px', '50%', 'transparent', '1']);
   }
-  const v = declarations(c[3]);
-  assert.deepEqual([v['min-width'], v['text-align'], v['font-size'], v['font-weight'], v.color], ['64px', 'center', '17px', '800', 'var(--o-text)']);
-  // Inertes à .4 à une borne ; la valeur au gris tertiaire quand il est éteint.
+  const v = declarations(jg[1]);
+  assert.deepEqual([v['font-size'], v['font-weight'], v.color], ['44px', '300', 'var(--o-text)']);
+  // L'arc est un curseur : nommé, ses bornes celles de l'appareil, la valeur dite.
+  assert.match(html, /<svg viewBox="0 0 240 212" role="slider" tabindex="0" aria-label="Consigne" aria-valuemin="5" aria-valuemax="35" aria-valuenow="20.5" aria-valuetext="20,5°"/);
+  // Inertes à .4 à une borne ; la consigne au gris tertiaire quand il est éteint.
   const borne = rendre({ ch: poele(), sonde: null }, maison({ states: [st(POELE, 'off', { hvac_modes: ['off', 'heat'], temperature: 35, min_temp: 5, max_temp: 35 })] }));
   assert.match(borne, /aria-label="Consigne : Plus" style="[^"]*opacity:0.4/);
   /* ASSERTION AJOUTÉE (relecture de la partie C) : inerte, le bouton reste
    * focalisable — `aria-disabled`, plus `disabled` : le focus ne tombe plus
    * sur <body> quand on atteint la borne. */
   assert.ok(/<button type="button" aria-disabled="true" aria-label="Consigne : Plus"/.test(borne) && !borne.includes('disabled=""'), 'aria-disabled, pas disabled');
-  assert.match(borne, /min-width:64px;[^"]*color:var\(--o-text3\)">35,0°</);
-  assert.ok(!SOURCE.includes('<PasAPas nom={tr(\'Consigne\')}'), 'la rangée « Consigne » garde son dessin local : PasAPas, partagé, ne change pas');
+  assert.match(borne, /data-consigne="" style="[^"]*color:var\(--o-text3\)[^"]*">35,0°</);
+  assert.ok(!SOURCE.includes('<PasAPas nom={tr(\'Consigne\')}'), 'la consigne garde son dessin local : PasAPas, partagé, ne change pas');
   // « En marche » : son sous-titre, la bascule — hors du planning seulement.
   assert.match(html, /<div data-rangee="marche" style="[^"]*padding:14px 18px[^"]*"><span style="min-width:0"><span style="display:block;font-size:14px;font-weight:700">En marche<\/span><span style="display:block;font-size:12px;font-weight:600;color:var\(--o-text2\);margin-top:2px">Coupe la zone sans toucher à la consigne<\/span><\/span><button type="button" role="switch" aria-checked="true" aria-label="En marche"/);
   // « Planning » : un bouton vers l'onglet ; « Aucun » sans semaine, « Éteint » planning éteint, « Actif » allumé.
@@ -1631,7 +1654,8 @@ test('un thermostat (3e) : Consigne — − et + carrés de 44 px —, En marche
   assert.equal(planning(rendre({ ch: poele({ semaine: SEMAINE }), sonde: null })), 'Éteint');
   const allume = rendre({ ch: poele({ planning: true, semaine: SEMAINE, mode: 'eco', source: 'planning', fin: '2026-10-12T23:00:00+02:00' }), sonde: null });
   assert.equal(planning(allume), 'Actif');
-  assert.deepEqual(rangeesDe(allume), ['consigne', 'prochain', 'fenetre', 'maison', 'planning', 'appareil'], 'au planning : plus de marche ; le prochain changement et la maison');
+  // ASSERTION MODIFIÉE (17/11) : la consigne vit dans la jauge, plus dans la liste.
+  assert.deepEqual(rangeesDe(allume), ['prochain', 'fenetre', 'maison', 'planning', 'appareil'], 'au planning : plus de marche ; le prochain changement et la maison');
   // En « Observer sans agir », la rangée le dit : le planning est là, il ne commande rien.
   assert.equal(planning(rendre({ ch: poele({ planning: true, semaine: SEMAINE }), etat: etat({ simulation: true }), sonde: null })), 'Observer sans agir');
   // Jouée : « Planning » ouvre son onglet.

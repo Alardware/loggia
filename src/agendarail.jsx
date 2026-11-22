@@ -84,11 +84,20 @@ export function lire(e, hass) {
   };
 }
 
+/* L'agenda sans événement, UN pour tout le module (audit du 12/11, lot 5b). Le repli `[]` écrit dans le composant naissait
+ * neuf à chaque rendu : les mémos qui en dépendent se recalculaient pour rien. Gelé : personne ne doit y ranger un
+ * événement — la carte et la feuille ne font que le lire (`filter`, `for…of`). */
+export const AUCUN_EVENEMENT = Object.freeze([]);
+
 /* ════════════ LA CARTE DU RAIL (1a / 2a) ════════════ */
 
 export function CarteAgenda({ hass = null, evenements = null, jourChoisi = null, onChoisirJour = null, onOuvrir = null, lever = null }) {
-  const evts = Array.isArray(evenements) ? evenements : [];
-  const base = useMemo(() => new Date(new Date().toDateString()), []);
+  const evts = Array.isArray(evenements) ? evenements : AUCUN_EVENEMENT;
+  /* Le jour de base suit la date (audit du 12/11, B14) : figé au montage, il restait sur la veille après minuit — bande et
+   * titre du 12 sur une tablette restée ouverte, « Rien de prévu ce jour-là » alors qu'aujourd'hui avait un rendez-vous.
+   * Le patron de `useAgendaAccueil` : `jourAuj` change à minuit, l'Accueil se redessine au moins chaque minute. */
+  const jourAuj = new Date().toDateString();
+  const base = useMemo(() => new Date(jourAuj), [jourAuj]);
   const jours = useMemo(() => joursAgenda(base), [base]);
   const compte = useMemo(() => comptesParJour(evts, jours), [evts, jours]);
   /* La carte ne montre que sept jours : un jour choisi AILLEURS — la feuille

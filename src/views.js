@@ -146,6 +146,29 @@ export function viewAvailability(ctx) {
   return out;
 }
 
+/** Les vues personnalisées lisibles d'une valeur de configuration : une liste, chacune avec son identifiant et son nom. */
+export function vuesPersoValides(v) {
+  return Array.isArray(v) ? v.filter(x => x && x.id && x.name) : [];
+}
+
+/* Les vues qui ne sont qu'Objets avec un filtre (`App.jsx` les rend par `ObjetsView`) : cocher Objets les couvre. */
+const VUES_FILTRE_OBJETS = ['lumieres', 'climat', 'volets', 'medias'];
+
+/** Un profil peut-il ouvrir la vue `vid` ? `vues` : le `Set` des vues cochées pour lui, ou `null` = tout est permis.
+ * Audit du 12/11, B19 : la garde de la racine et les deux menus l'écrivaient chacun à sa façon, et aucun ne connaissait
+ * Lumières, Climat, Volets ni Médias — un profil « Objets » qui touchait les lumières allumées sur l'Accueil en était
+ * renvoyé aussitôt. Accueil et Paramètres toujours ; une pièce suit Pièces ; les quatre vues filtrées suivent leur case OU
+ * Objets ; le planning des volets (`voletsplan`) suit Volets. */
+export function vuePermise(vid, vues) {
+  if (!vues) return true;
+  if (vid === 'accueil' || vid === 'parametres') return true;
+  const v = String(vid || '');
+  if (v.indexOf('room:') === 0) return vues.has('pieces');
+  if (VUES_FILTRE_OBJETS.indexOf(v) >= 0) return vues.has(v) || vues.has('objets');
+  if (v === 'voletsplan') return vuePermise('volets', vues);
+  return vues.has(v);
+}
+
 /** Lecture tolerante : inconnu = disponible. */
 export function isViewAvailable(views, vid) {
   const v = views && views[vid];

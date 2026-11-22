@@ -18,7 +18,7 @@ import { tr } from '../i18n.js';
 import { useHass, HASS_POLL_MS, Segment, lavisCarte, SURF_CARTE } from '../app/noyau.jsx';
 import { zoneDe } from '../appareils/fiches.jsx';
 import { useSeconde } from '../cartescustom/cartes.jsx';
-import { RM_BTN, RmBascule, RmJauge, RM_CARD, RM_ICO, GlypheCarte, emChiffre, ChiffreHaut, RM_NAME, RM_SUB } from './briques.jsx';
+import { RM_BTN, RmBascule, RmJauge, RM_CARD, RM_SOUS_PLAQUE, RM_ICO, GlypheCarte, emChiffre, ChiffreHaut, RM_NAME, RM_SUB } from './briques.jsx';
 import { hassQuiConnait } from './mesure.jsx';
 
 /* Le mode enfant sur la carte d'un lecteur (chantier Mode enfant, E15 à E17 ; passe bis du 17/10, point 14) : la pastille, le glyphe du
@@ -172,8 +172,11 @@ function ProgressionLecteur({ l, playing }) {
   useSeconde(playing);
   const pos = posLecteur(l, Date.now());
   const pct = l.dur ? Math.min(100, Math.max(0, (pos || 0) / l.dur * 100)) : 0;
+  /* 4 PX AU-DESSUS, PLUS 8 (audit du 12/11). Le nom d'un média descend de 4 px pour tomber à la hauteur de celui des autres cartes
+   * (`RM_SOUS_PLAQUE`) ; avec la barre à 8, le pied d'une TV ou d'une enceinte en lecture finissait 4 px sous celui de ses voisines
+   * (172 px au lieu de 168, mesuré dans la démo). La barre rend ces 4 px : elle ne bouge pas, le pied non plus. */
   return (
-    <div className="o-seul-large" aria-hidden="true" data-progression="" style={{ position: 'relative', height: 3, marginTop: 8, borderRadius: 2, background: 'var(--o-s1)', overflow: 'hidden', flexShrink: 0 }}>
+    <div className="o-seul-large" aria-hidden="true" data-progression="" style={{ position: 'relative', height: 3, marginTop: 4, borderRadius: 2, background: 'var(--o-s1)', overflow: 'hidden', flexShrink: 0 }}>
       <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: pct + '%', borderRadius: 2, background: 'var(--o-text2)' }} />
     </div>
   );
@@ -275,7 +278,8 @@ function RoomMediaCard({ id, hass, onOpen, label = null }) {
           : !v.indispo && temps ? (temps.reste_s != null && temps.reste_s >= 3600 ? <ChiffreHaut v={dureeTexte(temps.reste_s / 60)} /> : <ChiffreHaut v={Math.round((temps.reste_s || 0) / 60)} u="min" />)
           : v.on && !v.indispo && v.vol != null && (v.muted ? <ChiffreHaut v={tr('Muet')} /> : <ChiffreHaut v={v.vol} u="%" />)}
       </div>
-      <div style={{ marginTop: 'var(--o-milieu-haut, 10px)', minWidth: 0 }}>
+      {/* 14 px sous la plaque, comme la lumière (audit du 12/11, `RM_SOUS_PLAQUE`) : à 10, le nom d'une TV tombait 4 px plus haut. */}
+      <div style={{ marginTop: RM_SOUS_PLAQUE, minWidth: 0 }}>
         <div className="o-gab-nom" style={{ ...RM_NAME, fontSize: 15 }}>{v.nom}</div>
         <div className="o-gab-phrase" style={{ ...RM_SUB, color: v.phrase.encre, '--o-n': Math.max(1, v.phrase.texte.length) }}>{v.phrase.texte}</div>
       </div>

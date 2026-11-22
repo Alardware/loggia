@@ -10,7 +10,8 @@
  * PUR : ni React, ni Home Assistant. La fiche et la carte lisent ici ce que la
  * fin fera, l'entité qui porte le minuteur, et leurs phrases.
  */
-import { tr, locale } from './i18n.js';
+import { tr } from './i18n.js';
+import { heureCourte } from './format.js';
 import { insecable, decompte } from './prises.js';
 import { BITS } from './lecteur.js';
 
@@ -60,9 +61,9 @@ export function minuteurEnCours(finDe, l) {
   return null;
 }
 
-const heure = (fin) => new Date(fin).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+const heure = heureCourte;
 /** « S’éteint à 22:40 », « S’arrête à 22:40 ». */
-export const finTexte = (geste, fin) => (geste === 'arreter' ? tr('S’arrête à {h}', { h: heure(fin) }) : tr('S’éteint à {h}', { h: heure(fin) }));
+const finTexte = (geste, fin) => (geste === 'arreter' ? tr('S’arrête à {h}', { h: heure(fin) }) : tr('S’éteint à {h}', { h: heure(fin) }));
 
 /** La phrase de la fiche pendant qu'il tourne : « S’éteint à 22:40 · dans 29 min 41 s » — le décompte des lampes et des prises. */
 export function phraseMinuteurMedia(geste, fin, maintenant = Date.now()) {

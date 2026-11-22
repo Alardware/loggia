@@ -202,7 +202,7 @@ automation:
 - **Les commandes passent par Home Assistant**, avec ses autorisations :
   un compte ne peut rien faire dans Loggia qu'il ne puisse déjà faire ailleurs.
   Ce qui modifie la configuration de la maison est réservé aux
-  administrateurs (`require_admin`, sur les vingt commandes WebSocket
+  administrateurs (`require_admin`, sur les vingt-et-une commandes WebSocket
   concernées).
 - **Le code administrateur est haché** par l'intégration et n'est jamais
   renvoyé à un écran. Les essais ratés sont limités.
@@ -234,7 +234,9 @@ chargement : `mode=auto|light|dark`, `lang=<le code d'une des sept langues>`, `t
 (c'est par lui que l'audit de contraste rejoue chaque variante), `vue=<identifiant>` ou `vue=room:<pièce>`,
 `fiche=<entity_id>` (ouvre la fiche d'un appareil).
 Les décisions du projet sont dans `docs/decisions/`, une par fichier, avec leur
-contexte.
+contexte. Les règles de l'interface (cartes, popups, thèmes, textes) sont
+réunies dans [docs/guide-ux.md](docs/guide-ux.md) : à lire avant de toucher à
+un écran.
 
 ## Soutenir
 
@@ -245,8 +247,9 @@ aide à le faire vivre :
 
 ## Crédits
 
-Polices Manrope (Mikhail Sharanda) et Newsreader (Production Type), sous SIL
-Open Font License 1.1. Icônes de l'interface : [UIcons par Flaticon](https://www.flaticon.com/uicons).
+Polices Manrope (Mikhail Sharanda), Newsreader (Production Type), Outfit (The
+Outfit Project Authors), Roboto (The Roboto Project Authors) et Mona Sans (The
+Mona Sans Project Authors, GitHub), sous SIL Open Font License 1.1. Icônes de l'interface : [UIcons par Flaticon](https://www.flaticon.com/uicons).
 Icônes météo : Meteocons, de Bas Milius (`@bybas/weather-icons`), sous licence
 MIT. React et three.js, sous licence MIT ; Leaflet, pour la carte, sous licence
 BSD à deux clauses. Tout cela est embarqué : rien n'est chargé depuis ces sites.

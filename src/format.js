@@ -89,6 +89,44 @@ export function nombre(v, decimales = 0, minimum = decimales) {
  * Un horodatage complet (date comprise, donc au-delà d'une journée de
  * secondes) se lit tel quel. `null` sans départ connu.
  */
+/* Le symbole d'une monnaie, quand Home Assistant en donne le code.
+ *
+ * Un capteur de coût porte l'unité que Home Assistant lui a mise : « EUR », le
+ * code de la monnaie de l'installation. Loggia l'écrivait telle quelle, à côté
+ * de ses propres montants en « € » : « 2,62 EUR » et « 16,73 € » sur la même
+ * carte (audit du 12/11). Un code connu rend son symbole, y compris en tête
+ * d'une unité composée (« EUR/kWh ») ; tout le reste passe tel quel — une
+ * monnaie qu'on ne connaît pas garde son code, qui se lit. */
+const SYMBOLES_MONNAIE = { EUR: '€', USD: '$', GBP: '£', JPY: '¥', PLN: 'zł' };
+export function symboleMonnaie(unite) {
+  const u = String(unite == null ? '' : unite).trim();
+  const m = /^([A-Z]{3})(?=$|\/)/.exec(u);
+  const s = m ? SYMBOLES_MONNAIE[m[1]] : null;
+  return s ? s + u.slice(3) : u;
+}
+
+/** Une durée en minutes, lisible : « 45 min », « 1 h », « 2 h 15 », « 1 h 01 »
+ * (lot 5b de l'audit du 12/11). Trois copies au caractère près la portaient —
+ * `dureeLisible` (robots.js), `dureePrise` (prises.js), `dureeTexte`
+ * (enfantetat.js) — qui gardent leur nom et passent ici. Arrondie à la minute,
+ * jamais négative : ce qui ne se lit pas (`null`, '', NaN) vaut « 0 min ». */
+export function dureeMinutes(min) {
+  const m = Math.max(0, Math.round(Number(min) || 0));
+  if (m < 60) return tr('{n} min', { n: m });
+  const h = Math.floor(m / 60), r = m % 60;
+  return r ? tr('{h} h {m}', { h, m: String(r).padStart(2, '0') }) : tr('{h} h', { h });
+}
+
+/** L'heure d'un instant, « 14:20 », dans la langue de l'écran (lot 5b de
+ * l'audit du 12/11). `t` : des millisecondes ou une Date. Le corps est celui
+ * des treize copies qu'il remplace, au caractère près — une entrée illisible
+ * rend ce que rendait chacune d'elles. Les heures en SECONDES, celle du fuseau
+ * de la maison (`heureMaison`) et celles qui ajoutent un jour restent chez
+ * elles : elles disent autre chose. */
+export function heureCourte(t) {
+  return new Date(t).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+}
+
 export function minutesDepuisHeure(ts, maintenant = new Date()) {
   const s = Number(ts);
   if (!s || !isFinite(s) || s < 0) return null;

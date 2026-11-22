@@ -39,6 +39,11 @@ CLE_ENTITES = "loggia_entities"
 CLE_NUIT = "loggia_nuit"
 # Les etats ou une lampe ne dit pas ou elle en est.
 MUETS = ("unavailable", "unknown")
+# « Alimentee par » (audit du 12/11, X4 ; ADR 0369) : {ampoule: interrupteur}.
+# Une ampoule connectee derriere un interrupteur mural n'a plus de courant
+# quand il est eteint, et Home Assistant garde son dernier etat - ou la dit
+# injoignable. La fiche de l'ampoule l'ecrit ; les regles la lisent ici.
+CLE_ALIMENTATION = "loggia_alimentation"
 
 
 def _liste_de_textes(x: Any) -> list[str]:
@@ -121,6 +126,37 @@ def a_epargner(attributs: dict[str, Any], veilleuses: Iterable[str]) -> set[str]
     return epargnees
 
 
+def _commandable(haid: Any) -> bool:
+    return isinstance(haid, str) and (haid.startswith("light.") or haid.startswith("switch."))
+
+
+def alimentations_de(brut: Any) -> dict[str, str]:
+    """La relation « alimentee par », lue proprement : {ampoule: source}, deux
+    `light.*` ou `switch.*` differents. Une source ne peut pas etre elle-meme
+    alimentee : la relation qui la nomme s'ecarte - ni chaine, ni boucle, et
+    une seule question a poser (« sa source est-elle eteinte ? »)."""
+    if not isinstance(brut, dict):
+        return {}
+    propres = {a: s for a, s in brut.items() if _commandable(a) and _commandable(s) and a != s}
+    return {a: s for a, s in propres.items() if s not in propres}
+
+
+def hors_tension(alimentations: Any, etat_de: Any) -> set[str]:
+    """Les ampoules sans courant : celles dont la source est ETEINTE (`off`).
+    `etat_de(haid)` rend l'etat de la source, ou None. Une source muette ou
+    absente ne dit rien : l'ampoule garde son propre etat. Une lecture qui
+    leve n'ecarte rien - on commande, plutot que de se taire a tort."""
+    coupees: set[str] = set()
+    for ampoule, source in (alimentations or {}).items():
+        try:
+            etat = etat_de(source)
+        except Exception:  # noqa: BLE001
+            return set()
+        if isinstance(etat, str) and etat.lower() == "off":
+            coupees.add(ampoule)
+    return coupees
+
+
 # Le bit TRANSITION de LightEntityFeature : une lampe qui ne l'a pas ne sait pas
 # fondre, et le lui demander ne ferait rien de bon (la veilleuse de la Nuit, les
 # scenarios - ADR 0304).
@@ -192,6 +228,23 @@ async def async_interrupteurs_declares(store: Any) -> set[str]:
 async def async_veilleuses(store: Any) -> list[str]:
     """Les veilleuses de la regle Nuit, lues au magasin (`veilleuses_de`)."""
     return veilleuses_de(await store.async_get_shared(CLE_NUIT, None))
+
+
+async def async_alimentations(store: Any) -> dict[str, str]:
+    """La relation « alimentee par », lue au magasin (`alimentations_de`). Un
+    magasin illisible : aucune relation, la regle commande comme avant."""
+    try:
+        return alimentations_de(await store.async_get_shared(CLE_ALIMENTATION, None))
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def hors_tension_dans(hass: Any, alimentations: Any) -> set[str]:
+    """Les ampoules sans courant en ce moment (`hors_tension`), d'apres les
+    etats de Home Assistant. Sans relation, rien n'est lu."""
+    if not alimentations:
+        return set()
+    return hors_tension(alimentations, lambda haid: getattr(hass.states.get(haid), "state", None))
 
 
 def attributs_des_lumieres(hass: Any, declares: Iterable[str] = ()) -> dict[str, dict[str, Any]]:

@@ -74,11 +74,20 @@ test('à égalité, la plus tôt ; le passé ne compte pas', () => {
   assert.equal(apres.debut, base + 4 * H, 'celle d’avant est passée');
 });
 
-test('l’heure en cours compte, un trou casse la continuité', () => {
+/* ASSERTION MODIFIÉE (13/11, audit du 12/11, lot 2a, B13 ; ADR 0355 — sa décision du 12/11 : « l'heure entamée ne compte plus
+ * entière »). Le test figeait l'inverse : à la demie, la fenêtre « 0 h – 2 h » était rendue comme si ses deux heures restaient
+ * devant soi. L'heure entamée ne compte plus que pour ce qu'il en reste, et la fenêtre part de maintenant. */
+test('l’heure entamée ne compte que pour ce qu’il en reste, un trou casse la continuité', () => {
   const pts = [{ debut: base, fin: base + H, prix: 1 }, { debut: base + H, fin: base + 2 * H, prix: 1 },
     { debut: base + 3 * H, fin: base + 4 * H, prix: 0 }, { debut: base + 5 * H, fin: base + 6 * H, prix: 0 }];
-  const f = fenetreMoinsChere(pts, base + 30 * 60e3);
+  // À l'heure pile, les deux heures à 1 sont entières : la fenêtre ; les deux heures à 0 ne se touchent pas.
+  const f = fenetreMoinsChere(pts, base);
   assert.deepEqual([f.debut, f.fin], [base, base + 2 * H], 'les deux heures à 0 ne se touchent pas');
+  // À la demie, il ne reste qu'une heure et demie d'un seul tenant : plus aucune fenêtre de deux heures.
+  assert.equal(fenetreMoinsChere(pts, base + 30 * 60e3), null, 'une heure entamée a compté pour entière');
+  // Une heure et demie, elle, tient encore : de maintenant, pour une heure et demie.
+  const g = fenetreMoinsChere(pts, base + 30 * 60e3, 90);
+  assert.deepEqual([g.debut, g.fin], [base + 30 * 60e3, base + 2 * H]);
 });
 
 test('des prix tous égaux ne désignent rien', () => {

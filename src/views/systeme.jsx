@@ -16,8 +16,10 @@
  *
  * `SystemeContent` est l'export par defaut, comme `views/meteo.jsx`. */
 import { useState, useEffect, useRef } from 'react';
-import { Fi, Gauge, Bascule, BottomSheet, TitreFeuille } from '../ui.jsx';
-import { tr, trN, locale } from '../i18n.js';
+import { Fi, Gauge, Bascule, BottomSheet, TitreFeuille, useEtatServeur } from '../ui.jsx';
+import { lieuxSauvegarde, aDireLieux } from '../sauvegardelieux.js';
+import { tr, trN } from '../i18n.js';
+import { heureCourte } from '../format.js';
 import { useSysHist } from '../historique.jsx';
 import { sysSensors, sysNames } from '../sysconf.js';
 import { LOGGIA_INDEX } from '../state.js';
@@ -227,7 +229,9 @@ function PanneauCharge({ series, releve }) {
   );
 }
 
-function PanneauVersions({ lignes, sauvegarde, maintenant, enDefaut = false }) {
+function PanneauVersions({ lignes, sauvegarde, maintenant, enDefaut = false, lieux = null }) {
+  // Une copie ratée ou un élément manqué (P10) passe aussi l'icône à l'ambre.
+  if (lieux && lieux.echec) enDefaut = true;
   return (
     <div style={SYS_PANNEAU}>
       <EntetePanneau titre={tr('Versions')} />
@@ -248,6 +252,15 @@ function PanneauVersions({ lignes, sauvegarde, maintenant, enDefaut = false }) {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{sauvegarde.complete ? tr('Dernière sauvegarde complète') : tr('Dernière sauvegarde')}</div>
             <div style={{ fontSize: 13, fontWeight: 700, marginTop: 1 }}>{[momentLisible(sauvegarde.t, maintenant), tailleLisible(sauvegarde.octets)].filter(Boolean).join(' · ')}</div>
+            {/* Où elle est allée (P10) : « Cette machine : copiée · Nabu Casa : copie ratée » — rien pour une copie seule réussie. */}
+            {aDireLieux(lieux) && (
+              <div data-lieux="" style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4, lineHeight: 1.4 }}>
+                {lieux.lieux.map((l, i) => (
+                  <span key={l.id}>{i ? ' · ' : ''}<span style={{ color: l.ok ? 'var(--o-text2)' : 'var(--o-bad)' }}>{l.ok ? tr('{lieu} : copiée', { lieu: l.nom }) : tr('{lieu} : copie ratée', { lieu: l.nom })}</span></span>
+                ))}
+                {lieux.manques > 0 && <span style={{ color: 'var(--o-bad)' }}>{' · ' + trN(lieux.manques, '{n} élément manqué', '{n} éléments manqués')}</span>}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -330,7 +343,6 @@ const NIVEAUX_JOURNAL = {
  * La liste ne pese rien dans le calcul de la rangee (base nulle) : c'est le
  * voisin — ou la hauteur minimale de la carte — qui fixe la taille. */
 function PanneauJournal({ journal, indisponible }) {
-  const heure = (t) => new Date(t).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   const mots = { info: tr('INFO'), avert: tr('AVERT.'), erreur: tr('ERREUR') };
   return (
     <div className="sys-journal" style={{ ...SYS_PANNEAU, display: 'flex', flexDirection: 'column' }}>
@@ -349,7 +361,7 @@ function PanneauJournal({ journal, indisponible }) {
             const [rgb, col] = NIVEAUX_JOURNAL[l.niveau] || NIVEAUX_JOURNAL.info;
             return (
               <div key={l.t + ':' + i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 0' }}>
-                <span style={{ minWidth: 38, flexShrink: 0, fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums', marginTop: 2, whiteSpace: 'nowrap' }}>{heure(l.t)}</span>
+                <span style={{ minWidth: 38, flexShrink: 0, fontSize: 11, fontWeight: 700, color: 'var(--o-text3)', fontVariantNumeric: 'tabular-nums', marginTop: 2, whiteSpace: 'nowrap' }}>{heureCourte(l.t)}</span>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: col, flexShrink: 0, marginTop: 5 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.titre}</div>
@@ -481,6 +493,11 @@ function SystemeContent({ hass }) {
   const reussie = entitesAdmin(LOGGIA_INDEX).sauvegarde.reussie;
   const tReussie = reussie && S[reussie] ? Date.parse(S[reussie].state) : NaN;
   const sauvegarde = derniereSauvegarde(sup.backups) || (isNaN(tReussie) ? null : { t: tReussie, octets: null, complete: false });
+  /* La dernière sauvegarde, emplacement par emplacement (P10, ADR 0383 ; sauvegardelieux.js) : `backup/info` ne répond qu'à un
+   * administrateur ; refusé, rien n'est dit. Relu toutes les cinq minutes, les noms des emplacements toutes les heures. */
+  const infoSauvegarde = useEtatServeur(hass, 'backup/info', 300000, '').etat;
+  const agentsSauvegarde = useEtatServeur(hass, 'backup/agents/info', 3600000, '').etat;
+  const lieux = lieuxSauvegarde(infoSauvegarde, agentsSauvegarde && agentsSauvegarde.agents);
   const modules = modulesComplementaires(sup.addons, sup.stats);
   const reseau = interfaceReseau(sup.network);
   const base = baseDeDonnees(infoBase);
@@ -556,7 +573,7 @@ function SystemeContent({ hass }) {
       {(series.length > 0 || versions.length > 0) && (
         <div className="grid-sys-duo">
           {series.length > 0 && <PanneauCharge series={series} releve={releve} />}
-          {versions.length > 0 && <PanneauVersions lignes={versions} sauvegarde={sauvegarde} maintenant={maintenant} enDefaut={!!defautSauvegarde} />}
+          {versions.length > 0 && <PanneauVersions lignes={versions} sauvegarde={sauvegarde} maintenant={maintenant} enDefaut={!!defautSauvegarde} lieux={lieux} />}
         </div>
       )}
 

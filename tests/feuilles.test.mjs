@@ -39,7 +39,10 @@ const fonction = (src, nom) => {
 
 test('la croix commune : la taille et le fond de l’épingle ; elle ferme sa feuille', () => {
   const c = fonction(UI, 'CroixFeuille');
-  assert.ok(c.includes('width: 34, height: 34, borderRadius: 10') && c.includes("background: 'var(--o-s1)'"), 'la croix n’a plus la taille de ses voisins');
+  // ASSERTION MODIFIÉE (audit du 12/11, lot 5c ; ADR 0374) : le dessin de la croix vit dans `DESSIN_CROIX` (ui.jsx), que trois croix de
+  // panneau lisent aussi ; `CroixFeuille` le pose. La taille et le fond se lisent donc là où ils sont écrits.
+  const dessin = UI.split('\n').find(l => l.startsWith('export const DESSIN_CROIX = ')) || '';
+  assert.ok(dessin.includes('width: 34, height: 34, borderRadius: 10') && dessin.includes("background: 'var(--o-s1)'") && c.includes('style={{ ...DESSIN_CROIX, ...style }}'), 'la croix n’a plus la taille de ses voisins');
   assert.ok(c.includes('const fermer = useContext(FermerCtx);') && c.includes('data-croix=""'));
   assert.ok(fonction(APP, 'BoutonEpingle').includes('width: 34, height: 34, borderRadius: 10'), 'l’épingle a changé de taille : la croix ne s’aligne plus sur elle');
   const b = fonction(UI, 'BottomSheet');
@@ -80,7 +83,9 @@ test('chaque feuille porte la croix sur sa ligne d’en-tête', () => {
       /* ASSERTION MODIFIÉE (30/10, G3-E2/E3) : les popups du chauffe-eau et de la borne : leurs contenus (`FicheEauContent`, ficheeau.jsx ;
        * `FicheBorneContent`, ficheborne.jsx), chargés à la demande, portent l'en-tête commun — sa croix et son nom (`EnteteFiche`), vérifié plus bas. */
       // ASSERTION MODIFIÉE (01/11, ADR 0318) : la feuille d'un traceur d'objet ; son contenu (`FicheTraceurContent`, fichetraceur.jsx) porte l'en-tête commun.
-      if (!/<CroixFeuille|<TitreFeuille|<FicheEntete|<ContenuEnfant|<FicheRobotContent|<FicheDistributeurContent|<FicheChauffageContent|<FicheVoletContent|<FichePriseContent|<FicheLumiereContent|<FicheMediaContent|<FicheMeteoContenu|<FicheCapteurContent|<FicheBinaireContent|<FicheConfortContent|<FichePlanteContent|<FicheGroupeContent|<FicheSwitchContent|<FeuilleCalendrierContent|<ContenuVanne|<FicheEauContent|<FicheBorneContent|<FicheTraceurContent/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
+      // ASSERTION MODIFIÉE (21/11, ADR 0387) : la fiche du purificateur (`FichePurificateurContent`, fichepurificateur.jsx), chargée à la demande, porte l'en-tête commun.
+      // ASSERTION MODIFIÉE (21/11, ADR 0386) : la fiche serrure (`FicheSerrureContent`, ficheserrure.jsx) et celles de la voiture, de la litière et de la fontaine (`FicheComposeContent`, voiture.jsx et animaux.jsx), chargées à la demande, portent l'en-tête commun.
+      if (!/<CroixFeuille|<TitreFeuille|<FicheEntete|<ContenuEnfant|<FicheRobotContent|<FicheDistributeurContent|<FicheChauffageContent|<FicheVoletContent|<FichePriseContent|<FicheLumiereContent|<FicheMediaContent|<FicheMeteoContenu|<FicheCapteurContent|<FicheBinaireContent|<FicheConfortContent|<FichePlanteContent|<FicheGroupeContent|<FicheSwitchContent|<FeuilleCalendrierContent|<ContenuVanne|<FicheEauContent|<FicheBorneContent|<FicheTraceurContent|<FicheSerrureContent|<FicheComposeContent|<FichePurificateurContent/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
       i = s.indexOf('<BottomSheet', i + 1);
     }
   }
@@ -257,7 +262,9 @@ test('chaque feuille dit son nom : sa ligne de titre, ou NomFeuille posé sur le
       /* ASSERTION MODIFIÉE (30/10, G3-E2/E3) : les popups du chauffe-eau et de la borne : leurs contenus (`FicheEauContent`, ficheeau.jsx ;
        * `FicheBorneContent`, ficheborne.jsx), chargés à la demande, portent l'en-tête commun — sa croix et son nom (`EnteteFiche`), vérifié plus bas. */
       // ASSERTION MODIFIÉE (01/11, ADR 0318) : la feuille d'un traceur d'objet ; son contenu (`FicheTraceurContent`, fichetraceur.jsx) porte l'en-tête commun.
-      if (!/<TitreFeuille|<FicheEntete|<NomFeuille|<ContenuEnfant|<FicheRobotContent|<FicheDistributeurContent|<FicheChauffageContent|<FicheVoletContent|<FichePriseContent|<FicheLumiereContent|<FicheMediaContent|<FicheMeteoContenu|<FicheCapteurContent|<FicheBinaireContent|<FicheConfortContent|<FichePlanteContent|<FicheGroupeContent|<FicheSwitchContent|<FeuilleCalendrierContent|<ContenuVanne|<FicheEauContent|<FicheBorneContent|<FicheTraceurContent/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
+      // ASSERTION MODIFIÉE (21/11, ADR 0387) : la fiche du purificateur (`FichePurificateurContent`, fichepurificateur.jsx), chargée à la demande, porte l'en-tête commun.
+      // ASSERTION MODIFIÉE (21/11, ADR 0386) : la fiche serrure (`FicheSerrureContent`, ficheserrure.jsx) et celles de la voiture, de la litière et de la fontaine (`FicheComposeContent`, voiture.jsx et animaux.jsx), chargées à la demande, portent l'en-tête commun.
+      if (!/<TitreFeuille|<FicheEntete|<NomFeuille|<ContenuEnfant|<FicheRobotContent|<FicheDistributeurContent|<FicheChauffageContent|<FicheVoletContent|<FichePriseContent|<FicheLumiereContent|<FicheMediaContent|<FicheMeteoContenu|<FicheCapteurContent|<FicheBinaireContent|<FicheConfortContent|<FichePlanteContent|<FicheGroupeContent|<FicheSwitchContent|<FeuilleCalendrierContent|<ContenuVanne|<FicheEauContent|<FicheBorneContent|<FicheTraceurContent|<FicheSerrureContent|<FicheComposeContent|<FichePurificateurContent/.test(bloc) && !/ title=\{/.test(ouverture)) sans.push(f + ':' + s.slice(0, i).split('\n').length);
       i = s.indexOf('<BottomSheet', i + 1);
     }
   }

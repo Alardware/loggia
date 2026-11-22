@@ -22,7 +22,8 @@ test('la pastille : l’icône et le nom sur une ligne, 44 px pour le doigt, ron
 
 test('comme la capture : l’icône dans la couleur du texte ; seul ce qui tourne prend sa teinte', () => {
   assert.ok(corps.includes("<Ico name={s.icone || 'sparkles'} size={16} color={enCours ? t.col : 'var(--o-text)'} />"));
-  assert.ok(corps.includes("background: enCours ? lavisCarte(t.rgb, .26) : 'var(--o-s1)'"));
+  // ASSERTION MODIFIÉE (19/11) : le fond de Prisme dans tous les thèmes — le remplissage du thème sur SA couleur de fond à 85 %.
+  assert.ok(corps.includes("background: enCours ? lavisCarte(t.rgb, .26) : FOND_PUCE"));
   assert.ok(corps.includes("title={enCours ? tr('En cours') : undefined}"));
   assert.ok(!/#[0-9a-f]{3,8}\b|rgba?\(\d/i.test(corps), 'aucune couleur écrite en dur');
   assert.ok(!corps.includes('libelleDernier'), 'le dernier lancement reste à la vue Scénarios');

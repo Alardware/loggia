@@ -7,7 +7,7 @@ import { pickSibling } from '../discovery.js';
 import { evenementsPorte, lignesPorte, textePorte } from '../evenement.js';
 import { dureePrise } from '../prises.js';
 import { lumieresDe } from '../lumieres.js';
-import { motsSurete, fuiteCalculee, pluieDeRobot, entendueParCamera, niveauPile, estMeteoAlarm, lireVigilance } from '../attention.js';
+import { motsSurete, fuiteCalculee, pluieDeRobot, entendueParCamera, niveauPile, estMeteoAlarm, lireVigilance, cameraEnLigne } from '../attention.js';
 import { fmtWatts, minutesDepuisHeure } from '../format.js';
 import { notifIds, plantsCfg } from '../lectures.js';
 import { locale, tr, trN } from '../i18n.js';
@@ -92,7 +92,8 @@ function deriveAccueil(hass, cfg, resolved) {
   const lightsOn = lightIds.filter(id => S[id] && S[id].state === 'on').length;
   // `etat` : l'état de la personne, que l'avatar de l'Accueil dit en un mot — sa zone, ou « Inconnu » (G1-D8).
   const people = peopleList().map(p => ({ name: p.name, img: p.img, home: !!(S[p.haid] && S[p.haid].state === 'home'), etat: S[p.haid] ? S[p.haid].state : null }));
-  const cams = (cfg.cams || []).map(c => ({ name: c.name, haid: c.haid, online: (S[c.haid] ? S[c.haid].state !== 'unavailable' : c.online !== false) }));
+  // En ligne : la règle partagée avec la vue Sécurité (audit du 12/11), `unknown` et « sans entité » compris.
+  const cams = (cfg.cams || []).map(c => ({ name: c.name, haid: c.haid, online: cameraEnLigne(c, S) }));
   const alarmId = (secAlarm() && S[secAlarm()]) ? secAlarm()
     : ((resolved && resolved.alarm && resolved.alarm.available) ? resolved.alarm.main : null);
   const alarmS = alarmId ? S[alarmId] : null;

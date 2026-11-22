@@ -130,14 +130,15 @@ test('sans ligne des appareils mesurés, pas de borne', () => {
   assert.equal(trouverBorne({ index: indexOf(fx), states: fx.states, energyPrefs: fx.energyPrefs }), null);
 });
 
-test('deux bornes : rien', () => {
+// ASSERTION MODIFIÉE (21/11, ADR 0385, A7) : deux bornes ne donnent plus « rien » — chacune a sa carte ; `trouverBorne` rend la première.
+test('deux bornes : la première, et la liste les garde toutes', () => {
   const fx = garage();
   fx.devices.push(device('d_borne2', 'Seconde', 'garage'));
   fx.entities.push(entity('sensor.b2_p', { device: 'd_borne2' }), entity('number.b2_a', { device: 'd_borne2' }), entity('binary_sensor.b2_plug', { device: 'd_borne2' }), entity('sensor.b2_e', { device: 'd_borne2' }));
   Object.assign(fx.states, states(state('sensor.b2_p', '0', { device_class: 'power' }), state('number.b2_a', '16', { device_class: 'current', min: 6, max: 32 }),
     state('binary_sensor.b2_plug', 'off', { device_class: 'plug' }), state('sensor.b2_e', '1', { device_class: 'energy' })));
   fx.energyPrefs.device_consumption.push({ stat_consumption: 'sensor.b2_e' });
-  assert.equal(trouverBorne({ index: indexOf(fx), states: fx.states, energyPrefs: fx.energyPrefs }), null);
+  assert.equal(trouverBorne({ index: indexOf(fx), states: fx.states, energyPrefs: fx.energyPrefs }).appareil, 'd_borne');
 });
 
 test('elle alimente `evNow`, et la fiche garde la main', () => {

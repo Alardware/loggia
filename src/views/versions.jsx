@@ -13,7 +13,7 @@ import { Panneau, Ligne, CAPITALES, btnDanger, btnSecondaire } from './parcommun
 import { CarteTel, LignesTel, LigneTel, btnTel } from './partel.jsx';
 import { listerVersions, rendreVersion, quandVersion, motifVersion, texteVersion } from '../versions.js';
 
-const ARME = { ...btnDanger, background: 'var(--o-bad)', color: '#fff' };
+const ARME = { ...btnDanger, background: 'var(--o-bad-fond)', color: '#fff' }; // le rouge qui porte du blanc (contraste.js)
 
 /** Le composant : la page de Home Assistant, ou la démo — celui que Paramètres reçoit. */
 const pontDe = (hass) => (hass && typeof hass.callWS === 'function' ? hass : null);

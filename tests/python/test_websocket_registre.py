@@ -65,6 +65,9 @@ EPINGLE = {
     'loggia/lumieres/etat': ('ouverte', ''),
     'loggia/lumieres/journal': ('ouverte', 'entity_id'),
     'loggia/minuteurs/annuler': ('ouverte', 'entity_id'),
+    # ASSERTION MODIFIÉE (21/11, ADR 0387) : le planning des purificateurs.
+    'loggia/purificateurs/etat': ('ouverte', ''),
+    'loggia/purificateurs/regler': ('admin', '?actif entity_id ?semaine'),
     'loggia/minuteurs/etat': ('ouverte', ''),
     'loggia/minuteurs/poser': ('ouverte', 'entity_id minutes'),
     'loggia/spotify/jouer': ('ouverte', 'entity_id ?sortie uri'),
@@ -182,7 +185,8 @@ def test_chaque_commande_garde_son_nom_son_niveau_et_ses_champs(inscrites):
     # ASSERTION MODIFIÉE (09/11, ADR 0340) : 63 -> 64, les montees en temperature.
     # ASSERTION MODIFIÉE (11/11, ADR 0344) : 64 -> 65, Spotify (l'enceinte, puis la playlist).
     # ASSERTION MODIFIÉE (11/11, ADR 0346) : 65 -> 66, les playlists Spotify, que Spotify joue ou non.
-    assert len(inscrites.commandes) == 66
+    # ASSERTION MODIFIÉE (21/11, ADR 0387) : 66 -> 68, le planning des purificateurs (etat, regler).
+    assert len(inscrites.commandes) == 68
     for nom, gestionnaire in sorted(inscrites.commandes.items()):
         niveau, champs = EPINGLE[nom]
         assert _niveau(inscrites, gestionnaire, nom) == niveau, nom + " a change de niveau d'acces"

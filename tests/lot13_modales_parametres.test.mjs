@@ -55,7 +55,8 @@ test('plus d’« Annuler » qui ne fait que fermer : la croix de la feuille suf
       nom + ' : un bouton ne fait que fermer, à côté de la croix');
     assert.ok(src.includes("{tr('Enregistrer')}</button>"), nom + ' : « Enregistrer » est parti avec « Annuler »');
   }
-  assert.ok(PROFIL.includes('{onDelete && <button onClick={onDelete}'), 'la suppression d’un profil a disparu');
+  // En deux appuis depuis l'audit du 12/11 (tests/audit_1211_lot3bis_profil.test.mjs) : le bouton est toujours là.
+  assert.ok(PROFIL.includes('{onDelete && <button onClick={() => { if (armeSuppr) onDelete(); else setArmeSuppr(true); }}'), 'la suppression d’un profil a disparu');
 });
 
 test('le focus revient au bouton qui a ouvert la feuille', () => {

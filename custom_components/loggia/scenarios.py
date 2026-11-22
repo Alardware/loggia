@@ -49,7 +49,8 @@ from homeassistant.core import Context, HomeAssistant, callback
 
 from .const import DOMAIN
 from .discovery import async_index
-from .lumieres_maison import (a_epargner, async_interrupteurs_declares, blanc_borne, lumieres_de_la_maison, par_service,
+from .lumieres_maison import (a_epargner, async_alimentations, async_interrupteurs_declares, blanc_borne,
+                              hors_tension_dans, lumieres_de_la_maison, par_service,
                               sait_fondre, sait_le_blanc)
 from .nombres import lu
 from .refus import RefusNomme
@@ -560,6 +561,11 @@ def cibles(action: dict[str, Any], maison: dict[str, Any], piece: str | None,
         attributs = {h: (e.get("attrs") or {}) for h, e in entites.items()
                      if h.startswith("light.") and isinstance(e, dict)}
         epargnees = a_epargner(attributs, veilleuses or ())
+    if famille == "lumieres":
+        # Une ampoule dont l'interrupteur est coupe n'a plus de courant (ADR
+        # 0369) : son etat est celui d'avant la coupure, et aucun geste - ni
+        # eteindre, ni allumer - ne lui parvient. Le contexte les nomme.
+        epargnees = set(epargnees) | set(maison.get("hors_tension") or ())
     out = []
     for haid in sorted(candidats):
         if haid in epargnees or haid not in entites:
@@ -650,7 +656,8 @@ def capturer(maison: dict[str, Any], veilleuses=(), familles=FAMILLES_ETAT, port
             lampes = [h for h in entites if h.startswith("light.")]
         attributs = {h: (e.get("attrs") or {}) for h, e in entites.items()
                      if h.startswith("light.") and isinstance(e, dict)}
-        epargnees = a_epargner(attributs, veilleuses or ())
+        # Ni une ampoule sans courant (ADR 0369) : son etat n'est pas le sien.
+        epargnees = a_epargner(attributs, veilleuses or ()) | set(maison.get("hors_tension") or ())
         for haid in sorted(lampes):
             e = entites.get(haid)
             if not isinstance(e, dict) or haid in epargnees or not dans_la_portee(e, portee, piece):
@@ -694,6 +701,9 @@ def ordres_etats(etats: dict[str, dict[str, Any]],
     appareil disparu ou injoignable est passe. Les lampes dont l'ordre est le meme partent ensemble ; le blanc va
     a la lampe qui le prend, borne par elle, la couleur a celle qui la prend."""
     entites = maison.get("entites") or {}
+    # Une ampoule sans courant en ce moment (ADR 0369) est passee, comme un
+    # appareil injoignable : rien ne lui parviendrait.
+    coupees = set(maison.get("hors_tension") or ())
     eteindre: list[str] = []
     allumer_tels_quels: list[str] = []
     lampes: dict[str, tuple[list[str], dict[str, Any]]] = {}
@@ -702,7 +712,7 @@ def ordres_etats(etats: dict[str, dict[str, Any]],
     fermer: list[str] = []
     for haid in sorted(etats or {}):
         v, e = etats[haid], entites.get(haid)
-        if not isinstance(v, dict) or not isinstance(e, dict):
+        if not isinstance(v, dict) or not isinstance(e, dict) or haid in coupees:
             continue
         etat = str(e.get("etat") or "").lower()
         if etat in ("unavailable", "unknown", ""):
@@ -1048,6 +1058,9 @@ class LoggiaScenarios:
         maison = self.inventaire()
         maison["velux"] = await self._velux()
         maison["lumieres"] = self._lumieres(maison, await async_interrupteurs_declares(self.store))
+        # Les ampoules sans courant en ce moment (ADR 0369) : `cibles`,
+        # `capturer` et `ordres_etats` les ecartent.
+        maison["hors_tension"] = hors_tension_dans(self.hass, await async_alimentations(self.store))
         return {"maison": maison, "veilleuses": await self._veilleuses(),
                 "alarme": await self._alarme(maison), "nuit": self._nuit()}
 

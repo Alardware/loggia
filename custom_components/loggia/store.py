@@ -62,6 +62,15 @@ FORBIDDEN_KEYS: frozenset[str] = frozenset({CLE_CLAIR, CLE_HACHE})
 # Ce qui ne sort JAMAIS du magasin, meme pour un administrateur : le client
 # apprend seulement si un code est defini (`loggia_admin_pin_defini`).
 SECRETES: frozenset[str] = frozenset({CLE_CLAIR, CLE_HACHE})
+# Ce que la lecture de la configuration ne rend pas non plus, sans etre
+# secret : les tables que tiennent les rappels et les minuteurs (audit du
+# 12/11, S3). Chacune a sa commande (`rappels/etat`, `minuteurs/etat`), qui ne
+# rend a un compte que SES rappels et les minuteurs qu'il peut piloter ; par
+# `config/get`, tout compte lisait celles des autres, auteur (`par`) et
+# entites hors de ses droits compris. Le client ne les lit jamais ici. Elles
+# restent dans le magasin : les modules les lisent par `async_get_shared`, et
+# les versions precedentes les gardent comme avant.
+HORS_LECTURE: frozenset[str] = frozenset({"loggia_rappels", "loggia_minuteurs"})
 # La configuration des alertes : « Fermer en cas de fuite » y vit, et ne
 # s'ecrit que par sa commande etroite (`_set_locked`, eau_calcul.py).
 CLE_ALERTES = "loggia_alertes"
@@ -726,7 +735,9 @@ class LoggiaStore:
         perso = dict(value) if isinstance(value, dict) else {}
         couvre = {k: v for k, v in perso.items() if est_personnelle(k)}
         # Les secrets restent ici ; le client sait seulement s'il y a un code.
-        commun = {k: v for k, v in data["shared"].items() if k not in SECRETES}
+        # Les rappels et les minuteurs aussi : ils se lisent par leur commande,
+        # sous les droits du compte (audit du 12/11, S3 ; HORS_LECTURE).
+        commun = {k: v for k, v in data["shared"].items() if k not in SECRETES and k not in HORS_LECTURE}
         commun["loggia_admin_pin_defini"] = enregistrement_valide(data["shared"].get(CLE_HACHE))
         # Et combien de chiffres il compte, pour que le pave sache quand
         # verifier (ADR 0278) — jamais le code lui-meme. Une valeur ecrite par

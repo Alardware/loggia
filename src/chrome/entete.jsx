@@ -1,12 +1,13 @@
 /* L’en-tête de chaque vue (`Header`) : la recherche, les profils, les notifications, le bouton de l’assistant.
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
-import { createContext, useState, useRef, useEffect, useContext, useLayoutEffect, Suspense } from 'react';
+import { createContext, useState, useRef, useEffect, useContext, useLayoutEffect, useId, Suspense } from 'react';
 import { lazyRecharge } from '../recharge.js';
 import { nonLues as journalNonLues } from '../journal.js';
 import { getHass } from '../state.js';
 import { sansAccents, enPanne } from '../outils.js';
 import { commander, commanderService, surVanne } from '../actions.js';
 import { chargeAllumage } from '../ventilo.js';
+import { coupeePar } from '../alimentation.js';
 import { useLoggia } from '../runtime.js';
 import { isViewAvailable } from '../views.js';
 import { Fi, REDUCE_MOTION, HIDDEN_VIEWS, BottomSheet, NomFeuille, CroixFeuille, userBg, FlipText } from '../ui.jsx';
@@ -129,9 +130,10 @@ function appareilsRecherche(nq, h, { onNav, droits = [], onFiche = null }) {
     if (pont && droits.indexOf('inter') < 0) continue;
     const allumee = st.state === 'on';
     const garde = dom === 'switch' && !pont && !sirene && allumee && !cvEstLumiere(id) && gardeDeSwitch(lecture, id, { reconnue: priseDe(S, id).prise, indexLu: indexLu() });
-    const togglable = !pont && !sirene && !garde && (dom === 'light' || dom === 'switch' || dom === 'fan');
+    // Une ampoule sans courant (audit du 12/11, X4 ; ADR 0369) n'offre pas « Basculer » : rien ne lui parviendrait. Entrée mène à sa vue.
+    const togglable = !pont && !sirene && !garde && !coupeePar(st) && (dom === 'light' || dom === 'switch' || dom === 'fan');
     out.push({
-      group: tr('Appareils'), label: nom, sub: id, run: togglable, runLabel: tr('Basculer'),
+      cle: 'ent:' + id, group: tr('Appareils'), label: nom, sub: id, run: togglable, runLabel: tr('Basculer'),
       icon: <Fi i={DOMS[dom]} color="var(--o-cyan)" />,
       act: pont ? mene('loggia-par-section', 'inter', 'parametres') : sirene ? (close) => { onNav('securite'); close(); } : garde ? (onFiche ? (close) => { onFiche(id); close(); } : mene('loggia-objets-filtre', 'prises', 'objets'))
         : (close) => {
@@ -152,14 +154,25 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(0);
   const listRef = useRef(null);
+  /* LA SÉLECTION SE DIT (audit du 12/11, lot 4, I6). Les flèches déplaçaient
+   * un fond d'accent que le lecteur d'écran ne voyait pas : le focus reste dans
+   * le champ, rien ne bougeait pour lui. Le motif de la liste à suggestions
+   * (WAI-ARIA) : le champ est une `combobox` qui désigne, par
+   * `aria-activedescendant`, l'`option` choisie de la `listbox` — le lecteur la
+   * lit à chaque flèche. Chaque option porte, en description, son groupe. */
+  const idListe = useId();
+  const idOption = (i) => idListe + '-o' + i;
   const nq = sansAccents(q.trim());
   const match = (label) => !nq || sansAccents(label).indexOf(nq) >= 0;
   const results = [];
-  rooms.forEach(r => { if (!match(r)) return; const p = PIECES.find(x => x.name === r); results.push({ group: tr('Pièces'), label: r, icon: p ? p.icon : <Fi i="home" color="var(--o-accent)" size={20} />, act: (close) => { onNav('room:' + r); close(); } }); });
-  NAV.forEach(g => g.items.forEach(it => { const vid = LABEL_VIEW[it.label]; if (BUILT.has(vid) && isViewAvailable(avail, vid) && match(it.label)) results.push({ group: tr('Vues'), label: tr(it.label), icon: it.svg, act: (close) => { onNav(vid); close(); } }); }));
-  HIDDEN_VIEWS().forEach(h => { if (isViewAvailable(avail, h.vid) && match(h.label)) results.push({ group: tr('Vues'), label: tr(h.label), icon: <Fi i={h.icon} color={h.c} />, act: (close) => { onNav(h.vid); close(); } }); });
-  customViews.forEach(cv => { if (match(cv.name)) results.push({ group: tr('Vues'), label: cv.name, icon: <Fi i={cv.icon || 'sparkles'} color="var(--o-accent-soft)" />, act: (close) => { onNav('cv:' + cv.id); close(); } }); });
-  scenarios().forEach(s => { const nom = nomScenario(s); if (!match(nom)) return; results.push({ group: tr('Scénarios'), label: nom, sub: resumeScenario(s, nomsLiens()), icon: <Ico name={s.icone || 'sparkles'} color={teinteScenario(s).col} />, run: true, act: (close) => { lancerScenario(getHass(), s.id); close(); } }); });
+  /* Chaque résultat porte sa clé (`cle`, audit du 12/11, B15) : la clé de rendu était `groupe:libellé`, et deux lampes
+   * « Plafonnier » (salon, chambre) la partageaient — au rendu suivant, une ligne fantôme gardait l'ancien geste, ou une
+   * ligne manquait. L'identifiant de ce que la ligne ouvre est unique, lui. */
+  rooms.forEach(r => { if (!match(r)) return; const p = PIECES.find(x => x.name === r); results.push({ cle: 'piece:' + r, group: tr('Pièces'), label: r, icon: p ? p.icon : <Fi i="home" color="var(--o-accent)" size={20} />, act: (close) => { onNav('room:' + r); close(); } }); });
+  NAV.forEach(g => g.items.forEach(it => { const vid = LABEL_VIEW[it.label]; if (BUILT.has(vid) && isViewAvailable(avail, vid) && match(it.label)) results.push({ cle: 'vue:' + vid, group: tr('Vues'), label: tr(it.label), icon: it.svg, act: (close) => { onNav(vid); close(); } }); }));
+  HIDDEN_VIEWS().forEach(h => { if (isViewAvailable(avail, h.vid) && match(h.label)) results.push({ cle: 'vue:' + h.vid, group: tr('Vues'), label: tr(h.label), icon: <Fi i={h.icon} color={h.c} />, act: (close) => { onNav(h.vid); close(); } }); });
+  customViews.forEach(cv => { if (match(cv.name)) results.push({ cle: 'cv:' + cv.id, group: tr('Vues'), label: cv.name, icon: <Fi i={cv.icon || 'sparkles'} color="var(--o-accent-soft)" />, act: (close) => { onNav('cv:' + cv.id); close(); } }); });
+  scenarios().forEach(s => { const nom = nomScenario(s); if (!match(nom)) return; results.push({ cle: 'sc:' + s.id, group: tr('Scénarios'), label: nom, sub: resumeScenario(s, nomsLiens()), icon: <Ico name={s.icone || 'sparkles'} color={teinteScenario(s).col} />, run: true, act: (close) => { lancerScenario(getHass(), s.id); close(); } }); });
   // Appareils : par nom, dès deux caractères tapés — le déluge n'aide personne (`appareilsRecherche`).
   if (nq.length >= 2) results.push(...appareilsRecherche(nq, getHass(), { onNav, droits, onFiche }));
   // Réglages : chaque section des Paramètres se trouve par son nom — la
@@ -174,7 +187,7 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
     [['users', tr('Utilisateurs'), null], ['apparence', tr('Apparence'), null], ['vues', tr('Vues'), 'vues'], ['auto', tr('Automatisations'), 'auto'], ['alertes', tr('Alertes'), 'alertes'], ['maj', tr('Mises à jour'), 'maj'], ['connexion', tr('Connexion HA'), null], ['about', tr('À propos'), null]].forEach(([id, label, droit]) => {
       if (droit && droits.indexOf(droit) < 0) return;
       if (!match(label)) return;
-      results.push({ group: tr('Réglages'), label, icon: <Fi i="settings" color="var(--o-text2)" />, act: (close) => { try { sessionStorage.setItem('loggia-par-section', id); } catch {} onNav('parametres'); close(); } });
+      results.push({ cle: 'sec:' + id, group: tr('Réglages'), label, icon: <Fi i="settings" color="var(--o-text2)" />, act: (close) => { try { sessionStorage.setItem('loggia-par-section', id); } catch {} onNav('parametres'); close(); } });
     });
     /* Et chaque réglage (07/11, usage étape 12) : « veille » trouve « Écran de veille », sa section en dessous ; le
      * choisir ouvre les Paramètres sur sa rangée, allumée (`demanderReglage`). Dès deux lettres, comme les appareils ;
@@ -183,14 +196,14 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
       const dispo = Object.keys(SECTIONS_REGLAGES).filter(s => sectionOuverte(s, droits));
       optionsReglages(dispo, { sections: false }).forEach(o => {
         if (!match(o.label)) return;
-        results.push({ group: tr('Réglages'), label: o.label, sub: o.groupe, icon: <Fi i="settings-sliders" color="var(--o-text2)" />, act: (close) => { demanderReglage(o.id); onNav('parametres'); close(); } });
+        results.push({ cle: 'reg:' + o.id, group: tr('Réglages'), label: o.label, sub: o.groupe, icon: <Fi i="settings-sliders" color="var(--o-text2)" />, act: (close) => { demanderReglage(o.id); onNav('parametres'); close(); } });
       });
     }
   }
   const selIdx = results.length ? Math.min(sel, results.length - 1) : -1;
   useEffect(() => { setSel(0); }, [nq]);
   useEffect(() => { try { const el = listRef.current && listRef.current.querySelector('[data-sel="1"]'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' }); } catch {} }, [selIdx]);
-  let lastGroup = null;
+  let lastGroup = null, idGroupe;
   return (
     <BottomSheet onClose={onClose}>
       {(close) => (
@@ -205,6 +218,8 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
             <Ico name="search" size={16} color="var(--o-text2)" />
             <input
               autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr('Pièce, vue, scène…')} aria-label={tr('Rechercher')}
+              role="combobox" aria-autocomplete="list" aria-expanded={results.length > 0} aria-controls={idListe}
+              aria-activedescendant={selIdx >= 0 ? idOption(selIdx) : undefined}
               onKeyDown={(e) => {
                 if (e.key === 'ArrowDown') { e.preventDefault(); setSel(i => Math.min(i + 1, results.length - 1)); }
                 else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(i => Math.max(i - 1, 0)); }
@@ -216,14 +231,16 @@ function SearchSheet({ onClose, onNav, customViews = [], rooms = [], droits = []
           </div>
           <CroixFeuille />
           </div>
-          <div ref={listRef} style={{ maxHeight: '52vh', overflowY: 'auto', margin: '0 -8px', padding: '0 8px' }}>
+          <div ref={listRef} id={idListe} role={results.length ? 'listbox' : undefined} aria-label={results.length ? tr('Rechercher') : undefined} style={{ maxHeight: '52vh', overflowY: 'auto', margin: '0 -8px', padding: '0 8px' }}>
             {!results.length && <div style={{ padding: '26px 8px', textAlign: 'center', fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Aucun résultat pour « {q} »', { q })}</div>}
             {results.map((r, i) => {
               const head = r.group !== lastGroup; lastGroup = r.group;
+              if (head) idGroupe = idListe + '-g' + i;
               return (
-                <div key={r.group + ':' + r.label}>
-                  {head && <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.09em', color: 'var(--o-text3)', textTransform: 'uppercase', padding: '10px 8px 5px' }}>{r.group}</div>}
-                  <div data-sel={i === selIdx ? '1' : undefined} role="button" tabIndex={0}
+                <div key={r.cle}>
+                  {/* L'intitulé du groupe n'est pas une option : caché au lecteur, il revient en description de chacune. */}
+                  {head && <div id={idGroupe} aria-hidden="true" style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.09em', color: 'var(--o-text3)', textTransform: 'uppercase', padding: '10px 8px 5px' }}>{r.group}</div>}
+                  <div data-sel={i === selIdx ? '1' : undefined} id={idOption(i)} role="option" aria-selected={i === selIdx} aria-describedby={idGroupe} tabIndex={-1}
                     onClick={() => r.act(close)} onMouseEnter={() => setSel(i)}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); r.act(close); } }}
                     style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 10px', borderRadius: 14, cursor: 'pointer', background: i === selIdx ? 'rgba(var(--o-accent-rgb),.14)' : 'transparent' }}>
@@ -275,10 +292,6 @@ function Header() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
-  // Appui long sur le chip lumières (voir plus bas) : minuteur + drapeau pour
-  // que le clic qui SUIT un appui long ne navigue pas en plus d'avoir éteint.
-  const chipTimer = useRef(0);
-  useEffect(() => () => clearTimeout(chipTimer.current), []);
   /* « Lu » vit désormais DANS le journal, une entrée à la fois (01/10). La
    * signature du contenu ne savait pas distinguer « deux alertes dont une déjà
    * lue » de « deux alertes neuves » : elle changeait, et tout redevenait non

@@ -176,9 +176,11 @@ test('K2 + K3 : le rail ne les montre qu’à un ADMINISTRATEUR, et charge la r�
   assert.ok(d.includes("useEffect(() => { if (admin) import('../systemecalc.js').then(setSys, () => {}); }, [admin]);"));
   assert.ok(d.includes("if (sys) sys.lignesAdmin(S0).forEach(x => momentRows.push(<LigneMoment key={x.cle} {...x} onOpen={onNav ? () => onNav('systeme') : null} />));"));
   assert.ok(!/^import .*'\.\.\/systeme\.js'/m.test(d), 'jamais importé au boot');
-  // Ni point d'attention, ni téléphone.
+  // Pas de point d'attention.
   assert.ok(!lire('src/attention.js').includes('etatSauvegarde'));
-  assert.ok(!lire('scripts/textes_serveur.mjs').includes('sauvegarde de cette nuit'));
+  // ASSERTION MODIFIÉE (21/11, ADR 0384) : « rien au téléphone » est amendé — la sauvegarde ratée part UNE fois au téléphone des
+  // administrateurs (veilles.py, `pour="admins"`) ; sa phrase est donc dans les textes du serveur.
+  assert.ok(lire('scripts/textes_serveur.mjs').includes('La sauvegarde de cette nuit a échoué'));
 });
 
 const majs = (n, base = Date.parse('2026-10-30T10:00:00Z')) => {

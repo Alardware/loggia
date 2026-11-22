@@ -69,6 +69,9 @@ CLES_DES_MODULES: dict[str, str] = {
     # plante ajoutee n'est pas un detecteur de fuite - le carnet le sait tout
     # de suite, sans attendre le redemarrage.
     "loggia_plants": "eau",
+    # Le rappel des ouvertures (ADR 0388) : la popup d'une porte ecrit son delai
+    # par la configuration generale - il compte, ou se tait, tout de suite.
+    "loggia_ouvertures": "ouvertures",
 }
 
 

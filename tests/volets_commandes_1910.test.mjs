@@ -147,7 +147,9 @@ test('point 1 — l’ancienne carte (garage) : ni glissière ni pourcentage san
   const arbre = capter(F.RoomCoverCard, { id: 'cover.garage', hass: hassOrdres(ordres, [garage]), onOpen: () => {} });
   element(arbre, 'Stop Garage').props.onClick(evt());
   element(arbre, 'Ouvrir Garage').props.onClick(evt());
-  assert.deepEqual(ordres.map(o => o[0]), ['open_cover'], 'Stop ne part pas, Ouvrir oui');
+  // ASSERTION MODIFIÉE (21/11, ADR 0385) : un garage est un ouvrant à confirmer — le premier toucher sur « Ouvrir » pose « Confirmer ? » (4 s) et ne
+  // part pas ; l'envoi du second se joue dans tests/chantier_2011_lot5_G.test.mjs. Stop, lui, ne part toujours pas (sans le bit STOP).
+  assert.deepEqual(ordres.map(o => o[0]), [], 'Stop ne part pas, et Ouvrir demande d’abord');
   // Avec la position : la glissière et le chiffre reviennent.
   const volet = st('cover.velux', 'open', 40, { nom: 'Velux', attributes: { device_class: 'window', supported_features: 15 } });
   const avec = renderToStaticMarkup(createElement(F.RoomCoverCard, { id: 'cover.velux', hass: hassOrdres(ordres, [volet]), onOpen: () => {} }));
@@ -278,7 +280,8 @@ test('point 6 — `unknown` est une panne pour l’ancienne carte et l’ancienn
   C.reglerCourses({ horloge: () => T, ...AU_REPOS });
   const g = st('cover.garage', 'unknown', null, { nom: 'Garage', attributes: { device_class: 'garage', supported_features: 3 } });
   const html = renderToStaticMarkup(createElement(F.RoomCoverCard, { id: 'cover.garage', hass: hassOrdres([], [g]), onOpen: () => {} }));
-  assert.ok(html.startsWith('<div class="o-rmcard o-panne"') && html.includes('Indisponible'));
+  // ASSERTION MODIFIÉE (12/11, audit) : la carte d'un cover est aussi le conteneur de la grille commune (`o-gabarit`, E6).
+  assert.ok(html.startsWith('<div class="o-rmcard o-gabarit o-panne"') && html.includes('Indisponible'));
   for (const nom of ['Ouvrir Garage', 'Stop Garage', 'Fermer Garage']) assert.ok(bouton(html, nom).includes('aria-disabled="true"'), nom);
   const fiche = APP.slice(APP.indexOf('function RoomCoverSheet('), APP.indexOf('function RoomClimateSheet('));
   assert.ok(fiche.includes('const mort = enPanne(id, st);'));

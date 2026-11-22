@@ -152,7 +152,12 @@ export function journeeMesure(brut, { cle = null, uniteTable = null, ecrite = ''
   const table = lus.map(p => ({ t: p.t, v: versRepere(cle, p.v, uniteTable) }));
   const zones = cle ? zonesMesure(cle, dehors) : [];
   const z = zones[zi] ? { i: zi, bon: zones[zi].bon } : null;
-  const courbe = courbeMesure(table, { cle, unite: uniteTable, maintenant: t, zones: !neutre, dehors });
+  /* La courbe tient la dernière valeur connue jusqu'à maintenant (audit du 12/11, B21) : une mesure sans `state_class`, stable
+   * depuis la veille, n'a qu'un point d'histoire (« Pas d'historique sur 24 h »), et une ligne s'arrêtait au dernier changement.
+   * Au dessin seulement : « depuis » et « min · max » lisent les points tels quels. */
+  const fin = table.length ? table[table.length - 1] : null;
+  const trace = fin && fin.t < t ? [...table, { t, v: fin.v }] : table;
+  const courbe = courbeMesure(trace, { cle, unite: uniteTable, maintenant: t, zones: !neutre, dehors });
   const depuis = cle && !dehors ? texteDepuis(depuisMesure(table, cle, z, zones), cle, uniteTable, ecrite) : null;
   const ecrire = (v) => (cle ? chiffreMesure(cle, v, uniteTable) : nombre(v, 1, 0));
   const vs = lus.map(p => p.v);

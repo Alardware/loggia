@@ -23,7 +23,8 @@ export const OBJ_ORDRE = ['lumieres', 'volets', 'chauffage', 'prises', 'multimed
 /** « IoT » = les APPAREILS : ce qui travaille seul — robot aspirateur, tondeuse,
  * distributeur, ventilateur, humidificateur, vanne. Pas les prises : « une
  * prise c'est une prise » (retour user du 17/09). */
-export const DOMAINES_IOT = ['vacuum', 'lawn_mower', 'feeder', 'fan', 'humidifier', 'valve', 'borne'];
+// La voiture, la litière, la fontaine (A11, A12 ; ADR 0386) : des appareils que la découverte reconnaît, comme la borne.
+export const DOMAINES_IOT = ['vacuum', 'lawn_mower', 'feeder', 'fan', 'humidifier', 'valve', 'borne', 'voiture', 'litiere', 'fontaine'];
 
 /** Les classes de capteur binaire qui disent une presence : la fiche d'edition
  * les nomme ; sous les filtres, ce sont des capteurs comme les autres. */
@@ -146,12 +147,19 @@ export function compteObjets(objets, filtre) {
 }
 
 /** Les chiffres de tete : appareils, pieces distinctes, actifs, absents. Un groupe compte ses membres : ceux qui détectent sont
- *  actifs, ceux qui ne répondent plus, absents (C20). */
-export function statsObjets(objets) {
+ *  actifs, ceux qui ne répondent plus, absents (C20).
+ *
+ *  LES PIÈCES SONT CELLES DE LOGGIA (audit du 12/11, X7). La pièce d'un objet est le nom de sa zone Home Assistant : sur une
+ *  vraie installation, l'en-tête annonçait « 93 appareils répartis dans 11 pièces » — « Network », le local technique — quand
+ *  l'Accueil en montre 7. `piecesComptees` désigne les pièces de Loggia, celles de l'Accueil : une zone qui n'en est pas une ne
+ *  compte plus pour une pièce ; ses appareils, eux, restent comptés. `norm` rapproche les noms comme la vue d'une pièce le fait
+ *  (casse, accents). Sans liste — un appelant qui ne la connaît pas —, toute pièce nommée compte, comme avant. */
+export function statsObjets(objets, piecesComptees = null, norm = (s) => String(s)) {
+  const voulues = Array.isArray(piecesComptees) ? new Set(piecesComptees.map(p => norm(p))) : null;
   const pieces = new Set();
   let actifs = 0, absentes = 0;
   (objets || []).forEach(o => {
-    if (o.piece) pieces.add(String(o.piece));
+    if (o.piece) { const p = norm(o.piece); if (!voulues || voulues.has(p)) pieces.add(p); }
     if (Array.isArray(o.membres)) { actifs += Number(o.actifsMembres) || 0; absentes += Number(o.muetsMembres) || 0; return; }
     if (o.actif) actifs += 1;
     if (o.absent) absentes += 1;
@@ -245,11 +253,18 @@ export const PLAGES_PLANTE = { hum: [15, 70], temp: [10, 32], lux: [500, 20000],
 /* La LUMIÈRE ne se juge pas à l'instant (audit du 19/10, M6) : la nuit, toutes les plantes passaient « Lumière faible ». `luxJour`
  * (lirePlante, App.jsx) : le maximum du jour s'il est connu, sinon le lux du moment quand le soleil est levé, sinon null — la
  * lumière ne presse pas. Absent (une plante d'exemple), le lux du moment. */
+/* Le jugement porte sur la valeur ARRONDIE comme elle s'écrit (audit du 12/11, B24) : le sol, la lumière et l'engrais à l'unité, la
+ * température au dixième. Sur la valeur brute, un sol à 14,6 % passait « À arroser » sous le chiffre « 15 % », et la fiche
+ * conseillait « le sol est à 15 %, il lui en faut au moins 15 % ». `pas` : 1 à l'unité, 10 au dixième. */
 export function verdictsPlante({ hum = null, temp = null, lux = null, cond = null, luxJour } = {}) {
-  const v = (x, [bas, haut], mots) => (x == null || isNaN(x)) ? null : x < bas ? mots[0] : x > haut ? mots[2] : mots[1];
+  const v = (x, [bas, haut], mots, pas = 1) => {
+    if (x == null || isNaN(x)) return null;
+    const lu = Math.round(x * pas) / pas;
+    return lu < bas ? mots[0] : lu > haut ? mots[2] : mots[1];
+  };
   const out = {
     hum: v(hum, PLAGES_PLANTE.hum, ['sec', 'ok', 'humide']),
-    temp: v(temp, PLAGES_PLANTE.temp, ['froid', 'ok', 'chaud']),
+    temp: v(temp, PLAGES_PLANTE.temp, ['froid', 'ok', 'chaud'], 10),
     lux: v(luxJour === undefined ? lux : luxJour, PLAGES_PLANTE.lux, ['faible', 'ok', 'plein']),
     cond: v(cond, PLAGES_PLANTE.cond, ['peu', 'ok', 'trop']),
   };

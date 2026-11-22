@@ -311,8 +311,14 @@ class LoggiaLumieres:
         try:
             if await self.store.async_get_shared(CLE, None) is not None:
                 await self.store.async_modifier_shared(CLE, remplacer)
+                ecrite = CLE
             else:
                 await self.store.async_modifier_shared(CLE_ENTITES, dans_les_entites)
+                ecrite = CLE_ENTITES
+            # Les ecrans lisent et reecrivent EUX-MEMES ces deux cles (la liste
+            # entiere) : sans signal, un ecran au cache perime remettait l'ancien
+            # nom a sa prochaine declaration (audit du 12/11, S5).
+            self.store.signaler_communes([ecrite])
         except Exception:  # noqa: BLE001
             _LOGGER.warning("Loggia lumieres : la declaration de %s n'a pas pu suivre son renommage en %s",
                             ancien, nouveau, exc_info=True)

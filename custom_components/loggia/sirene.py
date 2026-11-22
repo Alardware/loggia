@@ -222,8 +222,16 @@ class LoggiaSirene:
         # seule : a l'echeance, `_async_eteindre` la trouve deja eteinte et se
         # contente de nettoyer la table, sans rien commander ni journaliser.
         self.table[haid] = {"fin": maintenant + DUREE, "par": par}
-        await self._sauver()
+        # Armer AVANT de sauvegarder, et sauvegarder sous garde (audit du
+        # 12/11, S4) : une ecriture refusee (commun trop gros, disque) sortait
+        # avant `_armer`, et la sirene allumee sonnait sans arret programme.
+        # Le rendez-vous ne lit que `self.table` ; comme `_async_eteindre`, une
+        # sauvegarde ratee se journalise et ne bloque rien.
         self._armer(haid)
+        try:
+            await self._sauver()
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia sirene : la table n'a pas pu etre sauvegardee apres le test de %s", haid)
         if self.regles is not None:
             await self.regles.noter(MODULE, "test", "sonner", cibles=[haid], n=1,
                                     motif=("test sonore de {s} s (duree geree par la sirene)" if par_la_sirene

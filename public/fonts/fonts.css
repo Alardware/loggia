@@ -106,3 +106,58 @@
   src: url(./cY9XfjOCX1hbuyalUrK439vogqCz_goCYw7oReyJFYYzbA.woff2) format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
+
+/* Outfit (variable, latin) — titres et chiffres du thème Prisme. Licence OFL. */
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url(./outfit-latin-wght-normal.woff2) format('woff2');
+}
+
+/* Roboto (variable, graisses 100 à 900) — texte des thèmes Google et Material (audit des thèmes du 13/11, E5).
+ * Fichiers de @fontsource-variable/roboto 5.3.0, tels quels. Copyright 2011 The Roboto Project Authors
+ * (https://github.com/googlefonts/roboto-classic). Licence SIL Open Font License 1.1.
+ * Un navigateur ne demande ces fichiers que si un glyphe emploie la famille : rien n'est chargé sous un autre thème.
+ * Pas de préchargement dans index.html (lot14_chargement n'en veut que deux). */
+/* latin-ext */
+@font-face {
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url(./roboto-latin-ext-wght-normal.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url(./roboto-latin-wght-normal.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Mona Sans (variable, graisses 200 à 900) — texte du thème GitHub (E5).
+ * Fichiers de @fontsource-variable/mona-sans 5.3.0, tels quels. Copyright 2022 The Mona Sans Project Authors
+ * (https://github.com/github/mona-sans), nom réservé « Mona ». Licence SIL Open Font License 1.1. */
+/* latin-ext */
+@font-face {
+  font-family: 'Mona Sans';
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url(./mona-sans-latin-ext-wght-normal.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Mona Sans';
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url(./mona-sans-latin-wght-normal.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}

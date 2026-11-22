@@ -106,6 +106,13 @@ def lire_plan(dossier: Path, etage: str) -> bytes | None:
         return None
 
 
+def plan_existe(dossier: Path, etage: str) -> bool:
+    """Un plan deja sur le disque pour cet etage. Sert a savoir si un depot
+    dont la fiche est refusee a CREE son fichier - qu'on retire alors pour ne
+    pas laisser un plan sans fiche (audit du 12/11, S5)."""
+    return etage_valide(etage) and (dossier / f"{etage}.glb").exists()
+
+
 def supprimer_plan(dossier: Path, etage: str) -> bool:
     cible = chemin_plan(dossier, etage)
     try:
@@ -161,6 +168,21 @@ def creer_vue(hass, store, dossier: Path):
     def refus(statut: int, code: str):
         return web.json_response({"code": code}, status=statut)
 
+    def refus_du_magasin(err: ValueError):
+        # Le magasin refuse la fiche (un plafond : `RefusNomme`) : un refus
+        # NOMME plutot qu'une exception qui sortait de la vue (audit du 12/11, S5).
+        code = getattr(err, "code", None) or "plan_ecriture"
+        return refus(413 if code == "payload_too_large" else 400, code)
+
+    def signaler() -> None:
+        # Les ecrans relisent `loggia_plan3d` et la reecrivent ENTIERE (une
+        # liaison) : sans signal, un ecran au cache perime effacait la fiche du
+        # plan qu'on venait de deposer (audit du 12/11, S5). Par `getattr` : la
+        # doublure du magasin des tests ne l'a pas forcement.
+        signal = getattr(store, "signaler_communes", None)
+        if callable(signal):
+            signal([CLE])
+
     class LoggiaPlanView(HomeAssistantView):
         url = URL
         name = "api:loggia:plan"
@@ -185,13 +207,30 @@ def creer_vue(hass, store, dossier: Path):
             try:
                 octets = await lire_corps(request.content)
                 nom = request.query.get("nom")
+                existait = await hass.async_add_executor_job(plan_existe, dossier, etage)
                 version = await hass.async_add_executor_job(ecrire_plan, dossier, etage, octets)
             except PlanRefuse as err:
                 return refus(413 if err.code == "plan_trop_lourd" else 400, err.code)
             except OSError:
                 _LOGGER.exception("Loggia : plan %s impossible a ecrire", etage)
                 return refus(500, "plan_ecriture")
-            await store.async_modifier_shared(CLE, lambda v: fiche(v, etage, nom, octets))
+            # La fiche sous garde, elle aussi (audit du 12/11, S5) : son refus
+            # sortait de la vue en erreur brute, le fichier deja ecrit.
+            try:
+                await store.async_modifier_shared(CLE, lambda v: fiche(v, etage, nom, octets))
+            except (ValueError, OSError) as err:
+                _LOGGER.warning("Loggia : la fiche du plan %s est refusee : %s", etage, err)
+                # Le fichier que CE depot a cree n'aurait pas de fiche : on le
+                # retire. Un plan qui en remplacait un autre ne peut pas rendre
+                # l'ancien (deja remplace d'un seul tenant) : il reste, sous
+                # l'ancienne fiche, et le prochain depot l'ecrase.
+                if not existait:
+                    try:
+                        await hass.async_add_executor_job(supprimer_plan, dossier, etage)
+                    except OSError:
+                        _LOGGER.exception("Loggia : le plan %s sans fiche n'a pas pu etre retire", etage)
+                return refus_du_magasin(err) if isinstance(err, ValueError) else refus(500, "plan_ecriture")
+            signaler()
             return web.json_response({"version": version, "taille": len(octets)})
 
         async def delete(self, request, etage):
@@ -201,7 +240,13 @@ def creer_vue(hass, store, dossier: Path):
             if not etage_valide(etage):
                 return refus(400, "plan_etage")
             await hass.async_add_executor_job(supprimer_plan, dossier, etage)
-            await store.async_modifier_shared(CLE, lambda v: fiche(v, etage, None, None))
+            # Un refus du magasin se nomme, comme au depot (audit du 12/11, S5).
+            try:
+                await store.async_modifier_shared(CLE, lambda v: fiche(v, etage, None, None))
+            except (ValueError, OSError) as err:
+                _LOGGER.warning("Loggia : la fiche du plan %s n'a pas pu etre retiree : %s", etage, err)
+                return refus_du_magasin(err) if isinstance(err, ValueError) else refus(500, "plan_ecriture")
+            signaler()
             return web.json_response({"retire": etage})
 
     return LoggiaPlanView()

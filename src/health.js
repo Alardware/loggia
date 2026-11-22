@@ -35,6 +35,7 @@
 
 import { locale } from './i18n.js';
 import { domaineDe } from './outils.js';
+import { PLATEFORMES_CALCULEES } from './attention.js';
 
 /** Les domaines qui vivent dans la configuration, sans matériel derrière. */
 const DOMAINES_LOCAUX = new Set(['automation', 'script', 'scene', 'input_boolean',
@@ -99,27 +100,54 @@ function muettes(states, meta) {
   return out;
 }
 
+/** Depuis combien de MILLISECONDES une entité tient son état, à l'horloge `maintenant` ; null sans date lisible. */
+function ageDe(st, maintenant) {
+  const t = st && (st.last_changed || st.last_updated);
+  if (!t) return null;
+  const ms = new Date(t).getTime();
+  return isFinite(ms) ? maintenant - ms : null;
+}
+
+/** Le silence qu'une intégration doit tenir avant d'être dite tombée (audit du 12/11) : cinq minutes. */
+export const MUETTE_DEPUIS_MS = 5 * 60000;
+
 /**
  * Intégrations dont TOUTES les entités se taisent.
  *
  * On exige un minimum d'entités : une intégration qui n'en expose qu'une seule
  * ne permet pas de distinguer une panne de plateforme d'un appareil éteint.
+ *
+ * UN POINT QUI CLIGNOTE N'EST PAS UNE PANNE (audit du 12/11). Sur une vraie
+ * installation, « … ne répond plus · 4 appareils » est apparu puis a disparu
+ * en quatre minutes : une intégration en nuage qui se reconnecte passe par
+ * `unavailable` le temps d'un hoquet. Elle ne compte donc que si ses entités
+ * se taisent depuis CINQ MINUTES au moins — la plus récente de leurs dates
+ * (`last_changed`, sinon `last_updated`), lue à l'horloge passée en
+ * paramètre ; une entité sans date ne retient rien. Et les plateformes
+ * CALCULÉES (`template`, `group` : `PLATEFORMES_CALCULEES`, attention.js)
+ * sont écartées : elles se taisent parce que ce qu'elles lisent se tait, la
+ * panne est toujours ailleurs, et c'est elle qu'il faut dire.
  */
-function integrationsTombees(states, meta, seuil = 3) {
+export function integrationsTombees(states, meta, seuil = 3, maintenant = Date.now()) {
   const parPlateforme = new Map();
   Object.keys(states).forEach(id => {
     const m = meta && meta.get ? meta.get(id) : null;
     const p = m && m.platform;
     if (!p) return;
     if (m.category === 'config' || m.category === 'diagnostic') return;
-    const e = parPlateforme.get(p) || { total: 0, muettes: 0, entities: [] };
+    if (PLATEFORMES_CALCULEES.indexOf(p) >= 0) return;
+    const e = parPlateforme.get(p) || { total: 0, muettes: 0, entities: [], recente: null };
     e.total += 1;
-    if (estMuette(states[id])) { e.muettes += 1; e.entities.push(id); }
+    if (estMuette(states[id])) {
+      e.muettes += 1; e.entities.push(id);
+      const age = ageDe(states[id], maintenant);
+      if (age != null && (e.recente == null || age < e.recente)) e.recente = age;
+    }
     parPlateforme.set(p, e);
   });
   const out = [];
   parPlateforme.forEach((e, p) => {
-    if (e.total >= seuil && e.muettes === e.total) {
+    if (e.total >= seuil && e.muettes === e.total && (e.recente == null || e.recente >= MUETTE_DEPUIS_MS)) {
       out.push({ kind: 'integration', scope: p, count: e.total, entities: e.entities });
     }
   });
@@ -237,7 +265,7 @@ function passerellesTombees(devices) {
  * L'état de santé de l'installation : des incidents, pas des symptômes.
  *
  * @param {Map} devices  les appareils de `buildDevices`
- * @param {object} ctx   { states, meta }
+ * @param {object} ctx   { states, meta, maintenant } — `maintenant` : l'horloge en ms, Date.now() sinon (audit du 12/11)
  */
 export function healthReport(devices, ctx = {}) {
   const states = ctx.states || {};
@@ -258,7 +286,7 @@ export function healthReport(devices, ctx = {}) {
     });
   });
 
-  integrationsTombees(states, meta).forEach(i => {
+  integrationsTombees(states, meta, 3, ctx.maintenant != null ? ctx.maintenant : Date.now()).forEach(i => {
     if (i.entities.every(e => expliquees.has(e))) return;
     incidents.push(i);
     i.entities.forEach(e => expliquees.add(e));

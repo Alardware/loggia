@@ -12,6 +12,7 @@ import { LISERE, petitesCapitales } from '../styles.js';
 import { nombre } from '../format.js';
 import { Ico } from '../icones.jsx';
 import { tr } from '../i18n.js';
+import { quandLumiere } from '../lumieres.js';
 import { figeeDe, ecouterFigees, texteFigee } from '../fraicheur.js';
 import { soeursDe, estDehors, pieceLoggiaDe, useHass, lavisCarte } from '../app/noyau.jsx';
 import { cvIcoEntite } from '../cartescustom/cartes.jsx';
@@ -126,12 +127,18 @@ function vueMesure(H, id, label = null, humId = null) {
   const neutre = neutreDe(cle, uniteTable, dehors) || horsPiece(cle, id) || nonJugee(S, id, cle);
   const zone = cle && v != null && !neutre && !figee ? zoneMesure(cle, v, dehors) : null;
   const hum = lu && humId && S[humId] ? lireNombre(S[humId].state) : null;
-  const phrase = muette ? tr('Indisponible') : !lu ? tr('Valeur illisible') : figee ? texteFigee(figee) : phraseMesure(cle, zone, hum);
+  // Muette, la règle de la lumière (`phraseLumiere` ; audit du 12/11, lot 4, E24) : « Indisponible depuis 14:20 », déjà en rouge.
+  const depuis = muette && st ? quandLumiere(st.last_changed) : null;
+  const phrase = muette ? (depuis ? tr('Indisponible depuis {h}', { h: depuis }) : tr('Indisponible')) : !lu ? tr('Valeur illisible') : figee ? texteFigee(figee) : phraseMesure(cle, zone, hum);
   const repli = zone ? phraseMesure(cle, zone, hum, true) : null;
   const nom = label || cvName(st, id);
   const famille = nomMesure(cle);
   return {
     nom, muette, figee, cle, famille: nomDitFamille(nom, famille) ? '' : famille, zone, neutre, inconnue, dehors,
+    /* CE QUE LA CARTE MESURE, même muette (audit du 12/11) : dans Objets, une mesure indisponible n'écrivait que le nom de sa pièce
+     * et « Indisponible » — sans dire si c'était le CO₂ ou l'humidité. Sa famille, celle qui s'écrit sous le chiffre ; sans famille et
+     * sous un nom donné par la vue, le nom de l'entité. Rien quand le nom affiché le dit déjà. */
+    libelle: (nomDitFamille(nom, famille) ? '' : famille) || (label && !famille ? cvName(st, id) : ''),
     chiffre: !lu ? null : cle ? chiffreMesure(cle, n, uniteTable) : nombre(n, 1, 0), unite: cle === 'temp' ? signeTemp(uT) : (a.unit_of_measurement || ''),
     barre: zone ? barreMesure(cle, v, uniteTable, dehors) : null,
     phrase,
@@ -195,7 +202,7 @@ function RoomMesureCard({ id, hass, onOpen, label = null }) {
         // Le lavis, seulement hors du bon : 0,1 en haut, 0,16 pour la dernière zone, 0,03 en bas.
         ...(teinte && LAVIS ? { background: lavisCarte(teinte.rgb, derniere ? .16 : .1, .03) } : null),
         border: LISERE }}>
-      {onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(v.nom, valeur && famille ? famille + ' ' + valeur : valeur, v.phrase)} />}
+      {onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(v.nom, valeur ? (famille ? famille + ' ' + valeur : valeur) : v.libelle, v.phrase)} />}
       {/* La ligne du haut : la plaque ; sur une carte étroite (la grille commune, passe téléphone), le chiffre à droite et
         * sa famille dessous — la feuille n'en montre qu'une écriture. La famille y passe en minuscules, de 10 à 8 px, dans
         * la place que laisse la plaque (`--o-reserve`, 38 + 8 px), comme l'étiquette d'un chauffage. */}
@@ -208,6 +215,8 @@ function RoomMesureCard({ id, hass, onOpen, label = null }) {
             {famille && <span aria-hidden="true" className="o-gab-etiquette" style={{ marginTop: 3, lineHeight: 1, whiteSpace: 'nowrap', color: 'var(--o-text3)', '--o-n': famille.length, '--o-reserve': '46px' }}>{famille}</span>}
           </span>
         )}
+        {/* Sans chiffre — muette, illisible —, la carte étroite garde en haut ce qu'elle mesure (audit du 12/11). */}
+        {v.chiffre == null && v.libelle && <span aria-hidden="true" className="o-gab-etiquette o-seul-etroit" style={{ marginTop: 4, minWidth: 0, lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--o-text3)', '--o-n': v.libelle.length, '--o-reserve': '46px' }}>{v.libelle}</span>}
       </div>
       {/* La rangée de la carte d'une prise : le nom et la phrase à gauche, le chiffre à droite, aligné sur leur bas. Sur une
         * carte large (correction bis, point 6), la colonne du nom ne descend pas sous son mot le plus long (`o-mesure-gauche`,
@@ -216,7 +225,9 @@ function RoomMesureCard({ id, hass, onOpen, label = null }) {
         * chiffre se tait — il est en haut — et le nom et la phrase prennent toute la largeur (`o-gab-nom`, `o-gab-phrase`) ;
         * la longueur de la phrase (`--o-n`) règle sa taille, de 12 à 10,5 px. */}
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 'var(--o-milieu-haut, 14px)', '--o-plancher': plancher ? plancher + 10 + 'px' : undefined }}>
-        <div className="o-mesure-gauche" style={{ flex: '1 1 0%', minWidth: 0 }}>
+        {/* La colonne du nom reste en haut (`RM_SOUS_PLAQUE`, audit du 12/11) : alignée en bas, un chiffre et sa famille plus hauts
+          * qu'elle la poussaient de 3 px — le nom des particules et des COV tombait à 72 px, celui des autres cartes à 69. */}
+        <div className="o-mesure-gauche" style={{ flex: '1 1 0%', minWidth: 0, alignSelf: 'flex-start' }}>
           <div className="o-mesure-nom o-gab-nom" style={NOM_MESURE}>{v.nom}</div>
           {/* La phrase de la carte LARGE, dans son cadre (`o-mesure-phrases`, index.css) : elle rétrécit de 12 à 10,5 px d'après sa
             * largeur estimée (`--o-larg`), puis cède sa place à sa forme de repli — « Idéal · 47 % », « Confiné » —, écrite une
@@ -230,6 +241,8 @@ function RoomMesureCard({ id, hass, onOpen, label = null }) {
           <div className="o-mesure-phrase-courte o-gab-phrase o-seul-etroit" style={{ ...RM_SUB, color: encre, '--o-n': Math.max(1, (v.phraseCourte || v.phrase).length) }}>{v.phraseCourte || v.phrase}</div>
         </div>
         {v.chiffre != null && <ChiffreMesure chiffre={v.chiffre} unite={v.unite} famille={famille} />}
+        {/* Sans chiffre, la carte large garde ce qu'elle mesure à sa place, en petites capitales (audit du 12/11). */}
+        {v.chiffre == null && v.libelle && <span aria-hidden="true" className="o-seul-large" style={{ ...petitesCapitales(10), flex: '0 1 auto', minWidth: 0, maxWidth: '50%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.libelle}</span>}
       </div>
       {v.barre && <BarreMesure barre={v.barre} />}
     </div>

@@ -1,10 +1,12 @@
 /* La vue Objets : ses filtres, ses en-têtes chargés à la demande, ses objets.
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
-import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useRangerLibre } from '../glisser.js';
 import { lazyRecharge } from '../recharge.js';
-import { LOGGIA_INDEX, medPlayers, loggiaEnt, enBorne, estTraceur } from '../state.js';
-import { borneEnCharge } from '../borne.js';
+import { LOGGIA_INDEX, LOGGIA_RESOLVED, LOGGIA_CFG, nomZoneDe, medPlayers, loggiaEnt, enBornes, estTraceur, normRooms, cfgVal } from '../state.js';
+import { borneEnCharge, cleBorne, borneDeCle } from '../borne.js';
+import { CarteBorne, FicheBorne } from '../cartes/eauborne.jsx';
+import { composes, quandComposes, CLE_COMPOSE } from '../composesboot.js';
 import { enPanne } from '../outils.js';
 import { wattsDe } from '../unites.js';
 import { interrupteurDeModule } from '../resolve.js';
@@ -90,10 +92,50 @@ const OBJ_DOMAINES = ['light', 'cover', 'climate', 'water_heater', 'media_player
  * liste et nous la passe, ce qui rend la dépendance VISIBLE. Lue ici, elle
  * était invisible à `exhaustive-deps` — et la déclarer sans l'employer aurait
  * ajouté un avertissement à un inventaire que le projet garde court exprès. */
+/* LA SIGNATURE DE LA MAISON, pour ne relire Objets que si ce qu'il montre a pu changer (19/11, fluidité, point 1).
+ *
+ * `objetsDeLaMaison` parcourt toutes les entités, découvre lumières, chauffages et volets, puis la vue trie et compte :
+ * cela repartait à chaque `hass` neuf, c'est-à-dire à chaque changement de N'IMPORTE QUELLE entité. La signature
+ * reprend ce que le calcul lit — l'état, `hvac_action`, la position d'un volet, le nom, la classe, le réveil d'un
+ * chauffe-eau — et laisse de côté le bruit : d'un capteur chiffré, seulement s'il répond, et pour une puissance, si
+ * elle passe 10 W (la chauffe d'un module, la charge d'une borne). Une porte qui s'ouvre change la signature ; une
+ * puissance qui bouge de 3 W, non. L'index, la découverte et la configuration y entrent par leur identité : chacun
+ * est remplacé, jamais modifié en place. */
+const NUMEROS = new WeakMap();
+let prochainNumero = 1;
+const numero = (o) => {
+  if (!o || typeof o !== 'object') return 0;
+  let n = NUMEROS.get(o);
+  if (!n) { n = prochainNumero++; NUMEROS.set(o, n); }
+  return n;
+};
+const hacher = (h, s) => { for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; };
+export function signatureMaison(hass) {
+  const S = hass && hass.states;
+  if (!S) return '';
+  let h = 0, n = 0;
+  for (const id in S) {
+    const st = S[id];
+    n++;
+    if (!st) continue;
+    const a = st.attributes || {};
+    let mot;
+    if (id.indexOf('sensor.') === 0) {
+      const muet = st.state === 'unavailable' || st.state === 'unknown';
+      const w = a.device_class === 'power' ? wattsDe(st) : null;
+      mot = muet ? 'm' : (w != null ? (w > 10 ? 'p' : 'r') : 'v');
+    } else {
+      mot = st.state + '|' + (a.hvac_action || '') + '|' + (a.current_position == null ? '' : a.current_position) + '|' + (a.friendly_name || '')
+        + '|' + (a.device_class || '') + (id.indexOf('water_heater.') === 0 ? '|' + (st.last_updated || '') : '');
+    }
+    h = hacher(h, id + '=' + mot + ';');
+  }
+  return numero(LOGGIA_INDEX) + '.' + numero(LOGGIA_RESOLVED) + '.' + numero(LOGGIA_CFG) + '.' + n + '.' + h;
+}
+
 function objetsDeLaMaison(hass, ajoutes = [], epinglesDehors = null) {
   const S = (hass && hass.states) || {};
   const meta = (id) => (LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && LOGGIA_INDEX.entityMeta.get(id)) || {};
-  const pieceDe = (id) => (LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function') ? (LOGGIA_INDEX.areaNameOf(id) || null) : null;
   const epingles = epinglesDehors || new Set(lireEpingles().map(x => cvId(x)));
   const out = [];
   const pris = new Set();
@@ -103,7 +145,7 @@ function objetsDeLaMaison(hass, ajoutes = [], epinglesDehors = null) {
     const type = o.type || 'entite';
     const st = o.id ? S[o.id] : null;
     const etat = st ? st.state : null;
-    const piece = o.piece || (o.id ? pieceDe(o.id) : null);
+    const piece = o.piece || (o.id ? nomZoneDe(o.id) : null);
     const domaine = o.domaine || (o.id ? cvDomain(o.id) : null);
     out.push({
       cle, id: o.id || null, type, zone: o.zone || null, domaine, piece,
@@ -159,8 +201,16 @@ function objetsDeLaMaison(hass, ajoutes = [], epinglesDehors = null) {
   const duDistributeur = new Set(feeder ? feeder.soeurs.map(x => x.id) : []);
   if (feeder && feeder.appareil) parAppareil.add(feeder.appareil);
   /* La borne de recharge (chantier G3, E3) : UNE carte pour l'appareil — ni son interrupteur en prise, ni sa puissance en capteur. */
-  const borne = enBorne();
-  if (borne) parAppareil.add(borne.appareil);
+  const bornes = enBornes();
+  bornes.forEach(b => parAppareil.add(b.appareil));
+  /* La voiture, la litière, la fontaine (A11, A12 ; ADR 0386) : UNE carte pour l'appareil — ni son verrou ni ses capteurs en
+   * cartes à part, ni une litière qui publie un `vacuum` en robot aspirateur. */
+  // La découverte se charge à la demande (`composesboot.js`) : avant elle, rien de composé — au relevé suivant, leurs cartes.
+  const K = composes(LOGGIA_INDEX);
+  const composesMaison = K ? K.composesDe(LOGGIA_INDEX, S) : [];
+  composesMaison.forEach(c => parAppareil.add(c.appareil));
+  // Ses MESURES non plus (la pression d'un pneu, la température dehors d'une voiture) : elles entrent une à une, avant ce tri-là.
+  const duCompose = new Set(composesMaison.map(c => c.appareil));
   // Les capteurs d'une plante sont a la plante : ils ne font pas une carte de plus — ceux de sa base, et ceux de son appareil (C29).
   const plantes = plantesDeLaMaison(S);
   const basesPlantes = plantes.map(p => String(p.base));
@@ -187,7 +237,7 @@ function objetsDeLaMaison(hass, ajoutes = [], epinglesDehors = null) {
   const mesures = [];
   const candidats = [];
   Object.keys(S).forEach(id => {
-    if (pris.has(id) || duDistributeur.has(id) || dUnePlante(id)) return;
+    if (pris.has(id) || duDistributeur.has(id) || dUnePlante(id) || duCompose.has(meta(id).deviceId)) return;
     // Un traceur d'objet (ADR 0318) fait la carte de son appareil, avant ses capteurs ; un autre `device_tracker` n'en fait pas.
     const d = cvDomain(id); const rang = estTraceur(id) ? 0 : OBJ_DOMAINES.indexOf(d); if (rang < 0) return;
     /* Les lecteurs sont ceux de `medPlayers()` (resolve.js : M1 B) — une entité `media_player` qui n'en est pas n'a pas de carte :
@@ -241,8 +291,10 @@ function objetsDeLaMaison(hass, ajoutes = [], epinglesDehors = null) {
   //    au sens d'objets.js — il FAIT quelque chose : une distribution en cours
   //    (le capteur de l'appareil), plus « il reste un repas aujourd'hui ».
   if (feeder) entree('obj:feeder', { type: 'feeder', domaine: 'feeder', nom: tr('Distributeur'), actif: !!feeder.distribue });
-  // La borne : sous IoT, « active » quand elle charge ; sa pièce est celle de sa puissance.
-  if (borne) { const da = LOGGIA_INDEX && LOGGIA_INDEX.deviceMeta ? LOGGIA_INDEX.deviceMeta.get(borne.appareil) : null; entree('obj:borne', { type: 'borne', domaine: 'borne', nom: (da && da.name) || tr('Borne de recharge'), piece: pieceDe(borne.puissance), actif: borneEnCharge(borne, S) }); }
+  // Les bornes (A7, une carte chacune) : sous IoT, « active » quand elle charge ; sa pièce est celle de sa puissance.
+  bornes.forEach(borne => { const da = LOGGIA_INDEX && LOGGIA_INDEX.deviceMeta ? LOGGIA_INDEX.deviceMeta.get(borne.appareil) : null; entree(cleBorne(bornes, borne), { type: 'borne', domaine: 'borne', nom: (da && da.name) || tr('Borne de recharge'), piece: nomZoneDe(borne.puissance), actif: borneEnCharge(borne, S) }); });
+  // Chacun sous IoT, sa pièce celle de son appareil ; « actif » quand la voiture charge, quand la litière nettoie.
+  composesMaison.forEach(c => entree(CLE_COMPOSE + c.appareil, { type: 'app', domaine: c.genre, nom: c.nom || K.nomGenre(c.genre), piece: nomZoneDe(K.entitesCompose(c)[0]), actif: K.composeActif(c, S) }));
   // Les plantes (C29) : découvertes ou configurées ; la pièce d'une base sans appareil, celle de ses capteurs.
   plantes.forEach(p => entree('plant:' + p.base, { type: 'plant', domaine: 'plant', nom: p.nom, piece: p.piece || (p.capteurs ? null : plantPiece(S, p.base, null)) || null,
     capteurs: Object.values(capteursPlante(S, p)).filter(Boolean) }));
@@ -403,7 +455,17 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
    * et on les passe : la dépendance devient visible et vérifiable. */
   const epinglesSig = lireEpingles().map(x => cvId(x)).join('|');
   const epingles = useMemo(() => new Set(epinglesSig ? epinglesSig.split('|') : []), [epinglesSig]);
-  const tousObjets = useMemo(() => objetsDeLaMaison(hass, ajoutes, epingles), [hass, ajoutes, epingles]);
+  /* Sur la SIGNATURE de la maison, plus sur `hass` (19/11, fluidité, point 1) : Home Assistant rend un `hass` neuf à
+   * chaque changement de n'importe quelle entité, et la maison entière se relisait — une puissance qui bougeait de 3 W
+   * suffisait. `hassFrais` donne au calcul le relevé du moment, sans en faire une dépendance. */
+  const hassFrais = useRef(hass);
+  hassFrais.current = hass;
+  const sigMaison = signatureMaison(hass);
+  // La découverte de la voiture, de la litière et de la fontaine arrive à la demande (`composesboot.js`, ADR 0386) : la liste se refait alors.
+  const [, arrivee] = useState(0);
+  useEffect(() => quandComposes(() => arrivee(n => n + 1)), []);
+  const sigListe = sigMaison && composes(LOGGIA_INDEX) ? sigMaison + '·composes' : sigMaison;
+  const tousObjets = useMemo(() => objetsDeLaMaison(sigListe ? hassFrais.current : null, ajoutes, epingles), [sigListe, ajoutes, epingles]);
   // L'ordre propose est deja piece par piece : c'est de LA que part un
   // deplacement — sinon la grille sautait a la premiere prise (bug vecu).
   const derived = useMemo(
@@ -438,19 +500,29 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
    * (59 px) : rien ne saute. */
   const { etat: etatCh } = useEtatChauffage(actuel === 'chauffage');
   const barreMaison = actuel === 'chauffage' && barreMaisonUtile(etatCh);
-  const stats = useMemo(() => statsObjets(objets), [objets]);
+  /* Les pièces de l'en-tête sont celles de Loggia — les mêmes que sur l'Accueil (audit du 12/11, X7) —, pas les zones de Home
+   * Assistant : « Network » ou le local technique ne sont pas des pièces de la maison. */
+  const piecesSig = normRooms(cfgVal('loggia_rooms', null)).map(r => r.room).join('|');
+  const piecesLoggia = useMemo(() => (piecesSig ? piecesSig.split('|') : []), [piecesSig]);
+  const stats = useMemo(() => statsObjets(objets, piecesLoggia, rmNorm), [objets, piecesLoggia]);
   const [addSheet, setAddSheet] = useState(false);
   const [cardEdit, setCardEdit] = useState(null);
+  // La popup d'une borne SUIVANTE (A7) : l'appareil qu'on ouvre. La première garde sa popup de la fabrique commune (`obj:borne`).
+  const [bornePop, setBornePop] = useState(null);
   const nomDe = (o) => ed.labelOf(o.cle) || o.nom;
-  const scenes = Object.keys(S).filter(k => k.indexOf('scene.') === 0).length;
+  const scenes = useMemo(() => Object.keys(sigMaison ? hassFrais.current.states || {} : {}).filter(k => k.indexOf('scene.') === 0).length, [sigMaison]);
   const dc = useDomainCards(hass, { onNav });
   // Toute carte vient de la fabrique commune — entite, zone, distributeur,
   // plante — la meme que dans les pieces (composeur du 15/09).
   const carte = (o) => {
     const compacte = ed.estCompact(o.cle);
     if (o.type === 'zone') return dc.card(null, nomDe(o), o.zone);
+    // Une borne de plus (A7) : sa carte et sa popup, la fabrique commune ne connaît que la première (`obj:borne`).
+    const bornesDeLaMaison = enBornes();
+    const suivante = o.type === 'borne' ? borneDeCle(bornesDeLaMaison, o.cle) : null;
+    if (suivante && suivante !== bornesDeLaMaison[0]) return <CarteBorne borne={suivante} hass={hass} chip={compacte} label={ed.labelOf(o.cle) || null} onOpen={() => setBornePop(suivante.appareil)} />;
     // Une carte composée — le distributeur, une plante, un groupe de capteurs (C20) — se nomme par sa clé ; une entité, par son identifiant.
-    const cle = (o.type === 'feeder' || o.type === 'plant' || o.type === 'groupe' || o.type === 'borne') ? o.cle : o.id;
+    const cle = (o.type === 'feeder' || o.type === 'plant' || o.type === 'groupe' || o.type === 'borne' || o.type === 'app') ? o.cle : o.id;
     /* Un nom posé à la main l'emporte toujours ; sinon, la carte d'une mesure porte celui de sa pièce (C13) — sa famille
      * est écrite sous son chiffre. La compacte ne l'écrit pas : elle garde son nom de Home Assistant. */
     return compacte ? dc.compact(cle, ed.labelOf(o.cle) || null) : dc.card(cle, ed.labelOf(o.cle) || o.nomCarte || null);
@@ -472,7 +544,11 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
             * « Objets » — un lecteur d'écran lisait donc le mauvais nom, et
             * trois entrées du menu menaient toutes au même titre. */}
           <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{filtre === 'lumieres' ? tr('Lumières') : filtre === 'chauffage' ? tr('Climat') : filtre === 'multimedia' ? tr('Médias') : filtre === 'volets' ? tr('Volets') : tr('Objets')}</h1>
-          <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{tr('{n} appareils répartis dans {p} pièces · {a} actifs', { n: stats.appareils, p: stats.pieces, a: stats.actifs })}</div>
+          <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{/* Tout au pluriel : la phrase d'origine, telle que chaque langue l'a traduite. Dès qu'un des trois nombres vaut 0
+              * ou 1, trois morceaux accordés chacun au sien (audit du 12/11) : « 1 appareils répartis dans 1 pièces · 1 actifs ». */}
+            {(stats.appareils > 1 && stats.pieces > 1 && stats.actifs > 1)
+              ? tr('{n} appareils répartis dans {p} pièces · {a} actifs', { n: stats.appareils, p: stats.pieces, a: stats.actifs })
+              : trN(stats.appareils, '{n} appareil réparti', '{n} appareils répartis') + ' ' + trN(stats.pieces, 'dans {n} pièce', 'dans {n} pièces') + ' · ' + trN(stats.actifs, '{n} actif', '{n} actifs')}</div>
           {/* Les volets ont une chose que les autres familles n'ont pas : des
             * MODES et un planning, qui ne tiennent dans aucune carte. L'entrée
             * du menu ouvre désormais cette vue-ci, filtrée, comme Lumières ou
@@ -573,7 +649,10 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
           /* La rangée commune de 40 px (19/10) : le titre de Tous, de Chauffage… au niveau de celui des Lumières. */
           <div className="o-objets-entete">
             <h2 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, fontWeight: 400, color: 'var(--o-text2)' }}>{titreFiltre}</h2>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{trN(visibles.length, '{n} appareil', '{n} appareils')}{chauffent ? ' · ' + trN(chauffent, '{n} chauffe', '{n} chauffent') : null}</span>
+            {/* UN SEUL TOTAL (audit du 12/11, E10). Ce compte écrivait le nombre de CARTES — « 89 appareils » — à côté d'une puce
+              * « Tous 121 » et d'un en-tête « 121 appareils » : un groupe de capteurs tient plusieurs appareils sur une carte. Il
+              * compte désormais comme sa puce (`compteObjets` : un groupe pèse ses membres) : le même nombre partout. */}
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text3)' }}>{trN(compteObjets(visibles, 'tous'), '{n} appareil', '{n} appareils')}{chauffent ? ' · ' + trN(chauffent, '{n} chauffe', '{n} chauffent') : null}</span>
           </div>
         )}
         {barreMaison && <Suspense fallback={<div style={{ minHeight: 59 }} />}><BarreMaison hass={hass} etat={etatCh} /></Suspense>}
@@ -595,6 +674,7 @@ function ObjetsView({ hass, onNav, filtre = null, edit = false, onEnt = null }) 
         )}
         {/* dc.card sans dc.sheets = fiches muettes (piege vecu). */}
         {dc.sheets}
+        {bornePop && enBornes().filter(x => x.appareil === bornePop).map(x => <FicheBorne key={x.appareil} borne={x} hass={hass} onClose={() => setBornePop(null)} />)}
         {addSheet && <ComposeurCartes dc={dc} hass={hass} present={ed.ids} onToggle={ed.toggle}
           domaines={[...OBJ_DOMAINES, 'input_boolean', 'number', 'select']} onClose={() => setAddSheet(false)} />}
         {cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={(parCle.get(cardEdit) && nomDe(parCle.get(cardEdit))) || cardEdit} origine={(parCle.get(cardEdit) || {}).nom || cardEdit} hass={hass} onClose={() => setCardEdit(null)} />}

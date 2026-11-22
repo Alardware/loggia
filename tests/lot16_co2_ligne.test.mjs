@@ -59,7 +59,8 @@ test('la ligne du CO₂ : le mot de la zone en tête de la phrase, jamais coupé
    * de repli — « Confiné », sans « aérez » — garde le mot en tête (`phraseMesure(…, true)`). Ce qu'elle dit ne change pas. */
   assert.ok(f.includes("<div className=\"o-mesure-phrase\" data-longue={v.phraseRepli ? '' : undefined} style={{ ...RM_SUB, color: encre, '--o-larg': emPhrase(v.phrase) }}>{v.phrase}</div>")
     && f.includes("const encre = v.muette ? 'var(--o-bad)' : teinte ? teinte.c : 'var(--o-text2)';"), 'la phrase de la zone');
-  assert.ok(f.includes("label={nomCarte(v.nom, valeur && famille ? famille + ' ' + valeur : valeur, v.phrase)}"), 'le nom accessible dit ce que la carte affiche, sa famille comprise');
+  // ASSERTION MODIFIÉE (12/11, audit) : muette, la surface dit encore ce que mesure la carte (`v.libelle`, E23).
+  assert.ok(f.includes("label={nomCarte(v.nom, valeur ? (famille ? famille + ' ' + valeur : valeur) : v.libelle, v.phrase)}"), 'le nom accessible dit ce que la carte affiche, sa famille comprise');
   assert.ok(PUR.includes('const morceaux = z ? [z.t] : [];'), 'le mot de la zone vient en tête');
 });
 

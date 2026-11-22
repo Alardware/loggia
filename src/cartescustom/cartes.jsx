@@ -1,7 +1,9 @@
 /* Les cartes des vues personnalisées dont les cartes et les fiches se servent : `CvCard`, les caméras, l'alarme.
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
 import { useState, useRef, useEffect, Suspense } from 'react';
-import { LOGGIA_INDEX, cfgVal, estTraceur } from '../state.js';
+import { LOGGIA_INDEX, cfgVal, estTraceur, plateformeDe } from '../state.js';
+import { camPrivee } from '../camcmd.js';
+import { auteurAlarme, texteAuteur, refusArmement, appelForcer, REFUS_APRES_MS, REFUS_DURE_MS } from '../alarmegeste.js';
 import { lazyRecharge } from '../recharge.js';
 import { versHex, lisibleSurLavis } from '../contraste.js';
 import { enPanne, gestesCover, positionPubliee } from '../outils.js';
@@ -9,7 +11,7 @@ import { LAVIS } from '../theme.js';
 import { cameraModes } from '../discovery.js';
 import { commanderService, estVanneCarte, commander } from '../actions.js';
 import { cleCamera } from '../present.js';
-import { Fi, BottomSheet, ListeChoix, CV_DOM_ICON, cvDomain, cvName, Surface, nomCarte } from '../ui.jsx';
+import { Fi, BottomSheet, ListeChoix, CV_DOM_ICON, cvDomain, cvName, Surface, nomCarte, useEtatServeur } from '../ui.jsx';
 import { appuiBascule } from '../prises.js';
 import { luminosite, teinteDeCarte, phraseLumiere, lavisLumiere, capacitesLumiere } from '../lumieres.js';
 import { pourcentTexte } from '../lecteur.js';
@@ -17,14 +19,17 @@ import { iconeMesure, cleMesure } from '../confort.js';
 import { phraseChauffeEau, chauffeEauEnChauffe } from '../objets.js';
 import { motPresence } from '../presence.js';
 import { useOptimiste } from '../optimiste.js';
+import { useConfirmerOuverture } from '../confirmerouvrant.js';
 import { CamLive } from '../camera.jsx';
 import { ICONES_ARMEMENT, couleurPile, CLASSES_OUVRANT } from '../attention.js';
+import { composes } from '../composesboot.js';
 import { LISERE } from '../styles.js';
 import { relTime, fmtWatts } from '../format.js';
 import { estVolet, vueVolet, coverActif, coverOuvert, iconeSelonEtat } from '../voletecran.js';
 import { useCourseVolet, ordreEtArret, ordreEtCourse } from '../voletcourse.js';
 import { useEtatVolets, voletDe } from '../voletsetat.js';
-import { teinteClimat } from '../chauffageecran.js';
+import { teinteClimat, consigneVoisine } from '../chauffageecran.js';
+import { uniteTemp } from '../unites.js';
 import { Ico } from '../icones.jsx';
 import { depuis } from '../evenement.js';
 import { tr, locale, trSens, trN } from '../i18n.js';
@@ -74,11 +79,15 @@ function sousCamera(online, ev) {
 }
 function tuileCamera(cam, i, hass) {
   const teinte = CAMERAS()[i % CAMERAS().length];
-  return {
-    label: cam.name, tag: 'LIVE · ' + (cam.name || '').toUpperCase(), grad: teinte.grad, glow: teinte.glow,
+  const tuile = {
+    // Hors ligne, pas de « LIVE » (audit du 12/11) : la règle des tuiles de la vue Sécurité.
+    label: cam.name, tag: cam.online === false ? tr('HORS LIGNE') : 'LIVE · ' + (cam.name || '').toUpperCase(), grad: teinte.grad, glow: teinte.glow,
     sub: sousCamera(cam.online, cam.evenement || null),
     cle: cleCamera(cam, i), haid: cam.haid, online: cam.online, hass, evenement: cam.evenement || null,
   };
+  // Privée (A8, ADR 0385 ; camcmd.js) : « PRIVÉ », jamais « HORS LIGNE » — qu'on ne la confonde pas avec une panne.
+  return camPrivee(LOGGIA_INDEX, (hass && hass.states) || {}, cam.haid)
+    ? { ...tuile, online: true, tag: tr('Privé').toUpperCase(), sub: <><Fi i="lock" size={11} />{tr('Privé')}</> } : tuile;
 }
 
 /* Fiche camera (maquettes du 14/09) : la tuile de l'Accueil en grand — meme
@@ -225,10 +234,19 @@ function cvIcoEntite(dom, id, st, name) {
   if (dom === 'lock') return ['unlocked', 'unlocking', 'locking', 'open', 'opening', 'jammed'].indexOf(s) >= 0 ? 'unlock' : 'lock';
   return CV_DOM_ICON[dom] || 'bolt';
 }
+/* « − » et « + » d'un climat (audit du 12/11, B1) : un cran vaut le PAS de l'appareil (`consigneVoisine`), comme la carte de
+ * chauffage des pièces. À ± 0,5, « − » sur un appareil réglé au degré redonnait la même consigne : 21 → 20,5, que l'arrondi au
+ * pas (`commander`) remontait à 21. Rend ce qui est parti — de quoi le montrer tout de suite —, ou null sans consigne lisible. */
+function bougerConsigne(hass, id, a, base, sens) {
+  if (typeof base !== 'number' || !Number.isFinite(base)) return null;
+  const vise = consigneVoisine(base, sens, a, uniteTemp(a, hass)) ?? base + sens * 0.5;
+  const v = commander(hass, id, 'set_temperature', vise, 'temperature');
+  return v != null ? v : vise;
+}
 function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   const st = hass && hass.states ? hass.states[id] : null;
   const call = (d, s, data) => commanderService(hass, id, d, s, { entity_id: id, ...(data || {}) });
-  // Consigne optimiste de la compacte climat (fenêtre fixe 4 s, comme partout).
+  // Consigne optimiste d'un climat, compacte et standard (fenêtre fixe 4 s, comme partout).
   const [ovT, setOvT] = useState(null);
   const ovTRef = useRef(0);
   useEffect(() => () => clearTimeout(ovTRef.current), []);
@@ -284,12 +302,19 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   const vue = volet ? vueVolet({ st, course, v: vVolet, etat: etatVolets }) : null;
   /* Un geste de cover (19/10) : ce qu'il accepte ; un VOLET lance sa course (Stop la fige), qu'un refus de Home Assistant oublie. */
   const gestesCv = dom === 'cover' ? gestesCover(st) : null;
+  /* Ouvrir un portail ou un garage se fait en deux temps (chantier du 20/11, A9 ; Gladys X6) : le premier toucher pose
+   * « Confirmer ? » 4 s, le second sur « ▲ » l'envoie. Fermer, arrêter et tout volet partent tout de suite (confirmerouvrant.js). */
+  const conf = useConfirmerOuverture(dom === 'cover' ? st : null);
+  const armeCv = dom === 'cover' && conf.armee && !dead;
+  const posCv = positionPubliee(st) != null ? positionPubliee(st) : (st && st.state === 'open' ? 100 : 0);
   const bougerCover = (g, cible) => {
     if (!g) return;
     const envoi = envoyerGeste(hass, id, g);
-    if (!vue) envoi();
-    else if (cible == null) ordreEtArret(id, st, envoi);
-    else ordreEtCourse(id, cible, st, envoi);
+    conf.demander(g, posCv, () => {
+      if (!vue) envoi();
+      else if (cible == null) ordreEtArret(id, st, envoi);
+      else ordreEtCourse(id, cible, st, envoi);
+    });
   };
   // Alarme en cours d'armement : le temps restant, battu à la seconde.
   const cptAlarme = dom === 'alarm_control_panel' ? armCompte(st) : null;
@@ -342,6 +367,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
   else if (cvEstLumiere(id)) { const pct = ovBri != null ? ovBri : luminosite(a); stateTxt = phraseLumiere({ st }).texte + (on && dom === 'light' && pct != null ? ' · ' + pct + '\u00a0%' : ''); }
   else if (togglable) stateTxt = on ? tr('Allumé') : tr('Éteint');
   else if (dom === 'climate') stateTxt = (a.current_temperature != null ? decMax(a.current_temperature, 1) + '°' : '—') + (a.temperature != null ? ' → ' + decMax(a.temperature, 1) + '°' : '') + (s !== 'off' ? '' : ' · ' + tr('Éteint'));
+  else if (armeCv) stateTxt = tr('Confirmer ?');
   else if (vue) stateTxt = vue.phrase;
   // Le verdict de V12 aux deux bouts, et un entier (19/10) : plus de « Ouvert · 98% » ni de « 1.5% ».
   else if (dom === 'cover') stateTxt = s === 'opening' ? tr('Ouverture…') : s === 'closing' ? tr('Fermeture…') : on ? (tr('Ouvert') + (positionPubliee(st) != null && !coverOuvert(positionPubliee(st)) ? ' · ' + Math.round(positionPubliee(st)) + '%' : '')) : tr('Fermé');
@@ -443,7 +469,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
           * (`o-cvact`) : sur une carte étroite, compacte ou standard, l'icône
           * remplace le mot (index.css) et le nom garde sa place (05/10). */}
         {runnable && !dead && <button className="o-cvact" aria-label={runnable[2] + ' ' + name} title={runnable[2]} onClick={(e) => { e.stopPropagation(); const lancer = () => call(runnable[0], runnable[1]); if (dom === 'scene' || dom === 'script') annulable(tr('{nom} lancé', { nom: name }), lancer); else lancer(); }} style={{ position: 'relative', borderRadius: 10, background: 'rgba(var(--o-accent-rgb),.14)', border: 'none', color: 'var(--o-accent-soft)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}><span className="o-cvact-ico"><Ico name={icoRun} size={14} /></span><span className="o-cvact-mot">{runnable[2]}</span></button>}
-        {dom === 'lock' && !dead && <button className="o-cvact" aria-label={(s === 'locked' ? tr('Déverrouiller') : tr('Verrouiller')) + ' ' + name} title={s === 'locked' ? tr('Déverrouiller') : tr('Verrouiller')} onClick={(e) => { e.stopPropagation(); call('lock', s === 'locked' ? 'unlock' : 'lock'); }} style={{ position: 'relative', borderRadius: 10, background: s === 'locked' ? 'rgba(var(--o-ok-rgb),.14)' : 'rgba(var(--o-warn2-rgb),.16)', border: 'none', color: s === 'locked' ? 'var(--o-ok)' : 'var(--o-warn2)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}><span className="o-cvact-ico"><Ico name={s === 'locked' ? 'unlock' : 'lock'} size={14} /></span><span className="o-cvact-mot">{s === 'locked' ? tr('Déverrouiller') : tr('Verrouiller')}</span></button>}
+        {dom === 'lock' && !dead && <button className="o-cvact" aria-label={(s === 'locked' ? tr('Déverrouiller') : tr('Verrouiller')) + ' ' + name} title={s === 'locked' ? tr('Déverrouiller') : tr('Verrouiller')} onClick={(e) => { e.stopPropagation(); /* À code (A4, ADR 0386) : la fiche le demande, la carte n'échoue pas en silence. */ if (a.code_format && onOpen) { onOpen(id); return; } call('lock', s === 'locked' ? 'unlock' : 'lock'); }} style={{ position: 'relative', borderRadius: 10, background: s === 'locked' ? 'rgba(var(--o-ok-rgb),.14)' : 'rgba(var(--o-warn2-rgb),.16)', border: 'none', color: s === 'locked' ? 'var(--o-ok)' : 'var(--o-warn2)', fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}><span className="o-cvact-ico"><Ico name={s === 'locked' ? 'unlock' : 'lock'} size={14} /></span><span className="o-cvact-mot">{s === 'locked' ? tr('Déverrouiller') : tr('Verrouiller')}</span></button>}
         {/* Alarme : le geste attendu, comme la serrure — armer quand elle
           * dort, désarmer sinon. Si le panneau réclame un code, le bouton
           * ouvre la fiche plutôt que d'échouer en silence. */}
@@ -483,7 +509,7 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
           // Climat : la consigne ENTRE les deux boutons, comme la maquette.
           if (dom === 'climate') {
             const base = ovT != null ? ovT : a.temperature;
-            const bouge = (d) => { if (base == null) return; const v = commander(hass, id, 'set_temperature', base + d, 'temperature'); poseT(v != null ? v : base + d); };
+            const bouge = (sens) => { const v = bougerConsigne(hass, id, a, base, sens); if (v != null) poseT(v); };
             /* Groupe serré, ancré à droite — l'espace libre reste à gauche.
              * PLUS SERRÉ QUE LES AUTRES depuis le gabarit à deux rangées
              * (05/10) : il partage sa ligne avec l'ICÔNE, qui ne s'efface plus.
@@ -496,16 +522,17 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
             const miniClim = { ...mini, width: 30 };
             return (
               <span style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto', flexShrink: 0 }}>
-                <button style={miniClim} aria-label={'− ' + name} onClick={(e) => { e.stopPropagation(); bouge(-0.5); }}>−</button>
+                <button style={miniClim} aria-label={'− ' + name} onClick={(e) => { e.stopPropagation(); bouge(-1); }}>−</button>
                 <span style={{ fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minWidth: 34, textAlign: 'center' }}>{base != null ? decMax(base, 1) + '°' : '—'}</span>
-                <button style={miniClim} aria-label={'+ ' + name} onClick={(e) => { e.stopPropagation(); bouge(0.5); }}>+</button>
+                <button style={miniClim} aria-label={'+ ' + name} onClick={(e) => { e.stopPropagation(); bouge(1); }}>+</button>
               </span>
             );
           }
           /* Un volet lance sa course (§ 5) : la compacte, la carte et la fiche la dessinent ensemble. Les ▲ ▼ suivent ce que
            * le cover accepte (`gestesCover`, 19/10) : inertes s'il ne sait pas, jamais un toast de refus. */
           if (dom === 'cover') return (<>
-            <button style={{ ...mini, ...(gestesCv.monter ? null : RM_INERTE) }} aria-disabled={gestesCv.monter ? undefined : true} aria-label={tr('Ouvrir') + ' ' + name} onClick={(e) => { e.stopPropagation(); bougerCover(gestesCv.monter, 100); }}><Fi i="angle-up" size={13} /></button>
+            <button style={{ ...mini, ...(armeCv ? miniAccent : gestesCv.monter ? null : RM_INERTE) }} aria-disabled={gestesCv.monter || armeCv ? undefined : true} aria-label={(armeCv ? tr('Confirmer ?') : tr('Ouvrir')) + ' ' + name}
+              onClick={(e) => { e.stopPropagation(); if (armeCv) conf.confirmer(); else bougerCover(gestesCv.monter, 100); }}><Fi i={armeCv ? 'check' : 'angle-up'} size={13} /></button>
             <button style={{ ...mini, ...(gestesCv.descendre ? null : RM_INERTE) }} aria-disabled={gestesCv.descendre ? undefined : true} aria-label={tr('Fermer') + ' ' + name} onClick={(e) => { e.stopPropagation(); bougerCover(gestesCv.descendre, 0); }}><Fi i="angle-down" size={13} /></button>
           </>);
           /* Un robot (I12) : la PREMIÈRE puce de sa carte — Démarrer, Pause, Reprendre —, jamais la base ; en erreur, la base seule :
@@ -557,20 +584,27 @@ function CvCard({ id, hass, label = null, onOpen = null, dense = false }) {
           </div>
         );
       })()}
-      {!dense && dom === 'climate' && !dead && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
-          <button aria-label={'− ' + name} onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature - .5); }} style={{ position: 'relative', flex: 1, padding: 8, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>−</button>
-          <span style={{ fontSize: 15, fontWeight: 800, minWidth: 52, textAlign: 'center' }}>{a.temperature != null ? decMax(a.temperature, 1) + '°' : '—'}</span>
-          <button aria-label={'+ ' + name} onClick={(e) => { e.stopPropagation(); if (a.temperature != null) commander(hass, id, 'set_temperature', a.temperature + .5); }} style={{ position: 'relative', flex: 1, padding: 8, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>+</button>
-        </div>
-      )}
+      {!dense && dom === 'climate' && !dead && (() => {
+        // Le même cran et la même avance que la compacte (B1) : deux appuis rapides partent de la consigne MONTRÉE.
+        const base = ovT != null ? ovT : a.temperature;
+        const bouge = (sens) => { const v = bougerConsigne(hass, id, a, base, sens); if (v != null) poseT(v); };
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
+            <button aria-label={'− ' + name} onClick={(e) => { e.stopPropagation(); bouge(-1); }} style={{ position: 'relative', flex: 1, padding: 8, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>−</button>
+            <span style={{ fontSize: 15, fontWeight: 800, minWidth: 52, textAlign: 'center' }}>{base != null ? decMax(base, 1) + '°' : '—'}</span>
+            <button aria-label={'+ ' + name} onClick={(e) => { e.stopPropagation(); bouge(1); }} style={{ position: 'relative', flex: 1, padding: 8, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text)', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>+</button>
+          </div>
+        );
+      })()}
       {!dense && dom === 'cover' && !dead && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           {/* Trois flèches nues : sans nom, un lecteur d'écran n'annonçait que
             * « bouton » trois fois de suite (plan M7). */}
           {/* Ce que le cover accepte (`gestesCover`, 19/10) ; un volet lance sa course, Stop la fige — et un refus l'oublie. */}
           {[['monter', 'angle-up', tr('Ouvrir'), 100], ['stop', 'square', tr('Stop'), null], ['descendre', 'angle-down', tr('Fermer'), 0]].map(([cle, gi, nom, cible]) => (
-            <button key={cle} aria-label={nom + ' ' + name} title={nom} aria-disabled={gestesCv[cle] ? undefined : true} onClick={(e) => { e.stopPropagation(); bougerCover(gestesCv[cle], cible); }} style={{ position: 'relative', flex: 1, padding: 9, borderRadius: 10, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', ...(gestesCv[cle] ? null : RM_INERTE) }}><Fi i={gi} size={14} /></button>
+            <button key={cle} aria-label={(cle === 'monter' && armeCv ? tr('Confirmer ?') : nom) + ' ' + name} title={cle === 'monter' && armeCv ? tr('Confirmer ?') : nom} aria-disabled={gestesCv[cle] || (cle === 'monter' && armeCv) ? undefined : true}
+              onClick={(e) => { e.stopPropagation(); if (cle === 'monter' && armeCv) conf.confirmer(); else bougerCover(gestesCv[cle], cible); }}
+              style={{ position: 'relative', flex: 1, padding: 9, borderRadius: 10, background: cle === 'monter' && armeCv ? 'var(--o-accent-fond)' : 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: cle === 'monter' && armeCv ? '#fff' : 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', ...(gestesCv[cle] || (cle === 'monter' && armeCv) ? null : RM_INERTE) }}><Fi i={cle === 'monter' && armeCv ? 'check' : gi} size={14} /></button>
           ))}
         </div>
       )}
@@ -770,7 +804,8 @@ function CvSirene({ id, hass, label = null }) {
           * format standard est de 184 px (retour du 17/09). */}
         {!mort && tuiles.length > 0 && <div style={RM_SUB}>{tuiles.map(([l, v]) => l + ' ' + v).join(' · ')}</div>}
         <div style={{ flex: 1 }} />
-        {!mort && <button type="button" onClick={tester} disabled={test} className="o-rmbtn" style={{ ...RM_BTN, marginTop: 11, width: '100%', opacity: test ? .6 : 1 }}><Fi i="volume" size={12} /> {test ? tr('Test en cours…') : tr('Test sonore (3 s)')}</button>}
+        {/* L'icône à 7 px du texte (audit du 12/11) : l'espace tapée entre les deux, seule, la collait au mot. */}
+        {!mort && <button type="button" onClick={tester} disabled={test} className="o-rmbtn" style={{ ...RM_BTN, marginTop: 11, width: '100%', opacity: test ? .6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}><Fi i="volume" size={12} />{test ? tr('Test en cours…') : tr('Test sonore (3 s)')}</button>}
       </div>
     </div>
   );
@@ -810,11 +845,22 @@ function CvAlarm({ id, hass, sans = false, message = null, label = null }) {
   const codePourArm = codeRequis && aAl.code_arm_required !== false;
   const [demande, setDemande] = useState(null); // { svc } en attente de code
   const [code, setCode] = useState('');
+  /* Le dernier armement demandé (P1, ADR 0382 ; alarmegeste.js) : trois secondes après, un panneau resté désarmé dit ce qui
+   * bloque. Le code tapé y reste le temps du refus (60 s), en mémoire seulement, pour « Armer quand même ». */
+  const [geste, setGeste] = useState(null);
+  const [, setTic] = useState(0);
+  useEffect(() => {
+    if (!geste) return undefined;
+    const lu = setTimeout(() => setTic(x => x + 1), REFUS_APRES_MS + 200);
+    const fin = setTimeout(() => setGeste(null), REFUS_DURE_MS);
+    return () => { clearTimeout(lu); clearTimeout(fin); };
+  }, [geste]);
+  const ordre = (svc, c) => { call(svc, c); setGeste(svc === 'alarm_disarm' ? null : { svc, code: c || null, t: Date.now() }); };
   const agir = (svc) => {
     const faut = svc === 'alarm_disarm' ? codeRequis : codePourArm;
-    if (faut) { setDemande({ svc }); setCode(''); } else call(svc);
+    if (faut) { setDemande({ svc }); setCode(''); } else ordre(svc);
   };
-  const valider = () => { if (demande && code) { call(demande.svc, code); setDemande(null); setCode(''); } };
+  const valider = () => { if (demande && code) { ordre(demande.svc, code); setDemande(null); setCode(''); } };
   // Le temps qu'il reste pour sortir (ou pour désarmer), battu à la seconde.
   const cpt = armCompte(st);
   useSeconde(!!cpt);
@@ -833,6 +879,13 @@ function CvAlarm({ id, hass, sans = false, message = null, label = null }) {
   // existent (Alarmo n'expose que les modes configurés). Proposer « Maison »
   // à un panneau qui l'ignore, c'est promettre un geste sans effet.
   const CHIPS = mort ? [] : armChips(aAl, s);
+  const refus = mort ? null : refusArmement(geste, st, hass && hass.states);
+  const forcer = refus && plateformeDe(id) === 'alarmo' ? appelForcer(id, refus, geste && geste.code) : null;
+  // L'auteur du dernier changement (P2) : désarmée ou armée — ni pendant l'armement, ni dans l'alerte.
+  const presence = useEtatServeur(hass, 'loggia/presence/etat', 60000, '').etat;
+  const auteur = mort || !s || s === 'triggered' || s === 'arming' || s === 'pending' ? null : auteurAlarme(st, id, presence && presence.journal);
+  // Le refus prend la place du message de l'appelant, au même endroit, dans le même encadré ambre (P1).
+  if (refus) message = { texte: tr('Pas armée, encore ouvert : {noms}', { noms: refus.noms.join(', ') }), niveau: 'alerte' };
   return (
     <div className={'o-piece o-carte-alarme' + (mort ? ' o-panne' : '')} style={{ ...CV_CADRE, height: '100%', minHeight: 172, overflow: 'hidden' }}>
       {/* GABARIT MAISON — règle dure : icône hg SEULE, état hd, TITRE SOUS
@@ -843,6 +896,7 @@ function CvAlarm({ id, hass, sans = false, message = null, label = null }) {
       </div>
       <div style={{ marginTop: 8, ...(sans ? { flex: 1, display: 'flex', flexDirection: 'column' } : {}) }}>
         <div style={RM_NAME}>{label || cvName(st, id)}</div>
+        {auteur && !(message && message.texte) && <div data-auteur="" style={RM_SUB}>{texteAuteur(auteur)}{st.last_changed ? ' · ' + depuis(st.last_changed) : ''}</div>}
         {/* Le message se DIT aussi (audit du 03/10, règle de l'ADR 0107) : il
           * arrive quand l'alarme s'arme sur un ouvrant resté ouvert, ou se
           * déclenche — la carte est déjà à l'écran, et un encadré monté avec
@@ -855,6 +909,11 @@ function CvAlarm({ id, hass, sans = false, message = null, label = null }) {
             <Fi i="triangle-warning" size={13} style={{ marginTop: 1, flexShrink: 0 }} />
             <span style={{ minWidth: 0 }}>{message.texte}</span>
           </div>
+        )}
+        {/* « Armer quand même » (P1) : Alarmo seulement, sur ce geste, avec le mode et le code du geste refusé. */}
+        {forcer && (
+          <button type="button" data-forcer="" className="o-rmbtn" style={{ ...RM_BTN, marginTop: 6, width: '100%' }}
+            onClick={() => { if (hass && hass.callService) hass.callService(forcer.domaine, forcer.service, forcer.data); setGeste(null); }}>{tr('Armer quand même')}</button>
         )}
         {/* Le temps qui reste se lit sur le tour du mode visé (voir plus bas).
           * Panneau muet sur ce qu'il prépare : la barre reste le repère. */}
@@ -922,10 +981,12 @@ function CvAlarm({ id, hass, sans = false, message = null, label = null }) {
  * Elles lisent la maison entière : découverte par device_class ou
  * configuration existante — zéro YAML, sources injectables pour la biblio. */
 const OUVRANT_DCS = CLASSES_OUVRANT;
+// Les portes et fenêtres de la MAISON : la portière d'une voiture n'en est pas une (A11, ADR 0386 ; `appareilCompose`).
+const deLaVoiture = (S, id) => { const K = composes(LOGGIA_INDEX), m = K && LOGGIA_INDEX.entityMeta.get(id); return !!m && K.appareilCompose(LOGGIA_INDEX, S, m.deviceId); };
 const ouvrantsDe = (S) => Object.keys(S || {})
   .filter(id => id.indexOf('binary_sensor.') === 0 && S[id] && S[id].state !== 'unavailable')
   .map(id => ({ id, dc: (S[id].attributes || {}).device_class, on: S[id].state === 'on', nom: (S[id].attributes || {}).friendly_name || id, lc: S[id].last_changed }))
-  .filter(o => OUVRANT_DCS.indexOf(o.dc) >= 0);
+  .filter(o => OUVRANT_DCS.indexOf(o.dc) >= 0 && !deLaVoiture(S, o.id));
 
 /* La feuille du Calendrier — le mois entier, et le choix des agendas (la carte
  * du rail l'ouvre) : la coquille. Le contenu se charge à la demande

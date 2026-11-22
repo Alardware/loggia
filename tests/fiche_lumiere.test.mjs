@@ -309,7 +309,9 @@ test('point 1 : la fiche d’une ampoule « Froide » en thème clair — une en
   assert.equal(fond, 'rgba(255,209,163,.22)', 'la plaque prend le blanc de 4 000 K : elle se voit');
   const [jauge] = element(m, 'RmJauge');
   assert.equal(jauge.props.couleur, encre, 'le repère a la même encre');
-  assert.equal(jauge.props.grade, LU.couleursLumiere(lireCouleur(encre).slice(0, 3)).degrade, 'en thème clair, la barre se peint depuis l’encre gardée — la teinte vraie, presque blanche, ne se verrait pas');
+  /* ASSERTION MODIFIÉE (16/11, « la couleur de la barre en clair ça va pas », puis « Oui, les blancs aussi ») : la barre d'un blanc n'est plus peinte depuis
+   * l'encre brune — elle prend la barre de l'or, que la feuille peint de l'ambre de la bascule en thème clair. La teinte vraie, presque blanche, ne s'y voit toujours pas. */
+  assert.equal(jauge.props.grade, LU.couleursLumiere(null).degrade, 'en thème clair, la barre d’un blanc est celle de l’or');
 }, { clair: true }));
 
 /* ── Passe de finition 9 bis B ─────────────────────────────────────────────────── */
@@ -336,9 +338,11 @@ test('point 15 : choisir un blanc ou une couleur sur une lampe ÉTEINTE l’allu
   assert.deepEqual(w.appels.slice(2), ['light.turn_on light.eteinte color_temp_kelvin=3500']);
 }));
 
-test('point 15 : une lampe muette ne dessine plus sa barre — le code le dit (`v.variable && !v.muette`), et une lampe vivante garde la sienne', () => dans(() => {
+/* ASSERTION MODIFIÉE (audit du 12/11, X4 ; ADR 0369) : la barre ne se dessine pas non plus pour une ampoule sans courant —
+ * `inerte` vaut pour une lampe muette ET pour une ampoule dont l'interrupteur est coupé. */
+test('point 15 : une lampe muette ne dessine plus sa barre — le code le dit (`v.variable && !inerte`), et une lampe vivante garde la sienne', () => dans(() => {
   const FICHE = lire('src/fichelumiere.jsx');
-  assert.ok(FICHE.includes('{v.variable && !v.muette && Jauge && ('), 'la condition de la barre');
+  assert.ok(FICHE.includes('const inerte = v.muette || !!v.coupee;') && FICHE.includes('{v.variable && !inerte && Jauge && ('), 'la condition de la barre');
   const w = poser();
   assert.equal(element(monter(Fiche, { hass: w.hass, id: 'light.morte' }), 'RmJauge').length, 0, 'muette : pas de barre');
   assert.equal(element(monter(Fiche, { hass: w.hass, id: 'light.chambre' }), 'RmJauge').length, 1, 'éteinte mais vivante : sa barre, son repère gris');

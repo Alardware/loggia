@@ -12,6 +12,7 @@
 import { estCleAppareil, estCleServeur, horsSauvegarde } from './config.js';
 import { lumieresDe } from './lumieres.js';
 import { reportContenu, profilEstAdmin } from './contenupartage.js';
+import { CLE_ALIMENTATION, avecAlimentation } from './alimentation.js';
 
 /** Index de la decouverte : zones, appareils, entites. */
 export let LOGGIA_INDEX = null;
@@ -35,6 +36,16 @@ let cfgRecu = null;
 let LOGGIA_SERVER = false;
 /** Le profil que CET écran affiche, posé par App (ADR 0220) ; null avant. */
 let PROFIL_ECRAN = null;
+
+/** Le nom de la zone Home Assistant d'une entité — sa pièce —, ou null : sans
+ * index, pour une entité inconnue ou sans zone (lot 5b de l'audit du 12/11).
+ * Neuf fiches et vues recopiaient cette lecture (`pieceDe`,
+ * `pieceDuChauffage`) ; `areaNameOf` (discovery.js) rend déjà une chaîne non
+ * vide ou null. `zoneDe` (appareils/fiches.jsx) et `zoneIdDe` (fichemedia.jsx)
+ * font autre chose et restent chez eux. */
+export function nomZoneDe(id) {
+  return (LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function' && LOGGIA_INDEX.areaNameOf(id)) || null;
+}
 
 export function setLoggiaState({ index, ent, resolved, cfg, save, recu, server, profil }) {
   if (index !== undefined) LOGGIA_INDEX = index;
@@ -150,6 +161,26 @@ const COMMUN_AU_PREMIER = new Set(['loggia-hiddenviews', 'loggia-shownviews', 'l
 const MARQUE = '__profils';
 const indexe = (v) => !!v && typeof v === 'object' && !Array.isArray(v)
   && Object.prototype.hasOwnProperty.call(v, MARQUE);
+
+/* Rangées DEUX FOIS par profil (audit du 12/11, ADR 0349).
+ *
+ * Les trois clés du menu avaient leur propre découpage, écrit à la main le
+ * 10/10 : `{ "0": […], "1": […], "*": […] }`. Le passage central est arrivé le
+ * lendemain et a rangé cette valeur ENTIÈRE comme part commune — d'où, chez qui
+ * avait déjà un menu, `{ __profils: { "0": […], "*": { "0": […], … } } }`. La
+ * part commune n'échoit qu'au premier profil, qui a la sienne depuis : plus
+ * personne ne lit l'ancien découpage, il pèse et il trompe qui regarde la
+ * configuration. À la prochaine écriture de la clé, il redevient la liste
+ * commune qu'il portait (ou disparaît) : ce que chacun voit ne change pas. */
+export function sansDoubleRangement(cle, v) {
+  if (!COMMUN_AU_PREMIER.has(String(cle)) || !indexe(v)) return v;
+  const p = v[MARQUE] || {};
+  const c = p['*'];
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return v;
+  const parts = { ...p };
+  if (Array.isArray(c['*'])) parts['*'] = c['*']; else delete parts['*'];
+  return { [MARQUE]: parts };
+}
 
 /* ── Le profil appartient a l'ECRAN (ADR 0220, 17/10) ─────────────────────
  *
@@ -528,7 +559,7 @@ export function cfgSet(patch) {
     // Une FONCTION transforme ce qui est deja la, au lieu de le remplacer : par
     // part pour un reglage range par profil, sur la valeur entiere sinon.
     if (estParProfil(k)) {
-      const brut = cfgBrute(k, null);
+      const brut = sansDoubleRangement(k, cfgBrute(k, null));
       reel[k] = poserProfil(brut, id, patch[k]);
       /* L'ADMIN QUI AJOUTE OU RETIRE agit pour tous (20/10, contenupartage.js) :
        * le changement de CONTENU de sa part part dans celle de chaque profil ;
@@ -560,6 +591,125 @@ export function cfgSet(patch) {
   return Promise.resolve(cfgSave ? cfgSave(reel) : true);
 }
 
+/* ── Retirer un profil (audit du 12/11, B11 ; ADR 0365) ───────────────────
+ *
+ * Les réglages d'un profil sont rangés sous son RANG dans la liste : ses
+ * favoris, sa grille, son menu, son apparence — et la fiche de chaque écran
+ * retient le rang du profil qu'il affiche. Retirer le profil de rang 1 ne
+ * retirait que son nom : le profil de rang 2 passait au rang 1 et lisait les
+ * réglages du profil retiré ; les siens restaient orphelins au rang 2, jusqu'à
+ * ce qu'un profil créé plus tard en hérite ; et un écran resté sur le rang 2
+ * retombait sur les réglages du premier profil.
+ *
+ * Tout descend donc d'un cran avec la liste, dans UN seul envoi : le composant
+ * prend le lot en entier ou le refuse en entier (la liste des profils est
+ * réservée à un administrateur) — la renumérotation ne passe pas sans le
+ * retrait, ni l'inverse. */
+
+/** Une valeur rangée par profil, une fois le profil de rang `rang` retiré : sa
+ *  part s'en va, chaque part de rang supérieur descend d'un cran, la part
+ *  commune `*` reste. Une valeur d'avant la bascule (sans marqueur) ne bouge
+ *  pas. `auPremier` : la part commune n'échoit qu'au premier profil (le menu,
+ *  `COMMUN_AU_PREMIER`) — avec lui, elle s'en va aussi, sinon le profil qui
+ *  prend sa place en hériterait. Rend `null` quand il ne reste rien. */
+export function partsSansProfil(v, rang, auPremier = false) {
+  if (v == null) return null;
+  const r = Number(rang);
+  if (!Number.isInteger(r) || r < 0) return v;
+  const sansCommune = auPremier && r === 0;
+  if (!indexe(v)) return sansCommune ? null : v;
+  const avant = v[MARQUE] || {};
+  const p = {};
+  Object.keys(avant).forEach((k) => {
+    if (k === '*') { if (!sansCommune) p['*'] = avant[k]; return; }
+    if (!/^[0-9]{1,3}$/.test(k)) { p[k] = avant[k]; return; }
+    const n = Number(k);
+    if (n === r) return;
+    p[String(n > r ? n - 1 : n)] = avant[k];
+  });
+  return Object.keys(p).length ? { [MARQUE]: p } : null;
+}
+
+const estProfilAdmin = (u) => String((u && u.role) || '').toLowerCase() === 'admin';
+
+/** Le rang que retient la fiche d'un écran, une fois le profil de rang `rang`
+ *  retiré (`liste` : la liste d'APRÈS). Un rang supérieur descend d'un cran ;
+ *  l'écran qui affichait le profil retiré passe au premier profil qui n'est pas
+ *  Admin — un profil Admin ne se rouvre pas tout seul (ADR 0080) —, à défaut au
+ *  premier. Rend le rang en texte, ou `null` quand la fiche n'a pas à changer. */
+export function rangApresRetrait(profil, rang, liste) {
+  if (typeof profil !== 'string' || !/^[0-9]{1,3}$/.test(profil)) return null;
+  const p = Number(profil), r = Number(rang);
+  if (p < r) return null;
+  if (p > r) return String(p - 1);
+  const j = (Array.isArray(liste) ? liste : []).findIndex(u => !estProfilAdmin(u));
+  const suite = String(j >= 0 ? j : 0);
+  return suite === profil ? null : suite;
+}
+
+/** Le profil qu'un écran affichait (`avant[rang]`), retrouvé dans la liste
+ *  d'APRÈS : par son compte Home Assistant, sinon tel quel. Quand la liste
+ *  change sur un AUTRE écran, celui-ci suit son profil au lieu de garder un
+ *  rang qui ne veut plus rien dire. Pas retrouvé : le même rang si la liste n'a
+ *  pas raccourci (il a été retouché sur place) ; sinon son profil a été retiré,
+ *  et l'écran passe au premier profil qui n'est pas Admin. */
+export function rangDuProfil(avant, rang, apres) {
+  const liste = Array.isArray(apres) ? apres : [];
+  if (!liste.length) return 0;
+  const anciens = Array.isArray(avant) ? avant : [];
+  const moi = anciens[rang] || null;
+  if (moi) {
+    if (moi.haId) { const i = liste.findIndex(u => u && u.haId === moi.haId); if (i >= 0) return i; }
+    const sig = usersSig([moi]);
+    const i = liste.findIndex(u => usersSig([u]) === sig);
+    if (i >= 0) return i;
+  }
+  if (liste.length >= anciens.length && rang >= 0 && rang < liste.length) return rang;
+  const j = liste.findIndex(u => !estProfilAdmin(u));
+  return j >= 0 ? j : 0;
+}
+
+/** Retirer le profil de rang `rang`. `liste` : la liste des profils SANS lui.
+ *  Part dans le même lot : la liste, chaque réglage rangé par profil
+ *  (`PAR_PROFIL`) renuméroté, et le rang des fiches d'écran qui change. À
+ *  l'écran tout de suite, comme `cfgSet` ; rend l'issue de `cfgSave`. */
+export function retirerProfil(rang, liste) {
+  const reel = { loggia_users: liste };
+  PAR_PROFIL.forEach((k) => {
+    const brut = sansDoubleRangement(k, cfgBrute(k, null));
+    if (brut == null) return;
+    const suite = partsSansProfil(brut, rang, COMMUN_AU_PREMIER.has(k));
+    if (JSON.stringify(suite) !== JSON.stringify(brut)) reel[k] = suite;
+  });
+  // Les fiches des écrans vivent au composant : sans lui, il n'y en a pas.
+  let fiches = null;
+  const connues = LOGGIA_SERVER ? appareilsConnus() : {};
+  Object.keys(connues).forEach((id) => {
+    const p = rangApresRetrait(connues[id] && connues[id].profil, rang, liste);
+    if (p != null) { fiches = fiches || {}; fiches[id] = { profil: p }; }
+  });
+  const next = { ...(LOGGIA_CFG || {}) };
+  Object.keys(reel).forEach((k) => {
+    if (reel[k] == null) delete next[k];
+    else next[k] = reel[k];
+  });
+  if (fiches) {
+    const toutes = { ...connues };
+    Object.keys(fiches).forEach((id) => { toutes[id] = { ...toutes[id], ...fiches[id] }; });
+    next[CLE_APPAREILS] = toutes;
+  }
+  LOGGIA_CFG = next;
+  try {
+    Object.keys(reel).forEach((k) => {
+      if (reel[k] == null) localStorage.removeItem(k);
+      else localStorage.setItem(k, JSON.stringify(reel[k]));
+    });
+  } catch { /* stockage indisponible : la valeur serveur suffit */ }
+  // Une fiche n'envoie que ce qui change : le composant la fusionne à la liste.
+  const lot = fiches ? { ...reel, [CLE_APPAREILS]: fiches } : reel;
+  return Promise.resolve(cfgSave ? cfgSave(lot) : true);
+}
+
 /**
  * Une cle que le COMPOSANT vient d'ecrire lui-meme, telle qu'il la rend.
  *
@@ -585,13 +735,21 @@ export function cfgRecue(cle, valeur) {
 /**
  * L'objet `hass` du document parent. Le dashboard tourne dans une iframe de
  * meme origine : on remonte au document du haut quand il existe.
+ *
+ * Tel que l'ECRAN le lit (audit du 12/11, X4 ; ADR 0369) : une ampoule dont
+ * l'interrupteur est coupe (`loggia_alimentation`) y est eteinte, marquee de ce
+ * qui la coupe. C'est ici, a l'entree unique du releve, que cela se pose :
+ * une vingtaine d'endroits comptent les lampes allumees sur `state`, la sante
+ * des appareils et la recherche aussi — aucun n'a a connaitre la relation.
+ * Sans relation, ou sans ampoule coupee, c'est l'objet de Home Assistant, tel
+ * quel (`avecAlimentation`, alimentation.js).
  */
 export function getHass() {
   try {
     const doc = (window.top && window.top !== window && window.top.document)
       ? window.top.document : document;
     const el = doc.querySelector('home-assistant');
-    return (el && el.hass) || null;
+    return avecAlimentation((el && el.hass) || null, cfgBrute(CLE_ALIMENTATION, null));
   } catch { return null; }
 }
 
@@ -616,27 +774,6 @@ export function getHass() {
 export function compteOrdinaire(hass) {
   const h = hass || getHass();
   return !!(h && h.user && h.user.is_admin === false);
-}
-
-/**
- * Script qui distribue une ration.
- *
- * Home Assistant n'expose rien de standard pour cela : c'est toujours un script
- * ecrit a la main. Faute d'etre designe dans la configuration, le bouton
- * « Distribuer une ration » disparaissait sans un mot — alors que le script
- * existe presque toujours, sous un nom qui le dit.
- *
- * On le reconnait donc au nom, comme les capteurs de l'aspirateur. Un script
- * mal devine ne casse rien : il n'est appele que sur un clic volontaire.
- */
-export function feederScript(hass, cfg) {
-  const designe = (cfg || {}).script;
-  const S = (hass && hass.states) || {};
-  if (designe && S[designe]) return designe;
-  const mots = /(nourri|croquette|ration|gamelle|feed|distribu)/;
-  return Object.keys(S).find(id => id.indexOf('script.') === 0 && mots.test(vacSlug(
-    id.slice(7) + '_' + ((S[id].attributes && S[id].attributes.friendly_name) || '')
-  ))) || null;
 }
 
 /* ── Page d'accueil de Home Assistant ───────────────────────────────────────
@@ -1146,7 +1283,7 @@ const FAM_SCHEMA = [
   ['consoNow', 'gridNow', 'consoNowParts'],
   ['surplusNow', 'injectionNow'],
   ['solarOutput', 'solarNow', 'solarNowParts'],
-  ['evNow'],
+  ['evNow', 'evNowParts'],
   ['batNow', 'batSoc', 'batChargeNow', 'batDechargeNow', 'batRate', 'batRateParts', 'batSocParts', 'batNowParts'],
 ];
 const FAM_BATTERIE = FAM_SCHEMA[4];
@@ -1248,8 +1385,10 @@ export function estEtatPoele(id) {
 }
 
 /* Les intégrations de traceurs d'OBJETS (ADR 0318) : `invoxia_biotracker`, vue au registre de l'installation d'essai (01/11) ;
- * `invoxia`, le nom que l'audit lui donnait. Un téléphone (`mobile_app`), un routeur (`unifi`, `ping`) n'en sont pas. */
-const TRACEURS_OBJETS = ['invoxia', 'invoxia_biotracker'];
+ * `invoxia`, le nom que l'audit lui donnait. Un téléphone (`mobile_app`), un routeur (`unifi`, `ping`) n'en sont pas.
+ * Tile, Tractive (collier) et Traccar Server (chantier du 20/11, F3 ; ADR 0381) : domaines lus dans leurs manifestes.
+ * Restent dehors Traccar Client (`traccar`, une application de téléphone) et Bermuda, qui suit aussi les téléphones. */
+const TRACEURS_OBJETS = ['invoxia', 'invoxia_biotracker', 'tile', 'tractive', 'traccar_server'];
 /** Un traceur d'objet — un sac, un vélo, un chien —, reconnu à sa plateforme : un `device_tracker` qui n'est pas une personne (ADR 0318). */
 export const estTraceur = (id) => String(id).indexOf('device_tracker.') === 0 && TRACEURS_OBJETS.indexOf(plateformeDe(id)) >= 0;
 
@@ -1297,10 +1436,17 @@ export function enBatteries() {
   return (r && Array.isArray(r.batteries)) ? r.batteries.filter(b => b && typeof b === 'object') : [];
 }
 
-/** La borne de recharge que la découverte a trouvée (chantier G3, E3) : `{ appareil, puissance, courant, prise, statut, interrupteur, energie }`, ou null. */
+/** La borne de recharge que la découverte a trouvée (chantier G3, E3) : `{ appareil, puissance, courant, prise, statut, interrupteur, energie }`, ou null.
+ *  Avec plusieurs bornes (A7), la première ; `enBornes` les rend toutes. */
 export function enBorne() {
   const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.energy;
   return (r && r.borne && typeof r.borne === 'object') ? r.borne : null;
+}
+
+/** TOUTES les bornes de recharge de la maison (chantier du 20/11, A7) : la liste que la découverte a rangée, vide sans borne. */
+export function enBornes() {
+  const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.energy;
+  return (r && Array.isArray(r.bornes)) ? r.bornes.filter(b => b && typeof b === 'object') : [];
 }
 
 /** Les entrées de prévision solaire (Forecast.Solar, Solcast…) que le tableau Énergie rattache aux onduleurs (E7). */

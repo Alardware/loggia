@@ -72,7 +72,11 @@
 import { useState, useEffect, useRef, useId, useMemo } from 'react';
 import { tr, trN, locale } from './i18n.js';
 import { Fi, Bascule } from './ui.jsx';
-import { compteOrdinaire, enHaids, enPrix, entitesAppareilDe, estRearmement } from './state.js';
+import { compteOrdinaire, enHaids, enPrix, entitesAppareilDe, estRearmement, estEtatPoele, nomAppareilDe, LOGGIA_INDEX } from './state.js';
+import { texteEtatPoele } from './poele.js';
+import { vanneDeLAppareil } from './chauffageseuils.js';
+import { signauxDeLAppareil } from './chauffagealertes.js';
+import { ReglagesAir } from './reglagesair.jsx';
 import { commander, commanderService, planAction, actionCtx } from './actions.js';
 import { useOptimiste } from './optimiste.js';
 import { raisonEchec, enregistrerRefus } from './refus.js';
@@ -161,10 +165,6 @@ const enOrdreHvac = (liste) => [...ORDRE_HVAC.filter(m => liste.includes(m)), ..
  * fiche d'avant (`motModeClimat`, App.jsx) — Home Assistant d'abord, sinon
  * Loggia. Sans lui, le mode tel que l'appareil l'écrit. */
 const motHvacBrut = (mode) => mode;
-/* Le mot d'un préréglage (`motPreset`, chauffageecran.js) : celui de Home
- * Assistant pour les siens (eco, comfort, away, boost…), sinon celui d'un
- * ordre fil pilote (D15, ADR 0319), sinon tel que l'appareil l'écrit (le
- * `turbo`, l'`overnight` d'un poêle). */
 
 /* Les fins d'une reprise en main (spec § 9.3, D3) : le prochain changement
  * par défaut — dit par son heure (`quand` : « 22:30 », « demain 07:30 » ;
@@ -385,7 +385,8 @@ function plaqueDuChauffage(ch, hass, puissance, simulation) {
   const mort = muet(st);
   const a = (st && st.attributes) || {};
   const marche = !mort && st.state !== 'off';
-  const [fond, encre] = plaqueMode({ chauffe: enChauffe({ famille: 'thermostat', muet: mort, marche, action: a.hvac_action }),
+  const vanne = vanneDeLAppareil(ch.entite, S, LOGGIA_INDEX && LOGGIA_INDEX.entityMeta);
+  const [fond, encre] = plaqueMode({ chauffe: enChauffe({ famille: 'thermostat', muet: mort, marche, action: a.hvac_action, vanne }),
     froid: marche && a.hvac_action === 'cooling', eteint: !marche });
   return { icone: 'thermometer-half', fond, encre };
 }
@@ -492,6 +493,287 @@ function PasCarre({ nom, valeur, peutMoins, peutPlus, moins, plus, eteint = fals
   );
 }
 
+/* ════════════ La jauge d'une consigne (17/11) ════════════
+ *
+ * Sa demande du 17/11 : la consigne d'un thermostat — un poêle, une clim — se
+ * règle sur une jauge, comme dans Home Assistant ; la consigne en grand au
+ * milieu (son choix), la pièce au-dessus et en repère sur l'arc. Un arc de
+ * 270°, ouvert en bas. Glisser sur l'arc, ou − / +, pose la consigne : au
+ * planning, c'est une reprise en main (« Manuel »), comme le − / + d'avant —
+ * le moteur n'a pas changé. Le geste part au LÂCHER, un seul ordre. */
+const JAUGE = { cx: 120, cy: 120, r: 100, debut: 135, ouverture: 270 };
+const pointDeJauge = (angle) => {
+  const t = angle * Math.PI / 180;
+  return [JAUGE.cx + JAUGE.r * Math.cos(t), JAUGE.cy + JAUGE.r * Math.sin(t)];
+};
+const arcDeJauge = (a1, a2) => {
+  if (!(a2 - a1 > 0.01)) return '';
+  const [x1, y1] = pointDeJauge(a1), [x2, y2] = pointDeJauge(a2);
+  return 'M' + x1.toFixed(2) + ' ' + y1.toFixed(2) + ' A' + JAUGE.r + ' ' + JAUGE.r + ' 0 ' + (a2 - a1 > 180 ? 1 : 0) + ' 1 ' + x2.toFixed(2) + ' ' + y2.toFixed(2);
+};
+/** L'angle d'une valeur sur la jauge, bornée à [min, max] : 135° au minimum, 405° au maximum. */
+export function angleDeJauge(v, min, max) {
+  if (!(max > min)) return JAUGE.debut;
+  const p = (Math.min(max, Math.max(min, v)) - min) / (max - min);
+  return JAUGE.debut + JAUGE.ouverture * p;
+}
+/** La valeur sous un point de la jauge (coordonnées de son dessin, 240 de large), bornée à [min, max] ; null loin de l'arc —
+ * au milieu, sur ses boutons : un appui là ne règle rien. Dans l'ouverture du bas, le bout le plus proche. */
+export function valeurDuPoint(x, y, min, max) {
+  const dx = x - JAUGE.cx, dy = y - JAUGE.cy;
+  const d = Math.hypot(dx, dy);
+  if (d < JAUGE.r - 34 || d > JAUGE.r + 26) return null;
+  let a = Math.atan2(dy, dx) * 180 / Math.PI;
+  a = (a + 360) % 360;
+  if (a < 90) a += 360;
+  if (a < JAUGE.debut) a = a < 112.5 ? JAUGE.debut + JAUGE.ouverture : JAUGE.debut;
+  return min + (Math.min(JAUGE.debut + JAUGE.ouverture, a) - JAUGE.debut) / JAUGE.ouverture * (max - min);
+}
+
+/* La jauge. `valeur` : la consigne dite (celle de la PIÈCE au planning, son capteur décalé) ; `caler(v)` la pose sur la grille
+ * du pas de l'appareil ; `poser(v)` part au lâcher. `piece` : la mesure de la pièce, son repère. `etat` au-dessus de la
+ * consigne, à son encre. Les − / + gardent les noms et l'inertie de la rangée « Consigne » d'avant (« Consigne : Plus »,
+ * `aria-disabled` à la borne). Au clavier, l'arc est un curseur : les flèches font − / +. */
+const BOUTON_JAUGE = (peut) => ({ width: 44, height: 44, padding: 0, borderRadius: '50%', border: 'var(--o-bw,1px) solid var(--o-bd3)', background: 'transparent',
+  color: 'var(--o-text1)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: peut ? 1 : 0.4, cursor: peut ? 'pointer' : 'default' });
+function JaugeConsigne({ valeur, min, max, caler, couleur, piece, etat, encreEtat, eteint, peutMoins, peutPlus, moins, plus, poser }) {
+  const [glisse, setGlisse] = useState(null);
+  const dessin = useRef(null);
+  const lue = glisse != null ? glisse : valeur;
+  const lire = (e) => {
+    const b = dessin.current && dessin.current.getBoundingClientRect();
+    if (!b || !b.width) return null;
+    const v = valeurDuPoint((e.clientX - b.left) * 240 / b.width, (e.clientY - b.top) * 240 / b.width, min, max);
+    return v == null ? null : caler(v);
+  };
+  const appui = (e) => {
+    if (!poser || valeur == null) return;
+    const v = lire(e);
+    if (v == null) return;
+    // Pas de focus au doigt ni à la souris : son cadre n'a de sens qu'au clavier.
+    e.preventDefault();
+    if (e.currentTarget.setPointerCapture) e.currentTarget.setPointerCapture(e.pointerId);
+    setGlisse(v);
+  };
+  const bouge = (e) => { if (glisse == null) return; const v = lire(e); if (v != null) setGlisse(v); };
+  const lache = () => { if (glisse == null) return; const v = glisse; setGlisse(null); if (v !== valeur) poser(v); };
+  const touche = (e) => {
+    const sens = e.key === 'ArrowUp' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowDown' || e.key === 'ArrowLeft' ? -1 : 0;
+    if (!sens) return;
+    e.preventDefault();
+    if (sens > 0 && peutPlus) plus();
+    if (sens < 0 && peutMoins) moins();
+  };
+  const a = lue == null ? JAUGE.debut : angleDeJauge(lue, min, max);
+  const [px, py] = pointDeJauge(a);
+  const repere = piece != null && max > min ? angleDeJauge(piece, min, max) * Math.PI / 180 : null;
+  const texte = lue != null ? nombre(lue, 1) + '°' : '—';
+  return (
+    <div data-jauge="" style={{ position: 'relative', width: '100%', maxWidth: 252, margin: '0 auto' }}>
+      <svg ref={dessin} viewBox="0 0 240 212" role="slider" tabIndex={0} aria-label={tr('Consigne')} aria-valuemin={min} aria-valuemax={max}
+        aria-valuenow={lue != null ? lue : undefined} aria-valuetext={texte} onKeyDown={touche}
+        onPointerDown={appui} onPointerMove={bouge} onPointerUp={lache} onPointerCancel={() => setGlisse(null)} onLostPointerCapture={lache}
+        style={{ display: 'block', width: '100%', height: 'auto', touchAction: 'none', cursor: poser ? 'pointer' : 'default', outlineOffset: 4, borderRadius: 16 }}>
+        <circle cx={JAUGE.cx} cy={JAUGE.cy} r={JAUGE.r - 12} style={{ fill: 'color-mix(in srgb, ' + couleur + ' 9%, transparent)' }} />
+        <path d={arcDeJauge(JAUGE.debut, JAUGE.debut + JAUGE.ouverture)} fill="none" strokeWidth={14} strokeLinecap="round"
+          style={{ stroke: 'color-mix(in srgb, var(--o-text3) 28%, transparent)' }} />
+        <path data-arc="" d={arcDeJauge(JAUGE.debut, a)} fill="none" strokeWidth={14} strokeLinecap="round" style={{ stroke: couleur }} />
+        {repere != null && (
+          <line data-repere="" x1={JAUGE.cx + (JAUGE.r - 12) * Math.cos(repere)} y1={JAUGE.cy + (JAUGE.r - 12) * Math.sin(repere)}
+            x2={JAUGE.cx + (JAUGE.r + 12) * Math.cos(repere)} y2={JAUGE.cy + (JAUGE.r + 12) * Math.sin(repere)}
+            strokeWidth={3} strokeLinecap="round" style={{ stroke: 'var(--o-text)', opacity: 0.85 }} />
+        )}
+        {lue != null && <circle cx={px} cy={py} r={11} strokeWidth={5} style={{ fill: '#fff', stroke: couleur }} />}
+      </svg>
+      <div style={{ position: 'absolute', left: 0, right: 0, top: '25%', textAlign: 'center', pointerEvents: 'none' }}>
+        <div data-grand="" style={{ fontSize: 13, fontWeight: 800, lineHeight: 1.2, color: encreEtat, padding: '0 56px', overflowWrap: 'anywhere' }}>{etat}</div>
+        <div data-consigne="" style={{ fontSize: 44, fontWeight: 300, lineHeight: 1.15, letterSpacing: '-.02em', color: eteint ? 'var(--o-text3)' : 'var(--o-text)',
+          fontVariantNumeric: 'tabular-nums' }}>{texte}</div>
+      </div>
+      <div style={{ position: 'absolute', left: 0, right: 0, top: '62%', display: 'flex', justifyContent: 'center', gap: 20 }}>
+        <button type="button" aria-disabled={peutMoins ? undefined : true} onClick={() => { if (peutMoins) moins(); }} aria-label={tr('{a} : {b}', { a: tr('Consigne'), b: tr('Moins') })}
+          style={BOUTON_JAUGE(peutMoins)}>
+          <Fi i="minus-small" size={18} />
+        </button>
+        <button type="button" aria-disabled={peutPlus ? undefined : true} onClick={() => { if (peutPlus) plus(); }} aria-label={tr('{a} : {b}', { a: tr('Consigne'), b: tr('Plus') })}
+          style={BOUTON_JAUGE(peutPlus)}>
+          <Fi i="plus-small" size={18} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════ Les commandes de son appareil (17/11, son choix « A ») ════════════
+ *
+ * Ce que la feuille « L'appareil » montrait par-dessus la fiche (sa photo 4,
+ * qu'il ne comprenait pas) vient DANS la fiche de TOUT thermostat — un poêle,
+ * une clim, une pompe à chaleur —, sous le nom de son appareil : ses listes
+ * de choix (une puissance), son ventilateur (ses préréglages, ses vitesses),
+ * ses interrupteurs en puces, et « Infos » repliées — ses capteurs. Seulement
+ * ses entités PRINCIPALES : ni réglage ni diagnostic (le registre les range),
+ * ni masquée, ni désactivée ; reconnues par leur domaine, jamais par leur nom
+ * ni par une marque. « L'appareil » garde l'épingle et la liste complète. */
+// « Auto », pas « Automatique » : six puces sur trois colonnes, au téléphone, le mot long se coupait.
+const MOTS_VENTILO = { auto: () => tr('Auto'), sleep: () => tr('Nuit'), manual: () => tr('Manuel') };
+const motVentilo = (p) => (MOTS_VENTILO[p] ? MOTS_VENTILO[p]() : String(p).charAt(0).toUpperCase() + String(p).slice(1));
+const metaDe = (id) => (LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && typeof LOGGIA_INDEX.entityMeta.get === 'function' ? LOGGIA_INDEX.entityMeta.get(id) : null) || {};
+/* Le nom court d'une entité : celui que l'intégration lui donne (« Eco Stop »), sinon son nom affiché — sans le nom de son
+ * appareil en tête, que le titre de la section dit déjà. */
+const nomCourt = (id, st) => {
+  const m = metaDe(id);
+  const nom = String(m.name || ((st && st.attributes) || {}).friendly_name || id);
+  const app = m.device ? String(m.device) : '';
+  return app && nom.length > app.length + 1 && nom.toLowerCase().indexOf(app.toLowerCase() + ' ') === 0 ? nom.slice(app.length + 1) : nom;
+};
+const horsService = (st) => !st || st.state === 'unavailable' || st.state === 'unknown';
+// Le filet entre deux rangées des « Infos », sous leur rangée de tête.
+const FILET_INFOS = filet(1);
+
+/** Les entités d'un thermostat que sa fiche commande ou montre, rangées : `{ choix, ventilos, interrupteurs, infos }`. `sonde` :
+ * la mesure de la pièce, déjà dite en haut ; un capteur de température qui redit `current_temperature` non plus. */
+export function commandesDeLAppareil(ch, S, sonde) {
+  const vide = { choix: [], ventilos: [], interrupteurs: [], infos: [] };
+  if (!ch || ch.famille !== 'thermostat' || !ch.entite || !S) return vide;
+  const a = ((S[ch.entite] || {}).attributes) || {};
+  const ids = entitesAppareilDe(ch.entite).filter(id => {
+    if (id === ch.entite || !S[id]) return false;
+    const m = metaDe(id);
+    return !m.hidden && !m.disabled && !m.category;
+  });
+  const dom = (id) => id.split('.')[0];
+  const options = (id) => (S[id].attributes || {}).options;
+  const doublon = (id) => {
+    const at = S[id].attributes || {};
+    return at.device_class === 'temperature' && a.current_temperature != null && Number(S[id].state) === Number(a.current_temperature);
+  };
+  return {
+    choix: ids.filter(id => dom(id) === 'select' && Array.isArray(options(id)) && options(id).length >= 2 && options(id).length <= 8),
+    ventilos: ids.filter(id => dom(id) === 'fan'),
+    interrupteurs: ids.filter(id => dom(id) === 'switch'),
+    infos: ids.filter(id => dom(id) === 'sensor' && !(sonde && sonde.id === id) && !doublon(id)),
+  };
+}
+
+/** Les choix d'un ventilateur : ses préréglages, puis ses vitesses quand il en a de 2 à 6 (`percentage_step`) — seulement ce
+ * qu'il DÉCLARE savoir faire (`supported_features` : 1 la vitesse, 8 les préréglages), le moteur d'actions refusant le reste ;
+ * `choisi`, celui qu'il suit, allumé ; null éteint. */
+export function choixDuVentilo(st) {
+  const a = (st && st.attributes) || {};
+  const sait = Number(a.supported_features) || 0;
+  const presets = sait & 8 && Array.isArray(a.preset_modes) ? a.preset_modes.filter(p => typeof p === 'string' && p) : [];
+  const pas = sait & 1 ? Number(a.percentage_step) : 0;
+  const n = pas > 0 ? Math.round(100 / pas) : 0;
+  const vitesses = n >= 2 && n <= 6 ? Array.from({ length: n }, (_, i) => i + 1) : [];
+  const options = [...presets.map(p => ({ id: 'p:' + p, label: motVentilo(p) })), ...vitesses.map(k => ({ id: 'v:' + k, label: String(k) }))];
+  let choisi = null;
+  if (st && st.state === 'on') {
+    if (a.preset_mode && presets.includes(a.preset_mode)) choisi = 'p:' + a.preset_mode;
+    else if (vitesses.length && Number(a.percentage) > 0) choisi = 'v:' + Math.min(n, Math.max(1, Math.round(Number(a.percentage) / pas)));
+  }
+  return { options, choisi, pas };
+}
+
+function ChoixAppareil({ hass, id, idBase }) {
+  const st = hass.states[id];
+  const [ov, poserOv] = useOptimiste(st.state);
+  const choisir = (o) => { if (commanderService(hass, id, 'select', 'select_option', { entity_id: id, option: o }) != null) poserOv(o); };
+  return <PucesNommees id={idBase} libelle={nomCourt(id, st)} options={st.attributes.options.map(o => ({ id: o, label: String(o) }))}
+    choisi={ov != null ? ov : st.state} onChoisir={choisir} />;
+}
+
+function VentiloAppareil({ hass, id, idBase }) {
+  const st = hass.states[id];
+  const { options, choisi: lu, pas } = choixDuVentilo(st);
+  const [ov, poserOv] = useOptimiste(lu);
+  const choisir = (c) => {
+    const v = c.slice(2);
+    const parti = c.indexOf('p:') === 0
+      ? commanderService(hass, id, 'fan', 'set_preset_mode', { entity_id: id, preset_mode: v })
+      : commanderService(hass, id, 'fan', 'set_percentage', { entity_id: id, percentage: Math.min(100, Math.round(Number(v) * pas)) });
+    if (parti != null) poserOv(c);
+  };
+  return <PucesNommees id={idBase} libelle={nomCourt(id, st)} options={options} choisi={ov != null ? ov : lu} onChoisir={choisir} />;
+}
+
+/* Un interrupteur de l'appareil, ou un ventilateur sans vitesse ni préréglage : une puce qui bascule — allumé, le bleu plein. */
+function PuceInterrupteur({ hass, id }) {
+  const st = hass.states[id];
+  const [ov, poserOv] = useOptimiste(st.state);
+  const on = (ov != null ? ov : st.state) === 'on';
+  const inerte = horsService(st);
+  const basculer = () => {
+    if (inerte) return;
+    if (commanderService(hass, id, id.split('.')[0], on ? 'turn_off' : 'turn_on', { entity_id: id }) != null) poserOv(on ? 'off' : 'on');
+  };
+  return (
+    <button type="button" aria-pressed={on} aria-disabled={inerte ? true : undefined} onClick={basculer} style={{ ...BOUTON_MODE(on), opacity: inerte ? 0.4 : 1 }}>
+      <span style={{ minWidth: 0 }}>{nomCourt(id, st)}</span>
+    </button>
+  );
+}
+
+// La valeur d'un capteur de l'appareil : son nombre au format de la langue et son unité, l'état d'un poêle traduit.
+function valeurInfo(id, st) {
+  if (horsService(st)) return '—';
+  const at = st.attributes || {};
+  const n = Number(st.state);
+  if (st.state !== '' && Number.isFinite(n)) return nombre(n, 1, 0) + (at.unit_of_measurement ? ' ' + at.unit_of_measurement : '');
+  return estEtatPoele(id) ? texteEtatPoele(st.state) : String(st.state);
+}
+
+function CommandesAppareil({ hass, ch, sonde, idBase }) {
+  const S = (hass && hass.states) || {};
+  const { choix, ventilos, interrupteurs, infos } = commandesDeLAppareil(ch, S, sonde);
+  const [infosOuvertes, setInfosOuvertes] = useState(false);
+  const avecChoix = ventilos.filter(id => choixDuVentilo(S[id]).options.length);
+  const puces = [...interrupteurs, ...ventilos.filter(id => !avecChoix.includes(id))];
+  // Le nom de son appareil tel que Home Assistant le donne ; sans appareil nommé, « Ses commandes ».
+  const titre = nomAppareilDe(ch.entite) || tr('Ses commandes');
+  const blocs = [
+    ...choix.map(id => <ChoixAppareil key={id} hass={hass} id={id} idBase={idBase + '-' + id.replace('.', '-')} />),
+    ...avecChoix.map(id => <VentiloAppareil key={id} hass={hass} id={id} idBase={idBase + '-' + id.replace('.', '-')} />),
+    puces.length > 0 && (
+      <div key="puces" role="group" aria-label={titre} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+        {puces.map(id => <PuceInterrupteur key={id} hass={hass} id={id} />)}
+      </div>
+    ),
+  ].filter(Boolean);
+  if (!blocs.length && !infos.length) return null;
+  return (
+    <>
+      {blocs.length > 0 && (
+        <div data-panneau="commandes" style={PANNEAU_HAUT}>
+          <div style={{ ...PETITES_CAPITALES, marginBottom: 12 }}>{titre}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>{blocs}</div>
+        </div>
+      )}
+      {infos.length > 0 && (
+        <div data-panneau="infos" style={PANNEAU_LISTE}>
+          <button type="button" aria-expanded={infosOuvertes} aria-controls={infosOuvertes ? idBase + '-infos' : undefined}
+            onClick={() => setInfosOuvertes(v => !v)} style={RANGEE_BOUTON}>
+            <span style={TITRE}>{tr('Infos')}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 800, color: 'var(--o-text2)' }}>
+              {infosOuvertes ? null : infos.length}
+              <Fi i={infosOuvertes ? 'angle-small-up' : 'angle-small-down'} size={16} color="var(--o-text3)" />
+            </span>
+          </button>
+          {infosOuvertes && (
+            <div id={idBase + '-infos'}>
+              {infos.map(id => (
+                <div key={id} data-info={id} style={{ ...RANGEE_FIXE, borderTop: FILET_INFOS }}>
+                  <span style={{ ...TITRE, minWidth: 0 }}>{nomCourt(id, S[id])}</span>
+                  <span style={{ ...VALEUR_RANGEE, textAlign: 'right', minWidth: 0, overflowWrap: 'anywhere' }}>{valeurInfo(id, S[id])}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 /* Un groupe de puces sous son libellé visible, qui le nomme : les modes et
  * les préréglages d'un appareil, ce que fait une fenêtre ouverte. */
 function PucesNommees({ id, libelle, options, choisi, onChoisir }) {
@@ -534,6 +816,10 @@ function Avertissements({ ch, st, etats = {}, rate = false }) {
       tr('Son programme « {nom} » est allumé : il change les réglages lui-même. Coupez-le pour que le planning commande seul.', { nom: nomProg })],
     // Son dernier ordre perdu deux fois (30/10) : le moteur réessaie au prochain changement, ou au prochain événement.
     av.includes('ordre_defait') && ['ordre_defait', 'triangle-warning', tr('Il n’a pas gardé le dernier ordre de Loggia, qui réessaiera au prochain changement.')],
+    /* Éteint de lui-même, le moteur attend avant d'y voir un geste ; éteint et sa mesure déjà à la consigne, le planning ne
+     * l'allume pas encore (18/11, ADR 0375). */
+    av.includes('eteint_seul') && ['eteint_seul', 'power', tr('Il s’est éteint de lui-même : Loggia attend qu’il reparte, le planning reste en place.')],
+    av.includes('deja_chaud') && ['deja_chaud', 'temperature-high', tr('Sa mesure est déjà au-dessus de la consigne : Loggia l’allumera quand elle redescendra.')],
     SECURITE_VTHERM.includes(preset) && ['securite', 'shield-exclamation', tr('Sécurité : la sonde de température ne répond plus, VTherm chauffe seul.')],
     preset === DELESTAGE_VTHERM && ['delestage', 'bolt', tr('Délestage : la maison consomme trop, VTherm suspend la chauffe.')],
   ].filter(Boolean);
@@ -568,6 +854,18 @@ function DefautAppareil({ hass, ch, etats = {} }) {
       )}
     </div>
   );
+}
+
+/* Ce que l'appareil dit tout seul (A10) : la pression d'une chaudière sous 0,8 bar, un stock de granulés sous 10 % — une ligne
+ * chacune, au dessin des avertissements, avec la valeur lue. Ils étaient des chiffres repliés dans « Infos ». Parti, le seuil
+ * redépassé, la ligne s'en va. */
+function SeuilsAppareil({ alertes }) {
+  return alertes.map(({ cle, texte }) => (
+    <div key={cle} className="o-panne" role="status" data-seuil={cle}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 14, fontSize: 13, fontWeight: 700, lineHeight: 1.4 }}>
+      <Fi i="triangle-warning" size={14} color="var(--o-text2)" /><span style={{ minWidth: 0 }}>{texte}</span>
+    </div>
+  ));
 }
 
 /* ════════════ L'accueil ════════════ */
@@ -605,7 +903,10 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
    * de la maison (ADR 0128). */
   const uT = uniteTemp(a, hass);
   const consigneLue = ch.famille === 'thermostat' ? consigneClimat(a) : null;
-  const [ovT, poserOvT] = useOptimiste(consigneLue);
+  /* Trois appuis rapides sur « + » : l'écho du premier ordre effaçait l'avance du deuxième, et le troisième repartait de lui
+   * (audit du 12/11, B29). Seule la consigne envoyée, une fois relue, lève l'avance ; le filet de 6 s reste. */
+  const avanceAtteinte = (v) => consigneLue != null && Number(v) === Number(consigneLue);
+  const [ovT, poserOvT] = useOptimiste(consigneLue, undefined, avanceAtteinte);
   const consigne = ovT != null ? ovT : consigneLue;
   // Le décalage de son capteur (30/10) : au planning, la fiche dit et règle la consigne de la PIÈCE.
   const decPiece = auPlanning ? decalageEn(ch, uT) : 0;
@@ -658,19 +959,28 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
   const minT = Number(a.min_temp), maxT = Number(a.max_temp);
   const peutBaisser = consigne != null && !(a.min_temp != null && Number.isFinite(minT) && consigne <= minT);
   const peutMonter = consigne != null && !(a.max_temp != null && Number.isFinite(maxT) && consigne >= maxT);
-  const regler = (sens) => {
-    if (consigne == null || !ch.entite) return;
+  /* Le pas que le moteur a APPRIS d'un appareil qui n'en publie pas (30/10, `pas` de l'état, 17/11) : un poêle MCZ ne garde que
+   * les degrés entiers — un cran de 0,5 °C partait pour rien. */
+  const aPas = Number(ch.pas) > 0 && !(Number(a.target_temp_step) > 0) ? { ...a, target_temp_step: Number(ch.pas) } : a;
+  /* Une consigne visée, dans l'unité et sur l'échelle de l'APPAREIL. Au planning, elle part en reprise en main, en °C de la
+   * pièce (le serveur ne parle qu'en Celsius) ; hors du planning, à l'appareil, comme sa fiche d'avant. */
+  const poserConsigne = (vise) => {
+    if (vise == null || consigne == null || !ch.entite) return;
     if (auPlanning) {
-      const vise = consigneVoisine(consigne, sens, a, uT);
-      const p = vise != null && planAction(ch.entite, 'set_temperature', vise, actionCtx(hass));
+      const p = planAction(ch.entite, 'set_temperature', vise, actionCtx(hass));
       if (!p || !p.ok || p.data.temperature === consigne) return;
       poserOvT(p.data.temperature);
       auMoteur(messageMain(ch, { temperature: Math.round((versCelsius(p.data.temperature, uT) - decalageEn(ch, 'C')) * 10) / 10, fin: 'prochain' }), () => poserOvT(null));
       return;
     }
-    // Un vrai cran du pas de l'appareil : ± 0,5 arrondi au degré retombait sur la même consigne (audit du 19/10).
-    const v = commander(hass, ch.entite, 'set_temperature', consigneVoisine(consigne, sens, a, uT) ?? consigne + sens * 0.5, 'temperature');
+    const v = commander(hass, ch.entite, 'set_temperature', vise, 'temperature');
     if (v != null) poserOvT(v);
+  };
+  const regler = (sens) => {
+    if (consigne == null || !ch.entite) return;
+    const vise = consigneVoisine(consigne, sens, aPas, uT);
+    // Un vrai cran du pas de l'appareil : ± 0,5 arrondi au degré retombait sur la même consigne (audit du 19/10).
+    poserConsigne(auPlanning ? vise : vise ?? consigne + sens * 0.5);
   };
   // Hors du planning, l'appareil directement, comme sa fiche d'avant : son mode, sa marche, son préréglage.
   const choisirHvac = (m) => { if (commander(hass, ch.entite, 'set_hvac_mode', m) != null) poserOvHvac(m); };
@@ -719,6 +1029,8 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
    * muet ne se commande pas en direct (ADR 0048). */
   const modesPuces = auPlanning || !mort ? (ch.modes || []).filter(m => ordreDuMode(ch, m, st, auPlanning)) : [];
   const thermostat = ch.famille === 'thermostat';
+  // Ce que disent les capteurs de son appareil (A10) : une pression ou un stock bas se DIT sous l'en-tête ; une vanne ouverte fait chauffer.
+  const signaux = thermostat ? signauxDeLAppareil(ch.entite, S, LOGGIA_INDEX && LOGGIA_INDEX.entityMeta) : { alertes: [], vanne: null };
   /* Hors du planning, un thermostat se commande comme sa fiche d'avant (son
    * choix du 11/10) : les modes d'un appareil qui sait autre chose que
    * chauffer (une climatisation, une pompe à chaleur réversible), ses
@@ -731,6 +1043,11 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
   const montrerPlage = libre && !!plage;
   const montrerConsigne = thermostat && (auPlanning || !mort) && !montrerPlage;
   const montrerMarche = libre;
+  // La jauge (17/11) : la consigne unique d'un thermostat, lisible — elle remplace le haut et la rangée « Consigne ».
+  const jauge = montrerConsigne && consigne != null;
+  // Ce que son appareil a de plus à commander ou à montrer (17/11, son choix « A ») : une section sous le haut.
+  const commandes = thermostat && !mort ? commandesDeLAppareil(ch, S, sonde) : null;
+  const avecCommandes = !!commandes && Object.keys(commandes).some(k => commandes[k].length > 0);
 
   /* Le haut. Un thermostat hors du planning (cadre 3e) dit en grand ce qu'il
    * FAIT — « Éteint », « Chauffe » à l'orange, « Refroidit » au bleu, « Au
@@ -748,7 +1065,8 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
   let grand = '—', encre = 'var(--o-text3)', sous = null, encreSous = 'var(--o-text2)', modeGrand = null;
   if (thermostat && !auPlanning) {
     const action = marche ? a.hvac_action : null;
-    const chauffe = enChauffe({ famille: 'thermostat', muet: mort, marche, action });
+    // La vanne d'une tête qui ne publie pas son action (A10) : le capteur de son appareil.
+    const chauffe = enChauffe({ famille: 'thermostat', muet: mort, marche, action, vanne: signaux.vanne });
     if (mort) grand = tr('Indisponible');
     else if (!marche && coupeeParLaRegle) {
       grand = tr('Éteint'); encre = 'var(--o-text2)'; sous = tr('Fenêtre ouverte · arrêt automatique'); encreSous = 'var(--o-warn)';
@@ -756,7 +1074,8 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
     else if (chauffe || action === 'cooling') {
       grand = chauffe ? tr('Chauffe') : tr('Refroidit');
       encre = chauffe ? 'var(--o-warn2)' : 'var(--o-cold)';
-      sous = consigne != null ? tr('Vers {t}°', { t: nombre(consigne - decPiece, 1) }) : null;
+      // Sur la jauge, la consigne se lit au milieu : la phrase dit qui commande.
+      sous = consigne != null && !jauge ? tr('Vers {t}°', { t: nombre(consigne - decPiece, 1) }) : null;
     } else {
       grand = tr('Au repos');
       encre = 'var(--o-text)';
@@ -773,7 +1092,21 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
     const parLaFenetre = auPlanning ? ch.source === 'fenetre' : eteint && coupeeParLaRegle;
     encreSous = parLaFenetre ? 'var(--o-warn)' : 'var(--o-text2)';
   }
+  if (jauge && !auPlanning && sous == null) sous = phraseDuHaut(ch, etat, ref, false, false);
   const mesure = mesurePiece(hass, sonde);
+  /* La jauge : sa couleur — au planning celle du mode qu'il suit, l'orange d'une consigne posée à la main ; hors du planning
+   * l'orange de la chauffe, le bleu du froid, le gris éteint —, ses bornes et son pas, dits sur l'échelle de la PIÈCE. Au
+   * planning, une reprise en main se dit « Manuel » (sa demande du 17/11). */
+  // Un thermostat revenu à SON programme (Tado, Netatmo) le suit : ce n'est pas « Manuel ».
+  const manuel = auPlanning && ch.source === 'main' && r.programme !== true;
+  const couleurJauge = auPlanning ? (modeGrand ? couleurMode(modeGrand) : 'var(--o-warn2)')
+    : !marche || mort ? 'var(--o-text3)' : hvac === 'cool' || a.hvac_action === 'cooling' ? 'var(--o-cold)' : 'var(--o-warn2)';
+  const pasJauge = Number(aPas.target_temp_step) > 0 ? Number(aPas.target_temp_step) : uT === 'F' ? 1 : 0.5;
+  const borne = (x, defaut) => (x != null && Number.isFinite(Number(x)) ? Number(x) : defaut);
+  const minJauge = borne(a.min_temp, uT === 'F' ? 45 : 7) - decPiece;
+  const maxJauge = borne(a.max_temp, uT === 'F' ? 86 : 30) - decPiece;
+  const dixieme = (x) => Math.round(x * 10) / 10;
+  const caler = (v) => dixieme(Math.min(maxJauge, Math.max(minJauge, Math.round((v + decPiece) / pasJauge) * pasJauge - decPiece)));
 
   /* Le prochain changement du planning, deux fois. La rangée « Prochain
    * changement » le dit, avec sa majuscule et son mode, sur la semaine que la
@@ -857,7 +1190,7 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
   const versPlanning = () => { if (onOnglet) onOnglet('planning'); };
   const valeurPlanning = !estSemaine(ch.semaine) ? tr('Aucun') : ch.planning !== true ? tr('Éteint') : simulation ? tr('Observer sans agir') : tr('Actif');
   const cles = [
-    montrerConsigne && 'consigne',
+    montrerConsigne && !jauge && 'consigne',
     montrerMarche && 'marche',
     prochain && 'prochain',
     aFenetre && 'fenetre',
@@ -961,12 +1294,13 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
     }
     /* L'appareil : sa consommation, l'interrupteur d'un module, toutes ses
      * entités — sa carte ne mène plus à la fiche de l'appareil, la fiche du
-     * chauffage si. */
+     * chauffage si. Ses commandes dans la fiche (17/11), il garde l'épingle et
+     * la liste complète. */
     return (
       <button key={cle} type="button" data-rangee={cle} onClick={() => onFiche(ch.entite)} style={{ ...RANGEE_BOUTON_DOUBLE, borderTop: f }}>
         <span style={{ minWidth: 0 }}>
           <span style={TITRE}>{tr('L’appareil')}</span>
-          <span style={SOUS}>{tr('L’épingle, les commandes et toutes ses entités')}</span>
+          <span style={SOUS}>{avecCommandes ? tr('L’épingle et toutes ses entités') : tr('L’épingle, les commandes et toutes ses entités')}</span>
         </span>
         <Fi i="angle-small-right" size={16} color="var(--o-text3)" />
       </button>
@@ -977,9 +1311,25 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
     <div className="rb-accueil" style={{ gap: 12 }}>
       <Avertissements ch={ch} st={st} etats={S} rate={!!etat && etat.demarrage === false} />
       <DefautAppareil hass={hass} ch={ch} etats={S} />
+      <SeuilsAppareil alertes={signaux.alertes} />
       {err && <div role="alert" style={ALERTE}>{err}</div>}
 
       <div data-panneau="haut" style={PANNEAU_HAUT}>
+        {jauge ? (
+          <>
+            {mesure != null && (
+              <div data-piece="" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 6, marginBottom: 2 }}>
+                <span style={petitesCapitales(10)}>{tr('Pièce')}</span>
+                <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: '-.01em' }}>{nombre(mesure, 1) + '°'}</span>
+              </div>
+            )}
+            <JaugeConsigne valeur={dixieme(consigne - decPiece)} min={minJauge} max={maxJauge} caler={caler} couleur={couleurJauge} piece={mesure}
+              etat={manuel ? tr('Manuel') : grand} encreEtat={manuel ? 'var(--o-warn2)' : encre} eteint={!marche}
+              peutMoins={peutBaisser} peutPlus={peutMonter} moins={() => regler(-1)} plus={() => regler(1)}
+              poser={(v) => poserConsigne(Math.round((v + decPiece) * 100) / 100)} />
+            {sous && <div data-sous="" style={{ fontSize: 12.5, fontWeight: 600, color: encreSous, textAlign: 'center', marginTop: 2 }}>{sous}</div>}
+          </>
+        ) : (
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
           <div style={{ minWidth: 0 }}>
             {/* Un mot long passe à la ligne, plus petit — jamais tronqué (« Ochrona przed zamarzaniem »). */}
@@ -996,6 +1346,7 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
             </div>
           )}
         </div>
+        )}
         {enReprise && (
           <div data-reprise="" style={{ marginTop: 18 }}>
             <div id={idBase + '-fin'} style={PETITES_CAPITALES}>{ORDRE_MODES.includes(r.mode) ? tr('Garder ce mode jusqu’à') : tr('Garder cette consigne jusqu’à')}</div>
@@ -1016,7 +1367,8 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
           {montrerHvac && <PucesNommees id={idBase + '-hvac'} libelle={tr('Mode')} options={hvacs.map(m => ({ id: m, label: motHvac(m) }))} choisi={hvac} onChoisir={choisirHvac} />}
           {presets.length > 0 && (
             <div style={{ marginTop: montrerHvac ? 16 : 0 }}>
-              <PucesNommees id={idBase + '-preset'} libelle={tr('Préréglage')} options={presets.map(p => ({ id: p, label: motPreset(p) }))} choisi={preset} onChoisir={choisirPreset} />
+              <PucesNommees id={idBase + '-preset'} libelle={tr('Préréglage')} options={presets.map(p => ({ id: p, label: motPreset(p) }))}
+                choisi={preset} onChoisir={choisirPreset} />
             </div>
           )}
           {montrerPlage && [['bas', tr('Consigne basse')], ['haut', tr('Consigne haute')]].map(([bord, nom], i) => (
@@ -1029,6 +1381,10 @@ function OngletAccueil({ idBase, hass, ch, etat, sonde, onFiche, onOnglet = null
           ))}
         </div>
       )}
+
+      {thermostat && !mort && <ReglagesAir hass={hass} id={ch.entite} style={PANNEAU_HAUT} />}
+
+      {avecCommandes && <CommandesAppareil hass={hass} ch={ch} sonde={sonde} idBase={idBase + '-app'} />}
 
       {cles.length > 0 && <div data-liste="" style={PANNEAU_LISTE}>{cles.map((cle, i) => rangee(cle, filet(i)))}</div>}
     </div>
@@ -1948,7 +2304,9 @@ function TemperaturesDesModes({ idBase, hass, ch, ordinaire }) {
   const [ordre, setOrdre] = useState('');
   // Les températures, en °C : le cran suivant part de celles qu'on montre, l'avance comprise.
   const tLues = temperaturesDe(ch.temperatures);
-  const [ovT, poserOvT] = useOptimiste(JSON.stringify(tLues));
+  // Le moteur doit RENDRE les températures envoyées pour lever l'avance : l'écho d'un cran plus ancien ne compte pas (audit du 12/11, B29).
+  const tAtteintes = (v) => JSON.stringify(temperaturesDe(v)) === JSON.stringify(tLues);
+  const [ovT, poserOvT] = useOptimiste(JSON.stringify(tLues), undefined, tAtteintes);
   const temps = ovT || tLues;
   const uMaison = uniteTemp(null, hass);
   const modes = Array.isArray(ch.modes) ? ch.modes : [];

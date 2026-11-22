@@ -33,7 +33,6 @@ export const SEUIL_FERME = 2;
 // `st` peut manquer (entité absente) : seule la position tranche alors.
 export function coverFerme(st, pos) {
   if (st && st.state === 'closed') return true;
-  if (st && st.state === 'open' && pos >= 100) return false;
   return pos <= SEUIL_FERME;
 }
 export const coverOuvert = (pos) => pos >= 100 - SEUIL_FERME;
@@ -74,7 +73,9 @@ export function positionDe(st) {
  * `open`, il n'est pas pour autant en haut. */
 function positionSure(st) {
   const pos = positionDe(st);
-  const publie = pos != null && positionPubliee(st) != null;
+  /* Une position que Home Assistant SUPPOSE (`assumed_state` : un moteur radio sans retour, une course calculée au temps ; chantier
+   * du 20/11, F4, ADR 0381) n'est pas une mesure : baissé à la télécommande, il se croit encore en haut. */
+  const publie = pos != null && positionPubliee(st) != null && !(st.attributes && st.attributes.assumed_state === true);
   if (publie && st.state === 'closed' && pos > SEUIL_FERME) return { pos: 0, sure: false };
   return { pos, sure: publie };
 }

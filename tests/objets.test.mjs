@@ -38,7 +38,8 @@ test('chaque domaine trouve son filtre ; une prise declaree lumiere est une lumi
   assert.deepEqual(f({ domaine: 'lawn_mower' }), ['iot'], 'le robot du jardin est un robot');
   assert.deepEqual(f({ domaine: 'plant', type: 'plant' }), ['capteurs'], 'une plante est un bouquet de capteurs');
   // ASSERTION MODIFIÉE (30/10, G3-E3) : la borne de recharge trouvée par la découverte (`obj:borne`) est un appareil — pas une prise.
-  assert.deepEqual(DOMAINES_IOT, ['vacuum', 'lawn_mower', 'feeder', 'fan', 'humidifier', 'valve', 'borne'], 'aucune prise parmi les appareils');
+  // ASSERTION MODIFIÉE (21/11, ADR 0386) : la voiture, la litière et la fontaine sont des appareils, sous IoT (A11, A12).
+  assert.deepEqual(DOMAINES_IOT, ['vacuum', 'lawn_mower', 'feeder', 'fan', 'humidifier', 'valve', 'borne', 'voiture', 'litiere', 'fontaine'], 'aucune prise parmi les appareils');
   assert.deepEqual(f({ domaine: 'borne', type: 'borne' }), ['iot'], 'la borne est sous IoT');
   assert.deepEqual(f({ domaine: 'script' }), [], 'un domaine inconnu ne vit que sous Tous');
 });
@@ -161,7 +162,9 @@ test('la vue Objets dessine les cartes de la piece, une par appareil, derriere d
   // `objetsDeLaMaison`, il était invisible à la règle des dépendances, et le
   // résultat en dépend. La liste est mémoïsée par la vue, qui la transmet.
   // ASSERTION MODIFIÉE (chantier Capteurs, tâche 7) : la carte standard d'une mesure porte le nom de sa pièce, que l'objet lui donne (C13).
-  assert.ok(vue.includes('objetsDeLaMaison(hass, ajoutes, epingles)') && vue.includes('return compacte ? dc.compact(cle, ed.labelOf(o.cle) || null) : dc.card(cle, ed.labelOf(o.cle) || o.nomCarte || null);'), 'les cartes de la piece');
+  // ASSERTION MODIFIÉE (19/11, fluidité, point 1 ; ADR 0377) : Objets se mémoïse sur la signature de la maison.
+  // ASSERTION MODIFIÉE (21/11, ADR 0386) : la signature dit aussi l'arrivée de la découverte des appareils composés (`sigListe`).
+  assert.ok(vue.includes('objetsDeLaMaison(sigListe ? hassFrais.current : null, ajoutes, epingles)') && vue.includes('return compacte ? dc.compact(cle, ed.labelOf(o.cle) || null) : dc.card(cle, ed.labelOf(o.cle) || o.nomCarte || null);'), 'les cartes de la piece');
   assert.ok(vue.includes('dc.card(null, nomDe(o), o.zone)'), 'une zone fil pilote a sa carte');
   assert.ok(vue.includes('borderRadius: 9') && !vue.includes('borderRadius: 999'), 'des puces, pas des pilules');
   assert.ok(vue.includes(`className="o-favrow o-objfiltres" style={{ display: 'flex', gap: 8, overflowX: 'auto', flexWrap: 'nowrap' }}`), 'une seule ligne, pas de retour a la ligne ; elle defile si elle deborde');

@@ -21,7 +21,7 @@
 import { useState } from 'react';
 import { tr } from './i18n.js';
 import { Fi, Bascule, ListeChoix } from './ui.jsx';
-import { LOGGIA_INDEX, compteOrdinaire } from './state.js';
+import { nomZoneDe, compteOrdinaire } from './state.js';
 import { LISERE } from './styles.js';
 import { nombre } from './format.js';
 import { commanderService } from './actions.js';
@@ -37,7 +37,6 @@ const RANGEE = { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 
 const PUCE = { height: 44, padding: '0 14px', borderRadius: 10, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 700, fontFamily: 'inherit', flexShrink: 0 };
 const ROND = { width: 44, height: 44, borderRadius: 12, border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text1)', fontFamily: 'inherit', flexShrink: 0 };
 
-const pieceDe = (id) => (LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function' ? LOGGIA_INDEX.areaNameOf(id) : null);
 // Au dixième, dans la langue de l'écran (`nombre`, format.js), comme la phrase de la carte.
 const degres = (v) => (v == null ? '—' : nombre(v, 1, 0) + '°');
 
@@ -53,7 +52,7 @@ export default function FicheEau({ id, hass, onFiche = null, epingle = null, Gly
   const admin = !compteOrdinaire(hass);
   const [envoi, setEnvoi] = useState(false);
   const [err, setErr] = useState('');
-  const zone = pieceDe(id);
+  const zone = nomZoneDe(id);
   const genre = tr('chauffe-eau');
   const marche = ordreMarche(id, v, !v.marche);
 

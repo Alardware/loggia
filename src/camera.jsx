@@ -8,6 +8,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { tr } from './i18n.js';
 import { pageRegardee, suivreRegard, GRACE_DIRECT } from './regard.js';
+import { LOGGIA_INDEX } from './state.js';
+import { camPrivee } from './camcmd.js';
+import { BoutonSon, CamOrientation, PanneauPrive } from './camdiffere.jsx';
+
+// Ce qu'une vignette attend sa réponse avant de l'abandonner et d'en redemander une (audit du 12/11, B9).
+const ATTENTE_MAX = 20000;
 
 /* Regardée ou non, à `grace` ms près (lot 14 de l'audit du 03/10) : faux
  * quand l'onglet est caché ou que la veille recouvre la page depuis `grace`
@@ -40,26 +46,27 @@ export function HaImage({ hass, haid, refreshMs = 2000, kind = 'camera', fit = '
   useEffect(() => {
     if (!haid || !authentifie) { setSrc(null); return; }
     if (!regardee) return;
-    let alive = true, tour = 0, enVol = null;
+    let alive = true, enVol = null, depart = 0;
     const endpoint = kind === 'image' ? 'image_proxy' : 'camera_proxy';
     const fetchSnap = async () => {
-      /* Chaque appel porte son numero. Sur une camera lente, la reponse d'un
-       * tour ancien arrivait apres une plus recente et remontait une image
-       * perimee a l'ecran ; les vignettes semblaient reculer dans le temps. */
-      const mien = ++tour;
-      /* Cette réponse-là serait jetée de toute façon (`mien !== tour`) : la
-       * requête d'avant, pas encore revenue, est abandonnée. Sur une caméra
-       * lente, les requêtes ne s'empilent plus (audit de consolidation du
-       * 28/10, B7). */
-      if (enVol) enVol.abort();
+      /* UNE REQUÊTE À LA FOIS, ET ON L'ATTEND (audit du 12/11, B9). Chaque tour abandonnait la requête d'avant
+       * pour ne plus les empiler (audit de consolidation du 28/10, B7) : sur une caméra qui met plus de
+       * `refreshMs` à répondre, aucune image n'arrivait donc jamais — la tuile restait sur son fond. Le tour
+       * qui tombe pendant une requête passe son tour, comme la carte d'un robot (vacplan.jsx) : rien ne
+       * s'empile, et l'image qui arrive est toujours la dernière demandée — elle ne peut plus reculer dans le
+       * temps. Une requête qui ne revient pas au bout de `ATTENTE_MAX` est abandonnée, pour que la suivante
+       * parte. */
+      if (enVol) { if (Date.now() - depart < ATTENTE_MAX) return; enVol.abort(); }
       const ctrl = enVol = new AbortController();
+      depart = Date.now();
       try {
         const res = await fetch(`/api/${endpoint}/${haid}`, { headers: { Authorization: `Bearer ${jeton.current}` }, signal: ctrl.signal });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const blob = await res.blob();
-        if (!alive || mien !== tour) return;
+        if (!alive || enVol !== ctrl) return;
         setSrc(URL.createObjectURL(blob));
       } catch { /* garde le fond en repli */ }
+      finally { if (enVol === ctrl) enVol = null; }
     };
     fetchSnap();
     const id = setInterval(fetchSnap, refreshMs);
@@ -107,7 +114,7 @@ async function iceServers(conn, haid) {
 }
 
 // ── Lecteur caméra LIVE (porté de V1) : WebRTC → HLS natif → MJPEG signé → snapshot ──
-export function CamLive({ hass, haid, online = true, nom = '' }) {
+export function CamLive({ hass, haid, online: enLigne = true, nom = '' }) {
   const vidRef = useRef(null);
   const imgRef = useRef(null);
   const [mode, setMode] = useState('loading'); // loading | video | mjpeg | snap | off
@@ -130,6 +137,12 @@ export function CamLive({ hass, haid, online = true, nom = '' }) {
    * connexion ou a la deconnexion. */
   const authentifie = !!token;
   const conn = hass && hass.connection ? hass.connection : null;
+  /* Le mode privé (chantier du 20/11, A8) : l'objectif est occulté, il n'y a rien à montrer — et rien à
+   * négocier. Une caméra privée ne demande donc PLUS de flux, comme une caméra hors ligne ; mais elle le DIT
+   * (`PanneauPrive`) au lieu de rester noire. Chez Reolink, privée, elle passe aussi « indisponible » : c'est le
+   * mode, pas une panne. */
+  const prive = camPrivee(LOGGIA_INDEX, hass && hass.states, haid);
+  const online = enLigne && !prive;
   /* Personne ne regarde, plus de direct (lot 14 de l'audit du 03/10). Sous la
    * veille — posée par-dessus l'Accueil sans le démonter — ou dans un onglet
    * caché, chaque caméra gardait sa session toute la nuit. Elle se ferme
@@ -269,6 +282,7 @@ export function CamLive({ hass, haid, online = true, nom = '' }) {
     return () => { cancelled = true; clearInterval(gelIv); if (cleanupRtc) { try { cleanupRtc(); } catch {} } const v = vidCapture; if (v) { try { v.pause(); } catch {} try { v.srcObject = null; } catch {} v.removeAttribute('src'); try { v.load(); } catch {} } const im = imgCapture; if (im) { im.onerror = null; im.removeAttribute('src'); } };
   }, [haid, online, authentifie, conn, regardee]);
   const cover = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' };
+  if (prive) return <PanneauPrive nom={nom} />;
   if (mode === 'off') return null; // repli sur le fond gradient de la tuile
   /* Le flux porte le NOM de la caméra (20/09) : une image sans texte ne dit
    * rien à qui ne la voit pas, et « Flux de la caméra » ne disait pas laquelle. */
@@ -282,6 +296,10 @@ export function CamLive({ hass, haid, online = true, nom = '' }) {
         * télécharge rien tant que personne ne regarde (son propre regard), et
         * se démonte quand le direct revient. Le premier chargement ne change pas. */}
       {mode === 'loading' && reprise && <HaImage hass={hass} haid={haid} refreshMs={2000} kind="camera" alt={dit} />}
+      {/* Les commandes de la caméra, au-dessus du bouton qui agrandit : le son (seulement si le flux en porte, et seulement
+        * en direct vidéo — l'instantané n'en a pas) et, dans la fiche, la croix d'une caméra motorisée. */}
+      {mode === 'video' && <BoutonSon vidRef={vidRef} nom={nom} />}
+      <CamOrientation hass={hass} haid={haid} nom={nom} />
     </>
   );
 }

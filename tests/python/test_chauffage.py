@@ -239,6 +239,8 @@ def creer(module, store_module, regles_module):
         m._verifications = {}
         # Le pas revele, les ordres defaits, les programmes ecoutes (30/10).
         m._pas, m._defaits, m._programmes = {}, {}, {}
+        # Les thermostats eteints d'eux-memes, et ceux deja a leur consigne (ADR 0375).
+        m._extinctions, m._au_chaud = {}, set()
         m._minuteur = m._ecoute = m._au_demarrage = None
         m._arrete = False
         m._depot = FauxStore(None)
@@ -1111,6 +1113,16 @@ def test_un_ordre_perdu_deux_fois_se_dit_jusqu_a_ce_qu_un_ordre_tienne(creer, rd
     assert "ordre_defait" not in poele["avertissements"] and poele["defait"] is None
 
 
+def test_l_etat_publie_le_pas_appris(creer):
+    """La jauge de la fiche cale ses crans sur le pas qu'un appareil a REVELE sans en publier (17/11) ; None avant."""
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat")), ("id-rad", chauffage(RAD, "fil_pilote"))))
+    etat = {c["cle"]: c for c in lancer(m.async_etat())["chauffages"]}
+    assert (etat["id-poele"]["pas"], etat["id-rad"]["pas"]) == (None, None)
+    m._pas[POELE] = 1.0
+    etat = {c["cle"]: c for c in lancer(m.async_etat())["chauffages"]}
+    assert (etat["id-poele"]["pas"], etat["id-rad"]["pas"]) == (1.0, None)
+
+
 def test_sans_decalage_l_etat_dit_zero(creer):
     m = creer(config(("id-poele", chauffage(POELE, "thermostat")), ("id-rad", chauffage(RAD, "fil_pilote"))))
     etat = {c["cle"]: c for c in lancer(m.async_etat())["chauffages"]}
@@ -1325,14 +1337,160 @@ def test_repasser_la_pompe_a_chaleur_en_chauffe_a_la_main_est_un_geste(creer):
     assert m.reprises["id-pac"]["temperature"] == 21.0
 
 
-def test_un_poele_vraiment_eteint_reste_un_geste(creer):
+def test_un_poele_vraiment_eteint_reste_un_geste(creer, module):
+    """ASSERTION MODIFIEE (ADR 0375) : eteint sans qu'une personne de Home Assistant
+    l'ait demande, il peut s'eteindre de lui-meme. Le moteur attend, sans le rallumer ;
+    toujours eteint au bout de l'attente, c'est un geste — jusqu'au prochain changement."""
     m = creer(config(("id-poele", chauffage(POELE, "thermostat"))), etats(poele_t=20))
     allume = FauxEtat("heat", {**ATTRS_POELE, "temperature": 20, "hvac_action": "heating"})
     eteint = FauxEtat("off", {**ATTRS_POELE, "temperature": 20, "hvac_action": "off"})
     m.hass.states.table[POELE] = eteint
     m._sur_etat(Evenement(POELE, allume, eteint))
     m.hass.executer()
-    assert m.reprises["id-poele"]["mode"] == "arret"
+    assert m.reprises == {}, "pas encore : il s'eteint peut-etre de lui-meme"
+    assert m.hass.services.appels == [], "ni rallume pendant qu'il s'eteint"
+    assert m.prochain_reveil(m.horloge) == LUNDI_0700 + module.ATTENTE_EXTINCTION, "le moteur se reveille a la fin"
+    m.horloge = LUNDI_0700 + module.ATTENTE_EXTINCTION
+    lancer(m.async_evaluer())
+    r = m.reprises["id-poele"]
+    assert (r["mode"], r["fin"]) == ("arret", paris(2026, 10, 12, 8, 30).isoformat())
+    assert m.hass.services.appels == []
+    assert ("main", "reprise en main", "jusqu’à 08:30", "geste fait ailleurs") in journal(m)
+
+
+# ── Eteint de lui-meme, ou deja a sa consigne (ADR 0375) ─────────────────────
+
+def poele_rallume_par_le_planning(m):
+    """Le poele eteint, piece froide : le planning (Confort, 20 °C) l'allume, et il le confirme."""
+    lancer(m.async_evaluer())
+    assert m.hass.services.appels == [("climate", "set_hvac_mode", {"entity_id": [POELE], "hvac_mode": "heat"}),
+                                      ("climate", "set_temperature", {"entity_id": [POELE], "temperature": 20.0})]
+    allume = FauxEtat("heat", {**ATTRS_POELE, "temperature": 20, "hvac_action": "heating", "current_temperature": 18})
+    vieux, m.hass.states.table[POELE] = m.hass.states.table[POELE], allume
+    m._sur_etat(Evenement(POELE, vieux, allume, m.hass.services.contextes[0]))
+    m.hass.executer()
+    return allume
+
+
+def test_un_poele_qui_s_eteint_de_lui_meme_puis_se_met_en_veille_n_est_pas_un_geste(creer, module):
+    """18/11, chez lui : le planning rallume le poele a 14:33 ; a 14:39 il s'eteint seul
+    (sa consigne depassee), publie `off` pendant l'extinction et le refroidissement, puis
+    repart en veille a 14:58 (`heat`, `idle`). Chaque passage devenait « reprise en main ·
+    geste fait ailleurs » : « Manuel jusqu'a 18:00 », qu'il ne comprenait pas. Rien de tout
+    cela n'est un geste, et rien ne part vers lui pendant qu'il s'eteint."""
+    table = etats(poele="off", poele_t=17)
+    table[POELE] = FauxEtat("off", {**ATTRS_POELE, "temperature": 17, "hvac_action": "off", "current_temperature": 18})
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat"))), table)
+    allume = poele_rallume_par_le_planning(m)
+    eteint = FauxEtat("off", {**ATTRS_POELE, "temperature": 20, "hvac_action": "off", "current_temperature": 21})
+    m.horloge = LUNDI_0700 + timedelta(minutes=6)
+    m.hass.states.table[POELE] = eteint
+    m._sur_etat(Evenement(POELE, allume, eteint))
+    m.hass.executer()
+    assert m.reprises == {}
+    assert len(m.hass.services.appels) == 2, "pas rallume pendant qu'il s'eteint"
+    assert [e for e in journal(m) if e[1:4:2] == ("retenu", module.ETEINT_SEUL)], journal(m)
+    poele = next(c for c in lancer(m.async_etat())["chauffages"] if c["cle"] == "id-poele")
+    assert "eteint_seul" in poele["avertissements"] and poele["source"] == "planning"
+    veille = FauxEtat("heat", {**ATTRS_POELE, "temperature": 20, "hvac_action": "idle", "current_temperature": 21})
+    m.horloge = LUNDI_0700 + timedelta(minutes=25)
+    m.hass.states.table[POELE] = veille
+    m._sur_etat(Evenement(POELE, eteint, veille))
+    m.hass.executer()
+    assert m.reprises == {} and m._extinctions == {}, "reparti seul, la ou le planning le veut"
+    assert len(m.hass.services.appels) == 2
+    poele = next(c for c in lancer(m.async_etat())["chauffages"] if c["cle"] == "id-poele")
+    assert "eteint_seul" not in poele["avertissements"]
+
+
+def test_eteint_par_une_personne_de_home_assistant_c_est_aussitot_un_geste(creer):
+    Context = sys.modules["homeassistant.core"].Context
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat"))), etats(poele_t=20))
+    allume = FauxEtat("heat", {**ATTRS_POELE, "temperature": 20, "hvac_action": "heating"})
+    eteint = FauxEtat("off", {**ATTRS_POELE, "temperature": 20, "hvac_action": "off"})
+    m.hass.states.table[POELE] = eteint
+    m._sur_etat(Evenement(POELE, allume, eteint, Context(user_id="u-1")))
+    m.hass.executer()
+    assert m.reprises["id-poele"]["mode"] == "arret" and m.reprises["id-poele"]["par"] == "u-1"
+    assert m._extinctions == {}
+
+
+def test_un_changement_du_planning_pendant_l_attente_clot_l_affaire_sans_geste(creer):
+    """Eteint a 08:00 ; le planning passe en Eco a 08:30. Une reprise aurait fini a 08:30 :
+    a la fin de l'attente (08:45), toujours eteint, le planning s'applique, sans reprise."""
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat"))), etats(poele_t=20),
+              maintenant=paris(2026, 10, 12, 8))
+    allume = FauxEtat("heat", {**ATTRS_POELE, "temperature": 20, "hvac_action": "heating"})
+    eteint = FauxEtat("off", {**ATTRS_POELE, "temperature": 20, "hvac_action": "off"})
+    m.hass.states.table[POELE] = eteint
+    m._sur_etat(Evenement(POELE, allume, eteint))
+    m.hass.executer()
+    m.horloge = paris(2026, 10, 12, 8, 30)
+    lancer(m.async_evaluer())
+    assert m.hass.services.appels == [], "08:30 : il attend encore"
+    m.horloge = paris(2026, 10, 12, 8, 45)
+    lancer(m.async_evaluer())
+    assert m.reprises == {}
+    assert m.hass.services.appels == [("climate", "set_hvac_mode", {"entity_id": [POELE], "hvac_mode": "heat"}),
+                                      ("climate", "set_temperature", {"entity_id": [POELE], "temperature": 17.0})]
+
+
+def test_reprendre_le_planning_pendant_l_attente_l_applique_aussitot(creer):
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat"))), etats(poele_t=20))
+    allume = FauxEtat("heat", {**ATTRS_POELE, "temperature": 20, "hvac_action": "heating"})
+    eteint = FauxEtat("off", {**ATTRS_POELE, "temperature": 20, "hvac_action": "off"})
+    m.hass.states.table[POELE] = eteint
+    m._sur_etat(Evenement(POELE, allume, eteint))
+    m.hass.executer()
+    lancer(m.async_rendre_au_planning("id-poele"))
+    assert m._extinctions == {}
+    assert m.hass.services.appels[0] == ("climate", "set_hvac_mode", {"entity_id": [POELE], "hvac_mode": "heat"})
+
+
+def test_un_geste_qui_le_met_la_ou_le_planning_le_veut_n_est_pas_une_reprise(creer):
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat"))), etats(poele_t=17))
+    vieux = FauxEtat("heat", {**ATTRS_POELE, "temperature": 17})
+    neuf = FauxEtat("heat", {**ATTRS_POELE, "temperature": 20})
+    m.hass.states.table[POELE] = neuf
+    m._sur_etat(Evenement(POELE, vieux, neuf))
+    m.hass.executer()
+    assert m.reprises == {}, "Confort, 20 °C : c'est deja le planning"
+
+
+def test_eteint_et_deja_a_sa_consigne_le_planning_ne_l_allume_pas(creer, module):
+    """Sa mesure a 30 °C pour un Confort a 20 : l'allumer, c'est un allumage pour rien.
+    Il attend ; sa mesure sous la consigne, le planning l'allume."""
+    table = etats()
+    froid = {**ATTRS_POELE, "temperature": 17, "hvac_action": "off"}
+    table[POELE] = FauxEtat("off", {**froid, "current_temperature": 30})
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat"))), table)
+    lancer(m.async_evaluer())
+    lancer(m.async_evaluer())
+    assert m.hass.services.appels == []
+    assert sum(1 for e in journal(m) if e[1:4:2] == ("retenu", module.DEJA_CHAUD)) == 1, f"dit une fois : {journal(m)}"
+    poele = next(c for c in lancer(m.async_etat())["chauffages"] if c["cle"] == "id-poele")
+    assert "deja_chaud" in poele["avertissements"]
+    vieux, neuf = table[POELE], FauxEtat("off", {**froid, "current_temperature": 20.5})
+    m.hass.states.table[POELE] = neuf
+    m._sur_etat(Evenement(POELE, vieux, neuf))
+    m.hass.executer()
+    assert m.hass.services.appels == [], "20,5 °C : toujours au-dessus"
+    vieux, neuf = neuf, FauxEtat("off", {**froid, "current_temperature": 19.5})
+    m.hass.states.table[POELE] = neuf
+    m._sur_etat(Evenement(POELE, vieux, neuf))
+    m.hass.executer()
+    assert m.hass.services.appels == [("climate", "set_hvac_mode", {"entity_id": [POELE], "hvac_mode": "heat"}),
+                                      ("climate", "set_temperature", {"entity_id": [POELE], "temperature": 20.0})]
+    assert m._au_chaud == set()
+
+
+def test_une_reprise_demandee_a_loggia_allume_meme_deja_au_chaud(creer):
+    table = etats()
+    table[POELE] = FauxEtat("off", {**ATTRS_POELE, "temperature": 17, "hvac_action": "off", "current_temperature": 30})
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat"))), table)
+    lancer(m.async_reprendre_la_main("id-poele", temperature=22))
+    assert m.hass.services.appels == [("climate", "set_hvac_mode", {"entity_id": [POELE], "hvac_mode": "heat"}),
+                                      ("climate", "set_temperature", {"entity_id": [POELE], "temperature": 22.0})]
 
 
 @pytest.mark.parametrize("automatique", ["safety", "security", "power"])

@@ -25,6 +25,7 @@
 import { entityCaps } from './capabilities.js';
 import { getHass, cfgVal } from './state.js';
 import { domaineDe } from './outils.js';
+import { CLE_ALIMENTATION, alimentationsDe, sourceCoupee } from './alimentation.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // La traduction.
@@ -84,6 +85,8 @@ const PLANS = {
     set_preset_mode: { service: 'set_preset_mode', field: 'preset_mode', kind: 'option', list: 'preset_modes' },
     set_fan_mode: { service: 'set_fan_mode', field: 'fan_mode', kind: 'option', list: 'fan_modes' },
     set_swing_mode: { service: 'set_swing_mode', field: 'swing_mode', kind: 'option', list: 'swing_modes' },
+    // Le balayage HORIZONTAL (bit 512, Home Assistant 2024.12) : sa liste, son service (A5, 20/11) ; le masque le nomme déjà (capabilities.js).
+    set_swing_horizontal_mode: { service: 'set_swing_horizontal_mode', field: 'swing_horizontal_mode', kind: 'option', list: 'swing_horizontal_modes' },
     // `pct` bornait a 0-100 en dur, alors qu'un deshumidificateur accepte
     // typiquement 30 a 99 : une consigne sous le minimum partait quand meme,
     // pour se faire refuser par l'appareil, et `bounds` revenait vide — une
@@ -192,7 +195,8 @@ const PLANS = {
   input_text: { set_value: { service: 'set_value', field: 'value', kind: 'raw' } },
   button: { press: { service: 'press' } },
   input_button: { press: { service: 'press' } },
-  update: { install: { service: 'install' } },
+  // `backup` : sauvegarder d'abord, pour une mise à jour qui le sait (P13, ADR 0382 ; miseajour.js).
+  update: { install: { service: 'install', accepte: ['backup'] } },
   automation: { trigger: { service: 'trigger' } },
   timer: {
     start: { service: 'start' }, pause: { service: 'pause' },
@@ -734,6 +738,21 @@ function sansVanne(id, c, surEchec) {
   return false;
 }
 
+/* Une ampoule sans courant ne reçoit rien (audit du 12/11, X4 ; ADR 0369) : son interrupteur est coupé (`loggia_alimentation`),
+ * l'ordre se perdrait — et Home Assistant, qui la croit là, le rendrait en échec. Un ordre GROUPÉ part pour les autres (« Tout
+ * éteindre », la tuile d'une pièce, une ambiance) ; seul, il ne part pas, et sans message : sa carte et sa fiche disent déjà
+ * « Hors tension » et ne commandent plus. Lu sur le relevé qu'on lui passe : celui de `getHass`, ou celui d'un test, la source
+ * éteinte y est la même. Rend les entités qui partent — `id` tel quel quand rien n'est à retenir —, ou `false`. */
+function sansCoupees(hass, id) {
+  const S = hass && hass.states;
+  if (!S || !id) return id;
+  const alim = alimentationsDe(cfgVal(CLE_ALIMENTATION, null));
+  const coupee = (x) => !!sourceCoupee(x, S, alim);
+  if (!Array.isArray(id)) return coupee(id) ? false : id;
+  const reste = id.filter(x => !coupee(x));
+  return reste.length === id.length ? id : reste.length ? reste : false;
+}
+
 export function commanderService(hass, id, domaine, service, data, surEchec) {
   let d = data || {};
   const trad = id ? capaciteDe(domaine, service, d) : null;
@@ -759,7 +778,9 @@ export function commanderService(hass, id, domaine, service, data, surEchec) {
   }
   // La route directe passe par la même garde (passe bis 2) : un `turn_on` qui porte un champ de plus rouvrait la prise désignée.
   const e = d.entity_id || id;
-  const reste = sansVanne(e, service, surEchec);
+  const sansEau = sansVanne(e, service, surEchec);
+  // Puis ce qui n'a pas de courant (ADR 0369) : la route directe passe par les deux gardes, comme l'autre.
+  const reste = sansEau === false ? false : sansCoupees(hass, sansEau);
   if (reste === false) return null;
   if (reste !== e) d = { ...d, entity_id: reste };
   if (hass && hass.callService) return reglee(hass.callService(domaine, service, d));
@@ -792,6 +813,9 @@ export function commander(hass, id, capability, value, champ, options, surEchec)
 function lancerCommande(hass, id, capability, value, champ, options, surEchec) {
   // Rien ne part : `commanderService` rend null, `commander` undefined (ses appelants lisent `!= null`).
   id = sansVanne(id, capability, surEchec);
+  if (id === false) return {};
+  // Une ampoule sans courant ne reçoit rien (ADR 0369) ; le reste d'un groupe part.
+  id = sansCoupees(hass, id);
   if (id === false) return {};
   if (!Array.isArray(id)) return lancerUn(hass, id, capability, value, champ, options, surEchec);
   const ctx = actionCtx(hass);

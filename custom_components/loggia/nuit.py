@@ -37,9 +37,9 @@ from homeassistant.core import HomeAssistant, callback
 
 from .presence import CLE as CLE_PRESENCE, invite_present
 from .const import DOMAIN
-from .lumieres_maison import (MUETS, a_epargner, async_interrupteurs_declares, attributs_des_lumieres,
-                              lumieres_de_la_maison, par_service, registre_de, sait_fondre, service_de,
-                              veilleuses_de)
+from .lumieres_maison import (MUETS, a_epargner, async_alimentations, async_interrupteurs_declares,
+                              attributs_des_lumieres, hors_tension_dans, lumieres_de_la_maison, par_service,
+                              registre_de, sait_fondre, service_de, veilleuses_de)
 from .refus import RefusNomme
 from .regles import demarrer, niveau
 
@@ -632,6 +632,9 @@ class LoggiaNuit:
         # qui en contient une avec elles -, en plus de ce que `sauf` nomme.
         epargnees = set(h for h in (c.get("sauf") or []) if isinstance(h, str))
         epargnees |= a_epargner(attributs, veilleuses_de(self.cfg))
+        # Une ampoule dont l'interrupteur est coupe n'a plus de courant (ADR
+        # 0369) : son etat est celui d'avant la coupure, rien ne lui parvient.
+        epargnees |= hors_tension_dans(self.hass, await async_alimentations(self.store))
         cibles = a_eteindre(etats, epargnees)
         if not cibles:
             return

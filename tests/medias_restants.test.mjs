@@ -283,3 +283,51 @@ test('ADR 0316 : voixmedia.js n’est importé que par la fiche du lecteur, char
   assert.ok(lire('src/fichemedia.jsx').includes("from './voixmedia.js'"));
   for (const f of ['src/App.jsx', 'src/resolve.js', 'src/state.js', 'src/cartes/media.jsx', 'src/telecommande.js']) assert.ok(!lire(f).includes('voixmedia'), f);
 });
+
+/* ── Audit du 12/11, lot 2a, B2 : « Envoyé » et « Annoncé » ne s'écrivent qu'à la réponse de Home Assistant ──────────────
+ * Le message de réussite était posé avant elle, et l'échec avalé : un appel refusé affichait « Envoyé », et rien ne disait que
+ * rien n'était parti. La règle d'« Écrire sur la TV » : un refus se dit, et le texte reste dans le champ. */
+const CUISINE_B2 = 'media_player.echo_cuisine', OFF_B2 = 'media_player.chambre_echo_dot', SHOW_B2 = 'media_player.echo_show';
+const reponseLongue = async (m) => { for (let i = 0; i < 8; i++) await Promise.resolve(); m.rendre(); };
+
+test('B2 : « Dire à Alexa » — refusé, le refus se dit et la phrase reste ; accepté, « Envoyé » et le champ se vide', async () => dans(async () => {
+  const w = poser();
+  w.refuser(true);
+  const da = sous(sous(fiche(w, CUISINE_B2), 'PanneauEcho'), 'DireAAlexa');
+  taper(da, 'mets du jazz');
+  touche(champ(da), 'Enter'); da.rendre();
+  assert.equal(w.appels.length, 1, 'la phrase est partie');
+  assert.ok(!da.texte().includes('Envoyé à Alexa'), '« Envoyé » avant la réponse');
+  await reponseLongue(da);
+  assert.ok(da.texte().includes('Home Assistant a refusé.') && !da.texte().includes('Envoyé à Alexa'), 'un appel refusé passe pour envoyé');
+  assert.equal(champ(da).props.value, 'mets du jazz', 'la phrase refusée a quitté le champ');
+  // Le même geste, accepté : le refus s'efface, « Envoyé » se lit, le champ se vide.
+  w.refuser(false);
+  touche(champ(da), 'Enter'); da.rendre();
+  await reponseLongue(da);
+  assert.equal(w.appels.length, 2);
+  assert.ok(da.texte().includes('Envoyé à Alexa : « mets du jazz »') && !da.texte().includes('Home Assistant a refusé.'));
+  assert.equal(champ(da).props.value, '');
+}));
+
+test('B2 : l’annonce — refusée, ni la fiche ni les cartes ne l’écrivent, le refus se dit et le texte reste', async () => dans(async () => {
+  const w = poser();
+  w.refuser(true);
+  const pe = sous(fiche(w, OFF_B2), 'PanneauEcho');
+  de(pe, 'Segment')[0].props.onChange('annonce'); pe.rendre();
+  const an = sous(pe, 'Annonce');
+  taper(an, 'je rentre');
+  touche(champ(an), 'Enter'); an.rendre();
+  assert.equal(w.appels.length, 1, 'l’annonce est partie');
+  await reponseLongue(an);
+  assert.ok(an.texte().includes('Home Assistant a refusé.') && !an.texte().includes('Annoncé sur'), 'une annonce refusée passe pour dite');
+  assert.deepEqual([OFF_B2, CUISINE_B2, SHOW_B2].map(id => E.annonceDe(id)), [null, null, null], 'les cartes écrivent une annonce qui n’est pas partie');
+  assert.equal(champ(an).props.value, 'je rentre');
+  // Acceptée : écrite sur la fiche et sur les cartes visées, le champ se vide.
+  w.refuser(false);
+  touche(champ(an), 'Enter'); an.rendre();
+  await reponseLongue(an);
+  assert.ok(an.texte().includes('Annoncé sur toute la maison : « je rentre »') && !an.texte().includes('Home Assistant a refusé.'));
+  assert.equal(E.annonceDe(OFF_B2), 'je rentre');
+  assert.equal(champ(an).props.value, '');
+}));

@@ -1,6 +1,6 @@
 # 0346 — Les playlists Spotify, que Spotify joue ou non
 
-*11 novembre 2026 — à l'essai (bêta v3.100.0-beta.1)*
+*11 novembre 2026 — appliqué (v3.100.0)*
 
 ## Le problème
 

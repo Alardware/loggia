@@ -373,9 +373,15 @@ class LoggiaMinuteurs:
         if str(st.state).lower() in COUPE:
             raise RefusNomme("minuteur_deja_eteint", "appareil deja eteint", haid)
         self.table = prolonger(self.table, haid, minutes, time.time(), par)
-        await self._sauver()
+        # Armer et ecouter AVANT de sauvegarder (audit du 12/11, S7c) : une
+        # sauvegarde refusee sortait avant `_armer`, et l'ecran affichait un
+        # decompte que rien n'executait - ou, en prolongation, 40 min pendant
+        # que l'extinction restait armee a 10. Ce qui s'affiche est arme ; le
+        # refus remonte toujours a l'ecran (le minuteur ne survivrait pas a un
+        # redemarrage).
         self._armer(haid)
         self._reecouter()
+        await self._sauver()
         # La pose se note au journal (chantier Prises, spec 6.3) : le journal du
         # jour d'une prise la dit (« minuteur · 30 min »). `n`, dans les parties :
         # les minutes de CET appui, ajoutees a ce qui restait. Jamais `par`.

@@ -43,9 +43,10 @@ test('une entité sans valeur n’est pas une entité en panne', () => {
 // ── Une intégration entière ─────────────────────────────────────────────────
 
 test('une intégration entièrement muette est un seul incident', () => {
+  // ASSERTION MODIFIÉE (12/11, audit) : une intégration ne compte qu'après cinq minutes de silence (X10) ; muette depuis dix.
   const states = {
-    'sensor.a': et('unavailable'), 'sensor.b': et('unavailable'),
-    'sensor.c': et('unavailable'), 'light.ok': et('on'),
+    'sensor.a': et('unavailable', 10), 'sensor.b': et('unavailable', 10),
+    'sensor.c': et('unavailable', 10), 'light.ok': et('on'),
   };
   const meta = new Map([
     ['sensor.a', { platform: 'exemple' }], ['sensor.b', { platform: 'exemple' }],

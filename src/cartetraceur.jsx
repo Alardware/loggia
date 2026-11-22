@@ -20,7 +20,7 @@ import { tr } from './i18n.js';
 import { LISERE } from './styles.js';
 import { LOGGIA_INDEX, entitesAppareilDe } from './state.js';
 import { couleurPile } from './attention.js';
-import { RM_CARD, RM_ICO, RM_MILIEU, RM_NAME, RM_SUB, GlypheCarte } from './cartes/briques.jsx';
+import { RM_CARD_HAUT, RM_GAUCHE, RM_ICO, RM_MILIEU, RM_NAME, RM_SUB, GlypheCarte } from './cartes/briques.jsx';
 import { hassQuiConnait } from './cartes/mesure.jsx';
 import { ChiffreNomme, ChiffreNommeHaut } from './cartes/robot.jsx';
 import { SURF_CARTE, useHass } from './app/noyau.jsx';
@@ -55,14 +55,16 @@ export default function CarteTraceur({ id, hass, nom = null, chip = false, onOpe
   }
   return (
     <div className={'o-rmcard o-gabarit' + (v.mort ? ' o-panne' : '')} data-traceur=""
-      style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default', background: SURF_CARTE, border: LISERE }}>
+      style={{ ...RM_CARD_HAUT, position: 'relative', cursor: onOpen ? 'pointer' : 'default', background: SURF_CARTE, border: LISERE }}>
       {onOpen && <Surface onClick={() => onOpen(id)} label={label} />}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
         {plaque(RM_ICO(fond[0], fond[1]), 17)}
         {v.pile != null && <ChiffreNommeHaut v={v.pile} nom={tr('Batterie')} couleur={teintePile} />}
       </div>
-      <div style={{ ...RM_MILIEU, marginTop: 'var(--o-milieu-haut, 10px)' }}>
-        <div style={{ minWidth: 0 }}>
+      {/* Le nom 14 px sous la plaque, comme sur toutes les cartes (audit du 12/11, `RM_MILIEU`) : 10 partout le posait 4 px plus haut
+        * que celui d'une lumière ; la carte étroite garde ses 10 (`--o-milieu-haut`). Sa colonne reste en haut (`RM_GAUCHE`). */}
+      <div style={RM_MILIEU}>
+        <div style={RM_GAUCHE}>
           <div className="o-gab-nom" style={{ ...RM_NAME, fontSize: 15 }}>{v.nom}</div>
           <div className="o-gab-phrase" style={{ ...RM_SUB, color: v.encre, '--o-n': Math.max(1, v.zone.length) }}>{v.zone}</div>
           {v.quand && <div style={{ ...RM_SUB, color: 'var(--o-text3)' }}>{v.quand}</div>}

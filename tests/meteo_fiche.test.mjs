@@ -21,7 +21,8 @@ test('le nom de la ville : « Météo-France forecast for city Sainte-Solange »
   assert.equal(nomVille('Météo-France forecast for city Sainte-Solange'), 'Sainte-Solange');
   assert.equal(nomVille('Forecast for city Paris'), 'Paris');
   assert.equal(nomVille('Météo Sainte-Solange'), 'Météo Sainte-Solange', 'un nom choisi par l’utilisateur reste tel quel');
-  assert.equal(nomVille('Maison'), 'Maison');
+  // ASSERTION MODIFIÉE (12/11, audit) : « Maison » est le nom par défaut d'une installation, pas un lieu — le widget écrit « Météo ».
+  assert.equal(nomVille('Maison'), null);
   assert.equal(nomVille(''), null);
   assert.equal(nomVille(null), null);
 });

@@ -1,6 +1,6 @@
 # 0340 — Mesurer les montées en température
 
-*9 novembre 2026 — à l'essai (bêta v3.100.0-beta.1) (étude sur 8 matins réels)*
+*9 novembre 2026 — appliqué (v3.100.0) (étude sur 8 matins réels)*
 
 ## Le problème
 

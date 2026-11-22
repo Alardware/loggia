@@ -41,6 +41,7 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.core import HomeAssistant, callback
 
 from .entites import motif_de
+from .refus import RefusNomme
 from .regles import demarrer
 
 if TYPE_CHECKING:  # l'annotation seule — les tests chargent ce module hors paquet
@@ -118,8 +119,14 @@ def poser(table: dict, quand: Any, sorte: Any, entite: Any, par: Any, maintenant
     if not isinstance(par, str) or not par:
         raise ValueError("compte inconnu")
     neuve = {k: v for k, v in (table or {}).items() if not (v["par"] == par and v["entite"] == entite)}
-    if sum(1 for v in neuve.values() if v["par"] == par) >= MAX_PAR_COMPTE or len(neuve) >= MAX_RAPPELS:
-        raise ValueError("%d rappels au plus" % MAX_PAR_COMPTE)
+    # Deux plafonds, deux refus NOMMES (audit du 12/11, S7d) : un seul
+    # `ValueError` disait « 10 rappels au plus » meme quand c'etait la maison
+    # qui etait pleine, et l'ecran n'en lisait que la phrase generique. La
+    # limite suit les deux-points (refus.py) ; l'ecran la traduit (src/refus.js).
+    if sum(1 for v in neuve.values() if v["par"] == par) >= MAX_PAR_COMPTE:
+        raise RefusNomme("trop_de_rappels", "trop de rappels pour ce compte, au plus", MAX_PAR_COMPTE)
+    if len(neuve) >= MAX_RAPPELS:
+        raise RefusNomme("trop_de_rappels_maison", "trop de rappels dans la maison, au plus", MAX_RAPPELS)
     neuve[rid] = {"quand": float(quand), "par": par, "entite": entite, "sorte": sorte}
     return neuve
 
@@ -268,8 +275,11 @@ class LoggiaRappels:
         # Ceux qu'il remplace ne sont plus dans la table : leurs rendez-vous partent.
         for ancien in [r for r in self._rdv if r not in self.table]:
             self._desarmer(ancien)
-        await self._sauver()
+        # Armer AVANT de sauvegarder (audit du 12/11, S7c, comme les minuteurs) :
+        # une sauvegarde refusee sortait avant `_armer`, et le rappel affiche -
+        # l'ancien deja desarme - ne partait jamais. Le refus remonte toujours.
         self._armer(rid)
+        await self._sauver()
         return await self.async_etat(par)
 
     async def async_annuler(self, rid: Any, par: Any = None) -> dict[str, Any]:

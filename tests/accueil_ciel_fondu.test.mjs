@@ -29,7 +29,12 @@ test('le ciel s’efface sur le fond du theme, quel qu’il soit', () => {
   const long = css.slice(css.indexOf('html[style*="--o-bggrad"] .o-wx3d, body:has(.o-fond-photo) .o-wx3d {'));
   assert.ok(long.length < css.length, 'les fonds degrades et la photo n’ont plus leur masque long');
   const blocLong = long.slice(0, long.indexOf('}'));
-  assert.ok(blocLong.includes('-webkit-mask-image: linear-gradient(180deg, #000 0%, #000 30%,') && blocLong.includes('rgba(0,0,0,.06) 90%, transparent 100%);'), 'le masque long d’ADR 0059, prefixe, qui finit transparent');
+  // ASSERTION MODIFIÉE (17/11, sa capture : « le dégradé ici sur Prisme est beaucoup plus haut que pour les autres ») : le
+  // masque gardait le ciel entier jusqu'à 30 % seulement ; il le garde jusqu'à 58 %, et finit toujours transparent.
+  assert.ok(blocLong.includes('-webkit-mask-image: linear-gradient(180deg, #000 0%, #000 58%,') && blocLong.includes('rgba(0,0,0,.14) 91%, transparent 100%);'), 'le masque long d’ADR 0059, prefixe, qui finit transparent');
+  assert.ok(!blocLong.includes('#000 30%'), 'le masque efface de nouveau le ciel dès 30 % de sa hauteur');
+  const masques = [...blocLong.matchAll(/(?:-webkit-)?mask-image: ([^;]+);/g)].map((m) => m[1]);
+  assert.ok(masques.length === 2 && masques[0] === masques[1], 'le masque préfixé (Safari) et l’autre ne disent plus la même chose');
   assert.ok(src.includes('<div className="o-fond-photo" aria-hidden="true"'), 'le calque de la photo ne se reconnait plus : le masque long ne s’y appliquerait pas');
   assert.ok(readFileSync(join(RACINE, 'src', 'theme.js'), 'utf8').includes("set('--o-bggrad', v.bggrad)"), 'un theme a degrade ne pose plus `--o-bggrad` sur <html> : le selecteur du masque long ne le verrait pas');
   assert.ok(src.includes("background: fondPhotoActif ? 'transparent' : 'var(--o-bggrad, var(--o-bg))'"), 'la page est peinte du degrade du theme');

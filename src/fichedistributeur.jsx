@@ -49,6 +49,7 @@
  */
 import { useState, useEffect, useRef, useId } from 'react';
 import { tr, trN, trSens, locale, comparerTextes } from './i18n.js';
+import { heureCourte } from './format.js';
 import { Fi, Bascule, ListeChoix, cvName } from './ui.jsx';
 import { LOGGIA_INDEX, loggiaEnt, cfgVal, cfgSet, compteOrdinaire } from './state.js';
 import { commanderService } from './actions.js';
@@ -89,7 +90,7 @@ const motSource = (s) => (MOT_SOURCE[s] ? MOT_SOURCE[s]() : null);
 const motModeDe = (v) => { const k = String(v).toLowerCase(); return k === 'manual' ? trSens('Manuel · mode') : k === 'schedule' ? trSens('Programmé · mode') : null; };
 const MOT_CONSOMMABLE = { deshydratant: () => tr('Déshydratant'), filtre: () => tr('Filtre'), nettoyage: () => tr('Nettoyage') };
 const muette = (st) => !st || st.state === 'unavailable';
-const heureDe = (t) => new Date(t).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+const heureDe = heureCourte;
 /* L'origine du lien « Modifier dans Home Assistant », comme Paramètres. Rien
  * hors navigateur (les tests), rien dans la démo : elle n'a pas de Home Assistant. */
 const origineHA = () => {
@@ -429,7 +430,7 @@ function RepasLoggia({ r, i, jours, quantite, ordinaire, poser, supprimer }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <span style={{ flex: 1, minWidth: 0 }}>
           {ordinaire ? <span style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums', color: r.actif ? undefined : 'var(--o-text2)' }}>{heure}</span>
-            : <ChampHeure valeur={heure} nom={tr('Heure')} onValide={(v) => poser({ ...r, heure: v })} />}
+            : <ChampHeure valeur={heure} nom={tr('Heure')} aLaSortie onValide={(v) => poser({ ...r, heure: v })} />}
         </span>
         {quantite && (ordinaire
           ? <span style={{ fontSize: 13.5, fontWeight: 700 }}>{trN(r.portions, '{n} portion', '{n} portions')}</span>

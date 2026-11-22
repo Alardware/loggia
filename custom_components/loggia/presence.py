@@ -43,8 +43,9 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.core import HomeAssistant, callback
 
 from .const import DOMAIN
-from .lumieres_maison import (a_epargner, async_interrupteurs_declares, async_veilleuses, attributs_des_lumieres,
-                              lumieres_de_la_maison, par_service, registre_de)
+from .lumieres_maison import (a_epargner, async_alimentations, async_interrupteurs_declares, async_veilleuses,
+                              attributs_des_lumieres, hors_tension_dans, lumieres_de_la_maison, par_service,
+                              registre_de)
 from .regles import demarrer, entites_propres, est_entite, niveau
 from .unites import depuis_celsius, unite_temperature
 from .voisins import domaines_voisins
@@ -601,6 +602,9 @@ class LoggiaPresence:
             _LOGGER.warning("Loggia presence : lampes illisibles, rien ne sera eteint au depart", exc_info=True)
             return []
         epargnees = a_epargner(attributs, await async_veilleuses(self.store))
+        # Une ampoule dont l'interrupteur est coupe n'a plus de courant (ADR
+        # 0369) : elle n'est pas « restee allumee », et rien ne lui parvient.
+        epargnees |= hors_tension_dans(self.hass, await async_alimentations(self.store))
         return [h for h in lumieres if h not in epargnees
                 and str(getattr(self.hass.states.get(h), "state", "")).lower() == "on"]
 
@@ -645,11 +649,15 @@ class LoggiaPresence:
                 self.eteintes = {}
             else:
                 etats = self._etats(list(self.eteintes))
+                # Une ampoule dont l'interrupteur a ete coupe depuis le depart
+                # n'a plus de courant (ADR 0369) : la rallumer ne ferait rien.
+                coupees = hors_tension_dans(self.hass, await async_alimentations(self.store))
                 # On ne rend que ce qu'on a pris — et qu'on tient encore : une
                 # lampe rallumee entre temps par quelqu'un d'autre, ou prise par
                 # une regle plus forte, n'est pas notre affaire.
                 a_rendre = [h for h in sorted(self.eteintes)
-                            if str(getattr(etats.get(h), "state", "")).lower() == "off"
+                            if h not in coupees
+                            and str(getattr(etats.get(h), "state", "")).lower() == "off"
                             and self.regles.tient("presence", "depart", h)]
                 # Chacun par son service (lumieres_maison) : l'interrupteur
                 # declare lumiere par `homeassistant.turn_on`.

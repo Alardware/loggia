@@ -58,10 +58,16 @@ test('Auto suit la fluidité que le ciel a mesurée ICI : plein → Plein, lége
   assert.equal(V.verreLeger(), false, 'une valeur inconnue n’est pas une mesure');
 });
 
-test('sans mesure EN COURS, Auto reste à Plein : effets coupés, ou qualité du ciel forcée', () => {
+// TEST MODIFIÉ (audit des thèmes du 13/11, V2, validé le 14/11) : ciel COUPÉ, Auto garde la dernière mesure connue.
+// Couper le ciel pour soulager une tablette lui rendait le flou de toutes ses cartes. La qualité forcée ne change pas.
+test('ciel coupé, Auto garde la dernière mesure ; qualité du ciel forcée, Auto reste à Plein', () => {
   poser({ 'loggia-ciel-actuel': 'leger', 'loggia-wxfx': '0' });
-  assert.equal(V.verreMesure(), null, 'effets coupés : la dernière mesure est ancienne');
-  assert.equal(V.verreLeger(), false);
+  assert.equal(V.verreMesure(), 'leger', 'effets coupés : la dernière mesure tient');
+  assert.equal(V.verreLeger(), true);
+  poser({ 'loggia-ciel-actuel': 'plein', 'loggia-wxfx': '0' });
+  assert.equal(V.verreLeger(), false, 'un appareil mesuré fluide garde le verre plein');
+  poser({ 'loggia-wxfx': '0' });
+  assert.equal(V.verreMesure(), null, 'jamais mesuré, sans écran tactile : Plein, comme avant');
   for (const q of ['leger', 'fixe']) {
     poser({ 'loggia-ciel-actuel': 'leger' });
     W.ecrireQualiteCiel(q);
@@ -187,9 +193,11 @@ test('en CSS, Léger retire le flou des cartes — et garde ce qui flotte', () =
   assert.ok(lire('src', 'ui.jsx').includes('<div role="presentation" ref={voileRef} className="o-voile"'), 'le voile des feuilles porte sa classe');
   // La photo, floutée une seule fois, avec le flou et la saturation des cartes.
   const photo = de('html.loggia-verre-leger .o-fond-photo');
-  assert.match(photo, /filter: blur\(16px\) saturate\(1\.35\)/);
+  // ASSERTIONS MODIFIÉES (14/11, audit des thèmes, F1) : le flou est celui du THÈME (`--o-flou` — Frosted Glass : 8 / 10 px),
+  // avec le flou de Loggia pour repli ; la photo et les cartes lisent le même jeton, elles ne peuvent plus diverger.
+  assert.match(photo, /filter: var\(--o-flou, blur\(16px\) saturate\(1\.35\)\);/);
   assert.match(photo, /inset: -\d+px !important/, 'le bord flou déborde de l’écran');
-  assert.match(css, /html\.loggia-frosted \[style\*="--o-surfA"\] \{ -webkit-backdrop-filter: blur\(16px\) saturate\(1\.35\); backdrop-filter: blur\(16px\) saturate\(1\.35\); \}/,
+  assert.match(css, /html\.loggia-frosted \[style\*="--o-surfA"\] \{ -webkit-backdrop-filter: var\(--o-flou, blur\(16px\) saturate\(1\.35\)\); backdrop-filter: var\(--o-flou, blur\(16px\) saturate\(1\.35\)\); \}/,
     'le flou du Plein a changé : celui de la photo doit le suivre');
   // Aucune couleur nouvelle : seulement les jetons du thème.
   assert.ok(!regles.some(l => /#[0-9a-f]{3,8}\b|rgba?\(/i.test(l.split('rgba(0,0,0,.32)').join(''))),

@@ -465,7 +465,9 @@ def test_les_consommables_seuls_posent_le_passage_horaire(creer, monkeypatch):
     v = creer(cfg_consos(), CONSOS)
     lancer(v._async_reabonner())
     assert len(poses) == 1
-    w = creer({}, CONSOS)
+    # ASSERTION MODIFIEE (21/11, ADR 0384) : la sauvegarde et la fuite de nuit, allumees par defaut, posent le
+    # passage horaire ; « rien d'actif » les eteint aussi.
+    w = creer({'sauvegarde': {'actif': False}, 'fuite_nuit': {'actif': False}}, CONSOS)
     lancer(w._async_reabonner())
     assert len(poses) == 1, "rien d'actif : pas de passage"
 

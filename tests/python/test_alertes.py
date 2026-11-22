@@ -119,6 +119,10 @@ def creer(module, store_module):
         a._depot = FauxStore(None)
         a._regles = regles_module.Regles(a._hass, magasin)
         a._regles._depot = FauxStore(None)
+        # ASSERTION MODIFIEE (14/11, audit du 12/11, lot 3, S1) : les mains posees pendant un danger, et leur
+        # ecoute au socle — le vrai constructeur les pose, la fabrique aussi.
+        a._mains_pendant = set()
+        a._defait_mains = a._regles.ecouter_mains(a._sur_main)
         if quand is not None:
             a._regles._maintenant = lambda: quand
         faits.append(a)
@@ -789,3 +793,100 @@ def test_les_vannes_coupees_ne_se_partagent_pas_entre_instances():
     tuple, chaque instance pose sa liste."""
     alertes = charger("alertes")
     assert isinstance(alertes.LoggiaAlertes.__dict__["_vannes_coupees"], tuple)
+
+# ── Audit du 12/11, lot 3, S1 : la surete passe avant la main (ADR 0364) ─────
+#
+# Le gel d'une main ecartait une entite avant toute comparaison de priorite :
+# un couloir eteint a la main a 23 h restait eteint quand le detecteur de fumee
+# sonnait a 23 h 20. Decision du proprietaire : la surete force, et le journal
+# dit ce qu'elle a force. Une main posee PENDANT le danger garde le dernier mot.
+
+CO = FauxEtat("binary_sensor.chambre_co", "on",
+              {"device_class": "carbon_monoxide", "friendly_name": "Monoxyde chambre"})
+
+
+def poser_une_main(a, haid):
+    """Quelqu'un commande `haid` depuis un ecran : Home Assistant porte son compte."""
+    from homeassistant.core import Context
+
+    class Ev:
+        data = {"entity_id": haid}
+        context = Context(user_id="u1")
+
+    a._regles._sur_changement(Ev())
+
+
+def test_la_surete_passe_avant_une_main_posee_avant_le_danger(creer):
+    a = creer(etats=maison())
+    poser_une_main(a, "light.couloir")
+    poser_une_main(a, "cover.salon")
+    assert a._regles.gele("light.couloir") and a._regles.gele("cover.salon"), "temoin : les deux sont sous la main"
+    lancer(a._reagir(FUMEE, "fumee"))
+    commandes = {h for _d, _s, cibles, _c in appels(a) for h in cibles}
+    assert {"light.couloir", "light.salon", "cover.salon"} <= commandes, "une main posee avant le danger a retenu la surete"
+    # Le journal le dit, et ne dit plus « sous la main » pour ce que la surete a pris.
+    lignes = lancer(a._regles.journal())
+    allumer = next(l for l in lignes if l["quoi"] == "allumer")
+    remonter = next(l for l in lignes if l["quoi"] == "remonter")
+    assert "forcé malgré la main" in allumer["detail"] and "forcé malgré la main" in remonter["detail"]
+    assert all("sous la main" not in l["detail"] for l in lignes)
+    # Le gel n'est pas leve : les autres regles respectent toujours la main.
+    assert a._regles.gele("light.couloir")
+
+
+def test_les_autres_regles_respectent_toujours_la_main(creer):
+    a = creer(etats=maison())
+    poser_une_main(a, "light.couloir")
+    partis = lancer(a._regles.agir("nuit", "coucher", "light", "turn_off", ["light.couloir"], quoi="eteindre"))
+    assert partis == [] and a._hass.services.appels == [], "une regle ordinaire a passe outre la main"
+    assert "sous la main" in lancer(a._regles.journal())[0]["detail"]
+
+
+def test_ce_que_la_surete_a_force_revient_comme_avant(creer):
+    a = creer(etats=maison())
+    poser_une_main(a, "light.couloir")             # eteint a la main, puis la fumee
+    lancer(a._reagir(FUMEE, "fumee"))
+    a._hass.services.appels.clear()
+    lancer(a._danger_passe(FUMEE.entity_id))
+    assert ("light", "turn_off", ["light.couloir"], {}) in appels(a),         "le couloir force par la surete reste allume : le gel d'avant le danger bloque son retour"
+    assert a._mains_pendant == set()
+
+
+def test_une_main_pendant_le_danger_n_est_pas_forcee_par_un_second_detecteur(creer):
+    a = creer(etats=maison())
+    lancer(a._reagir(FUMEE, "fumee"))
+    poser_une_main(a, "light.couloir")             # eteinte en connaissance de cause, pendant l'alerte
+    assert a._mains_pendant == {"light.couloir"}
+    a._hass.services.appels.clear()
+    lancer(a._reagir(CO, "co"))
+    commandes = {h for _d, _s, cibles, _c in appels(a) for h in cibles}
+    assert "light.couloir" not in commandes, "le second detecteur a rallume la lampe qu'on venait d'eteindre"
+    # Le danger passe : la main garde le dernier mot (ADR 0022), et la memoire des mains se vide.
+    a._hass.services.appels.clear()
+    lancer(a._danger_passe(FUMEE.entity_id))
+    lancer(a._danger_passe(CO.entity_id))
+    assert all("light.couloir" not in cibles for _d, _s, cibles, _c in appels(a))
+    assert a._mains_pendant == set()
+
+
+def test_hors_danger_une_main_n_est_pas_retenue(creer):
+    a = creer(etats=maison())
+    poser_une_main(a, "light.couloir")
+    assert a._mains_pendant == set()
+
+
+def test_une_fuite_coupe_la_vanne_meme_rouverte_a_la_main(creer):
+    a = creer(etats=maison())
+    poser_une_main(a, "valve.eau")
+    lancer(a._reagir(FUITE, "fuite"))
+    assert appels(a) == [("valve", "close_valve", ["valve.eau"], {})], "une main sur la vanne a empeche de couper l'eau"
+    assert "forcé malgré la main" in lancer(a._regles.journal())[0]["detail"]
+
+
+def test_l_arret_retire_l_ecoute_des_mains(creer):
+    a = creer(etats=maison())
+    assert a._sur_main in a._regles._sur_main
+    a._defait = None
+    a.async_arreter()
+    assert a._sur_main not in a._regles._sur_main and a._defait_mains is None
+    a.async_arreter()                               # deux fois de suite : sans effet, sans lever

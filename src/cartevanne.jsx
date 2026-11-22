@@ -128,12 +128,14 @@ export default function CarteVanne({ id, hass: vue, nom = null, chip = false, on
   }
   return (
     <div className={'o-rmcard o-gabarit' + (v.mort ? ' o-panne' : '')} data-vanne=""
-      style={{ ...g.carte, position: 'relative', cursor: onOpen ? 'pointer' : 'default', ...(v.lavis ? { background: g.lavis('var(--o-bad-rgb)', .14, .03) } : null), border: LISERE }}>
+      style={{ ...g.carte,
+        // Depuis le haut, le nom 14 px sous la plaque, comme toutes les cartes (audit du 12/11 ; `RM_CARD_HAUT`, `RM_SOUS_PLAQUE`, briques.jsx).
+        justifyContent: 'flex-start', position: 'relative', cursor: onOpen ? 'pointer' : 'default', ...(v.lavis ? { background: g.lavis('var(--o-bad-rgb)', .14, .03) } : null), border: LISERE }}>
       {onOpen && <Surface onClick={() => onOpen(id)} label={label} />}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
         {plaque(g.ico(fond, encre), 17)}
       </div>
-      <div style={{ ...g.milieu, marginTop: 'var(--o-milieu-haut, 10px)' }}>
+      <div style={g.milieu}>
         <div style={{ minWidth: 0 }}>
           <div className="o-gab-nom" style={{ ...g.nom, fontSize: 15 }}>{v.nom}</div>
           {/* La question prend la place de la phrase, en texte plein : elle se lit avant les deux puces. */}

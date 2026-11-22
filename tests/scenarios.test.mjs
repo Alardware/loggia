@@ -250,7 +250,8 @@ test('la recherche passe aux scenarios ; les liens sont sondes avec l’Accueil'
    * regarde, elle ne se pilote pas. Elle reçoit les pièces, plus de scénarios. */
   assert.ok(app.includes("<AmbientOverlay rooms={cfg.rooms || []} hass={hass}") && !app.includes('<AmbientOverlay scenes='),
     'la veille reçoit encore des scénarios');
-  assert.ok(app.includes("scenarios().forEach(s => { const nom = nomScenario(s); if (!match(nom)) return; results.push({ group: tr('Scénarios'),"), 'la recherche ⌘K');
+  // ASSERTION MODIFIÉE (13/11, audit du 12/11, lot 2b, B15) : chaque résultat de la recherche porte sa clé de rendu (`cle`).
+  assert.ok(app.includes("scenarios().forEach(s => { const nom = nomScenario(s); if (!match(nom)) return; results.push({ cle: 'sc:' + s.id, group: tr('Scénarios'),"), 'la recherche ⌘K');
   assert.ok(app.includes("const qsKeys = () => scenarios().map(s => s.lien).filter(Boolean);"), 'les scènes et scripts liés sont sondés');
   assert.ok(app.includes("{ label: 'Scénarios', svg: <Fi i=\"sparkles\"") && app.includes("'Scénarios': 'scenes',"), '« Scènes » est devenue « Scénarios », l’identifiant reste');
 });

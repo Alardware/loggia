@@ -87,8 +87,9 @@ test('la vue Énergie lit Electricity Maps par carbone.js, et pose l’intensit�
   const en = lire('src/views/energie.jsx');
   assert.ok(!en.includes('/fossil/') && !en.includes("Object.keys(S).find(k => k.indexOf('sensor.') === 0"), 'plus aucune recherche au nom');
   assert.ok(en.includes('const carbone = capteursCarbone(S, LOGGIA_INDEX && LOGGIA_INDEX.entityMeta);'));
-  assert.ok(en.includes("intensite != null && { caption: tr('Intensité carbone'), value: String(Math.round(intensite)), unit: uniteCarbone(uniteDe(carbone.intensite))"));
-  const i = en.indexOf("caption: tr('Électricité bas-carbone')"), j = en.indexOf("caption: tr('Intensité carbone')");
+  // ASSERTION MODIFIÉE (12/11, audit) : au téléphone, les tuiles prennent un libellé court (« Bas-carbone », « Carbone ») — E7.
+  assert.ok(en.includes("intensite != null && { caption: etroit ? tr('Carbone') : tr('Intensité carbone'), value: String(Math.round(intensite)), unit: uniteCarbone(uniteDe(carbone.intensite))"));
+  const i = en.indexOf("caption: etroit ? tr('Bas-carbone') : tr('Électricité bas-carbone')"), j = en.indexOf("caption: etroit ? tr('Carbone') : tr('Intensité carbone')");
   assert.ok(i > 0 && j > i && en.slice(i, j).split('\n').length <= 3, 'la tuile de l’intensité suit celle de la part bas-carbone');
 });
 
@@ -110,8 +111,10 @@ test('un préréglage d’ordre fil pilote se dit avec les mots de Loggia ; un i
   assert.equal(motPreset('comfort_-2'), 'Confort −2');
   assert.equal(motPreset('FrostProtection'), 'Hors-gel', 'un nom collé de ZHA');
   assert.equal(motPreset('eco'), 'Éco');
-  assert.equal(motPreset('turbo'), 'turbo');
-  assert.equal(motPreset('overnight'), 'overnight');
+  // ASSERTION MODIFIÉE (17/11) : un inconnu prend une majuscule en tête — « dynamic » s'affichait en minuscules dans la fiche.
+  assert.equal(motPreset('turbo'), 'Turbo');
+  assert.equal(motPreset('overnight'), 'Overnight');
+  assert.equal(motPreset('dynamic'), 'Dynamic');
   assert.equal(modeDOption('Hors-gel'), 'hors_gel');
   assert.equal(modeDOption(null), null);
 });

@@ -31,6 +31,8 @@ MOTS_DU_JOURNAL = (
     "non confirmé",
     # une pompe a chaleur qui refroidit : le planning attend (audit du 19/10)
     "il refroidit",
+    # eteint de lui-meme, ou deja a sa consigne : le planning attend (18/11, ADR 0375)
+    "éteint de lui-même, on attend", "déjà au-dessus de la consigne",
 )
 
 

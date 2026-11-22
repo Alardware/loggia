@@ -67,6 +67,8 @@ const FicheRobotContent = (await import(new URL('../src/ficherobot.jsx', import.
 const FicheRobot = (p) => createElement(FicheRobotContent, { ...p, vue: F.useVueRobot(p.hass, p.idRobot, null, true, { rapide: true }) });
 const FicheDistributeurContent = (await import(new URL('../src/fichedistributeur.jsx', import.meta.url).href)).default;
 const FicheLumiereContent = (await import(new URL('../src/fichelumiere.jsx', import.meta.url).href)).default;
+// La fiche serrure se charge à la demande depuis le chantier du 20/11 (A4, ADR 0386) : on rend son contenu, comme les autres.
+const FicheSerrure = (await import(new URL('../src/ficheserrure.jsx', import.meta.url).href)).default;
 // ASSERTION MODIFIÉE (audit des prises, 19/10) : la feuille d'un switch se charge à la demande ; on la joue telle que sa coquille
 // (`RoomSwitchSheet`, App.jsx) la monte, avec les briques d'App.jsx.
 const FicheSwitchContent = (await import(new URL('../src/ficheswitch.jsx', import.meta.url).href)).default;
@@ -134,7 +136,10 @@ test('lumière : morte ou retirée, ni interrupteur, ni jauge, ni palette', () =
   assert.ok(vive.includes('role="switch"') && vive.includes('role="slider"'), 'témoin : interrupteur et jauge');
   for (const st of [mort(ID, { supported_color_modes: ['color_temp', 'hs'] }), null]) {
     const html = rendre(FicheLumiere, { id: ID, hass: hassDe(st) });
-    morte('lumière ' + (st ? 'indisponible' : 'retirée'), html, { marque: 'Indisponible', permis: ['L’appareil'] });
+    /* ASSERTION MODIFIÉE (audit du 12/11, X4 ; ADR 0369) : une lampe INDISPONIBLE garde la rangée « Alimentée par » — un réglage de la
+     * maison, pas un ordre à l'ampoule : c'est là qu'on dit qu'elle est derrière un interrupteur éteint. Retirée, elle ne l'a pas. */
+    morte('lumière ' + (st ? 'indisponible' : 'retirée'), html, { marque: 'Indisponible', permis: st ? ['L’appareil', 'Alimentée par'] : ['L’appareil'] });
+    assert.equal(html.includes('Alimentée par'), !!st, 'la rangée, pour une lampe que Home Assistant connaît');
     assert.ok(!html.includes('Éteinte') && !html.includes('Couleur') && !html.includes('Minuteur'), 'ni « Éteinte », ni palette, ni minuteur');
   }
 });
@@ -167,10 +172,11 @@ test('prise : morte, pas d’interrupteur « Alimentée »', () => {
 
 test('serrure : morte, pas d’interrupteur ; ouverte, elle n’est pas « Indisponible »', () => {
   const ID = 'lock.porte';
+  // ASSERTION MODIFIÉE (21/11, ADR 0386) : le contenu de la fiche (`ficheserrure.jsx`), que la coquille `RoomLockSheet` charge à la demande.
   for (const st of [mort(ID), etat(ID, 'unknown'), null]) {
-    morte('serrure ' + (st ? st.state : 'retirée'), rendre(F.RoomLockSheet, { id: ID, hass: hassDe(st) }), { marque: 'Verrouillée' });
+    morte('serrure ' + (st ? st.state : 'retirée'), rendre(FicheSerrure, { id: ID, hass: hassDe(st) }), { marque: 'Verrouillée' });
   }
-  const ouverte = rendre(F.RoomLockSheet, { id: ID, hass: hassDe(etat(ID, 'open', { friendly_name: 'Porte' })) });
+  const ouverte = rendre(FicheSerrure, { id: ID, hass: hassDe(etat(ID, 'open', { friendly_name: 'Porte' })) });
   assert.ok(ouverte.includes('Ouverte') && !ouverte.includes('Indisponible'), '`open` est un état vivant');
   assert.equal(panne(ouverte), 0);
   assert.ok(ouverte.includes('role="switch"'), 'vivante, l’interrupteur reste');
@@ -419,11 +425,34 @@ test('minuteur et code d’alarme : rien ne se programme vers un appareil mort',
   const minuteur = blocSw('RangeeMinuteur');
   assert.ok(minuteur.includes('if (mort && reste == null) return null;'), 'mort, sans minuteur en cours : pas de rangée');
   // ASSERTION MODIFIÉE (audit de l'écran des prises, 19/10) : ni mort, ni éteint — le serveur refuse un minuteur sur un appareil éteint.
-  assert.ok(minuteur.includes('{!mort && !eteint && <FicheBouton icone="clock"'), '« +30 min » ne se propose plus');
+  // ASSERTION MODIFIÉE (audit du 12/11, lot 4, I5) : les durées de la fiche d'une lumière remplacent « +30 min » — inertes, mort ou éteint.
+  assert.ok(minuteur.includes('const peutPoser = !mort && !eteint && libre;') && minuteur.includes("const poser = (n) => { if (peutPoser) agir({ type: 'loggia/minuteurs/poser', entity_id: id, minutes: n }); };"), 'une durée ne se pose plus');
   assert.ok(minuteur.includes("type: 'loggia/minuteurs/annuler', entity_id: id"), 'un minuteur déjà posé s’annule encore');
   // ASSERTION MODIFIÉE (chantier Lumières, tâche 8) : la fiche d'une lumière a son minuteur, celui des prises ; muette, elle ne le montre pas.
-  assert.ok(readFileSync(new URL('../src/fichelumiere.jsx', import.meta.url), 'utf8').includes('{!v.muette && (() => {'), 'la lumière muette ne propose pas de minuteur');
+  // ASSERTION MODIFIÉE (audit du 12/11, X4 ; ADR 0369) : ni sans courant — `inerte` vaut pour une lampe muette et pour une ampoule dont l'interrupteur est coupé.
+  assert.ok(/const inerte = v\.muette \|\| !!v\.coupee;[\s\S]*\{!inerte && \(\(\) => \{/.test(readFileSync(new URL('../src/fichelumiere.jsx', import.meta.url), 'utf8')), 'la lumière muette ne propose pas de minuteur');
   assert.ok(blocSw('FicheSwitchContent').includes('<RangeeMinuteur hass={hass} id={id} mort={mort} briques={briques} />'), 'la prise passe sa panne');
   for (const s of [APP, SW]) assert.ok(!/<RangeeMinuteur(?![^>]*mort=)[^>]*\/>/.test(s), 'aucun appel ne l’oublie');
   assert.ok(bloc('CvAlarm').includes('{demande && !mort ? ('), 'un code en cours de saisie ne part pas vers une alarme morte');
+});
+
+/* ── Audit du 12/11, lot 2a, B7 : un ouvrant qui bouge le dit ─────────────────────────────────────────────────────────────
+ * Un garage ou un portail ne publie pas sa position : elle vaut 0 pendant toute l'ouverture, et la fiche écrivait « Fermé »
+ * en allumant la puce « Fermé ». */
+test('garage sans position : « Ouverture… » pendant qu’il s’ouvre, la puce où il va ; « Fermé » une fois fermé', () => {
+  const ID = 'cover.garage';
+  // Ouvrir, fermer, stop — pas de position (`supported_features` 11).
+  const garage = (state) => rendre(F.RoomCoverSheet, { id: ID, hass: hassDe(etat(ID, state, { friendly_name: 'Garage', device_class: 'garage', supported_features: 11 })) });
+  const choisie = (html) => { const m = html.split('aria-pressed="true"'); return m.length === 2 ? m[1].split('>')[1].split('<')[0] : null; };
+  const ouvre = garage('opening');
+  assert.ok(ouvre.includes('Ouverture…') && !ouvre.includes('Fermeture…'), 'un garage qui s’ouvre ne le dit pas');
+  assert.equal(choisie(ouvre), 'Ouvert', 'la puce « Fermé » reste allumée pendant l’ouverture');
+  const ferme = garage('closing');
+  assert.ok(ferme.includes('Fermeture…') && !ferme.includes('Ouverture…'));
+  assert.equal(choisie(ferme), 'Fermé');
+  // Arrêté, rien ne change : « Fermé » fermé, « Ouvert » ouvert.
+  const clos = garage('closed');
+  assert.ok(!clos.includes('Ouverture…') && !clos.includes('Fermeture…'));
+  assert.equal(choisie(clos), 'Fermé');
+  assert.equal(choisie(garage('open')), 'Ouvert');
 });

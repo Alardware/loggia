@@ -313,6 +313,12 @@ const APPAREILS = {
   'Point d’équipe': { en: 'Team meeting', de: 'Teambesprechung', nl: 'Teamoverleg', it: 'Riunione di team', es: 'Reunión de equipo', pl: 'Spotkanie zespołu' },
   'Poêle': { en: 'Stove', de: 'Ofen', nl: 'Kachel', it: 'Stufa', es: 'Estufa', pl: 'Piec' },
   'Poêle Timer': { en: 'Stove Timer', de: 'Ofen Timer', nl: 'Kachel Timer', it: 'Stufa Timer', es: 'Estufa Timer', pl: 'Piec Timer' },
+  'Poêle Puissance': { en: 'Stove Power', de: 'Ofen Leistung', nl: 'Kachel Vermogen', it: 'Stufa Potenza', es: 'Estufa Potencia', pl: 'Piec Moc' },
+  'Poêle Ventilateur ambiance': { en: 'Stove Room fan', de: 'Ofen Raumlüfter', nl: 'Kachel Ruimteventilator', it: 'Stufa Ventilatore ambiente', es: 'Estufa Ventilador ambiente', pl: 'Piec Wentylator pomieszczenia' },
+  'Poêle Eco Stop': { en: 'Stove Eco Stop', de: 'Ofen Eco Stop', nl: 'Kachel Eco Stop', it: 'Stufa Eco Stop', es: 'Estufa Eco Stop', pl: 'Piec Eco Stop' },
+  'Poêle Silence': { en: 'Stove Silent', de: 'Ofen Leise', nl: 'Kachel Stil', it: 'Stufa Silenzio', es: 'Estufa Silencio', pl: 'Piec Cisza' },
+  'Poêle Température des fumées': { en: 'Stove Flue gas temperature', de: 'Ofen Abgastemperatur', nl: 'Kachel Rookgastemperatuur', it: 'Stufa Temperatura fumi', es: 'Estufa Temperatura de humos', pl: 'Piec Temperatura spalin' },
+  'Poêle Heures avant entretien': { en: 'Stove Hours to service', de: 'Ofen Stunden bis Wartung', nl: 'Kachel Uren tot onderhoud', it: 'Stufa Ore alla manutenzione', es: 'Estufa Horas hasta mantenimiento', pl: 'Piec Godziny do serwisu' },
   'Poêle à granulés': { en: 'Pellet stove', de: 'Pelletofen', nl: 'Pelletkachel', it: 'Stufa a pellet', es: 'Estufa de pellets', pl: 'Piec na pellet' },
   // L'apostrophe droite du capteur de la porte, la courbe de sa serrure : deux clés.
   "Porte d'entrée": { en: 'Front door', de: 'Eingangstür', nl: 'Voordeur', it: 'Porta d’ingresso', es: 'Puerta de entrada', pl: 'Drzwi wejściowe' },
@@ -355,6 +361,7 @@ const APPAREILS = {
   "Tondeuse Durée d'utilisation des lames": { en: 'Mower Blade usage time', de: 'Mähroboter Nutzungsdauer der Klingen', nl: 'Grasmaaier Gebruiksduur messen', it: 'Tosaerba Tempo di utilizzo lame', es: 'Cortacésped Tiempo de uso de cuchillas', pl: 'Kosiarka Czas użytkowania ostrzy' },
   'Tondeuse Détection de pluie': { en: 'Mower Rain detection', de: 'Mähroboter Regenerkennung', nl: 'Grasmaaier Regendetectie', it: 'Tosaerba Rilevamento pioggia', es: 'Cortacésped Detección de lluvia', pl: 'Kosiarka Wykrywanie deszczu' },
   'Tondeuse En charge': { en: 'Mower Charging', de: 'Mähroboter Lädt', nl: 'Grasmaaier Opladen', it: 'Tosaerba In carica', es: 'Cortacésped Cargando', pl: 'Kosiarka Ładowanie' },
+  'Tondeuse Heures de repos': { en: 'Mower Resting hours', de: 'Mähroboter Ruhezeiten', nl: 'Grasmaaier Rusturen', it: 'Tosaerba Ore di riposo', es: 'Cortacésped Horas de descanso', pl: 'Kosiarka Godziny odpoczynku' },
   'Tondeuse Hauteur des lames': { en: 'Mower Blade height', de: 'Mähroboter Schnitthöhe', nl: 'Grasmaaier Maaihoogte', it: 'Tosaerba Altezza lame', es: 'Cortacésped Altura de cuchillas', pl: 'Kosiarka Wysokość ostrzy' },
   'Tondeuse Kilométrage total': { en: 'Mower Total distance', de: 'Mähroboter Gesamtstrecke', nl: 'Grasmaaier Totale afstand', it: 'Tosaerba Distanza totale', es: 'Cortacésped Distancia total', pl: 'Kosiarka Łączny dystans' },
   'Tondeuse Micrologiciel': { en: 'Mower Firmware', de: 'Mähroboter Firmware', nl: 'Grasmaaier Firmware', it: 'Tosaerba Firmware', es: 'Cortacésped Firmware', pl: 'Kosiarka Oprogramowanie' },
@@ -433,6 +440,12 @@ const APPAREILS = {
   'luminosité': { en: 'brightness', de: 'Helligkeit', nl: 'lichtsterkte', it: 'luminosità', es: 'luminosidad', pl: 'jasność' },
   'particules': { en: 'particles', de: 'Feinstaub', nl: 'fijnstof', it: 'particolato', es: 'partículas', pl: 'pyły' },
   'purificateur': { en: 'air purifier', de: 'Luftreiniger', nl: 'luchtreiniger', it: 'purificatore', es: 'purificador', pl: 'oczyszczacz' },
+  // Le purificateur et ses sœurs (ADR 0387).
+  'Purificateur d’air': { en: 'Air purifier', de: 'Luftreiniger', nl: 'Luchtreiniger', it: 'Purificatore d’aria', es: 'Purificador de aire', pl: 'Oczyszczacz powietrza' },
+  'qualité de l’air': { en: 'air quality', de: 'Luftqualität', nl: 'luchtkwaliteit', it: 'qualità dell’aria', es: 'calidad del aire', pl: 'jakość powietrza' },
+  'durée de vie du filtre': { en: 'filter life', de: 'Filterlebensdauer', nl: 'levensduur filter', it: 'durata del filtro', es: 'vida útil del filtro', pl: 'żywotność filtra' },
+  'affichage': { en: 'display', de: 'Anzeige', nl: 'display', it: 'display', es: 'pantalla', pl: 'wyświetlacz' },
+  'verrouillage enfant': { en: 'child lock', de: 'Kindersicherung', nl: 'kinderslot', it: 'blocco bambini', es: 'bloqueo infantil', pl: 'blokada rodzicielska' },
   'COV': { en: 'VOC', de: 'VOC', nl: 'VOS', it: 'COV', es: 'COV', pl: 'LZO' },
   'Thermomètre salon': { en: 'Living room thermometer', de: 'Thermometer Wohnzimmer', nl: 'Thermometer woonkamer', it: 'Termometro soggiorno', es: 'Termómetro salón', pl: 'Termometr salon' },
   'Thermomètre salon pile': { en: 'Living room thermometer battery', de: 'Thermometer Wohnzimmer Batterie', nl: 'Thermometer woonkamer batterij', it: 'Termometro soggiorno batteria', es: 'Termómetro salón pila', pl: 'Termometr salon bateria' },
@@ -445,6 +458,7 @@ const APPAREILS = {
   'Capteur salon': { en: 'Living room sensor', de: 'Sensor Wohnzimmer', nl: 'Sensor woonkamer', it: 'Sensore soggiorno', es: 'Sensor salón', pl: 'Czujnik salon' },
   'Luxmètre salon': { en: 'Living room light meter', de: 'Luxmeter Wohnzimmer', nl: 'Luxmeter woonkamer', it: 'Luxmetro soggiorno', es: 'Luxómetro salón', pl: 'Luksomierz salon' },
   'Purificateur salon': { en: 'Living room air purifier', de: 'Luftreiniger Wohnzimmer', nl: 'Luchtreiniger woonkamer', it: 'Purificatore soggiorno', es: 'Purificador salón', pl: 'Oczyszczacz salon' },
+  'Purificateur chambre': { en: 'Bedroom air purifier', de: 'Luftreiniger Schlafzimmer', nl: 'Luchtreiniger slaapkamer', it: 'Purificatore camera', es: 'Purificador dormitorio', pl: 'Oczyszczacz sypialnia' },
   'Capteur COV salon': { en: 'Living room VOC sensor', de: 'VOC-Sensor Wohnzimmer', nl: 'VOS-sensor woonkamer', it: 'Sensore COV soggiorno', es: 'Sensor COV salón', pl: 'Czujnik LZO salon' },
   'Capteur cuisine': { en: 'Kitchen sensor', de: 'Sensor Küche', nl: 'Sensor keuken', it: 'Sensore cucina', es: 'Sensor cocina', pl: 'Czujnik kuchnia' },
   'Capteur chambre': { en: 'Bedroom sensor', de: 'Sensor Schlafzimmer', nl: 'Sensor slaapkamer', it: 'Sensore camera', es: 'Sensor dormitorio', pl: 'Czujnik sypialnia' },
@@ -515,6 +529,39 @@ const APPAREILS = {
   'humidité du sol': { en: 'soil moisture', de: 'Bodenfeuchte', nl: 'bodemvochtigheid', it: 'umidità del terreno', es: 'humedad del suelo', pl: 'wilgotność gleby' },
   'conductivité': { en: 'conductivity', de: 'Leitfähigkeit', nl: 'geleidbaarheid', it: 'conducibilità', es: 'conductividad', pl: 'przewodność' },
   'lumière': { en: 'light', de: 'Licht', nl: 'licht', it: 'luce', es: 'luz', pl: 'światło' },
+  // Le lot 6 du chantier du 20/11 (A4, A11, A12 ; ADR 0386) : le portillon à code, la voiture, la litière et la fontaine.
+  'Portillon': { en: 'Garden gate', de: 'Gartentor', nl: 'Tuinpoort', it: 'Cancelletto', es: 'Portillo', pl: 'Furtka' },
+  'Voiture': { en: 'Car', de: 'Auto', nl: 'Auto', it: 'Auto', es: 'Coche', pl: 'Samochód' },
+  'Voiture électrique': { en: 'Electric car', de: 'Elektroauto', nl: 'Elektrische auto', it: 'Auto elettrica', es: 'Coche eléctrico', pl: 'Samochód elektryczny' },
+  'Voiture batterie': { en: 'Car battery', de: 'Auto Batterie', nl: 'Auto batterij', it: 'Auto batteria', es: 'Coche batería', pl: 'Samochód bateria' },
+  'Voiture autonomie': { en: 'Car range', de: 'Auto Reichweite', nl: 'Auto actieradius', it: 'Auto autonomia', es: 'Coche autonomía', pl: 'Samochód zasięg' },
+  'Voiture compteur kilométrique': { en: 'Car odometer', de: 'Auto Kilometerzähler', nl: 'Auto kilometerteller', it: 'Auto contachilometri', es: 'Coche cuentakilómetros', pl: 'Samochód licznik przebiegu' },
+  'Voiture état de charge': { en: 'Car charging state', de: 'Auto Ladezustand', nl: 'Auto laadstatus', it: 'Auto stato di ricarica', es: 'Coche estado de carga', pl: 'Samochód stan ładowania' },
+  'Voiture câble de charge': { en: 'Car charge cable', de: 'Auto Ladekabel', nl: 'Auto laadkabel', it: 'Auto cavo di ricarica', es: 'Coche cable de carga', pl: 'Samochód kabel ładowania' },
+  'Voiture verrou': { en: 'Car lock', de: 'Auto Verriegelung', nl: 'Auto vergrendeling', it: 'Auto serratura', es: 'Coche cierre', pl: 'Samochód zamek' },
+  'Voiture trappe de charge': { en: 'Car charge port', de: 'Auto Ladeklappe', nl: 'Auto laadklep', it: 'Auto sportello di ricarica', es: 'Coche tapa de carga', pl: 'Samochód klapka ładowania' },
+  'Voiture portière conducteur': { en: 'Car driver door', de: 'Auto Fahrertür', nl: 'Auto bestuurdersportier', it: 'Auto portiera conducente', es: 'Coche puerta del conductor', pl: 'Samochód drzwi kierowcy' },
+  'Voiture portière passager': { en: 'Car passenger door', de: 'Auto Beifahrertür', nl: 'Auto passagiersportier', it: 'Auto portiera passeggero', es: 'Coche puerta del pasajero', pl: 'Samochód drzwi pasażera' },
+  'Voiture alerte pneu avant gauche': { en: 'Car front left tyre warning', de: 'Auto Reifenwarnung vorne links', nl: 'Auto bandenwaarschuwing linksvoor', it: 'Auto avviso pneumatico anteriore sinistro', es: 'Coche alerta neumático delantero izquierdo', pl: 'Samochód ostrzeżenie opony przedniej lewej' },
+  'Voiture pression avant gauche': { en: 'Car front left pressure', de: 'Auto Reifendruck vorne links', nl: 'Auto bandenspanning linksvoor', it: 'Auto pressione anteriore sinistra', es: 'Coche presión delantera izquierda', pl: 'Samochód ciśnienie przednie lewe' },
+  'Voiture pression avant droite': { en: 'Car front right pressure', de: 'Auto Reifendruck vorne rechts', nl: 'Auto bandenspanning rechtsvoor', it: 'Auto pressione anteriore destra', es: 'Coche presión delantera derecha', pl: 'Samochód ciśnienie przednie prawe' },
+  'Voiture pression arrière gauche': { en: 'Car rear left pressure', de: 'Auto Reifendruck hinten links', nl: 'Auto bandenspanning linksachter', it: 'Auto pressione posteriore sinistra', es: 'Coche presión trasera izquierda', pl: 'Samochód ciśnienie tylne lewe' },
+  'Voiture pression arrière droite': { en: 'Car rear right pressure', de: 'Auto Reifendruck hinten rechts', nl: 'Auto bandenspanning rechtsachter', it: 'Auto pressione posteriore destra', es: 'Coche presión trasera derecha', pl: 'Samochód ciśnienie tylne prawe' },
+  'Voiture position': { en: 'Car location', de: 'Auto Standort', nl: 'Auto locatie', it: 'Auto posizione', es: 'Coche ubicación', pl: 'Samochód lokalizacja' },
+  'Litière': { en: 'Litter box', de: 'Katzenklo', nl: 'Kattenbak', it: 'Lettiera', es: 'Arenero', pl: 'Kuweta' },
+  'Litière autonettoyante': { en: 'Self-cleaning litter box', de: 'Selbstreinigendes Katzenklo', nl: 'Zelfreinigende kattenbak', it: 'Lettiera autopulente', es: 'Arenero autolimpiable', pl: 'Kuweta samoczyszcząca' },
+  'Litière bac plein': { en: 'Litter box bin full', de: 'Katzenklo Behälter voll', nl: 'Kattenbak afvalbak vol', it: 'Lettiera contenitore pieno', es: 'Arenero depósito lleno', pl: 'Kuweta pojemnik pełny' },
+  'Litière manque de litière': { en: 'Litter box low litter', de: 'Katzenklo Streu fehlt', nl: 'Kattenbak te weinig grit', it: 'Lettiera sabbia scarsa', es: 'Arenero falta arena', pl: 'Kuweta brak żwirku' },
+  'Litière niveau de litière': { en: 'Litter box litter level', de: 'Katzenklo Streustand', nl: 'Kattenbak gritniveau', it: 'Lettiera livello sabbia', es: 'Arenero nivel de arena', pl: 'Kuweta poziom żwirku' },
+  'Litière état': { en: 'Litter box status', de: 'Katzenklo Status', nl: 'Kattenbak status', it: 'Lettiera stato', es: 'Arenero estado', pl: 'Kuweta stan' },
+  'Litière passages': { en: 'Litter box times used', de: 'Katzenklo Nutzungen', nl: 'Kattenbak bezoeken', it: 'Lettiera utilizzi', es: 'Arenero usos', pl: 'Kuweta użycia' },
+  'Fontaine': { en: 'Water fountain', de: 'Trinkbrunnen', nl: 'Drinkfontein', it: 'Fontanella', es: 'Fuente', pl: 'Poidło' },
+  'Fontaine à eau': { en: 'Pet water fountain', de: 'Haustier-Trinkbrunnen', nl: 'Drinkfontein voor huisdieren', it: 'Fontanella per animali', es: 'Fuente para mascotas', pl: 'Poidło dla zwierząt' },
+  'Fontaine manque d’eau': { en: 'Water fountain low water', de: 'Trinkbrunnen Wassermangel', nl: 'Drinkfontein watertekort', it: 'Fontanella acqua scarsa', es: 'Fuente falta de agua', pl: 'Poidło brak wody' },
+  'Fontaine filtre': { en: 'Water fountain filter', de: 'Trinkbrunnen Filter', nl: 'Drinkfontein filter', it: 'Fontanella filtro', es: 'Fuente filtro', pl: 'Poidło filtr' },
+  'Fontaine jours de filtre': { en: 'Water fountain filter days', de: 'Trinkbrunnen Filtertage', nl: 'Drinkfontein filterdagen', it: 'Fontanella giorni filtro', es: 'Fuente días de filtro', pl: 'Poidło dni filtra' },
+  'Fontaine pompe': { en: 'Water fountain pump', de: 'Trinkbrunnen Pumpe', nl: 'Drinkfontein pomp', it: 'Fontanella pompa', es: 'Fuente bomba', pl: 'Poidło pompa' },
+  'Fontaine filtre remplacé': { en: 'Water fountain filter replaced', de: 'Trinkbrunnen Filter gewechselt', nl: 'Drinkfontein filter vervangen', it: 'Fontanella filtro sostituito', es: 'Fuente filtro cambiado', pl: 'Poidło filtr wymieniony' },
 };
 
 /** Le nom d'un appareil, sinon d'un lieu, dans la langue de la demonstration. */
@@ -764,6 +811,7 @@ function etatsInitiaux() {
       supported_features: 7 }),
     // Ses soeurs : les zones sont des interrupteurs, les lames se comptent en heures.
     'binary_sensor.tondeuse_en_charge': s('off', { friendly_name: 'Tondeuse En charge', device_class: 'battery_charging' }),
+    'sensor.tondeuse_heures_de_repos': s('09:00pm - 10:00am', { friendly_name: 'Tondeuse Heures de repos' }),
     'switch.tondeuse_zone_pelouse_avant': s('off', { friendly_name: 'Tondeuse Zone Pelouse avant' }),
     'switch.tondeuse_zone_pelouse_arriere': s('on', { friendly_name: 'Tondeuse Zone Pelouse arrière' }),
     'switch.tondeuse_zone_cote_garage': s('off', { friendly_name: 'Tondeuse Zone Côté garage' }),
@@ -806,6 +854,39 @@ function etatsInitiaux() {
     'binary_sensor.borne_branchee': { ...s('on', { friendly_name: 'Borne de recharge branchée', device_class: 'plug' }), last_changed: ilYaMin(140), last_updated: ilYaMin(140) },
     'sensor.borne_statut': s('connected', { friendly_name: 'Borne de recharge état', device_class: 'enum', options: ['disconnected', 'connected', 'charging', 'error'] }),
     'switch.borne_charge': s('on', { friendly_name: 'Borne de recharge charge' }),
+    /* LE PORTILLON (chantier du 20/11, A4 ; ADR 0386) : une serrure À CODE qui sait tirer son pêne (`supported_features`
+     * 1). Déverrouillée : « Je pars » ne la verrouillerait pas sans son code — « Avant de partir » la dit, avec le pavé de l'alarme.
+     * Elle accroche une fois sur deux en se verrouillant (`callService`) : « Serrure bloquée » se montre ainsi. */
+    'lock.portillon': s('unlocked', { friendly_name: 'Portillon', code_format: '^\\d{4}$', supported_features: 1 }),
+    /* LA VOITURE (A11, ADR 0386), aux clés de traduction de Tesla Fleet : branchée sur la borne, elle attend les heures creuses ;
+     * verrouillée, portières fermées, aucun pneu en alerte — l'arrière gauche un peu bas, sans que rien ne le dise. */
+    'sensor.voiture_batterie': s(64, { friendly_name: 'Voiture batterie', device_class: 'battery', unit_of_measurement: '%', state_class: 'measurement' }),
+    'sensor.voiture_autonomie': s(287, { friendly_name: 'Voiture autonomie', device_class: 'distance', unit_of_measurement: 'km', state_class: 'measurement' }),
+    'sensor.voiture_compteur': s(24512, { friendly_name: 'Voiture compteur kilométrique', device_class: 'distance', unit_of_measurement: 'km', state_class: 'total_increasing' }),
+    'sensor.voiture_etat_de_charge': s('stopped', { friendly_name: 'Voiture état de charge', device_class: 'enum', options: ['starting', 'charging', 'stopped', 'complete', 'disconnected', 'no_power'] }),
+    'binary_sensor.voiture_cable': s('on', { friendly_name: 'Voiture câble de charge', device_class: 'connectivity' }),
+    'lock.voiture': s('locked', { friendly_name: 'Voiture verrou' }),
+    'lock.voiture_trappe': s('locked', { friendly_name: 'Voiture trappe de charge' }),
+    'binary_sensor.voiture_portiere_conducteur': s('off', { friendly_name: 'Voiture portière conducteur', device_class: 'door' }),
+    'binary_sensor.voiture_portiere_passager': s('off', { friendly_name: 'Voiture portière passager', device_class: 'door' }),
+    'binary_sensor.voiture_alerte_pneu_avant_gauche': s('off', { friendly_name: 'Voiture alerte pneu avant gauche', device_class: 'problem' }),
+    'sensor.voiture_pression_avant_gauche': s(2.9, { friendly_name: 'Voiture pression avant gauche', device_class: 'pressure', unit_of_measurement: 'bar', state_class: 'measurement' }),
+    'sensor.voiture_pression_avant_droite': s(2.9, { friendly_name: 'Voiture pression avant droite', device_class: 'pressure', unit_of_measurement: 'bar', state_class: 'measurement' }),
+    'sensor.voiture_pression_arriere_gauche': s(2.6, { friendly_name: 'Voiture pression arrière gauche', device_class: 'pressure', unit_of_measurement: 'bar', state_class: 'measurement' }),
+    'sensor.voiture_pression_arriere_droite': s(2.9, { friendly_name: 'Voiture pression arrière droite', device_class: 'pressure', unit_of_measurement: 'bar', state_class: 'measurement' }),
+    'device_tracker.voiture': s('home', { friendly_name: 'Voiture position', source_type: 'gps', latitude: 48.8562, longitude: 2.3526, gps_accuracy: 12 }),
+    /* LA LITIÈRE ET LA FONTAINE (A12, ADR 0386), aux clés de traduction de PetKit : la litière dit son bac, son sable, son état et
+     * ses passages du jour ; la fontaine, son eau, son filtre et sa pompe. Rien à signaler : le filtre a encore onze jours. */
+    'binary_sensor.litiere_bac_plein': s('off', { friendly_name: 'Litière bac plein', device_class: 'problem' }),
+    'binary_sensor.litiere_manque_de_litiere': s('off', { friendly_name: 'Litière manque de litière', device_class: 'problem' }),
+    'sensor.litiere_niveau_de_litiere': s(64, { friendly_name: 'Litière niveau de litière', unit_of_measurement: '%', state_class: 'measurement' }),
+    'sensor.litiere_etat': s('idle', { friendly_name: 'Litière état' }),
+    'sensor.litiere_passages': s(5, { friendly_name: 'Litière passages', state_class: 'total' }),
+    'binary_sensor.fontaine_manque_d_eau': s('off', { friendly_name: 'Fontaine manque d’eau', device_class: 'problem' }),
+    'sensor.fontaine_filtre': s(38, { friendly_name: 'Fontaine filtre', unit_of_measurement: '%', state_class: 'measurement' }),
+    'sensor.fontaine_jours_de_filtre': s(11, { friendly_name: 'Fontaine jours de filtre', unit_of_measurement: 'd', state_class: 'measurement' }),
+    'switch.fontaine_pompe': s('on', { friendly_name: 'Fontaine pompe' }),
+    'button.fontaine_filtre_remplace': s('unknown', { friendly_name: 'Fontaine filtre remplacé' }),
     /* TEMPO (chantier G3, E4) : la couleur du jour et celle du lendemain, comme `rtetempo` les publie — un `enum` bleu, blanc,
      * rouge. Demain est ROUGE : « Demain : jour rouge » dans le rail de l'Accueil. */
     'sensor.rte_tempo_couleur_actuelle': s('Blanc', { friendly_name: 'Couleur Tempo du jour', device_class: 'enum', options: ['Bleu', 'Blanc', 'Rouge'] }),
@@ -869,6 +950,16 @@ function etatsInitiaux() {
     /* Le programme du poêle, le « Timer » d'un MCZ (D5, audit du 19/10) : un `switch` de SON appareil, allumé — il change
      * les réglages lui-même, et la fiche le dit (`programme_appareil`, 26/10). */
     'switch.poele_timer': s('on', { friendly_name: 'Poêle Timer', icon: 'mdi:timer-outline' }),
+    /* Ce que son appareil a de plus (17/11) : une puissance, un ventilateur, deux interrupteurs, deux capteurs — ce que la
+     * fiche d'un thermostat montre sous sa jauge, pour tout appareil (`commandesDeLAppareil`). */
+    'select.poele_puissance': s('3', { friendly_name: 'Poêle Puissance', options: ['1', '2', '3', '4', '5'] }),
+    // Vitesse (1), préréglages (8), marche et arrêt (16, 32) : ce qu'il déclare savoir faire.
+    'fan.poele_ventilateur': s('on', { friendly_name: 'Poêle Ventilateur ambiance', preset_modes: ['auto'], preset_mode: 'auto', percentage: 60, percentage_step: 20,
+      supported_features: 57 }),
+    'switch.poele_eco_stop': s('off', { friendly_name: 'Poêle Eco Stop' }),
+    'switch.poele_silence': s('off', { friendly_name: 'Poêle Silence' }),
+    'sensor.poele_fumees': s('62', { friendly_name: 'Poêle Température des fumées', device_class: 'temperature', unit_of_measurement: '°C', state_class: 'measurement' }),
+    'sensor.poele_entretien': s('658', { friendly_name: 'Poêle Heures avant entretien', device_class: 'duration', unit_of_measurement: 'h' }),
     /* Un planning de scheduler-component (nielsfaber), allumé, qui commande AUSSI le radiateur du bureau, au planning
      * de Loggia : deux chefs, que sa fiche dit (`programme_concurrent`, 26/10). Ses attributs, tels que la plateforme
      * les publie : `entities` dit ce que ses créneaux commandent. */
@@ -985,6 +1076,9 @@ function configDemo() {
      * la popup ait quelque chose a raconter. Le nom vaut ce qu'il dit : c'est
      * un reglage, chacun met le sien. */
     loggia_assistant: 'demo',
+    /* Le rappel des ouvertures (ADR 0388) : la porte d'entrée et la baie vitrée préviennent après 10 min, et la nuit — la popup de
+     * la baie, ouverte depuis 47 min, montre l'alerte de sa maquette. La démo n'envoie rien : il n'y a pas de composant. */
+    loggia_ouvertures: { 'binary_sensor.porte_entree': { delai: 10, nuit: true }, 'binary_sensor.baie_vitree': { delai: 10, nuit: true } },
     /* Le mode enfant de sa maquette (chantier Mode enfant, § 10) : le profil « Lino » sur la chambre, l'Apple TV ajoutée. Le faux
      * serveur le relit à chaque réglage (`enfantPatch`) et le réécrit ici, comme `loggia/config/suivre` le ferait chez lui. */
     loggia_enfant: ENFANT_CFG,
@@ -1565,6 +1659,8 @@ export function historiqueDemo(chemin, states) {
   const plusieurs = m ? decodeURIComponent(m[1]).split(',') : [];
   if (plusieurs.some(x => /^(vacuum|lawn_mower)\./.test(x))) return historiqueRobotDemo(plusieurs, states);
   if (plusieurs.some(x => SERIES_DIST.has(x))) return historiqueDistributeurDemo(plusieurs, String(chemin), states);
+  // Le purificateur (ADR 0387) : sa qualité d'air et ses modes de la journée.
+  if (plusieurs.some(x => PURIFICATEUR_CLES_DEMO[x])) return historiquePurificateurDemo(plusieurs, states);
   const id = m ? decodeURIComponent(m[1]) : null;
   const d = String(chemin).match(/history\/period\/([^?]+)/);
   const t0 = d ? Date.parse(decodeURIComponent(d[1])) : Date.now() - 86400000;
@@ -1639,6 +1735,62 @@ export function historiqueDemo(chemin, states) {
     for (const p of pts) p.state = String(Math.round((parseFloat(p.state) + ecart) * 100) / 100);
   }
   return [pts];
+}
+
+/* La journée du purificateur (ADR 0387), au format de `history/period` : la qualité de l'air par demi-heure (sa maquette : bon la
+ * nuit, moyen vers le soir, mauvais une heure, puis le niveau du moment), et le ventilateur — la nuit en Nuit, l'auto le matin,
+ * l'arrêt la journée, l'auto le soir. Chaque liste porte son `entity_id` en tête, comme Home Assistant. */
+const NIVEAUX_AIR_DEMO = ['excellent', 'good', 'moderate', 'poor', 'polluted'];
+function historiquePurificateurDemo(ids, states) {
+  const fin = Date.now(), debut = fin - 86400000;
+  const listes = [];
+  ids.forEach((id) => {
+    if (id === 'sensor.salon_purificateur_qualite_air') {
+      const motif = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 2, 2, 2, 3, 3, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0];
+      const actuel = Math.max(0, NIVEAUX_AIR_DEMO.indexOf(states[id] ? states[id].state : 'good'));
+      for (let k = 0; k < 8; k++) { const i = motif.length - 8 + k; motif[i] = Math.round(motif[i] + (actuel - motif[i]) * (k + 1) / 8); }
+      const l = motif.map((n, i) => ({ state: NIVEAUX_AIR_DEMO[n], last_changed: new Date(debut + i * 1800000).toISOString() }))
+        .filter((p, i, a) => i === 0 || p.state !== a[i - 1].state);
+      l[0].entity_id = id;
+      listes.push(l);
+    } else if (id.indexOf('fan.') === 0) {
+      // Le salon passe par ses modes ; la chambre, qui n'en a pas, s'allume et s'éteint seulement.
+      const modes = id === 'fan.salon_purificateur';
+      const minuit = new Date(fin); minuit.setHours(0, 0, 0, 0);
+      const pas = [[-90, 'on', 'sleep'], [420, 'on', 'auto'], [510, 'off', null], [1050, 'on', 'auto'], [1350, 'on', 'sleep']];
+      const l = [];
+      [-1, 0].forEach((j) => pas.forEach(([m, etat, mode]) => {
+        const t = minuit.getTime() + j * 86400000 + m * 60000;
+        if (t <= fin) l.push({ t, etat, mode });
+      }));
+      const vus = l.filter(x => x.t >= debut);
+      const avant = l.filter(x => x.t < debut).pop();
+      const points = (avant ? [{ ...avant, t: debut }] : []).concat(vus).map(x => ({ entity_id: id, state: x.etat, last_changed: new Date(x.t).toISOString(),
+        attributes: { preset_mode: modes ? x.mode : null, percentage: null } }));
+      listes.push(points);
+    }
+  });
+  return listes;
+}
+
+/* Le planning des purificateurs (ADR 0387), comme le composant le tiendrait (`purificateurs.py`) : le salon suit sa semaine. */
+const PURIF_PLANNING_DEMO = {};
+function etatPurificateursDemo() {
+  if (!PURIF_PLANNING_DEMO['fan.salon_purificateur']) {
+    const semaine = [{ debut: 0, mode: 'nuit' }, { debut: 420, mode: 'auto' }, { debut: 510, mode: 'arret' }, { debut: 1050, mode: 'auto' }, { debut: 1350, mode: 'nuit' }];
+    const weekend = [{ debut: 0, mode: 'nuit' }, { debut: 570, mode: 'auto' }, { debut: 1380, mode: 'nuit' }];
+    PURIF_PLANNING_DEMO['fan.salon_purificateur'] = { actif: true, semaine: [0, 1, 2, 3, 4, 5, 6].map(j => (j < 5 ? semaine : weekend).map(x => ({ ...x }))) };
+  }
+  return { maintenant: Date.now() / 1000, purificateurs: JSON.parse(JSON.stringify(PURIF_PLANNING_DEMO)) };
+}
+function reglerPurificateurDemo(msg, states) {
+  const id = msg && msg.entity_id;
+  if (!id || !states[id]) return Promise.reject(refusDemo('purificateur_introuvable', 'purificateur introuvable'));
+  const actuel = etatPurificateursDemo().purificateurs[id] || { actif: false, semaine: null };
+  const semaine = Array.isArray(msg.semaine) && msg.semaine.length === 7 ? msg.semaine.map(j => j.map(x => ({ debut: x.debut, mode: x.mode }))) : actuel.semaine;
+  if (!semaine) return Promise.reject(refusDemo('purificateur_semaine_vide', 'semaine vide'));
+  PURIF_PLANNING_DEMO[id] = { actif: typeof msg.actif === 'boolean' ? msg.actif : actuel.actif, semaine };
+  return Promise.resolve(etatPurificateursDemo());
 }
 
 /* Prévisions factices, au format du service `weather.get_forecasts` : une
@@ -2840,7 +2992,20 @@ const COURBES_MESURES_DEMO = {
   'sensor.capteur_frigo_temperature': [[[-24, 4.1], [-14, 3.8], [-10.5, 6.2], [-9.5, 4.4], [-3.2, 6.8], [-2.5, 4.6], [0, 4.2]], 0.15, 12],
 };
 // Leur pièce : celles qui n'en avaient pas.
+/* Les purificateurs (ADR 0387) : leurs entités, la clé de traduction et la catégorie que l'intégration leur donne, leur pièce.
+ * Celui du salon a tout ce que publie un VeSync, verrou en plus ; celui de la chambre ne sait que s'allumer et s'éteindre, et
+ * ne publie que son filtre — la fiche n'y montre que cela. */
+const PURIFICATEUR_CLES_DEMO = {
+  'fan.salon_purificateur': [null, null, 'salon'], 'sensor.salon_purificateur_qualite_air': ['air_quality', null, 'salon'],
+  'sensor.salon_purificateur_filtre': ['filter_life', 'diagnostic', 'salon'], 'switch.salon_purificateur_affichage': ['display', 'config', 'salon'],
+  'switch.salon_purificateur_verrou': ['child_lock', 'config', 'salon'],
+  'fan.chambre_purificateur': [null, null, 'chambre'], 'sensor.chambre_purificateur_filtre': ['filter_life', 'diagnostic', 'chambre'],
+};
+const PURIFICATEUR_DEMO = Object.keys(PURIFICATEUR_CLES_DEMO);
+const purificateursDe = (piece) => PURIFICATEUR_DEMO.filter(id => PURIFICATEUR_CLES_DEMO[id][2] === piece);
+const metaPurificateurDemo = (id) => (PURIFICATEUR_CLES_DEMO[id] ? { platform: 'vesync', key: PURIFICATEUR_CLES_DEMO[id][0], category: PURIFICATEUR_CLES_DEMO[id][1] } : {});
 const PIECES_MESURES_DEMO = { 'sensor.chambre_lino_co2': 'chambre', 'sensor.salon_luminosite': 'salon', 'sensor.salon_particules': 'salon', 'sensor.salon_cov': 'salon',
+  ...Object.fromEntries(PURIFICATEUR_DEMO.map(id => [id, PURIFICATEUR_CLES_DEMO[id][2]])),
   'sensor.salon_thermometre_pile': 'salon', 'sensor.salle_de_bain_temperature': 'sdb', 'sensor.salle_de_bain_humidite': 'sdb',
   // Le jardin : une zone de Home Assistant, et une pièce du dehors de la configuration (C17, 16/10).
   'sensor.jardin_temperature': 'jardin', 'sensor.jardin_humidite': 'jardin', 'sensor.jardin_vent': 'jardin', 'sensor.qualite_air_exterieur': 'jardin',
@@ -2859,7 +3024,9 @@ const APPAREILS_MESURES_DEMO = {
   thermo_salon: ['salon', 'Thermomètre salon', 'Thermomètre', ['sensor.salon_temperature', 'sensor.salon_humidite', 'sensor.salon_thermometre_pile']],
   capteur_salon: ['salon', 'Capteur salon', 'Capteur', ['sensor.salon_co2', 'sensor.salon_bruit']],
   luxmetre_salon: ['salon', 'Luxmètre salon', 'Capteur', ['sensor.salon_luminosite']],
-  purificateur_salon: ['salon', 'Purificateur salon', 'Capteur', ['sensor.salon_particules', 'fan.salon_purificateur']],
+  // Le purificateur (ADR 0387) : un appareil VeSync, son ventilateur et ses sœurs, qui ouvre la fiche du purificateur.
+  purificateur_salon: ['salon', 'Purificateur salon', 'Purificateur d’air', ['sensor.salon_particules', ...purificateursDe('salon')]],
+  purificateur_chambre: ['chambre', 'Purificateur chambre', 'Purificateur d’air', purificateursDe('chambre')],
   capteur_cov_salon: ['salon', 'Capteur COV salon', 'Capteur', ['sensor.salon_cov']],
   capteur_cuisine: ['cuisine', 'Capteur cuisine', 'Capteur', ['sensor.cuisine_temperature', 'sensor.cuisine_humidite']],
   capteur_chambre: ['chambre', 'Capteur chambre', 'Capteur', ['sensor.chambre_temperature', 'sensor.chambre_humidite', 'sensor.chambre_co2']],
@@ -2918,8 +3085,17 @@ function etatsMesuresDemo(states) {
     'sensor.salon_luminosite': s(120, { friendly_name: lieu('Salon') + ' ' + etiquette('luminosité'), unit_of_measurement: 'lx', device_class: 'illuminance', state_class: 'measurement' }),
     'sensor.salon_particules': s(8, { friendly_name: lieu('Salon') + ' ' + etiquette('particules'), unit_of_measurement: 'µg/m³', device_class: 'pm25', state_class: 'measurement' }),
     // Son ventilateur, avec ses modes, comme un Levoit (ticket #43) : la fiche les propose, la carte rallume dans le dernier.
-    'fan.salon_purificateur': s('on', { friendly_name: lieu('Salon') + ' ' + etiquette('purificateur'), percentage: 40, percentage_step: 25,
-      preset_modes: ['auto', 'sleep', 'manual', 'pet', 'turbo'], preset_mode: 'auto', supported_features: 57 }),
+    /* Son ventilateur, comme un LV-PUR131S de VeSync (ADR 0387) : trois vitesses, Auto et Nuit ; en Auto il ne publie pas sa
+     * vitesse. La fiche du purificateur lit ses sœurs à leur clé de traduction : la qualité de l'air, le filtre, l'écran, le verrou. */
+    'fan.salon_purificateur': s('on', { friendly_name: lieu('Salon') + ' ' + etiquette('purificateur'), percentage: null, percentage_step: 100 / 3,
+      preset_modes: ['auto', 'sleep'], preset_mode: 'auto', supported_features: 57 }),
+    'sensor.salon_purificateur_qualite_air': s('good', { friendly_name: lieu('Salon') + ' ' + etiquette('qualité de l’air') }),
+    'sensor.salon_purificateur_filtre': s(72, { friendly_name: lieu('Salon') + ' ' + etiquette('durée de vie du filtre'), unit_of_measurement: '%', state_class: 'measurement' }),
+    'switch.salon_purificateur_affichage': s('on', { friendly_name: lieu('Salon') + ' ' + etiquette('affichage') }),
+    'switch.salon_purificateur_verrou': s('off', { friendly_name: lieu('Salon') + ' ' + etiquette('verrouillage enfant') }),
+    // Le purificateur minimal de la chambre : marche et arrêt (16 | 32), son filtre, rien d'autre.
+    'fan.chambre_purificateur': s('on', { friendly_name: lieu('Chambre') + ' ' + etiquette('purificateur'), supported_features: 48 }),
+    'sensor.chambre_purificateur_filtre': s(41, { friendly_name: lieu('Chambre') + ' ' + etiquette('durée de vie du filtre'), unit_of_measurement: '%', state_class: 'measurement' }),
     // Un INDICE, sans unité : celui que la table lit (chantier Capteurs, § 6).
     'sensor.salon_cov': s(182, { friendly_name: lieu('Salon') + ' ' + etiquette('COV'), device_class: 'volatile_organic_compounds', state_class: 'measurement' }),
     'sensor.salon_thermometre_pile': s(81, { friendly_name: etiquette('Thermomètre salon pile'), device_class: 'battery', unit_of_measurement: '%' }),
@@ -3078,10 +3254,19 @@ function journalCapteursDemo(t) {
 const HISTOIRES_CAPTEURS_DEMO = (t) => {
   // Un passage du matin, seulement s'il est fini avant l'épisode en cours : une démo ouverte tôt n'en garde que l'épisode.
   const matin = (h1, m1, h2, m2, avant) => (aJour(t, 0, h2, m2) < avant ? [[aJour(t, 0, h1, m1), 'on'], [aJour(t, 0, h2, m2), 'off']] : []);
+  /* Les six jours d'avant (ADR 0388) : la semaine de la popup d'une ouverture — `n` ouvertures par jour, de 07:40 à 21:30, de
+   * `duree` à `duree + 2` minutes chacune. Aujourd'hui garde ses passages à lui, plus bas. */
+  const semaine = (comptes, duree) => comptes.flatMap((n, k) => Array.from({ length: n }, (_, i) => {
+    const min = 460 + Math.round(i * 830 / n) + (k * 7) % 23;
+    const a = aJour(t, k - comptes.length, Math.floor(min / 60), min % 60);
+    return [[a, 'on'], [a + (duree + (i % 3)) * MINUTE_MS, 'off']];
+  }).flat());
   return {
-    'binary_sensor.baie_vitree': [...matin(8, 12, 8, 19, t - 47 * MINUTE_MS), [t - 47 * MINUTE_MS, 'on']],
-    'binary_sensor.fenetre_chambre': [[t - 130 * MINUTE_MS, 'on']],
-    'binary_sensor.porte_entree': [[aJour(t, 0, 8, 12), 'on'], [aJour(t, 0, 8, 15), 'off'], [aJour(t, 0, 12, 40), 'on'], [aJour(t, 0, 12, 41), 'off']],
+    'binary_sensor.baie_vitree': [...semaine([3, 2, 4, 1, 3, 5], 6), ...matin(8, 12, 8, 19, t - 47 * MINUTE_MS), [t - 47 * MINUTE_MS, 'on']],
+    'binary_sensor.fenetre_chambre': [...semaine([1, 1, 2, 1, 1, 1], 20), [t - 130 * MINUTE_MS, 'on']],
+    'binary_sensor.porte_entree': [...semaine([6, 4, 9, 5, 7, 12], 2), [aJour(t, 0, 8, 12), 'on'], [aJour(t, 0, 8, 15), 'off'], [aJour(t, 0, 12, 40), 'on'], [aJour(t, 0, 12, 41), 'off']],
+    'binary_sensor.fenetre_salon': semaine([2, 0, 1, 2, 1, 3], 12),
+    'binary_sensor.porte_garage': semaine([2, 2, 1, 3, 2, 4], 3),
     'binary_sensor.detecteur_fumee_entree': [[avantCapteurs(t, 14, 5, 60), 'unavailable']],
     'binary_sensor.mouvement_salon': [...matin(7, 30, 7, 34, t - 3 * MINUTE_MS), [t - 2.9 * MINUTE_MS, 'on'], [t - 2.5 * MINUTE_MS, 'off']],
     'binary_sensor.radar_bureau': [...matin(9, 2, 11, 48, t - 47 * MINUTE_MS), [t - 47 * MINUTE_MS, 'on']],
@@ -3216,7 +3401,8 @@ const jumelleMediaDemo = (id) => {
 };
 /* La plateforme d'une entité d'un lecteur, et la clé de traduction de ses `notify` — c'est à elle que l'appariement reconnaît
  * « Annoncer » (`announce`) : rien ne se devine au nom. */
-const metaMediaDemo = (id) => { const d = appareilMediaDemo(id); return d ? { platform: APPAREILS_MEDIAS_DEMO[d][3], key: /_annoncer$/.test(id) ? 'announce' : /_parler$/.test(id) ? 'speak' : null } : {}; };
+// Le prochain réveil de l'Echo porte sa clé, `next_alarm` (P4, ADR 0382) : la fiche le lit sous le volume.
+const metaMediaDemo = (id) => { const d = appareilMediaDemo(id); return d ? { platform: APPAREILS_MEDIAS_DEMO[d][3], key: /_annoncer$/.test(id) ? 'announce' : /_parler$/.test(id) ? 'speak' : /_prochaine_alarme$/.test(id) ? 'next_alarm' : null } : {}; };
 /* La file de chaque Echo qui en a une : les morceaux, et celui qui joue. */
 const FILES_MEDIAS_DEMO = { 'media_player.echo_dot_chambre': { file: ['xib', 'temple', 'ruinas'], i: 0 } };
 /* Ce qu'un morceau pose sur l'entité qui le joue : le titre, l'artiste, le genre, la pochette ; la durée et la position publiée à `t`
@@ -3254,7 +3440,9 @@ function etatsMediasDemo() {
     'media_player.chambre_echo_dot': s('playing', { friendly_name: 'Echo Dot - Chambre', supported_features: 5644, volume_level: journeeEnfantDemo(ENFANT_CFG.profils[ENFANT_ZONE_DEMO], t).dans ? .3 : .2, device_class: 'speaker' }),
     'notify.chambre_echo_dot_annoncer': soeur('Echo Dot - Chambre', 'Annoncer'),
     'notify.chambre_echo_dot_parler': soeur('Echo Dot - Chambre', 'Parler'),
-    'sensor.chambre_echo_dot_prochaine_alarme': soeur('Echo Dot - Chambre', 'Prochaine alarme', { device_class: 'timestamp' }),
+    // Un réveil demain à 06:45 (P4) : la fiche de l'Echo le dit sous le volume.
+    'sensor.chambre_echo_dot_prochaine_alarme': { ...soeur('Echo Dot - Chambre', 'Prochaine alarme', { device_class: 'timestamp' }),
+      state: (() => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(6, 45, 0, 0); return d.toISOString(); })() },
     // La sœur « Annonces » de l'officielle (chantier Mode enfant, E23) : un `switch`, allumé — « Recevoir les annonces ».
     'switch.chambre_echo_dot_annonces': { ...soeur('Echo Dot - Chambre', 'Annonces'), state: 'on' },
     'media_player.echo_dot_chambre': s('playing', { friendly_name: 'Echo Dot Chambre', supported_features: 318399, volume_level: journeeEnfantDemo(ENFANT_CFG.profils[ENFANT_ZONE_DEMO], t).dans ? .3 : .2, app_name: 'Amazon Music', shuffle: false, repeat: 'off', ...attributsMorceau('xib', 91, t) }),
@@ -3627,7 +3815,7 @@ function indexDemo(states) {
   const ZONE_DE = {
     salon: ['light.salon', 'media_player.salon', 'sensor.salon_temperature', 'sensor.salon_humidite', 'sensor.salon_co2', 'sensor.salon_bruit', 'cover.volet_salon', 'cover.store_banne',
             'binary_sensor.fenetre_salon', 'binary_sensor.baie_vitree', 'switch.radiateur_salon', 'media_player.enceinte_salon', 'media_player.tv_salon', 'remote.tv_salon', 'binary_sensor.detecteur_co_salon',
-            'climate.poele', 'switch.poele_timer'],
+            'climate.poele', 'switch.poele_timer', ...COMMANDES_POELE_CHA],
     cuisine: ['light.cuisine', 'sensor.cuisine_temperature', 'sensor.cuisine_humidite', 'cover.volet_cuisine', 'binary_sensor.detecteur_fumee', 'binary_sensor.fuite_evier', 'valve.arrivee_eau'],
     chambre: ['light.chambre', 'sensor.chambre_temperature', 'sensor.chambre_humidite', 'sensor.chambre_co2', 'cover.volet_chambre', 'cover.rideau_chambre',
               'binary_sensor.fenetre_chambre', 'switch.radiateur_chambre', 'select.radiateur_chambre_fil_pilote', 'sensor.radiateur_chambre_puissance'],
@@ -3641,7 +3829,8 @@ function indexDemo(states) {
              // La borne de recharge (chantier G3, E3) : un appareil devant le garage.
              'sensor.borne_recharge', 'sensor.borne_energie', 'number.borne_courant_max', 'binary_sensor.borne_branchee', 'sensor.borne_statut', 'switch.borne_charge'],
     sdb: ['light.sdb', 'sensor.sdb_temperature', 'cover.volet_sdb', 'water_heater.ballon'],
-    jardin: [],
+    // Le portillon à code (A4, ADR 0386).
+    jardin: ['lock.portillon'],
     technique: [],
   };
   // La camera de l'entree et ses reglages forment UN appareil : c'est par lui
@@ -3717,7 +3906,7 @@ function indexDemo(states) {
       const famille = familleChauffageDemo(id);
       // La plateforme et la catégorie : celles de la démo, sauf pour les capteurs de sa maquette « Cartes capteurs » (Zigbee, Bluetooth, les piles en diagnostic).
       entities.push({ id, name: at.friendly_name || id, device: APPAREIL_DE(id), area: zone,
-        ...metaCapteurDemo(id), ...metaMediaDemo(id), ...metaChauffageDemo(id), ...metaPorteDemo(id), device_class: at.device_class || null,
+        ...metaCapteurDemo(id), ...metaMediaDemo(id), ...metaChauffageDemo(id), ...metaPorteDemo(id), ...metaPurificateurDemo(id), device_class: at.device_class || null,
         unit: at.unit_of_measurement || null, hidden: false, ...(famille ? { famille } : {}) });
     });
   });
@@ -3741,6 +3930,8 @@ function indexDemo(states) {
       'sensor.tondeuse_usage_des_lames': ['blade_used_time', 'diagnostic'], 'sensor.tondeuse_seuil_des_lames': ['blade_used_warn_time', 'diagnostic'],
       'sensor.tondeuse_surface': ['area', 'diagnostic'], 'sensor.tondeuse_cycles_de_batterie': ['maintenance_bat_cycles', 'diagnostic'],
       'sensor.tondeuse_progression': ['progress', null], 'sensor.tondeuse_temps_restant': ['left_time', null],
+      // Ses heures de repos (P7, ADR 0383) : la fiche dit « Heures de repos jusqu'à 10:00 » quand elle est garée dedans.
+      'sensor.tondeuse_heures_de_repos': ['non_work_hours', null],
       'sensor.tondeuse_temps_de_travail_total': ['maintenance_work_time', 'diagnostic'], 'sensor.tondeuse_kilometrage_total': ['maintenance_distance', 'diagnostic'],
       'sensor.tondeuse_signal_wi_fi': ['wifi_rssi', 'diagnostic'], 'number.tondeuse_hauteur_des_lames': ['blade_height', 'config'],
       'switch.tondeuse_detection_de_pluie': ['rain_detection', 'config'], 'select.tondeuse_securite_faune': ['wildlife_safety', 'config'],
@@ -3749,6 +3940,16 @@ function indexDemo(states) {
   };
   Object.keys(ROBOTS).forEach(appareil => {
     const [plateforme, liste] = ROBOTS[appareil];
+    Object.keys(liste).forEach(id => {
+      if (!states[id]) return;
+      const at = states[id].attributes || {};
+      entities.push({ id, name: at.friendly_name || id, device: appareil, area: null, platform: plateforme, key: liste[id][0], category: liste[id][1],
+        device_class: at.device_class || null, unit: at.unit_of_measurement || null, hidden: false });
+    });
+  });
+  // La voiture, la litière et la fontaine (A11, A12 ; ADR 0386) : sur le patron des robots.
+  Object.keys(COMPOSES_DEMO).forEach(appareil => {
+    const [plateforme, liste] = COMPOSES_DEMO[appareil];
     Object.keys(liste).forEach(id => {
       if (!states[id]) return;
       const at = states[id].attributes || {};
@@ -3844,6 +4045,10 @@ function indexDemo(states) {
       { id: 'alarme_sirene', name: etiquette('Alarme sirène'), area: 'entree', manufacturer: 'Démo', model: etiquette('Sirène'), firmware: null, via: 'pont_z2m', entry_type: null, integration: 'mqtt' },
       // La borne de recharge (chantier G3, E3).
       { id: 'borne', name: etiquette('Borne de recharge'), area: 'entree', manufacturer: 'Démo', model: etiquette('Borne de recharge'), firmware: null, via: null, entry_type: null, integration: 'demo' },
+      // La voiture, la litière et la fontaine (A11, A12 ; ADR 0386).
+      { id: 'voiture', name: etiquette('Voiture'), area: null, manufacturer: 'Démo', model: etiquette('Voiture électrique'), firmware: null, via: null, entry_type: null, integration: 'tesla_fleet' },
+      { id: 'litiere', name: etiquette('Litière'), area: 'sdb', manufacturer: 'Démo', model: etiquette('Litière autonettoyante'), firmware: null, via: null, entry_type: null, integration: 'petkit' },
+      { id: 'fontaine', name: etiquette('Fontaine'), area: 'cuisine', manufacturer: 'Démo', model: etiquette('Fontaine à eau'), firmware: null, via: null, entry_type: null, integration: 'petkit' },
       /* Les appareils des mesures (chantier Capteurs, § 9 ; C14, C16) : chacun PHYSIQUE, dans sa pièce — le thermomètre du salon, sa
        * température, son hygromètre et sa pile ; le capteur de chaque pièce ; la station du jardin, dans sa pièce du dehors (C17). */
       ...Object.keys(APPAREILS_MESURES_DEMO).map(id => ({ id, name: etiquette(APPAREILS_MESURES_DEMO[id][1]), area: APPAREILS_MESURES_DEMO[id][0], manufacturer: 'Démo',
@@ -4582,6 +4787,32 @@ const DISTRIBUTEURS_DEMO = {
     'sensor.granary_today_feeding_quantity_weight': ['today_feeding_quantity_weight', null],
   }],
 };
+/* La voiture, la litière et la fontaine (chantier du 20/11, A11 et A12 ; ADR 0386) : un appareil chacun, aux
+ * plateformes et aux clés de traduction lues dans le code des intégrations — Tesla Fleet pour la voiture, PetKit pour la litière et
+ * la fontaine. Loggia les reconnaît comme chez quelqu'un qui les a : par leur famille et leurs clés, jamais par leur nom. */
+const COMPOSES_DEMO = {
+  voiture: ['tesla_fleet', {
+    'sensor.voiture_batterie': ['charge_state_battery_level', null], 'sensor.voiture_autonomie': ['charge_state_battery_range', null],
+    'sensor.voiture_compteur': ['vehicle_state_odometer', 'diagnostic'], 'sensor.voiture_etat_de_charge': ['charge_state_charging_state', null],
+    'binary_sensor.voiture_cable': ['charge_state_conn_charge_cable', null], 'lock.voiture': ['vehicle_state_locked', null],
+    'lock.voiture_trappe': ['charge_state_charge_port_latch', null],
+    'binary_sensor.voiture_portiere_conducteur': ['vehicle_state_df', null], 'binary_sensor.voiture_portiere_passager': ['vehicle_state_pf', null],
+    'binary_sensor.voiture_alerte_pneu_avant_gauche': ['vehicle_state_tpms_soft_warning_fl', 'diagnostic'],
+    'sensor.voiture_pression_avant_gauche': ['vehicle_state_tpms_pressure_fl', 'diagnostic'], 'sensor.voiture_pression_avant_droite': ['vehicle_state_tpms_pressure_fr', 'diagnostic'],
+    'sensor.voiture_pression_arriere_gauche': ['vehicle_state_tpms_pressure_rl', 'diagnostic'], 'sensor.voiture_pression_arriere_droite': ['vehicle_state_tpms_pressure_rr', 'diagnostic'],
+    'device_tracker.voiture': ['location', null],
+  }],
+  litiere: ['petkit', {
+    'binary_sensor.litiere_bac_plein': ['waste_bin', null], 'binary_sensor.litiere_manque_de_litiere': ['sand_lack', null],
+    'sensor.litiere_niveau_de_litiere': ['litter_level', null], 'sensor.litiere_etat': ['litter_state', null], 'sensor.litiere_passages': ['times_used', null],
+  }],
+  fontaine: ['petkit', {
+    'binary_sensor.fontaine_manque_d_eau': ['lack_warning', null], 'sensor.fontaine_filtre': ['filter_percent', null],
+    'sensor.fontaine_jours_de_filtre': ['filter_left_days', null], 'switch.fontaine_pompe': ['power', null], 'button.fontaine_filtre_remplace': ['reset_filter', 'config'],
+  }],
+};
+/* Le portillon de la démo (A4, ADR 0386) : combien de fois on l'a verrouillé — il accroche une fois sur deux. */
+const PORTILLON_DEMO = { verrouillages: 0 };
 const APPAREIL_DIST = {
   dist_cuisine: { fabricant: 'Aqara', modele: 'ZNCWWSQ01LM' },
   dist_mangeoire: { fabricant: 'Aqara', modele: 'ZNCWWSQ01LM' },
@@ -5125,12 +5356,14 @@ const CLIM_CHA = 'climate.climatisation';
  * de scheduler-component qui commande aussi le radiateur du bureau. Le moteur les lit comme le serveur
  * (`programmeAllumeCha`, `concurrentsCha`) ; la fiche les nomme. */
 const PROGRAMME_POELE_CHA = 'switch.poele_timer';
+// Ses autres entités (17/11) : la fiche d'un thermostat montre les commandes et les capteurs de son appareil.
+const COMMANDES_POELE_CHA = ['select.poele_puissance', 'fan.poele_ventilateur', 'switch.poele_eco_stop', 'switch.poele_silence', 'sensor.poele_fumees', 'sensor.poele_entretien'];
 /** Ce que l'index pose d'un programme d'appareil : sa clé de traduction, qui le reconnaît (jamais le nom affiché). */
 const metaChauffageDemo = (id) => (id === PROGRAMME_POELE_CHA ? { key: 'timer' } : {});
 
 /** L'appareil d'une entité du chauffage, pour l'index ; null pour les autres. */
 function appareilChauffageDemo(id) {
-  if (id === POELE_CHA || id === PROGRAMME_POELE_CHA) return 'poele';
+  if (id === POELE_CHA || id === PROGRAMME_POELE_CHA || COMMANDES_POELE_CHA.includes(id)) return 'poele';
   const m = MODULES_CHA.find(x => x.select === id || x.interrupteur === id || x.puissance === id);
   return m ? m.appareil : null;
 }
@@ -6574,7 +6807,7 @@ function maisonEauDemo(states, variante = VARIANTE_EAU, t = Date.now()) {
 }
 
 /** `loggia/eau/etat` de la démo : le carnet, et ce qui a changé depuis le dernier relevé — un geste de la démo, au compte de la démo. */
-export function eauEtatDemo(states, cfg, t = Date.now()) {
+function eauEtatDemo(states, cfg, t = Date.now()) {
   const actions = (cfg && cfg.actions) || {}, vanne = actions.vanne || {}, cats = (cfg && cfg.categories) || {};
   const designee = typeof vanne.entite === 'string' ? vanne.entite : '';
   const suivies = [...new Set([...vannesEauDemo(states, designee), ...vannesEauDemo(states, '')])];
@@ -6804,8 +7037,14 @@ export function installerDemo(langue) {
       const lampes = [].concat(id || []).filter(lampeDemo);
       const autres = [].concat(id || []).filter(x => !lampeDemo(x));
       if (lampes.filter(x => gesteLumiereDemo(states, x, service, data || {})).length) el.hass = { ...el.hass, states };
-      // Un ventilateur rallumé dans un mode le garde (ticket #43).
-      if (service === 'turn_on' && data && data.preset_mode) toucher(autres, 'on', { preset_mode: data.preset_mode });
+      // Un ventilateur rallumé dans un mode le garde (ticket #43) ; un préréglage ou une vitesse le rallume (17/11).
+      if (domaine === 'fan' && service === 'set_preset_mode') toucher(autres, 'on', { preset_mode: (data || {}).preset_mode });
+      else if (domaine === 'fan' && service === 'set_percentage') {
+        const p = Number((data || {}).percentage) || 0;
+        toucher(autres, p > 0 ? 'on' : 'off', { percentage: p, preset_mode: null });
+      } else if (service === 'turn_on' && data && data.preset_mode) toucher(autres, 'on', { preset_mode: data.preset_mode });
+      // Allumé à une vitesse (la fiche du purificateur, ADR 0387) : en manuel, à ce cran.
+      else if (domaine === 'fan' && service === 'turn_on' && data && data.percentage != null) toucher(autres, 'on', { percentage: Number(data.percentage), preset_mode: null });
       else if (service === 'turn_on') toucher(autres, 'on');
       else if (service === 'turn_off') toucher(autres, 'off');
       else if (service === 'toggle') toucher(autres, states[id] && states[id].state === 'on' ? 'off' : 'on');
@@ -6861,9 +7100,24 @@ export function installerDemo(langue) {
       // Une serrure motorisee met deux bonnes secondes : sans ce passage par
       // `locking`, la demo montrerait un mouvement instantane qui n'existe pas.
       const lid = id || 'lock.porte_entree';
-      const vise = service === 'lock' ? 'locked' : 'unlocked';
-      toucher(lid, vise === 'locked' ? 'locking' : 'unlocking');
-      setTimeout(() => toucher(lid, vise), 2000);
+      /* Une serrure À CODE (A4, ADR 0386) : sans code au bon format, Home Assistant refuse (`add_default_code` lève une erreur de
+       * validation) et la serrure ne bouge pas. Le portillon de la démo prend n'importe quel code à quatre chiffres. */
+      const format = ((states[lid] || {}).attributes || {}).code_format;
+      if (format && !new RegExp(format).test(String((data || {}).code || ''))) {
+        return Promise.reject(Object.assign(new Error('Code for ' + lid + ' does not match ' + format), { code: 'service_validation_error' }));
+      }
+      if (service === 'open') {
+        // Tirer le pêne : la porte s'ouvre, puis la serrure revient « déverrouillée », comme une serrure qui tient la porte entrebâillée.
+        toucher(lid, 'opening');
+        setTimeout(() => toucher(lid, 'open'), 1500);
+        setTimeout(() => { if (states[lid] && states[lid].state === 'open') toucher(lid, 'unlocked'); }, 8000);
+      } else {
+        const vise = service === 'lock' ? 'locked' : 'unlocked';
+        // Le portillon accroche une fois sur deux en se verrouillant (la gâche frotte) : « Serrure bloquée » se montre ainsi.
+        const accroche = lid === 'lock.portillon' && vise === 'locked' && PORTILLON_DEMO.verrouillages++ % 2 === 0;
+        toucher(lid, vise === 'locked' ? 'locking' : 'unlocking');
+        setTimeout(() => toucher(lid, accroche ? 'jammed' : vise), 2000);
+      }
     } else if (domaine === 'media_player' || domaine === 'notify') {
       // Les lecteurs (chantier Médias, § 8) : chaque service de § 7.2 ; une annonce ne change aucun état.
       gesteMediaDemo(states, domaine, service, { ...(data || {}), entity_id: id }, Date.now()).forEach(([x, etat, attrs]) => toucher(x, etat, attrs));
@@ -6873,6 +7127,10 @@ export function installerDemo(langue) {
       /* Un module fil pilote (planning de chauffe) : l'état prend l'option si
        * le module la propose, et le moteur de la démo y lit un geste. */
       return choisirOptionChauffageDemo(contexteChauffage(), id, (data || {}).option);
+    } else if (domaine === 'select' && service === 'select_option' && COMMANDES_POELE_CHA.includes(id)) {
+      // La puissance du poêle (17/11) : elle prend l'option qu'elle propose.
+      const opt = (data || {}).option;
+      if (states[id] && (states[id].attributes.options || []).includes(opt)) toucher(id, opt);
     } else if (domaine === 'select' && service === 'select_option' && /^select\.(distributeur|mangeoire)_/.test(String(id))) {
       /* Le distributeur (ADR 0155), et la mangeoire de la variante `z2m` (passe bis de l'étape 2). START sur le select feed d'un
        * Aqara distribue sans que le select change d'état — Zigbee2MQTT le laisse vide ; le mode, lui, change, et le programme de
@@ -6886,6 +7144,11 @@ export function installerDemo(langue) {
       toucher(id, maintenant());
       if (id === 'button.granary_manual_feed') distribuerDemo(Number((states['number.granary_manual_feed_quantity'] || {}).state) || 1);
       if (id === 'button.granary_desiccant_reset') toucher('sensor.granary_remaining_desiccant', 30);
+    } else if (domaine === 'button' && service === 'press' && id === 'button.fontaine_filtre_remplace') {
+      // Le filtre de la fontaine remplacé (A12, ADR 0386) : il repart à neuf, trente jours devant lui.
+      toucher(id, maintenant());
+      toucher('sensor.fontaine_filtre', 100);
+      toucher('sensor.fontaine_jours_de_filtre', 30);
     }
     /* Un chauffage touché d'ailleurs — une consigne, l'interrupteur d'un
      * module — : le moteur du chauffage le lit, comme le serveur suit l'état
@@ -7082,6 +7345,9 @@ export function installerDemo(langue) {
       /* Les minuteurs d'extinction, comme le vrai composant (`minuteurs.py`) :
        * une heure de fin par appareil, et l'heure du serveur pour le décompte. */
       if (msg && msg.type === 'loggia/minuteurs/etat') return Promise.resolve(minuteursDemo());
+      // Le planning des purificateurs (ADR 0387), comme `purificateurs.py`, en mémoire.
+      if (msg && msg.type === 'loggia/purificateurs/etat') return Promise.resolve(etatPurificateursDemo());
+      if (msg && msg.type === 'loggia/purificateurs/regler') return reglerPurificateurDemo(msg, states);
       if (msg && msg.type === 'loggia/minuteurs/poser') {
         const r = minuteursPoser(msg.entity_id, msg.minutes);
         minuteurDemo(msg.entity_id, msg.minutes);

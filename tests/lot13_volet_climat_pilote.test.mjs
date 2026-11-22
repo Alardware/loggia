@@ -78,7 +78,8 @@ test('la fiche s’ouvre par la surface, premier enfant, nommée de ce que la ca
     // `nom` et `sub` sont ce que la carte ÉCRIT, sous l'icône : le nom de la
     // surface est le texte affiché, pas un résumé fait pour l'occasion.
     // ASSERTION MODIFIÉE (passe téléphone, tâche 4) : le nom et la phrase du thermostat et du fil pilote portent les classes de la grille commune ; ce qu'ils disent ne change pas.
-    assert.ok(f.includes('<div style={RM_NAME}>{nom}</div>') || f.includes('<div className="o-gab-nom" style={RM_NAME}>{nom}</div>'), nom + ' : le nom affiché n’est plus `nom`');
+    // ASSERTION MODIFIÉE (12/11, audit) : le nom d'un cover sans jauge porte la classe de la grille commune (deux lignes sur la carte étroite, E6).
+    assert.ok(f.includes('<div style={RM_NAME}>{nom}</div>') || f.includes('<div className="o-gab-nom" style={RM_NAME}>{nom}</div>') || f.includes("<div className={gestes.placer ? undefined : 'o-gab-nom'} style={RM_NAME}>{nom}</div>"), nom + ' : le nom affiché n’est plus `nom`');
     assert.ok(/<div (className="o-gab-phrase" )?style=\{\{ \.\.\.RM_SUB, [^\n]*\}\}>\{sub\}<\/div>/.test(f), nom + ' : l’état affiché n’est plus `sub`');
   }
 });
@@ -86,11 +87,15 @@ test('la fiche s’ouvre par la surface, premier enfant, nommée de ce que la ca
 test('« Ouvrir Volet salon » est le bouton qui lève le volet, et lui seul', () => {
   const volet = corps('RoomCoverCard');
   // ASSERTION MODIFIÉE (19/10) : chaque geste est celui que le cover ACCEPTE (`gestesCover`) — `envoyer` le fait partir, avec son avance.
-  for (const [mot, geste] of [['Ouvrir', 'envoyer(gestes.monter, 100);'], ['Stop', 'envoyer(gestes.stop, null);'], ['Fermer', 'envoyer(gestes.descendre, 0);']]) {
+  for (const [mot, geste] of [['Stop', 'envoyer(gestes.stop, null);'], ['Fermer', 'envoyer(gestes.descendre, 0);']]) {
     assert.ok(volet.includes(`<button aria-label={tr('${mot}') + ' ' + nom} title={tr('${mot}')} onClick={(e) => { e.stopPropagation(); ${geste} }}`),
       `« ${mot} » ne commence plus par le mot de sa bulle, ne nomme plus le volet, ou n’est plus son propre geste`);
   }
-  assert.equal(compter(volet, "tr('Ouvrir') + ' ' + nom"), 1, 'la carte et le bouton « Ouvrir » portent de nouveau le même nom');
+  // ASSERTION MODIFIÉE (21/11, ADR 0385) : « Ouvrir » d'un portail ou d'un garage se fait en deux temps — armé, son nom et son glyphe disent « Confirmer ? » ;
+  // non armé, il porte toujours le mot de sa bulle, nomme le volet et lance `demander` (le geste qui OUVRE demande ; fermer et arrêter partent seuls).
+  assert.ok(volet.includes("<button aria-label={(arme ? tr('Confirmer ?') : tr('Ouvrir')) + ' ' + nom} title={arme ? tr('Confirmer ?') : tr('Ouvrir')} onClick={(e) => { e.stopPropagation(); if (arme) conf.confirmer(); else demander(gestes.monter, 100); }}"),
+    '« Ouvrir » ne nomme plus le volet, ou n’est plus son propre geste');
+  assert.equal(compter(volet, "tr('Ouvrir')) + ' ' + nom"), 1, 'la carte et le bouton « Ouvrir » portent de nouveau le même nom');
   /* Un module fil pilote découvert n'a pas de consigne : ses − / + changent
    * son MODE, et le disent (plan 2 du chantier Chauffage, tâche 7) ; une zone
    * décrite à la main garde ses mots. Chacun nomme l'appareil. */
@@ -122,7 +127,8 @@ test('les commandes passent au-dessus de la surface, le dessin laisse passer le 
   const volet = corps('RoomCoverCard');
   assert.ok(/\nconst RM_BTN = \{ position: 'relative', /.test(APP), 'RM_BTN n’est plus positionné : chaque bouton passerait sous la surface');
   // ASSERTION MODIFIÉE (19/10) : la classe et le style de chaque bouton viennent de `bouton(g)` — RM_BTN, inerte s'il ne sait pas.
-  assert.ok(!rangee(volet, 'envoyer(gestes.monter, 100)').includes("position: 'relative'"), 'la rangée Ouvrir / Stop / Fermer couvre la surface : l’écart entre deux boutons ne fait plus rien');
+  // ASSERTION MODIFIÉE (21/11, ADR 0385) : « Ouvrir » passe par `demander` (la confirmation d'un portail).
+  assert.ok(!rangee(volet, 'demander(gestes.monter, 100)').includes("position: 'relative'"), 'la rangée Ouvrir / Stop / Fermer couvre la surface : l’écart entre deux boutons ne fait plus rien');
   assert.ok(volet.includes("className: 'o-rmbtn', style: { ...RM_BTN,"), 'Ouvrir, Stop ou Fermer ne tient plus sa position de RM_BTN');
   assert.equal(compter(volet, '{...bouton(gestes.'), 3, 'Ouvrir, Stop ou Fermer ne tient plus sa position de RM_BTN');
 

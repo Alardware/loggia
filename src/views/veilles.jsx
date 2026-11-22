@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { cvName, RegleEntete, usePli , useEtatServeur, ListeChoix, BottomSheet, EntPicker } from '../ui.jsx';
 import { ZONE_REGLAGES, CAPITALES, MONO, quandCourt } from './parcommun.jsx';
+import { ChampNombre } from './presence.jsx';
 import { niveauPile, couleurNiveau, SEUIL_CO2 } from '../attention.js';
 import { tr, comparerTextes } from '../i18n.js';
 import { raisonEchec } from '../refus.js';
@@ -193,9 +194,10 @@ export function VeillesReglages({ hass, cardSt }) {
           <div id="veilles-co2" style={ZONE_REGLAGES}>
             <div style={ligne}>
               <span style={{ ...label, minWidth: 68 }}>{tr('Au-delà de')}</span>
-              <input aria-label={tr('Seuil de CO₂, en ppm')} type="number" value={co2.seuil != null ? co2.seuil : SEUIL_CO2} min={400} max={3000} step={50}
-                onChange={e => enregistrer({ co2: { seuil: Math.max(400, Math.min(3000, Number(e.target.value) || SEUIL_CO2)) } })}
-                style={{ ...champ, width: 88 }} />
+              {/* Le seuil se TAPE (audit du 12/11, B3). Borné à chaque frappe, « 1200 » devenait 400 dès le « 1 », puis 4002, puis
+                * 3000 : seules les flèches du champ marchaient. Il part en quittant le champ, ou par Entrée (`ChampNombre`). */}
+              <ChampNombre nom={tr('Seuil de CO₂, en ppm')} valeur={co2.seuil != null ? co2.seuil : SEUIL_CO2} min={400} max={3000} pas={50}
+                onValide={(n) => enregistrer({ co2: { seuil: n } })} style={{ ...champ, width: 88 }} />
               <span style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 700 }}>ppm</span>
             </div>
             <div style={{ marginTop: 14 }}>
@@ -262,9 +264,10 @@ export function VeillesReglages({ hass, cardSt }) {
             </div>
             <div style={{ marginTop: 14 }}>
               <div style={{ ...label, marginBottom: 8 }}>{tr('Capteurs désignés')}</div>
+              {/* Au vouvoiement (audit du 12/11) : le français de Loggia vouvoie, « pointe » était la seule phrase de l'onglet à tutoyer. */}
               {designes.length === 0 && (
                 <div style={{ fontSize: 12, color: 'var(--o-text3)', fontWeight: 600, marginBottom: 8 }}>
-                  {tr('Aucun capteur désigné : pointe le capteur d’usure d’un filtre, d’une brosse, ou le niveau d’un réservoir — le plus souvent un pourcentage restant.')}
+                  {tr('Aucun capteur désigné : pointez le capteur d’usure d’un filtre, d’une brosse, ou le niveau d’un réservoir — le plus souvent un pourcentage restant.')}
                 </div>
               )}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>

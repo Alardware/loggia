@@ -139,13 +139,17 @@ test('coupée : « Coupée », depuis quand ; un minuteur qui tourne : sa fin, +
   await poser();
   const coupee = fiche(maison({ pc: 'off', depuis: a(20, 40) }), PC);
   assert.ok(/<span style="font-size:clamp\(20px, calc\(100cqi \/ \(0\.64 \* 6\)\), calc\(34px \* var\(--o-texte, 1\)\)\);font-weight:800;color:var\(--o-text2\)">Coupée<\/span>/.test(coupee) && coupee.includes('>Depuis 20:40<'));
-  const fin = Math.floor(Date.now() / 1000) + 30 * 60;   // à la seconde : « dans 30 min », pas 31
+  /* L'heure est FIGÉE, à la seconde ronde, et passée à la fiche (`maintenant`, sa propriété faite pour les tests). Lue à
+   * l'horloge réelle, une seconde qui basculait entre la pose du minuteur et le rendu donnait « dans 29 min 59 s » : le test
+   * tombait une fois de temps en temps, machine chargée (15/11). Le décompte à la seconde se joue dans decompte_minuteur. */
+  const T = Math.floor(Date.now() / 1000) * 1000;
+  const fin = T / 1000 + 30 * 60;   // à la seconde : « dans 30 min », pas 31
   await poser({ minuteurs: { [PC]: { fin, duree: 30 } } });
   // Coupée, le minuteur que le sondage tient encore est périmé (B3) : « Disponible… », les durées inertes, ni « Se coupe à » ni « +1 h ».
-  const fantome = fiche(maison({ pc: 'off', depuis: a(20, 40) }), PC);
+  const fantome = fiche(maison({ pc: 'off', depuis: a(20, 40) }), PC, { props: { maintenant: T } });
   assert.ok(fantome.includes('>Disponible une fois la prise allumée.<') && !fantome.includes('>Se coupe à') && !fantome.includes('>+1 h</button>') && !fantome.includes('>+15 min</button>'));
   for (const d of ['15 min', '30 min', '1 h', '2 h']) assert.ok(new RegExp('<button type="button" aria-disabled="true" style="[^"]*opacity:0[.]4[^"]*">' + d + '</button>').test(fantome), 'la puce ' + d + ' est inerte');
-  const html = fiche(maison(), PC);
+  const html = fiche(maison(), PC, { props: { maintenant: T } });
   const h = new Date(fin * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   assert.ok(html.includes('>Se coupe à ' + h + ' · dans 30\u00A0min<'), 'la fin, et le temps qu’il reste — « 30 » et « min » ne se séparent pas (F7)');
   assert.ok(html.includes('>+15 min</button>') && html.includes('>+1 h</button>') && html.includes('>Annuler</button>'));

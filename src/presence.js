@@ -34,3 +34,13 @@ export function motPresence(st, maison = null) {
   if (l.cle === 'inconnu') return tr('Inconnu');
   return l.zone;
 }
+
+/** Les initiales d'une personne sans photo, pour l'avatar du bandeau de l'Accueil (audit du 12/11 : un anneau vide).
+ * Deux lettres en capitales : la première de chacun des deux premiers mots, ou les deux premières d'un prénom seul
+ * (« Camille » → « CA », comme la carte Présence et l'aperçu validé le 12/11). Écrite ici : importer cartegeo.js
+ * tirerait traceur.js dans le démarrage, pour une ligne. */
+export function initialesPersonne(nom) {
+  const mots = String(nom || '').trim().split(/\s+/).filter(Boolean);
+  const lettres = mots.length > 1 ? mots.slice(0, 2).map((m) => Array.from(m)[0]) : Array.from(mots[0] || '').slice(0, 2);
+  return lettres.join('').toUpperCase();
+}

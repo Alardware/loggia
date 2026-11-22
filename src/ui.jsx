@@ -351,14 +351,18 @@ export function Gauge({ pct, color, h = 4, track = 'var(--o-bd1)', style, liquid
  * Le nombre bascule (`FlipText`) : ces tuiles changent sous les yeux, et un
  * chiffre qui se remplace d'un coup ne se voit pas.
  */
-export function MetricTile({ caption, value, unit, icon, tone = 'var(--o-text)', pct = null, style }) {
+/* `serre` (audit du 12/11) : la tuile d'une rangée de téléphone, où trois se partagent 360 px — 12 px de rembourrage, le libellé
+ * sans capitales ni espacement et sans glyphe : « AUTOSUFFISANCE » en capitales espacées ne tenait pas dans un tiers de ligne. */
+export function MetricTile({ caption, value, unit, icon, tone = 'var(--o-text)', pct = null, style, serre = false }) {
   return (
-    <div style={{ padding: 16, borderRadius: 'var(--o-radius,18px)', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: 'var(--o-shadow)', display: 'flex', flexDirection: 'column', minWidth: 0, ...style }}>
+    <div style={{ padding: serre ? 12 : 16, borderRadius: 'var(--o-radius,18px)', background: 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))', border: 'var(--o-bw,1px) solid var(--o-bd2)', boxShadow: 'var(--o-shadow)', display: 'flex', flexDirection: 'column', minWidth: 0, ...style }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {icon && <Fi i={icon} size={13} color="var(--o-text3)" />}
-        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-text3)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{caption}</span>
+        {icon && !serre && <Fi i={icon} size={13} color="var(--o-text3)" />}
+        <span style={serre ? { fontSize: 10.5, fontWeight: 700, color: 'var(--o-text3)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+          : { fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-text3)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{caption}</span>
       </div>
-      <div style={{ marginTop: 8, fontSize: 20, fontWeight: 800, color: tone, display: 'flex', alignItems: 'baseline', gap: 5, fontVariantNumeric: 'tabular-nums' }}>
+      {/* Serrée, une unité longue (« gCO₂eq/kWh ») passe sous le chiffre plutôt que de sortir de la tuile. */}
+      <div style={{ marginTop: 8, fontSize: serre ? 18 : 20, fontWeight: 800, color: tone, display: 'flex', flexWrap: serre ? 'wrap' : undefined, alignItems: 'baseline', columnGap: 5, fontVariantNumeric: 'tabular-nums' }}>
         <FlipText live text={String(value)} />
         {unit && <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text3)' }}>{unit}</span>}
       </div>
@@ -405,7 +409,7 @@ export function FlipText({ text, style, live = false }) {
  * endroit »), puis SUR la ligne d'en-tête, en dernier, à la taille de ses
  * voisins (« pourquoi ils ne sont pas alignés ? et horizontalement ») : 34 px,
  * rayon 10, le fond de l'épingle. Elle ferme la feuille qui la contient. */
-const CROIX = <svg aria-hidden="true" focusable="false" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>;
+export const CROIX = <svg aria-hidden="true" focusable="false" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>;
 /* Rendre INERTE tout ce qui n'est pas la feuille (audit du 27/09).
  *
  * Le piège à focus ne retenait que la touche Tab. Le curseur virtuel d'un
@@ -481,13 +485,18 @@ export function useIdTitreFeuille() {
   }, [ctx]);
   return id;
 }
+/* Le DESSIN de la croix commune (audit du 12/11, lot 5c ; ADR 0374). Trois croix ne ferment pas la feuille mais un panneau posé
+ * DEDANS — la fiche d'un rendez-vous, le formulaire d'un événement, celui d'un rappel — : `CroixFeuille` fermerait la feuille
+ * entière, elles gardent donc leur bouton et leur geste. Elles avaient aussi gardé leur dessin (28 px carrée, 30 px rondes) ;
+ * elles prennent celui-ci, et son glyphe (`CROIX`). */
+export const DESSIN_CROIX = { width: 34, height: 34, borderRadius: 10, flexShrink: 0, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text1)' };
 export function CroixFeuille({ style = null }) {
   const fermer = useContext(FermerCtx);
   return (
     /* « Fermer la fiche » (lot 7 de l'audit du 28/10, V7) : dans la fiche d'un volet, un lecteur d'écran annonçait deux
      * « Fermer » — la croix, et « Fermer Volet salon » qui ferme le volet. */
     <button type="button" data-croix="" onClick={() => { if (fermer) fermer(); }} aria-label={tr('Fermer la fiche')} title={tr('Fermer la fiche')}
-      style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text1)', ...style }}>{CROIX}</button>
+      style={{ ...DESSIN_CROIX, ...style }}>{CROIX}</button>
   );
 }
 /* Une ligne de titre simple : le titre à gauche, la croix à droite. */
@@ -628,7 +637,10 @@ export function BottomSheet({ onClose, children, opaque = false, onglets = false
   // Le filet (si l'animation ne se declenche pas) est ANNULE quand elle se
   // termine : sinon `onClose` partait deux fois a chaque fermeture (audit 18/09).
   const filet = useRef(null);
-  const close = () => { if (closing) return; setClosing(true); filet.current = setTimeout(onClose, 420); };
+  /* En mouvement réduit, l'animation de sortie est coupée (index.css, `* { animation: none }`) : son `animationend`
+   * n'arrive jamais, et la feuille restait figée 0,42 s, le temps du filet, avant de disparaître (audit des thèmes du
+   * 13/11, V7). Elle se ferme tout de suite. */
+  const close = () => { if (closing) return; setClosing(true); if (REDUCE_MOTION) { onClose(); return; } filet.current = setTimeout(onClose, 420); };
   /* Le retour à l'accueil ferme les feuilles OUVERTES, et il ne peut pas en
    * tenir la liste : elles naissent dans une dizaine d'endroits, dans des
    * composants qui ne se connaissent pas. Chacune s'auto-ferme donc sur un
@@ -1064,7 +1076,7 @@ export function ListeChoix({ value, options, onChange, label, style = null, chil
   const plein = !!(style && style.width === '100%');
   return (
     <span ref={wrapRef} style={{ position: 'relative', display: plein ? 'flex' : 'inline-flex', width: plein ? '100%' : undefined, maxWidth: '100%', minWidth: 0 }}>
-      <button ref={btnRef} type="button" onClick={(e) => (open ? fermer(false) : ouvrir(e.detail === 0))}
+      <button ref={btnRef} type="button" className="o-doigt" onClick={(e) => (open ? fermer(false) : ouvrir(e.detail === 0))}
         onKeyDown={(e) => { if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); ouvrir(true); } }}
         aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? base + '-l' : undefined}
         aria-label={nom || nomBouton} title={title || undefined} disabled={disabled}

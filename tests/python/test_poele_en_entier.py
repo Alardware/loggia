@@ -171,7 +171,9 @@ def test_un_poele_seul_suffit_au_passage_horaire(creer, monkeypatch):
     ev = sys.modules["homeassistant.helpers.event"]
     poses = []
     monkeypatch.setattr(ev, "async_track_time_interval", lambda _h, rappel, pas: poses.append(pas) or (lambda: None))
-    v = creer({}, {ENTRETIEN: heures(38)})
+    # ASSERTION MODIFIEE (21/11, ADR 0384) : la sauvegarde et la fuite de nuit, allumees par defaut, posent le
+    # passage horaire a elles seules ; on les eteint pour que le poele soit seul a le demander.
+    v = creer({"sauvegarde": {"actif": False}, "fuite_nuit": {"actif": False}}, {ENTRETIEN: heures(38)})
     lancer(v._async_reabonner())
     assert poses == [], "un registre illisible : aucun compteur, aucun passage"
     poele(monkeypatch)

@@ -1,5 +1,7 @@
 /* La carte d'une entité sans carte à elle.
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
+import { Suspense } from 'react';
+import { lazyRecharge } from '../recharge.js';
 import { LAVIS } from '../theme.js';
 import { commanderService } from '../actions.js';
 import { cvDomain, cvName, Surface, nomCarte, Fi } from '../ui.jsx';
@@ -10,12 +12,17 @@ import { CLASSES_MOUVEMENT, couleurPile, niveauPile } from '../attention.js';
 import { LISERE } from '../styles.js';
 import { Ico } from '../icones.jsx';
 import { tr } from '../i18n.js';
+import { quandLumiere } from '../lumieres.js';
+import { haWeatherLabel } from '../wxutil.jsx';
 import { retenirModeVentilo, chargeAllumage } from '../ventilo.js';
 import { useGardeSwitch, decMax, iconeChoisie, hx, lavisCarte } from '../app/noyau.jsx';
 import { pileDe } from '../appareils/fiches.jsx';
 import { cvIcoEntite, OUVRANT_DCS, texteDate, PlugIcon } from '../cartescustom/cartes.jsx';
-import { BIN_ETATS, RM_CARD, IlluOuvrant, RM_ICO, RmBascule, PileRepere, RM_NAME, RM_SUB, JaugePile, RM_BTN } from './briques.jsx';
-import { lireNombre } from './mesure.jsx';
+import { BIN_ETATS, RM_CARD_HAUT, RM_SOUS_PLAQUE, RM_GAUCHE, RM_ICO, RmBascule, PileRepere, RM_NAME, RM_SUB, JaugePile, RM_BTN, ChiffreHaut } from './briques.jsx';
+import { lireNombre, ChiffreMesure } from './mesure.jsx';
+
+/* La tuile d'une OUVERTURE (ADR 0388, ses maquettes du 22/11) : chargée à la demande — le démarrage n'en porte que l'adresse. */
+const CarteOuvertureContent = lazyRecharge(() => import('../carteouverture.jsx'));
 
 
 function RoomGenericCard({ id, hass, onOpen, label = null }) {
@@ -43,6 +50,8 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
      * fiche demande ; la carte ne coupe pas d'un appui. Une erreur sans état ne
      * garde rien : un serveur trop vieux ne gêne pas indéfiniment. */
     if (dom === 'switch' && onOpen && appuiBascule({ on: actif, garde: gs.garde, ouvrable: true }) === 'fiche') { onOpen(id); return; }
+    // Une serrure à code (A4, ADR 0386) : sa fiche demande le code ; sans lui, Home Assistant refuse sans bouger.
+    if (dom === 'lock' && a.code_format && onOpen) { onOpen(id); return; }
     const nv = !actif; setOv(nv);
     if (dom === 'lock') call('lock', nv ? 'lock' : 'unlock');
     // Un ventilateur se rallume dans son dernier MODE (ticket #43, ventilo.js).
@@ -56,14 +65,20 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   const ico = iconeChoisie(id) || (dom === 'camera' ? 'camera' : cvIcoEntite(dom, id, st, nom));
   const etatsBin = BIN_ETATS()[a.device_class] || null;
   const danger = dom === 'binary_sensor' && !!(etatsBin && etatsBin[2]) && s === 'on';
-  // Un ouvrant (porte, fenetre, garage, portail) : la carte d'avant, plus son
-  // illustration en filigrane, qui suit l'etat (retour user du 15/09 : « comme
-  // pour les plantes » — pas de bouton, pas de duree).
+  // Un ouvrant (porte, fenetre, garage, ouvrant sans nom) : sa tuile, celle de ses maquettes du 22/11 (ADR 0388).
   const ouvrant = dom === 'binary_sensor' && OUVRANT_DCS.indexOf(a.device_class) >= 0;
-  const ouvert = ouvrant && !mort && s === 'on';
   // La pile d'un capteur sans fil, lue dans son capteur soeur : le repere du
   // coin haut droit quand la carte n'a ni interrupteur ni mesure a y mettre.
   const pile = (dom === 'binary_sensor' || dom === 'sensor') && !mort ? pileDe(S, id) : null;
+  /* UNE OUVERTURE A SA TUILE (ADR 0388) : la pile en haut à droite, l'état et depuis quand, le dessin en bas à droite, l'ambre en
+   * entier quand elle est ouverte (carteouverture.jsx). Le temps qu'elle arrive, une carte vide de la même taille. */
+  if (ouvrant) {
+    return (
+      <Suspense fallback={<div className="o-rmcard" style={RM_CARD_HAUT} />}>
+        <CarteOuvertureContent id={id} hass={hass} nom={nom} ico={ico} pile={pile} onOpen={onOpen} />
+      </Suspense>
+    );
+  }
   // Une camera en direct est ALLUMEE, au sens de la carte : lavis, icone et
   // repere en bleu — la maquette entiere, pas seulement le sous-titre (retour
   // user du 14/09, deux fois : « pourquoi pas la couleur sur la carte »).
@@ -77,8 +92,9 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
   // barres quand c'est une pile (retour user du 19/09). Une mesure de la table
   // a sa carte (`RoomMesureCard`, chantier Capteurs, C6).
   let mesure = null, barres = null, subLu = null;
-  // Muet : « Indisponible » ; en rouge pour un capteur binaire (chantier Capteurs, C26), comme la carte d'une mesure.
-  if (mort) { sub = tr('Indisponible'); if (dom === 'binary_sensor') couleur = 'var(--o-bad)'; }
+  /* Muet : la règle de la lumière (`phraseLumiere`, lumieres.js ; audit du 12/11, lot 4, E24) — « Indisponible depuis 14:20 »,
+   * en rouge, quel que soit l'appareil ; le rouge ne valait que pour un capteur binaire (C26). Sans heure lisible, « Indisponible ». */
+  if (mort) { const q = st ? quandLumiere(st.last_changed) : null; sub = q ? tr('Indisponible depuis {h}', { h: q }) : tr('Indisponible'); couleur = 'var(--o-bad)'; }
   else if (dom === 'lock') { sub = s === 'locked' ? tr('Verrouillée') : s === 'unlocked' ? tr('Déverrouillée') : s === 'locking' ? tr('Verrouillage…') : s === 'unlocking' ? tr('Déverrouillage…') : s === 'jammed' ? tr('Bloquée') : String(s); teinte = 'ok'; couleur = actif ? 'var(--o-ok)' : 'var(--o-warn2)'; }
   else if (dom === 'camera') { sub = direct ? tr('En direct') : String(s); couleur = 'var(--o-accent-soft)'; }
   /* Le calme en neutre (chantier Capteurs, C26) : fermé, sans fumée, sans mouvement, intact — le gris doux ; ouvert, l'ambre du
@@ -101,16 +117,27 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
     // la ligne « Libellé · VERDICT » est partie avec la jauge (chantier Capteurs, C11).
     const n = lireNombre(s);
     const unite = a.unit_of_measurement || '';
-    mesure = n == null ? { v: String(s), u: '' } : { v: fmtN(n), u: unite };
-    if (a.device_class === 'battery' && n != null) {
-      barres = { n: Math.max(1, Math.min(5, Math.round(n / 20))), c: couleurPile(n, 'var(--o-ok)') };
-      const faible = niveauPile(n) != null;
-      sub = faible ? tr('Pile faible') : tr('Pile');
-      couleur = faible ? barres.c : 'var(--o-text3)';
+    /* Un état qui n'est pas un nombre (« partlycloudy », « charging ») n'est pas une mesure (audit du 12/11, lot 4, R4) : il
+     * s'écrivait en gros chiffres, tel quel, et débordait de la carte. Il se dit comme une phrase, sur la ligne d'état, dans la
+     * langue de l'écran quand on sait le traduire — un ciel par les mots de la météo (`haWeatherLabel`), sinon celui de Home
+     * Assistant (`formatEntityState`) —, tel que le capteur l'écrit sinon. Ni coin chiffré, ni chiffre à droite du nom. */
+    if (n == null) {
+      const brut = String(s);
+      const ha = hass && typeof hass.formatEntityState === 'function' ? hass.formatEntityState(st) : null;
+      sub = haWeatherLabel(brut) || (ha && ha !== brut ? ha : null) || brut || '—';
+      couleur = 'var(--o-text2)'; teinte = 'or';
     } else {
-      // Le nom de sa classe — qui se tait quand le nom de la carte le dit déjà (« Qualité de l'air » deux fois, audit du 19/10).
-      const nc = nomClasse(a.device_class, unite);
-      sub = (nc && !nomDitFamille(nom, nc) ? nc : '') || unite || tr('Mesure'); couleur = 'var(--o-text3)'; teinte = 'or';
+      mesure = { v: fmtN(n), u: unite };
+      if (a.device_class === 'battery') {
+        barres = { n: Math.max(1, Math.min(5, Math.round(n / 20))), c: couleurPile(n, 'var(--o-ok)') };
+        const faible = niveauPile(n) != null;
+        sub = faible ? tr('Pile faible') : tr('Pile');
+        couleur = faible ? barres.c : 'var(--o-text3)';
+      } else {
+        // Le nom de sa classe — qui se tait quand le nom de la carte le dit déjà (« Qualité de l'air » deux fois, audit du 19/10).
+        const nc = nomClasse(a.device_class, unite);
+        sub = (nc && !nomDitFamille(nom, nc) ? nc : '') || unite || tr('Mesure'); couleur = 'var(--o-text3)'; teinte = 'or';
+      }
     }
   }
   else if (dom === 'fan') { sub = actif ? (a.percentage != null ? tr('Vitesse {n} %', { n: Math.round(a.percentage) }) : tr('En marche')) : tr('Éteint'); couleur = actif ? 'var(--o-accent-soft)' : 'var(--o-text3)'; }
@@ -147,12 +174,16 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
      * un clic sur le nom, l'icône ou la jauge ouvre la fiche, comme avant.
      * Jamais `pointerEvents: 'auto'` dessous : en édition, la grille rend la
      * carte inerte par un `none` hérité, qu'un `auto` percerait. */
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')}
-      style={{ ...RM_CARD, position: 'relative', cursor: ouvrable ? 'pointer' : 'default',
+    /* LE NOM SOUS LA PLAQUE (audit du 12/11) : sans commandes, la carte posait son nom et son état au pied (`space-between`), à
+     * 129 px du haut quand celui d'une lumière est à 69. Elle range désormais depuis le haut (`RM_CARD_HAUT`) ; la jauge d'une pile et
+     * « Voir le flux » descendent au pied par leur marge auto, le dessin d'un ouvrant reste où il est. Elle est aussi le conteneur
+     * de la grille commune (`o-gabarit`) : sur la carte étroite du téléphone SEULEMENT, son nom passe sur deux lignes au plus
+     * (`o-gab-nom`) — « Détecteur de monoxyde salon » finissait en « … » sur une carte qui a la place. */
+    <div className={'o-rmcard o-gabarit' + (mort ? ' o-panne' : '')}
+      style={{ ...RM_CARD_HAUT, position: 'relative', cursor: ouvrable ? 'pointer' : 'default',
         ...((allume && LAVIS) ? { background: lavisCarte((a) => `${lavisBase}${a})`) } : null),
         border: LISERE }}>
       {ouvrable && <Surface onClick={() => onOpen(id)} label={nomCarte(nom, valeur, subLu || sub)} />}
-      {ouvrant && <IlluOuvrant type={a.device_class === 'window' ? 'fenetre' : 'porte'} ouvert={ouvert} />}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         {/* La plaque. Positionnée, elle passerait devant la surface : elle
           * laisse filer le clic (lot 13 de l'audit du 03/10). Plus rien ne s'y
@@ -164,8 +195,10 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
         </span>
         {(togglable || dom === 'lock') && !mort
           ? <RmBascule on={actif} nom={nom} onToggle={basculer} />
+          /* La mesure (audit du 12/11) : en haut à droite sur la carte étroite seulement (1c, `ChiffreHaut`) ; la carte large
+            * l'écrit sur la ligne du nom, à droite, comme toutes les mesures — « Qualité de l'air » l'écrivait seule en haut. */
           : (dom === 'sensor' && mesure && !mort)
-            ? <span style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginTop: 4, fontSize: 22, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: 'var(--o-text)' }}>{mesure.v}{mesure.u ? <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)' }}>{mesure.u}</span> : null}</span>
+            ? <ChiffreHaut v={mesure.v} u={mesure.u || null} />
           : dom === 'camera'
             ? <span aria-hidden="true" style={{ color: direct ? icoTexte : 'var(--o-text3)', display: 'flex', alignItems: 'center', height: 26 }}><Fi i="video-camera" size={15} /></span>
             : pile != null ? <PileRepere n={pile} onOuvrir={ouvrable ? () => onOpen(id) : null} /> : null}
@@ -174,14 +207,19 @@ function RoomGenericCard({ id, hass, onOpen, label = null }) {
         * laisse alors filer le clic vers la surface, jauges comprises. Celui
         * d'une caméra porte « Voir le flux » : il reste dans le flux, sous la
         * surface, et seul le bouton se positionne (lot 13 de l'audit du 03/10). */}
-      <div style={voirFlux ? { marginTop: 14 } : { marginTop: 14, position: 'relative', pointerEvents: 'none' }}>
-        <div style={RM_NAME}>{nom}</div>
-        <div style={{ ...RM_SUB, color: couleur }}>{sub}</div>
-        {barres && !mort && <JaugePile barres={barres} />}
-        {voirFlux && (
-          <button type="button" onClick={(e) => { e.stopPropagation(); if (onOpen) onOpen(id); }} aria-label={tr('Voir le flux') + ' ' + nom} aria-haspopup="dialog" className="o-rmbtn" style={{ ...RM_BTN, marginTop: 11, width: '100%', position: 'relative' }}>{tr('Voir le flux')}</button>
-        )}
+      <div style={voirFlux ? { display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: RM_SOUS_PLAQUE } : { display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: RM_SOUS_PLAQUE, position: 'relative', pointerEvents: 'none' }}>
+        <div style={{ ...RM_GAUCHE, flex: '1 1 0%' }}>
+          <div className="o-gab-nom" style={RM_NAME}>{nom}</div>
+          <div style={{ ...RM_SUB, color: couleur }}>{sub}</div>
+        </div>
+        {dom === 'sensor' && mesure && !mort && <ChiffreMesure chiffre={mesure.v} unite={mesure.u} famille={null} />}
       </div>
+      {barres && !mort && <div style={{ marginTop: 'auto', position: 'relative', pointerEvents: 'none' }}><JaugePile barres={barres} /></div>}
+      {voirFlux && (
+        <div style={{ marginTop: 'auto' }}>
+          <button type="button" onClick={(e) => { e.stopPropagation(); if (onOpen) onOpen(id); }} aria-label={tr('Voir le flux') + ' ' + nom} aria-haspopup="dialog" className="o-rmbtn" style={{ ...RM_BTN, marginTop: 11, width: '100%', position: 'relative' }}>{tr('Voir le flux')}</button>
+        </div>
+      )}
     </div>
   );
 }

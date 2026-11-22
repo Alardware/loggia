@@ -56,7 +56,7 @@ from .chauffage_calcul import (JOURS, MINUTES_JOUR, changement_en_cours, changem
                                mode_voulu, prochain_changement)
 from .chauffage_config import (TEMPERATURE_MAX, TEMPERATURE_MIN, config_defaut, lire_config, lire_instant,
                                lire_reprises, nouvelle_reprise, poser_maison, poser_patch)
-from .chauffage_familles import (MUETS, commande, consigne_en_unite, deja, famille, interrupteurs_du_module,
+from .chauffage_familles import (MUETS, commande, consigne_en_unite, deja, deja_assez_chaud, famille, interrupteurs_du_module,
                                  lire_appareil, PLATEFORME_SCHEDULER, PLATEFORME_VELAIR, PREFIXE_CONSIGNE,
                                  concurrents_scheduler, entites_velair,
                                  historique_resume, mode_applicable, mode_chauffe, modes_permis, options_du_module,
@@ -113,6 +113,17 @@ PRESETS_AUTOMATIQUES = ("safety", "security", "power")
 # s'ecrit pas au journal pendant ce temps (audit du 19/10 : une ligne par radiateur
 # a chaque redemarrage, ~2 min d'absence).
 SILENCE_AU_DEMARRAGE = timedelta(minutes=5)
+
+# Un thermostat qui passe de lui-meme a l'arret — ni par Loggia, ni par une personne
+# connue de Home Assistant — n'est pas aussitot un geste : un poele qui s'eteint seul
+# (sa consigne depassee) publie `off` pendant son extinction et son refroidissement,
+# puis repart en veille (18/11, chez lui : 19 et 21 minutes, et chaque fois une
+# « reprise en main » qu'il ne comprenait pas). Le moteur attend, sans rien lui
+# envoyer ; toujours eteint au bout de ce temps, c'est un geste (ADR 0375).
+ATTENTE_EXTINCTION = timedelta(minutes=45)
+# Les mots du journal de ces deux retenues (ADR 0375).
+ETEINT_SEUL = "éteint de lui-même, on attend"
+DEJA_CHAUD = "déjà au-dessus de la consigne"
 
 # Les mots du journal : le francais ecrit, la cle que l'ecran traduira (plan 2).
 MOTS = {"confort": "Confort", "confort_1": "Confort −1", "confort_2": "Confort −2",
@@ -288,6 +299,10 @@ class LoggiaChauffage:
         self._defaits: dict[str, dict[str, Any]] = {}
         # Les `switch` du programme de chaque appareil pilote, ecoutes : {entity_id: cle} (30/10).
         self._programmes: dict[str, str] = {}
+        # Les thermostats eteints d'eux-memes, en attente (ADR 0375) : {cle: {"depuis", "jusqua"}}.
+        self._extinctions: dict[str, dict[str, Any]] = {}
+        # Ceux que le planning n'allume pas, leur mesure deja a la consigne : chaque mesure les reevalue.
+        self._au_chaud: set[str] = set()
         self._minuteur = None
         self._ecoute = None
         self._au_demarrage = None
@@ -679,7 +694,15 @@ class LoggiaChauffage:
         unite = unite_temperature(self.hass)
         lu = lire_appareil(fam, neuf.state, neuf.attributes, unite, self._decalage(c))
         if lu["signature"] == lire_appareil(fam, vieux.state, vieux.attributes, unite)["signature"]:
+            if cle in self._au_chaud:
+                # Eteint, sa mesure a la consigne : chaque mesure dit s'il est temps de l'allumer (ADR 0375).
+                self.hass.async_create_task(self.async_evaluer([cle], raison="mesure"))
             return                                  # la piece se rechauffe : ce n'est pas un geste
+        if (lu["mode"] != "arret" and self._extinctions.pop(cle, None) is not None
+                and self._ou_le_veut_loggia(cle, c, entite, neuf.state, dict(neuf.attributes or {}))):
+            # Eteint de lui-meme, il repart seul (sa veille), la ou Loggia le veut : pas un geste (ADR 0375).
+            self.hass.async_create_task(self.async_evaluer([cle], raison="retour"))
+            return
         if fam == "vtherm":
             avant = vieux.attributes.get("preset_mode") in PRESETS_AUTOMATIQUES
             apres = neuf.attributes.get("preset_mode") in PRESETS_AUTOMATIQUES
@@ -710,7 +733,33 @@ class LoggiaChauffage:
                 return                              # l'appareil se cherche encore
         if self._programme_de(entite, fam):
             return                                  # son programme allume (le Timer d'un poele) : pas un geste (30/10)
-        self.hass.async_create_task(self._async_geste(cle, entite, lu, getattr(ctx, "user_id", None)))
+        par = getattr(ctx, "user_id", None)
+        if cle not in self.reprises and self._ou_le_veut_loggia(cle, c, entite, neuf.state, dict(neuf.attributes or {})):
+            return                                  # deja la ou le planning le veut : rien a reprendre (ADR 0375)
+        if fam == "thermostat" and lu["mode"] == "arret" and par is None:
+            # Passe a l'arret sans qu'une personne de Home Assistant l'ait demande : peut-etre
+            # s'eteint-il de lui-meme. On attend avant d'y voir un geste (ADR 0375).
+            maintenant = self.maintenant()
+            self._extinctions[cle] = {"depuis": maintenant, "jusqua": maintenant + ATTENTE_EXTINCTION}
+            self.hass.async_create_task(self.async_evaluer([cle], raison="extinction"))
+            return
+        self.hass.async_create_task(self._async_geste(cle, entite, lu, par))
+
+    def _ou_le_veut_loggia(self, cle: str, c: dict[str, Any], entite: str, etat: Any, attrs: dict) -> bool:
+        """L'appareil est-il deja la ou le moteur le mettrait — sa reprise en main, sinon
+        le planning ? Alors un changement venu d'ailleurs n'a rien a reprendre (ADR 0375)."""
+        voulu = self._voulu(cle, c, entite, self.maintenant())
+        r = self.reprises.get(cle)
+        if voulu["source"] == "main" and r is not None:
+            if r.get("programme"):
+                return False
+            cible = {"mode": r.get("mode"), "temperature": r.get("temperature")}
+        else:
+            cible = {"mode": mode_applicable(voulu["mode"], modes_permis(c["famille"], attrs)), "temperature": None}
+        if cible["mode"] is None and cible["temperature"] is None:
+            return False
+        return deja(c["famille"], cible, etat, self._avec_pas(entite, attrs), c["temperatures"],
+                    unite_temperature(self.hass), self._decalage(c))
 
     # ── Le calcul, et l'ordre ──────────────────────────────────────────────
     async def async_evaluer(self, cles=None, raison: str | None = None) -> None:
@@ -825,6 +874,21 @@ class LoggiaChauffage:
                 await self.regles.noter(MODULE, "main", "reprendre le planning", cibles=[entite], n=0,
                                         motif="fin de la reprise en main")
         etat, attrs = self._attributs(entite)
+        self._au_chaud.discard(cle)
+        ext = self._extinctions.get(cle)
+        if ext is not None:
+            # Eteint de lui-meme (ADR 0375) : reparti, l'attente tombe ; son temps passe, toujours
+            # eteint et le planning sans changement depuis, c'etait un geste. Un changement du
+            # planning entre-temps aurait clos la reprise : le planning s'applique, simplement.
+            lu = lire_appareil(c["famille"], etat, attrs, unite_temperature(self.hass), self._decalage(c))
+            if lu["mode"] not in (None, "arret") or lu["temperature"] is not None:
+                self._extinctions.pop(cle, None)
+                ext = None
+            elif maintenant >= ext["jusqua"]:
+                self._extinctions.pop(cle, None)
+                if lu["mode"] == "arret" and self._fin_par_defaut(c, ext["depuis"]) > maintenant:
+                    await self._noter_geste(cle, c, entite, lu, None, maintenant)
+                ext = None
         voulu = self._voulu(cle, c, entite, maintenant)
         await self._suivre_montee(cle, c, voulu, etat, attrs, maintenant)
         r = self.reprises.get(cle)
@@ -881,6 +945,14 @@ class LoggiaChauffage:
                                         motif=self._motif({**c, "entite": entite}, voulu, maintenant),
                                         detail="son programme commande")
             return
+        if ext is not None and cible["mode"] != "arret":
+            # Eteint de lui-meme : rien ne part tant qu'on attend (ADR 0375). L'Arret passe.
+            if self._notes.get(cle) != ("eteint_seul",):
+                self._notes[cle] = ("eteint_seul",)
+                await self.regles.noter(MODULE, voulu["source"], "retenu", cibles=[entite], n=0,
+                                        motif=self._motif({**c, "entite": entite}, voulu, maintenant),
+                                        detail=ETEINT_SEUL)
+            return
         unite = unite_temperature(self.hass)
         if deja(c["famille"], cible, etat, attrs, c["temperatures"], unite, self._decalage(c)):
             self._notes.pop(cle, None)
@@ -890,6 +962,18 @@ class LoggiaChauffage:
         if (ordre is not None and ordre["cible"] == cible
                 and (maintenant - ordre["ts"]).total_seconds() < STABILISATION):
             return                                  # parti, l'appareil n'a pas encore repondu
+        if voulu["source"] != "main" and deja_assez_chaud(c["famille"], cible, etat, self._avec_pas(entite, attrs),
+                                                          c["temperatures"], unite, self._decalage(c)):
+            # Eteint, et sa mesure deja a la consigne : le planning ne l'allume pas (ADR 0375).
+            # Chaque mesure le reevalue (`_sur_etat`) ; sous la consigne, il s'allume. Une
+            # reprise en main, elle, demande qu'il chauffe : elle passe.
+            self._au_chaud.add(cle)
+            if self._notes.get(cle) != ("deja_chaud", cible["mode"]):
+                self._notes[cle] = ("deja_chaud", cible["mode"])
+                await self.regles.noter(MODULE, voulu["source"], "retenu", cibles=[entite], n=0,
+                                        motif=self._motif({**c, "entite": entite}, voulu, maintenant),
+                                        detail=DEJA_CHAUD)
+            return
         appels = commande(c["famille"], cible, etat, attrs, c["temperatures"], unite, self._decalage(c))
         if not appels:
             return
@@ -1235,6 +1319,8 @@ class LoggiaChauffage:
             fin = lire_instant((self.reprises.get(cle) or {}).get("fin"))
             if fin is not None:
                 instants.append(fin)
+        # La fin de l'attente d'un thermostat eteint de lui-meme (ADR 0375).
+        instants += [e["jusqua"] for e in getattr(self, "_extinctions", {}).values()]
         if self.cfg["maison"]["mode"] == "vacances":
             fin = lire_instant(self.cfg["maison"].get("vacances_fin"))
             if fin is not None:
@@ -1403,7 +1489,14 @@ class LoggiaChauffage:
         c = self.cfg["chauffages"].get(cle)
         if c is None:
             return
-        maintenant = self.maintenant()
+        self._extinctions.pop(cle, None)            # une personne a parle : plus rien a attendre
+        await self._noter_geste(cle, c, entite, lu, par, self.maintenant())
+        await self.async_evaluer([cle], raison="geste")
+
+    async def _noter_geste(self, cle: str, c: dict[str, Any], entite: str, lu: dict[str, Any], par: str | None,
+                           maintenant: datetime) -> None:
+        """La reprise en main d'un geste, et sa ligne au journal ; sans evaluer : l'evaluation,
+        verrou tenu, l'appelle aussi (un thermostat toujours eteint a la fin de son attente)."""
         fin = self._fin_par_defaut(c, maintenant)
         # Une consigne hors des bornes de Loggia (5 a 30 °C) est respectee, jamais
         # renvoyee : ramenee au minimum de l'appareil, elle repartait vers lui (25/10).
@@ -1417,7 +1510,6 @@ class LoggiaChauffage:
         await self._sauver_reprises()
         await self.regles.noter(MODULE, "main", "reprise en main", cibles=[entite], n=0,
                                 motif=self._motif_fin(fin), detail=GESTE_AILLEURS)
-        await self.async_evaluer([cle], raison="geste")
 
     async def async_reprendre_la_main(self, cle: str, *, mode: Any = None, temperature: Any = None,
                                       fin: Any = "prochain", par: str | None = None, nom: str = "",
@@ -1459,6 +1551,7 @@ class LoggiaChauffage:
             instant = maintenant + timedelta(minutes=fin)
         else:
             raise ValueError("fin : prochain, relance, 60, 120 ou 240")
+        self._extinctions.pop(cle, None)            # demandee a Loggia : elle passe, meme a un appareil eteint seul
         self.reprises[cle] = nouvelle_reprise(mode, temperature, instant, maintenant, par)
         await self._sauver_reprises()
         await self.regles.noter(MODULE, "main", "reprise en main", cibles=[entite], n=0,
@@ -1475,6 +1568,7 @@ class LoggiaChauffage:
         entite = self._entite(cle, c, self._entrees_par_id())
         if controle is not None and entite and not controle(entite):
             raise PermissionError("pas le droit de piloter %s" % entite)
+        self._extinctions.pop(cle, None)            # demande ici : le planning s'applique sans attendre (ADR 0375)
         if self.reprises.pop(cle, None) is not None:
             await self._sauver_reprises()
             await self.regles.noter(MODULE, "main", "reprendre le planning", cibles=[entite] if entite else [],
@@ -1868,6 +1962,9 @@ class LoggiaChauffage:
         defait = self._defaits.get(cle) if (c or {}).get("planning") and not programme else None
         if defait is not None:
             avertissements.append("ordre_defait")
+        # Eteint de lui-meme, le moteur attend avant d'y voir un geste (ADR 0375).
+        if (c or {}).get("planning") and cle in getattr(self, "_extinctions", {}):
+            avertissements.append("eteint_seul")
         # Un module fil pilote se nomme comme son APPAREIL (« Radiateur Chambre ») :
         # son `select` s'affiche sous ce nom suivi de celui de l'exposition
         # (« Radiateur Chambre Pilot wire mode » sous zigbee2mqtt). L'ecran nomme
@@ -1913,6 +2010,8 @@ class LoggiaChauffage:
             "poele": est_poele(plateforme),
             # Ce qu'il fait au lieu de son dernier ordre, perdu deux fois (30/10) : {"mode", "temperature" (°C), "depuis"}.
             "defait": defait,
+            # Le pas qu'il a REVELE sans en publier (30/10) : la jauge de la fiche y cale ses crans (17/11).
+            "pas": self._pas.get(entite) if entite else None,
             # Planning eteint, la carte commande le module elle-meme : avec l'option telle
             # qu'il l'ecrit, `select_option` refusant toute autre graphie.
             "options": options_du_module(attrs.get("options")) if fam == "fil_pilote" and entite else None,
@@ -1929,6 +2028,12 @@ class LoggiaChauffage:
         # La reprise telle qu'elle se garde, ses deux instants a l'heure de la maison.
         reprise = None if r is None else {k: self._a_l_heure_de_la_maison(v) if k in ("fin", "depuis") else v
                                           for k, v in r.items()}
+        # Eteint, sa mesure deja a la consigne : le planning ne l'allume pas encore (ADR 0375).
+        if (c.get("planning") and not sans_etat and voulu["source"] != "main" and "eteint_seul" not in avertissements
+                and deja_assez_chaud(c["famille"], {"mode": mode_applicable(voulu["mode"], permis), "temperature": None},
+                                     etat, self._avec_pas(entite, attrs), c["temperatures"],
+                                     unite_temperature(self.hass), self._decalage(c))):
+            avertissements.append("deja_chaud")
         sortie.update({"mode": voulu["mode"],
                        "applique": None if sans_etat else mode_applicable(voulu["mode"], permis),
                        "source": voulu["source"], "fin": self._a_l_heure_de_la_maison(fin),

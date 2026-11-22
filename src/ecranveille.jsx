@@ -5,27 +5,32 @@
  * cent-soixante-dix lignes vivaient au milieu du monolithe, entre une carte de
  * piece et la vue Objets.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { REDUCE_MOTION, Surface } from './ui.jsx';
 import { Ico } from './icones.jsx';
 import { WeatherIco, weatherEntity } from './wxutil.jsx';
 import { tr, locale } from './i18n.js';
-import { getHass, LOGGIA_INDEX, plateformeDe, voisinsDe, nomAppareilDe } from './state.js';
+import { getHass, LOGGIA_INDEX, plateformeDe, voisinsDe, nomAppareilDe, enBorne, enBornes } from './state.js';
 import { annoncerVeille } from './regard.js';
 import { usePrevisions } from './cartemeteo.jsx';
 import { typesPrevision, heuresMeteo } from './meteo.js';
 import { pointsAttention, couleurNiveau } from './attention.js';
 import { capteurVigilance } from './vigilance.js';
 import { habillagePiece } from './app/pieces.jsx';
-import { estDehors } from './app/noyau.jsx';
+import { estDehors, masqueDe } from './app/noyau.jsx';
 import { useWide } from './app/ecran.jsx';
 import { lireNombre } from './cartes/mesure.jsx';
+import { statutEnPanne, statutsEnPanne } from './borne.js';
+import { composesDe, alertesComposes } from './composes.js';
+import { soleilCouche } from './nuitecran.js';
 
 /* Toujours sombre, quel que soit le thème : c'est une veille. Le fond et
  * l'encre de la maquette du 01/11 ; ses gris sont des fractions de l'encre. */
 const FOND = '#04070d';
 const ENCRE = '#e6ecf7';
 const encre = (a) => `rgba(230,236,247,${a})`;
+// Aucun état (pas encore de Home Assistant) : un seul objet vide, stable d'un rendu à l'autre (audit du 12/11, B30).
+const SANS_ETATS = {};
 
 /* Réveiller l'écran (lot 13 de l'audit du 03/10). Le minuteur de la veille vit
  * dans l'App : il se réarme à tout `pointerdown` de la fenêtre. La caméra de la
@@ -151,20 +156,28 @@ export function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, notifs, as
    * alarme) et les scénarios — la veille se regarde, elle ne se pilote pas.
    * L'alarme déclenchée passe avant tout : elle prend la place du point. */
   const hass = hassProp || getHass();
-  const S = (hass && hass.states) || {};
+  // `SANS_ETATS` plutôt qu'un `{}` neuf à chaque tic : les mémos plus bas en dépendent (B30).
+  const S = (hass && hass.states) || SANS_ETATS;
   /* Les pièces de la configuration, lues ICI dans les états : l'Accueil n'est
-   * calculé que sur sa vue, et la veille s'allume depuis n'importe laquelle. */
-  const num = (id) => (id && S[id] ? lireNombre(S[id].state) : null);
-  const lues = (rooms || []).filter(r => r && r.room).map(r => {
-    const h = r.haid || {};
-    return { name: r.room, temp: num(h.temp), co2: num(h.co2), co2Id: h.co2 || null, co2Seuil: Number(h.co2seuil) > 0 ? Math.round(Number(h.co2seuil)) : null };
-  });
+   * calculé que sur sa vue, et la veille s'allume depuis n'importe laquelle.
+   * Sous `useMemo` (audit du 12/11, B30) : l'horloge redessine la veille chaque
+   * seconde, toute la nuit, et refaisait ces lectures — puis le point « À
+   * surveiller », qui parcourt deux fois toute la maison — pour un résultat qui
+   * ne change qu'avec les états, les pièces, l'alarme ou les notifications. */
+  const lues = useMemo(() => {
+    const num = (id) => (id && S[id] ? lireNombre(S[id].state) : null);
+    return (rooms || []).filter(r => r && r.room).map(r => {
+      const h = r.haid || {};
+      return { name: r.room, temp: num(h.temp), co2: num(h.co2), co2Id: h.co2 || null, co2Seuil: Number(h.co2seuil) > 0 ? Math.round(Number(h.co2seuil)) : null };
+    });
+  }, [S, rooms]);
   const idMeteo = weatherEntity(hass);
   const typesMeteo = typesPrevision(idMeteo ? S[idMeteo] : null);
   const parHeure = usePrevisions(hass, idMeteo, typesMeteo.heure ? 'hourly' : null);
   const prochaines = heuresMeteo({ etat: idMeteo ? S[idMeteo] : null, previsions: parHeure, maintenant: clock.getTime(), soleil: S['sun.sun'] || null })
     .filter(h => h.cle !== 'maint');
-  const large = useWide(760);
+  // Large au-delà de 760 px : le « téléphone » de la feuille va jusqu'à 760 INCLUS (`max-width: 760px` ; audit du 12/11, lot 5b).
+  const large = useWide(761);
   // Une rangée tient sur UNE ligne : quatre heures au téléphone, cinq ailleurs.
   const heures = prochaines.slice(0, large ? 5 : 4);
   const hm = clock.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
@@ -173,17 +186,24 @@ export function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, notifs, as
   const dateBrute = clock.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' });
   const dateStr = String(locale()).indexOf('fr') === 0 && clock.getDate() === 1 ? dateBrute.replace(/\b1\b/, '1er') : dateBrute;
   const un = (v) => v.toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  const pieces = lues.filter(r => r.temp != null && !estDehors(r.name)).slice(0, 6);
-  const point = (() => {
+  const pieces = useMemo(() => lues.filter(r => r.temp != null && !estDehors(r.name)).slice(0, 6), [lues]);
+  // Le point se recalcule avec ce qu'il lit (B30) : les états, les pièces lues, l'alarme, les notifications — pas l'horloge.
+  const point = useMemo(() => {
     if (ast === 'triggered') return { niveau: 'danger', icone: 'bell-ring', texte: tr('Alarme déclenchée') };
     const p = pointsAttention({
       S, pieces: lues.map(r => ({ nom: r.name, co2: r.co2, haid: r.co2Id, seuil: r.co2Seuil })),
       plateforme: plateformeDe, voisins: voisinsDe, nomAppareil: nomAppareilDe, vigilance: capteurVigilance(S, LOGGIA_INDEX),
+      // Les entités d'une voiture ou d'une litière ont leurs points (`autres`) : pas de « Défaut signalé » en double (ADR 0386).
+      masque: masqueDe,
+      borneEnPanne: statutEnPanne(enBorne(), S),
+      bornesEnPanne: statutsEnPanne(enBornes(), S),
+      // La voiture, la litière, la fontaine (A11, A12 ; ADR 0386), comme sur l'Accueil.
+      autres: alertesComposes(composesDe(LOGGIA_INDEX, S), S, { nuit: soleilCouche(getHass()) }),
     })[0];
     if (p) return { niveau: p.niveau, icone: p.icone || 'triangle-warning', texte: p.sous ? p.titre + ' · ' + p.sous : p.titre };
     const n = (notifs || []).find(x => x && x.c === 'var(--o-bad)');
     return n ? { niveau: 'danger', icone: 'triangle-warning', texte: n.t + ' · ' + n.m } : null;
-  })();
+  }, [S, lues, ast, notifs]);
   const tonPoint = point ? couleurNiveau(point.niveau) : null;
   return (
     /* La veille n'est pas un `role="button"` (lot 13 de l'audit du 03/10) : le
@@ -211,7 +231,10 @@ export function AmbientOverlay({ wx, wxFx, weatherTemp, weatherLabel, notifs, as
       * doigt. Anti burn-in : tout le contenu dérive ensemble, pied d'écran
       * compris ; la nuit, il baisse d'un ton. */}
     <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: large ? 40 : '40px 18px', boxSizing: 'border-box', pointerEvents: 'none', transform: `translate(${decal.x}px, ${decal.y}px)`, opacity: nuit ? .55 : 1, transition: REDUCE_MOTION ? 'opacity 2s ease' : 'transform 6s ease, opacity 2s ease' }}>
-      <div style={{ position: 'absolute', top: 'calc(24px + var(--o-safe-top, 0px))', right: 28, fontSize: 11, fontWeight: 700, color: encre(.3) }}>{tr('Touchez l’écran pour revenir')}</div>
+      {/* La seule consigne de l'écran se lit (audit du 12/11, lot 4, E28) : à 30 %, elle tenait 2,3 pour 1, et 1,6 la nuit sous
+        * le voile du bloc. Le jour, 62 % de l'encre (6,7 pour 1) ; la nuit, l'encre entière sous le voile de 55 % (5,4) —
+        * plus sombre que le jour, jamais plus claire que l'heure, en petit : pas une lampe dans la chambre. */}
+      <div style={{ position: 'absolute', top: 'calc(24px + var(--o-safe-top, 0px))', right: 28, fontSize: 11, fontWeight: 700, color: nuit ? ENCRE : encre(.62) }}>{tr('Touchez l’écran pour revenir')}</div>
       <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', lineHeight: .9 }}>
         <span style={{ fontSize: 'clamp(100px, 17vw, 220px)', fontWeight: 400, letterSpacing: '-.05em', fontVariantNumeric: 'tabular-nums' }}>{hm}</span>
         <span style={{ fontSize: 22, fontWeight: 600, color: encre(.55), margin: '14px 0 0 10px', fontVariantNumeric: 'tabular-nums' }}>{ss}</span>

@@ -11,6 +11,7 @@
  * crepuscule, pluie d'orage, pluie battante). Embarquees dans le bundle
  * plutot que servies depuis  : la demo et une installation neuve les
  * ont aussi. */
+import { meteoAnimee } from './calme.js';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 /* Le jeu SOMBRE en fichiers lui aussi (04/11) : 26 Ko de dessins dans le boot, qui n'avait plus que 2 Ko de
  * marge. Une image météo arrive par sa propre requête, comme le jeu clair depuis le 25/10. */
@@ -165,7 +166,8 @@ export function WeatherIco({ wx, size = 42, anime = true }) {
   const clair = useClair();
   const src = (clair && WX_CLAIR[wx]) || WX_METEO[wx] || wxCloudy;
   const nom = nomMeteo(WX_METEO[wx] ? wx : 'clouds');
-  if (!anime || REDUCE_MOTION) return <IcoFigee src={src} size={size} nom={nom} />;
+  // « Ciel animé » coupé ou animations réduites : l'icône ne bouge plus non plus (audit des thèmes du 13/11, V4).
+  if (!anime || REDUCE_MOTION || !meteoAnimee()) return <IcoFigee src={src} size={size} nom={nom} />;
   return <img src={src} alt={nom} className="o-wx-ico" width={size} height={size} style={{ pointerEvents: 'none', display: 'block' }} />;
 }
 
@@ -201,7 +203,7 @@ export function haWeatherLabel(cond) {
  * d'autre ; l'interrupteur « Effets meteo animes » et prefers-reduced-motion
  * la coupent net. Idee reprise du Weather Showcase de GlassHome. */
 export function WxMini({ wx, on }) {
-  if (!on || REDUCE_MOTION) return null;
+  if (!on || REDUCE_MOTION || !meteoAnimee()) return null;
   const S = { position: 'absolute', pointerEvents: 'none' };
   const gouttes = (n, couleur, epais) => Array.from({ length: n }, (_, i) => (
     <span key={i} style={{ ...S, top: -6, left: (8 + i * 23) % 140, width: epais, height: 9, borderRadius: 4, background: couleur, animation: `o-wxm-fall ${1.1 + (i % 3) * .35}s linear ${i * .28}s infinite` }} />

@@ -2,6 +2,8 @@
 
 *1er novembre 2026 — appliqué (v3.97.0) (lot 10 du rapport « Gladys comparé au catalogue », 31/10 : D17, D18, K2, K3, K4)*
 
+*Amendée par l'ADR [0384](0384-la-sauvegarde-ratee-et-la-fuite-de-nuit-au-telephone.md) (21/11).*
+
 *Complète l'ADR [0037](0037-la-vue-systeme-d-une-machine-haos.md) : ce que la vue Système dit des sauvegardes, et ce qui en sort vers l'Accueil.*
 
 ## Le problème

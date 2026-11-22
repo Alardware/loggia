@@ -65,7 +65,8 @@ test('les identités ont leurs jetons, et l’écran ne les écrit plus en dur',
   for (const brut of ["'#ff8a4c'", '"#ff8a4c"', "'#ffce73'", '"#ffce73"', '#FF2D78', "'52,211,153'", 'rgba(52,211,153,', "'140,152,180'", 'rgba(140,152,180,', 'linear-gradient(135deg,#ffb347,#f87171)', "solar: '#fbbf24'", 'linear-gradient(90deg,#ffce73,#f59e0b)', 'rgba(255,138,76,', "'255,45,120'"]) {
     assert.equal(compter(app, brut), 0, brut);
   }
-  assert.ok(app.includes("const RM_ROSE = 'var(--o-rose)';"));
+  // ASSERTION MODIFIÉE (audit du 12/11, lot 4, E14 ; ADR 0370) : deux couleurs de bascule, toutes deux des jetons — le bleu de la maison, l'ambre d'une lumière.
+  assert.ok(app.includes("const RM_BLEU = 'var(--o-accent-fond)';") && app.includes("const RM_AMBRE = 'var(--o-bascule-lampe)';"));
   assert.ok(app.includes("const C = { solar: 'var(--o-flux-solaire)', home: 'var(--o-flux-maison)', grid: 'var(--o-flux-reseau)', ev: 'var(--o-flux-ve)', bat: 'var(--o-flux-batterie)' };"));
   assert.ok(app.includes("function ViewHead({ titre, sous, badge, rgb = 'var(--o-ok-rgb)' })"), 'le vert de l’en-tête suit le thème');
   assert.ok(app.includes("{ id: 'accent', label: 'Accent', col: 'var(--o-accent-soft)', rgb: 'var(--o-accent-soft-rgb)' },"), 'l’accent d’une pièce, en texte, prend la variante lisible');
@@ -125,10 +126,12 @@ test('« ne répond plus » se dit d’une seule façon : le liseré', async () 
   // ASSERTION MODIFIÉE (chantier Médias, tâche 4 ; M5) : la carte d'un lecteur passe dans la grille commune (`o-rmcard o-gabarit`, sa panne nommée `v.indispo`) — quatre cartes gardent cette écriture.
   // ASSERTION MODIFIÉE (chantier IoT, tâche 6, 18/10 ; I5) : la carte d'un robot passe dans la grille commune (`o-rmcard o-gabarit`, sa panne nommée `v.panne`) — trois cartes gardent cette écriture.
   // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I5) : la carte du distributeur passe dans la grille commune (`o-rmcard o-gabarit`, sa panne lue dans sa vue, `v.mort`) — deux cartes gardent cette écriture.
-  assert.equal(compter(app, "className={'o-rmcard' + (mort ? ' o-panne' : '')}"), 2, 'toutes les cartes de pièce (la lampe porte aussi o-light-card)');
+  // ASSERTION MODIFIÉE (12/11, audit) : la carte générique et celle d'un cover passent dans la grille commune (`o-gabarit`) : leur nom passe sur deux lignes sur la carte étroite (E6).
+  assert.equal(compter(app, "className={'o-rmcard' + (mort ? ' o-panne' : '')}"), 0, 'toutes les cartes de pièce (la lampe porte aussi o-light-card)');
   assert.equal(compter(app, "className={'o-rmcard o-gabarit' + (v.panne ? ' o-panne' : '')}"), 1, 'le robot, dans la grille commune');
   assert.equal(compter(app, "className={'o-rmcard o-gabarit' + (v.indispo ? ' o-panne' : '')}"), 1, 'le lecteur, dans la grille commune');
-  assert.equal(compter(app, "className={'o-rmcard o-gabarit' + (mort ? ' o-panne' : '')}"), 3, 'le thermostat, le fil pilote et la plante');
+  // ASSERTION MODIFIÉE (12/11, audit) : la carte générique et celle d'un cover y entrent (E6).
+  assert.equal(compter(app, "className={'o-rmcard o-gabarit' + (mort ? ' o-panne' : '')}"), 5, 'le thermostat, le fil pilote, la plante, la carte générique et le cover');
   assert.ok(app.includes("const mort = !!(estClimate(zone) && (!S || !S[zone.haid] || S[zone.haid].state === 'unavailable'));"), 'la zone de chauffage');
   /* Le distributeur (05/10, ADR 0155) : le réservoir muet ne suffisait pas —
    * chez l'utilisateur, c'est une aide `input_number` qui ne tombe jamais, et

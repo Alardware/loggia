@@ -32,6 +32,8 @@ function capacitesVisees(a, lampes, pieceScenario) {
 }
 /* LA puce de la fiche — teinte, nature, gestes, portées, moments, fondu, blanc : choisie, bleu plein et texte blanc (sa règle des
  * puces, sans exception, 31/10). La teinte du scénario n'en est jamais le fond : elle reste le point de chaque puce de teinte. */
+// « Supprimer » armé : le rouge plein de la feuille d'un profil (parametres.jsx), par-dessus son dessin au repos.
+const SUPPR_ARME = { background: 'var(--o-bad)', color: '#fff' };
 const puce = (on) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 700,
   border: 'var(--o-bw,1px) solid ' + (on ? 'transparent' : 'var(--o-bd2)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: on ? '#fff' : 'var(--o-text1)' });
 
@@ -43,6 +45,10 @@ export default function FicheScenario({ scenario = null, pieces = [], liens = []
   const [nature, setNature] = useState(natureInitiale || (scenario && scenario.lien ? 'lie' : scenario && scenario.etats ? 'maison' : 'compose'));
   const [err, setErr] = useState('');
   const [attente, setAttente] = useState(false);
+  /* Supprimer un scénario partait d'un seul toucher (audit du 12/11, lot 4, I2). Deux appuis, comme la feuille d'un profil :
+   * le premier arme le bouton, rouge plein et « Confirmer ? » ; sans second appui, il se désarme seul au bout de 4 s. */
+  const [armeSuppr, setArmeSuppr] = useState(false);
+  useEffect(() => { if (!armeSuppr) return undefined; const t = setTimeout(() => setArmeSuppr(false), 4000); return () => clearTimeout(t); }, [armeSuppr]);
   /* « La maison telle qu'elle est » (06/11, étape 8 du rapport sur l'usage) : on règle lumières et volets à la main, on
    * ouvre la fiche, on donne un nom. L'état est lu au serveur (`capturer`, les règles d'un scénario composé : jamais une
    * veilleuse), montré ici, envoyé avec le scénario ; chaque choix — l'étendue, les familles — relit la maison. */
@@ -234,7 +240,7 @@ export default function FicheScenario({ scenario = null, pieces = [], liens = []
 
           <div style={{ display: 'flex', gap: 8, marginTop: 20, alignItems: 'center', flexWrap: 'wrap' }}>
             {existant && scenario.integre && scenario.modifie && <button onClick={() => envoyer(close, { reinitialiser: scenario.id })} style={secondaire}>{tr('Remettre d’origine')}</button>}
-            {existant && !scenario.integre && <button onClick={() => envoyer(close, { supprimer: scenario.id })} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)' }}><Fi i="cross-small" size={12} />{tr('Supprimer')}</button>}
+            {existant && !scenario.integre && <button onClick={() => { if (armeSuppr) envoyer(close, { supprimer: scenario.id }); else setArmeSuppr(true); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)', transition: 'background .2s, color .2s', ...(armeSuppr ? SUPPR_ARME : null) }}><Fi i="cross-small" size={12} />{armeSuppr ? tr('Confirmer ?') : tr('Supprimer')}</button>}
             <span style={{ flex: 1 }} />
             <button onClick={() => valider(close)} disabled={!valide || attente} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 16px', borderRadius: 14, border: 'none', cursor: valide && !attente ? 'pointer' : 'default', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#fff', opacity: valide && !attente ? 1 : .45 }}><Fi i="plus" size={12} />{tr('Enregistrer')}</button>
           </div>

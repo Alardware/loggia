@@ -15,7 +15,7 @@ import { Ico } from '../icones.jsx';
 import { tr } from '../i18n.js';
 import { priseDe, useHass, lavisCarte } from '../app/noyau.jsx';
 import { PlugIcon } from '../cartescustom/cartes.jsx';
-import { RM_BTN, RM_SUB, RM_CARD, RM_ICO, GlypheCarte, RmBascule, ChiffreHaut, RM_NAME } from './briques.jsx';
+import { RM_BTN, RM_SUB, RM_CARD_HAUT, RM_ICO, GlypheCarte, RmBascule, ChiffreHaut, RM_NAME } from './briques.jsx';
 import { ValeurEtiquette } from './chauffage.jsx';
 
 /* ── La carte d'une PRISE (chantier Prises, § 3.1-3.2 ; sa maquette « Cartes
@@ -223,7 +223,8 @@ function RoomPriseCard({ id, hass, onOpen, titre = null }) {
   const phrase = (texte, classe) => <div className={classe} style={{ ...RM_SUB, color: v.muet ? 'var(--o-bad)' : 'var(--o-text2)', '--o-n': Math.max(1, texte.length) }}>{texte}</div>;
   return (
     <div ref={racine} className={'o-rmcard o-gabarit' + (v.muet ? ' o-panne' : '')} data-prise=""
-      style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
+      style={{ ...RM_CARD_HAUT, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
+        // Depuis le haut (audit du 12/11, `RM_CARD_HAUT`) : sans mesure, la prise n'a pas de pied large, et son nom tombait au bas de la carte.
         // Active (allumée, 1 W ou plus) : le lavis de son appareil, 0,16 en haut, 0,04 en bas.
         ...(v.vive && LAVIS ? { background: lavisCarte(tp.rgb, .16) } : null),
         border: LISERE }}>

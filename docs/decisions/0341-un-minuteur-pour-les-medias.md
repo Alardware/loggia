@@ -1,6 +1,6 @@
 # 0341 — Un minuteur pour les médias
 
-*10 novembre 2026 — à l'essai (bêta v3.100.0-beta.1)*
+*10 novembre 2026 — appliqué (v3.100.0)*
 
 ## Le problème
 

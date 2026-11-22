@@ -285,7 +285,9 @@ test('la galerie d’ajout : l’aperçu ne se tabule pas dans le bouton du choi
   // la souris ET à Espace, qui n'active que la surface), son rebond, et
   // l'anneau de focus 2 px dehors.
   const css = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
-  for (const r of ['.o-apercu { transition: transform .16s cubic-bezier(.34, 1.45, .56, 1); }', '.o-apercu:active { transform: scale(.955); }',
+  // ASSERTION MODIFIÉE (17/11, charte du mouvement, V6) : la durée et la courbe du rebond sont des jetons, posés sur
+  // `:root` avec les mêmes valeurs (.16s, cubic-bezier(.34, 1.45, .56, 1)) — tests/mouvement_charte.test.mjs.
+  for (const r of ['.o-apercu { transition: transform var(--o-dur-rapide) var(--o-rebond); }', '.o-apercu:active { transform: scale(.955); }',
     '.o-apercu:has(> .o-surface:active) { transform: scale(.955); }',
     '.o-apercu:has(> .o-surface:focus-visible) { outline: 2px solid var(--o-accent); outline-offset: 2px; }', '.o-apercu > .o-surface:focus-visible { outline: none; }',
     '.o-apercu { transition: none; } .o-apercu:active { transform: none; }', '.o-apercu:has(> .o-surface:active) { transform: none; }']) assert.ok(css.includes(r), 'index.css : ' + r);

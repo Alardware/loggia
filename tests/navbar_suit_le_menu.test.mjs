@@ -49,7 +49,9 @@ test('elle respecte les droits du profil, comme la barre latérale', () => {
   const c = corpsNav();
   const entete = APP.slice(APP.indexOf('function MobileNav({'), APP.indexOf(') {', APP.indexOf('function MobileNav({')));
   assert.ok(/vuesAutorisees = null/.test(entete), 'la barre ne reçoit plus les droits du profil');
-  assert.ok(c.includes("!vuesAutorisees || vid === 'accueil' || vuesAutorisees.has(vid)"),
+  /* ASSERTION MODIFIÉE (13/11, audit du 12/11, lot 2b, B19) : la règle vit dans `vuePermise` (views.js), la même pour la
+   * garde de la racine et les deux menus ; son comportement est épinglé par audit_1211_lot2b_noyau.test.mjs. */
+  assert.ok(c.includes('const permis = (vid) => vuePermise(vid, vuesAutorisees);'),
     'une vue interdite au profil pourrait entrer dans la barre');
   assert.ok(c.includes('permis(it.id) && isViewAvailable(avail, it.id)'),
     'la barre ne filtre plus sur les droits ET la disponibilité');

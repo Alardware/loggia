@@ -28,7 +28,7 @@ import { tr, locale, trN } from '../i18n.js';
 import { decMax, cvEstLumiere, useGardeSwitch, lavisCarte, hx, useAgenda, Segment } from '../app/noyau.jsx';
 import { RM_ICO, RM_NAME, RmBascule } from '../cartes/briques.jsx';
 import { useDemandeCoupure } from '../cartes/prise.jsx';
-import { useHistorique24, useDomainCards, FicheRangee } from '../appareils/fiches.jsx';
+import { useHistorique24, jusquAMaintenant, useDomainCards, FicheRangee } from '../appareils/fiches.jsx';
 import { CamSheet, CV_CADRE, texteDate, PlugIcon, cvIcoEntite, OUVRANT_DCS, ouvrantsDe, CvCard, CvAlarm } from './cartes.jsx';
 import { jourAgenda, APPAREIL_ACTIF } from '../accueil/briques.jsx';
 
@@ -524,14 +524,18 @@ function CvAgenda({ id, hass }) {
 }
 /* Activité récente : le journal de la MAISON — ouvrants, machines, volets,
  * serrures, alarme, capteurs muets — en pastilles colorées par domaine. */
+/* Le repli de `CvActivite`, un seul (audit du 12/11, lot 5b) : sans `hass`, un `{}` écrit dans le composant naissait neuf à
+ * chaque rendu. Gelé : la carte ne fait que le lire. */
+const SANS_ETATS_ACTIVITE = Object.freeze({});
 function CvActivite({ hass, demoEvents = null }) {
-  const S = (hass && hass.states) || {};
+  const S = (hass && hass.states) || SANS_ETATS_ACTIVITE;
+  // Les états, et non `hass` (lot 5b) : la liste se lit dans `S`, qu'elle relise quand `S` change.
   const ids = useMemo(() => {
     const doms = ['cover.', 'vacuum.', 'lawn_mower.', 'lock.', 'alarm_control_panel.'];
     const l = Object.keys(S).filter(id => doms.some(d => id.indexOf(d) === 0)
       || (id.indexOf('binary_sensor.') === 0 && ['door', 'window', 'garage_door', 'opening', 'connectivity', 'motion'].indexOf((S[id].attributes || {}).device_class) >= 0));
     return l.slice(0, 40);
-  }, [hass]);
+  }, [S]);
   const reels = grouperJournal(useRoomLogbook(hass, ids));
   const events = demoEvents !== null ? demoEvents : reels;
   const pastille = (id) => {
@@ -599,7 +603,7 @@ function CvHistory({ id, hass, demoPoints = null, onOpen = null }) {
   // La bibliothèque injecte un historique FACTICE : le hook tourne quand
   // même (ordre des hooks), ses données sont simplement ignorées.
   const pointsReels = useHistorique24(hass, id);
-  const points = demoPoints !== null ? demoPoints : pointsReels;
+  const lus = demoPoints !== null ? demoPoints : pointsReels;
   const st = hass && hass.states ? hass.states[id] : null;
   const a = (st && st.attributes) || {};
   const mort = !st || st.state === 'unavailable';
@@ -611,6 +615,10 @@ function CvHistory({ id, hass, demoPoints = null, onOpen = null }) {
   // L'ÉNERGIE (kWh, compteur croissant) se raconte en BARRES par heure —
   // chaque barre est le delta du compteur sur l'heure. Le reste en courbe.
   const estEnergie = a.device_class === 'energy' || /Wh$/.test(a.unit_of_measurement || '');
+  /* La courbe tient la dernière valeur connue jusqu'à maintenant (audit du 12/11, B21) : une mesure stable, un seul point rendu
+   * par HA, se trace plate au lieu de « Pas d'historique sur 24 h », et un dernier changement à 3 h du matin n'est plus dessiné
+   * au bord droit. Pas les barres de l'énergie : le point ajouté ferait un seau de plus, vide. */
+  const points = estEnergie ? lus : jusquAMaintenant(lus);
   let chemin = '', aire = '', vmin = null, vmax = null, barres = null, totalJour = null;
   if (date == null && Array.isArray(points) && points.length > 1) {
     if (estEnergie) {
@@ -699,10 +707,15 @@ const airDe = (S) => {
   const maxDe = (ids) => ids.length ? ids.reduce((m, id) => parseFloat(S[id].state) > parseFloat(S[m].state) ? id : m, ids[0]) : null;
   const moyDe = (ids) => ids.length ? ids.reduce((s, id) => s + parseFloat(S[id].state), 0) / ids.length : null;
   const co2 = maxDe(par(['carbon_dioxide']));
+  /* L'unité que le capteur PUBLIE (audit du 12/11, lot 4, E26) : des COV en µg/m³ s'écrivaient « ppb », des particules « µg »
+   * sans « /m³ ». Sans unité publiée, celle d'avant — et des particules en µg/m³, la seule que Home Assistant leur connaisse. */
+  const unite = (id, repli) => (id && String((S[id].attributes || {}).unit_of_measurement || '').trim()) || repli;
+  const voc = maxDe(par(['volatile_organic_compounds', 'volatile_organic_compounds_parts']));
+  const pm = maxDe(par(['pm25']));
   return {
     co2, co2V: co2 ? Math.round(parseFloat(S[co2].state)) : null,
-    vocV: (() => { const v = maxDe(par(['volatile_organic_compounds', 'volatile_organic_compounds_parts'])); return v ? Math.round(parseFloat(S[v].state)) : null; })(),
-    pmV: (() => { const v = maxDe(par(['pm25'])); return v ? Math.round(parseFloat(S[v].state)) : null; })(),
+    vocV: voc ? Math.round(parseFloat(S[voc].state)) : null, vocU: unite(voc, 'ppb'),
+    pmV: pm ? Math.round(parseFloat(S[pm].state)) : null, pmU: unite(pm, 'µg/m³'),
     humV: (() => { const v = moyDe(par(['humidity'])); return v != null ? Math.round(v) : null; })(),
   };
 };
@@ -717,7 +730,8 @@ function CvAir({ hass }) {
   const tuile = (l, v) => v != null && (
     <div style={{ flex: 1, minWidth: 0, padding: '5px 9px', borderRadius: 10, background: 'var(--o-s1)' }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--o-text3)' }}>{l}</div>
-      <div style={{ fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>{v}</div>
+      {/* « 45 µg/m³ » est plus long que « 45 µg » : une tuile étroite le finit en « … » plutôt que de déborder (E26). */}
+      <div style={{ fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v}</div>
     </div>
   );
   return (
@@ -734,8 +748,8 @@ function CvAir({ hass }) {
           <div style={{ height: '100%', width: Math.min(100, (air.co2V || 0) / 20) + '%', background: col, borderRadius: 4, transition: 'width .3s' }} />
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          {tuile(tr('COV'), air.vocV != null ? air.vocV + ' ppb' : null)}
-          {tuile('PM2.5', air.pmV != null ? air.pmV + ' µg' : null)}
+          {tuile(tr('COV'), air.vocV != null ? air.vocV + ' ' + air.vocU : null)}
+          {tuile('PM2.5', air.pmV != null ? air.pmV + ' ' + air.pmU : null)}
           {tuile(tr('Humidité'), air.humV != null ? air.humV + ' %' : null)}
         </div>
       </div>
@@ -807,7 +821,8 @@ function CvPresence({ hass, gens = null }) {
           <div className="o-presence-grille" id={did + '-g'} role="list" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '4px 4px', marginTop: 2 }}>
             {(liste.length > 8 ? liste.slice(0, 7) : liste).map((p) => (
               <div key={p.haid} role="listitem" title={p.name + ' · ' + etat(p)} aria-label={p.name + ' · ' + etat(p)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, minWidth: 0 }}>
-                {avatar(p, 26)}
+                {/* 26 px, 34 quand la carte est large (`--pres-av`, index.css ; audit du 12/11). */}
+                {avatar(p, 'var(--pres-av, 26px)')}
                 <span className="o-presence-nom" aria-hidden="true" style={{ maxWidth: '100%', fontSize: 10.5, fontWeight: 700, color: p.home ? 'var(--o-text1)' : 'var(--o-text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
               </div>
             ))}

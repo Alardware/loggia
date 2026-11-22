@@ -22,6 +22,7 @@
  * n'appelle aucun service. Il ne devine rien non plus — une liste absente est
  * une liste absente, pas une liste vide qu'on remplirait au jugé.
  */
+import { sansAccents } from './outils.js';
 
 /** Les bits qui nous concernent. `media_player` d'un côté, `remote` de l'autre. */
 export const FEAT_SOURCE = 2048;        // MediaPlayerEntityFeature.SELECT_SOURCE
@@ -29,7 +30,8 @@ export const FEAT_ACTIVITE = 4;         // RemoteEntityFeature.ACTIVITY
 
 const attrs = (etat) => (etat && etat.attributes) || {};
 const bits = (etat) => Number(attrs(etat).supported_features) || 0;
-const aplati = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+// `sansAccents` (outils.js) sans les blancs autour ; `s || ''` garde l'ancien sort d'un 0 ou d'un `false` : '' (lot 5b, audit du 12/11).
+const aplati = (s) => sansAccents(s || '').trim();
 
 /**
  * Cette liste de sources désigne-t-elle des SORTIES plutôt que des applications ?

@@ -174,7 +174,8 @@ test('§ 3 : la barre — une bande par zone, la zone où l’on est en plein, l
 test('muette : « Indisponible » en rouge, le liseré qui respire, ni chiffre ni barre', () => dans(() => {
   const m = carte('sensor.morte');
   const ph = classe(m, 'o-mesure-phrase');
-  assert.deepEqual([ph.props.children, ph.props.style.color], ['Indisponible', 'var(--o-bad)']);
+  // ASSERTION MODIFIÉE (audit du 12/11, lot 4, E24) : la règle de la lumière — depuis quand (son `last_changed`), toujours en rouge.
+  assert.ok(/^Indisponible depuis \S/.test(ph.props.children) && ph.props.style.color === 'var(--o-bad)', ph.props.children);
   assert.ok(m.arbre.props.className.includes('o-panne'), 'le liseré (ADR 0048)');
   assert.equal(de(m, 'ChiffreMesure'), undefined);
   assert.equal(de(m, 'BarreMesure'), undefined);
@@ -188,7 +189,8 @@ test('la surface nomme la carte de ce qu’elle affiche : le nom, la famille et 
   assert.equal(de(monter(F.RoomMesureCard, { id: 'sensor.chambre_co2', hass: poser().hass(), onOpen: () => {}, label: 'Chambre' }), 'Surface').props.label,
     'Chambre, CO₂ 1 659 ppm, Confiné · aérez', 'sous le nom de sa pièce, la famille le complète');
   assert.equal(de(carte('sensor.sejour_temperature'), 'Surface').props.label, 'Séjour, Température 21,4 °C, Idéal · 52 % d’humidité', 'dans Objets, la carte porte le nom de sa pièce : la famille le complète');
-  assert.equal(de(carte('sensor.morte'), 'Surface').props.label, 'CO₂ mort, Indisponible');
+  // ASSERTION MODIFIÉE (audit du 12/11, lot 4, E24) : la surface lit la phrase de la carte, depuis quand compris.
+  assert.ok(/^CO₂ mort, Indisponible depuis \S/.test(de(carte('sensor.morte'), 'Surface').props.label));
 }));
 
 test('C13 : le nom passe sur deux lignes au plus, entre deux mots, et la carte garde ses 184 px', () => dans(() => {
@@ -264,9 +266,9 @@ test('C6 : la fabrique des cartes envoie une mesure de la table à sa carte ; un
   const w = poser();
   let dc = null;
   monter(() => { dc = F.useDomainCards(w.hass()); return null; });
-  assert.deepEqual(['sensor.chambre_co2', 'sensor.sejour_temperature', 'sensor.sejour_lux', 'sensor.morte'].map(id => dc.card(id).type.name),
+  assert.deepEqual(['sensor.chambre_co2', 'sensor.sejour_temperature', 'sensor.sejour_lux', 'sensor.morte'].map(id => (dc.card(id).type.type || dc.card(id).type).name), /* ASSERTION MODIFIÉE (19/11, ADR 0377) : la carte protégée enveloppe la sienne */
     ['RoomMesureCard', 'RoomMesureCard', 'RoomMesureCard', 'RoomMesureCard']);
-  assert.equal(dc.card('sensor.pression').type.name, 'RoomGenericCard', 'la pression n’a pas de zone (hors chantier)');
+  assert.equal((dc.card('sensor.pression').type.type || dc.card('sensor.pression').type).name, 'RoomGenericCard', 'la pression n’a pas de zone (hors chantier)');
 }));
 
 test('C11 : la ligne « Libellé · VERDICT » et la jauge d’avant sont parties', () => {
@@ -280,7 +282,8 @@ test('C11 : la ligne « Libellé · VERDICT » et la jauge d’avant sont partie
  * d'écran ; la carte étroite garde sa phrase de la grille commune. */
 test('correction bis, point 6 : la carte large ne coupe aucun mot — la colonne du nom tient son mot le plus long, la phrase a sa forme de repli', () => dans(() => {
   const t = carte('sensor.sejour_temperature');
-  assert.deepEqual(classe(t, 'o-mesure-gauche').props.style, { flex: '1 1 0%', minWidth: 0 });
+  // ASSERTION MODIFIÉE (12/11, audit) : la colonne du nom reste en haut de sa rangée (`alignSelf`) : un chiffre et sa famille plus hauts qu'elle la poussaient de 3 px (E13).
+  assert.deepEqual(classe(t, 'o-mesure-gauche').props.style, { flex: '1 1 0%', minWidth: 0, alignSelf: 'flex-start' });
   const cadre = classe(t, 'o-mesure-phrases');
   assert.ok(cadre.props.className.split(' ').includes('o-seul-large'), 'le cadre de la phrase large');
   const [longue, repli] = cadre.props.children.filter(Boolean).map(e => e.props);

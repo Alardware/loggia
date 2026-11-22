@@ -129,7 +129,8 @@ def test_toutes_les_commandes_sont_enregistrees(banc):
     # ASSERTION MODIFIÉE (09/11, ADR 0340) : 63 -> 64, les montees en temperature.
     # ASSERTION MODIFIÉE (11/11, ADR 0344) : 64 -> 65, Spotify.
     # ASSERTION MODIFIÉE (11/11, ADR 0346) : 65 -> 66, les playlists Spotify.
-    assert len(banc.hass.commandes) == 66, sorted(banc.hass.commandes)
+    # ASSERTION MODIFIÉE (21/11, ADR 0387) : 66 -> 68, le planning des purificateurs.
+    assert len(banc.hass.commandes) == 68, sorted(banc.hass.commandes)
 
 
 def test_aucune_commande_ne_declare_id(banc):

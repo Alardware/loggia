@@ -19,7 +19,7 @@ import { useState, useEffect, useRef, useId } from 'react';
 import { tr } from './i18n.js';
 import { weatherEntity, WeatherIco, haWeatherLabel } from './wxutil.jsx';
 import { Fi, nomCarte } from './ui.jsx';
-import { typesPrevision, degres, estNuit, modeMeteo, heuresMeteo, extremesDuJour, pluieEtVent, nomVille, phraseMeteo, soleilMeteo, vigilanceWidget, capteursMeteo, pluieDansLheure } from './meteo.js';
+import { typesPrevision, degres, estNuit, modeMeteo, heuresMeteo, extremesDuJour, pluieEtVent, nomVille, lieuMaison, phraseMeteo, soleilMeteo, vigilanceWidget, capteursMeteo, pluieDansLheure } from './meteo.js';
 import { LOGGIA_INDEX } from './state.js';
 import { CARTE_RAIL } from './styles.js';
 import { capteurVigilance } from './vigilance.js';
@@ -80,7 +80,8 @@ export function CarteMeteo({ hass, onOpen = null }) {
   const extremes = extremesDuJour(parJour, maintenant);
   const pluie = pluieEtVent(parJour, a, maintenant);
   const heures = heuresMeteo({ etat: st, previsions: parHeure, maintenant, soleil });
-  const nom = nomVille(a.friendly_name) || tr('Météo');
+  // « Home », le nom par défaut, ou celui de la zone maison : « Météo » (audit du 12/11).
+  const nom = nomVille(a.friendly_name, lieuMaison(hass)) || tr('Météo');
   const temperature = degres(a.temperature, 1);
   const astre = soleilMeteo(maintenant, soleil);
   /* La phrase, et la vigilance qui la prend quand elle est orange ou rouge.

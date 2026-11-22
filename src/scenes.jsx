@@ -24,6 +24,7 @@ import { tr } from './i18n.js';
 import { Fi, ListeChoix, kbSlider, useEtatServeur } from './ui.jsx';
 import { sectionTitle } from './styles.js';
 import { versHex } from './contraste.js';
+import { sansAccents } from './outils.js';
 import { commander, commanderService } from './actions.js';
 import { hueScripts } from './lectures.js';
 import { dimmableLights, ctxLumieres, LOGGIA_INDEX } from './state.js';
@@ -126,7 +127,7 @@ const scriptSvc = (id) => (typeof id === 'string' && id.indexOf('script.') === 0
  * renvoie encore par un `input_select` désigné (`hueScripts.room`), que son script lit : ses options restent les pièces, et
  * la pièce choisie le règle comme avant. */
 const TOUTE = '*';
-const sansAccent = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+const sansAccent = (s) => sansAccents(s || '').trim(); // outils.js, sans les blancs autour (lot 5b, audit du 12/11)
 const zoneDe = (id) => (LOGGIA_INDEX && typeof LOGGIA_INDEX.areaOf === 'function' ? LOGGIA_INDEX.areaOf(id) : null);
 const HUE_CATS = () => Object.entries(HUE_SCENES).map(([id, c]) => ({ id, label: tr(c.label) }));
 // Le nuancier des ambiances Hue garde son nom (ScenesContent n'est pas
@@ -292,7 +293,7 @@ export default function ScenesContent({ hass }) {
       {/* réglages rapides : direct, pièce, collection, luminosité */}
       <div className="o-bar o-bar-scenes" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 'var(--o-radius,18px)', background: 'var(--o-surfA)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
         <QuickBox label={tr('Direct')} className="o-qb-direct">
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div className="o-doigt-serre" style={{ display: 'flex', gap: 4 }}>
             <button onClick={warmWhite} aria-label={tr('Blanc chaud')} style={miniBtn(false)}><span className="o-qb-ico" aria-hidden="true"><Fi i="bulb" size={15} color="var(--o-lampe)" /></span><span className="o-qb-txt">{tr('Blanc chaud')}</span></button>
             <button onClick={allOff} aria-label={tr('Éteindre')} style={miniBtn(false)}><span className="o-qb-ico" aria-hidden="true"><Fi i="power" size={15} /></span><span className="o-qb-txt">{tr('Éteindre')}</span></button>
           </div>

@@ -36,7 +36,7 @@ import { useMemo } from 'react';
 import { tr, locale } from './i18n.js';
 import { Fi } from './ui.jsx';
 import { WeatherIco, haWeatherLabel } from './wxutil.jsx';
-import { typesPrevision, degres, estNuit, modeMeteo, heuresMeteo, extremesDuJour, nomVille, phraseMeteo, vigilanceWidget, capteursMeteo, pluieDansLheure } from './meteo.js';
+import { typesPrevision, degres, estNuit, modeMeteo, heuresMeteo, extremesDuJour, nomVille, lieuMaison, phraseMeteo, vigilanceWidget, capteursMeteo, pluieDansLheure } from './meteo.js';
 import { semaineMeteo, tuilesMeteo, risquesMeteo } from './meteofiche.js';
 import { airDuDehors, pollensDuDehors } from './airdehors.js';
 import { LOGGIA_INDEX } from './state.js';
@@ -67,20 +67,26 @@ function Heure({ h, pluie }) {
   );
 }
 
+/* Les replis de la fiche, un seul chacun (audit du 12/11, lot 5b) : un `{}` écrit dans le composant naissait neuf à chaque
+ * rendu, et les mémos qui en dépendent se recalculaient pour rien. Gelés : la fiche ne fait que les lire. */
+const SANS_ETATS = Object.freeze({});
+const SANS_ATTRIBUTS = Object.freeze({});
+
 export default function FicheMeteoContenu({ id, hass, epingle = null, onFiche = null, maintenant = null }) {
-  const S = (hass && hass.states) || {};
+  const S = (hass && hass.states) || SANS_ETATS;
   const st = S[id] || null;
   const types = typesPrevision(st);
   const parHeure = usePrevisions(hass, id, types.heure ? 'hourly' : null);
   const parJour = usePrevisions(hass, id, types.jour ? 'daily' : null);
-  const a = (st && st.attributes) || {};
+  const a = (st && st.attributes) || SANS_ATTRIBUTS;
   const t = maintenant == null ? Date.now() : maintenant;
   const soleil = S['sun.sun'] || null;
   const muette = !st || st.state === 'unavailable' || st.state === 'unknown';
   const nuit = estNuit(t, soleil);
   const mode = muette ? null : modeMeteo(st.state, nuit);
   const ciel = muette ? null : haWeatherLabel(st.state);
-  const nom = nomVille(a.friendly_name) || tr('Météo');
+  // « Home », le nom par défaut, ou celui de la zone maison : « Météo », comme le widget (audit du 12/11).
+  const nom = nomVille(a.friendly_name, lieuMaison(hass)) || tr('Météo');
   // Muette, l'entité garde ses derniers attributs : on ne les dit pas, ce serait inventer un temps qu'il fait.
   const temperature = muette ? null : degres(a.temperature, 1);
   const ressenti = muette ? null : degres(a.apparent_temperature);

@@ -17,10 +17,14 @@ const bloc = (debut, fin) => { const d = src.indexOf(debut); assert.ok(d >= 0, d
 test('la carte d’un ouvrant : celle d’avant, plus le filigrane qui suit l’etat', () => {
   const c = bloc('function RoomGenericCard(', NL + 'function ');
   assert.ok(c.includes("const ouvrant = dom === 'binary_sensor' && OUVRANT_DCS.indexOf(a.device_class) >= 0;"), 'porte, fenetre, garage, ouverture, portail');
-  assert.ok(c.includes("{ouvrant && <IlluOuvrant type={a.device_class === 'window' ? 'fenetre' : 'porte'} ouvert={ouvert} />}"), 'l’illustration, fenetre ou porte, ouverte ou fermee');
+  // ASSERTION MODIFIÉE (22/11, ADR 0388) : ses maquettes du 22/11 donnent à l'ouvrant sa tuile (carteouverture.jsx, à la
+  // demande) ; le dessin, porte ou vantaux, ouvert ou fermé, y vit (dessinouverture.jsx). `IlluOuvrant` reste aux rangées du groupe.
+  assert.ok(c.includes('<CarteOuvertureContent id={id} hass={hass} nom={nom} ico={ico} pile={pile} onOpen={onOpen} />')
+    && readFileSync(join(RACINE, 'src', 'carteouverture.jsx'), 'utf8').includes("<DessinOuverture type={dessinOuverture(classe)} etat={v.muet ? 'muette' : v.ouvert ? 'ouverte' : 'fermee'} hauteur={70} />"), 'l’illustration, fenetre ou porte, ouverte ou fermee');
   assert.ok(!c.includes("tr('Historique')") && !c.includes('depuis {d}') && !c.includes('useMinute') && !c.includes('reperOuvrant'), 'rien d’autre n’a bouge : ni bouton, ni duree, ni repere');
   assert.ok(c.includes('<Fi i="video-camera" size={15} />') && c.includes("color: direct ? icoTexte : 'var(--o-text3)'"), 'le repere de la camera est celui d’avant');
-  assert.ok(c.includes('<div style={RM_NAME}>{nom}</div>'), 'le nom sans retrait : le filigrane est derriere, comme la plante');
+  // ASSERTION MODIFIÉE (12/11, audit) : le nom porte la classe de la grille commune (deux lignes sur la carte étroite, E6) ; il reste sans retrait.
+  assert.ok(c.includes('<div className="o-gab-nom" style={RM_NAME}>{nom}</div>'), 'le nom sans retrait : le filigrane est derriere, comme la plante');
   const i = bloc('function IlluOuvrant(', NL + '}');
   assert.ok(i.includes("position: 'absolute', right: 8, bottom: 8, height: 100") && i.includes("pointerEvents: 'none'"), 'en filigrane bas droite, comme la plante');
   assert.ok(i.includes("color: ouvert ? 'var(--o-warn)' : 'var(--o-text3)'") && i.includes('opacity: ouvert ? .6 : .28'), 'gris ferme, ambre ouvert');

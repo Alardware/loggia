@@ -27,7 +27,8 @@ const REDUCE_MOTION = (() => { try { return !!(window.matchMedia && window.match
 /** Les sections, et le nom qu'elles portent dans les Paramètres. */
 export const SECTIONS_REGLAGES = {
   users: 'Profils', apparence: 'Apparence', connexion: 'Connexion HA', auto: 'Automatisations', alertes: 'Alertes',
-  maj: 'Mises à jour', inter: 'Interrupteurs', regles: 'Règles', vues: 'Vues', appareils: 'Appareils', about: 'À propos',
+  // « Menu » et « Écrans » : les noms du rail et des cartes des Paramètres (audit du 12/11), plus « Vues » et « Appareils ».
+  maj: 'Mises à jour', inter: 'Interrupteurs', regles: 'Règles', vues: 'Menu', appareils: 'Écrans', about: 'À propos',
 };
 /** Celles qu'un profil ouvre seulement avec son droit (les autres s'ouvrent à tous). */
 const SECTIONS_A_DROIT = ['auto', 'alertes', 'maj', 'inter', 'regles', 'vues'];

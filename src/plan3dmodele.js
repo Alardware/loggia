@@ -17,12 +17,12 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
 const DOMAINES = ['light', 'switch', 'cover', 'fan', 'climate', 'media_player', 'binary_sensor', 'lock'];
-export const ENTITE = new RegExp('^(' + DOMAINES.join('|') + ')\\.[a-z0-9_]+$');
+const ENTITE = new RegExp('^(' + DOMAINES.join('|') + ')\\.[a-z0-9_]+$');
 
 /* GLTFLoader retire les points des noms (`light.x` -> `lightx`) : le nom
  * d'origine reste dans `userData.name`. */
 export const nomDe = (o) => (o && ((o.userData && o.userData.name) || o.name)) || '';
-export const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 
 /** Le noeud qui porte les pieces : la racine, ou son unique enfant. */
 const hautDe = (racine) => (racine.children.length === 1 && racine.children[0].children.length ? racine.children[0] : racine);

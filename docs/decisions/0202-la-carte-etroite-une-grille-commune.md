@@ -2,6 +2,8 @@
 
 *15 octobre 2026 — appliqué (v3.94.0) (passe téléphone). Remplace, pour la carte étroite, ce que les ADR 0188, 0193, 0196 et 0197 en disaient.*
 
+*Pour la lumière, l'ADR 0380 (20/11) remplace T12 et T6 : la plaque n'est plus l'interrupteur, la bascule paraît en haut à droite et le pourcentage ouvre la phrase.*
+
 ## Le problème
 
 > « ok pour 1c » — 15 octobre

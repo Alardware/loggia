@@ -89,7 +89,7 @@ export default function Onboarding({ runtime, onDone, onSkip }) {
   const [pin, setPin] = useState('');
   const [pinErreur, setPinErreur] = useState(null);
   const [enCours, setEnCours] = useState(false);
-  const telephone = !useWide(640);
+  const telephone = !useWide(641); // jusqu'à 640 px INCLUS, comme la feuille (`max-width: 640px`) et l'Accueil (audit du 12/11, lot 5b)
   const format = formatEcran(useCoarse(), useWide(1180));
 
   const resolved = (runtime && runtime.resolved) || {};

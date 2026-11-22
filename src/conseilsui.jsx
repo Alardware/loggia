@@ -13,8 +13,8 @@
  * Ce qui se calcule vit dans `conseils.js` et `tarif.js`, testés à sec.
  */
 import { useState, useRef, useEffect } from 'react';
-import { tr, locale } from './i18n.js';
-import { nombre } from './format.js';
+import { tr } from './i18n.js';
+import { nombre, heureCourte } from './format.js';
 import { Fi, cvName } from './ui.jsx';
 import { plagesAnnoncees, plagesApprises, plagesAutour, plagesVraies, heuresCreusesAVenir, lirePrevision, fenetreMoinsChere } from './tarif.js';
 import { useEtatsHist } from './historique.jsx';
@@ -28,7 +28,7 @@ import { RANGEE, TITRE, SOUS } from './fichekit.js';
 import { filet } from './fichecommune.jsx';
 import { useRappels, ecrireRappel, rappelDe, dansCalme, momentEco, dernierCycleHp, appareilsAuRepos } from './conseils.js';
 
-const heure = (ms) => new Date(ms).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+const heure = heureCourte;
 
 /**
  * Le moment le moins cher, d'après ce que la maison publie : `{ moment, plagesHc, prix }`.
@@ -87,7 +87,7 @@ function PuceRappel({ hass, etat, quand, sorte, entite = null }) {
   };
   return (
     <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0, marginLeft: 'auto' }}>
-      <button type="button" onClick={appui} aria-pressed={!!r} aria-busy={enVol || undefined}
+      <button type="button" className="o-doigt" onClick={appui} aria-pressed={!!r} aria-busy={enVol || undefined}
         aria-label={r ? tr('Prévenu à {h} — annuler', { h }) : tr('Me prévenir à {h}', { h })}
         style={{ height: 40, padding: '0 12px', borderRadius: 10, border: 'none', fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
           display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', cursor: 'pointer', opacity: enVol ? 0.6 : 1,

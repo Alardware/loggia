@@ -9,6 +9,7 @@
  * (tests/accueil_meteo.test.mjs).
  */
 import { tr, locale } from './i18n.js';
+import { heureCourte } from './format.js';
 import { lireVigilance, texteVigilance } from './attention.js';
 
 /* `WeatherEntityFeature` : une entité dit elle-même quelles prévisions elle
@@ -135,7 +136,7 @@ export function pluieEtVent(previsionsJour, attributs, maintenant) {
 export const memeJourQue = (t, ref) => { const a = new Date(t), b = new Date(ref); return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); };
 export const lectureDate = (p) => Date.parse((p && p.datetime) || '');
 export const nombreOuNull = (v) => { const n = Number(v); return (v == null || v === '' || isNaN(n)) ? null : n; };
-const hhmm = (t) => new Date(t).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+const hhmm = heureCourte;
 export const heureRonde = (t) => tr('{n} h', { n: new Date(t).getHours() });
 export const jourCourt = (t) => new Date(t).toLocaleDateString(locale(), { weekday: 'short' });
 const jourLong = (t) => new Date(t).toLocaleDateString(locale(), { weekday: 'long' });
@@ -143,13 +144,22 @@ export const mmArrondi = (v) => Math.round(v);
 
 /* Le nom de la ville. Météo-France nomme son entité « Météo-France forecast
  * for city Sainte-Solange » : on garde la ville. Un nom choisi à la main reste
- * tel quel — c'est le sien. */
-export function nomVille(nom) {
+ * tel quel — c'est le sien.
+ * LE NOM PAR DÉFAUT N'EST PAS UN LIEU (audit du 12/11) : une installation par
+ * défaut nomme son entité météo d'après sa zone maison — « Home », « Maison » —,
+ * et le widget s'intitulait « Home ». Ce nom-là, ou celui de la zone maison
+ * (`maison`, `hass.config.location_name`), rend null : l'écran écrit « Météo ». */
+export function nomVille(nom, maison = null) {
   const n = String(nom == null ? '' : nom).trim();
   if (!n) return null;
   const m = n.match(/forecast for (?:city|place|location)\s+(.+)$/i);
-  return m ? m[1].trim() : n;
+  const v = m ? m[1].trim() : n;
+  const bas = (x) => String(x == null ? '' : x).trim().toLowerCase();
+  if (v.toLowerCase() === 'home' || v.toLowerCase() === 'maison' || (bas(maison) && v.toLowerCase() === bas(maison))) return null;
+  return v;
 }
+/** Le nom de la zone maison de Home Assistant (`hass.config.location_name`), ou null. */
+export const lieuMaison = (hass) => (hass && hass.config && typeof hass.config.location_name === 'string' ? hass.config.location_name : null);
 
 /* Les prévisions à venir, triées, datées. */
 export const aVenir = (liste, maintenant) => (liste || []).map(p => ({ p, t: lectureDate(p) })).filter(x => !isNaN(x.t) && x.t > maintenant).sort((a, b) => a.t - b.t);

@@ -226,6 +226,14 @@ class LoggiaAlertes:
         self._dangers: dict[str, str] = {}
         self._avant: dict[str, dict] = {}
         self._vannes_coupees: list[str] = []
+        # La surete passe avant une main posee AVANT le danger (audit du 12/11,
+        # S1 ; ADR 0364) ; une main posee PENDANT le danger garde le dernier mot
+        # (ADR 0022) : un second detecteur ne rallume pas la lampe qu'on vient
+        # d'eteindre en connaissance de cause. On retient donc ces mains-la, le
+        # temps du danger.
+        self._mains_pendant: set[str] = set()
+        ecouter = getattr(regles, "ecouter_mains", None)
+        self._defait_mains = ecouter(self._sur_main) if callable(ecouter) else None
         # Le dernier etat CONNU de chaque capteur, avant qu'il ne se taise
         # (audit du 19/10, H5) : {entity_id: etat}. Un retour depuis
         # `unavailable` se compare a lui, pas au silence.
@@ -624,6 +632,17 @@ class LoggiaAlertes:
         st = self._hass.states.get(haid)
         return (getattr(st, "attributes", None) or {}).get("supported_features") if st is not None else None
 
+    def _sur_main(self, haid: str) -> None:
+        """Une main posee pendant qu'un danger dure : elle garde le dernier mot
+        jusqu'a ce qu'il passe (S1). Hors danger, rien a retenir."""
+        if self._dangers:
+            self._mains_pendant.add(haid)
+
+    def _sans_mains_du_danger(self, haids) -> list:
+        """Ce qu'un danger commande : tout, sauf ce qu'une main a repris depuis
+        qu'il dure. Une main d'AVANT le danger, elle, est forcee (`malgre_main`)."""
+        return [h for h in haids if h not in self._mains_pendant]
+
     def _retenir(self, haids) -> None:
         """L'etat d'AVANT, pour le rendre quand le danger passe — une fois : un
         second danger ne doit pas retenir l'etat que le premier a impose."""
@@ -693,7 +712,7 @@ class LoggiaAlertes:
         nom = etat.attributes.get("friendly_name") or etat.entity_id
         motif = "%s : %s" % (cat, nom)
         if actions.get("lumieres") and cat in LUMIERES:
-            lumieres = await self._lumieres()
+            lumieres = self._sans_mains_du_danger(await self._lumieres())
             if lumieres:
                 self._retenir(lumieres)
                 # Par service : une lampe a 100 %, un interrupteur declare
@@ -701,15 +720,18 @@ class LoggiaAlertes:
                 for domaine, service, lot in par_service(lumieres, True):
                     await self._regles.agir("alertes", "danger", domaine, service, lot,
                                             {"brightness_pct": 100} if domaine == "light" else None,
-                                            quoi="allumer", motif=motif, priorite=PRIORITE, tenir=True)
+                                            quoi="allumer", motif=motif, priorite=PRIORITE, tenir=True,
+                                            malgre_main=True)
         if actions.get("volets") and cat in VOLETS:
             # Un volet « tilt seul » ferait refuser l'appel groupe entier.
-            volets = [h for h in self._entites("cover", VOLETS_CLASSES)
-                      if ouvre_et_ferme(self._features(h))]
+            volets = self._sans_mains_du_danger(
+                [h for h in self._entites("cover", VOLETS_CLASSES)
+                 if ouvre_et_ferme(self._features(h))])
             if volets:
                 self._retenir(volets)
                 await self._regles.agir("alertes", "danger", "cover", "open_cover", volets,
-                                        quoi="remonter", motif=motif, priorite=PRIORITE, tenir=True)
+                                        quoi="remonter", motif=motif, priorite=PRIORITE, tenir=True,
+                                        malgre_main=True)
         vanne = actions.get("vanne") or {}
         if vanne.get("actif") and cat in VANNE:
             entites = self._vannes(vanne.get("entite"))
@@ -721,9 +743,11 @@ class LoggiaAlertes:
                 for domaine in sorted({h.split(".")[0] for h in entites}):
                     lot = [h for h in entites if h.split(".")[0] == domaine]
                     service = "close_valve" if domaine == "valve" else "turn_off"
+                    # Couper est le sens sur : une fuite ferme la vanne meme si une
+                    # main vient de la rouvrir, avant ou pendant le danger (S1).
                     partis += await self._regles.agir("alertes", "danger", domaine, service, lot,
                                                       quoi="couper", motif=motif, priorite=PRIORITE,
-                                                      tenir=True)
+                                                      tenir=True, malgre_main=True)
                 if partis:
                     self._vannes_coupees = list(partis)
             else:
@@ -740,11 +764,20 @@ class LoggiaAlertes:
         if self._dangers:
             return
         await self._async_rendre()
+        # Le danger est passe : les mains qu'il a vues ne retiennent plus rien (S1).
+        self._mains_pendant.clear()
 
     async def _async_rendre(self) -> None:
         """La maison revient a l'etat d'avant — ce que la regle tient encore :
         une lampe prise en main pendant l'alerte reste comme elle est. La
-        vanne, elle, reste coupee : une fuite s'inspecte avant de rouvrir."""
+        vanne, elle, reste coupee : une fuite s'inspecte avant de rouvrir.
+
+        `malgre_main` ici aussi (audit du 12/11, S1) : ce que la surete a force
+        malgre une main d'AVANT le danger est encore gele quand il passe — le
+        gel dure une demi-heure. Sans lui, le couloir eteint a la main puis
+        allume par la fumee restait allume. On ne rend que ce que la regle
+        tient encore : une main posee PENDANT le danger a repris la tenue, et
+        n'est pas touchee."""
         avant, self._avant = self._avant, {}
         eteindre: list = []
         allumer: dict[int, list] = {}
@@ -770,19 +803,21 @@ class LoggiaAlertes:
         self._regles.relacher("alertes", "danger")
         for domaine, service, lot in par_service(eteindre, False):
             await self._regles.agir("alertes", "danger", domaine, service, lot,
-                                    quoi="rendre", motif="danger passé", priorite=PRIORITE)
+                                    quoi="rendre", motif="danger passé", priorite=PRIORITE,
+                                    malgre_main=True)
         for b, haids in sorted(allumer.items()):
             await self._regles.agir("alertes", "danger", "light", "turn_on", sorted(haids),
                                     {"brightness": b}, quoi="rendre", motif="danger passé",
-                                    priorite=PRIORITE)
+                                    priorite=PRIORITE, malgre_main=True)
         for pos, haids in sorted(positions.items()):
             if pos <= 0:
                 await self._regles.agir("alertes", "danger", "cover", "close_cover", sorted(haids),
-                                        quoi="rendre", motif="danger passé", priorite=PRIORITE)
+                                        quoi="rendre", motif="danger passé", priorite=PRIORITE,
+                                        malgre_main=True)
             else:
                 await self._regles.agir("alertes", "danger", "cover", "set_cover_position",
                                         sorted(haids), {"position": pos}, quoi="rendre",
-                                        motif="danger passé", priorite=PRIORITE)
+                                        motif="danger passé", priorite=PRIORITE, malgre_main=True)
         if self._vannes_coupees:
             await self._regles.noter("alertes", "danger", "laisser coupée", cibles=list(self._vannes_coupees),
                                      n=len(self._vannes_coupees), motif="danger passé",
@@ -856,6 +891,14 @@ class LoggiaAlertes:
         self._au_demarrage = None
         for haid in list(getattr(self, "_muets", None) or {}):
             self._lever_guet(haid)
+        # L'ecoute des mains part avec le reste (S1) : sans cela, l'instance
+        # retiree resterait abonnee au socle.
+        if getattr(self, "_defait_mains", None) is not None:
+            try:
+                self._defait_mains()
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug("Loggia alertes : ecoute des mains deja retiree")
+        self._defait_mains = None
         if self._defait is None:
             return
         try:

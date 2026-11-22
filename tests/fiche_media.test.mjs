@@ -106,6 +106,8 @@ const curseur = (m, nom) => m.trouver(e => e.props && e.props.role === 'slider' 
 const classe = (m, c) => m.trouver(e => e.props && typeof e.props.className === 'string' && e.props.className.split(' ').indexOf(c) >= 0)[0];
 const champ = (m) => m.trouver(e => e.type === 'input')[0];
 const touche = (el, key) => el.props.onKeyDown({ key, preventDefault() {}, stopPropagation() {} });
+// La réponse de Home Assistant, arrivée : quelques tours de promesses, puis un rendu (audit du 12/11, B2).
+const reponse = async (m) => { for (let i = 0; i < 6; i++) await Promise.resolve(); m.rendre(); };
 // La bascule de l'en-tête : dans le fragment `epingle` que la fiche passe à EnteteFiche.
 const basculeDe = (m) => [].concat(de(m, 'EnteteFiche')[0].props.epingle.props.children).find(x => x && x.type && x.type.name === 'RmBascule');
 const rangeeAppareil = (m) => m.trouver(e => e.type === 'button' && texteDe(e).startsWith('L’appareil'))[0];
@@ -207,13 +209,16 @@ test('§ 6.6, § 6.7 : rien en lecture — le mot, la phrase qui dit quoi faire,
   saisie.props.onChange({ target: { value: 'mets du jazz' } }); da.rendre();
   touche(champ(da), 'Enter'); da.rendre();
   assert.deepEqual(w.appels, ['media_player.play_media ' + CUISINE + ' media_content_id=mets du jazz media_content_type=custom'], 'la phrase telle quelle, à la jumelle HACS');
-  assert.ok(da.texte().includes('Envoyé à Alexa : « mets du jazz »') && champ(da).props.value === '', 'dit, et le champ vidé');
+  // ASSERTION MODIFIÉE (13/11, audit du 12/11, lot 2a, B2) : « Envoyé » ne s'écrit qu'à la RÉPONSE de Home Assistant — avant elle,
+  // rien n'est dit et le champ garde la phrase (le champ vidé d'une phrase partie : tests/audit_1211_lot2a.test.mjs).
+  assert.ok(!da.texte().includes('Envoyé à Alexa') && champ(da).props.value === 'mets du jazz', 'rien n’est dit avant la réponse');
   // Une seule en vol (M13) : tant que la première n'a pas répondu, la seconde n'envoie rien.
   champ(da).props.onChange({ target: { value: 'encore' } }); da.rendre();
   assert.equal(bouton(da, 'Envoyer à Alexa').props['aria-disabled'], true);
   touche(champ(da), 'Enter'); da.rendre();
   assert.equal(w.appels.length, 1, 'la seconde phrase attend');
-  await Promise.resolve(); await Promise.resolve(); da.rendre();
+  await reponse(da);
+  assert.ok(da.texte().includes('Envoyé à Alexa : « mets du jazz »') && champ(da).props.value === 'encore', 'dit à la réponse ; ce qu’on a tapé entre-temps reste');
   assert.equal(bouton(da, 'Envoyer à Alexa').props['aria-disabled'], undefined, 'répondu : on peut envoyer de nouveau');
   // L'étoile garde la phrase du champ : elle devient une puce, choisie le temps d'une avance quand on l'envoie.
   champ(da).props.onChange({ target: { value: 'France Inter' } }); da.rendre();
@@ -223,6 +228,7 @@ test('§ 6.6, § 6.7 : rien en lecture — le mot, la phrase qui dit quoi faire,
   assert.ok(puce && puce.props['aria-pressed'] === false && puce.props.style.minHeight === 44 && puce.props.style.height === 'auto', 'la phrase gardée, une puce de 44 px au moins');
   da.appuyer(puce);
   assert.equal(w.appels[1], 'media_player.play_media ' + CUISINE + ' media_content_id=France Inter media_content_type=custom');
+  await reponse(da); // ASSERTION MODIFIÉE (13/11, B2) : choisie à la réponse, plus à l'appui
   assert.equal(bouton(da, 'France Inter').props['aria-pressed'], true, 'choisie : elle vient d’être envoyée');
 }));
 
@@ -329,12 +335,15 @@ test('§ 6.7, M9 : l’annonce — « Sur » : toute la maison (le groupe), puis
   for (const a of pretes) assert.ok(bouton(an, a) && bouton(an, a).props.style.minHeight === 44 && bouton(an, a).props.style.whiteSpace === 'normal', a + ' : une puce de 44 px au moins');
   an.appuyer(bouton(an, 'À table !'));
   assert.deepEqual(w.bruts, [{ d: 'notify', s: 'send_message', data: { entity_id: 'notify.partout_annoncer', message: 'À table !' } }], 'toute la maison : UN appel, la `notify` du groupe');
-  assert.deepEqual([OFF, CUISINE, SHOW, PARTOUT, ATV].map(id => E.annonceDe(id)), ['À table !', 'À table !', 'À table !', 'À table !', null], 'les cartes des Echo l’écrivent — et celle du groupe ; pas la TV');
-  assert.ok(an.texte().includes('Annoncé sur toute la maison : « À table ! »'));
+  // ASSERTION MODIFIÉE (13/11, audit du 12/11, lot 2a, B2) : ni la fiche ni les cartes ne l'écrivent avant la réponse de Home Assistant.
+  assert.deepEqual([OFF, CUISINE, SHOW, PARTOUT, ATV].map(id => E.annonceDe(id)), [null, null, null, null, null], 'rien n’est écrit avant la réponse');
+  assert.ok(!an.texte().includes('Annoncé sur'));
   // Une seule en vol (M13).
   an.appuyer(bouton(an, 'Je rentre bientôt'));
   assert.equal(w.bruts.length, 1, 'la seconde attend la réponse de la première');
-  await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); an.rendre();
+  await reponse(an);
+  assert.deepEqual([OFF, CUISINE, SHOW, PARTOUT, ATV].map(id => E.annonceDe(id)), ['À table !', 'À table !', 'À table !', 'À table !', null], 'les cartes des Echo l’écrivent — et celle du groupe ; pas la TV');
+  assert.ok(an.texte().includes('Annoncé sur toute la maison : « À table ! »'));
   assert.equal(bouton(an, 'Je rentre bientôt').props['aria-disabled'], undefined, 'répondu');
 }));
 
@@ -353,6 +362,7 @@ test('§ 6.7, M9 : des Echo choisies — l’officielle par sa `notify` « Annon
     { d: 'notify', s: 'send_message', data: { entity_id: 'notify.chambre_echo_dot_annoncer', message: 'je rentre' } },
     { d: 'notify', s: 'alexa_media', data: { message: 'je rentre', target: CUISINE, data: { type: 'announce' } } },
   ], 'l’officielle par sa sœur « Annoncer », la jumelle HACS par le service de HACS (§ 7.2)');
+  await reponse(an); // ASSERTION MODIFIÉE (13/11, B2) : écrit à la réponse
   assert.deepEqual([OFF, CUISINE, SHOW, PARTOUT].map(id => E.annonceDe(id)), ['je rentre', 'je rentre', null, null], 'les cartes visées seulement');
   assert.ok(an.texte().includes('Annoncé sur Echo Dot - Chambre, Echo de la cuisine : « je rentre »') && champ(an).props.value === '');
   // Toute la maison, de nouveau : la puce se rechoisit seule.
@@ -364,6 +374,7 @@ test('§ 6.7, M9 : des Echo choisies — l’officielle par sa `notify` « Annon
   champ(an).props.onChange({ target: { value: 'à table' } }); an.rendre();
   touche(champ(an), 'Enter'); an.rendre();
   assert.deepEqual(w.bruts.at(-1), { d: 'notify', s: 'send_message', data: { entity_id: 'notify.partout_annoncer', message: 'à table' } });
+  await reponse(an); // ASSERTION MODIFIÉE (13/11, B2) : écrit à la réponse
   assert.ok(an.texte().includes('Annoncé sur Partout : « à table »'));
 }));
 
@@ -379,6 +390,7 @@ test('passe bis, M9 : deux groupes — aucun n’est « toute la maison » : cha
     { d: 'notify', s: 'send_message', data: { entity_id: 'notify.chambre_echo_dot_annoncer', message: 'À table !' } },
     { d: 'notify', s: 'alexa_media', data: { message: 'À table !', target: [CUISINE, SHOW], data: { type: 'announce' } } },
   ], 'lequel des deux serait toute la maison ? chaque Echo, un appel par service');
+  await reponse(an); // ASSERTION MODIFIÉE (13/11, B2) : écrit à la réponse
   assert.deepEqual([OFF, CUISINE, SHOW, PARTOUT, 'media_player.etage'].map(id => E.annonceDe(id)), ['À table !', 'À table !', 'À table !', null, null], 'les cartes des Echo l’écrivent ; pas celles des groupes, qui n’ont rien reçu');
 }));
 
@@ -402,6 +414,7 @@ test('passe bis, M14 : une jumelle HACS indisponible ne reçoit ni phrase ni ann
     { d: 'notify', s: 'send_message', data: { entity_id: 'notify.chambre_echo_dot_annoncer', message: 'À table !' } },
     { d: 'notify', s: 'alexa_media', data: { message: 'À table !', target: SHOW, data: { type: 'announce' } } },
   ], 'l’officielle par sa sœur, l’Echo Show par le service de HACS ; rien pour la cuisine, morte');
+  await reponse(an2); // ASSERTION MODIFIÉE (13/11, B2) : écrit à la réponse
   assert.deepEqual([OFF, SHOW, CUISINE].map(id => E.annonceDe(id)), ['À table !', 'À table !', null]);
 }));
 

@@ -30,7 +30,7 @@ const WS_DELETE = 'loggia/config/delete';
  * (voir `enattente.js`) : il decrit un incident de transport de CET
  * appareil, pas un reglage. Il n'a rien a faire ni dans un export, ni dans
  * la configuration de la maison. */
-export const LOCAL_ONLY_KEYS = new Set(['loggia_enattente']);
+const LOCAL_ONLY_KEYS = new Set(['loggia_enattente']);
 
 // Prefixes reconnus comme appartenant a Loggia dans le localStorage.
 const KEY_PREFIXES = ['loggia_', 'loggia-'];
@@ -395,7 +395,7 @@ export async function reportLive(hass) {
 }
 
 /** Resume lisible a partir d'un etat deja connu. */
-export function report(state) {
+function report(state) {
   if (!state) return 'Configuration : etat inconnu';
   const L = [];
   L.push('Loggia · configuration v' + CONFIG_VERSION);

@@ -14,7 +14,8 @@ test('l’onglet Veilles designe les capteurs par un selecteur, jamais par un no
   assert.ok(v.includes("enregistrer({ consommables: { actif: !conso.actif } })"), 'la regle se debraye comme les autres');
   assert.ok(v.includes("enregistrer({ consommables: { seuil:"), 'un seuil, dans l’unite du capteur');
   assert.ok(v.includes("<EntPicker hass={hass} domaines={['sensor']}") && v.includes("enregistrer({ consommables: { capteurs: [...designes, id] } })"), 'un selecteur d’entites pour designer');
-  assert.ok(v.includes("{tr('Aucun capteur désigné : pointe le capteur d’usure d’un filtre, d’une brosse, ou le niveau d’un réservoir — le plus souvent un pourcentage restant.')}"), 'sans designation, la carte dit quoi designer');
+  // ASSERTION MODIFIÉE (12/11, audit) : la phrase passe au vouvoiement (« pointez »), comme tout le français de Loggia.
+  assert.ok(v.includes("{tr('Aucun capteur désigné : pointez le capteur d’usure d’un filtre, d’une brosse, ou le niveau d’un réservoir — le plus souvent un pourcentage restant.')}"), 'sans designation, la carte dit quoi designer');
   // Un nom de capteur devine serait une chaine ('filter', "brush"…) ; `.filter(` de JavaScript n'en est pas un.
   assert.ok(!/['"`](filter|brush|lifespan)['"`]/.test(v), 'aucun nom de capteur devine dans le code');
 });

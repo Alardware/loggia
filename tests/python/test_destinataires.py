@@ -512,7 +512,8 @@ ATTENDU = {
     # La fin d'un cycle : qui est a la maison.
     "prises": {"presents"},
     # Les veilles ordinaires et la collecte : qui est la ; le monoxyde : tout le monde.
-    "veilles": {"presents", "tous"},
+    # ASSERTION MODIFIEE (21/11, ADR 0384) : la sauvegarde ratee part aux administrateurs
+    "veilles": {"presents", "tous", "admins"},
 }
 
 

@@ -1,6 +1,6 @@
 # 0345 — Choisir les playlists Spotify affichées
 
-*11 novembre 2026 — à l'essai (bêta v3.100.0-beta.1)*
+*11 novembre 2026 — appliqué (v3.100.0)*
 
 ## Le problème
 

@@ -3,6 +3,7 @@ import { basename, join, resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { greffonTailleDuTexte as tailleDuTexte } from './scripts/taille_du_texte.mjs';
+import { greffonVersionDesFeuilles } from './scripts/version_feuilles.mjs';
 
 /* L'orbe (src/orbe.jsx) nait dans un effet a dependances vides : le
  * remplacement a chaud de Vite echange le module sans rejouer cet effet, et
@@ -145,6 +146,11 @@ const config = {
     rollupOptions: { output: { manualChunks: { vendor: ['react', 'react-dom'], three: ['three'] } } },
   },
 };
+
+/* Les feuilles de `public/` portent la version de leur contenu (16/11) : un navigateur gardait `fonts.css` des jours après
+ * une installation — scripts/version_feuilles.mjs. Ajouté ICI, et non dans la liste ci-dessus : tests/taille_texte.test.mjs
+ * et tests/orbe.test.mjs lisent cette ligne telle qu'elle est. Les deux constructions l'ont, paquet HACS et démo en ligne. */
+config.plugins.push(greffonVersionDesFeuilles());
 
 export default defineConfig(({ mode }) => {
   if (mode === 'demo') config.plugins.push(siteEnLigne);

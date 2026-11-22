@@ -37,7 +37,8 @@ export const CLASSES_SURETE = ['smoke', 'carbon_monoxide', 'gas', 'moisture', 's
  * `moisture`, sans appareil — « la plante a soif ». La même règle que le serveur (`alertes.py`, PLATEFORMES_CALCULEES), lue à la
  * plateforme que l'index donne ; une entité que le registre ne connaît pas (plateforme nulle) reste une fuite — on ne perd aucun vrai
  * détecteur. L'Accueil, « En ce moment » et Paramètres › Alertes la lisent (chantier Capteurs, étapes 2 et 3, tâche 12). */
-const PLATEFORMES_CALCULEES = ['template', 'group'];
+// Exportée (audit du 12/11) : health.js en écarte aussi le point « … ne répond plus », la panne d'un calcul vient d'ailleurs.
+export const PLATEFORMES_CALCULEES = ['template', 'group'];
 export const fuiteCalculee = (plateforme) => PLATEFORMES_CALCULEES.indexOf(plateforme) >= 0;
 /* La classe dit CE QU'UN BINAIRE MESURE, l'appareil qui le porte dit QUI le mesure (31/10, ADR 0305) — la règle du serveur
  * (`voisins.py`), lue aux domaines des entités de son appareil (`voisins(id)`, l'index ; [] sans appareil connu : rien ne se perd) :
@@ -123,7 +124,8 @@ export const ICONES_ATTENTION = {
   alarme: 'bell-ring', smoke: 'fire-smoke', carbon_monoxide: 'flame', gas: 'flame',
   moisture: 'water', safety: 'shield-exclamation', tamper: 'shield-exclamation', meteo: 'umbrella',
   ouvrant: 'door-open', co2: 'wind', camera: 'camera', chauffage: 'flame', pile: 'battery-quarter', sante: 'exclamation',
-  tempo: 'bolt', entendue: 'camera', defaut: 'triangle-warning', entretien: 'wrench-simple',
+  tempo: 'bolt', entendue: 'camera', defaut: 'triangle-warning', entretien: 'wrench-simple', borne: 'charging-station', fuite: 'raindrops',
+  serrure: 'lock', voiture: 'car-side', pneu: 'tire-pressure-warning', litiere: 'paw', fontaine: 'water',
 };
 
 /* Une entité muette ne dit rien : elle ne compte ni fermée ni ouverte. Sans
@@ -187,8 +189,8 @@ export function comptesSecurite(S, cams = [], { plateforme = () => null, masque 
       if (on) { mouvement.actifs += 1; mouvement.noms.push(nomDe(id, st)); }
     }
   });
-  /* `online === false` seulement : une caméra dont on ne sait rien est
-   * réputée joignable, comme dans `deriveAccueil` (`c.online !== false`). */
+  /* `online === false` seulement : `online` vient de `cameraEnLigne`, la même
+   * règle sur l'Accueil et dans la vue Sécurité (audit du 12/11). */
   const liste = (Array.isArray(cams) ? cams : []).filter(estObjet);
   const cameras = { total: liste.length, enLigne: 0, noms: [] };
   liste.forEach((cam, i) => {
@@ -200,6 +202,59 @@ export function comptesSecurite(S, cams = [], { plateforme = () => null, masque 
     portes: ou(portes), fenetres: ou(fenetres), mouvement: ou(mouvement), cameras: ou(cameras),
     ok: portes.ouverts === 0 && fenetres.ouverts === 0 && cameras.enLigne === cameras.total,
   };
+}
+
+/** Une caméra de la maison est-elle en ligne ? UNE règle pour l'Accueil, le
+ * compteur et les tuiles de la vue Sécurité (audit du 12/11) : le compteur
+ * tenait `unknown` pour joignable et les tuiles non, la vue disait « 3/4 en
+ * ligne » au-dessus de deux tuiles « HORS LIGNE ».
+ *  - sans entité (`haid`), elle ne peut rien montrer : hors ligne ;
+ *  - son état connu : en ligne sauf `unavailable` et `unknown` (la fiche
+ *    caméra dit déjà « Indisponible » pour les deux) ;
+ *  - son entité absente de l'instant : le drapeau gardé avec elle
+ *    (`online`), joignable s'il ne dit pas le contraire — comme avant. */
+export function cameraEnLigne(cam, S) {
+  if (!estObjet(cam) || typeof cam.haid !== 'string' || !cam.haid) return false;
+  const st = estObjet(S) ? S[cam.haid] : null;
+  if (estObjet(st)) return st.state !== 'unavailable' && st.state !== 'unknown';
+  return cam.online !== false;
+}
+
+/** La liste des caméras de la vue Sécurité, compteur ET tuiles (audit du
+ * 12/11) : celle de l'utilisateur (`loggia_cameras`, la liste de l'Accueil)
+ * quand il en a une — une caméra sans entité y reste, et s'affiche en panne —,
+ * chacune complétée par ce que la résolution sait d'elle (ses détecteurs) ;
+ * sinon celles de la résolution. Le compteur lisait la première, les tuiles
+ * la seconde, qui écarte les caméras sans entité : la caméra en panne
+ * disparaissait. */
+export function camerasDeLaMaison(choisies, resolues) {
+  const res = (Array.isArray(resolues) ? resolues : []).filter(estObjet);
+  const liste = (Array.isArray(choisies) ? choisies : []).filter(estObjet);
+  if (!liste.length) return res.map(c => ({ ...c, haid: c.haid || c.id || null })).filter(c => c.haid);
+  return liste.map(c => {
+    const r = c.haid ? res.find(x => (x.haid || x.id) === c.haid) : null;
+    return r ? { ...c, ...r, name: c.name || r.name, label: c.label || c.name || r.label } : { ...c };
+  });
+}
+
+/** Le mot et la couleur de la pastille de la vue Sécurité (audit du 12/11).
+ * Elle disait « Tout est calme » porte d'entrée ouverte : elle ne regardait que
+ * l'alarme et le mouvement des caméras. Dans l'ordre : état inconnu, alarme
+ * déclenchée, mouvement (caméras OU détecteurs), ouvrants ouverts, et le calme
+ * seulement quand rien de tout cela. Ambre dès qu'il y a un mouvement ou un
+ * ouvert ; au calme, vert alarme désarmée et ambre alarme armée, comme avant.
+ *  `alarme` : 'unknown' | 'triggered' | autre ; `mouvementCamera` : une
+ *  caméra détecte ; `comptes` : ceux de `comptesSecurite`.
+ *  → { titre, rgb } (`rgb` : la variable `--o-…-rgb` de la teinte). */
+export function etatSecurite({ alarme = null, mouvementCamera = false, comptes = null } = {}) {
+  const c = estObjet(comptes) ? comptes : {};
+  const n = (v) => Number(v) || 0;
+  if (alarme === 'unknown') return { titre: tr('État inconnu'), rgb: 'var(--o-text3-rgb)' };
+  if (alarme === 'triggered') return { titre: tr('Alarme déclenchée'), rgb: 'var(--o-bad-rgb)' };
+  if (mouvementCamera || n(c.mouvement && c.mouvement.actifs) > 0) return { titre: tr('Mouvement détecté'), rgb: 'var(--o-warn-rgb)' };
+  const ouverts = n(c.portes && c.portes.ouverts) + n(c.fenetres && c.fenetres.ouverts);
+  if (ouverts > 0) return { titre: trN(ouverts, '{n} ouvrant ouvert', '{n} ouvrants ouverts'), rgb: 'var(--o-warn-rgb)' };
+  return { titre: tr('Tout est calme'), rgb: alarme && alarme !== 'off' ? 'var(--o-warn-rgb)' : 'var(--o-ok-rgb)' };
 }
 
 /** La sous-ligne de la sécurité, en un mot : « Tout est sécurisé », sinon ce
@@ -403,7 +458,7 @@ function compteIncident(i) {
 
 /** Les points d'attention, du plus grave au plus doux puis par titre.
  *
- * ctx = { S, cams, pieces, sante, veilles, fenetres, plantes, plateforme, voisins, nomAppareil, tempoDemain, vigilance } — chaque
+ * ctx = { S, cams, pieces, sante, veilles, fenetres, plantes, plateforme, voisins, nomAppareil, tempoDemain, vigilance, borneEnPanne, bornesEnPanne, autres } — chaque
  * morceau peut manquer : l'Accueil se dessine avant que le serveur ait répondu,
  * et un ctx vide donne simplement une liste vide.
  *
@@ -516,7 +571,8 @@ export function pointsAttention(ctx) {
   });
 
   /* 7. Les veilles du serveur (`veilles.py`) : `signales` liste des clés
-   * `bat:<haid>`, `co2:<haid>` et `entretien:<haid>`. La pile est une info qui attend ; le CO₂ une
+   * `bat:<haid>`, `co2:<haid>`, `fuite:<haid>` et `entretien:<haid>` (`sauvegarde:<haid>` ne s'y montre pas : la vue Système
+   * le dit déjà, `systemecalc.js`, et le serveur ne l'envoie qu'au téléphone des administrateurs). La pile est une info qui attend ; le CO₂ une
    * alerte, sauf si la pièce l'a déjà dit (règle 4). L'entretien du poêle (ADR 0308) : le serveur le
    * signale sous son seuil, en heures de fonctionnement ; une info, une alerte quand il est dû. */
   const signales = (estObjet(c.veilles) && Array.isArray(c.veilles.signales)) ? c.veilles.signales : [];
@@ -536,6 +592,10 @@ export function pointsAttention(ctx) {
     } else if (genre === 'co2') {
       if (co2Haids.has(haid) || cles.has('co2:' + haid)) return;
       ajouter('co2:' + haid, 'alerte', tr('CO₂ élevé'), val != null ? nom + ' · ' + chiffre(val, 'ppm') : nom, null, haid);
+    } else if (genre === 'fuite') {
+      /* La fuite lente de nuit (ADR 0384) : le compteur d'eau a avancé quatre heures de suite, de 01 h à 05 h. Une alerte,
+       * qui mène à l'Énergie, où vit le compteur. Rien ne se ferme tout seul : on va voir. */
+      ajouter('fuite:' + haid, 'alerte', tr('De l’eau a coulé toute la nuit'), nom, 'energie', haid);
     } else if (genre === 'entretien') {
       const du = val != null && val <= 0;
       ajouter('entretien:' + haid, du ? 'alerte' : 'info',
@@ -597,6 +657,30 @@ export function pointsAttention(ctx) {
     if (!v || v.niveau !== VIGILANCE_POINT) return;
     ajouter('meteo:' + id, 'danger', motVigilance(v.niveau), v.detail || tr('Alerte météo en cours'), 'securite', id);
   });
+
+  /* 11. LA BORNE EN PANNE (chantier du 20/11, F1 ; ADR 0381) : son statut dit `error` ou `faulted` — la voiture ne
+   * chargera pas de la nuit. Rare et actionnable. `borneEnPanne` : le capteur de statut de la borne, quand l'écran l'a trouvée en
+   * panne (`statutEnPanne`, borne.js) — le module reste pur. */
+  const panne = typeof c.borneEnPanne === 'string' && c.borneEnPanne ? c.borneEnPanne : null;
+  if (panne) ajouter('borne:' + panne, 'alerte', tr('Borne en défaut'), nomAppareil(panne) || nomDe(panne, S[panne]), 'objets', panne);
+  /* PLUSIEURS BORNES (A7, ADR 0385) : « Borne en défaut » vaut pour chacune, au nom de son appareil. `bornesEnPanne` : les capteurs
+   * de statut de toutes les bornes en panne (`statutsEnPanne`, borne.js) ; la première, déjà dite, ne se redit pas (clé unique). */
+  (Array.isArray(c.bornesEnPanne) ? c.bornesEnPanne : []).forEach(id => {
+    if (typeof id === 'string' && id) ajouter('borne:' + id, 'alerte', tr('Borne en défaut'), nomAppareil(id) || nomDe(id, S[id]), 'objets', id);
+  });
+
+  /* 12. UNE SERRURE BLOQUÉE (chantier du 20/11, A4 ; ADR 0386) : `jammed`, l'état que Home Assistant donne à un pêne
+   * coincé à mi-course — la porte n'est tenue par rien, et seule la carte le disait. Rare et actionnable. Ni un groupe ni une
+   * entité masquée, comme les ouvrants. */
+  ids.forEach(id => {
+    const st = S[id];
+    if (id.indexOf('lock.') === 0 && estObjet(st) && st.state === 'jammed' && !ecarte(id, st, plateforme, masque)) ajouter('serrure:' + id, 'alerte', tr('Serrure bloquée'), nomDe(id, st), 'securite', id);
+  });
+
+  /* 13. LES APPAREILS COMPOSÉS (A11 et A12, ADR 0386) : la voiture ouverte ou déverrouillée la nuit, un pneu bas, le bac de la
+   * litière plein, la fontaine à remplir — `autres`, des points déjà faits par l'écran (`alertesComposes`, composes.js) : le
+   * module reste pur, et n'en apprend rien de plus. */
+  (Array.isArray(c.autres) ? c.autres : []).forEach(p => { if (estObjet(p) && p.cle) ajouter(p.cle, p.niveau, p.titre, p.sous, p.vue, p.haid); });
 
   /* Du plus grave au plus doux, puis par titre — puis par sous-titre et clé :
    * un ordre entièrement déterminé, pour que la liste ne saute pas d'un rendu

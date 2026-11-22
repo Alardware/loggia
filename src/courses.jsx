@@ -82,8 +82,9 @@ export function CarteCourses({ hass = null, liste, taches = null, onFait = null,
         <form onSubmit={valider} style={{ display: 'flex', gap: 8 }}>
           <input value={texte} onChange={e => setTexte(e.target.value)} aria-label={tr('Ajouter un article')} placeholder={tr('Ajouter un article')}
             style={{ flex: 1, minWidth: 0, minHeight: 44, boxSizing: 'border-box', padding: '10px 12px', borderRadius: 12, border: 'var(--o-bw,1px) solid var(--o-bd2)', background: 'var(--o-s2)', color: 'var(--o-text)', font: 'inherit', fontSize: 13 }} />
+          {/* Le « + » blanc sur `--o-accent-fond` (audit du 12/11, lot 4, E25) : sur l'accent clair, il ne tenait pas 2,5 pour 1. */}
           <button type="submit" disabled={envoi || !texte.trim()} aria-label={tr('Ajouter')}
-            style={{ width: 44, height: 44, flexShrink: 0, borderRadius: 12, border: 'none', background: 'var(--o-accent)', color: '#fff', cursor: envoi ? 'default' : 'pointer', opacity: envoi || !texte.trim() ? .6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            style={{ width: 44, height: 44, flexShrink: 0, borderRadius: 12, border: 'none', background: 'var(--o-accent-fond)', color: '#fff', cursor: envoi ? 'default' : 'pointer', opacity: envoi || !texte.trim() ? .6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Fi i="plus" size={13} />
           </button>
         </form>

@@ -6,7 +6,7 @@ Assistant. Le client ne peut pas designer un autre utilisateur — aucune comman
 n'accepte de champ `user_id`. Un utilisateur ne lit et n'ecrit donc que sa propre
 configuration, et les permissions Home Assistant restent celles de sa session.
 
-Les 66 commandes, toutes prefixees `loggia/`, chacune une ligne de la table
+Les 68 commandes, toutes prefixees `loggia/`, chacune une ligne de la table
 `COMMANDES` (lot 8, ADR 0291). Le compte et la repartition entre ouvertes,
 reservees et ouvertes au code de la maison sont verrouilles par
 `test_websocket_api.py` et `test_websocket_registre.py` : une commande
@@ -90,6 +90,9 @@ nouvelle doit y etre rangee d'un cote ou de l'autre.
                                description de la maison (admin ; passe bis 2
                                de la tranche robots 2, 20/10)
     minuteurs/etat|poser|annuler -> le minuteur d'extinction d'un appareil
+    purificateurs/etat      -> le planning des purificateurs, sous les droits
+                               de LECTURE du compte (ADR 0387)
+    purificateurs/regler    -> l'allumer, l'eteindre, sa semaine (admin)
     rappels/etat|poser|annuler -> « me prevenir a 22 h 30 » : SES rappels,
                                vers SES telephones (usage etape 11, 07/11)
     sirene/tester           -> sonner trois secondes, tenu ici
@@ -200,6 +203,8 @@ WS_ENF_DORMIR = "loggia/enfant/dormir"
 WS_MIN_ETAT = "loggia/minuteurs/etat"
 WS_MIN_POSER = "loggia/minuteurs/poser"
 WS_MIN_ANNULER = "loggia/minuteurs/annuler"
+WS_PUR_ETAT = "loggia/purificateurs/etat"
+WS_PUR_REGLER = "loggia/purificateurs/regler"
 WS_SIR_TESTER = "loggia/sirene/tester"
 WS_SPOTIFY_JOUER = "loggia/spotify/jouer"
 WS_SPOTIFY_PLAYLISTS = "loggia/spotify/playlists"
@@ -305,6 +310,7 @@ INDISPONIBLE = {
     "eau": "carnet de l'eau indisponible",
     "enfant": "mode enfant indisponible",
     "minuteurs": "minuteurs indisponibles",
+    "purificateurs": "planning des purificateurs indisponible",
     "sirene": "test de sirene indisponible",
     "rappels": "rappels indisponibles",
 }
@@ -413,15 +419,46 @@ def _code_ou_admin(ctx: Contexte, connection, msg) -> bool:
 
 # ── Les gestionnaires communs : l'etat et la configuration d'un module ──────
 
+def _sous_les_droits(etat, user):
+    """Le journal, les tenues et les ordres en attente d'un etat de module,
+    sous les droits de LECTURE du compte (audit du 12/11, S7a) - ce que la
+    decision 0279 fait pour `regles/etat`. Les volets, les fenetres, la
+    presence, les veilles, les scenarios et les robots rendaient leur part du
+    journal en entier : un compte restreint y lisait les entites que
+    `regles/etat` lui taisait. Aucun module ne change ; le filtre se pose ici,
+    sur ce qui sort.
+
+    Sans restriction - un administrateur, presque toutes les installations -,
+    `_lecture_autorisee` rend None et l'etat repart tel quel, le meme objet.
+    Une ligne sans cible reste, comme dans `journal_lisible`."""
+    from .discovery import _lecture_autorisee
+    from .regles import cles_lisibles, journal_lisible
+
+    lecture = _lecture_autorisee(user)
+    if lecture is None or not isinstance(etat, dict):
+        return etat
+    etat = dict(etat)
+    if isinstance(etat.get("journal"), list):
+        etat["journal"] = journal_lisible(etat["journal"], lecture)
+    for cle in ("tenues", "attente"):
+        if isinstance(etat.get(cle), dict):
+            etat[cle] = cles_lisibles(etat[cle], lecture)
+    return etat
+
+
 def _etat(par_compte: bool = False):
     """`etat` d'un module, tel qu'il le rend. `par_compte` : sous les droits de
     LECTURE du compte (audit du 19/10) - le module tait ce qu'il ne lit pas. Le
-    compte vient de la session, jamais du message."""
+    compte vient de la session, jamais du message.
+
+    Dans les deux cas, le journal, les tenues et les ordres en attente passent
+    ensuite par `_sous_les_droits` (audit du 12/11, S7a)."""
     async def handle_etat(ctx, connection, msg, module):
         if par_compte:
-            connection.send_result(msg["id"], await module.async_etat(connection.user))
+            etat = await module.async_etat(connection.user)
         else:
-            connection.send_result(msg["id"], await module.async_etat())
+            etat = await module.async_etat()
+        connection.send_result(msg["id"], _sous_les_droits(etat, connection.user))
 
     return handle_etat
 
@@ -559,6 +596,17 @@ async def handle_cfg_suivre(ctx, connection, msg, module):
 
     @callback
     def transmettre(changement):
+        # Le compte qui ecrit n'est dit qu'a SES ecrans (audit du 12/11, S7b ;
+        # ADR 0279, « ce qui n'est pas fait ») : un autre ecran du meme compte
+        # relit ses cles personnelles sur ce signe (src/config.js,
+        # `doitRelire`). Aux autres comptes, ni l'identifiant ni les noms de
+        # ses cles personnelles - son activite ne les regarde pas -, rien que
+        # les cles communes ; et rien du tout s'il n'y en a pas.
+        if isinstance(changement, dict) and changement.get("user_id") != connection.user.id:
+            communes = list(changement.get("communes") or [])
+            if not communes:
+                return
+            changement = {"user_id": None, "perso": [], "communes": communes}
         connection.send_message(websocket_api.event_message(msg["id"], changement))
 
     connection.subscriptions[msg["id"]] = async_dispatcher_connect(hass, SIGNAL_CONFIG, transmettre)
@@ -698,7 +746,10 @@ async def handle_scn_ordre(ctx, connection, msg, scenarios):
         _relayer(connection, msg, err)
         return
     # L'etat avec, deja range : l'ecran redessine sans attendre son sondage.
-    connection.send_result(msg["id"], {"ordre": config["ordre"], "etat": await scenarios.async_etat()})
+    # Son journal sous les droits du compte, comme `scenarios/etat` (audit du
+    # 12/11, S7a) : cette commande est ouverte a tout compte.
+    connection.send_result(msg["id"], {"ordre": config["ordre"],
+                                       "etat": _sous_les_droits(await scenarios.async_etat(), connection.user)})
 
 
 # Le scenario se nomme `scenario`, JAMAIS `id` (audit du 03/10) : `id` est
@@ -1140,6 +1191,19 @@ async def handle_min_annuler(ctx, connection, msg, minuteurs):
     connection.send_result(msg["id"], etat)
 
 
+# ── Le planning des purificateurs (ADR 0387) ───────────────────────────────
+# Le planning est la configuration de la maison, comme celui des robots : seul
+# un administrateur l'ecrit ; l'etat se lit de tout compte, sous ses droits de
+# LECTURE (`_etat(par_compte=True)`). Un refus previsible porte son code.
+async def handle_pur_regler(ctx, connection, msg, purificateurs):
+    try:
+        etat = await purificateurs.async_regler(msg["entity_id"], msg.get("actif"), msg.get("semaine"))
+    except ValueError as err:
+        _relayer(connection, msg, err)
+        return
+    connection.send_result(msg["id"], etat)
+
+
 # ── Le test d'une sirene (22/09) ───────────────────────────────────────────
 # Meme regime que les minuteurs : le geste d'une carte, ouvert a tout
 # compte connecte, sur ce qu'il a le droit de PILOTER — c'est le composant
@@ -1341,6 +1405,10 @@ COMMANDES: tuple[Commande, ...] = (
              module="minuteurs"),
     Commande(WS_MIN_ANNULER, handle_min_annuler, {vol.Required("entity_id"): str}, module="minuteurs"),
     Commande(WS_SIR_TESTER, handle_sir_tester, {vol.Required("entity_id"): str}, module="sirene"),
+    # Le planning des purificateurs (ADR 0387)
+    Commande(WS_PUR_ETAT, _etat(par_compte=True), module="purificateurs"),
+    Commande(WS_PUR_REGLER, handle_pur_regler, {vol.Required("entity_id"): str, vol.Optional("actif"): bool,
+                                                vol.Optional("semaine"): list}, acces=ADMIN, module="purificateurs"),
     # Les rappels (usage etape 11)
     Commande(WS_RAP_ETAT, handle_rap_etat, module="rappels"),
     Commande(WS_RAP_POSER, handle_rap_poser, {vol.Required("quand"): vol.Coerce(float), vol.Required("sorte"): str,

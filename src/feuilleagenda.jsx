@@ -10,10 +10,11 @@
 import { useState, useMemo, useEffect, useRef, Suspense } from 'react';
 import { lazyRecharge } from './recharge.js';
 import { tr, trN, locale, comparerTextes } from './i18n.js';
-import { BottomSheet, Fi, CroixFeuille, NomFeuille } from './ui.jsx';
+import { BottomSheet, Fi, CroixFeuille, NomFeuille, DESSIN_CROIX, CROIX } from './ui.jsx';
 import { cleJour, jourDeCle, moisPlus, joursAgenda, comptesParJour, evenementsDuJour, traverseJour, bornesDuJour, plageDeLaSemaine } from './agenda.js';
 import { peut } from './actions.js';
-import { majuscule, calDe, nomDuCalendrier, teinteAgenda, calendriersDeLaMaison, lire, BandeJours, LigneEvenement } from './agendarail.jsx';
+import { majuscule, calDe, nomDuCalendrier, teinteAgenda, calendriersDeLaMaison, lire, BandeJours, LigneEvenement, AUCUN_EVENEMENT } from './agendarail.jsx';
+import { lireCouleur, contraste, composer, ajuster, versHex, SEUILS } from './contraste.js';
 // Le formulaire d'un rendez-vous, chargé quand on l'ouvre (chantier Volets, la borne du démarrage).
 const NouvelEvenement = lazyRecharge(() => import('./formevenement.jsx').then(m => ({ default: m.NouvelEvenement })));
 
@@ -28,12 +29,58 @@ const H1 = 24;         // et finit à minuit le lendemain
 const HEURE_OUVERTURE = 7;  // ce qu'on voit en ouvrant, à défaut de l'heure courante
 const PAS_H = 48;      // hauteur d'une heure, en pixels
 
+/* L'ENCRE D'UN BLOC D'AGENDA (audit du 12/11, lot 4, E25). Le texte était blanc sur la teinte pleine de l'agenda : 1,9 pour 1
+ * sur l'orange, 2 sur le cyan, 2,1 sur le vert — et aucune des six teintes ne tient 4,5 en blanc. L'encre se tire de la teinte
+ * elle-même, assombrie du plus petit pas qui tient le seuil WCAG ; le blanc reste là où il le tient. Le bloc est posé à 92 %
+ * sur la feuille : on mesure contre la feuille sombre ET la claire (les fonds de `lisibleSurLavis`, contraste.js). Six teintes
+ * fixes (`teinteAgenda`) : le calcul se fait une fois chacune. */
+const FONDS_FEUILLE = [[18, 24, 36], [242, 244, 247]];
+const BLANC = [255, 255, 255];
+const ENCRES = new Map();
+export function encreSurTeinte(rgb) {
+  if (ENCRES.has(rgb)) return ENCRES.get(rgb);
+  const c = lireCouleur('rgb(' + rgb + ')');
+  let encre = '#fff';
+  if (c) {
+    const fonds = FONDS_FEUILLE.map(f => composer(f, [c[0], c[1], c[2], 0.92]));
+    if (!fonds.every(f => contraste(BLANC, f) >= SEUILS.wcag)) encre = versHex(ajuster(c.slice(0, 3), fonds, SEUILS.wcag, -1));
+  }
+  ENCRES.set(rgb, encre);
+  return encre;
+}
+
+/* DEUX RENDEZ-VOUS À LA MÊME HEURE SE PARTAGENT LA COLONNE (audit du 12/11, lot 4, E27). Chacun prenait toute la largeur :
+ * le second se posait sur le premier et le cachait. Comme dans un agenda d'ordinateur, les blocs qui se touchent de proche
+ * en proche forment un groupe ; chacun y prend la première voie libre, et le groupe se partage en autant de voies qu'il lui
+ * en a fallu. `blocs` : `[{ y, h }]`, en pixels — la hauteur DESSINÉE, plancher compris : deux blocs courts qui se
+ * recouvrent à l'écran se recouvrent, quoi que disent leurs heures. Rend `[{ voie, voies }]`, dans l'ordre reçu. */
+export function voiesDesBlocs(blocs) {
+  const out = blocs.map(() => ({ voie: 0, voies: 1 }));
+  const ordre = blocs.map((_, i) => i).sort((a, b) => blocs[a].y - blocs[b].y || a - b);
+  let groupe = [], fins = [], finGroupe = -Infinity;
+  const clore = () => { for (const i of groupe) out[i].voies = fins.length; groupe = []; fins = []; };
+  for (const i of ordre) {
+    const { y, h } = blocs[i];
+    if (y >= finGroupe) clore();
+    let v = fins.findIndex(fin => y >= fin);
+    if (v < 0) { v = fins.length; fins.push(0); }
+    fins[v] = y + h;
+    out[i].voie = v;
+    groupe.push(i);
+    finGroupe = Math.max(finGroupe, y + h);
+  }
+  clore();
+  return out;
+}
+
 const lundiDe = (d) => { const x = new Date(d); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); x.setHours(0, 0, 0, 0); return x; };
 const ajoute = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 
-export function FeuilleAgenda({ hass = null, evenements = null, jourChoisi = null, onChoisirJour = null, onClose = null, large = false, onPlage = null }) {
-  const evts = Array.isArray(evenements) ? evenements : [];
-  const base = useMemo(() => new Date(new Date().toDateString()), []);
+export function FeuilleAgenda({ hass = null, evenements = null, jourChoisi = null, onChoisirJour = null, onClose = null, large = false, onPlage = null, onChange = null }) {
+  const evts = Array.isArray(evenements) ? evenements : AUCUN_EVENEMENT; // le repli constant de la carte (audit du 12/11, lot 5b)
+  // Le jour de base suit la date, comme la carte du rail (audit du 12/11, B14) : la feuille laissée ouverte passé minuit.
+  const jourAuj = new Date().toDateString();
+  const base = useMemo(() => new Date(jourAuj), [jourAuj]);
   const choisi = jourChoisi || cleJour(base);
   /* La feuille RELIT la clé au lieu de la chercher dans les sept jours du rail.
    * Avec `find`, toute date hors de ces sept jours retombait sur aujourd'hui :
@@ -59,8 +106,10 @@ export function FeuilleAgenda({ hass = null, evenements = null, jourChoisi = nul
    * les éteindre.
    *
    * La case à cocher les éteint à l'écran — elle ne touche à rien chez Home
-   * Assistant. */
-  const nbEntites = hass && hass.states ? Object.keys(hass.states).length : 0;
+   * Assistant.
+   *
+   * `hass` suffit à relire la liste (audit du 12/11, lot 5b) : Home Assistant REMPLACE son objet à chaque changement, un
+   * agenda ajouté ou retiré compris. Le nombre d'entités, en plus, ne déclenchait rien que `hass` n'ait déjà déclenché. */
   const cals = useMemo(() => {
     const m = new Map();
     for (const id of calendriersDeLaMaison(hass)) m.set(id, { id, nom: nomDuCalendrier(id, hass), rgb: teinteAgenda(id), n: 0 });
@@ -70,7 +119,7 @@ export function FeuilleAgenda({ hass = null, evenements = null, jourChoisi = nul
       m.get(id).n += 1;
     }
     return [...m.values()].sort((a, b) => comparerTextes(a.nom, b.nom));
-  }, [evts, hass, nbEntites]);
+  }, [evts, hass]);
   const [eteints, setEteints] = useState(() => new Set());
   const basculer = (id) => setEteints(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const visibles = useMemo(() => evts.filter(e => !eteints.has(calDe(e) || '')), [evts, eteints]);
@@ -114,13 +163,13 @@ export function FeuilleAgenda({ hass = null, evenements = null, jourChoisi = nul
   const bouger = (sens) => allerA(cleJour(vue === 'mois' ? moisPlus(jourSel, sens) : ajoute(jourSel, sens * (vue === 'jour' ? 1 : 7))));
 
   const commun = { hass, evts: visibles, jourSel, choisi, allerA, vue, setVue, bouger, cals, eteints, basculer,
-    ouvert, setOuvert, onClose, ecrivables, nouveau, setNouveau };
+    ouvert, setOuvert, onClose, ecrivables, nouveau, setNouveau, onChange };
   return large ? <FeuilleLarge {...commun} /> : <FeuilleEtroite {...commun} />;
 }
 
 /* ──────────── La feuille d'ORDINATEUR (1b) : deux colonnes ──────────── */
 
-function FeuilleLarge({ hass, evts, jourSel, allerA, vue, setVue, bouger, cals, eteints, basculer, ouvert, setOuvert, onClose, ecrivables, nouveau, setNouveau }) {
+function FeuilleLarge({ hass, evts, jourSel, allerA, vue, setVue, bouger, cals, eteints, basculer, ouvert, setOuvert, onClose, ecrivables, nouveau, setNouveau, onChange }) {
   /* LA GRILLE S'OUVRE SUR UNE HEURE UTILE. Elle court maintenant de minuit à
    * minuit : sans cela on l'ouvrirait sur 3 h du matin, où il ne se passe
    * rien. On vise l'heure courante, une heure plus tôt pour garder du
@@ -157,7 +206,7 @@ function FeuilleLarge({ hass, evts, jourSel, allerA, vue, setVue, bouger, cals, 
                 return (
                   <button key={c.id} type="button" onClick={() => basculer(c.id)} aria-pressed={on}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 36, padding: '0 6px', borderRadius: 10, border: 'none', background: 'none', color: 'var(--o-text1)', font: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>
-                    <span aria-hidden="true" style={{ width: 16, height: 16, borderRadius: 5, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid rgba(' + c.rgb + ',1)', background: on ? 'rgba(' + c.rgb + ',1)' : 'transparent', color: '#fff' }}>
+                    <span aria-hidden="true" style={{ width: 16, height: 16, borderRadius: 5, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid rgba(' + c.rgb + ',1)', background: on ? 'rgba(' + c.rgb + ',1)' : 'transparent', color: encreSurTeinte(c.rgb) }}>
                       {on && <Fi i="check" size={9} />}
                     </span>
                     <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: on ? 1 : .5 }}>{c.nom}</span>
@@ -175,7 +224,7 @@ function FeuilleLarge({ hass, evts, jourSel, allerA, vue, setVue, bouger, cals, 
             </NomFeuille>
             {nouveau && (
               <Suspense fallback={null}><NouvelEvenement hass={hass} cals={ecrivables} jour={jourSel}
-                onClose={() => setNouveau(false)} onFait={() => setNouveau(false)} /></Suspense>
+                onClose={() => setNouveau(false)} onFait={() => { setNouveau(false); if (onChange) onChange(); }} /></Suspense>
             )}
             {/* Une HAUTEUR FIXE, quelle que soit la vue : « quand je passe en
               * mois ça change la taille, la taille ne doit pas changer ». La
@@ -188,7 +237,7 @@ function FeuilleLarge({ hass, evts, jourSel, allerA, vue, setVue, bouger, cals, 
             <div ref={zone} style={{ height: 596, overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain', background: 'transparent' }}>
               {vue === 'mois'
                 ? <GrilleMois jourSel={jourSel} evts={evts} hass={hass} onChoisir={allerA} />
-                : <GrilleHeures colonnes={colonnes} evts={evts} hass={hass} ouvert={ouvert} setOuvert={setOuvert} onChoisir={allerA} jourSel={jourSel} />}
+                : <GrilleHeures colonnes={colonnes} evts={evts} hass={hass} ouvert={ouvert} setOuvert={setOuvert} onChoisir={allerA} jourSel={jourSel} onChange={onChange} />}
             </div>
           </div>
         </div>
@@ -199,7 +248,7 @@ function FeuilleLarge({ hass, evts, jourSel, allerA, vue, setVue, bouger, cals, 
 
 /* ──────────── La feuille de TÉLÉPHONE (2b) : une colonne ──────────── */
 
-function FeuilleEtroite({ hass, evts, jourSel, choisi, allerA, vue, setVue, bouger, onClose, ecrivables, nouveau, setNouveau }) {
+function FeuilleEtroite({ hass, evts, jourSel, choisi, allerA, vue, setVue, bouger, onClose, ecrivables, nouveau, setNouveau, onChange }) {
   /* La bande suit le jour CHOISI, comme les sept colonnes de l'ordinateur.
    * Figée sur les sept jours à partir d'aujourd'hui, elle ne bougeait pas d'un
    * pouce quand on avançait d'une semaine, et le titre non plus — « je ne peux
@@ -221,7 +270,7 @@ function FeuilleEtroite({ hass, evts, jourSel, choisi, allerA, vue, setVue, boug
         </NomFeuille>
         {nouveau && (
           <Suspense fallback={null}><NouvelEvenement hass={hass} cals={ecrivables} jour={jourSel}
-            onClose={() => setNouveau(false)} onFait={() => setNouveau(false)} /></Suspense>
+            onClose={() => setNouveau(false)} onFait={() => { setNouveau(false); if (onChange) onChange(); }} /></Suspense>
         )}
         {/* Même garde qu'au large : le défilement s'arrête dans la feuille. */}
         <div style={{ height: '58vh', overflowY: 'auto', overscrollBehavior: 'contain' }}>
@@ -325,10 +374,11 @@ function EnTete({ titre, vue, setVue, bouger, allerA, large = false, croix = nul
    * ouvrirait un formulaire condamné d'avance. */
   /* Au TÉLÉPHONE, le mot ne tient pas : flèches, vues et bouton demandent 373 px
    * sur les 344 d'une feuille de 390, et cassent plus bas encore. Le bouton s'y
-   * réduit donc à son « + » en accent plein, son nom porté par `aria-label`. */
+   * réduit donc à son « + » en accent plein, son nom porté par `aria-label`.
+   * Le plein est `--o-accent-fond`, fait pour porter le blanc (audit du 12/11, lot 4, E25) : sur l'accent clair, 2,5 pour 1. */
   const nouveau = onNouveau ? (
     <button type="button" onClick={onNouveau} aria-label={tr('Nouvel événement')}
-      style={{ height: 36, width: large ? undefined : 36, padding: large ? '0 14px' : 0, borderRadius: large ? 12 : '50%', border: 'none', background: 'var(--o-accent)', color: '#fff', font: 'inherit', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, whiteSpace: 'nowrap', flexShrink: 0 }}>
+      style={{ height: 36, width: large ? undefined : 36, padding: large ? '0 14px' : 0, borderRadius: large ? 12 : '50%', border: 'none', background: 'var(--o-accent-fond)', color: '#fff', font: 'inherit', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, whiteSpace: 'nowrap', flexShrink: 0 }}>
       <Fi i="plus" size={large ? 12 : 14} />{large ? tr('Événement') : null}
     </button>
   ) : null;
@@ -374,7 +424,9 @@ function EnTete({ titre, vue, setVue, bouger, allerA, large = false, croix = nul
 
 /** Le mini-mois de la colonne de gauche. */
 function MiniMois({ jourSel, evts, onChoisir }) {
-  const jours = useMemo(() => joursAgenda(new Date(new Date().toDateString())), []);
+  // Même défaut, même remède (audit du 12/11, B14) : les jours connus suivent la date, pas le montage.
+  const jourAuj = new Date().toDateString();
+  const jours = useMemo(() => joursAgenda(new Date(jourAuj)), [jourAuj]);
   const connus = useMemo(() => new Set(jours.map(cleJour)), [jours]);
   const compte = useMemo(() => comptesParJour(evts, jours), [evts, jours]);
   const premier = new Date(jourSel.getFullYear(), jourSel.getMonth(), 1);
@@ -412,7 +464,7 @@ function MiniMois({ jourSel, evts, onChoisir }) {
 }
 
 /** La grille des heures : une colonne par jour, les événements à leur place. */
-function GrilleHeures({ colonnes, evts, hass, ouvert, setOuvert, onChoisir, jourSel = null, compacte = false }) {
+function GrilleHeures({ colonnes, evts, hass, ouvert, setOuvert, onChoisir, jourSel = null, compacte = false, onChange = null }) {
   // Les libellés s'arrêtent à 23 h : « 24:00 » ne se dit pas, et minuit est
   // déjà la ligne du bas.
   const heures = Array.from({ length: H1 - H0 }, (_, i) => H0 + i);
@@ -475,7 +527,7 @@ function GrilleHeures({ colonnes, evts, hass, ouvert, setOuvert, onChoisir, jour
                 <div key={cleJour(colonnes[i])} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '4px 2px 0', borderLeft: '1px solid var(--o-bd3)', minHeight: 26 }}>
                   {liste.map(e => (
                     <button key={e.cle} type="button" onClick={setOuvert ? () => setOuvert(e) : undefined}
-                      style={{ padding: '3px 8px', borderRadius: 6, border: 'none', background: 'rgba(' + e.rgb + ',.92)', color: '#fff', font: 'inherit', fontSize: 11.5, fontWeight: 700, textAlign: 'left', cursor: setOuvert ? 'pointer' : 'default', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      style={{ padding: '3px 8px', borderRadius: 6, border: 'none', background: 'rgba(' + e.rgb + ',.92)', color: encreSurTeinte(e.rgb), font: 'inherit', fontSize: 11.5, fontWeight: 700, textAlign: 'left', cursor: setOuvert ? 'pointer' : 'default', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {e.titre}
                     </button>
                   ))}
@@ -516,12 +568,20 @@ function GrilleHeures({ colonnes, evts, hass, ouvert, setOuvert, onChoisir, jour
             /* Passé la moitié de la semaine, la fiche n'a plus la place de
              * s'ouvrir à droite : elle passe à gauche, où il en reste. */
             const ficheAGauche = i > (colonnes.length - 1) / 2;
+            /* Les blocs du jour, à leur place et à leur hauteur, puis leur voie : deux rendez-vous à la même heure se
+             * partagent la colonne au lieu de se cacher (audit du 12/11, lot 4, E27). */
+            const places = duJour.map(e => {
+              const y = e.journee ? 0 : (e.bornes ? e.bornes.debut : 0) * PAS_H;
+              const brut = e.journee ? 40 : ((e.bornes ? e.bornes.fin - e.bornes.debut : 0) * PAS_H);
+              return { y, h: Math.max(24, brut) };
+            });
+            const voies = voiesDesBlocs(places);
             return (
               <div key={k} style={{ position: 'relative', background: k === auj ? 'rgba(var(--o-accent-rgb),.045)' : 'transparent', borderLeft: '1px solid var(--o-bd3)' }}>
                 {heures.map(h => (
                   <div key={h} aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: (h - H0) * PAS_H, borderTop: '1px solid var(--o-bd3)' }} />
                 ))}
-                {duJour.map(e => {
+                {duJour.map((e, j) => {
                   /* LE BLOC TIENT SUR LES BORNES DU JOUR, et jamais moins que
                    * ce que son texte demande. Deux lignes (titre + heures)
                    * réclament 40 px : padding 10, titre 15, écart 1, heures
@@ -529,28 +589,31 @@ function GrilleHeures({ colonnes, evts, hass, ouvert, setOuvert, onChoisir, jour
                    * position du bloc — et le titre seul tient dans 24.
                    * Signalé le 08/10 : « c'est coupé », sur une capture où il
                    * ne restait du titre que le bas des lettres. */
-                  const y = e.journee ? 0 : (e.bornes ? e.bornes.debut : 0) * PAS_H;
-                  const brut = e.journee ? 40 : ((e.bornes ? e.bornes.fin - e.bornes.debut : 0) * PAS_H);
-                  const h = Math.max(24, brut);
+                  const { y, h } = places[j];
                   const deuxLignes = h >= 40;
                   const estOuvert = !!(ouvert && ouvert.cle === e.cle);
+                  // Seul à son heure : toute la largeur, comme avant ; sinon sa part, côte à côte (E27).
+                  const { voie, voies: n } = voies[j];
+                  const largeur = n > 1 ? { left: 'calc(' + (voie * 100 / n) + '% + 1px)', width: 'calc(' + (100 / n) + '% - 2px)' } : { left: 2, right: 2 };
                   return (
                     /* UN BLOC PLEIN, de la couleur de son agenda (08/10). Le
                      * fond était à 18 % d'opacité sous un liseré : de loin,
                      * tous les événements se ressemblaient et la couleur de
                      * l'agenda ne se lisait plus. Plein, c'est elle qu'on voit
-                     * d'abord — et le texte passe en blanc. */
-                    <div key={e.cle} style={{ position: 'absolute', left: 2, right: 2, top: y, height: h }}>
+                     * d'abord — et le texte prend l'encre que la teinte tient
+                     * (`encreSurTeinte`, E25), au lieu d'un blanc à 2 pour 1. */
+                    <div key={e.cle} style={{ position: 'absolute', ...largeur, top: y, height: h }}>
                       <button type="button" onClick={setOuvert ? () => setOuvert(estOuvert ? null : e) : undefined}
-                        style={{ width: '100%', height: '100%', padding: deuxLignes ? '5px 8px' : '3px 8px', borderRadius: 6, border: 'none', background: 'rgba(' + e.rgb + ',.92)', color: '#fff', font: 'inherit', textAlign: 'left', cursor: setOuvert ? 'pointer' : 'default', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: 1, boxSizing: 'border-box', boxShadow: estOuvert ? '0 0 0 2px var(--o-bg2), 0 0 0 4px rgba(' + e.rgb + ',1)' : 'none' }}>
+                        style={{ width: '100%', height: '100%', padding: deuxLignes ? '5px 8px' : '3px 8px', borderRadius: 6, border: 'none', background: 'rgba(' + e.rgb + ',.92)', color: encreSurTeinte(e.rgb), font: 'inherit', textAlign: 'left', cursor: setOuvert ? 'pointer' : 'default', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: 1, boxSizing: 'border-box', boxShadow: estOuvert ? '0 0 0 2px var(--o-bg2), 0 0 0 4px rgba(' + e.rgb + ',1)' : 'none' }}>
                         {/* `flexShrink: 0` : sans lui les deux lignes se
                           * compriment dans un bloc trop court et le texte
                           * sort de sa propre boîte — c'est ce qui coupait les
                           * lettres en deux. */}
                         <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.titre}</span>
-                        {deuxLignes && <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 600, lineHeight: 1.2, opacity: .85, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.plage}</span>}
+                        {/* L'heure à pleine encre (E25) : à 85 %, elle retombait à 3,6 pour 1 ; sa taille la dit déjà seconde. */}
+                        {deuxLignes && <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 600, lineHeight: 1.2, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.plage}</span>}
                       </button>
-                      {estOuvert && <FicheEvenement e={e} hass={hass} aGauche={ficheAGauche} onFermer={() => setOuvert(null)} />}
+                      {estOuvert && <FicheEvenement e={e} hass={hass} aGauche={ficheAGauche} onFermer={() => setOuvert(null)} onChange={onChange} />}
                     </div>
                   );
                 })}
@@ -571,14 +634,29 @@ function GrilleHeures({ colonnes, evts, hass, ouvert, setOuvert, onChoisir, jour
   );
 }
 
+// « Supprimer » armé : le rouge plein de la feuille d'un profil (parametres.jsx), par-dessus son dessin au repos.
+const SUPPR_ARME = { background: 'var(--o-bad)', color: '#fff' };
+
 /** La fiche d'un événement, posée à côté de lui. */
-function FicheEvenement({ e, hass, onFermer, aGauche = false }) {
+function FicheEvenement({ e, hass, onFermer, aGauche = false, onChange = null }) {
   const jourLong = e.debut ? majuscule(e.debut.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' })) : '';
   const peutSupprimer = peut(hass, e.calId, 'supprimer_evenement') && e.uid;
+  /* Supprimer se CONFIRME, attend la réponse, et dit un refus (audit du 12/11, B4). Il partait d'un seul toucher ; la fiche se
+   * fermait avant la réponse, et un refus de Home Assistant n'était jamais dit — le rendez-vous restait là, sans un mot.
+   * Supprimé, l'agenda se relit aussitôt (`onChange`) : il attendait le sondage du quart d'heure. */
+  const [arme, setArme] = useState(false);
+  const [enVol, setEnVol] = useState(false);
+  const [erreur, setErreur] = useState(null);
+  /* Armé, le bouton passe au rouge plein ; sans second appui, il se désarme seul au bout de 4 s — le geste de la feuille d'un
+   * profil (audit du 12/11, lot 4, I2). Pas pendant l'envoi : la réponse le désarme, ou ferme la fiche. */
+  useEffect(() => { if (!arme || enVol) return undefined; const t = setTimeout(() => setArme(false), 4000); return () => clearTimeout(t); }, [arme, enVol]);
   const supprimer = () => {
-    if (!hass || !hass.callWS) return;
-    hass.callWS({ type: 'calendar/event/delete', entity_id: e.calId, uid: e.uid }).catch(() => { /* le serveur dira non */ });
-    onFermer();
+    if (!hass || !hass.callWS || enVol) return;
+    if (!arme) { setArme(true); return; }
+    setEnVol(true); setErreur(null);
+    Promise.resolve(hass.callWS({ type: 'calendar/event/delete', entity_id: e.calId, uid: e.uid }))
+      .then(() => { if (onChange) onChange(); onFermer(); },
+        () => { setEnVol(false); setArme(false); setErreur(tr('Home Assistant a refusé.')); });
   };
   const ligne = (icone, texte) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}><Fi i={icone} size={13} color="var(--o-text3)" />{texte}</div>
@@ -591,8 +669,8 @@ function FicheEvenement({ e, hass, onFermer, aGauche = false }) {
     <div style={{ position: 'absolute', zIndex: 6, width: 280, top: 0, ...(aGauche ? { right: '100%', marginRight: 8 } : { left: '100%', marginLeft: 8 }), padding: 16, borderRadius: 18, background: 'var(--o-well0)', border: '1px solid var(--o-bd1)', boxShadow: 'var(--o-shadow-hover)', display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <div style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 800, lineHeight: 1.25 }}>{e.titre}</div>
-        <button type="button" onClick={onFermer} aria-label={tr('Fermer')}
-          style={{ width: 28, height: 28, borderRadius: 9, border: 'none', background: 'var(--o-s1)', color: 'var(--o-text2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="cross-small" size={13} /></button>
+        {/* Le dessin de la croix commune (lot 5c, ADR 0374) ; son geste reste le sien : elle ferme cette fiche, pas la feuille. */}
+        <button type="button" onClick={onFermer} aria-label={tr('Fermer')} className="o-doigt" style={DESSIN_CROIX}>{CROIX}</button>
       </div>
       <span style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, background: 'rgba(' + e.rgb + ',.16)', color: 'rgba(' + e.rgb + ',1)', fontSize: 11, fontWeight: 800 }}>
         <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />{e.calendrier}
@@ -605,10 +683,11 @@ function FicheEvenement({ e, hass, onFermer, aGauche = false }) {
         * peut pas agir vaut moins que pas de bouton. */}
       {peutSupprimer && (
         <div style={{ display: 'flex', gap: 8, paddingTop: 4 }}>
-          <button type="button" onClick={supprimer} aria-label={tr('Supprimer')}
-            style={{ width: 36, height: 36, borderRadius: 12, border: 'none', background: 'rgba(var(--o-bad-rgb),.12)', color: 'var(--o-bad)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="trash" size={12} /></button>
+          <button type="button" onClick={supprimer} aria-label={arme ? tr('Confirmer ?') : tr('Supprimer')} aria-disabled={enVol || undefined}
+            style={{ minWidth: 36, height: 36, padding: arme ? '0 12px' : 0, borderRadius: 12, border: 'none', background: 'rgba(var(--o-bad-rgb),.12)', color: 'var(--o-bad)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, font: 'inherit', fontSize: 12.5, fontWeight: 800, opacity: enVol ? .5 : 1, transition: 'background .2s, color .2s', ...(arme ? SUPPR_ARME : null) }}><Fi i="trash" size={12} />{arme ? tr('Confirmer ?') : null}</button>
         </div>
       )}
+      {erreur && <div role="alert" style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{erreur}</div>}
     </div>
   );
 }

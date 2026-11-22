@@ -402,6 +402,10 @@ class LoggiaRobots:
         self._defait: list[Any] = []
         # Un registre illisible ne se signale qu'une fois (voir `_registre`).
         self._registre_dit = False
+        # {id du planning: (jour, (heure, minute))} du dernier depart TENTE : un
+        # planning ne part qu'une fois par jour et par heure (heure d'hiver ;
+        # audit du 12/11, S6 - la garde du distributeur, recopiee).
+        self._tentes: dict[str, tuple] = {}
         self._poser_carnet()
         bus = getattr(hass, "bus", None)
         if bus is not None:
@@ -728,9 +732,21 @@ class LoggiaRobots:
             from homeassistant.util import dt as dt_util
 
             quand = dt_util.now()
+        tentes = getattr(self, "_tentes", None)
+        if tentes is None:
+            tentes = self._tentes = {}
         partis = []
         for planning in list(self.cfg.get("plannings") or []):
             if not est_du(planning, quand):
+                continue
+            # La nuit du passage a l'heure d'hiver, 02:30 sonne deux fois (audit du 12/11, S6) : un planning deja tente ce jour a
+            # cette heure ne repart pas. La garde du distributeur, recopiee (`distributeurs.async_minute`). Le printemps reste une
+            # limite connue, comme pour lui : 02:00-02:59 n'existe pas, un passage de 02:30 ne part pas et rien ne le note.
+            cle = (quand.date(), (quand.hour, quand.minute))
+            if tentes.get(planning["id"]) == cle:
+                continue
+            tentes[planning["id"]] = cle
+            if getattr(quand, "fold", 0) and await self._tente_a_la_premiere_occurrence(planning, quand):
                 continue
             try:
                 if await self.async_lancer(planning, quand):
@@ -738,6 +754,23 @@ class LoggiaRobots:
             except Exception:  # noqa: BLE001
                 _LOGGER.warning("Loggia robots : le planning %s de %s n'est pas parti", planning.get("id"), planning.get("robot"), exc_info=True)
         return partis
+
+    async def _tente_a_la_premiere_occurrence(self, planning: dict, quand) -> bool:
+        """L'heure REPETEE (fold=1) : le journal montre-t-il ce planning tente a la premiere occurrence de cette heure ? `_tentes` ne
+        vit qu'en memoire : un redemarrage, ou un « Recharger », entre 02:30 CEST et 02:30 CET relancait le robot. Le journal, lui,
+        survit. Lu SEULEMENT dans l'heure repetee, une nuit par an. Recopie de `distributeurs._tente_a_la_premiere_occurrence`
+        (audit du 12/11, S6) : une mise en commun aurait touche au distributeur. Le motif ne nomme pas le robot : apres un redemarrage
+        dans l'heure repetee, deux plannings a la meme heure se retiennent l'un l'autre — un passage saute plutot qu'un robot qui
+        repart (en tete du module)."""
+        debut, fin = quand.replace(fold=0).timestamp(), quand.timestamp()
+        motif_vu = "planning " + str(planning.get("heure"))
+        try:
+            lignes = await self.regles.journal(limite=500, module=MODULE)
+        except Exception:  # noqa: BLE001 — sans journal, la memoire seule decide
+            _LOGGER.debug("Loggia robots : journal illisible a l'heure repetee", exc_info=True)
+            return False
+        return any(e.get("regle") == "planning" and e.get("motif") == motif_vu
+                   and debut <= (e.get("ts") or 0) < fin for e in lignes)
 
     # ── Ce que Home Assistant sait du robot ────────────────────────────────
     def _registre(self):

@@ -26,7 +26,7 @@
 import { useState, useEffect, useRef, useId } from 'react';
 import { tr, locale } from './i18n.js';
 import { Fi, ListeChoix, kbSlider } from './ui.jsx';
-import { compteOrdinaire, LOGGIA_INDEX } from './state.js';
+import { compteOrdinaire, nomZoneDe } from './state.js';
 import { commander } from './actions.js';
 import { useOptimiste } from './optimiste.js';
 import { ecrireRegle, raisonEchec } from './refus.js';
@@ -40,7 +40,7 @@ import {
   sousNomVolet, saitSePlacer, phraseLongue, prochainFiche, porteFiche, joursDuSens, decalageMaison, decalageDit,
   notePlanning, lignesSemaine, lundiDe, patchRegle, patchDecalage, patchJour, patchMode, FACADES, facadeDe, patchFacade, patchPorte,
   fusionConfig, fileEcritures, avertissementSoleil, MODES_MAISON, optionsPortes, PERIODES_VOLET, pointsHistorique, courbeVolet, manoeuvres,
-  heureManoeuvre, compteManoeuvres, AVANT_SANS_BASCULE_MS, RAFALE_MS,
+  heureManoeuvre, compteManoeuvres, AVANT_SANS_BASCULE_MS, RAFALE_MS, favorisVolet,
 } from './voletsfiche.js';
 import { EnteteFiche, FicheOnglets, PanneauOnglet, PETITES_CAPITALES, filet, focaliser, JOURS_DERNIERS } from './fichecommune.jsx';
 import { LISERE } from './styles.js';
@@ -279,6 +279,8 @@ function OngletAccueil({ hass, id, st, v, etat, vue, course, onOnglet, onFiche, 
   // Le repère où se trouve le volet, hors course : le verdict aux deux bouts (V12), la position ailleurs.
   const ici = (val) => !enCourse && pos != null && (val === 0 ? vue.ferme : val === 100 ? vue.ouvert : pos === val);
 
+  // Les positions favorites (A9) : « Aérer 30 % », « Ombre 60 % », d'un toucher, sous la fenêtre — la puce où il est est choisie.
+  const favoris = favorisVolet({ place, pos, enCourse });
   const prochain = prochainFiche({ v, etat, ferme: vue.ferme, ouvert: vue.ouvert });
   /* « Porte devant » parle du mouvement UTILE — le choix de « Prochain
    * mouvement » et de la phrase (`mouvementUtile`) — : le salon ouvert saute son
@@ -328,6 +330,14 @@ function OngletAccueil({ hass, id, st, v, etat, vue, course, onOnglet, onFiche, 
               onClick={() => { if (vue.peutDescendre) envoyer(0); }} style={CARRE(64, 48, 14, vue.peutDescendre)}><Fi i="angle-small-down" size={18} /></button>
           </div>
         </div>
+        {favoris.length > 0 && (
+          <div data-favoris="" style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+            {favoris.map(f => (
+              <button key={f.cle} type="button" aria-pressed={f.ici} aria-disabled={vise(f.valeur) ? undefined : true} onClick={() => { if (vise(f.valeur)) envoyer(f.valeur); }}
+                style={{ ...CARRE(0, 40, 12, vise(f.valeur)), width: 'auto', flex: 1, minWidth: 0, ...(f.ici ? ALLUME : null) }}>{f.mot}</button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div data-liste="" style={LISTE}>
@@ -459,7 +469,6 @@ function OngletPlanning({ hass, id, etat, erreur = false, ordinaire, file }) {
   const orientation = sol.volets && sol.volets[id] ? sol.volets[id].orientation : null;
   const facade = facadeDe(orientation);
   const capteur = (cfg.baies && cfg.baies.volets && cfg.baies.volets[id]) || '';
-  const pieceDe = (x) => (LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function' ? LOGGIA_INDEX.areaNameOf(x) : null);
   const mode = MODES_MAISON().find(m => m.id === (plan.mode || 'auto')) || MODES_MAISON()[0];
 
   return (
@@ -553,7 +562,7 @@ function OngletPlanning({ hass, id, etat, erreur = false, ordinaire, file }) {
           onChoix={(x) => ecrire('facade', (c) => patchFacade(c, id, x === 'aucune' ? null : Number(x)))} />
         {alerte('facade', SOUS_RANGEE)}
         <RangeeChoix titre={tr('Porte devant')} sous={tr('Ne ferme pas sur une porte ouverte')} entite={!!capteur}
-          valeur={capteur ? nomDe(hass, capteur) : tr('Aucune')} options={optionsPortes(S, pieceDe(id), pieceDe)}
+          valeur={capteur ? nomDe(hass, capteur) : tr('Aucune')} options={optionsPortes(S, nomZoneDe(id), nomZoneDe)}
           choisi={capteur} inerte={ordinaire} surInerte={() => lire('porte')} onChoix={(x) => ecrire('porte', (c) => patchPorte(c, id, x || null))} />
         {alerte('porte', SOUS_RANGEE)}
         <RangeeChoix titre={tr('Mode de la maison')} sous={tr('Pour tous les volets')} valeur={mode.label}

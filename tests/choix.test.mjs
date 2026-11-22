@@ -160,13 +160,16 @@ test('seules les feuilles à onglets gardent une hauteur fixe', () => {
     FicheChauffage: '<BottomSheet onClose={onClose} onglets>',
     // La fiche d'un volet : Accueil, Planning, Historique (plan 2 du chantier Volets, tâche 10).
     FicheVolet: '<BottomSheet onClose={onClose} onglets>',
+    // ASSERTION MODIFIÉE (21/11, ADR 0387) : la fiche d'un purificateur d'air — Accueil, Planning, Filtre, Historique.
+    FichePurificateur: '<BottomSheet onClose={onClose} onglets>',
   };
   for (const [nom, feuille] of Object.entries(avecOnglets)) {
     const i = APP.indexOf('\nfunction ' + nom + '(');
     const j = APP.indexOf('\nfunction ', i + 1);
     assert.ok(i >= 0 && APP.slice(i, j < 0 ? undefined : j).includes(feuille), nom + ' : changer d’onglet changerait la hauteur de la feuille');
   }
-  assert.equal((APP.match(/<BottomSheet[^>]* onglets/g) || []).length, 5, 'une feuille sans onglets a pris une hauteur fixe');
+  // ASSERTION MODIFIÉE (21/11, ADR 0387) : 5 -> 6, la fiche du purificateur.
+  assert.equal((APP.match(/<BottomSheet[^>]* onglets/g) || []).length, 6, 'une feuille sans onglets a pris une hauteur fixe');
   // La lampe blancs + couleurs : ses deux palettes partagent la même case — la
   // fiche prend la hauteur de la plus grande, sans les 760 px (19/09 : « pourquoi
   // cette différence entre ces deux lumières »).

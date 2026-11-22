@@ -1,6 +1,6 @@
 # 0339 — Les liens du projet, deux boutons sous le titre d'À propos
 
-*8 novembre 2026 — à l'essai (bêta v3.100.0-beta.1) (demande sur capture)*
+*8 novembre 2026 — appliqué (v3.100.0) (demande sur capture)*
 
 ## Le problème
 

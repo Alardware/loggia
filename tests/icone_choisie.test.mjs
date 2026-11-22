@@ -248,9 +248,10 @@ test('l’aperçu de la fiche montre le dessin en mouvement, et ne commande rien
   assert.ok(!f.includes('onToggle={() => setApercuAllume') || !f.includes('hass.callService'), 'l’aperçu commande la maison');
 });
 
-test('passe téléphone, tâche 3 : la carte d’une lumière porte l’icône choisie sur ses DEUX plaques — le dessin de la carte large, l’interrupteur de la carte étroite', () => {
+// TEST MODIFIÉ (sa décision du 20/11, ADR 0380) : la carte étroite n'a plus de plaque-interrupteur — une seule plaque, sur toutes les cartes.
+test('la carte d’une lumière porte l’icône choisie sur sa plaque — la même sur la carte large et la carte étroite', () => {
   const i = app.indexOf('function RoomLightCard(');
   const carte = app.slice(i, app.indexOf('\n}\n', i));
-  assert.equal(carte.split('<GlypheCarte id={id} size={17}><Fi i="bulb" size={17} /></GlypheCarte>').length - 1, 2, 'deux plaques, le même glyphe, que l’icône choisie remplace sur l’une comme sur l’autre');
-  assert.ok(carte.includes('<PlaqueBascule on={v.on}') && carte.includes('<span className="o-seul-large" style={RM_ICO(fond, encre)}>'), 'la plaque-interrupteur de la carte étroite et le dessin de la carte large');
+  assert.equal(carte.split('<GlypheCarte id={id} size={17}><Fi i="bulb" size={17} /></GlypheCarte>').length - 1, 1, 'une plaque, que l’icône choisie remplace');
+  assert.ok(carte.includes('<span style={RM_ICO(fond, encre)}>') && !carte.includes('PlaqueBascule'), 'un dessin, montré partout');
 });

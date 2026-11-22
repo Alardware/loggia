@@ -62,6 +62,10 @@ function useSpotify(hass) {
   const sources = Array.isArray(a.source_list) ? a.source_list.filter(s => typeof s === 'string' && s) : [];
   const [, setLu] = useState(0);
   const [erreur, setErreur] = useState('');
+  /* « Réessayer » (audit du 12/11, lot 4, I4) : Spotify ne répondait pas, et il fallait fermer et rouvrir l'écran pour qu'il
+   * redemande. Chaque essai relit la LISTE des playlists, rien d'autre — jamais une lecture de musique. Un échec n'est pas
+   * retenu (`LUES` ne garde que ce qui a été lu) : rien n'empêche de redemander tout de suite. */
+  const [essai, setEssai] = useState(0);
   const hassRef = useRef(hass);
   useEffect(() => { hassRef.current = hass; });
   useEffect(() => {
@@ -80,7 +84,7 @@ function useSpotify(hass) {
       }
     })();
     return () => { vivant = false; };
-  }, [compte]);
+  }, [compte, essai]);
   const lues = compte && LUES.get(compte) ? LUES.get(compte).liste : null;
   const cfg = cfgVal('loggia_spotify', null);
   const ajoutees = cfg && Array.isArray(cfg.ajoutees) ? cfg.ajoutees : [];
@@ -91,6 +95,7 @@ function useSpotify(hass) {
     compte, sources, actuelle: typeof a.source === 'string' ? a.source : null,
     playlists, montrees: playlistsMontrees(playlists, cachees), cachees: Array.isArray(cachees) ? cachees : [],
     lu: lues !== null, erreur, ajoutees,
+    relire: () => { setErreur(''); setEssai(n => n + 1); },
     jouer: (p, sortie) => hassRef.current.callWS({ type: 'loggia/spotify/jouer', entity_id: compte, uri: p.i, ...(sortie ? { sortie } : {}) }),
   };
 }
@@ -186,7 +191,15 @@ function FeuilleAjoutSpotify({ ajoutees, onClose, onGarde }) {
   const lienFaux = !!lien.trim() && !uriSpotify(lien);
   const garder = async (liste) => {
     setEnVol(true); setErreur('');
-    try { await cfgSet({ loggia_spotify: { ajoutees: liste } }); onGarde(); return true; }
+    /* `cfgSet` ne rejette pas : il rend `false` sur un refus (audit du 12/11, B23). La feuille se fermait alors comme sur un
+     * succès, et la playlist n'était plus dans la rangée. Refusé : l'erreur dans la feuille, qui reste ouverte — « Retirer »
+     * aussi. `null` (une coupure : le lot attend au carnet et repartira) reste un succès. */
+    try {
+      const pris = await cfgSet({ loggia_spotify: { ajoutees: liste } });
+      onGarde();
+      if (pris === false) { setErreur(tr('Enregistrement impossible.')); return false; }
+      return true;
+    }
     catch (e) { setErreur(raisonEchec(e)); return false; }
     finally { setEnVol(false); }
   };
@@ -259,7 +272,14 @@ export default function RangeeSpotify({ hass, edit = false }) {
         <Fleches rangee={rangee} bords={bords} />
       </div>
       {edit && sp.playlists.length > 0 && <div style={AIDE}>{tr('Cochez les playlists à afficher, ici et dans la fiche des enceintes.')} {tr('À l’écran : {n} sur {total}.', { n: sp.playlists.length - nCachees, total: sp.playlists.length })}</div>}
-      {(erreur || sp.erreur) && <div role="alert" style={{ ...ALERTE, marginTop: 0, marginBottom: 10 }}>{erreur || sp.erreur}</div>}
+      {(erreur || sp.erreur) && (
+        <div role="alert" style={{ ...ALERTE, marginTop: 0, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span>{erreur || sp.erreur}</span>
+          {/* La liste n'a pas pu se lire : on la redemande ici (I4). Seulement pour CET échec — un lancement refusé se rejoue
+            * d'un appui sur sa pochette. */}
+          {!erreur && sp.erreur && <button type="button" onClick={sp.relire} style={LIEN_TETE}><Fi i="refresh" size={12} />{tr('Réessayer')}</button>}
+        </div>
+      )}
       {sp.lu && !sp.playlists.length && <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Aucune playlist dans votre compte Spotify.')}</div>}
       {!edit && sp.playlists.length > 0 && !sp.montrees.length && <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Toutes vos playlists sont cachées : en mode édition, cochez celles à afficher.')}</div>}
       {liste.length > 0 && (

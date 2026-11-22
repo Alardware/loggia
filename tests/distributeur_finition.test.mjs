@@ -203,7 +203,8 @@ function useHassJoue(hass) {
   const useHass = evaluer(morceau('function useHass(', '\n}\n'), {
     useState: () => [0, () => { etat.force++; }], useRef: (() => { const r = { current: null }; return () => r; })(), useEffect,
     getHass: () => hass, HASS_POLL_MS: 2000, wattsDe: () => null, sigHash: (s) => s.length,
-    setInterval: (fn) => { etat.tick = fn; return 1; }, clearInterval: () => {}, console,
+    // ASSERTION MODIFIÉE (19/11, fluidité, point 3) : le tic s'abonne à la minuterie commune du pont, plus à un `setInterval` à lui.
+    abonnerPont: (fn) => { etat.tick = fn; return () => {}; }, console,
   }, 'useHass');
   return { useHass, etat };
 }

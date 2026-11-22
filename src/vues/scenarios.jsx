@@ -5,7 +5,7 @@ import { useRangerLibre } from '../glisser.js';
 import { lazyRecharge } from '../recharge.js';
 import { Fi } from '../ui.jsx';
 import { libelleDernier, nomScenario } from '../scenarios.js';
-import { tr, locale } from '../i18n.js';
+import { tr, trN, locale } from '../i18n.js';
 import { RmBascule } from '../cartes/briques.jsx';
 import { FicheRangee } from '../appareils/fiches.jsx';
 import { useScenarios, CarteScenario } from '../app/scenarios.jsx';
@@ -58,10 +58,13 @@ function ScenariosView({ hass, edit = false }) {
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ minWidth: 0 }}>
             <h1 style={{ margin: 0, fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 36, fontWeight: 500 }}>{tr('Scénarios')}</h1>
-            <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{sc.err && !liste.length ? sc.err : tr('{n} scénarios · dernier lancement {x}', { n: liste.length, x: libelleDernier(dernier, Date.now(), locale()).toLowerCase() })}</div>
+            <div style={{ fontSize: 13, color: 'var(--o-text2)', fontWeight: 600, marginTop: 5 }}>{sc.err && !liste.length ? sc.err
+              /* Rien encore lancé (audit du 12/11) : le compte seul — « 9 scénarios · dernier lancement — » ne disait rien de plus. */
+              : libelleDernier(dernier, Date.now(), locale()) === '—' ? trN(liste.length, '{n} scénario', '{n} scénarios')
+                : trN(liste.length, '{n} scénario · dernier lancement {x}', '{n} scénarios · dernier lancement {x}', { x: libelleDernier(dernier, Date.now(), locale()).toLowerCase() }) /* accordé : « 1 scénarios » au singulier (audit du 12/11) */}</div>
           </div>
           {peutCapturer && (
-            <button type="button" onClick={() => setFiche('maison')} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 14px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' }}>
+            <button type="button" onClick={() => setFiche('maison')} className="o-doigt" style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 14px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, background: 'var(--o-s1)', border: 'var(--o-bw,1px) solid var(--o-bd2)', color: 'var(--o-text1)' }}>
               <Fi i="camera" size={13} />{tr('Enregistrer la maison')}
             </button>
           )}
@@ -92,6 +95,13 @@ function ScenariosView({ hass, edit = false }) {
             </button>
           )}
         </div>
+        {/* Aucun scénario à montrer, une fois l'état du composant arrivé : la
+          * vue le DIT au lieu de laisser la grille blanche (audit du 12/11,
+          * lot 4, I1). Une erreur s'écrit déjà sous le titre ; en édition,
+          * « Ajouter un scénario » tient la place. */}
+        {!edit && sc.etat && !sc.err && !liste.length && (
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Aucun scénario')}</div>
+        )}
         {/* La bibliothèque Hue arrive à la première ouverture (scenes.jsx,
           * 11/10) : le repli tient sa place, pour que rien ne saute — 534 px,
           * la section mesurée dans la démo à 1440 px de large, là où elle

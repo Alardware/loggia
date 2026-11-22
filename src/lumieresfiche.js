@@ -8,7 +8,7 @@
  * luminosité de la carte vivent dans lumieres.js : la fiche les reprend, elle ne
  * les récrit pas.
  */
-import { tr, locale } from './i18n.js';
+import { tr, locale, comparerTextes } from './i18n.js';
 import { nombre } from './format.js';
 import { insecable, dureePrise, decompte } from './prises.js';
 import { ajuster, versHex, SEUILS } from './contraste.js';
@@ -314,4 +314,26 @@ export function ordresAmbiance(scene, lampes, { bri = null } = {}) {
     out.push({ id: l.id, capacite: xy ? 'set_xy' : 'set_hs', valeur: xy ? xyDeRgb(rgb) : hsDeRgb(rgb), options });
   }
   return out;
+}
+
+/* ── « Alimentée par » (audit du 12/11, X4 ; ADR 0369) ─────────────────────── */
+
+/**
+ * Ce qui peut couper le courant d'une lampe, pour la liste de sa fiche : `[{ id, label }]`.
+ *  - d'abord SA pièce : les lumières de la maison (`lampes`, celles de `lumieresDe` — l'interrupteur mural qu'une intégration
+ *    montre comme une lumière en est une), puis les interrupteurs (`switchs`) ;
+ *  - puis les lumières des autres pièces, leur pièce dite : un interrupteur rangé dans une autre zone reste choisissable ;
+ *  - jamais elle-même, ni une lampe déjà alimentée par une autre : une source ne peut pas l'être (`alimentationsDe`).
+ * `alim` : la relation lue ; `pieceDe(id)` : sa pièce, ou null ; `nomDe(id)` : son nom.
+ */
+export function sourcesAlimentation({ id, lampes = [], switchs = [], alim = null, pieceDe = () => null, nomDe = (x) => x }) {
+  const ici = pieceDe(id);
+  const prises = alim || {};
+  const libre = (x) => x !== id && !Object.prototype.hasOwnProperty.call(prises, x);
+  const dici = (x) => !!ici && pieceDe(x) === ici;
+  const ranger = (ids) => ids.map(x => ({ id: x, nom: String(nomDe(x) || x) })).sort((a, b) => comparerTextes(a.nom, b.nom));
+  const proches = ranger(lampes.filter(x => libre(x) && dici(x))).concat(ranger(switchs.filter(x => libre(x) && dici(x) && lampes.indexOf(x) < 0)));
+  const ailleurs = ranger(lampes.filter(x => libre(x) && !dici(x)));
+  return proches.map(o => ({ id: o.id, label: o.nom }))
+    .concat(ailleurs.map(o => ({ id: o.id, label: [o.nom, pieceDe(o.id)].filter(Boolean).join(' · ') })));
 }

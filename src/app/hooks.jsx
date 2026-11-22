@@ -486,10 +486,10 @@ function useAssistantApp({ editMode, hass, view }) {
   return { entSheet, setEntSheet, assistantNs, assistantAttendu, assistantOuvert, setAssistantOuvert, questionVocale, setQuestionVocale, poserQuestion };
 }
 
-function useComptesApp({ applyUser, haAdmin, hass, persistUsers, userIdx, users }) {
+function useComptesApp({ applyUser, haAdmin, hass, persistUsers, retirerUnProfil, userIdx, users }) {
   const addUser = (data) => persistUsers([...users, { ...data, _k: 'u' + Date.now() }]);
   const updateUser = (i, data) => persistUsers(users.map((u, j) => j === i ? { ...u, ...data } : u));
-  const deleteUser = (i) => { if (users[i] && users[i].role === 'Admin' && users.filter(u => u.role === 'Admin').length <= 1) return; const a = users.filter((_, j) => j !== i); persistUsers(a); if (i === userIdx) applyUser(0); else if (i < userIdx) applyUser(userIdx - 1); };
+  const deleteUser = (i) => { if (users[i] && users[i].role === 'Admin' && users.filter(u => u.role === 'Admin').length <= 1) return; const a = users.filter((_, j) => j !== i); retirerUnProfil(i, a); if (i === userIdx) applyUser(0); else if (i < userIdx) applyUser(userIdx - 1); };
   // Auto-détection : au 1er chargement, sélectionne le profil Loggia correspondant à l'utilisateur HA connecté
   // (selon l'appareil/login). Ne s'exécute qu'une fois → un switch manuel dans Loggia reste prioritaire ensuite.
   const autoUserRef = useRef(false);

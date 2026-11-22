@@ -949,7 +949,8 @@ class Regles:
                    quoi: str = "", motif: str = "", priorite: int = 0,
                    tenir: bool = False, jusqu_a_relacher: bool = False,
                    simuler: bool = False, orientation: int | None = None,
-                   dehors: float | None = None, attendre: bool = False) -> list:
+                   dehors: float | None = None, attendre: bool = False,
+                   malgre_main: bool = False) -> list:
         """Commande, en respectant ce que les regles doivent toutes respecter.
 
         Rend la liste des entites REELLEMENT commandees — jamais la liste
@@ -983,6 +984,16 @@ class Regles:
         qui doit etre fait avant l'ordre suivant, et dont l'echec doit se
         savoir : les aires d'une tondeuse avant qu'elle ne tonde (chantier IoT,
         passe bis du 18/10, point 4). Sans lui, l'appel part sans attendre.
+
+        `malgre_main` : la SURETE passe avant la main (audit du 12/11, S1 ;
+        ADR 0364). Le gel ecartait une entite avant toute comparaison de
+        priorite : un couloir eteint a la main a 23 h restait eteint quand le
+        detecteur de fumee sonnait a 23 h 20. Avec lui, une entite gelee part
+        quand meme — une regle plus forte la retient toujours —, et le journal
+        dit combien ont ete forcees. Le gel, lui, n'est pas leve : les autres
+        regles continuent de respecter la main. Reserve a ce qui protege des
+        personnes (alertes.py) ; le vent et la fenetre, au meme palier, ne le
+        demandent pas.
         """
         await self._charger()
         demandees = [h for h in cibles if isinstance(h, str)]
@@ -990,7 +1001,8 @@ class Regles:
         # ne partent pas — en observation non plus, le journal ne dit pas ce qui ne serait jamais parti. Fermer passe toujours.
         eau = await self.eau_retenue(service, demandees, data)
         demandees = [h for h in demandees if h not in eau]
-        geles = [h for h in demandees if self.gele(h)]
+        sous_la_main = [h for h in demandees if self.gele(h)]
+        geles = [] if malgre_main else sous_la_main
         tenus_par: dict[str, int] = {}
         retenues = []
         for h in demandees:
@@ -1039,6 +1051,11 @@ class Regles:
             details.append("commande refusee par Home Assistant")
         if geles:
             details.append(("{n} sous la main de quelqu’un", {"n": len(geles)}))
+        # Ce que la surete a commande MALGRE une main (S1) : seulement ce qui est reellement parti.
+        forces = [h for h in sous_la_main if h in retenues] if malgre_main else []
+        if forces:
+            details.append(("{n} forcé malgré la main" if len(forces) == 1 else "{n} forcés malgré la main",
+                            {"n": len(forces)}))
         for autre, nb in tenus_par.items():
             details.append(("{n} tenu par {regle}" if nb == 1 else "{n} tenus par {regle}",
                             {"n": nb, "regle": autre}))

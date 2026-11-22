@@ -136,7 +136,9 @@ test('la carte de plante : sans commande, elle reste un bouton — c’est son n
    * ASSERTIONS MODIFIÉES (chantier Capteurs, étapes 2 et 3, tâche 10 ; C30) : la carte lit sa vue (`vuePlante`) — le nom, le sol, la phrase, le même nom
    * pour la compacte et la standard ; le chiffre lu (`v.chiffre`) est celui qu'on voit. */
   assert.equal(compter(c, 'role="button" tabIndex={0} aria-label={label} aria-haspopup="dialog"'), 2, 'compacte et standard : le nom, le sol, la phrase affichés, et la fiche annoncée');
-  assert.ok(c.includes('const label = nomCarte(nom, v.sol == null ? null : v.chiffre, v.phrase);') && compter(c, '{v.chiffre}</span>') === 2, 'le chiffre lu est celui qu’on voit');
+  // ASSERTION MODIFIÉE (12/11, audit) : la carte standard écrit le « % » du sol en petit (E13) : le même chiffre, `nombre(v.sol, 0)`, et son unité ; « — » sans sol.
+  assert.ok(c.includes('const label = nomCarte(nom, v.sol == null ? null : v.chiffre, v.phrase);') && compter(c, '{v.chiffre}</span>') === 1
+    && c.includes("{v.sol == null ? v.chiffre : <>{nombre(v.sol, 0)}<span style={{ fontSize: 15 }}>%</span></>}</span>"), 'le chiffre lu est celui qu’on voit');
   assert.ok(!c.includes("tr('Ouvrir')"), 'plus de « Ouvrir Monstera », qui taisait le verdict');
   assert.equal(compter(c, '{v.phrase}</div>'), 2, 'la phrase lue et la phrase affichée viennent de la même vue');
 });

@@ -61,7 +61,9 @@ test('le repère de pile passe au-dessus de la surface : sa bulle s’affiche, s
 });
 
 test('l’intertitre qu’on saisit s’enfonce avec le rebond des boutons, sauf en mouvement réduit', () => {
-  assert.ok(css.includes('.o-pointille { transition: transform .16s cubic-bezier(.34, 1.45, .56, 1); }'), 'la transition des boutons, que `[role="button"]` lui donnait');
+  // ASSERTION MODIFIÉE (17/11, charte du mouvement, V6) : la durée et la courbe du rebond sont des jetons, posés sur
+  // `:root` avec les mêmes valeurs (.16s, cubic-bezier(.34, 1.45, .56, 1)) — tests/mouvement_charte.test.mjs.
+  assert.ok(css.includes('.o-pointille { transition: transform var(--o-dur-rapide) var(--o-rebond); }'), 'la transition des boutons, que `[role="button"]` lui donnait');
   assert.ok(/@media \(prefers-reduced-motion: reduce\) \{\s*\.o-pointille:active, \[data-sec\]:has\(> \.o-surface\):active \{ transform: none; \}\s*\.o-pointille \{ transition: none; \}\s*\}/.test(css), 'le mouvement réduit coupe aussi la transition');
   assert.ok(css.indexOf('.o-pointille { transition: transform') < css.indexOf('.o-pointille { transition: none; }'), 'la règle du mouvement réduit vient après, et l’emporte');
   // La racine plate d'EditableCard n'a pas de transition en ligne : la classe s'applique.

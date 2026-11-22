@@ -34,9 +34,19 @@ const OPTIMISTE_MS = 6000;
  * dire. Sans ce signal, un Annuler plus rapide que le relevé suivant laissait la carte sur le geste jusqu'au filet — l'état
  * réel, lui, n'avait pas bougé entre-temps. Le nom vit ici : annuler.js tire déjà ce module par lumieresetat.js. */
 export const OUBLIER_OPTIMISTES = 'loggia:oublier-optimistes';
-export function useOptimiste(reel, delai = OPTIMISTE_MS) {
+/* `atteint(ov, reel)` (facultatif, audit du 12/11, B29) : l'état réel ne répond qu'en ATTEIGNANT l'avance, l'idée de la `cible`
+ * de `poserPartage`. Trois appuis rapides sur « + » depuis 20 : l'écho du premier ordre (20,5) arrivait pendant que l'écran
+ * montrait le deuxième (21), effaçait l'avance, et le troisième appui repartait de 20,5 — 21 envoyé deux fois, la pièce finissait
+ * à 21 au lieu de 21,5. L'écho d'un ordre remplacé n'est pas une réponse. Le filet des `delai` ms reste : un appareil qui arrondit
+ * autrement n'atteint jamais l'avance, et l'écran redit la vérité au filet. Sans `atteint`, rien ne change. */
+export function useOptimiste(reel, delai = OPTIMISTE_MS, atteint = null) {
   const [ov, setOv] = useState(null);
   const minuteur = useRef(0);
+  // L'avance posée et le juge du dernier rendu, lus par l'effet qui suit `reel` sans en faire des dépendances (B29).
+  const avance = useRef(null);
+  const juge = useRef(atteint);
+  juge.current = atteint;
+  avance.current = ov;
   useEffect(() => () => clearTimeout(minuteur.current), []);
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -58,6 +68,8 @@ export function useOptimiste(reel, delai = OPTIMISTE_MS) {
    * optimiste qui n'obtient jamais de reponse expire quand meme. */
   useEffect(() => {
     if (reel == null) return;
+    // Un écho qui n'est pas l'avance (B29) : elle tient, son filet court toujours.
+    if (juge.current && avance.current != null && !juge.current(avance.current, reel)) return;
     clearTimeout(minuteur.current); setOv(null);
   }, [reel]);
   const poser = useCallback((v) => {

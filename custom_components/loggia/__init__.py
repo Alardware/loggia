@@ -62,7 +62,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 MODULES_VIVANTS = (
     "rechargement",
     "alertes", "chauffage", "distributeurs", "eau", "enfant", "fenetres", "interrupteurs", "lumieres", "minuteurs",
-    "nuit", "presence", "prises", "rappels", "robots", "scenarios", "sirene", "veilles", "volets", "regles",
+    "nuit", "ouvertures", "presence", "prises", "purificateurs", "rappels", "robots", "scenarios", "sirene", "veilles", "volets", "regles",
 )
 
 
@@ -106,6 +106,8 @@ MODULES = (
     Module("chauffage", "LoggiaChauffage", _REGLES, _REGLES, "moteur du chauffage indisponible"),
     # Fenetre ouverte, chauffage coupe.
     Module("fenetres", "LoggiaFenetres", _REGLES, _REGLES, "regle des fenetres indisponible"),
+    # Une ouverture restee ouverte, ou ouverte la nuit : le telephone le dit (ADR 0388).
+    Module("ouvertures", "LoggiaOuvertures", _REGLES, _REGLES, "rappel des ouvertures indisponible"),
     # Depart et retour : la maison se met en veille quand elle se vide.
     Module("presence", "LoggiaPresence", _REGLES, _REGLES, "regle de presence indisponible"),
     # La nuit : veilleuse a minuterie, et extinction des lampes oubliees.
@@ -124,6 +126,9 @@ MODULES = (
     # Les minuteurs d'extinction : « eteindre dans 30 min », tenus ICI et non
     # plus dans l'onglet du navigateur (21/09).
     Module("minuteurs", "LoggiaMinuteurs", _REGLES, _REGLES, "minuteurs d'extinction indisponibles"),
+    # Le planning des purificateurs d'air (ADR 0387) : une semaine de modes,
+    # appliquee a chaque changement meme ecran ferme, comme celui des robots.
+    Module("purificateurs", "LoggiaPurificateurs", _REGLES, _REGLES, "planning des purificateurs indisponible"),
     # Le test d'une sirene : « sonner trois secondes », tenu ICI et non plus
     # dans l'onglet (22/09, ADR 0065).
     Module("sirene", "LoggiaSirene", _REGLES, _REGLES, "test de sirene indisponible"),

@@ -135,7 +135,7 @@ const AVEC_RGB = new Set(['--o-accent-soft', '--o-ok', '--o-warn', '--o-warn2', 
  * seul : une icône et un mot l'accompagnent toujours. */
 const VIFS = new Set(['--o-bad', '--o-rose']);
 /** Tous les jetons que la garde peut poser — à purger au changement de thème. */
-export const JETONS_GARDE = ['--o-text', '--o-text2', '--o-text3', '--o-text3-rgb', '--o-text-lavis', '--o-text1-lavis', '--o-text2-lavis', '--o-text3-lavis', '--o-text3-lavis-rgb', '--o-accent', '--o-accent-rgb', '--o-accent-fond',
+export const JETONS_GARDE = ['--o-text', '--o-text2', '--o-text3', '--o-text3-rgb', '--o-text-lavis', '--o-text1-lavis', '--o-text2-lavis', '--o-text3-lavis', '--o-text3-lavis-rgb', '--o-accent', '--o-accent-rgb', '--o-accent-fond', '--o-bad-fond',
   '--o-rose-fond', '--o-purple-fond', '--o-surfA', '--o-surfB', '--o-well', '--o-well0',
   ...TEINTES, ...TEINTES.filter(t => AVEC_RGB.has(t)).map(t => t + '-rgb'), ...TEINTES.map(t => t + '-lavis')];
 
@@ -210,7 +210,11 @@ export function garde(lire) {
    * (Loggia, GitHub, The Projekt…) la carte se voit déjà, et son ombre fait le
    * reste. Sans filet ni ombre, il ne reste que la clarté. */
   const filet = parseFloat(lire('--o-bw') || '1') > 0;
-  if (!filet) {
+  /* … ni RELIEF (audit des thèmes du 13/11, F6). Neumorphix pose sa carte dans la couleur du fond PAR PRINCIPE : deux ombres, une
+   * sombre et une claire, la soulèvent. L'écarter du fond cassait le thème. Tant que ces ombres sont là, on n'y touche pas ;
+   * « Ombres portées » coupé (`--o-shadow: none`), la carte redevient plate et la séparation reprend. */
+  const relief = lire('--o-relief') === '1' && !/^(none)?$/.test((lire('--o-shadow') || '').trim());
+  if (!filet && !relief) {
     for (const t of ['--o-surfA', '--o-surfB']) {
       const c = lireCouleur(lire(t)); if (!c) continue;
       const v = separer(c, page[0], SEUILS.carte);
@@ -322,19 +326,23 @@ export function garde(lire) {
     }
     out[jeton + '-lavis'] = versHex(ajusterTous(c.slice(0, 3), [[contre, SEUILS.wcag]], sens));
   }
-  // L'accent : une icône, un interrupteur, un trait — 3:1.
+  /* L'accent REMPLIT et DESSINE — une icône, un interrupteur, un trait, un lavis : il lui suffit de SE VOIR, 3:1 sur la page et
+   * sur les cartes (audit des thèmes du 13/11, E4 et M5). On lui demandait en plus de se LIRE comme un texte (4,5:1) sur un disque
+   * de sa propre couleur : c'est ce qui le retouchait dans 26 variantes sur 36 — le violet de Dracula #bd93f9 devenait #cfb0fb,
+   * l'orange d'iOS clair un brun. Ce qui s'ÉCRIT dans l'accent a son propre jeton, corrigé avec les teintes : `--o-accent-soft`. */
   const accent = lireCouleur(lire('--o-accent'));
   if (accent) {
-    // L'accent habille aussi des disques de sa propre couleur (l'icône d'un
-    // scénario) : il doit s'y lire.
-    const surDisque = { cible: SEUILS.surLavis, fonds: () => { const o2 = []; for (const p of page) for (const s of surfaces) o2.push(composer(composer(p, s), [accent[0], accent[1], accent[2], 0.22])); return o2; } };
-    const a = ajusterTous(accent.slice(0, 3), [[fonds, SEUILS.accent]], sens, surDisque);
+    const a = ajusterTous(accent.slice(0, 3), [[fonds, SEUILS.accent]], sens);
     if (versHex(a) !== versHex(accent)) { out['--o-accent'] = versHex(a); out['--o-accent-rgb'] = versRgb(a); }
     // Le fond d'accent PORTE du texte blanc (puce choisie, bouton plein) : la
     // teinte a 82 %, assombrie encore s'il le faut pour tenir le seuil.
     const base = [0, 1, 2].map(i => a[i] * 0.82);
     out['--o-accent-fond'] = versHex(ajuster(base, [[255, 255, 255]], SEUILS.surAccent, -1));
   }
+  /* Le rouge qui PORTE du texte blanc — un bouton armé (« Confirmer ? », « Supprimer ? ») — a lui aussi son fond : le rouge d'un
+   * thème sombre est clair, le blanc n'y tenait que 3,3:1 (audit du 12/11). `--o-bad` reste le rouge qui écrit et qui signale. */
+  const rouge = lireCouleur(out['--o-bad'] || lire('--o-bad'));
+  if (rouge) out['--o-bad-fond'] = versHex(ajuster(rouge.slice(0, 3), [[255, 255, 255]], SEUILS.surAccent, -1));
   /* Le bouton de l'assistant porte une icône BLANCHE sur son dégradé rose →
    * violet. En thème sombre, ces deux teintes sont claires — et la garde les
    * éclaircit encore pour le texte : l'icône y tombait à 2,3:1. Deux jetons

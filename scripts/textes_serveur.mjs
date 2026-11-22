@@ -53,11 +53,20 @@ export const CLES_TELEPHONE = [
   '{appareil} se rallume après l’heure',
   /* Le rappel de collecte, la veille au soir (chantier G2, S2 ; ADR 0301). */
   'Demain : {types}',
+  /* La sauvegarde automatique ratée, aux administrateurs : les deux phrases de la vue Système (ADR 0384). */
+  'La sauvegarde de cette nuit a échoué',
+  'La dernière sauvegarde a échoué',
+  /* La fuite lente de nuit : le compteur d'eau a avancé quatre heures de suite (ADR 0384). */
+  '{nom} : de l’eau a coulé toute la nuit, une fuite ?',
   /* « Me prévenir » d'un conseil d'énergie (07/11, usage étape 11 ; rappels.py). */
   '{nom} : les heures creuses commencent',
   'Les heures creuses commencent',
   '{nom} : le moment le moins cher commence',
   'Le moment le moins cher commence',
+  /* Une ouverture restée ouverte, ou ouverte la nuit (ADR 0388 ; ouvertures.py). */
+  '{nom} est ouverte depuis {n} min',
+  '{nom} est ouvert depuis {n} min',
+  '{nom} vient de s’ouvrir',
 ];
 
 /* Ce que le serveur dit ou montre SANS passer par le telephone (chantier Mode
