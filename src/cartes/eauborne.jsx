@@ -6,12 +6,14 @@
  * chauffe-eau ni borne n'en télécharge rien de plus (`tests/lot14_chargement`).
  *
  * La borne n'est pas une entité : c'est un APPAREIL trouvé par la découverte
- * (`enBorne`, borne.js) — sa carte se pose sous la clé `obj:borne`.
+ * (`enBorne`, borne.js) — sa carte se pose sous la clé `obj:borne`. Avec
+ * plusieurs bornes (A7), chacune a sa carte et sa popup : `borne` désigne
+ * celle qu'on veut (`enBornes`), la première à défaut.
  */
 import { Suspense, useState } from 'react';
 import { lazyRecharge } from '../recharge.js';
 import { BottomSheet } from '../ui.jsx';
-import { enBorne, LOGGIA_INDEX } from '../state.js';
+import { enBorne, enBornes, LOGGIA_INDEX } from '../state.js';
 import { useHass } from '../app/noyau.jsx';
 import { hassQuiConnait } from './mesure.jsx';
 import { RM_CARD, GlypheCarte } from './briques.jsx';
@@ -50,18 +52,18 @@ export function FicheEauChaude({ id, hass, onClose }) {
   );
 }
 
-/** La carte de la borne trouvée — rien sans borne. */
-export function CarteBorne({ hass, label = null, onOpen = null, chip = false }) {
-  const b = enBorne();
+/** La carte d'une borne trouvée (la première, sans `borne`) — rien sans borne. */
+export function CarteBorne({ hass, borne = null, label = null, onOpen = null, chip = false }) {
+  const b = borne || enBorne();
   const cles = clesBorne(b);
   const H = hassQuiConnait(useHass(cles, b ? [b.puissance] : null), hass, cles[0]);
   if (!b) return null;
   return <Suspense fallback={repli(chip)}><CarteBorneContent borne={b} hass={H} nom={label || nomBorne(b)} chip={chip} onOpen={onOpen} Glyphe={GlypheCarte} /></Suspense>;
 }
 
-/** La popup de la borne, et la fiche universelle de son appareil par-dessus. */
-export function FicheBorne({ hass, onClose }) {
-  const b = enBorne();
+/** La popup d'une borne (la première, sans `borne`), et la fiche universelle de son appareil par-dessus. */
+export function FicheBorne({ hass, borne = null, onClose }) {
+  const b = borne || enBorne();
   const cles = clesBorne(b);
   const H = hassQuiConnait(useHass(cles, b ? [b.puissance] : null), hass, cles[0]);
   const [fiche, setFiche] = useState(null);
@@ -79,4 +81,5 @@ export function FicheBorne({ hass, onClose }) {
 }
 
 /** Les clés que l'écran doit suivre pour la carte de la borne (App.jsx, `obj:borne`). */
-export const clesDeLaBorne = () => clesBorne(enBorne());
+// Une borne parmi plusieurs (A7, ADR 0385) : `obj:borne:<appareil>` ; sans appareil, la première.
+export const clesDeLaBorne = (appareil = null) => clesBorne(appareil ? (enBornes().find(b => b && b.appareil === appareil) || null) : enBorne());

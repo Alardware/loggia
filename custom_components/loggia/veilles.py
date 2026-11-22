@@ -92,8 +92,34 @@ La fraicheur des mesures (01/11, ADR 0311)
   ne recoit pas (fraicheur.py). L'etat des veilles le porte (`figees`), calcule
   a chaque lecture : rien a garder, rien au telephone, aucun point d'attention.
 
+La sauvegarde ratee (21/11, ADR 0384 ; amende l'ADR 0314)
+─────────────────────────────────────────────────────────
+  La vue Systeme dit deja qu'une sauvegarde automatique a echoue (ADR 0314) ;
+  personne ne l'ouvre le matin. Chaque heure, la veille lit les capteurs de la
+  plateforme `backup` PAR LE REGISTRE, a leur cle de traduction, jamais a leur
+  nom, et applique la regle de l'ecran (`etatSauvegarde`, systemecalc.js) pour
+  l'echec seulement : le gestionnaire est au repos et la derniere tentative est
+  plus recente que la derniere reussite (ou rien n'a jamais reussi). UNE fois,
+  aux ADMINISTRATEURS — eux seuls peuvent y remedier. La cle
+  `sauvegarde:<tentative>` se rearme quand une reussite plus recente arrive.
+  Pas de « retard » : l'ecran le dit, le telephone se tait. Sans reglage,
+  toujours suivie ; « Observer sans agir » le simule.
+
+La fuite lente de nuit (21/11, ADR 0384)
+────────────────────────────────────────
+  Le compteur d'eau est celui du tableau Energie de Home Assistant. Une fuite
+  fait avancer le compteur TOUTE la nuit ; un robinet, une chasse d'eau, un
+  lave-linge n'y suffisent pas. Vers cinq heures (au demarrage, entre 05:00 et
+  08:00), la veille relit l'historique du compteur de 01:00 a 05:00 et ne dit
+  « une fuite ? » que s'il a AVANCE dans chacune des quatre heures
+  (`fuite_nocturne`). Un compteur remis a zero, un releve par jour, trop peu de
+  points : pas de verdict. UNE fois par nuit, aux personnes a la maison ; la cle
+  `fuite:<compteur>` s'en va apres une nuit sans fuite. Rien ne se ferme tout
+  seul : aucune vanne n'est commandee.
+
 A qui (ADR 0301) : les veilles ordinaires et la collecte vont aux personnes a
-la maison ; le monoxyde, a tout le monde (`regles.prevenir`, `pour=`).
+la maison ; le monoxyde, a tout le monde ; la sauvegarde ratee, aux
+administrateurs (`regles.prevenir`, `pour=`).
 """
 from __future__ import annotations
 
@@ -124,7 +150,7 @@ CLE_ETAT = "loggia_veilles_etat"
 VERSION_ETAT = 1
 # Un plafond, pas un reglage : une maison n'a pas mille piles basses.
 MAX_SIGNALES = 1000
-PREFIXES_SIGNALES = ("co2:", "bat:", "conso:", "co:", "entretien:")
+PREFIXES_SIGNALES = ("co2:", "bat:", "conso:", "co:", "entretien:", "sauvegarde:", "fuite:")
 # Le registre change par rafales (une integration qui charge cent entites) :
 # on se reabonne une fois, un peu apres la premiere (audit du 19/10, M4). Le
 # delai laisse aussi a l'entite neuve le temps d'ecrire son premier etat.
@@ -163,6 +189,28 @@ SEUIL_ENTRETIEN = 100
 # notification — une cle de CLES_VOIX, comme les boutons du mode enfant.
 MSG_COLLECTE = "Demain : {types}"
 BOUTON_SORTI = "C’est sorti"
+# La sauvegarde automatique ratee (ADR 0384) : les deux phrases de l'ecran
+# (`etatSauvegarde`), pour que le telephone et la vue Systeme disent pareil.
+MSG_SAUVEGARDE = "La sauvegarde de cette nuit a échoué"
+MSG_SAUVEGARDE_ANCIENNE = "La dernière sauvegarde a échoué"
+# La fuite lente de nuit (ADR 0384) : le nom est celui du compteur d'eau.
+MSG_FUITE = "{nom} : de l’eau a coulé toute la nuit, une fuite ?"
+
+# La sauvegarde : les cles de traduction des capteurs de la plateforme `backup`.
+PLATEFORME_SAUVEGARDE = "backup"
+CLE_TENTEE = "last_attempted_automatic_backup"
+CLE_REUSSIE = "last_successful_automatic_backup"
+CLE_GESTIONNAIRE = "backup_manager_state"
+# Une tentative « de cette nuit » : moins de 24 h, partie avant 8 h (comme l'ecran).
+NUIT_SAUVEGARDE_S = 86400
+NUIT_SAUVEGARDE_H = 8
+
+# La fuite de nuit : de 01:00 a 05:00, heure de la maison, quatre heures de suite.
+DEBUT_NUIT_H = 1
+HEURES_FUITE = 4
+# Le passage qui juge la nuit, et la fin de la fenetre ou un demarrage la rattrape.
+HEURE_VERDICT = 5
+FIN_RATTRAPAGE_H = 8
 
 # Le palier Danger du monoxyde, en ppm : AU-DELA de 35 (« jusqu'a 35 » est
 # Moyen). UNE source : la table de l'ecran, `PALIERS.co` de src/confort.js —
@@ -188,6 +236,10 @@ DEFAUT: dict[str, Any] = {
     # Observer sans agir (ADR 0004 ; audit du 19/10, H3) : le drapeau des
     # autres modules, que l'interrupteur des Regles pose avec eux.
     "simulation": {"actif": False},
+    # La sauvegarde ratee aux administrateurs et la fuite de nuit (ADR 0384) :
+    # allumees, sans reglage a poser — le telephone n'est dit qu'une fois.
+    "sauvegarde": {"actif": True},
+    "fuite_nuit": {"actif": True},
 }
 
 # Les listes d'entites de la configuration, relues a chaque lecture et a
@@ -252,6 +304,87 @@ def en_dessous(valeur, seuil, deja_signale: bool, inclus: bool = False) -> bool:
     return valeur <= seuil if inclus else valeur < seuil
 
 
+def sauvegarde_ratee(tentee, reussie, etat_gestionnaire) -> bool:
+    """L'echec d'une sauvegarde automatique : le MIROIR de l'ecran
+    (`etatSauvegarde`, systemecalc.js), pour l'echec seulement.
+
+    `tentee`, `reussie` : des instants (secondes epoch) ou None ; `etat_gestionnaire` :
+    l'etat du capteur `backup_manager_state` (None sans capteur : au repos, comme
+    l'ecran). Une sauvegarde en cours (`create_backup`…) n'est pas un echec : sa
+    tentative est deja notee, sa reussite pas encore. Echec = la tentative est plus
+    recente que la reussite, ou rien n'a jamais reussi."""
+    if etat_gestionnaire not in (None, "idle"):
+        return False
+    if tentee is None:
+        return False
+    return reussie is None or tentee > reussie
+
+
+def tentee_de_nuit(tentee, maintenant) -> bool:
+    """La tentative est-elle « de cette nuit » ? Moins de 24 h, et partie avant
+    8 h dans le fuseau de la maison — la phrase de l'ecran, pour ne pas dire
+    « cette nuit » d'un echec de lundi. `maintenant` : un instant AVEC fuseau."""
+    if tentee is None or maintenant is None:
+        return False
+    try:
+        if maintenant.timestamp() - tentee >= NUIT_SAUVEGARDE_S:
+            return False
+        from datetime import datetime
+
+        return datetime.fromtimestamp(tentee, maintenant.tzinfo).hour < NUIT_SAUVEGARDE_H
+    except (TypeError, ValueError, OverflowError, OSError):
+        return False
+
+
+def fuite_nocturne(points, debut):
+    """Le compteur d'eau a-t-il coule TOUTE la nuit ?
+
+    `points` : [(t_epoch, valeur)] tries, l'historique du compteur ; `debut` : 01:00,
+    en epoch. Vrai seulement si le compteur a AVANCE (strictement) dans chacune des
+    quatre heures 1-2, 2-3, 3-4 et 4-5 : la valeur a un instant est la derniere
+    connue a cet instant. Une baisse (un compteur remis a zero) n'est pas une
+    fuite. None = pas de verdict : moins de points qu'il n'en faut pour quatre
+    avances (un compteur qui ne se met a jour qu'une fois par jour ne declenche
+    donc jamais), ou aucune valeur connue au debut."""
+    vus = []
+    for p in points or ():
+        try:
+            t, v = float(p[0]), lu(p[1])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if v is not None and math.isfinite(t):
+            vus.append((t, v))
+    vus.sort(key=lambda p: p[0])
+    if len(vus) < HEURES_FUITE + 1 or vus[0][0] > debut:
+        return None
+    valeurs = []
+    for k in range(HEURES_FUITE + 1):
+        borne, connue = debut + 3600 * k, None
+        for t, v in vus:
+            if t > borne:
+                break
+            connue = v
+        valeurs.append(connue)
+    return all(valeurs[k + 1] > valeurs[k] for k in range(HEURES_FUITE))
+
+
+def _instant_iso(etat):
+    """L'instant d'un capteur d'horodatage (un ISO 8601), en secondes epoch ;
+    None s'il est muet, absent ou illisible."""
+    if etat is None:
+        return None
+    brut = str(getattr(etat, "state", "")).strip()
+    if brut.lower() in MUETS:
+        return None
+    try:
+        from homeassistant.util import dt as dt_util
+
+        quand = dt_util.parse_datetime(brut)
+        return quand.timestamp() if quand is not None else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 # Les onduleurs : leur batterie se recharge, ce n'est pas une pile a changer (audit du 19/10, M13).
 ONDULEURS = ("nut", "apcupsd")
 
@@ -290,6 +423,8 @@ class LoggiaVeilles:
     # L'entretien du poele : les capteurs vus sous le seuil au passage d'avant,
     # pas encore signales (un 0 d'un instant ne compte pas). En memoire seulement.
     _entretien_bas: frozenset = frozenset()
+    # L'historique du compteur d'eau : dit UNE fois quand il ne se lit pas.
+    _historique_dit = False
 
     def __init__(self, hass: HomeAssistant, store: "LoggiaStore", regles=None) -> None:
         self.hass = hass
@@ -331,7 +466,7 @@ class LoggiaVeilles:
         if bus is not None and self._defait_registre is None:
             self._defait_registre = bus.async_listen("entity_registry_updated", self._sur_registre)
         await self._async_reabonner()
-        await self._async_horaire()
+        await self._async_horaire(rattrapage=True)
         # Un redemarrage dans les trois heures qui suivent l'heure du rappel.
         await self._async_collecte(rattrapage=True)
 
@@ -392,7 +527,9 @@ class LoggiaVeilles:
         horaire = bool((self.cfg.get("batterie") or {}).get("actif")
                        or (self.cfg.get("consommables") or {}).get("actif")
                        or self._capteurs_co(self._tous_les_etats())
-                       or self._compteurs_entretien())
+                       or self._compteurs_entretien()
+                       or (self.cfg.get("sauvegarde") or {}).get("actif")
+                       or (self.cfg.get("fuite_nuit") or {}).get("actif"))
         if horaire and self._horaire is None:
             from datetime import timedelta
 
@@ -428,15 +565,26 @@ class LoggiaVeilles:
     def _sur_heure(self, _now) -> None:
         self.hass.async_create_task(self._async_horaire())
 
-    async def _async_horaire(self) -> None:
+    async def _async_horaire(self, rattrapage: bool = False) -> None:
         """Ce qui se vide lentement : un passage par heure. Le monoxyde chiffre
         aussi (contre-relecture du lot 3) : un danger deja la au demarrage
         complet se dit, et un envoi rate se retente — une fois tant que la cle
-        est gardee."""
+        est gardee. `rattrapage` : le demarrage de Home Assistant, qui juge aussi
+        la nuit passee (la fuite) s'il tombe entre 05:00 et 08:00."""
         await self._async_batteries()
         await self._async_consommables()
         await self._async_co()
         await self._async_entretien()
+        # ADR 0384 : chacune seule — une panne de lecture (registre, historique)
+        # ne coupe pas la veille d'apres, et le dit.
+        try:
+            await self._async_sauvegarde()
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia veilles : la sauvegarde ratee n'a pas pu etre jugee")
+        try:
+            await self._async_fuite(rattrapage=rattrapage)
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Loggia veilles : la fuite de nuit n'a pas pu etre jugee")
 
     async def _async_evaluer(self) -> None:
         await self._async_co2()
@@ -698,6 +846,150 @@ class LoggiaVeilles:
             elif deja:
                 self.signales.discard(cle)
         self._entretien_bas = frozenset(bas)
+        if self.signales != avant:
+            await self._async_garder()
+
+    # ── La sauvegarde ratee (ADR 0384) ─────────────────────────────────────
+    def _entites_sauvegarde(self) -> dict[str, str]:
+        """{cle de traduction: entity_id} des capteurs de la plateforme `backup`,
+        lus au REGISTRE — jamais a leur nom. Un registre illisible n'en connait
+        aucun : pas de verdict."""
+        try:
+            from homeassistant.helpers import entity_registry as er
+
+            entrees = list(er.async_get(self.hass).entities.values())
+        except Exception:  # noqa: BLE001
+            return {}
+        return {str(e.translation_key): str(e.entity_id) for e in entrees
+                if getattr(e, "platform", None) == PLATEFORME_SAUVEGARDE
+                and getattr(e, "disabled_by", None) is None
+                and getattr(e, "translation_key", None) in (CLE_TENTEE, CLE_REUSSIE, CLE_GESTIONNAIRE)}
+
+    async def _async_sauvegarde(self) -> None:
+        """Une sauvegarde automatique ratee, UNE fois, aux administrateurs. La cle
+        `sauvegarde:<tentative>` ne se pose que si l'envoi est parti, et se rearme
+        quand l'echec n'est plus vrai (une reussite plus recente). Un etat muet ne
+        rearme rien ; une sauvegarde en cours ne change rien non plus."""
+        if self._arrete or not (self.cfg.get("sauvegarde") or {}).get("actif"):
+            return
+        ids = self._entites_sauvegarde()
+        haid = ids.get(CLE_TENTEE)
+        if not haid:
+            return
+        avant = set(self.signales)
+        self._purger("sauvegarde:")
+        tentee = _instant_iso(self.hass.states.get(haid))
+        reussie_etat = self.hass.states.get(ids.get(CLE_REUSSIE, ""))
+        gestionnaire = self.hass.states.get(ids.get(CLE_GESTIONNAIRE, ""))
+        etat = str(getattr(gestionnaire, "state", "")).strip().lower() if gestionnaire is not None else None
+        # Muet : la tentative, la reussite ou le gestionnaire ne disent rien —
+        # ni signal ni rearmement. Une reussite « unknown » veut dire « jamais » (Home
+        # Assistant), comme sur l'ecran ; « unavailable », rien.
+        muet = (tentee is None
+                or (reussie_etat is not None and str(getattr(reussie_etat, "state", "")).strip().lower() == "unavailable")
+                or (etat is not None and etat in MUETS))
+        if muet or etat not in (None, "idle"):
+            if self.signales != avant:
+                await self._async_garder()
+            return
+        reussie = _instant_iso(reussie_etat)
+        cle = "sauvegarde:" + haid
+        deja = cle in self.signales
+        ratee = sauvegarde_ratee(tentee, reussie, etat)
+        if ratee and not deja:
+            simule = self._simule()
+            # Deux phrases, deux constantes : la garde des textes lit chaque envoi.
+            if tentee_de_nuit(tentee, self._maintenant()):
+                parti = await self.regles.prevenir("veilles", "sauvegarde", MSG_SAUVEGARDE, motif=haid,
+                                                   simuler=simule, pour="admins")
+            else:
+                parti = await self.regles.prevenir("veilles", "sauvegarde", MSG_SAUVEGARDE_ANCIENNE, motif=haid,
+                                                   simuler=simule, pour="admins")
+            # La cle seulement si c'est parti : un telephone pas encore pret ne fait rien perdre.
+            if parti:
+                self.signales.add(cle)
+        elif not ratee and deja:
+            self.signales.discard(cle)
+        if self.signales != avant:
+            await self._async_garder()
+
+    # ── La fuite lente de nuit (ADR 0384) ──────────────────────────────────
+    async def _compteurs_eau(self) -> list[str]:
+        """Les compteurs d'eau du tableau Energie de Home Assistant (`stat_energy_from`
+        d'une source `water`) : l'identifiant de la statistique est, dans le cas
+        courant, l'entity_id du capteur cumulatif. Pas de tableau, ou illisible :
+        aucun compteur."""
+        try:
+            from homeassistant.components.energy.data import async_get_manager
+
+            prefs = (await async_get_manager(self.hass)).data or {}
+        except Exception:  # noqa: BLE001
+            return []
+        trouves = []
+        for source in prefs.get("energy_sources") or []:
+            if isinstance(source, dict) and source.get("type") == "water":
+                haid = source.get("stat_energy_from")
+                if est_entite(haid) and haid not in trouves:
+                    trouves.append(haid)
+        return sorted(trouves)
+
+    async def _points_compteur(self, haid: str, debut: float) -> list | None:
+        """L'historique du compteur, de `debut` a `debut` + quatre heures :
+        [(t_epoch, valeur)], la valeur au debut comprise (`include_start_time_state`).
+        None s'il ne se lit pas — dit une fois, pas a chaque nuit."""
+        from datetime import datetime, timezone
+        from functools import partial
+
+        try:
+            from homeassistant.components.recorder import get_instance, history
+
+            lus = await get_instance(self.hass).async_add_executor_job(partial(
+                history.state_changes_during_period, self.hass,
+                datetime.fromtimestamp(debut, timezone.utc),
+                datetime.fromtimestamp(debut + 3600 * HEURES_FUITE, timezone.utc),
+                haid, no_attributes=True, include_start_time_state=True))
+        except Exception:  # noqa: BLE001
+            if not self._historique_dit:
+                self._historique_dit = True
+                _LOGGER.warning("Loggia veilles : historique du compteur d'eau illisible, "
+                                "pas de veille de fuite", exc_info=True)
+            return None
+        self._historique_dit = False
+        points = []
+        for e in (lus or {}).get(haid, []):
+            quand = getattr(e, "last_updated", None)
+            valeur = nombre(e)
+            if quand is not None and valeur is not None:
+                points.append((quand.timestamp(), valeur))
+        return points
+
+    async def _async_fuite(self, rattrapage: bool = False) -> None:
+        """Le passage de cinq heures (au demarrage, entre 05:00 et 08:00) : le
+        compteur d'eau a-t-il avance dans chacune des quatre heures de 01:00 a
+        05:00 ? UNE fois par nuit ; la cle `fuite:<compteur>` ne se pose que si
+        l'envoi est parti, et s'en va apres une nuit sans fuite. Rien ne se ferme."""
+        if self._arrete or not (self.cfg.get("fuite_nuit") or {}).get("actif"):
+            return
+        maintenant = self._maintenant()
+        if not (maintenant.hour == HEURE_VERDICT or (rattrapage and HEURE_VERDICT <= maintenant.hour < FIN_RATTRAPAGE_H)):
+            return
+        debut = maintenant.replace(hour=DEBUT_NUIT_H, minute=0, second=0, microsecond=0).timestamp()
+        # Une nuit de changement d'heure peut etre trop courte : pas de verdict sur le futur.
+        if maintenant.timestamp() < debut + 3600 * HEURES_FUITE:
+            return
+        compteurs = await self._compteurs_eau()
+        avant = set(self.signales)
+        self._purger("fuite:")
+        for haid in compteurs:
+            verdict = fuite_nocturne(await self._points_compteur(haid, debut), debut)
+            cle = "fuite:" + haid
+            deja = cle in self.signales
+            if verdict is True and not deja:
+                if await self.regles.prevenir("veilles", "fuite", (MSG_FUITE, {"nom": self._nom(haid, {})}),
+                                              motif=haid, simuler=self._simule(), pour="presents"):
+                    self.signales.add(cle)
+            elif verdict is False and deja:
+                self.signales.discard(cle)
         if self.signales != avant:
             await self._async_garder()
 
@@ -1089,6 +1381,9 @@ class LoggiaVeilles:
         entite = cfg["creuses"].get("entite")
         cfg["creuses"]["entite"] = entite if est_entite(entite) else ""
         cfg["simulation"] = {"actif": cfg["simulation"].get("actif") is True}
+        # Un vrai booleen (ADR 0384) : « oui », 1 ou une liste ne l'allument pas.
+        cfg["sauvegarde"] = {"actif": cfg["sauvegarde"].get("actif") is True}
+        cfg["fuite_nuit"] = {"actif": cfg["fuite_nuit"].get("actif") is True}
         c = cfg["collecte"]
         source = c.get("source")
         cfg["collecte"] = {

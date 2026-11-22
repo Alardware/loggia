@@ -67,7 +67,8 @@ function useHassJoue(hass) {
   const useHass = morceau('function useHass(', '\n}', {
     useState: React.useState, useRef: React.useRef, useEffect: React.useEffect,
     getHass: () => hass, HASS_POLL_MS: 2000, wattsDe: () => null,
-    sigHash: (s) => s.length, setInterval: () => 1, clearInterval: () => {},
+    // ASSERTION MODIFIÉE (19/11, fluidité, point 3) : la minuterie commune du pont remplace le `setInterval` de chaque appelant.
+    sigHash: (s) => s.length, abonnerPont: () => () => {},
   }, 'useHass');
   return { useHass, rendus };
 }

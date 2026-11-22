@@ -31,9 +31,23 @@ const nomDe = (id, st) => (st && st.attributes && st.attributes.friendly_name) |
 const vivant = (st) => !!st && typeof st === 'object' && st.state != null && MUETS.indexOf(String(st.state)) < 0;
 const groupe = (id, st, plateforme) => Array.isArray(st.attributes && st.attributes.entity_id) || plateforme(id) === 'group';
 
-/** Ce qui restera ouvert : `{ portails: [{id, nom}], ouverts: [{id, nom, famille}] }`. */
-export function restesAvantDepart(S, { plateforme = () => null, masque = () => false, voisins = () => [] } = {}) {
-  const out = { portails: [], ouverts: [] };
+/* LES SERRURES (chantier du 20/11, A4 ; ADR 0386). « Je pars » et « Bonne nuit » verrouillent, mais pas tout :
+ * — une serrure BLOQUÉE (`jammed`) ne bouge plus ;
+ * — une serrure À CODE (`code_format`) refuse `lock.lock` sans lui, et le scénario n'en a pas ;
+ * — un scénario modifié peut ne plus verrouiller du tout (`verrouille` faux).
+ * Celles-là restent ouvertes en partant : la feuille les dit, et offre « Verrouiller ». */
+const NON_VERROUILLEE = ['unlocked', 'unlocking', 'open', 'opening', 'jammed'];
+
+/** Le scénario `s` verrouille-t-il toute la maison ? Une action « Serrures · Verrouiller » sur toute la maison, sans condition
+ *  d'heure. Un scénario qui lance un script (`lien`), inconnu ou absent : on ne sait pas, donc non. */
+export function verrouillePar(s) {
+  const actions = s && !s.lien && Array.isArray(s.actions) ? s.actions : [];
+  return actions.some(a => a && a.famille === 'serrures' && a.geste === 'verrouiller' && (a.portee || 'maison') === 'maison' && (!a.si || a.si === 'toujours'));
+}
+
+/** Ce qui restera ouvert : `{ portails: [{id, nom}], ouverts: [{id, nom, famille}], serrures: [{id, nom, bloquee, code}] }`. */
+export function restesAvantDepart(S, { plateforme = () => null, masque = () => false, voisins = () => [], verrouille = false } = {}) {
+  const out = { portails: [], ouverts: [], serrures: [] };
   if (!S || typeof S !== 'object') return out;
   const ids = Object.keys(S).sort();
   ids.forEach(id => {
@@ -58,7 +72,16 @@ export function restesAvantDepart(S, { plateforme = () => null, masque = () => f
     (famille === 'portes' ? portes : fenetres).push({ id, nom: nomDe(id, st), famille });
   });
   out.ouverts = [...portes, ...fenetres];
+  ids.forEach(id => {
+    if (id.indexOf('lock.') !== 0) return;
+    const st = S[id];
+    if (!vivant(st) || groupe(id, st, plateforme) || masque(id) || NON_VERROUILLEE.indexOf(String(st.state)) < 0) return;
+    const bloquee = st.state === 'jammed', code = !!(st.attributes || {}).code_format;
+    // Le scénario la verrouillera : rien à dire.
+    if (verrouille && !bloquee && !code) return;
+    out.serrures.push({ id, nom: nomDe(id, st), bloquee, code });
+  });
   return out;
 }
 
-export const resteQuelqueChose = (r) => !!r && (r.portails.length + r.ouverts.length) > 0;
+export const resteQuelqueChose = (r) => !!r && (r.portails.length + r.ouverts.length + (r.serrures || []).length) > 0;

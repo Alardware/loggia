@@ -187,6 +187,34 @@ export function colonnesPour(largeur, etroit, mosaique) {
   return Math.max(1, Math.floor((Math.max(0, entier(largeur, 0)) + ECART) / (LARGEUR_MIN + ECART)));
 }
 
+/** Les nombres de colonnes (2 à `max`) où la carte `index` se retrouve SEULE
+ * sur sa rangée, dans une grille qui place ses cartes à la suite (CSS grid,
+ * sans `dense`) ; `largeurs` : la largeur de chaque carte en colonnes (1, ou 2
+ * pour une carte élargie). Audit du 12/11 : la carte Présence de la vue
+ * Sécurité tombait seule sur sa rangée, une colonne sur trois, avatars
+ * minuscules ; la vue l'étend alors à toute la rangée, et seulement alors —
+ * à côté de l'alarme et de la sirène, elle garde sa colonne. */
+export function seuleSurSaRangee(largeurs, index, max = 8) {
+  const l = (Array.isArray(largeurs) ? largeurs : []).map(x => Math.max(1, entier(x, 1)));
+  const out = [];
+  if (index < 0 || index >= l.length) return out;
+  for (let k = 2; k <= max; k++) {
+    let col = 0;
+    let debut = -1;
+    for (let i = 0; i < l.length; i++) {
+      const s = Math.min(l[i], k);
+      if (col + s > k) col = 0;
+      if (i === index) debut = col;
+      // La carte suivante tient-elle encore sur la même rangée ?
+      if (i === index + 1 && col !== 0) { debut = -1; break; }
+      col += s;
+      if (col >= k) col = 0;
+    }
+    if (debut === 0) out.push(k);
+  }
+  return out;
+}
+
 /** Ce qu'on enregistre : les places des pièces qui existent encore. Une pièce
  *  supprimée ne doit pas garder sa cellule en réserve. */
 export function nettoyer(places, noms) {

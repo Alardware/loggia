@@ -55,7 +55,7 @@ export function depuisQuand(etats, debut, st) {
  * fait rendre à minuit, nettoyé au démontage ; le jour fait partie des dépendances de la lecture. `null` tant qu'elle n'est pas lue,
  * 'erreur' si elle ne se lit pas, sinon `{ debut, etats: { id: [{ t, s }] } }`.
  */
-export function useJournee(hass, ids) {
+export function useJournee(hass, ids, relire = null) {
   const [lu, setLu] = useState(null);
   const [, setTic] = useState(0);
   const hRef = useRef(hass);
@@ -79,7 +79,8 @@ export function useJournee(hass, ids) {
     new Promise((ok) => ok(hRef.current.callApi('GET', 'history/period/' + new Date(debut).toISOString() + '?filter_entity_id=' + encodeURIComponent(sig) + '&minimal_response&no_attributes')))
       .then((r) => { if (vivant) setLu({ debut, etats: lireJournee(r) }); }, () => { if (vivant) setLu('erreur'); });
     return () => { vivant = false; };
-  }, [connecte, sig, jour]);
+    // `relire` (ADR 0388) : la tuile d'une ouverture relit sa journée quand la porte change — sa liste, elle, ne change pas.
+  }, [connecte, sig, jour, relire]);
   // Une lecture d'un autre jour ne se montre pas : la suivante arrive.
   return lu && lu !== 'erreur' && lu.debut !== jour ? null : lu;
 }

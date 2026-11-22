@@ -1,5 +1,6 @@
 /* La carte d'un robot : l'aspirateur et la tondeuse.
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
+import { useState, useEffect } from 'react';
 import { LOGGIA_INDEX } from '../state.js';
 import { enPanne } from '../outils.js';
 import { LAVIS } from '../theme.js';
@@ -13,7 +14,7 @@ import { petitesCapitales, LISERE } from '../styles.js';
 import { Ico } from '../icones.jsx';
 import { tr } from '../i18n.js';
 import { useHass, HASS_POLL_MS, lavisCarte } from '../app/noyau.jsx';
-import { RM_BTN, ChiffreHaut, RM_CARD, RM_ICO, GlypheCarte, RM_MILIEU, RM_NAME, RM_SUB } from './briques.jsx';
+import { RM_BTN, ChiffreHaut, RM_CARD_HAUT, RM_GAUCHE, RM_ICO, GlypheCarte, RM_MILIEU, RM_NAME, RM_SUB } from './briques.jsx';
 import { hassQuiConnait } from './mesure.jsx';
 
 /* ── Les robots : l'aspirateur et la tondeuse (chantier IoT, étape 1 ; sa maquette « Cartes IoT », 1a ; I5 à I9, I12, I33) ──
@@ -69,6 +70,22 @@ function localiserRobot(H, id, domaine) {
  * avant que l'écran ne se redessine. Une tondeuse à aires dont aucune n'est allumée n'offre pas « Démarrer », et sa phrase le dit
  * (`sansZone`, point D) : toucher la carte ouvre la fiche, où l'on choisit. */
 const FILET_ROBOT_MS = 5000;
+/* Ce que fait la base d'un aspirateur (`robotsbase.js`, ses tables de clés et de mots) se charge à la demande (ADR 0385) : seul un
+ * aspirateur en a besoin, et le démarrage n'en embarque rien. La carte se dessine sans, puis se relit une fois le morceau là — la
+ * phrase de la base arrive un instant après, rien d'autre ne change. Un morceau qui manque se redemande au prochain montage. */
+let BASE_ROBOT = null;
+let BASE_EN_ROUTE = null;
+function useBaseRobot(voulu) {
+  const [, relire] = useState(0);
+  useEffect(() => {
+    if (!voulu || BASE_ROBOT) return undefined;
+    let vivant = true;
+    BASE_EN_ROUTE = BASE_EN_ROUTE || import('../robotsbase.js').then((m) => { BASE_ROBOT = m || null; }, () => {}).then(() => { BASE_EN_ROUTE = null; });
+    BASE_EN_ROUTE.then(() => { if (vivant && BASE_ROBOT) relire((n) => n + 1); });
+    return () => { vivant = false; };
+  }, [voulu]);
+  return BASE_ROBOT;
+}
 function useVueRobot(hass, id, label = null, actif = true, { rapide = false } = {}) {
   const S0 = (hass && hass.states) || {};
   const domaine = String(id).split('.')[0];
@@ -79,7 +96,10 @@ function useVueRobot(hass, id, label = null, actif = true, { rapide = false } = 
   const aires = actif && domaine === 'lawn_mower' ? airesTondeuse(LOGGIA_INDEX, id) : [];
   // Sa progression et son temps restant, à leur clé (lot 9 Gladys, ADR 0313) : la phrase d'une tondeuse les dit.
   const idPct = soeur('sensor', 0, ['progress']), idReste = soeur('sensor', 0, ['left_time']);
-  const vivant = useHass(actif ? [id, idBat, idCharge, idPct, idReste, ...aires].filter(Boolean) : []);
+  // Ce que fait la base d'un aspirateur, et la pièce où il est (chantier du 20/11, A6) : ses sœurs, à leur clé.
+  const B = useBaseRobot(actif && domaine === 'vacuum');
+  const base = B ? B.soeursBase(LOGGIA_INDEX, id) : [];
+  const vivant = useHass(actif ? [id, idBat, idCharge, idPct, idReste, ...aires].concat(base.map(b => b.id)).filter(Boolean) : []);
   const H = hassQuiConnait(vivant, hass, id);
   const S = (H && H.states) || {};
   const st = actif ? S[id] || null : null;
@@ -101,7 +121,10 @@ function useVueRobot(hass, id, label = null, actif = true, { rapide = false } = 
   const charge = !!(idCharge && S[idCharge] && S[idCharge].state === 'on');
   const carnet = vueCarnetRobot(etat, id, maintenant, departRobot(id, maintenant), { sansZone });
   // Le carnet porte exactement ce que la phrase lit : `pieces`, `tout`, `libelle`, `erreur`, `prochain`.
-  const phrase = phraseRobot({ domaine, phase, depuis: st && st.last_changed, bipe, ...carnet, charge, sansZone, maintenant, avance: avanceTonte(S[idPct], S[idReste]) });
+  const entrees = B ? B.entreesBase(base, S) : [];
+  const soin = base.length ? B.lireBase(entrees) : null;
+  const phrase = phraseRobot({ domaine, phase, depuis: st && st.last_changed, bipe, ...carnet, charge, sansZone, maintenant, avance: avanceTonte(S[idPct], S[idReste]),
+    aspire: base.length ? B.avanceAspirateur(entrees) : null, base: soin ? { activite: soin.activite && soin.activite.texte, alerte: soin.alertes.length ? soin.alertes[0].texte : null } : null });
   const service = (svc) => { commanderService(H, id, domaine, svc, { entity_id: id }); apresCommandeRobot(); };
   /* Le geste en vol, l'avance partagée : `cle` (la puce), la phase qu'il annonce, la phase réelle d'avant lui et son `last_changed` ;
    * `mot` : celui de la puce de la popup (« Nettoyer 2 pièces ») ; `garde` : un départ par le serveur, tenu jusqu'à sa réponse.
@@ -177,7 +200,7 @@ function RoomRobotCard({ id, hass, onOpen, label = null }) {
   return (
     /* La carte n'est pas un bouton (ADR 0074) : la surface, premier enfant, dit ce que la carte affiche — le nom, la phrase, la
      * batterie — et les puces, positionnées, passent au-dessus d'elle. */
-    <div className={'o-rmcard o-gabarit' + (v.panne ? ' o-panne' : '')} data-robot="" style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
+    <div className={'o-rmcard o-gabarit' + (v.panne ? ' o-panne' : '')} data-robot="" style={{ ...RM_CARD_HAUT, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
       ...(v.travail && LAVIS ? { background: lavisCarte(v.teinte[0], .14, .03) } : null), border: LISERE }}>
       {onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(v.nom, v.phrase.texte, pile == null ? null : tr('batterie {p} %', { p: pile }))} />}
       {/* La ligne du haut : la plaque, et la batterie nommée de la carte étroite. */}
@@ -185,10 +208,12 @@ function RoomRobotCard({ id, hass, onOpen, label = null }) {
         <span style={RM_ICO(fond, encrePlaque)}><GlypheCarte id={id} size={17}><Ico name={dom === 'vacuum' ? 'vacuum' : 'mower'} size={17} /></GlypheCarte></span>
         {pile != null && <ChiffreNommeHaut v={pile} nom={tr('Batterie')} couleur={couleur} />}
       </div>
-      {/* La rangée du milieu, 10 px sous la plaque : le nom et la phrase à gauche — sur une carte étroite, toute la largeur, la phrase
+      {/* La rangée du milieu, sous la plaque : le nom et la phrase à gauche — sur une carte étroite, toute la largeur, la phrase
         * de 12 à 10,5 px selon sa longueur (`--o-n`) —, la batterie nommée de la carte large à droite. */}
-      <div style={{ ...RM_MILIEU, marginTop: 'var(--o-milieu-haut, 10px)' }}>
-        <div style={{ minWidth: 0 }}>
+      {/* Le nom 14 px sous la plaque, comme sur toutes les cartes (audit du 12/11, `RM_MILIEU`) : 10 partout le posait 4 px plus haut
+        * que celui d'une lumière ; la carte étroite garde ses 10 (`--o-milieu-haut`). Sa colonne reste en haut (`RM_GAUCHE`). */}
+      <div style={RM_MILIEU}>
+        <div style={RM_GAUCHE}>
           <div className="o-gab-nom" style={{ ...RM_NAME, fontSize: 15 }}>{v.nom}</div>
           <div className="o-gab-phrase" style={{ ...RM_SUB, color: v.phrase.encre, '--o-n': Math.max(1, v.phrase.texte.length) }}>{v.phrase.texte}</div>
         </div>

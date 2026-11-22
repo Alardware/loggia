@@ -447,7 +447,9 @@ def test_un_reabonnement_ne_repousse_pas_le_passage_horaire(creer, monkeypatch, 
         return retirer
 
     monkeypatch.setattr(ev, "async_track_time_interval", intervalle)
-    v = creer({"batterie": {"actif": True, "seuil": 15}}, {})
+    # ASSERTION MODIFIEE (21/11, ADR 0384) : la sauvegarde et la fuite de nuit, allumees par defaut, posent aussi
+    # le passage horaire ; on les eteint pour que les piles soient seules a le demander.
+    v = creer({"batterie": {"actif": True, "seuil": 15}, "sauvegarde": {"actif": False}, "fuite_nuit": {"actif": False}}, {})
     with caplog.at_level("INFO", logger=v.__module__):
         lancer(v._async_reabonner())
         lancer(v._async_reabonner())

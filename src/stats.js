@@ -145,14 +145,28 @@ export function casesStat(periode, bornes, lang = null) {
  * `hour` relu sur une case journalière, ou d'une installation qui garde encore
  * ses lignes de cinq minutes.
  */
-export function repartir(lignes, cases, facteur = 1) {
+export function repartir(lignes, cases, facteur = 1, pas = null) {
   const out = cases.map(() => null);
   if (!Array.isArray(lignes) || !cases.length) return out;
+  /* Le RELEVÉ borne le changement, à l'heure et au jour (audit du 12/11,
+   * ADR 0347). Un compteur ne peut pas avoir compté, dans une tranche, plus
+   * que ce qu'il affiche à la fin : un index est toujours bien au-dessus, un
+   * compteur journalier ne l'atteint qu'à sa remise à zéro. Quand le
+   * `change` dépasse le relevé, c'est que Home Assistant a pris pour une
+   * consommation la retombée d'une somme de deux compteurs — la tranche de
+   * minuit portait + 1,42 € jamais dépensés, et le coût du jour doublait.
+   * Au mois, la règle ne tient plus (le relevé d'un compteur journalier n'y
+   * vaut que son dernier jour) : elle ne s'applique pas. */
+  const borne = pas === 'hour' || pas === 'day' || pas === '5minute';
   for (const ligne of lignes) {
     if (!ligne) continue;
     const t = instantStat(ligne.start);
-    const v = typeof ligne.change === 'number' ? ligne.change : parseFloat(ligne.change);
+    let v = typeof ligne.change === 'number' ? ligne.change : parseFloat(ligne.change);
     if (t == null || !isFinite(v)) continue;
+    if (borne) {
+      const e = typeof ligne.state === 'number' ? ligne.state : parseFloat(ligne.state);
+      if (isFinite(e) && e >= 0 && e < v) v = e;
+    }
     /* Recherche dichotomique : un an de lignes horaires fait 8 760 entrées, et
      * le calendrier en demande douze séries d'un coup. */
     let lo = 0, hi = cases.length - 1, k = -1;
@@ -178,7 +192,9 @@ export function repartir(lignes, cases, facteur = 1) {
 export function libellePeriode(periode, recul = 0, maintenant = Date.now(), lang = null) {
   const l = lang || locale();
   const b = bornesStat(periode, recul, maintenant);
-  const veille = new Date(b.fin.getTime() - 864e5);
+  /* La veille de la fin, en jour CIVIL (audit du 12/11, B27) : retirer 24 h au lundi 0 h d'heure d'été tombait le samedi 23 h,
+   * et la semaine du passage à l'heure d'été s'écrivait « 23 – 28 mars ». */
+  const veille = new Date(b.fin.getFullYear(), b.fin.getMonth(), b.fin.getDate() - 1);
   if (periode === 'annee') return String(b.debut.getFullYear());
   if (periode === 'mois') return b.debut.toLocaleDateString(l, { month: 'long', year: 'numeric' });
   if (periode === 'semaine') {
@@ -298,6 +314,13 @@ export function sommeStat(serie) {
  * même — une série absente mais encore fraîche survit à un hoquet du réseau,
  * plutôt que d'effacer le graphe affiché.
  */
+/** Une série d'avant se garde-t-elle ? Lue il y a moins d'une demi-heure, ET pour la même période (`repere`). Sans ce second
+ * point (audit du 12/11, B6), remonter l'historique jusqu'à une période où Home Assistant n'a rien changeait le titre et
+ * laissait le graphe et les totaux de la période affichée juste avant. `lue` : `{ quand, repere }`, posé à chaque lecture. */
+export function serieEncoreBonne(lue, repere, maintenant) {
+  return !!lue && lue.repere === repere && maintenant - lue.quand < GARDE_SERIE;
+}
+
 export function statsRelues(avant, lectures, garder = () => true) {
   const m = {};
   for (const r of Array.isArray(lectures) ? lectures : []) {
@@ -316,9 +339,31 @@ export function requeteStat(ids, bornes) {
     end_time: new Date(bornes.fin).toISOString(),
     statistic_ids: ids,
     period: bornes.pas,
-    types: ['change'],
+    // `state` : le relevé du compteur en fin de tranche, pour `repartir` (ADR 0347).
+    types: ['change', 'state'],
   };
 }
+
+/* LES STATISTIQUES GARDÉES (19/11, fluidité, point 4). La vue Énergie posait 7 à 8 questions à Home Assistant à
+ * chaque ouverture, et rien n'était gardé : revenir sur Énergie refaisait tout, écran vide le temps des réponses. La
+ * réponse brute se garde ici, par question (entités, période, recul) : quatre minutes « fraîche » — le relevé de
+ * 5 min de la vue (`tour`) la trouve donc périmée et relit —, puis montrée en attendant la relecture. Au plus 40
+ * questions, les plus anciennes s'en vont. En mémoire seulement : un rechargement repart de zéro. */
+const STATS_GARDEES = new Map();
+const STATS_FRAICHES_MS = 4 * 60000;
+const STATS_MAX = 40;
+/** Ce qui a été gardé pour une question : `{ res, fraiche }`, ou null. */
+export function statsGardees(k, maintenant = Date.now()) {
+  const g = STATS_GARDEES.get(k);
+  return g ? { res: g.res, fraiche: maintenant - g.quand < STATS_FRAICHES_MS } : null;
+}
+export function garderStats(k, res) {
+  STATS_GARDEES.delete(k);
+  STATS_GARDEES.set(k, { res, quand: Date.now() });
+  if (STATS_GARDEES.size > STATS_MAX) STATS_GARDEES.delete(STATS_GARDEES.keys().next().value);
+}
+/** Oublie ce qui a été gardé — pour les tests, qui rejouent la même question avec d'autres réponses. */
+export function oublierStats() { STATS_GARDEES.clear(); }
 
 /**
  * Les statistiques d'une période, pour plusieurs entités à la fois.
@@ -333,6 +378,12 @@ export function requeteStat(ids, bornes) {
 export function useStats(hass, ids, periode, decalage = 0, tour = 0, facteurs = null) {
   const [series, setSeries] = useState({});
   const [pret, setPret] = useState(false);
+  /* Les cases DES SÉRIES LUES, posées avec elles (19/11 : « Semaine ne
+   * fonctionne pas »). Les cases se recalculaient sur la période demandée, les
+   * séries restaient celles de la précédente jusqu'à la réponse : passer de
+   * Jour à Semaine donnait 24 valeurs pour 7 cases, et le graphe lisait la
+   * 20e case d'une semaine — la vue tombait. */
+  const [casesLues, setCasesLues] = useState(null);
   const lus = useRef({});
   /* Les facteurs passent par une REFERENCE vivante : l'appelant reconstruit
    * l'objet a chaque rendu, et le mettre en dependance de l'effet relancerait
@@ -351,28 +402,37 @@ export function useStats(hass, ids, periode, decalage = 0, tour = 0, facteurs = 
   useEffect(() => {
     let vivant = true;
     const h = vivantHass.current;
-    if (!parle || !cle) { setSeries({}); setPret(false); return undefined; }
+    if (!parle || !cle) { setSeries({}); setCasesLues(null); setPret(false); return undefined; }
     const bornes = bornesStat(periode, decalage);
     const liste = cle.split('|');
     const cases = casesStat(periode, bornes);
-    setPret(false);
-    h.callWS(requeteStat(liste, bornes))
-      .then(res => {
-        if (!vivant) return;
+    const appliquer = (res) => {
         const maintenant = Date.now();
+        const repere = periode + '|' + decalage;
         const lectures = liste.map(id => {
           const lignes = (res && res[id]) || null;
-          if (Array.isArray(lignes)) lus.current[id] = maintenant;
+          if (Array.isArray(lignes)) lus.current[id] = { quand: maintenant, repere };
           const f = fact.current;
-          return { id, arr: Array.isArray(lignes) ? repartir(lignes, cases, (f && f[id]) || 1) : null };
+          return { id, arr: Array.isArray(lignes) ? repartir(lignes, cases, (f && f[id]) || 1, bornes.pas) : null };
         });
-        setSeries(avant => statsRelues(avant, lectures, (id) => maintenant - (lus.current[id] || 0) < GARDE_SERIE));
+        setSeries(avant => statsRelues(avant, lectures, (id) => serieEncoreBonne(lus.current[id], repere, maintenant)));
+        setCasesLues(cases);
         setPret(true);
-      })
+    };
+    /* Ce qui a déjà été lu pour la même question (point 4) : affiché tout de suite. Frais, on s'en tient là ; plus
+     * vieux, on relit derrière, l'ancien graphe restant en place jusqu'à la réponse. */
+    const k = cle + '#' + periode + '#' + decalage;
+    const garde = statsGardees(k);
+    if (garde) {
+      appliquer(garde.res);
+      if (garde.fraiche) return () => { vivant = false; };
+    } else setPret(false);
+    h.callWS(requeteStat(liste, bornes))
+      .then(res => { if (!vivant) return; garderStats(k, res); appliquer(res); })
       /* Pas de statistiques, pas de `recorder`, ou l'utilisateur n'a pas le
-       * droit de les lire : la section ne s'affiche pas, c'est tout. */
-      .catch(() => { if (vivant) { setSeries({}); setPret(true); } });
+       * droit de les lire : la section ne s'affiche pas, c'est tout. Une relecture ratée garde ce qui était affiché. */
+      .catch(() => { if (!vivant) return; if (garde) { setPret(true); return; } setSeries({}); setCasesLues(null); setPret(true); });
     return () => { vivant = false; };
   }, [parle, cle, periode, decalage, tour]);
-  return { cases: casesStat(periode, bornesStat(periode, decalage)), series, pret };
+  return { cases: casesLues || casesStat(periode, bornesStat(periode, decalage)), series, pret };
 }

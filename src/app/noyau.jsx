@@ -5,7 +5,7 @@ import { LOGGIA_INDEX, normRooms, cfgVal, iconesCfg, cfgSet, loggiaEnt, LOGGIA_R
 import { sansAccents } from '../outils.js';
 import { LAVIS, lav } from '../theme.js';
 import { wattsDe } from '../unites.js';
-import { interrupteurDeModule, modulesHorsSaisie } from '../resolve.js';
+import { interrupteurDeModule, modulesHorsSaisie, thermostatsHorsSaisie } from '../resolve.js';
 import { REDUCE_MOTION, cvName, cvId, HX_TOKENS } from '../ui.jsx';
 import { compteursMaison, estPrise, estPontZigbee } from '../prises.js';
 import { useEtatPrises, gardeDeSwitch } from '../prisesetat.js';
@@ -15,6 +15,7 @@ import { estSirene } from '../attention.js';
 import { nombre } from '../format.js';
 import { croqHaids, plantsCfg } from '../lectures.js';
 import { trouverDistributeur, lireDistributeur, TABLES as TABLES_DISTRIBUTEUR } from '../distributeur.js';
+import { composes, CLE_COMPOSE } from '../composesboot.js';
 import { Ico } from '../icones.jsx';
 import { lireCalendriers, garderDansFenetre } from '../agenda.js';
 import { comparerTextes, tr, locale } from '../i18n.js';
@@ -242,10 +243,10 @@ function iconeChoisie(id) {
  * au telephone, « Cartes / Plan » partage sa ligne avec les etages. */
 function Segment({ value, options, onChange, grandir = false, label = null, compact = false }) {
   return (
-    <div role="group" aria-label={label || undefined}
+    <div role="group" aria-label={label || undefined} className="o-doigt-serre"
       style={{ display: grandir ? 'flex' : 'inline-flex', width: grandir ? '100%' : undefined, boxSizing: 'border-box', padding: 3, gap: 3, borderRadius: 12, background: 'var(--o-well)', border: 'var(--o-bw,1px) solid var(--o-bd2)' }}>
       {options.map(o => { const on = o.id === value; return (
-        <button key={String(o.id)} aria-pressed={on} aria-label={compact ? o.label : undefined} title={compact ? o.label : undefined} onClick={() => { if (!on) onChange(o.id); }}
+        <button key={String(o.id)} className="o-doigt" aria-pressed={on} aria-label={compact ? o.label : undefined} title={compact ? o.label : undefined} onClick={() => { if (!on) onChange(o.id); }}
           style={{ flex: grandir ? 1 : undefined, height: grandir ? 38 : 30, padding: compact ? '0 11px' : '0 14px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: grandir ? 13 : 12.5, fontWeight: 700, background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
           {o.ico ? <Ico name={o.ico} size={compact ? 15 : 13} /> : null}{compact ? null : o.label}</button>
       ); })}
@@ -258,7 +259,9 @@ function Segment({ value, options, onChange, grandir = false, label = null, comp
 function nomDeCle(S, k) {
   const s = String(k || '');
   if (s === 'obj:feeder') return tr('Distributeur');
-  if (s === 'obj:borne') return tr('Borne de recharge');
+  if (s === 'obj:borne' || s.indexOf('obj:borne:') === 0) return tr('Borne de recharge');
+  // La voiture, la litière, la fontaine (A11, A12) : le nom de l'appareil, sinon celui de son genre.
+  if (s.indexOf(CLE_COMPOSE) === 0) { const K = composes(LOGGIA_INDEX); const c = K && K.composesDe(LOGGIA_INDEX, S || {}).find(x => CLE_COMPOSE + x.appareil === s); return c ? c.nom || K.nomGenre(c.genre) : s; }
   if (s.indexOf('plant:') === 0) { const p = plantesDeLaMaison(S).find(x => x.base === s.slice(6)); return (p && p.nom) || s.slice(6); }
   if (s.indexOf('groupe:') === 0) return NOMS_GROUPES()[s.slice(7)] || s.slice(7);
   if (s.indexOf('zone:') === 0) { const z = climateZones(S || {}).find(x => x.id === s.slice(5)); return z ? (z.name || z.room || z.id) : s.slice(5); }
@@ -499,12 +502,16 @@ function plantPiece(S, base, saisie) {
  * son registre ; si son appareil est PHYSIQUE — un appareil du registre qui n'est pas un service (C14) ; ses sœurs ; sa pièce
  * de Loggia (C17 : '' hors d'une pièce de Loggia) ; le nom de son appareil. */
 /* Une entité masquée ou désactivée (l'index) : l'Accueil ne la compte pas, comme Objets (audit du 19/10, M14). */
-const masqueDe = (id) => { const m = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && LOGGIA_INDEX.entityMeta.get(id); return !!m && (m.hidden || m.disabled); };
+/* Masquée, désactivée — ou d'un appareil composé (A11, A12 ; ADR 0386) : la portière d'une voiture n'est pas une porte de la
+ * maison, l'alerte d'une litière n'est pas un « Défaut signalé » ; ils ont leur carte et leurs points (composes.js). */
+const deCompose = (d) => { const K = composes(LOGGIA_INDEX); return !!K && K.appareilCompose(LOGGIA_INDEX, (getHass() || {}).states, d); };
+const masqueDe = (id) => { const m = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && LOGGIA_INDEX.entityMeta.get(id); return !!m && (m.hidden || m.disabled || deCompose(m.deviceId)); };
 function ctxCapteurs() {
   const em = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta, dm = LOGGIA_INDEX && LOGGIA_INDEX.deviceMeta;
   return {
     meta: (id) => (em && em.get(id)) || {},
-    physique: (d) => { const x = d && dm ? dm.get(d) : null; return !!x && x.entryType !== 'service'; },
+    // Un appareil composé (une voiture, une litière, une fontaine) n'entre ni dans les groupes ni dans les piles : il a sa carte.
+    physique: (d) => { const x = d && dm ? dm.get(d) : null; return !!x && x.entryType !== 'service' && !deCompose(d); },
     soeurs: soeursDe,
     piece: (id) => pieceLoggiaDe(id) || '',
     appareil: (id) => { const m = em && em.get(id); return (m && m.device) || null; },
@@ -542,11 +549,17 @@ function climateZones(S) {
    * Une saisie ne masque plus les modules (plan 2 du chantier Chauffage,
    * choix 3) : ceux qu'elle ne decrit pas la completent. La resolution les
    * range apres `loggia_climate` ; on les reprend ici apres la saisie lue,
-   * l'heritee comprise, que la resolution ne connait pas. */
+   * l'heritee comprise, que la resolution ne connait pas.
+   *
+   * Les thermostats aussi, depuis l'ADR 0379 : une saisie les laissait au
+   * registre, et un poele ajoute apres elle manquait a sa piece. Une ligne
+   * dont l'appareil a disparu se tait (le filtre sur les etats, plus bas). */
   const saisi = cfgVal('loggia_climate', null);
   const c = (Array.isArray(saisi) && saisi.length) ? saisi : loggiaEnt('climate', null);
   const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.climate;
-  if (Array.isArray(c) && c.length) return c.concat(modulesHorsSaisie(c, r && r.list)).filter(z => z && z.haid && (!S || S[z.haid]));
+  if (Array.isArray(c) && c.length) {
+    return c.concat(thermostatsHorsSaisie(c, r && r.list), modulesHorsSaisie(c, r && r.list)).filter(z => z && z.haid && (!S || S[z.haid]));
+  }
   if (r && r.available) return r.list;
   return [];
 }
@@ -615,6 +628,44 @@ const HASS_POLL_MS = (() => {
   try { const c = JSON.parse(window.localStorage.getItem('loggia_haCfg') || 'null'); const n = c && +c.pollMs; return (n >= 1000 && n <= 60000) ? n : 2000; } catch { return 2000; }
 })();
 const sigHash = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; };
+/* UNE minuterie pour tout le pont (19/11, fluidité, point 3). Chaque `useHass` avait son `setInterval` de 2 s : près de
+ * 140 sur Objets, déphasés — autant de rendus séparés — et chacun redemandait `hass` au document. Ils tournaient aussi
+ * tablette en veille ou appli en arrière-plan. Désormais un seul tic relève `hass` une fois et le passe à tous les
+ * abonnés : leurs mises à jour tombent dans le même rendu. Écran caché, il se tait ; au retour, un tic tout de suite. */
+const ABONNES_PONT = new Set();
+let minuteriePont = null;
+const tournerPont = () => {
+  if (typeof document !== 'undefined' && document.hidden) return;
+  const hass = getHass();
+  ABONNES_PONT.forEach(f => f(hass));
+};
+const retourPont = () => { if (typeof document !== 'undefined' && !document.hidden) tournerPont(); };
+/* L'horloge qui a posé la minuterie. Cette garde NE SERT QU'AUX BANCS DE TEST : chacun pose sa fausse horloge et ses
+ * cartes ne se démontent pas, si bien que la minuterie commune resterait attachée à l'horloge du banc précédent. Une
+ * horloge remplacée repart donc de zéro. Dans un navigateur, `setInterval` ne change jamais : la condition reste
+ * fausse, une comparaison par abonnement, rien d'autre. */
+let horlogePont = null;
+function abonnerPont(f) {
+  if (minuteriePont && horlogePont !== globalThis.setInterval) {
+    try { clearInterval(minuteriePont); } catch { /* l'ancienne horloge n'est plus là */ }
+    minuteriePont = null;
+    ABONNES_PONT.clear();
+  }
+  ABONNES_PONT.add(f);
+  if (!minuteriePont) {
+    horlogePont = globalThis.setInterval;
+    minuteriePont = setInterval(tournerPont, HASS_POLL_MS);
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', retourPont);
+  }
+  return () => {
+    ABONNES_PONT.delete(f);
+    if (!ABONNES_PONT.size && minuteriePont) {
+      clearInterval(minuteriePont);
+      minuteriePont = null;
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', retourPont);
+    }
+  };
+}
 // noisyKeys : capteurs de puissance (W) au jitter continu → signature = valeur arrondie à 10 W,
 // SANS last_updated (sinon re-render de toute l'app à chaque tick de 2 s).
 function useHass(keys, noisyKeys) {
@@ -646,8 +697,9 @@ function useHass(keys, noisyKeys) {
     const prefixes = cles.filter(k => k.charAt(k.length - 1) === '.'); // clés-préfixes (ex: 'automation.')
     const plain = cles.filter(k => k.charAt(k.length - 1) !== '.');
     let prev = '';
-    const tick = () => { try {
-      const hass = getHass();
+    // `releve` : le `hass` que la minuterie commune vient de lire, une fois pour tous (point 3) ; seul, le premier tic le lit.
+    const tick = (releve) => { try {
+      const hass = releve !== undefined ? releve : getHass();
       ref.current = hass;
       let sig = 'none';
       if (hass && hass.states) {
@@ -674,8 +726,7 @@ function useHass(keys, noisyKeys) {
       if (sig !== prev) { prev = sig; force(n => n + 1); }
     } catch (e) { console.error('useHass tick', e); } };
     tick();
-    const iv = setInterval(tick, HASS_POLL_MS);
-    return () => clearInterval(iv);
+    return abonnerPont(tick);
   }, [keysSig, noisySig]);
   /* Sans clé, aucun tic ne tient `ref` à jour : le relevé du moment, lu au rendu
    * — un appelant qui peut passer une liste vide garde un `hass` frais. */
@@ -688,4 +739,4 @@ function useHass(keys, noisyKeys) {
  * comme les polices — la carte n’en garde que l’adresse. En adresses data:, ils pesaient 6 778 octets au démarrage. */
 const PLANT_ART = { schefflera: './plantes/schefflera.svg', dracaena: './plantes/dracaena.svg' };
 
-export { estClair, dec, decMax, useFlash, SURF_CARTE, lavisCarte, rmNorm, soeursDe, poserCompteursMaison, priseDe, indexLu, useGardeSwitch, filtresEntite, ecartDe, switchsEcartes, noteEcartes, pieceLoggiaDe, NOMS_GROUPES, estClimate, pilotFamille, iconeChoisie, Segment, nomDeCle, FICHE_PILOTABLES, lireEpingles, basculerEpingle, distributeurConfigure, useAgenda, hx, estDehors, plantCapteur, plantPiece, masqueDe, ctxCapteurs, plantesDeLaMaison, capteursPlante, climateZones, readZone, croqKeys, cvEstLumiere, HASS_POLL_MS, useHass, PLANT_ART };
+export { abonnerPont, estClair, dec, decMax, useFlash, SURF_CARTE, lavisCarte, rmNorm, soeursDe, poserCompteursMaison, priseDe, indexLu, useGardeSwitch, filtresEntite, ecartDe, switchsEcartes, noteEcartes, pieceLoggiaDe, NOMS_GROUPES, estClimate, pilotFamille, iconeChoisie, Segment, nomDeCle, FICHE_PILOTABLES, lireEpingles, basculerEpingle, distributeurConfigure, useAgenda, hx, estDehors, plantCapteur, plantPiece, masqueDe, ctxCapteurs, plantesDeLaMaison, capteursPlante, climateZones, readZone, croqKeys, cvEstLumiere, HASS_POLL_MS, useHass, PLANT_ART };

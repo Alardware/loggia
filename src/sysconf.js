@@ -11,7 +11,7 @@ import { capteursHote } from './resolve.js';
 import { tr } from './i18n.js';
 
 export const sysKeys = () => Object.values(sysSensors()).flatMap(o => Object.values(o || {})).filter(Boolean);
-export const SYS_SLOTS = ['host', 'nebula', 'ucg'];
+const SYS_SLOTS = ['host', 'nebula', 'ucg'];
 // Trois emplacements de machine, remplis par la configuration, sinon par ce que
 // la découverte a trouvé, sinon par les constantes. Un emplacement sans machine
 // reste vide : la vue affiche alors « — » partout et la carte se dit hors ligne.

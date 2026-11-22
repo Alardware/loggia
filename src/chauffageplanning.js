@@ -15,8 +15,10 @@
  * les sept derniers jours.
  */
 import { JOURS, FROID, lireHeure, ecrireHeure, changementEnCours, modeVoulu, modePlanning } from './chauffage.js';
-import { modeDuModule, estMuet, enChauffe } from './chauffageecran.js';
+import { modeDuModule, estMuet, enChauffe, motMode } from './chauffageecran.js';
 import { deCelsius } from './unites.js';
+import { tr, locale } from './i18n.js';
+import { nombre } from './format.js';
 
 /* Le jour d'une fin vit avec l'heure murale, et l'état muet d'un appareil,
  * dans `chauffageecran.js` : la carte, au démarrage, s'en sert aussi (tâche
@@ -840,4 +842,39 @@ export function tempsDeChauffe(bandes) {
   const liste = Array.isArray(bandes) ? bandes : [];
   const somme = (v) => liste.filter(b => b.chauffe === v).reduce((s, b) => s + (b.a - b.de), 0);
   return { chauffe: somme(true), sans: somme(false) };
+}
+
+/* ── Les montées en température (ADR 0340) : la mise en forme, sans React ── */
+const majuscule = (s) => (s ? s.charAt(0).toLocaleUpperCase(locale()) + s.slice(1) : s);
+const signe = (v) => (v > 0 ? '+' : v < 0 ? '−' : '');
+
+/** Un écart signé, à une décimale : « +0,9 », « −0,2 », « 0,0 ». */
+export const ecartSigne = (v) => signe(v) + nombre(Math.abs(v), 1);
+
+/**
+ * « Aujourd’hui · 06:00 », « Hier · 20:30 », « Sam. · 07:00 », « 25 oct. · 06:00 ».
+ * L'heure se lit dans la partie MURALE de l'instant, écrit à l'heure de la
+ * maison, et `aujourdhui` vient du serveur : rien ne dépend du fuseau de l'écran.
+ */
+export function momentMontee(debut, aujourdhui) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(String(debut));
+  const a = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(aujourdhui));
+  if (!m || !a) return '';
+  const jour = Date.UTC(+m[1], +m[2] - 1, +m[3]);
+  const ecart = Math.round((Date.UTC(+a[1], +a[2] - 1, +a[3]) - jour) / JOUR_MS);
+  const date = (o) => new Intl.DateTimeFormat(locale(), { ...o, timeZone: 'UTC' }).format(new Date(jour));
+  const mot = ecart === 0 ? tr('Aujourd’hui') : ecart === 1 ? tr('Hier')
+    : ecart > 1 && ecart < 7 ? majuscule(date({ weekday: 'short' })) : date({ day: 'numeric', month: 'short' });
+  return mot + ' · ' + m[4] + ':' + m[5];
+}
+
+/** Une montée du serveur, en °C, prête à écrire dans l'unité de la maison. */
+export function ligneMontee(m, aujourdhui, unite = 'C') {
+  const degres = (v) => nombre(deCelsius(v, unite), 1) + '°';
+  return {
+    cle: m.debut, moment: momentMontee(m.debut, aujourdhui),
+    modes: (motMode(m.de) || '—') + ' → ' + (motMode(m.a) || '—'),
+    gain: ecartSigne(unite === 'F' ? m.gain * 1.8 : m.gain) + '°', chaud: m.gain > 0,
+    depart: degres(m.t0), arrivee: degres(m.t0 + m.gain), duree: m.duree,
+  };
 }

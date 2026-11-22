@@ -13,6 +13,7 @@
  *   — ce que l'appareil sait faire, lu dans `supported_features`.
  */
 import { tr } from './i18n.js';
+import { quandLumiere } from './lumieres.js';
 import { modeChauffeEau, phraseChauffeEau, chauffeEauEnChauffe } from './objets.js';
 
 /** `WaterHeaterEntityFeature` de Home Assistant. */
@@ -41,7 +42,7 @@ export function bornerConsigne(v, min, max, pas = 1) {
  * `{ nom, mort, marche, mode, motMode, actuelle, consigne, min, max, pas, modes,
  *    absence, sait: { consigne, mode, absence, marche }, phrase: { texte, encre }, plaque: [fond, encre] }`
  */
-export function vueEauChaude({ id, S = {}, nom = null }) {
+export function vueEauChaude({ id, S = {}, nom = null, maintenant = Date.now() }) {
   const st = (S && S[id]) || null;
   const a = (st && st.attributes) || {};
   const etat = st ? String(st.state) : 'unavailable';
@@ -64,7 +65,9 @@ export function vueEauChaude({ id, S = {}, nom = null }) {
   // En chauffe : seulement si un attribut connu le dit (G1) — un ballon en « Éco » n'est pas un appareil qui chauffe.
   const chauffe = marche && chauffeEauEnChauffe(a);
   // La phrase de la carte générique (G1), et l'absence quand elle est posée.
-  const texte = mort ? tr('Indisponible') : [phraseChauffeEau(st), absence && marche ? tr('Absence') : null].filter(Boolean).join(' · ');
+  // Muet, la règle de la lumière (`phraseLumiere` ; audit du 12/11, lot 4, E24) : « Indisponible depuis 14:20 », en rouge.
+  const depuis = mort && st ? quandLumiere(st.last_changed, maintenant) : null;
+  const texte = mort ? (depuis ? tr('Indisponible depuis {h}', { h: depuis }) : tr('Indisponible')) : [phraseChauffeEau(st), absence && marche ? tr('Absence') : null].filter(Boolean).join(' · ');
   return {
     nom: nom || a.friendly_name || id,
     mort, marche, chauffe, mode, motMode, actuelle, consigne, absence, sait,
@@ -73,11 +76,12 @@ export function vueEauChaude({ id, S = {}, nom = null }) {
     modes: liste.map(m => ({ id: m, label: modeChauffeEau(m) })),
     // Le mode de remise en marche : celui qui n'est pas l'arrêt, le premier de sa liste.
     modeMarche: liste.find(m => m !== 'off') || null,
-    // L'orange de la chauffe seulement quand il chauffe ; en marche, le texte ; à l'arrêt ou muet, le gris.
-    phrase: { texte, encre: chauffe ? 'var(--o-orange)' : marche ? 'var(--o-text2)' : 'var(--o-text3)' },
+    // L'orange de la chauffe seulement quand il chauffe ; en marche, le texte ; à l'arrêt, le gris ; muet, le rouge (E24).
+    phrase: { texte, encre: mort ? 'var(--o-bad)' : chauffe ? 'var(--o-orange)' : marche ? 'var(--o-text2)' : 'var(--o-text3)' },
     plaque: chauffe ? ['rgba(var(--o-orange-rgb),.18)', 'var(--o-orange)'] : marche ? ['var(--o-s1)', 'var(--o-text1)'] : ['var(--o-s1)', 'var(--o-text3)'],
-    // La température de l'eau, en grand à droite de la carte.
-    chiffre: actuelle != null ? Math.round(actuelle) : (consigne != null ? Math.round(consigne) : null),
+    /* La température de l'eau, en grand à droite de la carte — MESURÉE, sinon rien (audit du 12/11, B25) : un ballon sans
+     * capteur affichait sa consigne sous le mot « Eau » (« 55° Eau », même à l'arrêt). La consigne reste dite dans la phrase. */
+    chiffre: actuelle != null ? Math.round(actuelle) : null,
   };
 }
 

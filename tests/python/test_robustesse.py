@@ -253,8 +253,9 @@ def test_chaque_module_passe_par_le_demarrage_garde():
     # ASSERTION MODIFIEE (chantier Mode enfant, tache 3) : `enfant` passe par
     # le demarrage garde comme les autres.
     # ASSERTION MODIFIEE (etape 3 IoT, 25/10 ; I28) : le carnet de l'eau passe par le demarrage garde.
+    # ASSERTION MODIFIÉE (21/11, ADR 0387) : le planning des purificateurs passe par le demarrage garde.
     for f in ("chauffage", "distributeurs", "eau", "enfant", "fenetres", "interrupteurs", "lumieres", "minuteurs", "nuit",
-              "presence", "prises", "robots", "scenarios", "sirene", "veilles", "volets"):
+              "presence", "prises", "purificateurs", "robots", "scenarios", "sirene", "veilles", "volets"):
         src = (dossier / (f + ".py")).read_text(encoding="utf-8")
         assert "hass.async_create_task(self._async_demarrer())" not in src, f
         assert 'demarrer(hass, self, self._async_demarrer(), "' in src, f
@@ -284,7 +285,9 @@ def test_chaque_module_vivant_sait_s_arreter():
     # ASSERTION MODIFIEE (chantier Mode enfant, tache 3) : 17 -> 18.
     # ASSERTION MODIFIEE (etape 3 IoT, 25/10 ; I28) : 18 -> 19, le carnet de l'eau - son ecoute, son ecriture differee.
     # ASSERTION MODIFIÉE (07/11, étape 11) : 19 -> 20, les rappels — leurs rendez-vous.
-    assert len(noms) == 20, noms
+    # ASSERTION MODIFIÉE (21/11, ADR 0387) : 20 -> 21, le planning des purificateurs - son tic de minute, son rattrapage.
+    # ASSERTION MODIFIÉE (22/11, ADR 0388) : 21 -> 22, le rappel des ouvertures - ses minuteries, son ecoute.
+    assert len(noms) == 22, noms
     for nom in noms:
         src = (dossier / (nom + ".py")).read_text(encoding="utf-8")
         assert "def async_arreter" in src or "def arreter" in src, nom

@@ -52,6 +52,7 @@ import {
   EnteteFiche, FicheOnglets, PanneauOnglet, PageReglagesAppareil, OngletEntretien, focaliser,
 } from './fichecommune.jsx';
 import { CADRE_TUILE, SOUS } from './fichekit.js';
+import DessinRobot from './dessinrobot.jsx';
 
 /* Les refus d'un départ (`loggia/robots/lancer`, chantier IoT, I3 A) : un
  * robot muet ou déjà en route, des pièces que son intégration ne sait pas
@@ -166,6 +167,9 @@ function OngletAccueil({ vue, etat, zones, choisir, enRoute, toutChoisi, bascule
             </div>
           )}
         </div>
+        {/* Le dessin de l'appareil (sa demande du 22/11, ADR 0389) : vu de dessus, dans son disque, animé au travail — comme la fiche
+          * de Home Assistant. Il suit la phase de la vue, l'avance d'un geste comprise ; le témoin de la base, la charge PUBLIÉE. */}
+        <DessinRobot domaine={vue.domaine} phase={vue.phase} charge={!!vue.charge} bipe={!!vue.bipe} />
         {/* « OÙ » : seulement si Loggia sait commander des pièces (I16). « Tout le logement » est choisie quand aucune pièce ne l'est.
           * Muet, rien ne se choisit : le départ ne partirait pas — « Où » ne se dessine pas (passe bis du 18/10, point 12). */}
         {choisir && zones.length > 0 && !vue.panne && (<>
@@ -413,11 +417,19 @@ function OngletPlanning({ hass, domaine, robot, zones, planning }) {
 
   const enregistrer = async (patch, optimiste) => {
     if (!h || ordinaire) return;
-    setEtat(e => (e ? { ...e, config: optimiste(e.config || { plannings: [], robots: {} }) } : e));
+    /* La configuration d'avant, gardée pour un refus (audit du 12/11, B22) : l'avance posée au magasin PARTAGÉ tenait jusqu'au
+     * relevé suivant (15 s fiche ouverte, 60 s pour la carte de l'Accueil), et la ligne refusée s'affichait comme enregistrée sous
+     * le message d'erreur. `posee` : la configuration qu'on a posée — `setEtat` appelle sa fonction tout de suite. */
+    let avant, posee;
+    setEtat(e => { if (!e) return e; avant = e.config; posee = optimiste(e.config || { plannings: [], robots: {} }); return { ...e, config: posee }; });
     try {
       const r = await h.callWS({ type: 'loggia/robots/config', patch });
       if (vivant.current && r && r.config) { setEtat(e => (e ? { ...e, config: r.config } : e)); setErr(''); }
     } catch (e) {
+      /* Refusé : la configuration d'avant revient, seulement si celle affichée est encore la nôtre — une écriture plus récente,
+       * ou un relevé, ne s'efface pas ; puis on relit le serveur (B22). */
+      if (posee !== undefined) setEtat(x => (x && x.config === posee ? { ...x, config: avant } : null));
+      apresCommandeRobot();
       // Un planning de trop se dit par son code, dans la langue de l'écran ; un passage dont la forme est refusée (`invalid_format` :
       // deux formes de zones mêlées, une heure illisible) se dit d'une phrase traduite, jamais du motif brut du composant (passe bis
       // du 20/10, point 2) ; le motif n'en sort qu'en dernier recours, dans une phrase traduite (audit du 03/10, refus.js).

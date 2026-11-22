@@ -46,6 +46,9 @@ ADMIN_SEULEMENT = [
     # ASSERTION MODIFIEE (06/11, etape 8) : la capture de la maison telle qu'elle est - elle ne sert qu'a composer
     # un scenario, ce que seuls les administrateurs font.
     "WS_SCN_CAPTURER",
+    # ASSERTION MODIFIEE (21/11, ADR 0387) : le planning d'un purificateur d'air - la configuration de la maison,
+    # comme celui des robots.
+    "WS_PUR_REGLER",
 ]
 # Ce qui se LIT, ou se fait, depuis tout compte connecte — a dessein.
 OUVERTES = [
@@ -60,6 +63,10 @@ OUVERTES = [
     "WS_MIN_ETAT", "WS_MIN_POSER", "WS_MIN_ANNULER",
     # Le test d'une sirene (22/09) : meme geste, meme regime.
     "WS_SIR_TESTER",
+    # Spotify (ADR 0344) : l'enceinte, puis la playlist — le droit de piloter le lecteur Spotify, comme un minuteur.
+    "WS_SPOTIFY_JOUER",
+    # Ses playlists, que Spotify joue ou non (ADR 0346) : sous les droits de LECTURE du compte.
+    "WS_SPOTIFY_PLAYLISTS",
     # Suivre la configuration (22/09) : des noms de cles, rien de la maison.
     "WS_CFG_SUIVRE",
     # Ranger les scenarios (audit du 03/10) : de l'agencement (ADR 0125),
@@ -75,6 +82,8 @@ OUVERTES = [
     # L'historique RESUME d'un chauffage (audit du 19/10) : sous les droits de
     # LECTURE du compte, comme `etat`.
     "WS_CHA_HISTORIQUE",
+    # Les montees en temperature mesurees (ADR 0340) : sous les droits de LECTURE, comme l'historique.
+    "WS_CHA_MONTEES",
     # Les manoeuvres d'un volet (chantier Volets, spec 6.5) : des lignes du
     # journal, sous les droits de lecture du compte, comme `regles/etat`
     # depuis le 28/10 (ADR 0279).
@@ -102,6 +111,8 @@ OUVERTES = [
     # ASSERTION MODIFIÉE (07/11, étape 11) : « Me prévenir » d'un conseil d'énergie — comme un minuteur, le geste
     # de tout compte ; chacun ne lit, ne pose et n'annule que SES rappels (le compte vient de la session).
     "WS_RAP_ETAT", "WS_RAP_POSER", "WS_RAP_ANNULER",
+    # ASSERTION MODIFIEE (21/11, ADR 0387) : le planning des purificateurs se lit de tout compte, sous ses droits de LECTURE.
+    "WS_PUR_ETAT",
 ]
 # Ce qui s'ouvre au CODE DE LA MAISON (chantier Mode enfant, E2 B) : les gestes
 # du parent. Pas de `require_admin` - une tablette de famille porte un compte

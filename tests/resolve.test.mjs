@@ -178,6 +178,15 @@ test('media : une enceinte exposee deux fois n’apparait qu’une, avec son com
   assert.deepEqual([echo.haid, echo.alexa, echo.modele, echo.annonce, echo.annonceHacs], ['media_player.echo_salon', false, null, null, null]);
 });
 
+test('media : un boîtier à télécommande est un écran, même sans classe (Apple TV, 09/11)', () => {
+  const m = resolveMedia(ctxOf(alexaHome()));
+  const par = (h) => m.list.find(x => x.haid === h);
+  assert.equal(par('media_player.apple_tv_salon').boitierTv, true);
+  assert.equal(par('media_player.bureau_echo_dot').boitierTv, false);
+  const mine = resolveMedia(ctxOf(alexaHome(), { loggia_medias: [{ haid: 'media_player.apple_tv_salon', name: 'Apple TV' }] }));
+  assert.equal(mine.list[0].boitierTv, true, 'choisie à la main aussi');
+});
+
 test('media : un lecteur seul n’invente pas de compagnon', () => {
   const ampli = resolveMedia(ctxOf(mediaHome())).list.find(x => x.haid === 'media_player.ampli');
   assert.equal(ampli.ma, null);
@@ -431,7 +440,9 @@ test('chauffage : une configuration decrit ce qu’aucune convention ne devine',
   const mine = [{ id: 'pilote', haid: 'switch.radiateur', tempCible: 'input_number.consigne', hasAuto: true }];
   const c = resolveClimate(ctxOf(simpleHome(), { loggia_climate: mine }));
   assert.equal(c.source, 'utilisateur');
-  assert.deepEqual(c.list, mine);
+  assert.equal(c.list[0], mine[0], 'la saisie, telle quelle');
+  // Le thermostat de la maison, qu'elle ne nomme pas, la complète (ADR 0379).
+  assert.deepEqual(c.list.map(z => z.id), ['pilote', 'climate.chambre']);
 });
 
 test('chauffage : la saisie reste telle quelle, les modules fil pilote qu’elle ne décrit pas s’y ajoutent', () => {
@@ -448,10 +459,11 @@ test('chauffage : la saisie reste telle quelle, les modules fil pilote qu’elle
   const c = resolveClimate(ctxOf(fx, { loggia_climate: mine }));
   assert.equal(c.source, 'utilisateur');
   assert.equal(c.list[0], mine[0], 'la saisie, telle quelle');
-  assert.deepEqual(c.list.map(z => z.id), ['pilote', 'select.radiateur_fil_pilote'], 'puis le module qu’elle ne décrit pas');
-  // Le module déjà décrit (son select en mode) : la saisie seule, sans doublon.
+  assert.deepEqual(c.list.map(z => z.id), ['pilote', 'climate.chambre', 'select.radiateur_fil_pilote'],
+    'puis le thermostat (ADR 0379) et le module qu’elle ne décrit pas');
+  // Le module déjà décrit (son select en mode) : pas de doublon — le thermostat, lui, reste.
   const decrit = [{ ...mine[0], modeEnt: 'select.radiateur_fil_pilote' }];
-  assert.deepEqual(resolveClimate(ctxOf(fx, { loggia_climate: decrit })).list, decrit);
+  assert.deepEqual(resolveClimate(ctxOf(fx, { loggia_climate: decrit })).list.map(z => z.id), ['pilote', 'climate.chambre']);
 });
 
 // ── Energie ──────────────────────────────────────────────────────────────────

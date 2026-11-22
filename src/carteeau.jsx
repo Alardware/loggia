@@ -12,7 +12,8 @@
  *  - COMPACTE (88) : la plaque, le nom, la phrase, la température à droite.
  * La couleur : l'orange de la chauffe seulement quand un attribut dit qu'il
  * chauffe (`chauffeEauEnChauffe`, G1) ; neutre en marche, gris à l'arrêt, le
- * liseré qui respire quand il ne répond plus. La phrase est celle de la carte
+ * liseré qui respire et « Indisponible depuis 14:20 » en rouge quand il ne
+ * répond plus (la règle de la lumière, `vueEauChaude` ; audit du 12/11, lot 4, E24). La phrase est celle de la carte
  * générique (`phraseChauffeEau`, G1) : « Pompe à chaleur · 52,5° → 55° ».
  * La carte n'est pas un bouton (ADR 0074) : la surface, premier enfant, dit ce
  * qu'elle affiche, et ouvre la popup.
@@ -20,7 +21,7 @@
 import { Fi, Surface, nomCarte } from './ui.jsx';
 import { tr } from './i18n.js';
 import { LISERE } from './styles.js';
-import { RM_CARD, RM_ICO, RM_MILIEU, RM_NAME, RM_SUB } from './cartes/briques.jsx';
+import { RM_CARD_HAUT, RM_GAUCHE, RM_ICO, RM_MILIEU, RM_NAME, RM_SUB } from './cartes/briques.jsx';
 import { ChiffreNomme, ChiffreNommeHaut } from './cartes/robot.jsx';
 import { SURF_CARTE, lavisCarte } from './app/noyau.jsx';
 import { vueEauChaude } from './eauchaude.js';
@@ -53,14 +54,16 @@ export default function CarteEau({ id, hass, nom = null, chip = false, onOpen = 
   }
   return (
     <div className={'o-rmcard o-gabarit' + (v.mort ? ' o-panne' : '')} data-eau-chaude=""
-      style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default', background: fondCarte, border: LISERE }}>
+      style={{ ...RM_CARD_HAUT, position: 'relative', cursor: onOpen ? 'pointer' : 'default', background: fondCarte, border: LISERE }}>
       {onOpen && <Surface onClick={() => onOpen(id)} label={label} />}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
         {plaque(RM_ICO(fond, encre), 17)}
         {chiffre != null && <ChiffreNommeHaut v={chiffre} u="°" nom={tr('Eau')} />}
       </div>
-      <div style={{ ...RM_MILIEU, marginTop: 'var(--o-milieu-haut, 10px)' }}>
-        <div style={{ minWidth: 0 }}>
+      {/* Le nom 14 px sous la plaque, comme sur toutes les cartes (audit du 12/11, `RM_MILIEU`) : 10 partout le posait 4 px plus haut
+        * que celui d'une lumière ; la carte étroite garde ses 10 (`--o-milieu-haut`). Sa colonne reste en haut (`RM_GAUCHE`). */}
+      <div style={RM_MILIEU}>
+        <div style={RM_GAUCHE}>
           <div className="o-gab-nom" style={{ ...RM_NAME, fontSize: 15 }}>{v.nom}</div>
           <div className="o-gab-phrase" style={{ ...RM_SUB, color: v.phrase.encre, '--o-n': Math.max(1, v.phrase.texte.length) }}>{v.phrase.texte}</div>
         </div>

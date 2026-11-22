@@ -14,7 +14,8 @@ const cov = (dc, state, pos, nom) => ({ state, attributes: { device_class: dc, f
 
 test('rien d’ouvert : rien à dire, « Je pars » part tout de suite', () => {
   const r = D.restesAvantDepart({ 'binary_sensor.f': bin('window', 'off', 'Fenêtre'), 'cover.g': cov('garage', 'closed', 0, 'Garage') });
-  assert.deepEqual(r, { portails: [], ouverts: [] });
+  // ASSERTION MODIFIÉE (21/11, ADR 0386) : les serrures qui resteront ouvertes ont leur liste (A4).
+  assert.deepEqual(r, { portails: [], ouverts: [], serrures: [] });
   assert.equal(D.resteQuelqueChose(r), false);
   assert.equal(D.resteQuelqueChose(D.restesAvantDepart(null)), false);
 });
@@ -54,7 +55,8 @@ test('mêmes exclusions que la rangée sûreté : injoignable, masqué, groupe',
     masque: (id) => id.endsWith('.masque'),
     plateforme: (id) => id === 'binary_sensor.plateforme' ? 'group' : null,
   });
-  assert.deepEqual(r, { portails: [], ouverts: [] });
+  // ASSERTION MODIFIÉE (21/11, ADR 0386) : la liste des serrures (A4), vide ici.
+  assert.deepEqual(r, { portails: [], ouverts: [], serrures: [] });
 });
 
 test('le capteur de porte que porte un garage motorisé se tait : le garage le dit déjà', () => {
@@ -69,9 +71,11 @@ test('le capteur de porte que porte un garage motorisé se tait : le garage le d
 test('« Je pars » passe par la feuille, les autres scénarios partent tout de suite', () => {
   const s = src('app/scenarios.jsx');
   // ASSERTION MODIFIÉE (05/11, étape 4) : « Bonne nuit » passe par la même feuille que « Je pars ».
-  assert.ok(s.includes("if (AVANT_DE_LANCER.includes(id) && resteQuelqueChose(restesMaintenant(hass))) { setAvant(id); return; }"));
+  // ASSERTION MODIFIÉE (21/11, ADR 0386) : le scénario part avec, pour savoir s'il verrouillera les serrures (A4).
+  assert.ok(s.includes("if (AVANT_DE_LANCER.includes(id) && resteQuelqueChose(restesMaintenant(hass, scenarios().find(x => x.id === id)))) { setAvant(id); return; }"));
   assert.ok(s.includes('avant, partir, renoncer: () => setAvant(null) };'));
-  const f = src('app/depart.jsx');
+  // ASSERTION MODIFIÉE (21/11, ADR 0386) : la feuille se charge à la demande (`departfeuille.jsx`) ; sa coquille reste dans app/depart.jsx.
+  const f = src('app/depart.jsx') + src('departfeuille.jsx');
   assert.ok(f.includes('onClick={() => sc.partir(sc.avant)}'), 'c’est la feuille qui lance');
   assert.ok(f.includes("'cover', 'close_cover'"), 'un portail se ferme d’ici');
   assert.ok(!/tr\('Annuler'\)/.test(f), 'pas d’« Annuler » qui ne fait que fermer : la croix suffit');
@@ -79,12 +83,14 @@ test('« Je pars » passe par la feuille, les autres scénarios partent tout de 
 });
 
 test('« Bonne nuit » sur le même modèle : la feuille, son titre, son bouton — et les actions du moment n’y échappent pas', () => {
-  const f = src('app/depart.jsx');
+  // ASSERTION MODIFIÉE (21/11, ADR 0386) : la feuille se charge à la demande (`departfeuille.jsx`) ; sa coquille reste dans app/depart.jsx.
+  const f = src('app/depart.jsx') + src('departfeuille.jsx');
   assert.ok(f.includes("export const AVANT_DE_LANCER = ['depart', 'nuit'];"));
   assert.ok(f.includes("{nuit ? tr('Avant de dormir') : tr('Avant de partir')}"));
   assert.ok(f.includes("{nuit ? (reste ? tr('{nom} quand même', { nom }) : nom) : (reste ? tr('Partir quand même') : tr('Partir'))}"));
   const m = src('accueil/actionsmoment.jsx');
-  assert.ok(m.includes('if (a.scenario && AVANT_DE_LANCER.includes(a.scenario) && resteQuelqueChose(restesMaintenant(hass))) { setAvant(a); return; }'),
+  // ASSERTION MODIFIÉE (21/11, ADR 0386) : le scénario part avec, pour savoir s'il verrouillera les serrures (A4).
+  assert.ok(m.includes('if (a.scenario && AVANT_DE_LANCER.includes(a.scenario) && resteQuelqueChose(restesMaintenant(hass, scenarios().find(x => x.id === a.scenario)))) { setAvant(a); return; }'),
     'le bouton « Bonne nuit » de l’Accueil lançait le scénario sans regarder ce qui reste ouvert');
   assert.ok(m.includes('<FeuilleDepart hass={hass} sc={feuille} />'));
 });

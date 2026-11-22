@@ -79,14 +79,15 @@ test('le repli de démonstration a des clés fixes, pas traduites', () => {
   assert.ok(!/cle: tr\(/.test(bloc), 'la clé de repli passe par tr() : elle changera avec la langue');
 });
 
-test('la vue Sécurité n’affiche que les caméras qui ont une entité', () => {
-  const i = src.indexOf('const camList = rCams.map(');
-  assert.notEqual(i, -1, 'camList a disparu');
-  const corps = src.slice(i, src.indexOf(';', src.indexOf('.filter(', i)));
-  // C'est ce filtre — et lui seul — qui rend sûre la clé `c.haid` du rendu de
-  // cette vue. Le retirer y ramènerait exactement le défaut corrigé ici.
-  assert.match(corps, /\.filter\(c => c && c\.haid\)/,
-    'la vue Sécurité accepte des caméras sans entité : sa clé de liste redeviendra undefined');
+// ASSERTION MODIFIÉE (12/11, audit) : la caméra sans entité S'AFFICHE désormais dans la vue Sécurité (tuile en panne) —
+// filtrée, elle manquait aux tuiles alors que le compteur la comptait. Sa clé de liste est celle de l'Accueil, `cleCamera`.
+test('la vue Sécurité affiche aussi les caméras sans entité, sous une clé sûre', () => {
+  const i = src.indexOf('const camList = camerasDeLaMaison(camsCfg, rCams).map(');
+  assert.notEqual(i, -1, 'camList ne lit plus la liste commune au compteur');
+  const corps = src.slice(i, src.indexOf('}));', i));
+  assert.doesNotMatch(corps, /\.filter\(c => c && c\.haid\)/, 'la vue Sécurité écarte de nouveau la caméra sans entité, que son compteur compte');
+  assert.ok(src.includes('cle: cleCamera(c, ci), haid: c.haid,') && src.includes('<Anim key={c.cle} i={i} base={140}><CameraTile c={c} /></Anim>'),
+    'la tuile de la vue Sécurité reprend une clé qui peut valoir undefined pour les caméras sans entité');
 });
 
 test('la fiche camera : le flux, comment on le voit, les modes, la Securite', () => {

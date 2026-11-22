@@ -19,7 +19,7 @@ import assert from 'node:assert/strict';
 import { register } from 'node:module';
 import { readFileSync } from 'node:fs';
 
-import { resolveClimate, interrupteurDeModule, modulesHorsSaisie } from '../src/resolve.js';
+import { resolveClimate, interrupteurDeModule, modulesHorsSaisie, thermostatsHorsSaisie } from '../src/resolve.js';
 import { area, device, entity, state, states, ctxOf, indexOf } from './fixtures.mjs';
 
 import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
@@ -177,17 +177,38 @@ const SAISIE = () => [
     tempCible: 'input_number.consigne_chambre', modeEnt: 'input_select.mode_chambre', autoEnt: null, hasAuto: false, tempSensor: null },
 ];
 
-test('une saisie qui ne décrit pas le module : elle, telle quelle, puis le module', () => {
+test('une saisie qui ne décrit ni le thermostat ni le module : elle, telle quelle, puis le thermostat, puis le module', () => {
+  /* ADR 0379 : une saisie laissait les thermostats « au registre ». La pièce et
+   * la vue Chauffage ne lisent que les zones : un poêle ajouté après la saisie
+   * n'y entrait jamais (le 20/11, le nouveau poêle remplaçait celui qu'elle
+   * nommait, désactivé depuis). Le thermostat complète la saisie, comme le module. */
   const mine = SAISIE();
   const c = resolveClimate(ctxOf(maison({ thermostat: true }), { loggia_climate: mine }));
   assert.equal(c.available, true);
   assert.equal(c.source, 'utilisateur');
-  assert.equal(c.list.length, 2);
+  assert.deepEqual(c.list.map(z => z.id), ['chambre', 'climate.salon', SELECT], 'la saisie, puis le thermostat, puis le module');
   assert.equal(c.list[0], mine[0], 'la zone saisie est rendue telle quelle — le même objet');
-  assert.deepEqual(c.list[1], ZONE, 'le module la complète');
-  assert.ok(!c.list.some(z => z.haid === 'climate.salon'),
-    'les thermostats ne changent pas : une saisie les laisse au registre, comme avant');
+  assert.deepEqual(c.list[1], resolveClimate(ctxOf(maison({ thermostat: true }))).list[0], 'le thermostat, sous la forme qu’il a sans saisie');
+  assert.deepEqual(c.list[2], ZONE, 'le module la complète');
   assert.equal(mine.length, 1, 'la saisie n’est pas modifiée');
+});
+
+test('une saisie qui nomme déjà le thermostat par son entité : elle seule, sans doublon', () => {
+  const mine = [{ id: 'poele', name: 'Poêle', room: 'Séjour', haid: 'climate.salon', type: 'thermostat', tempCible: 'input_number.consigne' }];
+  assert.deepEqual(resolveClimate(ctxOf(maison({ thermostat: true, famille: null }), { loggia_climate: mine })).list, mine);
+});
+
+test('les thermostats hors saisie : un climate.* découvert que la saisie ne nomme pas', () => {
+  const T = { id: 'climate.a', haid: 'climate.a', name: 'A', room: 'Séjour', type: 'thermostat', hasAuto: false, tempSensor: null };
+  assert.deepEqual(thermostatsHorsSaisie([{ id: 'x', haid: 'switch.x' }], [T, ZONE]), [T], 'un module n’est pas un thermostat');
+  assert.deepEqual(thermostatsHorsSaisie([{ id: 'y', haid: 'climate.a' }], [T]), [], 'nommé par son entité');
+  // La résolution rend la saisie AVEC ce qui la complète : une ligne saisie n'y passe jamais deux fois.
+  const ligne = { id: 'poele', haid: 'climate.b', type: 'thermostat' };
+  assert.deepEqual(thermostatsHorsSaisie([ligne], [ligne, T]), [T]);
+  assert.deepEqual(thermostatsHorsSaisie([], [{ id: 's', haid: 'switch.s', type: 'thermostat' }]), [], 'un « thermostat » saisi sur un switch n’est pas un climate découvert');
+  // Une saisie abîmée (null, une entité en objet) ne fait rien tomber.
+  assert.deepEqual(thermostatsHorsSaisie([null, { haid: { id: 'climate.a' } }], [T]), [T]);
+  assert.deepEqual(thermostatsHorsSaisie(null, null), []);
 });
 
 test('une saisie qui décrit déjà le module, par son mode ou par son entité : elle seule', () => {
@@ -329,6 +350,27 @@ test('les zones : la saisie, puis les modules qu’elle ne décrit pas — l’a
   await avecMaison(fx, { ent: { climate: mine } }, ({ climateZones }) => {
     assert.deepEqual(climateZones(fx.states).map(z => z.id), ['chambre', SELECT]);
   });
+});
+
+test('Pièce : un thermostat ajouté après la saisie a sa carte — la ligne d’un appareil disparu, aucune', async () => {
+  /* Le cas du 20/11 (ADR 0379) : la saisie nommait l'ancien poêle, désactivé
+   * depuis dans Home Assistant ; le nouveau, rangé au Séjour, manquait à la
+   * pièce alors qu'Objets le montrait. La saisie d'aujourd'hui comme l'ancienne
+   * configuration (`loggia_entities.climate`). */
+  const fx = maison({ thermostat: true });
+  const ancien = [{ id: 'poele', name: 'Poêle', room: 'Séjour', haid: 'climate.ancien', type: 'thermostat',
+    tempCible: null, modeEnt: null, autoEnt: null, hasAuto: false, tempSensor: null }];
+  for (const reglage of [{ cfg: { loggia_climate: ancien } }, { ent: { climate: ancien } }]) {
+    const quoi = Object.keys(reglage)[0];
+    await avecMaison(fx, reglage, ({ climateZones, roomEntitiesBrutes, objetsDeLaMaison }) => {
+      assert.deepEqual(climateZones(fx.states).map(z => z.id), ['climate.salon', SELECT], quoi + ' : le thermostat et le module ; la ligne morte se tait');
+      const ids = roomEntitiesBrutes({ states: fx.states }, 'Séjour');
+      assert.ok(ids.includes('climate.salon'), quoi + ' : le thermostat de la pièce a sa carte');
+      assert.ok(!ids.includes('climate.ancien'), quoi);
+      const cles = objetsDeLaMaison({ states: fx.states }, [], new Set()).map(o => o.cle);
+      assert.equal(cles.filter(k => k === 'climate.salon').length, 1, quoi + ' : Objets garde UNE carte du thermostat');
+    });
+  }
 });
 
 test('une zone découverte se lit par son select, sans consigne', async () => {

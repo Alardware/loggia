@@ -28,9 +28,11 @@
  *  - la PHRASE d'état (§ 4) : « Allumée depuis 18:05 », « S'éteint à 21:10 »,
  *    « Éteinte », « Indisponible depuis 14:20 ».
  */
-import { tr, locale } from './i18n.js';
+import { tr } from './i18n.js';
+import { heureCourte } from './format.js';
 import { quandPrise } from './prises.js';
 import { lisibleSurLavis, lireCouleur } from './contraste.js';
+import { coupeePar } from './alimentation.js';
 
 /* ── Ce qu'est une lumière (L11) ────────────────────────────────────────────── */
 
@@ -269,9 +271,14 @@ export function teinteDeCarte(a, dernier = null, clair = false) {
  *    lit contre la teinte qui PEINT la carte (`teinteDeCarte`) : la teinte vraie en
  *    thème sombre, le même blanc plafonné en thème clair (R7 : la plaque et le lavis
  *    d'un blanc froid ne se voyaient pas sur la carte claire).
- *  - La barre : en thème sombre, la teinte vraie, claire sur une piste sombre ; en
- *    thème clair, l'encre gardée — la teinte vraie d'un blanc, presque blanche, ne
- *    se voit pas sur la piste (1,2:1).
+ *  - La barre : en thème sombre, la teinte vraie, claire sur une piste sombre. En
+ *    thème clair, la teinte vraie d'un blanc, presque blanche, ne se voit pas sur la
+ *    piste (1,2:1) : un BLANC — ou une couleur chaude, qui en est un (`barreDeLOr`) —
+ *    y prend la barre de l'or de la maison, que la feuille peint de l'ambre de la
+ *    bascule (index.css, « La BARRE de luminosité »), et une autre COULEUR se peint
+ *    depuis son encre gardée. (16/11 : la barre d'un blanc se
+ *    peignait elle aussi depuis l'encre, du beige au brun — « la couleur de la barre
+ *    en clair ça va pas », puis « Oui, les blancs aussi ».) Le repère garde l'encre.
  *  - L'or de la maison (une lampe qui ne fait que varier, un switch-lumière, une
  *    lampe éteinte) est un jeton, déjà gardé par le thème : il passe tel quel.
  * `clair` : le thème est clair.
@@ -282,7 +289,27 @@ export function encreLumiere(a, dernier = null, { clair = false, lavis = 0.22 } 
   const c = couleursLumiere(teinte);
   if (!teinte) return { encre: c.col, degrade: c.degrade };
   const encre = lisibleSurLavis('rgb(' + teinteLumiere(a, dernier, ENCRE_BLANC_MAX).join(',') + ')', clair, 1 - (1 - lavis) * (1 - PLAQUE), c.col);
-  return { encre, degrade: clair ? couleursLumiere(lireCouleur(encre).slice(0, 3)).degrade : c.degrade };
+  if (!clair) return { encre, degrade: c.degrade };
+  return { encre, degrade: barreDeLOr(a, dernier) ? couleursLumiere(null).degrade : couleursLumiere(lireCouleur(encre).slice(0, 3)).degrade };
+}
+
+/* En thème clair, les lampes dont la barre prend celle de l'or — celles dont l'encre, un brun, peignait une barre brune :
+ *  - un BLANC : ce que dit la lampe allumée (`color_mode: color_temp`), ou le carnet quand elle est éteinte — la même
+ *    lecture, dans le même ordre, que `teinteLumiere` ;
+ *  - une couleur qui EST un blanc : presque sans teinte, ou CHAUDE, de l'orangé au jaune. Une Hue annonce souvent son blanc
+ *    chaud comme une couleur (`rgb`, `xy` — `[255, 176, 92]` dans la démo), et l'encre d'un orangé est le même brun.
+ * Un rouge, un vert, un bleu, un violet gardent leur teinte : assombrie, elle se reconnaît encore. */
+const CHAUD = [15, 65];      // la teinte, en degrés : de l'orangé au jaune (les blancs de la table sont à 29 – 30°)
+const SANS_TEINTE = 0.12;    // la saturation sous laquelle une couleur est un blanc
+function barreDeLOr(a, dernier) {
+  const x = a || {}, d = dernier || {};
+  if (x.color_mode ? x.color_mode === 'color_temp' && !!kelvinDe(x) : d.mode === 'color_temp' && Number(d.kelvin) > 0) return true;
+  const t = teinteLumiere(a, dernier);
+  if (!t) return false;      // l'or lui-même : déjà traité par l'appelant
+  const [r, v, b] = t, max = Math.max(r, v, b), ecart = max - Math.min(r, v, b);
+  if (!max || ecart / max < SANS_TEINTE) return true;
+  const h = ((max === r ? ((v - b) / ecart) % 6 : max === v ? (b - r) / ecart + 2 : (r - v) / ecart + 4) * 60 + 360) % 360;
+  return h >= CHAUD[0] && h <= CHAUD[1];
 }
 
 /** Le lavis d'une carte allumée (L6) : de 0,08 + 0,14 × la luminosité en haut (0,22 à 100 %) à 0,03 en bas. `bri` : 1 à 100, ou null (tout ou rien : 100). */
@@ -293,7 +320,7 @@ export function lavisLumiere(bri) {
 
 /* ── La phrase d'état (§ 4) ─────────────────────────────────────────────────── */
 
-const heureDe = (t) => new Date(t).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+const heureDe = heureCourte;
 const memeJour = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
 
 /** « Depuis » : l'heure aujourd'hui, « hier » la veille, la date au-delà (celle des prises). */
@@ -308,6 +335,7 @@ export function quandLumiere(t, maintenant = Date.now()) {
 
 /**
  * La phrase d'état (§ 4), la première qui s'applique :
+ *  0. sans courant — son interrupteur est coupé (ADR 0369) : « Hors tension » ;
  *  1. indisponible (`unavailable`, `unknown`, ou absente) : « Indisponible
  *     depuis 14:20 » — `panne` : en rouge, et le liseré qui respire ;
  *  2. un minuteur qui tourne, allumée : « S'éteint à 21:10 » ;
@@ -315,17 +343,30 @@ export function quandLumiere(t, maintenant = Date.now()) {
  *  4. éteinte : « Éteinte ».
  * `st` : l'état tel que la carte le montre — le geste d'abord (`useOptimiste`)
  * lui donne l'heure du geste ; `fin` : la fin du minuteur en ms, ou null.
- * Rend `{ texte, panne, on }`.
+ * `bri` : le pourcentage que la carte montre (allumée et variable), ou null.
+ * Rend `{ texte, panne, on }` ; allumée avec un `bri`, aussi `court` — la phrase
+ * de la carte étroite, qui n'a plus de place pour le chiffre (sa décision du
+ * 20/11, ADR 0380) : « 45 % · depuis 18:05 », « 45 % · s'éteint à 21:10 ».
  */
-export function phraseLumiere({ st = null, fin = null, maintenant = Date.now() } = {}) {
+export function phraseLumiere({ st = null, fin = null, maintenant = Date.now(), bri = null } = {}) {
+  /* Avant tout le reste, une ampoule sans courant (audit du 12/11, X4 ; ADR 0369) : son interrupteur est coupé. Ni une panne —
+   * elle reviendra avec lui —, ni « Éteinte » : on ne peut pas l'allumer d'ici. `coupee` : ce qui la coupe ; la carte, qui
+   * connaît le nom de cet interrupteur, l'ajoute (`useVueLumiere`). */
+  const source = coupeePar(st);
+  if (source) return { texte: tr('Hors tension'), panne: false, on: false, coupee: source };
   const s = st ? st.state : null;
   if (!st || s === 'unavailable' || s === 'unknown') {
     const q = st ? quandLumiere(st.last_changed, maintenant) : null;
     return { texte: q ? tr('Indisponible depuis {h}', { h: q }) : tr('Indisponible'), panne: true, on: false };
   }
   if (s !== 'on') return { texte: tr('Éteinte'), panne: false, on: false };
-  if (fin && fin > maintenant) return { texte: tr('S’éteint à {h}', { h: heureDe(fin) }), panne: false, on: true };
-  return { texte: tr('Allumée depuis {h}', { h: quandLumiere(st.last_changed, maintenant) || '—' }), panne: false, on: true };
+  const n = bri == null ? null : String(bri);
+  if (fin && fin > maintenant) {
+    const h = heureDe(fin);
+    return { texte: tr('S’éteint à {h}', { h }), ...(n ? { court: tr('{n} % · s’éteint à {h}', { n, h }) } : {}), panne: false, on: true };
+  }
+  const h = quandLumiere(st.last_changed, maintenant) || '—';
+  return { texte: tr('Allumée depuis {h}', { h }), ...(n ? { court: tr('{n} % · depuis {h}', { n, h }) } : {}), panne: false, on: true };
 }
 
 /** La luminosité en pourcent (1 à 100), ou null : `brightness` va de 0 à 255. */

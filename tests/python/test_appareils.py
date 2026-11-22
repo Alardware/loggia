@@ -77,6 +77,49 @@ def test_retirer_l_appareil_d_un_autre_compte_est_reserve():
     assert appareils.fusionner(depart, {TABLETTE: None}, compte="papa", is_admin=True, maintenant=MAINTENANT) == {}
 
 
+# ── Audit du 12/11, lot 3, S2 et B11 : ecrire une fiche n'en change pas le proprietaire (ADR 0365) ──
+
+def test_ecrire_la_fiche_d_un_autre_compte_ne_permet_plus_de_la_retirer():
+    """S2. Un compte ordinaire ecrivait la fiche d'un autre — elle devenait la sienne —, puis la retirait."""
+    depart = {TABLETTE: {"profil": "1", "nom": "Tablette murale", "compte": "luna", "vu": 5}}
+    rangees = appareils.fusionner(depart, {TABLETTE: {"nom": "Renommee", "profil": "2"}},
+                                  compte="invite", is_admin=False, maintenant=MAINTENANT)
+    # Ecrire reste permis (une fiche n'est pas une frontiere : ADR 0220), l'ecran s'est montre...
+    assert rangees[TABLETTE]["nom"] == "Renommee" and rangees[TABLETTE]["profil"] == "2"
+    assert rangees[TABLETTE]["vu"] == MAINTENANT
+    # ... mais la fiche reste celle de son compte : la retirer est toujours refuse.
+    assert rangees[TABLETTE]["compte"] == "luna", "une ecriture a change le proprietaire de la fiche"
+    with pytest.raises(ValueError):
+        appareils.fusionner(rangees, {TABLETTE: None}, compte="invite", is_admin=False, maintenant=MAINTENANT)
+    assert appareils.fusionner(rangees, {TABLETTE: None}, compte="luna", is_admin=False, maintenant=MAINTENANT) == {}
+
+
+def test_un_administrateur_renumerote_sans_devenir_proprietaire():
+    """B11. Retirer un profil renumerote le profil des fiches des AUTRES ecrans : l'administrateur n'en devient pas le
+    proprietaire, et ne les a pas « vus » — ni « En ligne » a tort, ni echeance d'oubli qui repart."""
+    il_y_a_80_jours = MAINTENANT - 80 * 24 * 3600 * 1000
+    depart = {TABLETTE: {"profil": "2", "compte": "luna", "vu": il_y_a_80_jours},
+              PC: {"profil": "0", "compte": "papa", "vu": 7}}
+    rangees = appareils.fusionner(depart, {TABLETTE: {"profil": "1"}}, compte="papa", is_admin=True, maintenant=MAINTENANT)
+    assert rangees[TABLETTE] == {"profil": "1", "compte": "luna", "vu": il_y_a_80_jours}
+    # Sa propre fiche, elle, se date comme avant.
+    rangees = appareils.fusionner(rangees, {PC: {"profil": "1"}}, compte="papa", is_admin=True, maintenant=MAINTENANT)
+    assert rangees[PC] == {"profil": "1", "compte": "papa", "vu": MAINTENANT}
+    # Le compte de la tablette ecrit et retire toujours sa fiche.
+    rangees = appareils.fusionner(rangees, {TABLETTE: {"format": "tablette"}}, compte="luna", is_admin=False, maintenant=MAINTENANT)
+    assert rangees[TABLETTE]["vu"] == MAINTENANT
+    assert TABLETTE not in appareils.fusionner(rangees, {TABLETTE: None}, compte="luna", is_admin=False, maintenant=MAINTENANT)
+
+
+def test_une_fiche_sans_compte_prend_celui_qui_l_ecrit():
+    """Une fiche d'avant (sans compte), ou neuve : le premier qui l'ecrit en devient le proprietaire, une fois."""
+    rangees = appareils.fusionner({TABLETTE: {"profil": "1", "vu": 5}}, {TABLETTE: {"format": "tablette"}},
+                                  compte="luna", is_admin=False, maintenant=MAINTENANT)
+    assert rangees[TABLETTE]["compte"] == "luna" and rangees[TABLETTE]["vu"] == MAINTENANT
+    rangees = appareils.fusionner(rangees, {PC: {"profil": "0"}}, compte="invite", is_admin=False, maintenant=MAINTENANT)
+    assert rangees[PC]["compte"] == "invite"
+
+
 def test_un_anonyme_oublie_s_en_va_un_nomme_reste():
     vieux = MAINTENANT - appareils.OUBLI_ANONYME_MS - 1
     depart = {

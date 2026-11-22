@@ -23,6 +23,14 @@
 /** Les animations sans fin qu'on suspend hors de l'écran. */
 export const ANIMATIONS_SUSPENDUES = Object.freeze(['o-souffle', 'o-tour', 'o-livedot', 'o-livehalo']);
 
+/* Les autres boucles (audit des thèmes du 13/11, V3) : les icônes d'un appareil
+ * en marche (`o-ic-…`), la mini-scène météo (`o-wxm-…`), les vagues de l'anneau,
+ * les flux de l'Énergie et la pulsation d'une alerte tournaient elles aussi
+ * sous le pli. Elles portent leur animation en style en ligne : la feuille de
+ * style les met en pause par `[data-o-hors]`, sans connaître leurs classes. */
+export const PREFIXES_SUSPENDUS = Object.freeze(['o-ic-', 'o-wxm-']);
+export const BOUCLES_SUSPENDUES = Object.freeze(['lgWave', 'loggia-energy-flow', 'pulse']);
+
 /** L'attribut que pose l'observateur sur un élément sorti de l'écran. */
 export const ATTRIBUT_HORS = 'data-o-hors';
 
@@ -37,7 +45,7 @@ const MARGE = '8px';
  */
 export function ecouterHorsEcran(doc = globalThis.document, Observateur = globalThis.IntersectionObserver) {
   if (!doc || typeof Observateur !== 'function') return () => {};
-  const noms = new Set(ANIMATIONS_SUSPENDUES);
+  const noms = new Set([...ANIMATIONS_SUSPENDUES, ...BOUCLES_SUSPENDUES]);
   const suivis = new Set();
   const io = new Observateur((entrees) => {
     for (const e of entrees) {
@@ -50,8 +58,10 @@ export function ecouterHorsEcran(doc = globalThis.document, Observateur = global
   }, { rootMargin: MARGE });
   const lacher = (el) => { io.unobserve(el); suivis.delete(el); };
   const surDepart = (ev) => {
-    if (!noms.has(ev.animationName)) return;
-    const el = ev.target;
+    const nom = ev.animationName || '';
+    if (!noms.has(nom) && !PREFIXES_SUSPENDUS.some(p => nom.startsWith(p))) return;
+    // Un tracé de dessin n'a pas de boîte à observer : on suit son <svg>.
+    const el = ev.target && (ev.target.ownerSVGElement || ev.target);
     if (!el || suivis.has(el)) return;
     // Ménage au passage : React remplace des cartes ; celles qu'il a retirées
     // hors de l'écran ne redonneraient plus jamais de nouvelles.

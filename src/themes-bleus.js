@@ -1,6 +1,7 @@
-/* Saphir, Acier, Givre : trois thèmes tirés de trois planches de couleurs
- * envoyées le 25/10/2026 — « Primary Blue », « Сталь » et la « Holst »
- * bleue. Même forme que les presets de `theme.js` (entrée d'`applyVars`).
+/* Saphir, Acier : deux thèmes tirés de planches de couleurs envoyées le
+ * 25/10/2026 — « Primary Blue » et « Сталь » (Givre, tiré de la « Holst »
+ * bleue, est retiré depuis le 19/11). Même forme que les presets de `theme.js`
+ * (entrée d'`applyVars`).
  *
  * Pourquoi un fichier à part : le boot n'avait plus que 2,5 Ko sous sa borne
  * (tests/lot14_chargement.test.mjs). Ces trois thèmes n'y entrent pas ; ils
@@ -10,7 +11,7 @@
  * la garde de contraste (ADR 0060) en relève la clarté à l'exécution, sans
  * changer de teinte.
  *
- * Comme pour The Projekt, la hiérarchie se fait par la CLARTÉ : les accents
+ * La hiérarchie se fait par la CLARTÉ : les accents
  * décoratifs (volets, scènes, épingles) restent dans le bleu, l'avertissement
  * garde sa chaleur, les points vert / rouge leur sens, et les teintes des
  * pièces ne sont pas reprises — elles identifient, elles n'habillent pas. */
@@ -143,63 +144,6 @@ export const THEMES_BLEUS = {
         '--o-cyan': '#2f6380', '--o-cyan-rgb': '47,99,128',
         '--o-purple': '#4e6a83', '--o-purple-rgb': '78,106,131',
         '--o-shadow-hover': '0 18px 40px rgba(31,44,56,.14)',
-      },
-    },
-  },
-  /* ── Givre — la planche « Holst » bleue, de #223A5E à #F3F8FD.
-   * Sa nature est claire : texte et icônes dans les bleus de la planche, sur
-   * un fond qui monte du #D0E1F2 au #F3F8FD. Le sombre est un bleu marine,
-   * pas du noir ; le fond y reste plus sombre que les cartes, sinon elles
-   * s'y perdraient en haut de page. */
-  givre: {
-    dark: {
-      bg: '#0f1c30', surface: '#223a5e', surfaceElevated: '#294670', text: '#f3f8fd', muted: '#9fc0e3',
-      border: 'rgba(208,225,242,.14)', accent: '#4d79a8', accentText: '#d0e1f2',
-      radius: '16px', borderWidth: '1px',
-      shadow: '0 4px 12px rgba(5,12,24,.4), 0 16px 36px rgba(5,12,24,.35)',
-      bggrad: 'linear-gradient(180deg, #1f3557 0%, #172a44 45%, #0f1c30 100%)',
-      font: MANROPE,
-      fine: {
-        '--o-surfA': '#294670', '--o-surfB': '#223a5e',
-        '--o-bg2': '#172a44', '--o-side1': '#1b3050', '--o-side2': '#0f1c30',
-        '--o-header': 'rgba(15,28,48,.85)',
-        '--o-well': '#1b3050', '--o-well0': '#294670', '--o-well2': '#0f1c30',
-        '--o-text': '#f3f8fd', '--o-text1': '#d0e1f2', '--o-text2': '#9fc0e3', '--o-text3': '#8cb0d8',
-        '--o-bd1': 'rgba(208,225,242,.18)', '--o-bd2': 'rgba(208,225,242,.12)', '--o-bd3': 'rgba(208,225,242,.08)',
-        '--o-s1': 'rgba(208,225,242,.1)', '--o-s2': 'rgba(208,225,242,.07)', '--o-s3': 'rgba(208,225,242,.05)',
-        '--o-s4': 'rgba(208,225,242,.03)', '--o-s5': 'rgba(208,225,242,.03)',
-        '--o-sky': 'rgba(110,158,204,.35)',
-        ...SEM_SOMBRE,
-        '--o-gold': '#f3f8fd', '--o-gold-rgb': '243,248,253',
-        '--o-cold': '#bcd6f0', '--o-cold-rgb': '188,214,240',
-        '--o-cyan': '#8fd0f0', '--o-cyan-rgb': '143,208,240',
-        '--o-purple': '#9fc0e3', '--o-purple-rgb': '159,192,227',
-        '--o-shadow-hover': '0 20px 44px rgba(5,12,24,.45)',
-      },
-    },
-    light: {
-      bg: '#d0e1f2', surface: '#f3f8fd', surfaceElevated: '#ffffff', text: '#223a5e', muted: '#355982',
-      border: 'rgba(34,58,94,.14)', accent: '#355982', accentText: '#223a5e',
-      radius: '16px', borderWidth: '1px',
-      shadow: '0 1px 2px rgba(34,58,94,.08), 0 10px 26px rgba(34,58,94,.1)',
-      bggrad: 'linear-gradient(180deg, #f3f8fd 0%, #e2edf8 45%, #d0e1f2 100%)',
-      font: MANROPE,
-      fine: {
-        '--o-surfA': '#ffffff', '--o-surfB': '#f3f8fd',
-        '--o-bg2': '#e2edf8', '--o-side1': '#f3f8fd', '--o-side2': '#d0e1f2',
-        '--o-header': 'rgba(243,248,253,.88)',
-        '--o-well': '#eaf2fa', '--o-well0': '#ffffff', '--o-well2': '#d0e1f2',
-        '--o-text': '#223a5e', '--o-text1': '#2b4870', '--o-text2': '#355982', '--o-text3': '#4d79a8',
-        '--o-bd1': 'rgba(34,58,94,.18)', '--o-bd2': 'rgba(34,58,94,.12)', '--o-bd3': 'rgba(34,58,94,.08)',
-        '--o-s1': 'rgba(34,58,94,.08)', '--o-s2': 'rgba(34,58,94,.055)', '--o-s3': 'rgba(34,58,94,.04)',
-        '--o-s4': 'rgba(34,58,94,.025)', '--o-s5': 'rgba(34,58,94,.025)',
-        '--o-sky': 'rgba(77,121,168,.25)',
-        ...SEM_CLAIR,
-        '--o-gold': '#223a5e', '--o-gold-rgb': '34,58,94',
-        '--o-cold': '#3f6f9f', '--o-cold-rgb': '63,111,159',
-        '--o-cyan': '#2f6d9e', '--o-cyan-rgb': '47,109,158',
-        '--o-purple': '#4d79a8', '--o-purple-rgb': '77,121,168',
-        '--o-shadow-hover': '0 18px 40px rgba(34,58,94,.16)',
       },
     },
   },

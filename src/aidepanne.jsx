@@ -3,7 +3,7 @@
  * Sous l'en-tête de la fiche : ce qui se tait, la piste à suivre, et — à un administrateur, hors démo — « Ouvrir dans Home
  * Assistant », la page de l'appareil, sinon celle de son intégration. Les fiches à en-tête commun (`EnteteFiche`) ne
  * connaissent pas leur entité : celui qui les ouvre la pose dans `FicheEntite` (appareils/fiches.jsx, la recherche). */
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useState, useRef, useEffect } from 'react';
 import { tr } from './i18n.js';
 import { Fi } from './ui.jsx';
 import { getHass, compteOrdinaire, plateformeDe, appareilDe, plateformeMuette } from './state.js';
@@ -26,8 +26,41 @@ function aideDe(id, hass = null, estPrise = false) {
   if (!st || st.state !== 'unavailable') return null;
   const app = appareilDe(id);
   const plateforme = plateformeDe(id);
-  return aidePanne({ id, st, plateforme, pont: app && app.pont, appareil: app && app.id, estPrise,
-    integrationMuette: plateformeMuette(plateforme, S), admin: !compteOrdinaire(h) });
+  const integrationMuette = plateformeMuette(plateforme, S);
+  const aide = aidePanne({ id, st, plateforme, pont: app && app.pont, appareil: app && app.id, estPrise,
+    integrationMuette, admin: !compteOrdinaire(h) });
+  // Relancer l'intégration (P11, ADR 0382) : quand elle se tait ENTIÈRE, et pour un administrateur — le service l'est aussi.
+  return aide ? { ...aide, relance: !!(integrationMuette && !compteOrdinaire(h)) } : null;
+}
+
+/* « Relancer l'intégration » (chantier du 20/11, P11 ; ADR 0382) : `homeassistant.reload_config_entry` sur cette entité —
+ * Home Assistant retrouve son intégration. En deux temps, comme « Redémarrer HA » (systeme.jsx) : le premier toucher arme
+ * « Confirmer ? » 4 s. Rien ne se relance tout seul : une relance automatique tournerait en boucle. Dit fait à la réponse. */
+function RelancerIntegration({ id, hass = null }) {
+  const [arme, setArme] = useState(false);
+  const [issue, setIssue] = useState(null);
+  const minuterie = useRef(null);
+  useEffect(() => () => clearTimeout(minuterie.current), []);
+  const taper = () => {
+    clearTimeout(minuterie.current);
+    if (!arme) { setArme(true); minuterie.current = setTimeout(() => setArme(false), 4000); return; }
+    setArme(false);
+    const h = hass || getHass();
+    if (!h || !h.callService) return;
+    setIssue('envoi');
+    Promise.resolve(h.callService('homeassistant', 'reload_config_entry', { entity_id: id })).then(() => setIssue('ok'), () => setIssue('refus'));
+  };
+  if (issue === 'ok') return <div data-relance="ok" style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, color: 'var(--o-text2)' }}>{tr('Relance demandée')}</div>;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
+      <button type="button" onClick={taper} disabled={issue === 'envoi'} data-relance=""
+        style={{ padding: '7px 12px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 800,
+          border: 'var(--o-bw,1px) solid ' + (arme ? 'var(--o-warn2)' : 'var(--o-bd2)'), background: arme ? 'var(--o-warn2)' : 'transparent', color: arme ? '#fff' : 'var(--o-text)' }}>
+        {arme ? tr('Confirmer ?') : tr('Relancer l’intégration')}
+      </button>
+      {issue === 'refus' && <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-bad)' }}>{tr('La relance n’a pas abouti')}</span>}
+    </div>
+  );
 }
 
 /** « Ouvrir dans Home Assistant », seul : la fiche d'une prise a déjà ses mots (ficheprise.jsx). */
@@ -53,6 +86,7 @@ export function AidePanne({ id, hass = null, estPrise = false }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--o-text)' }}>{aide.titre}</div>
         <div style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.45, color: 'var(--o-text2)', marginTop: 3 }}>{aide.conseil}</div>
+        {aide.relance && <RelancerIntegration id={id} hass={hass} />}
         <LienPanne id={id} hass={hass} />
       </div>
     </div>

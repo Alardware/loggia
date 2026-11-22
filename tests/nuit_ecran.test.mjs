@@ -275,7 +275,8 @@ test('en CSS : un voile qui laisse passer les clics, la photo plus sombre, un pa
   assert.match(de('html.loggia-nuit-sol .o-fond-photo'), /transition: filter 4s/);
   assert.match(de('html.loggia-nuit .o-fond-photo'), /filter: brightness\(var\(--o-nuit-photo/);
   // En verre Léger, la photo garde son flou : l'assombrissement s'y ajoute, il ne le remplace pas.
-  assert.match(de('html.loggia-nuit.loggia-verre-leger .o-fond-photo'), /filter: blur\(16px\) saturate\(1\.35\) brightness\(var\(--o-nuit-photo/);
+  // ASSERTION MODIFIÉE (14/11, audit des thèmes, F1) : le flou de la photo est celui du thème (`--o-flou`), celui de Loggia pour repli.
+  assert.match(de('html.loggia-nuit.loggia-verre-leger .o-fond-photo'), /filter: var\(--o-flou, blur\(16px\) saturate\(1\.35\)\) brightness\(var\(--o-nuit-photo/);
   // L'écran de veille a son propre voile de nuit : le nôtre s'en retire, sans transition (le pseudo-élément disparaît).
   assert.match(de('html.loggia-nuit-sol body:has(.o-sombre[style*="position: fixed"])::after'), /content: none/);
   assert.ok(lire('src', 'ecranveille.jsx').includes('<div className="o-sombre" style={{ position: \'fixed\', inset: 0, zIndex: 500,'), 'la racine de la veille n’est plus l’îlot sombre fixe que le CSS reconnaît');

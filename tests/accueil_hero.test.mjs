@@ -59,7 +59,8 @@ test('les scenarios : UNE rangee qui defile, tous dedans ; le chemin vers la vue
   const s = bloc('function ScenariosAccueil(', NL + '}');
   assert.ok(!s.includes('liste.slice(') && !s.includes('useWide('), 'plus de coupe a cinq : tous les scenarios de l’Accueil sont dans la rangee');
   // ASSERTION MODIFIÉE (05/11, étape 5) : hors édition, la rangée se range par un appui long (`{...ranger}`), chaque carte porte sa clé (`dataId`).
-  assert.ok(s.includes(`<div ref={rangee} {...ranger} className="grid-qscenes" inert={edit ? '' : undefined}>`) && s.includes("{liste.map(s => <CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} dataId={s.id} />)}"), 'la rangee ne contient QUE des scenarios');
+  // ASSERTION MODIFIÉE (11/11, ADR 0343) : des pastilles, plus des cartes compactes.
+  assert.ok(s.includes(`<div ref={rangee} {...ranger} className="grid-qscenes" inert={edit ? '' : undefined}>`) && s.includes("{liste.map(s => <PastilleScenario key={s.id} s={s} enCours={sc.enCours === s.id} onLancer={sc.lancer} dataId={s.id} />)}"), 'la rangee ne contient QUE des scenarios');
   const rangee = s.slice(s.indexOf(`<div ref={rangee} {...ranger} className="grid-qscenes" inert={edit ? '' : undefined}>`));
   assert.ok(!rangee.includes("onNav('scenes')") && !rangee.includes('dashed'), 'plus de fausse carte dans la rangee');
   assert.ok(s.includes("? <button type=\"button\" onClick={() => onNav('scenes')} aria-label={tr('Tous les scénarios')}") && s.includes("{nScenarios ? compte : tr('Tous les scénarios')}<Fi i=\"angle-right\" size={10} color=\"var(--o-text3)\" />"), 'le lien de l’en-tete : « 9 scenarios → », ou « Tous les scenarios » quand aucun n’est sur l’Accueil');
@@ -70,8 +71,10 @@ test('les scenarios : UNE rangee qui defile, tous dedans ; le chemin vers la vue
   assert.ok(s.includes('bordsDefilement(el.scrollLeft, el.scrollWidth, el.clientWidth)') && s.includes("el.addEventListener('scroll', mesurer, { passive: true });") && s.includes('new ResizeObserver(mesurer)'), 'la mesure suit le defilement et la largeur');
   assert.ok(s.includes("behavior: REDUCE_MOTION ? 'auto' : 'smooth'") && s.includes("if (Math.abs(el.scrollLeft - depart) < 2) el.scrollBy({ left: pas, behavior: 'auto' });"), 'un moteur qui n’anime pas ne laisse pas la rangee sur place');
   const large = css.slice(css.indexOf("/* ── Les scenarios de l'Accueil : UNE rangee qui defile"));
-  assert.ok(large.includes('@media (min-width: 821px) {') && large.includes('grid-auto-flow: column; grid-auto-columns: max(116px, calc((100% - 60px) / 6));'), 'six visibles sur PC, jamais sous 116 px : un nom ne se tronque pas');
+  // ASSERTION MODIFIÉE (11/11, ADR 0343) : des pastilles à leur largeur, plus six cartes d'au moins 116 px.
+  assert.ok(large.includes('@media (min-width: 821px) {') && large.includes('display: flex; gap: 8px;') && large.includes('.grid-qscenes > button { flex: 0 0 auto; scroll-snap-align: start; }'), 'des pastilles a leur largeur sur PC : un nom ne se tronque pas');
   assert.ok(large.includes('padding: 6px 6px 26px; margin: -6px -6px -26px;'), 'les ombres vivent, la mise en page ne bouge pas');
   assert.ok(large.includes('@media (pointer: coarse) { .o-qscenes-fleche { display: none !important; } }'), 'au doigt on glisse : pas de fleches');
-  assert.ok(css.includes('.grid-qscenes > button { flex: 0 0 150px; scroll-snap-align: start; }'), 'le telephone garde sa regle : 150 px par carte');
+  // ASSERTION MODIFIÉE (11/11, ADR 0343) : au téléphone aussi, chaque pastille à sa largeur.
+  assert.ok(css.includes('.grid-qscenes > button { flex: 0 0 auto; scroll-snap-align: start; }'), 'le telephone : chaque pastille a sa largeur');
 });

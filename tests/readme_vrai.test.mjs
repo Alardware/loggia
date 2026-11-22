@@ -22,7 +22,9 @@ const README = lire('README.fr.md');
 
 /* Les chiffres en toutes lettres : le README écrit « douze », pas « 12 ». */
 const MOTS = ['zéro', 'une', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix',
-  'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize', 'dix-sept', 'dix-huit', 'dix-neuf', 'vingt'];
+  'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize', 'dix-sept', 'dix-huit', 'dix-neuf', 'vingt',
+  // ASSERTION MODIFIÉE (21/11, ADR 0387) : vingt-et-une commandes réservées avec le planning des purificateurs.
+  'vingt-et-une'];
 const enLettres = (n) => MOTS[n] || String(n);
 
 test('le nombre de commandes réservées aux administrateurs', () => {

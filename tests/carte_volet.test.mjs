@@ -125,7 +125,8 @@ test('pendant une course : « En fermeture », Stop allumé avec son mot, le chi
 });
 
 test('V3 : la fabrique donne la carte d’un VOLET ; le garage et le portail gardent la leur', () => {
-  assert.ok(APP.includes("d === 'cover' ? (estVolet(S[k]) ? <RoomVoletCard id={id} hass={hass} onOpen={setCoverPop} titre={label} /> : <RoomCoverCard id={id} hass={hass} onOpen={setCoverPop} titre={label} />)"));
+  // ASSERTION MODIFIÉE (19/11, fluidité, point 2 ; ADR 0377) : la fabrique pose la carte protégée (`cartesMemo`, `memeCarte`) et lui passe la minute.
+  assert.ok(APP.includes("d === 'cover' ? (estVolet(S[k]) ? <M.volet id={id} hass={hass} minute={minute} onOpen={setCoverPop} titre={label} /> : <M.couvrant id={id} hass={hass} minute={minute} onOpen={setCoverPop} titre={label} />)") && APP.includes('volet: memo(RoomVoletCard, memeCarte), couvrant: memo(RoomCoverCard, memeCarte)'));
 });
 
 test('la compacte garde ses ▲ ▼ et prend la phrase de la carte', () => {

@@ -262,13 +262,19 @@ export function prixVarie(points, historique) {
 }
 
 /**
- * La fenêtre CONTINUE la moins chère à venir, d'au moins `dureeMin` minutes
- * (deux heures par défaut) : `{ debut, fin, prix }` — le prix moyen, pondéré
- * par la durée de chaque tranche —, ou null.
+ * La fenêtre CONTINUE la moins chère à venir, de `dureeMin` minutes (deux
+ * heures par défaut) : `{ debut, fin, prix }` — le prix moyen, pondéré par la
+ * durée de chaque tranche —, ou null.
  *
- * L'heure en cours compte (on peut encore s'en servir) ; ce qui est passé, non.
- * Un trou dans la prévision coupe la continuité. À égalité, la plus tôt. Des
- * prix tous égaux ne désignent rien : il n'y a pas de creux.
+ * L'heure ENTAMÉE ne compte que pour ce qu'il en reste (audit du 12/11, B13 ;
+ * ADR 0355). Comptée entière, une tranche bon marché presque finie emportait la
+ * fenêtre : à 14 h 50, « 14 h – 16 h » passait devant « 16 h – 18 h » pour dix
+ * minutes de prix bas suivies d'une heure chère. Une fenêtre part donc de
+ * MAINTENANT, ou du début d'une tranche à venir, et dure `dureeMin` au juste :
+ * sa dernière tranche est coupée où elle s'arrête. Ce qui est passé ne compte
+ * pas. Un trou dans la prévision coupe la continuité ; moins de `dureeMin` de
+ * prévision devant soi ne désigne rien. À égalité, la plus tôt. Des prix tous
+ * égaux ne désignent rien : il n'y a pas de creux.
  */
 export function fenetreMoinsChere(points, maintenant, dureeMin = 120) {
   const pts = (Array.isArray(points) ? points : [])
@@ -279,16 +285,17 @@ export function fenetreMoinsChere(points, maintenant, dureeMin = 120) {
   const JEU = 60e3;
   let meilleur = null;
   for (let i = 0; i < pts.length; i++) {
-    let duree = 0, somme = 0, fin = pts[i].debut;
-    let j = i;
-    for (; j < pts.length && duree < voulu; j++) {
+    const depart = Math.max(pts[i].debut, maintenant);
+    const terme = depart + voulu;
+    let duree = 0, somme = 0, fin = depart;
+    for (let j = i; j < pts.length && fin < terme; j++) {
       if (j > i && Math.abs(pts[j].debut - fin) > JEU) break;
-      const d = pts[j].fin - pts[j].debut;
-      duree += d; somme += pts[j].prix * d; fin = pts[j].fin;
+      const de = Math.max(pts[j].debut, depart), a = Math.min(pts[j].fin, terme);
+      duree += a - de; somme += pts[j].prix * (a - de); fin = a;
     }
-    if (duree < voulu) continue;
+    if (fin < terme || !(duree > 0)) continue;
     const moyen = somme / duree;
-    if (!meilleur || moyen < meilleur.prix - 1e-12) meilleur = { debut: pts[i].debut, fin, prix: moyen };
+    if (!meilleur || moyen < meilleur.prix - 1e-12) meilleur = { debut: depart, fin: terme, prix: moyen };
   }
   return meilleur;
 }

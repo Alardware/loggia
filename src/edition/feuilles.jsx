@@ -1,7 +1,7 @@
 /* Les feuilles de l’édition, chargées à la demande : la feuille d’une carte (`CardEditSheet`), le composeur (`ComposeurCartes`) et l’historique des mises en page (`FeuilleHistorique`).
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
 import { useState, useMemo, cloneElement } from 'react';
-import { LOGGIA_INDEX, cfgSet, switchLights, iconesCfg, compteOrdinaire } from '../state.js';
+import { LOGGIA_INDEX, nomZoneDe, cfgSet, switchLights, iconesCfg, compteOrdinaire } from '../state.js';
 import { deCelsius } from '../unites.js';
 import { BottomSheet, NomFeuille, editBtn, CroixFeuille, cvId, Fi, TitreFeuille, ListeChoix } from '../ui.jsx';
 import { DESSINS_CAT, FONTE_CAT } from '../dessins.js';
@@ -118,7 +118,7 @@ function FeuilleHistorique({ entrees, onRestaurer, onOublier, onClose }) {
 function pieceDeLEntite(hass, id) {
   const p = piecesDeLaMaison().find(x => roomEntitiesBrutes(hass, x).indexOf(id) >= 0 || (layoutOf(ROOM_LAYOUT_KEY, x).added || []).indexOf(id) >= 0);
   if (p) return p;
-  return (LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function') ? (LOGGIA_INDEX.areaNameOf(id) || null) : null;
+  return nomZoneDe(id);
 }
 /* Deplacer une entite dans une piece : elle entre dans la grille de celle-ci
  * et sort de toutes les autres — en UNE ecriture, pour toutes les pieces :
@@ -481,11 +481,10 @@ function ComposeurCartes({ hass, dc = null, present = [], onToggle, onClose, pie
   const S = (hass && hass.states) || {};
   const nomEnt = (id) => (S[id] && S[id].attributes && S[id].attributes.friendly_name) || id;
   const domaineOk = (id) => domaines.indexOf(id.slice(0, id.indexOf('.'))) >= 0;
-  const pieceDe = (id) => (LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function' && LOGGIA_INDEX.areaNameOf(id)) || null;
   const nbEntites = Object.keys(S).length;
   const domainesSig = domaines.join('|');
   // Les appareils : chaque entite avec ses filtres (le vocabulaire d'Objets) et sa piece.
-  const appareils = useMemo(() => Object.keys(S).filter(domaineOk).sort().map(id => ({ id, nom: nomEnt(id), piece: pieceDe(id), filtres: filtresEntite(S, id) })), [nbEntites, domainesSig]);
+  const appareils = useMemo(() => Object.keys(S).filter(domaineOk).sort().map(id => ({ id, nom: nomEnt(id), piece: nomZoneDe(id), filtres: filtresEntite(S, id) })), [nbEntites, domainesSig]);
   // Les cartes de Loggia disponibles chez toi : le distributeur (configure),
   // chaque plante, chaque zone fil pilote (un thermostat est une entite, il
   // vit chez les appareils). La piece courante d'abord.

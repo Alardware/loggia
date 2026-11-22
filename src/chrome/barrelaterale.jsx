@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { nonLues as journalNonLues } from '../journal.js';
 import { useLoggia } from '../runtime.js';
-import { isViewAvailable } from '../views.js';
+import { isViewAvailable, vuePermise } from '../views.js';
 import { BottomSheet, TitreFeuille, userBg, Fi, readViewsCfg, HIDDEN_VIEWS, FlipText } from '../ui.jsx';
 import { tr, nomProfil, trN } from '../i18n.js';
 import { ilYa, LABEL_VIEW, BUILT, NAV } from './entete.jsx';
@@ -53,7 +53,7 @@ function FeuilleProfils({ users, userIdx, onSwitchUser, onGerer, onClose }) {
         ))}
       </div>
       <button onClick={() => { onGerer(); onClose(); }}
-        style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', marginTop: 12, padding: '12px 12px 0', border: 'none', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', background: 'transparent', color: 'var(--o-accent)', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+        style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', marginTop: 12, padding: '12px 12px 0', border: 'none', borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', background: 'transparent', color: 'var(--o-accent-soft)', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
         <Fi i="settings" size={14} /><span>{tr('Gérer les profils')}</span>
       </button>
     </BottomSheet>
@@ -97,8 +97,9 @@ function Sidebar({ view, onNav, open = true, customViews = [], ha = null, vuesAu
   const nbNonVues = journalNonLues(notifs);
   const nonVues = nbNonVues > 0;
   const marquerVues = () => { if (onLireNotifs) onLireNotifs(); };
-  // Permissions par profil : `null` = tout (admins et profils sans restriction).
-  const permis = (vid) => !vuesAutorisees || vid === 'accueil' || vid === 'parametres' || vuesAutorisees.has(vid);
+  // Permissions par profil : `null` = tout (admins et profils sans restriction). La règle commune (`vuePermise`, audit du
+  // 12/11, B19) : Lumières, Climat, Volets et Médias suivent aussi Objets.
+  const permis = (vid) => vuePermise(vid, vuesAutorisees);
   // Une vue que l'installation ne peut pas remplir ne figure pas dans le menu.
   const { views: avail } = useLoggia();
   const [viewsCfg, setViewsCfg] = useState(readViewsCfg);

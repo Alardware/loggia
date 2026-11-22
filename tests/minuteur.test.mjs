@@ -48,7 +48,8 @@ test('la rangée lit le serveur, et ne tient plus rien dans l’onglet', () => {
   assert.ok(d >= 0, 'la rangée existe');
   const bloc = sw.slice(d, sw.indexOf('\n}\n', d));
   assert.ok(bloc.includes("useEtatServeur(hass, 'loggia/minuteurs/etat', 15000, '')"), 'elle lit les minuteurs du composant');
-  assert.ok(bloc.includes("type: 'loggia/minuteurs/poser', entity_id: id, minutes: 30"), '+30 min part au serveur');
+  // ASSERTION MODIFIÉE (audit du 12/11, lot 4, I5) : les durées de la fiche d'une lumière (15 min à 2 h), plus seulement « +30 min ».
+  assert.ok(bloc.includes("type: 'loggia/minuteurs/poser', entity_id: id, minutes: n") && bloc.includes('DUREES_MINUTEUR.map(') && bloc.includes('AJOUTS_MINUTEUR.map('), 'les durées partent au serveur');
   assert.ok(bloc.includes("type: 'loggia/minuteurs/annuler', entity_id: id"), 'annuler aussi');
   assert.ok(bloc.includes('useSeconde(reste != null);'), 'le décompte bat à la seconde, seulement s’il y a un minuteur');
   assert.ok(bloc.includes('<FicheValeur>{decompte(reste)}</FicheValeur>'), 'le décompte se voit, en chiffres tabulaires');

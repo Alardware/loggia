@@ -25,7 +25,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { magasin, reglerPrisesEtat } from './prisesetat.js';
 import { cfgVal, cfgRecue } from './state.js';
-import { tr } from './i18n.js';
+import { dureeMinutes } from './format.js';
 
 const ETAT = magasin((h) => Promise.resolve(h.callWS({ type: 'loggia/enfant/etat' }))
   .then(r => (r && typeof r === 'object' ? { ...r, recu: Date.now() } : r)), 60000, 15000);
@@ -76,13 +76,9 @@ export function profilEnfant(etat, ident) {
   return ident && p && typeof p === 'object' && p[ident] && typeof p[ident] === 'object' ? p[ident] : null;
 }
 
-/** Les mots de la maquette pour une durée en minutes : « 35 min », « 1 h », « 1 h 25 », « 1 h 30 » ; jamais sous zéro. */
-export function dureeTexte(minutes) {
-  const m = Math.max(0, Math.round(Number(minutes) || 0));
-  if (m < 60) return tr('{n} min', { n: m });
-  const h = Math.floor(m / 60), r = m % 60;
-  return r ? tr('{h} h {m}', { h, m: String(r).padStart(2, '0') }) : tr('{n} h', { n: h });
-}
+/** Les mots de la maquette pour une durée en minutes : « 35 min », « 1 h », « 1 h 25 », « 1 h 30 » ; jamais sous zéro —
+ *  `dureeMinutes` (format.js, lot 5b de l'audit du 12/11) : la clé « {h} h » s'y écrit comme « {n} h » dans les sept langues. */
+export function dureeTexte(minutes) { return dureeMinutes(minutes); }
 
 /**
  * Le budget d'un écran (E8) : `{ total_s, utilise_s, reste_s, bonus_min }` — le total du jour avec les minutes accordées,

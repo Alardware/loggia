@@ -51,9 +51,10 @@ test('il s’affiche, et seulement quand il existe', () => {
 test('la devise vient de Home Assistant, jamais supposée en euros', () => {
   assert.ok(APP.includes("const uniteDe = (id) => (id && S[id] && S[id].attributes && S[id].attributes.unit_of_measurement) || null;"),
     'l’unité se lit sur l’entité');
-  assert.ok(APP.includes('const deviseJour = uniteDe(EN.coutJour) || uniteDe(EN.ecoJour)'),
+  // ASSERTION MODIFIÉE (12/11, audit sur une instance réelle) : la devise passe par `symboleMonnaie` — « € », pas le « EUR » brut du capteur.
+  assert.ok(APP.includes('const deviseJour = symboleMonnaie(uniteDe(EN.coutJour) || uniteDe(EN.ecoJour)'),
     'celle du coût d’abord, puis celle de l’économie');
-  assert.ok(APP.includes("|| (hass && hass.config && hass.config.currency) || '€';"),
+  assert.ok(APP.includes("|| (hass && hass.config && hass.config.currency) || '€');"),
     'puis celle de l’installation — l’euro n’est que le dernier recours');
 });
 

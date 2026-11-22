@@ -15,6 +15,19 @@ const SystemeContent = lazyRecharge(() => import('../views/systeme.jsx'));
  * de fichier. */
 const EnergieContent = lazyRecharge(() => import('../views/energie.jsx').then(m => ({ default: m.EnergieContent })));
 const SecuriteContent = lazyRecharge(() => import('../views/securite.jsx').then(m => ({ default: m.SecuriteContent })));
+/* ÉNERGIE PRÉPARÉE EN DOUCE (19/11, fluidité, point 5). Au premier tap, la vue chargeait son code puis celui de son
+ * historique, chacun derrière un écran vide. Trois secondes après le démarrage, quand le navigateur n'a rien d'autre à
+ * faire, son code se charge sans rien afficher (energie.jsx demande aussitôt l'historique) : le premier tap est
+ * immédiat. Pas en mode « économie de données ». Un échec ne dit rien : le tap le redemandera, avec sa garde. */
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  const charger = () => {
+    const c = typeof navigator !== 'undefined' && navigator.connection;
+    if (c && c.saveData) return;
+    import('../views/energie.jsx').catch(() => {});
+  };
+  const auCalme = () => setTimeout(() => (typeof window.requestIdleCallback === 'function' ? window.requestIdleCallback(charger, { timeout: 8000 }) : charger()), 3000);
+  if (document.readyState === 'complete') auCalme(); else window.addEventListener('load', auCalme, { once: true });
+}
 // Parametres : 1300 lignes ou l'on n'arrive que volontairement. Le formulaire
 // d'entites vient du meme morceau — il ne s'ouvre qu'en mode edition.
 const ParametresContent = lazyRecharge(() => import('../views/parametres.jsx').then(m => ({ default: m.ParametresContent })));

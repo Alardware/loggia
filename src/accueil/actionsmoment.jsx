@@ -30,7 +30,7 @@ export function ActionsMoment({ hass, lumieres = 0 }) {
     else if (a.scenario) lancerScenario(hass, a.scenario);
   };
   const faire = (a) => {
-    if (a.scenario && AVANT_DE_LANCER.includes(a.scenario) && resteQuelqueChose(restesMaintenant(hass))) { setAvant(a); return; }
+    if (a.scenario && AVANT_DE_LANCER.includes(a.scenario) && resteQuelqueChose(restesMaintenant(hass, scenarios().find(x => x.id === a.scenario)))) { setAvant(a); return; }
     executer(a);
   };
   const feuille = avant ? { avant: avant.scenario, tous: scenarios(), noms: nomsLiens(), partir: () => { setAvant(null); executer(avant); }, renoncer: () => setAvant(null) } : null;

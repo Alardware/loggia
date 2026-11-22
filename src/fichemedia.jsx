@@ -15,6 +15,7 @@
  *    et la puce « Allumer ». Puis le volume : le muet, la barre de la maison
  *    (piste 32), « 30 % » ou « Muet ». Indisponible : le mot, la phrase, et plus
  *    aucune commande (M7) ;
+ *  - le minuteur (10/11, ADR 0341) : six durées en un appui, « Autre durée » ; en cours, le décompte, +15 min, +1 h, Annuler ;
  *  - le panneau d'une Echo (§ 6.7) : « Dire à Alexa / Annonce ». Les phrases
  *    gardées en puces (M19), le champ, l'étoile « Garder » ; l'annonce (M9) :
  *    « Sur » — toute la maison ou les Echo choisies —, le champ, quatre annonces
@@ -46,16 +47,22 @@ import { tr, trSens, locale } from './i18n.js';
 import { enPanne } from './outils.js';
 import { Fi, kbSlider, BottomSheet, ListeChoix } from './ui.jsx';
 import { Ico } from './icones.jsx';
-import { LOGGIA_INDEX, medPlayers, cfgVal, compteOrdinaire, plateformeDe } from './state.js';
+import { LOGGIA_INDEX, medPlayers, cfgVal, compteOrdinaire, plateformeDe, entitesAppareilDe } from './state.js';
 import { lazyRecharge } from './recharge.js';
 import { useEtatEnfant, maisonAvecEnfant, profilEnfant, dureeTexte, poserEtatEnfant } from './enfantetat.js';
 import { PinModal } from './pinmodal.jsx';
-import { raisonEchec } from './refus.js';
+import { raisonEchec, texteRefus } from './refus.js';
 import { annoncer, ANNONCE_MS } from './lecteuretat.js';
 import { useOptimiste } from './optimiste.js';
 import { appelPourJouer, phraseAlexa, TYPE_PHRASE } from './favlecture.js';
 import { applisDe, appelPourLancer, appliCourante, telecommandeDe } from './applis.js';
 import { integrationDe, telecommandePour, appelPourTouche } from './telecommande.js';
+import { armerRepetition } from './maintien.js';
+import { prochainsEcho, texteProchain } from './echoprochain.js';
+import { candidatsGroupe, appelGroupe, appelsToutDegrouper } from './groupelecteurs.js';
+
+// La clé de traduction d'une entité, dans l'index (P4) : la sorte d'un capteur d'Echo, jamais son nom.
+const cleTraduction = (e) => { const m = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && typeof LOGGIA_INDEX.entityMeta.get === 'function' ? LOGGIA_INDEX.entityMeta.get(e) : null; return m ? m.translationKey : null; };
 import { litUneVoix, moteursVoix, appelVoix, clavierDe, appelClavier } from './voixmedia.js';
 import { marqueDe } from './marques.js';
 import NavigateurMedias, { favorisLecture, noterFavori, MEDIA_ICONES } from './navigateurmedias.jsx';
@@ -63,6 +70,10 @@ import { genreLecteur, glypheLecteur, posLecteur, fmtTemps, pourcentTexte, etatV
 import { EnteteFiche, PETITES_CAPITALES, filet } from './fichecommune.jsx';
 import { LISERE } from './styles.js';
 import { PANNEAU, RANGEE, TITRE, SOUS } from './fichekit.js';
+import { abonnerMinuteurs, poserMinuteurs, useHorloge } from './prisesetat.js';
+import { dureePrise } from './prises.js';
+import { DUREES_MEDIA, AJOUTS_MEDIA, AUTRE_DUREE, consigneMinuteur, phraseMinuteurMedia } from './minuteurmedia.js';
+import { PanneauSpotify } from './spotifymedias.jsx';
 
 /* La feuille « Réglages parent » du mode enfant (chantier Mode enfant, E19) : la seconde feuille de cette fiche, montée après son
  * contenu, chargée à l'ouverture seulement — le motif du plan du robot (ficherobot.jsx). Son contenu seul est à la demande
@@ -90,6 +101,38 @@ const NOTE = { fontSize: 11.5, fontWeight: 700, color: 'var(--o-text3)' };
 const GRAND = { fontSize: 24, fontWeight: 800, lineHeight: 1.15 };
 /* Une puce de sa maquette (`ChipButton`) : le gris doux, sans bordure ; choisie, le bleu plein et le blanc (la règle des puces) ;
  * inerte à .4 — mais rien d'inerte ne se dessine ici : ce qu'un lecteur ne sait pas n'a pas de puce (M11). */
+/* « Jouer aussi dans » (P6, ADR 0383 ; groupelecteurs.js) : une puce par enceinte de la même intégration qui sait se grouper —
+ * bleue quand elle est dans le groupe —, et « Tout dégrouper ». Grouper ne lance aucune lecture. Rien sur un lecteur qui ne sait
+ * pas se grouper, ou seul de son intégration. */
+function PanneauGroupe({ id, v }) {
+  const H = v.hass;
+  const S = (H && H.states) || {};
+  const autres = candidatsGroupe(id, Object.keys(S).filter(x => x.indexOf('media_player.') === 0), S, plateformeDe);
+  const [enVol, envoyer] = useEnVol();
+  if (!autres.length) return null;
+  const lancer = (appels) => {
+    if (enVol || !H || typeof H.callService !== 'function' || !appels.length) return;
+    envoyer(() => Promise.all(appels.map(a => H.callService(a.domaine, a.service, a.data))));
+  };
+  const avec = autres.filter(a => a.dans);
+  return (
+    <div data-panneau="groupe" style={{ ...PANNEAU, padding: '14px 18px 16px' }}>
+      <span style={TITRE}>{tr('Jouer aussi dans')}</span>
+      <span style={SOUS}>{avec.length ? tr('Avec {noms}', { noms: avec.map(a => a.nom).join(', ') }) : tr('Seule pour l’instant')}</span>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+        {autres.map(a => (
+          <button key={a.id} type="button" aria-pressed={a.dans} aria-disabled={enVol ? true : undefined}
+            onClick={() => lancer([appelGroupe(id, a.id, !a.dans)])} style={{ ...LARGE(a.dans, !enVol), padding: '0 14px' }}>{a.nom}</button>
+        ))}
+        {avec.length > 0 && (
+          <button type="button" aria-disabled={enVol ? true : undefined} onClick={() => lancer(appelsToutDegrouper(id, S))}
+            style={{ ...LARGE(false, !enVol), padding: '0 14px', marginLeft: 'auto' }}>{tr('Tout dégrouper')}</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const PUCE = (choisie = false, peut = true) => ({ border: 'none', fontFamily: 'inherit', fontWeight: 700, cursor: peut ? 'pointer' : 'default', opacity: peut ? 1 : .4,
   display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box', minWidth: 0,
   background: choisie ? 'var(--o-accent-fond)' : 'var(--o-s1)', color: choisie ? '#fff' : 'var(--o-text1)' });
@@ -248,7 +291,9 @@ function CeQuiJoue({ v, maintenant }) {
   const l = v.l;
   const [artErr, setArtErr] = useState(null);
   const art = l.art && l.art !== artErr ? l.art : null;
-  const titre = l.title || l.channel || l.serie || l.app || '';
+  /* Une série, comme sa carte (`titreLecteur`, lecteur.js ; audit du 12/11, lot 4, E20) : son nom en titre, l'épisode dessous —
+   * la fiche écrivait le titre de l'épisode deux fois, et jamais le nom de la série. */
+  const titre = l.serie || l.title || l.channel || l.app || '';
   const episode = l.saison != null && l.episode != null ? 'S' + l.saison + ' E' + l.episode : l.episode != null ? 'E' + l.episode : null;
   const dessous = [l.serie && l.title !== l.serie ? l.title : null, episode, l.artist, l.album].filter(Boolean).join(' · ');
   // Une TV dans une application, sans titre : ce n'est pas un direct ; une radio, un flux sans durée, l'est.
@@ -288,19 +333,27 @@ function CeQuiJoue({ v, maintenant }) {
 function DireAAlexa({ id, cible, hass, onGarder }) {
   const [texte, setTexte] = useState('');
   const [envoyee, setEnvoyee] = useState(null);
+  const [refus, setRefus] = useState(false);
   const [enVol, envoyer] = useEnVol();
   const vivant = useVivant();
   const minuteur = useRef(0);
   useEffect(() => () => clearTimeout(minuteur.current), []);
   const phrases = favorisLecture(id).filter(f => f.c === TYPE_PHRASE);
   const phrase = phraseAlexa(texte);
+  /* « Envoyé » ne s'écrit qu'à la RÉPONSE de Home Assistant (audit du 12/11, B2). Posé avant elle, il s'affichait même quand
+   * l'appel était refusé, et le refus était avalé : rien ne disait que rien n'était parti. Un refus se dit, et la phrase reste
+   * dans le champ — la règle d'« Écrire sur la TV ». Le champ ne se vide que s'il porte encore ce qui vient de partir. */
   const dire = (p) => {
     const appel = appelPourJouer(p, cible);
     if (!appel || !hass || !hass.callService) return;
-    if (!envoyer(() => hass.callService(appel.domaine, appel.service, appel.data))) return;
-    setEnvoyee(p.t); setTexte('');
-    clearTimeout(minuteur.current);
-    minuteur.current = setTimeout(() => { if (vivant.current) setEnvoyee(null); }, 6000);
+    const tapee = texte;
+    setRefus(false);
+    envoyer(() => Promise.resolve(hass.callService(appel.domaine, appel.service, appel.data)).then(() => {
+      if (!vivant.current) return;
+      setEnvoyee(p.t); setTexte(t => (t === tapee ? '' : t));
+      clearTimeout(minuteur.current);
+      minuteur.current = setTimeout(() => { if (vivant.current) setEnvoyee(null); }, 6000);
+    }, () => { if (vivant.current) { setRefus(true); setEnvoyee(null); } }));
   };
   const garder = () => { if (!phrase) return; noterFavori(id, phrase); setTexte(''); if (onGarder) onGarder(); };
   return (
@@ -325,7 +378,8 @@ function DireAAlexa({ id, cible, hass, onGarder }) {
           <Fi i="paper-plane" size={15} />
         </button>
       </div>
-      {envoyee && <div role="status" style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-ok)', marginTop: 10, overflowWrap: 'anywhere' }}>{tr('Envoyé à Alexa : « {phrase} »', { phrase: envoyee })}</div>}
+      {refus && <div role="alert" style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-bad)', marginTop: 10 }}>{tr('Home Assistant a refusé.')}</div>}
+      {!refus && envoyee && <div role="status" style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-ok)', marginTop: 10, overflowWrap: 'anywhere' }}>{tr('Envoyé à Alexa : « {phrase} »', { phrase: envoyee })}</div>}
     </div>
   );
 }
@@ -348,6 +402,7 @@ function Annonce({ hass }) {
   // Les cibles choisies (leurs `haid`) ; vide : toute la maison.
   const [choisies, setChoisies] = useState([]);
   const [dite, setDite] = useState(null);
+  const [refus, setRefus] = useState(false);
   const [enVol, envoyer] = useEnVol();
   const vivant = useVivant();
   const minuteur = useRef(0);
@@ -371,17 +426,23 @@ function Annonce({ hass }) {
     const officielles = voies.map(v => v.officielle).filter(Boolean);
     const jumelles = voies.map(v => v.jumelle).filter(Boolean);
     const une = (l) => (l.length === 1 ? l[0] : l);
-    const parti = envoyer(() => Promise.all([
+    /* « Annoncé » ne s'écrit qu'à la réponse (audit du 12/11, B2), sur la fiche comme sur les cartes visées : un refus se dit,
+     * et le texte reste dans le champ. */
+    const ecrites = (toute ? [...echos, ...(groupe ? [groupe] : [])] : vises).map(p => p.haid);
+    const ou = toute ? null : vises.map(p => nomLecteur(S, p)).join(', ');
+    setRefus(false);
+    envoyer(() => Promise.all([
       officielles.length ? hass.callService('notify', 'send_message', { entity_id: une(officielles), message: t }) : null,
       jumelles.length ? hass.callService('notify', 'alexa_media', { message: t, target: une(jumelles), data: { type: 'announce' } }) : null,
-    ]));
-    if (!parti) return;
-    // Les cartes visées l'écrivent six secondes : toute la maison, c'est chaque Echo — et le groupe qui l'a dite, qui a sa carte.
-    annoncer((toute ? [...echos, ...(groupe ? [groupe] : [])] : vises).map(p => p.haid), t);
-    setTexte('');
-    setDite({ texte: t, ou: toute ? null : vises.map(p => nomLecteur(S, p)).join(', ') });
-    clearTimeout(minuteur.current);
-    minuteur.current = setTimeout(() => { if (vivant.current) setDite(null); }, ANNONCE_MS);
+    ]).then(() => {
+      // Les cartes visées l'écrivent six secondes : toute la maison, c'est chaque Echo — et le groupe qui l'a dite, qui a sa carte.
+      annoncer(ecrites, t);
+      if (!vivant.current) return;
+      setTexte(cur => (cur.trim() === t ? '' : cur));
+      setDite({ texte: t, ou });
+      clearTimeout(minuteur.current);
+      minuteur.current = setTimeout(() => { if (vivant.current) setDite(null); }, ANNONCE_MS);
+    }, () => { if (vivant.current) { setRefus(true); setDite(null); } }));
   };
   const pret = !!texte.trim() && !enVol;
   return (
@@ -405,7 +466,8 @@ function Annonce({ hass }) {
           <button key={a} type="button" aria-disabled={enVol || undefined} title={a} onClick={() => { if (!enVol) dire(a); }} style={{ ...LARGE(false, !enVol), ...SOUPLE }}><span style={DEUX_LIGNES}>{a}</span></button>
         ))}
       </div>
-      {dite && (
+      {refus && <div role="alert" style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-bad)', marginTop: 10 }}>{tr('Home Assistant a refusé.')}</div>}
+      {!refus && dite && (
         <div role="status" style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-ok)', marginTop: 10, overflowWrap: 'anywhere' }}>
           {dite.ou ? tr('Annoncé sur {ou} : « {phrase} »', { ou: dite.ou, phrase: dite.texte }) : tr('Annoncé sur toute la maison : « {phrase} »', { phrase: dite.texte })}
         </div>
@@ -536,6 +598,26 @@ function EcrireTv({ hass, clavier }) {
   );
 }
 
+/* Une flèche ou un volume qu'on garde enfoncé se répète (P5, ADR 0382 ; `armerRepetition`, maintien.js). La touche part au
+ * `pointerdown` ; le relâchement, la sortie du doigt, la page cachée, la fenêtre quittée ou la fiche fermée arrêtent tout. Un `click`
+ * sans pointeur (`detail` 0 ou absent : le clavier, Entrée ou Espace) envoie une touche ; celui qui suit un toucher est ignoré. */
+function useRepete() {
+  const arret = useRef(null);
+  const arreter = useRef(() => { if (arret.current) { arret.current(); arret.current = null; } }).current;
+  useEffect(() => {
+    const cachee = () => { if (document.visibilityState === 'hidden') arreter(); };
+    document.addEventListener('visibilitychange', cachee);
+    window.addEventListener('blur', arreter);
+    return () => { arreter(); document.removeEventListener('visibilitychange', cachee); window.removeEventListener('blur', arreter); };
+  }, [arreter]);
+  return (envoyer) => ({
+    onPointerDown: (e) => { if (e.button) return; arreter(); arret.current = armerRepetition(envoyer); },
+    onPointerUp: arreter, onPointerLeave: arreter, onPointerCancel: arreter,
+    onContextMenu: (e) => e.preventDefault(),
+    onClick: (e) => { if (!e || !e.detail) envoyer(); },
+  });
+}
+
 function PanneauTv({ id, v, choix, tele, integration, Segment, enfant = false, bloque = null, reprise = null }) {
   const S = (v.hass && v.hass.states) || {};
   // Le clavier de l'Apple TV qui attend du texte, sur l'appareil de ce lecteur (M3) ; sinon rien.
@@ -545,6 +627,7 @@ function PanneauTv({ id, v, choix, tele, integration, Segment, enfant = false, b
   const [lancee, setLancee] = useState(null);
   const [tout, setTout] = useState(false);
   const [onglet, setOnglet] = useState('applis');
+  const repete = useRepete();
   // Un appareil qui n'a QUE l'un des deux n'a pas besoin d'un segment ; sans applications, il s'ouvre sur la télécommande.
   const vue = (!choix && tele) ? 'tele' : (!tele ? 'applis' : onglet);
   const appeler = (appel) => { if (appel && v.hass && v.hass.callService) v.hass.callService(appel.domaine, appel.service, appel.data); };
@@ -578,15 +661,15 @@ function PanneauTv({ id, v, choix, tele, integration, Segment, enfant = false, b
   const noms = NOMS_TOUCHES();
   const sait = (g) => !!tele && tele.gestes.indexOf(g) >= 0;
   const fleche = (g, pos) => (sait(g) ? (
-    <button key={g} type="button" onClick={() => toucher(g)} aria-label={noms[g]} title={noms[g]}
+    <button key={g} type="button" {...repete(() => toucher(g))} aria-label={noms[g]} title={noms[g]}
       style={{ position: 'absolute', ...pos, width: 44, height: 44, padding: 0, border: 'none', borderRadius: '50%', background: 'none', color: 'var(--o-text1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <Fi i={DESSIN_TOUCHE[g]} size={18} />
     </button>
   ) : null);
   // Retour · Accueil · Lecture — chacun s'il existe pour cette intégration (`TOUCHES_TV`) — puis Veille : `turn_off` ou `turn_on`
   // selon l'état connu (`v.marche`), jamais un basculement ; seulement si le lecteur a les deux bits (M10).
-  const touche = (g, dessin, mot, action) => (
-    <button key={g} type="button" onClick={action} title={mot} style={{ ...PUCE(), height: 60, flexDirection: 'column', gap: 5, padding: '0 4px', borderRadius: 12, fontSize: 11.5 }}>
+  const touche = (g, dessin, mot, action, maintenue = false) => (
+    <button key={g} type="button" {...(maintenue ? repete(action) : { onClick: action })} title={mot} style={{ ...PUCE(), height: 60, flexDirection: 'column', gap: 5, padding: '0 4px', borderRadius: 12, fontSize: 11.5 }}>
       <Fi i={dessin} size={15} /><span style={{ ...ELLIPSE, maxWidth: '100%' }}>{mot}</span>
     </button>
   );
@@ -646,7 +729,7 @@ function PanneauTv({ id, v, choix, tele, integration, Segment, enfant = false, b
             {['retour', 'accueil', 'lecture'].filter(sait).map(g => touche(g, DESSIN_TOUCHE[g], g === 'lecture' ? tr('Lecture') : noms[g], () => toucher(g)))}
             {v.cmd.marche && touche('veille', 'power', tr('Veille'), () => v.marche(!v.on))}
             {/* Volume − et + (M1, ADR 0316) : seulement si la table de CETTE intégration les a (`TOUCHES_TV`) ; un geste, une touche. */}
-            {['vol_moins', 'vol_plus'].filter(sait).map(g => touche(g, DESSIN_TOUCHE[g], noms[g], () => toucher(g)))}
+            {['vol_moins', 'vol_plus'].filter(sait).map(g => touche(g, DESSIN_TOUCHE[g], noms[g], () => toucher(g), true))}
           </div>
         </>
       )}
@@ -802,6 +885,77 @@ function PanneauEnfant({ v, etat, profil, cfgProfil, admin, onReglages, onDemand
   );
 }
 
+/* ── Le minuteur (10/11, ADR 0341) ──────────────────────────────────────────────
+ *
+ * Sa demande : « un minuteur configurable et activable à la demande pour les médias ». Le serveur le tient (minuteurs.py, ADR 0064) :
+ * il part même la fiche fermée, et chaque écran lit la même heure de fin. Six durées en un appui, « Autre durée » de 5 en 5 min (−, +,
+ * « Démarrer ») ; en cours, « S’éteint à 22:40 · dans 29 min 41 s », +15 min, +1 h, Annuler — le serveur AJOUTE à ce qui reste. À la
+ * fin, la TV et la barre de son s'éteignent, une Echo s'arrête de jouer (`minuteurDe`, minuteurmedia.js). Éteinte — ou, pour ce qui
+ * s'arrête, sans rien en lecture —, les puces sont inertes et la phrase dit quand elles servent. Toutes attendent la réponse d'un appel
+ * en vol. La fiche ne le monte pas sur un écran bloqué par le mode enfant : la maison le tient déjà. */
+function PanneauMinuteur({ v, maintenant }) {
+  const m = v.minuteur;
+  const t = maintenant == null ? Date.now() : Number(maintenant);
+  // La fiche ouverte, les minuteurs se relisent toutes les 15 s (le relevé des lampes et des prises).
+  useEffect(() => abonnerMinuteurs({ rapide: true }), []);
+  const vivant = useVivant();
+  const [enVol, envoyer] = useEnVol();
+  const [erreur, setErreur] = useState('');
+  const [autre, setAutre] = useState(false);
+  const [libre, setLibre] = useState(AUTRE_DUREE.depart);
+  // Une fin passée, pas encore relue, n'est plus un minuteur — jamais « dans 0 s ».
+  const fin = m.fin && m.fin > t ? m.fin : null;
+  // Le décompte à la seconde tant qu'il tourne ; jamais quand l'heure est fixée (les tests).
+  useHorloge(maintenant == null && !!fin);
+  const peut = m.geste === 'arreter' ? v.on && (v.playing || v.paused) : v.on;
+  const H = v.hass;
+  const appel = (msg) => {
+    if (!H || typeof H.callWS !== 'function') return;
+    setErreur('');
+    envoyer(() => new Promise((ok) => ok(H.callWS(msg))).then((r) => { if (r && r.minuteurs) poserMinuteurs(r); if (vivant.current) setAutre(false); },
+      // Un refus nommé du serveur (`minuteur_deja_eteint`) se dit en clair ; le reste, la phrase générale.
+      (x) => { if (vivant.current) setErreur(x && x.code === 'unauthorized' ? tr('Ce compte ne pilote pas cet appareil.') : texteRefus(x) || tr('Le minuteur n’a pas pu être enregistré.')); }));
+  };
+  // En cours, sur l'entité qui le porte (un jumeau qui a pris la main garde le sien) ; sinon sur la cible.
+  const poser = (n) => { if (!enVol && (fin || peut)) appel({ type: 'loggia/minuteurs/poser', entity_id: fin ? m.porteur : m.cible, minutes: n }); };
+  const annuler = () => { if (!enVol) appel({ type: 'loggia/minuteurs/annuler', entity_id: m.porteur }); };
+  const actif = peut && !enVol;
+  const inerte = (ok) => (ok ? undefined : true);
+  const phrase = fin ? phraseMinuteurMedia(m.geste, fin, t) : consigneMinuteur(m.geste, { tv: !!v.l && v.l.classe === 'tv', peut });
+  return (
+    <div data-panneau="minuteur" style={{ ...PANNEAU, padding: '14px 18px 16px' }}>
+      <span style={TITRE}>{tr('Minuteur')}</span>
+      <span style={SOUS}>{phrase}</span>
+      {fin ? (
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          {AJOUTS_MEDIA.map(n => <button key={n} type="button" aria-disabled={inerte(!enVol)} onClick={() => poser(n)} style={LARGE(false, !enVol)}>{'+' + dureePrise(n)}</button>)}
+          <button type="button" aria-disabled={inerte(!enVol)} onClick={annuler} style={{ ...LARGE(false, !enVol), marginLeft: 'auto' }}>{tr('Annuler')}</button>
+        </div>
+      ) : (
+        <>
+          <div style={{ ...QUATRE_COLONNES, marginTop: 12 }}>
+            {DUREES_MEDIA.map(n => <button key={n} type="button" aria-disabled={inerte(actif)} onClick={() => poser(n)} style={LARGE(false, actif)}>{dureePrise(n)}</button>)}
+            <button type="button" aria-expanded={autre && peut} aria-disabled={inerte(actif)} onClick={() => { if (actif) setAutre(!autre); }}
+              style={{ ...LARGE(autre && peut, actif), gridColumn: 'span 2' }}>{tr('Autre durée')}</button>
+          </div>
+          {/* La durée libre : −, la durée, +, « Démarrer ». À 320 px, « Démarrer » passe à la ligne plutôt que de déborder. */}
+          {autre && peut && (
+            <div data-autre-duree="" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+              <button type="button" aria-label={tr('{n} min de moins', { n: AUTRE_DUREE.pas })} aria-disabled={inerte(libre > AUTRE_DUREE.min)}
+                onClick={() => setLibre(Math.max(AUTRE_DUREE.min, libre - AUTRE_DUREE.pas))} style={RONDE(44, false, libre > AUTRE_DUREE.min)}><Fi i="minus-small" size={16} /></button>
+              <span aria-live="polite" style={{ minWidth: 64, textAlign: 'center', fontSize: 16, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{dureePrise(libre)}</span>
+              <button type="button" aria-label={tr('{n} min de plus', { n: AUTRE_DUREE.pas })} aria-disabled={inerte(libre < AUTRE_DUREE.max)}
+                onClick={() => setLibre(Math.min(AUTRE_DUREE.max, libre + AUTRE_DUREE.pas))} style={RONDE(44, false, libre < AUTRE_DUREE.max)}><Fi i="plus-small" size={16} /></button>
+              <button type="button" aria-disabled={inerte(!enVol)} onClick={() => poser(libre)} style={{ ...LARGE(true, !enVol), marginLeft: 'auto', padding: '0 18px' }}>{tr('Démarrer')}</button>
+            </div>
+          )}
+        </>
+      )}
+      {erreur && <div role="alert" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--o-bad)', marginTop: 10 }}>{erreur}</div>}
+    </div>
+  );
+}
+
 /**
  * Le contenu de la feuille d'un lecteur. `vue` : celle de sa carte (`useVueLecteur`, App.jsx) ; `briques` : `RmBascule`,
  * `RmJauge`, `Segment` et `gradeVolume` d'App.jsx ; `glyphe` : le glyphe de sa carte (l'icône choisie devant) ; `epingle` : son
@@ -827,6 +981,9 @@ export default function FicheMediaContent({ id, vue: v, briques, glyphe = null, 
    * garde ses bits, mais `play_media` partirait dans le vide — pas de « Dire à Alexa », et l'annonce ne la vise pas (passe bis, 17/10). */
   const cibleHacs = vivante && lecteur.alexa && lecteur.annonceHacs && !enPanne(lecteur.annonceHacs, S[lecteur.annonceHacs]) ? lecteur.annonceHacs : null;
   const peutAnnoncer = vivante && !!lecteur.alexa && !!(lecteur.annonce || cibleHacs);
+  /* Spotify sur cette Echo (ADR 0344) : ses noms — le sien, ceux de sa jumelle HACS et de l'entité qui commande —, que la liste de
+   * Spotify Connect reconnaît mot pour mot. */
+  const nomsSpotify = [id, lecteur.annonceHacs, lecteur.ctl].filter(Boolean).map(x => S[x] && S[x].attributes && S[x].attributes.friendly_name).filter(Boolean);
   /* L'annonce de `tts.speak` (M2) : une enceinte d'une plateforme qui lit la voix (`cast`), qui sait jouer un média (le bit PLAY_MEDIA,
    * 512), et au moins un moteur de synthèse qui répond. Une Echo n'est pas de `cast` : elle garde la sienne, par Alexa. */
   const moteurs = vivante && litUneVoix(plateformeDe(id)) && (Number((S[id] && S[id].attributes && S[id].attributes.supported_features) || 0) & 512) ? moteursVoix(S) : [];
@@ -946,7 +1103,20 @@ export default function FicheMediaContent({ id, vue: v, briques, glyphe = null, 
               {ligneVolume && <div data-plafond-ligne="" style={{ fontSize: 12, fontWeight: 700, color: v.bute ? 'var(--o-accent-soft)' : 'var(--o-text2)', marginTop: 8 }}>{ligneVolume}</div>}
             </>
           )}
+          {/* Le prochain réveil, minuteur et rappel d'une Echo (P4, ADR 0382) : une ligne sous le volume, seulement s'il y en a un. */}
+          {vivante && lecteur.alexa && (() => {
+            const t = maintenant || Date.now();
+            const p = prochainsEcho(entitesAppareilDe(id), S, cleTraduction, t);
+            return p.length ? <div data-echo-prochains="" style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', marginTop: 10 }}>{p.map(x => texteProchain(x, t)).join(' · ')}</div> : null;
+          })()}
         </div>
+
+        {/* Le minuteur (ADR 0341), sous ce qui joue : pas sur un écran bloqué par le mode enfant, qui le tient déjà. */}
+        {/* Spotify (ADR 0344), avant le minuteur : une pochette, et la playlist part sur cette Echo. */}
+        {vivante && !v.bloque && lecteur.alexa && <PanneauSpotify hass={v.hass} noms={nomsSpotify} />}
+        {vivante && !v.bloque && v.minuteur && <PanneauMinuteur v={v} maintenant={maintenant} />}
+        {/* Grouper les enceintes (P6, ADR 0383), après le minuteur : pas sur un écran bloqué par le mode enfant. */}
+        {vivante && !v.bloque && <PanneauGroupe id={id} v={v} />}
 
         {/* Le mode enfant (E18) : son panneau quand le profil agit ou que ses limites sont levées ; sinon, un lecteur qui a une zone porte
           * la rangée « Mode enfant · Désactivé », qui ouvre la feuille des réglages (E20) — le pavé d'abord pour un compte ordinaire. */}

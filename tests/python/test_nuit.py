@@ -1010,3 +1010,22 @@ def test_une_veilleuse_interrupteur_s_arme_et_s_eteint_comme_une_lampe(creer):
     lancer(n.hass.taches.pop())
     assert n.hass.services.appels == [("homeassistant", "turn_off", {"entity_id": ["switch.veilleuse"]})]
     assert "switch.veilleuse" not in n._minuteurs
+
+
+def test_le_coucher_n_envoie_rien_a_une_ampoule_sans_courant(creer):
+    """Audit du 12/11, X4 (ADR 0369) : l'ampoule du salon est derriere un
+    interrupteur mural. Eteint, elle n'a plus de courant - Home Assistant la
+    dit encore allumee -, et le coucher ne lui envoie rien. Rallume, elle
+    redevient une lampe comme les autres."""
+    relation = {"loggia_alimentation": {"light.salon": "light.interrupteur"}}
+    n = creer(cfg_coucher(), {**LAMPES, "light.interrupteur": FauxEtat("off")}, partage=relation)
+    lancer(n._async_coucher())
+    assert n.hass.services.appels == [("light", "turn_off", {"entity_id": ["light.veilleuse"]})]
+    n = creer(cfg_coucher(), {**LAMPES, "light.interrupteur": FauxEtat("on")}, partage=relation)
+    lancer(n._async_coucher())
+    assert n.hass.services.appels == [
+        ("light", "turn_off", {"entity_id": ["light.interrupteur", "light.salon", "light.veilleuse"]})]
+    # Un interrupteur injoignable ne dit rien : l'ampoule garde son propre etat.
+    n = creer(cfg_coucher(), {**LAMPES, "light.interrupteur": FauxEtat("unavailable")}, partage=relation)
+    lancer(n._async_coucher())
+    assert n.hass.services.appels == [("light", "turn_off", {"entity_id": ["light.salon", "light.veilleuse"]})]

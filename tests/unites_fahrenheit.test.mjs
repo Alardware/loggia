@@ -89,7 +89,8 @@ test('la carte capteur passe l’unité de son capteur à la jauge, qui écrit `
 test('la salutation de l’Accueil dit l’unité de la maison, pas « °C » en dur', () => {
   const app = MONOLITHE;
   assert.ok(!app.includes('a.inTemp.toFixed(1)}°C'), 'le « °C » en dur est revenu dans la salutation');
-  assert.ok(app.includes("{a && a.inTemp != null ? ` · ${dec(a.inTemp, 1)} °${a.inTempUnite}` : ''}"), 'la salutation lit l’unité calculée avec la moyenne');
+  // ASSERTION MODIFIÉE (12/11, audit) : une espace insécable entre le nombre et « °C », qui partait seul à la ligne au téléphone.
+  assert.ok(app.includes("{a && a.inTemp != null ? ` · ${dec(a.inTemp, 1)}\\u00a0°${a.inTempUnite}` : ''"), 'la salutation lit l’unité calculée avec la moyenne');
   assert.ok(app.includes('const inTempUnite = uniteTemp(null, hass);') && app.includes('const inTemp = moyenneTemperatures(indoor.map(r => ({ v: r.temp, unite: uniteTemp(r.tempId && S[r.tempId] ? S[r.tempId].attributes : null, hass) })), inTempUnite);'), 'chaque pièce passe par le Celsius avant la moyenne');
   assert.ok(app.includes('rooms, inTemp, inTempUnite, inHum,'), 'l’unité voyage avec la valeur');
 });

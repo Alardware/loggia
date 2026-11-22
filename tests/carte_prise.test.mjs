@@ -472,7 +472,8 @@ test('défaire la demande, sur la vraie carte — pendant la demande seule la ba
 });
 
 test('la fabrique : la carte d’une PRISE ; la carte générique ne connaît plus les prises', () => {
-  assert.ok(APP.includes("              : (d === 'switch' && priseDe(S, k).prise) ? <RoomPriseCard id={id} hass={hass} onOpen={ouvrir} titre={label} />\n              : ROOM_GENERIQUES.indexOf(d) >= 0 ? <RoomGenericCard"));
+  // ASSERTION MODIFIÉE (19/11, fluidité, point 2 ; ADR 0377) : la fabrique pose la carte protégée (`cartesMemo`, `memeCarte`) et lui passe la minute.
+  assert.ok(APP.includes("              : (d === 'switch' && priseDe(S, k).prise) ? <M.prise id={id} hass={hass} minute={minute} onOpen={ouvrir} titre={label} />\n              : ROOM_GENERIQUES.indexOf(d) >= 0 ? <M.generique") && APP.includes('prise: memo(RoomPriseCard, memeCarte), generique: memo(RoomGenericCard, memeCarte)'));
   const debut = APP.indexOf('function RoomGenericCard(');
   const generique = APP.slice(debut, APP.indexOf('\n}\n', debut));
   for (const mot of ['priseDe', 'carteDePrise', 'priseVive', 'TYPES_PRISE', 'fmtW', 'o-prise-']) assert.ok(!generique.includes(mot), 'la carte générique lit encore ' + mot);

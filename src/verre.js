@@ -9,8 +9,11 @@
  * Un réglage de L'APPAREIL, comme le « Ciel animé » (wxpresets.js) : c'est la
  * tablette murale qui rame, pas le PC. « Auto » suit la fluidité que le ciel
  * de l'Accueil mesure (`loggia-ciel-actuel`, posé par ciel.js) : plein donne
- * Plein, léger ou fixe donnent Léger. Sans mesure EN COURS — effets coupés,
- * qualité du ciel forcée, rien de mesuré —, Auto reste à Plein, comme avant.
+ * Plein, léger ou fixe donnent Léger. Ciel COUPÉ (audit des thèmes du 13/11,
+ * V2) : Auto garde la dernière mesure connue, et sans mesure choisit Léger sur
+ * un écran tactile — couper le ciel pour soulager une tablette lui rendait le
+ * flou de toutes ses cartes. Qualité du ciel forcée, ou rien de mesuré sur un
+ * ordinateur : Auto reste à Plein, comme avant.
  *
  * Ce module ne dépend de rien : le démarrage (theme.js) pose la classe avant
  * le premier rendu, et il ne doit pas tirer le ciel ni sa table avec lui. Il
@@ -24,10 +27,15 @@ export const lireVerre = () => { const q = lire(CLE_VERRE); return q === 'plein'
 
 /** Ce que la mesure du ciel dit ici : 'plein', 'leger', ou null sans mesure en cours. */
 export function verreMesure() {
-  if (lire('loggia-wxfx') === '0' || lire('loggia-ciel-qualite')) return null;
+  if (lire('loggia-ciel-qualite')) return null;
   const n = lire('loggia-ciel-actuel');
-  return n === 'plein' ? n : n === 'leger' || n === 'fixe' ? 'leger' : null;
+  const mesure = n === 'plein' ? n : n === 'leger' || n === 'fixe' ? 'leger' : null;
+  // Ciel coupé : la dernière mesure tient ; sans elle, un écran tactile passe en Léger.
+  if (lire('loggia-wxfx') === '0') return mesure || (tactile() ? 'leger' : null);
+  return mesure;
 }
+
+const tactile = () => { try { return !!(globalThis.matchMedia && globalThis.matchMedia('(pointer: coarse)').matches); } catch { return false; } };
 
 /** Le rendu retenu sur cet appareil : true pour Léger. */
 export const verreLeger = () => { const q = lireVerre(); return q === 'auto' ? verreMesure() === 'leger' : q === 'leger'; };

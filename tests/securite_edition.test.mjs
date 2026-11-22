@@ -65,7 +65,8 @@ test('la vue Securite passe par le meme editeur d’agencement que les autres vu
   assert.ok(vue.includes('{edit && <BandeauEdition ed={ed} onAjouter={() => setAddSheet(true)} onEnt={onEnt} />}'), 'le bandeau d’edition des autres vues — un seul, en tete, avec « Entites de la vue » (17/09)');
   assert.ok(vue.includes('? <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit} hass={hass} taille={false} />'), 'chaque carte se saisit, se retire, se renomme — sans compacte ici');
   assert.ok(vue.includes('{bloc.titre && (edit ? <EditableCard plat ed={ed} id={bloc.titre} nom={nomDe(bloc.titre)} onEdit={setCardEdit}>{titre}</EditableCard> : titre)}'), 'les titres aussi');
-  assert.ok(vue.includes("className={ed.estLarge(k) ? 'o-cvw2' : ''}"), 'la largeur choisie vaut hors edition');
+  // ASSERTION MODIFIÉE (12/11, audit) : la classe de la carte dit aussi, pour la Présence, les rangées où elle est seule (`o-seule-k…`).
+  assert.ok(vue.includes("className={classeCarte(k)}") && vue.includes("[ed.estLarge(k) ? 'o-cvw2' : '', ...(k === 'carte:presence' ? seule.map(n => CLASSES_SEULE[n]) : [])]"), 'la largeur choisie vaut hors edition');
   assert.ok(vue.includes('{edit && bi === blocs.length - 1 && <CarteAjout onClick={() => setAddSheet(true)} />}') && vue.includes('<ComposeurCartes hass={hass} dc={dc} present={ed.ids} onToggle={ed.toggle}') && vue.includes("pied={<button onClick={addSection} style={editBtn(false)}>{tr('Ajouter un titre')}</button>}"), 'ajouter une carte ou un titre');
   assert.ok(vue.includes('{cardEdit && <CardEditSheet ed={ed} id={cardEdit} nom={nomDe(cardEdit)} origine={origineDe(cardEdit)} hass={hass} onClose={() => setCardEdit(null)} />}'), 'la fiche d’une carte');
   assert.ok(vue.includes('<div ref={ed.gridRef}'), 'le glisser-deposer a sa grille');

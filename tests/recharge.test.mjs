@@ -20,7 +20,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { creerRecharge, CLE_RECHARGE, FENETRE_RECHARGE } from '../src/recharge.js';
+import { creerRecharge, CLE_RECHARGE, FENETRE_RECHARGE, PAUSES_ATTENTE } from '../src/recharge.js';
 
 import { MONOLITHE } from './monolithe.mjs'; // App.jsx et ce qui en sort (ADR 0282)
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -28,9 +28,10 @@ const lire = (...p) => readFileSync(join(RACINE, ...p), 'utf8');
 const NL = String.fromCharCode(10);
 const ANTISLASH = String.fromCharCode(92);
 
-/** Un navigateur de poche : une session qui survit au rechargement, une horloge qu'on avance. */
+/** Un navigateur de poche : une session qui survit au rechargement, une horloge qu'on avance, un serveur qu'on
+ * coupe (`enService`) et un réseau qu'on retire (`reseau`). Ses pauses durent une milliseconde. */
 function monde({ enLigne = true, sansSession = false } = {}) {
-  const m = { t: 1800000000000, recharges: 0, session: new Map() };
+  const m = { t: 1800000000000, recharges: 0, session: new Map(), reseau: enLigne, enService: true, verifications: 0 };
   m.stockage = () => {
     if (sansSession) throw new Error('SecurityError');
     return {
@@ -40,10 +41,16 @@ function monde({ enLigne = true, sansSession = false } = {}) {
     };
   };
   m.recharger = () => { m.recharges += 1; };
-  m.enLigne = () => enLigne;
+  m.enLigne = () => m.reseau;
   m.maintenant = () => m.t;
+  m.pageServie = async () => { m.verifications += 1; return m.enService; };
+  m.pauses = [];
+  m.attendre = (ms) => { m.pauses.push(ms); return new Promise(r => setTimeout(r, 1)); };
   return m;
 }
+
+/** Laisse passer quelques pauses du monde de poche. */
+const patienter = (ms = 30) => new Promise(r => setTimeout(r, ms));
 
 /** Le 404 d'un import à la demande, tel que Chrome le dit. */
 const echoue = () => Promise.reject(new TypeError('Failed to fetch dynamically imported module'));
@@ -109,13 +116,16 @@ test('la mise à jour suivante recharge de nouveau, même sans chargement réuss
     'une tablette murale reste des semaines sur l’Accueil : le drapeau ne doit pas la priver du prochain rechargement');
 });
 
-test('l’écouteur de Vite recharge et retient l’erreur — une fois', () => {
+test('l’écouteur de Vite recharge et retient l’erreur — une fois', async () => {
   const m = monde();
   const fenetre = new EventTarget();
   const retirer = creerRecharge(m).ecouter(fenetre);
   const ev = new Event('vite:preloadError', { cancelable: true });
   fenetre.dispatchEvent(ev);
   assert.equal(ev.defaultPrevented, true, 'retenue : Vite rend undefined au lieu de lever');
+  // ASSERTION MODIFIÉE (18/11, popup vide après un redémarrage de HA) : la page ne part plus à l'instant de l'échec, mais
+  // dès que le serveur répond qu'il la sert — ici tout de suite, le temps d'une vérification.
+  await patienter();
   assert.equal(m.recharges, 1);
   retirer();
   m.t += 3000;
@@ -145,13 +155,64 @@ test('l’import retenu par l’écouteur rend undefined : l’écran attend, sa
   assert.equal(m.recharges, 1);
 });
 
-test('sans mémoire de session, ou hors ligne, rien ne recharge', async () => {
-  for (const m of [monde({ sansSession: true }), monde({ enLigne: false })]) {
-    const erreur = new TypeError('Failed to fetch dynamically imported module');
-    await assert.rejects(creerRecharge(m).charger(() => Promise.reject(erreur)), (e) => e === erreur);
-    assert.equal(m.recharges, 0,
-      'sans mémoire, une seule fois ne se garantit pas ; hors ligne, la page d’erreur du navigateur remplacerait la nôtre');
-  }
+// ASSERTION MODIFIÉE (18/11) : « hors ligne » quitte ce test pour le suivant — la page n'y lève plus, elle attend le réseau.
+test('sans mémoire de session, rien ne recharge', async () => {
+  const m = monde({ sansSession: true });
+  const erreur = new TypeError('Failed to fetch dynamically imported module');
+  await assert.rejects(creerRecharge(m).charger(() => Promise.reject(erreur)), (e) => e === erreur);
+  assert.equal(m.recharges, 0, 'sans mémoire, une seule fois ne se garantit pas');
+});
+
+/* 18/11, son retour : « si j'ouvre une popup rien ne s'affiche, je dois relancer l'app ». Home Assistant venait de
+ * redémarrer. L'appli garde la page ouverte, et HA répond avant d'avoir rechargé Loggia — le composant publie ses
+ * fichiers à la FIN de sa mise en route : jusque-là, tout fichier de Loggia rend 404. La première popup demandée
+ * dans cette fenêtre échouait, la page repartait AUSSITÔT… sur le même 404, et restait sur « 404: Not Found » :
+ * plus aucun code à nous pour réessayer. Elle attend maintenant que le serveur la serve. */
+test('HA qui redémarre ne sert pas encore la page : elle attend, sans repartir, puis repart dès qu’il la sert', async () => {
+  const m = monde();
+  m.enService = false;
+  const p = creerRecharge(m).charger(echoue);
+  await patienter();
+  assert.equal(m.recharges, 0, 'repartir maintenant tomberait sur le 404 du serveur, et la page y resterait');
+  assert.ok(m.verifications > 1, 'le serveur est redemandé, pas une seule fois');
+  assert.ok(m.pauses.length > 0 && m.pauses.every((ms, i) => ms === PAUSES_ATTENTE[Math.min(i, PAUSES_ATTENTE.length - 1)]),
+    'des pauses rapprochées d’abord, puis la dernière, répétée : ' + m.pauses.slice(0, 8).join(', '));
+  assert.equal(await enAttente(p), true, 'la popup garde son repli pendant l’attente, jamais l’écran de secours');
+  assert.equal(m.session.has(CLE_RECHARGE), false, 'rien n’est parti : aucune date');
+  m.t += 45000;
+  m.enService = true;
+  await patienter();
+  assert.equal(m.recharges, 1, 'le serveur sert la page : elle repart, une fois');
+  assert.equal(m.session.get(CLE_RECHARGE), String(m.t),
+    'la date est celle du DÉPART : un nouvel échec juste après se dira, sans boucle, quelle qu’ait été l’attente');
+});
+
+test('hors ligne, la page attend le réseau au lieu de lever, puis repart', async () => {
+  const m = monde({ enLigne: false });
+  const p = creerRecharge(m).charger(echoue);
+  await patienter();
+  assert.equal(m.recharges, 0, 'hors ligne, la page d’erreur du navigateur remplacerait la nôtre');
+  assert.equal(m.verifications, 0, 'hors ligne, inutile de demander au serveur');
+  assert.equal(await enAttente(p), true,
+    'une erreur ici resterait gravée dans le chargement à la demande : la fiche resterait cassée au retour du réseau');
+  m.reseau = true;
+  await patienter();
+  assert.equal(m.recharges, 1);
+});
+
+test('l’écouteur de Vite retient l’erreur tout de suite, et ne recharge qu’une fois la page servie', async () => {
+  const m = monde();
+  m.enService = false;
+  const fenetre = new EventTarget();
+  creerRecharge(m).ecouter(fenetre);
+  const ev = new Event('vite:preloadError', { cancelable: true });
+  fenetre.dispatchEvent(ev);
+  assert.equal(ev.defaultPrevented, true, 'la décision se prend à l’instant : Vite ne doit pas lever');
+  await patienter();
+  assert.equal(m.recharges, 0);
+  m.enService = true;
+  await patienter();
+  assert.equal(m.recharges, 1);
 });
 
 /** Les modules de src, sous-dossiers compris. */

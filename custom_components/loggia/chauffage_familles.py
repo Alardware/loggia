@@ -456,6 +456,28 @@ def deja(fam: str, cible: dict, etat: Any, attributs: Any, temperatures: Any,
     return abs(actuelle - consigne_en_unite(float(t) + decalage, attrs, unite)) <= tolerance
 
 
+def deja_assez_chaud(fam: str, cible: dict, etat: Any, attributs: Any, temperatures: Any,
+                     unite: str = "C", decalage: float = 0.0) -> bool:
+    """Ce thermostat ETEINT mesure-t-il deja la consigne de `cible`, ou plus ? Le
+    planning ne l'allume pas : allume, il ne chaufferait pas, et un poele ferait
+    tout son allumage pour s'eteindre aussitot (18/11, chez lui : sa sonde a 37 °C
+    pour 17 °C voulus, un allumage pour rien). Il s'allume quand sa mesure passe
+    sous la consigne. Sa PROPRE mesure, celle sur laquelle il s'allumerait ou
+    s'arreterait de lui-meme — pas une sonde de la piece. En veille (`en_veille`),
+    il est deja allume ; sans mesure, on ne retient rien."""
+    attrs = attributs if isinstance(attributs, dict) else {}
+    if fam != "thermostat" or str(etat if etat is not None else "") != "off" or en_veille(fam, etat, attrs):
+        return False
+    mode, temperature = cible.get("mode"), cible.get("temperature")
+    if mode == "arret":
+        return False
+    t = temperature if isinstance(temperature, (int, float)) else temperature_du_mode(mode, temperatures)
+    mesure = _nombre(attrs.get("current_temperature"))
+    if t is None or mesure is None or mode_chauffe(attrs) is None:
+        return False
+    return mesure >= consigne_en_unite(float(t) + decalage, attrs, unite)
+
+
 def pas_revele(envoye: Any, lue: Any) -> float | None:
     """Le pas qu'un appareil REVELE en prenant une consigne a sa facon (30/10) : un
     poele MCZ n'annonce pas `target_temp_step`, et 17,5 °C envoyes lui font 17. Une

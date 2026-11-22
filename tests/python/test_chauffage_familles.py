@@ -536,3 +536,46 @@ def test_vers_celsius_est_l_inverse_de_depuis_celsius():
     assert unites.vers_celsius(68, "F") == 20
     assert unites.vers_celsius(20, "C") == 20
     assert round(unites.vers_celsius(unites.depuis_celsius(17.5, "F"), "F"), 6) == 17.5
+
+
+# ── Eteint, sa mesure deja a la consigne (ADR 0375) ─────────────────────────
+
+def test_un_thermostat_eteint_deja_a_sa_consigne_ne_s_allume_pas(fam):
+    """18/11, chez lui : la sonde du poele a 37 °C pour 17 °C voulus. L'allumer, c'etait
+    tout un allumage pour s'eteindre aussitot. Sa PROPRE mesure decide, au pas de l'appareil."""
+    eteint = {"hvac_modes": ["off", "heat"], "hvac_action": "off", "current_temperature": 37}
+    eco = {"mode": "eco", "temperature": None}
+    temperatures = {"confort": 20, "eco": 17}
+    assert fam.deja_assez_chaud("thermostat", eco, "off", eteint, temperatures)
+    assert fam.deja_assez_chaud("thermostat", eco, "off", {**eteint, "current_temperature": 17}, temperatures), \
+        "a la consigne : il ne chaufferait pas"
+    assert not fam.deja_assez_chaud("thermostat", eco, "off", {**eteint, "current_temperature": 16.5}, temperatures)
+    assert not fam.deja_assez_chaud("thermostat", {"mode": "confort", "temperature": None}, "off",
+                                    {**eteint, "current_temperature": 19}, temperatures)
+    # Le decalage de son capteur (30/10) : 17 °C dans la piece, c'est 19 a son capteur.
+    assert not fam.deja_assez_chaud("thermostat", eco, "off", {**eteint, "current_temperature": 18}, temperatures,
+                                    decalage=2.0)
+    # En °F : 17 °C font 63 °F au degre.
+    assert fam.deja_assez_chaud("thermostat", eco, "off", {**eteint, "current_temperature": 63}, temperatures, unite="F")
+    assert not fam.deja_assez_chaud("thermostat", eco, "off", {**eteint, "current_temperature": 62}, temperatures,
+                                    unite="F")
+
+
+@pytest.mark.parametrize("cas", ["allume", "en_veille", "arret_voulu", "sans_mesure", "sans_chauffe", "fil_pilote",
+                                 "vtherm"])
+def test_ce_qui_n_est_pas_retenu_au_chaud(fam, cas):
+    eteint = {"hvac_modes": ["off", "heat"], "hvac_action": "off", "current_temperature": 30}
+    cible, etat, attrs, famille = {"mode": "eco", "temperature": None}, "off", dict(eteint), "thermostat"
+    if cas == "allume":
+        etat = "heat"
+    elif cas == "en_veille":
+        attrs["hvac_action"] = "idle"
+    elif cas == "arret_voulu":
+        cible = {"mode": "arret", "temperature": None}
+    elif cas == "sans_mesure":
+        attrs.pop("current_temperature")
+    elif cas == "sans_chauffe":
+        attrs["hvac_modes"] = ["off", "cool"]
+    else:
+        famille = cas
+    assert not fam.deja_assez_chaud(famille, cible, etat, attrs, {"eco": 17})

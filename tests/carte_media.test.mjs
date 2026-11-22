@@ -246,12 +246,14 @@ test('M14 : la carte s’abonne à son entité et à son jumeau ; l’identifian
 
 test('le gabarit : la puce de 44 au pied positionnée, la progression de 3 px, la source et la bascule à la carte large seule', () => {
   assert.ok(APP.includes("const RM_MEDIA_PUCE = { ...RM_BTN, flex: 'none', width: 44, height: 44, padding: 0, borderRadius: 12, border: 'none'"), 'la puce de sa maquette : 44 × 44, arrondi 12, sans bordure, positionnée');
-  assert.ok(APP.includes("style={{ position: 'relative', height: 3, marginTop: 8, borderRadius: 2, background: 'var(--o-s1)', overflow: 'hidden', flexShrink: 0 }}"), 'la progression : 3 px, 8 px dessus');
+  // ASSERTION MODIFIÉE (12/11, audit) : 4 px au-dessus de la progression, plus 8 — le nom descend de 4 px (E13), la barre les rend : le pied reste à 168 px.
+  assert.ok(APP.includes("style={{ position: 'relative', height: 3, marginTop: 4, borderRadius: 2, background: 'var(--o-s1)', overflow: 'hidden', flexShrink: 0 }}"), 'la progression : 3 px, 4 px dessus');
   const i = APP.indexOf('\nfunction RoomMediaCard(');
   const carteSrc = APP.slice(i, APP.indexOf('\n}\n', i));
   assert.ok(carteSrc.includes('className="o-seul-large" data-source=""') && carteSrc.includes('<RmBascule className="o-seul-large"') && carteSrc.includes('<div className="o-seul-large" style={{ display: \'flex\', alignItems: \'flex-end\', gap: 8, marginTop: \'auto\', paddingTop: \'var(--o-pied-haut, 8px)\' }}>'),
     'la source, la bascule et le pied s’écrivent pour la carte large (ADR 0202) ; l’étroite a les siens (tâche 5)');
-  assert.ok(carteSrc.includes("marginTop: 'var(--o-milieu-haut, 10px)'"), '10 px sous la plaque, 8 pour le pied : le budget de 146 (§ 6.1)');
+  // ASSERTION MODIFIÉE (12/11, audit) : le nom 14 px sous la plaque, comme toutes les cartes (E13 ; `RM_SOUS_PLAQUE`) — la progression rend ces 4 px, le budget reste de 146.
+  assert.ok(carteSrc.includes('marginTop: RM_SOUS_PLAQUE') && APP.includes("const RM_SOUS_PLAQUE = 'var(--o-milieu-haut, 14px)';"), '14 px sous la plaque, 8 pour le pied : le budget de 146 (§ 6.1, E13)');
   assert.ok(!carteSrc.includes('marginTop: 14 }}>'), 'aucune marge fixe ne pousse le corps dehors (ADR 0179)');
 });
 

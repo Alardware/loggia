@@ -28,7 +28,7 @@
  */
 
 import { tr, locale } from './i18n.js';
-import { nombre, fmtWatts } from './format.js';
+import { nombre, fmtWatts, dureeMinutes, heureCourte } from './format.js';
 
 /**
  * Les appareils que Loggia sait reconnaître : la couleur qui les dit (un
@@ -398,7 +398,7 @@ export function ligneDePrise({ st = null, mesure = false, watts = null, minuteur
   return { ligne: mesure ? 7 : 8, depuis };
 }
 
-const heureDe = (t) => new Date(t).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+const heureDe = heureCourte;
 
 /** « Depuis » : l'heure si c'est aujourd'hui, sinon « le 2 sept. » — l'année au-delà d'un an. */
 export function quandPrise(t, maintenant = Date.now()) {
@@ -413,12 +413,8 @@ export function quandPrise(t, maintenant = Date.now()) {
 /** Des kilowattheures : deux décimales sous 10, une au-delà (sa maquette). */
 export const kwhPrise = (k) => nombre(k, k < 10 ? 2 : 1) + ' kWh';
 
-/** Une durée en minutes : « 30 min », « 1 h », « 1 h 05 ». */
-export function dureePrise(min) {
-  const m = Math.max(0, Math.round(Number(min) || 0));
-  if (m < 60) return tr('{n} min', { n: m });
-  return m % 60 ? tr('{h} h {m}', { h: Math.floor(m / 60), m: String(m % 60).padStart(2, '0') }) : tr('{h} h', { h: m / 60 });
-}
+/** Une durée en minutes : « 30 min », « 1 h », « 1 h 05 » — `dureeMinutes` (format.js, lot 5b de l'audit du 12/11). */
+export function dureePrise(min) { return dureeMinutes(min); }
 
 /**
  * Le temps qu'il reste avant `fin` (ms), pour un minuteur qui se DÉCOMPTE (sa

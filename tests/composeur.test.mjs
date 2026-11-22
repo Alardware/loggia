@@ -25,7 +25,8 @@ test('la fabrique rend toute cle : entite, zone, distributeur, plante — et por
   assert.ok(dc.includes('{feederPop && <FicheDistributeur hass={hass} onClose={() => setFeederPop(false)} />}') && dc.includes('{plantPop && <FichePlante pl={plantPop}'), 'leurs fiches voyagent avec la fabrique');
   // ASSERTION MODIFIÉE (30/10, G3-E2/E3) : les popups du chauffe-eau et de la borne se ferment avec les autres.
   // ASSERTION MODIFIÉE (01/11, ADR 0318) : la popup d'un traceur d'objet se ferme avec les autres.
-  assert.ok(dc.includes('setFeederPop(false); setPlantPop(null); setEauPop(null); setBornePop(false); setTraceurPop(null); };'), 'fermer les ferme aussi');
+  // ASSERTION MODIFIÉE (21/11, ADR 0386) : la popup d'une voiture, d'une litière ou d'une fontaine se ferme aussi.
+  assert.ok(dc.includes('setFeederPop(false); setPlantPop(null); setEauPop(null); setBornePop(false); setTraceurPop(null); setComposePop(null); };'), 'fermer les ferme aussi');
   assert.ok(dc.includes('const nom = (k) => nomDeCle(S, k);'), 'et elle sait nommer une cle');
   const n = bloc('function nomDeCle(', NL + '}');
   assert.ok(n.includes("if (s === 'obj:feeder') return tr('Distributeur');") && n.includes("if (s.indexOf('plant:') === 0)") && n.includes("if (s.indexOf('zone:') === 0)") && n.includes('return cvName(S && S[s], s);'), 'distributeur, plante, zone, sinon l’entite');
@@ -37,7 +38,8 @@ test('Objets ne compose plus rien : il demande ses cartes a la fabrique', () => 
   // ASSERTION MODIFIÉE (chantier Capteurs, tâche 7) : la carte standard d'une mesure porte le nom de sa pièce, que l'objet lui donne (C13).
   // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 9 ; C20) : une carte de groupe se nomme par sa clé, comme le distributeur et la plante.
   // ASSERTION MODIFIÉE (30/10, G3-E3) : la borne de recharge aussi se nomme par sa clé (`obj:borne`).
-  assert.ok(v.includes("const cle = (o.type === 'feeder' || o.type === 'plant' || o.type === 'groupe' || o.type === 'borne') ? o.cle : o.id;") && v.includes('return compacte ? dc.compact(cle, ed.labelOf(o.cle) || null) : dc.card(cle, ed.labelOf(o.cle) || o.nomCarte || null);'), 'la fabrique, pour tout');
+  // ASSERTION MODIFIÉE (21/11, ADR 0386) : la voiture, la litière et la fontaine (`app`) se nomment aussi par leur clé.
+  assert.ok(v.includes("const cle = (o.type === 'feeder' || o.type === 'plant' || o.type === 'groupe' || o.type === 'borne' || o.type === 'app') ? o.cle : o.id;") && v.includes('return compacte ? dc.compact(cle, ed.labelOf(o.cle) || null) : dc.card(cle, ed.labelOf(o.cle) || o.nomCarte || null);'), 'la fabrique, pour tout');
 });
 
 test('le composeur : cartes de Loggia d’abord, appareils par piece, puces, recherche qui cherche tout', () => {

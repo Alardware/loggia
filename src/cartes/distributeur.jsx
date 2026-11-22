@@ -8,7 +8,7 @@ import { LISERE } from '../styles.js';
 import { locale, tr } from '../i18n.js';
 import { SURF_CARTE } from '../app/noyau.jsx';
 import { FicheAppareil, BoutonEpingle } from '../appareils/fiches.jsx';
-import { RM_CARD, RM_ICO, RM_MILIEU, RM_NAME, RM_SUB, GlypheCarte } from './briques.jsx';
+import { RM_CARD, RM_CARD_HAUT, RM_GAUCHE, RM_ICO, RM_MILIEU, RM_NAME, RM_SUB, GlypheCarte } from './briques.jsx';
 import { RM_PUCE_CHOISIE, ChiffreNommeHaut, ChiffreNomme, RM_PUCE_ROBOT } from './robot.jsx';
 
 // Une vanne (chantier IoT, étape 3) : sa carte — large, étroite, compacte — et sa popup, d'UN morceau chargé à la demande (vanne.jsx,
@@ -65,16 +65,18 @@ function RoomFeederCard({ v, onOpen, chip = false }) {
   return (
     /* La carte n'est pas un bouton (ADR 0074) : la surface, premier enfant, dit ce que la carte affiche — le nom, la phrase, le
      * réservoir — et la puce, positionnée, passe au-dessus d'elle. */
-    <div className={'o-rmcard o-gabarit' + (v.mort ? ' o-panne' : '')} style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default', border: LISERE }}>
+    <div className={'o-rmcard o-gabarit' + (v.mort ? ' o-panne' : '')} style={{ ...RM_CARD_HAUT, position: 'relative', cursor: onOpen ? 'pointer' : 'default', border: LISERE }}>
       {onOpen && <Surface onClick={() => onOpen()} label={label} />}
       {/* La ligne du haut : la plaque, et le réservoir nommé de la carte étroite. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
         <span style={RM_ICO(fond, encre)}><Fi i="paw" size={17} /></span>
         {v.pct != null && <ChiffreNommeHaut v={v.pct} nom={tr('Réservoir')} />}
       </div>
-      {/* La rangée du milieu, 10 px sous la plaque : le nom et la phrase à gauche, le réservoir nommé de la carte large à droite. */}
-      <div style={{ ...RM_MILIEU, marginTop: 'var(--o-milieu-haut, 10px)' }}>
-        <div style={{ minWidth: 0 }}>
+      {/* La rangée du milieu, sous la plaque : le nom et la phrase à gauche, le réservoir nommé de la carte large à droite. */}
+      {/* Le nom 14 px sous la plaque, comme sur toutes les cartes (audit du 12/11, `RM_MILIEU`) : 10 partout le posait 4 px plus haut
+        * que celui d'une lumière ; la carte étroite garde ses 10 (`--o-milieu-haut`). Sa colonne reste en haut (`RM_GAUCHE`). */}
+      <div style={RM_MILIEU}>
+        <div style={RM_GAUCHE}>
           <div className="o-gab-nom" style={{ ...RM_NAME, fontSize: 15 }}>{v.nom}</div>
           <div className="o-gab-phrase" style={{ ...RM_SUB, color: v.phrase.encre, '--o-n': Math.max(1, v.phrase.texte.length) }}>{v.phrase.texte}</div>
         </div>

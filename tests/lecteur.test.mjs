@@ -47,6 +47,13 @@ test('M11 : les bits décident — ce qu’une entité ne sait pas n’est pas d
   assert.deepEqual([commandesLecteur(sansVolume).volume, commandesLecteur(sansVolume).muet, commandesLecteur(sansVolume).chercher], [false, false, false]);
 });
 
+test('un boîtier à télécommande se lit comme une TV, même sans classe (Apple TV, 09/11)', () => {
+  const l = (attrs, boitierTv) => lireLecteur({ [ATV]: st('playing', { supported_features: 450487, ...attrs }) }, { haid: ATV, ma: null, alexa: false, boitierTv });
+  assert.equal(l({}, true).classe, 'tv');
+  assert.equal(l({ device_class: 'receiver' }, true).classe, 'receiver', 'la classe de Home Assistant prime');
+  assert.equal(l({}, false).classe, null);
+});
+
 test('M10 : l’interrupteur s’il sert — les deux bits, et pas une Echo', () => {
   assert.deepEqual(['alexa_media', 'alexa_devices', 'apple_tv', 'cast', null].map(estAlexa), [true, true, false, false, false]);
   // Une Echo HACS a les bits on/off (318399 porte 128 et 256) : ils ne coupent rien, la bascule n'est pas dessinée.

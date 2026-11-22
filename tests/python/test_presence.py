@@ -1017,3 +1017,26 @@ def test_sans_registre_le_depart_garde_tout_sauf_les_veilleuses(creer):
     p = creer(cfg(), {**DEHORS, "light.salon": FauxEtat("on")}, partage={"loggia_nuit": {"veilleuse": {"lampes": []}}})
     lancer(p._async_depart())
     assert p.hass.services.appels == [("light", "turn_off", {"entity_id": ["light.salon"]})]
+
+
+def test_le_depart_et_le_retour_n_envoient_rien_a_une_ampoule_sans_courant(creer):
+    """Audit du 12/11, X4 (ADR 0369) : l'ampoule du salon est derriere un
+    interrupteur mural eteint. Home Assistant la dit encore allumee ; elle n'est
+    pas « restee allumee », et le depart ne lui envoie rien. Une lampe prise au
+    depart dont l'interrupteur est coupe ENSUITE n'est pas rallumee au retour."""
+    relation = {"loggia_alimentation": {"light.salon": "light.interrupteur"}}
+    c = cfg(retour={"lumieres": True, "seulement_la_nuit": False, "chauffage": False})
+    p = creer(c, {**DEHORS, "light.salon": FauxEtat("on"), "light.chambre": FauxEtat("on"),
+                  "light.interrupteur": FauxEtat("off")}, partage=relation)
+    lancer(p._async_depart())
+    assert p.hass.services.appels == [("light", "turn_off", {"entity_id": ["light.chambre"]})]
+    assert p.eteintes == {"light.chambre": "on"}
+
+    p = creer(c, {**DEHORS, "light.salon": FauxEtat("on"), "light.interrupteur": FauxEtat("on")}, partage=relation)
+    lancer(p._async_depart())
+    assert p.hass.services.appels == [("light", "turn_off", {"entity_id": ["light.interrupteur", "light.salon"]})]
+    # Tout est eteint ; puis quelqu'un coupe l'interrupteur mural : au retour, l'ampoule n'a plus de courant.
+    for h in ("light.salon", "light.interrupteur"):
+        p.hass.states.table[h] = FauxEtat("off")
+    lancer(p._async_retour())
+    assert p.hass.services.appels[1:] == [("light", "turn_on", {"entity_id": ["light.interrupteur"]})]

@@ -1,0 +1,106 @@
+/* Prisme — la mise en page du thème (html.loggia-prisme, posée par applyTheme).
+ *
+ * Le preset de `theme.js` ne porte que des jetons : couleurs, ombres, rayon,
+ * polices. Ce fichier porte ce qu'un jeton ne peut pas dire — la FORME de la
+ * barre latérale, du bandeau, des titres et des chiffres — et rien d'autre. Chaque
+ * règle est bornée à `html.loggia-prisme` : les autres thèmes ne bougent pas.
+ *
+ * Les `!important` répondent aux styles en ligne des composants, comme le
+ * font déjà les règles de `html.loggia-frosted` dans index.css.
+ */
+/* ── Titres : Outfit, droits. L'italique des titres est écrit en ligne pour
+ *    Newsreader ; Outfit n'en a pas, le navigateur le penchait de force. */
+html.loggia-prisme [style*="--o-serif"] { font-style: normal !important; letter-spacing: -.01em; }
+html.loggia-prisme .o-greet-name { font-weight: 300 !important; letter-spacing: -.02em; }
+/* Le titre de chaque vue, comme la salutation de l'Accueil : Outfit, en maigre. */
+html.loggia-prisme .loggia-content h1:not(.o-vh) { font-family: var(--o-serif) !important; font-style: normal !important; font-weight: 300 !important; letter-spacing: -.02em; }
+
+/* ── Barre latérale : un voile, des entrées en pilule, l'active en tonal. */
+/* Le voile seul était transparent : sur téléphone, la barre s'ouvre PAR-DESSUS la
+ * page et l'on voyait le contenu à travers. Le voile est posé sur un fond plein. */
+html.loggia-prisme .loggia-aside { background: linear-gradient(var(--o-s4), var(--o-s4)), linear-gradient(180deg, var(--o-side1), var(--o-side2)) !important; border-right: var(--o-bw, 1px) solid var(--o-bd3) !important; box-shadow: none !important; }
+/* La pastille glissante se mesure avant que la classe du thème soit posée : avec
+ * des entrées plus hautes, elle tombait une ligne trop haut au chargement.
+ * L'entrée active porte donc elle-même son fond. */
+html.loggia-prisme .o-navpill { display: none !important; }
+html.loggia-prisme .o-nav-item { box-sizing: border-box; min-height: 44px; padding: 0 14px !important; border-radius: 999px !important; color: var(--o-text2) !important; font-weight: 600 !important; transition: background .2s, color .2s; }
+html.loggia-prisme .o-nav-item i, html.loggia-prisme .o-nav-item svg { color: inherit !important; }
+html.loggia-prisme .o-nav-item:hover { background: var(--o-s2); color: var(--o-text) !important; }
+html.loggia-prisme .o-nav-item[aria-current] { background: rgba(var(--o-accent-rgb), .16); color: var(--o-accent-soft) !important; }
+html.loggia-prisme .loggia-aside > button { border-radius: 999px !important; min-height: 44px; }
+html.loggia-prisme .loggia-aside > div:last-child > div:first-child { border-radius: 999px !important; padding: 12px 16px !important; }
+
+/* ── Bandeau : tous les boutons de Loggia, dans la barre du thème. Pas de
+ *    bande derrière : les commandes sont posées sur la page (ou sur le ciel),
+ *    chacune avec son remplissage tonal et son filet fin. */
+html.loggia-prisme .loggia-hdr,
+html.loggia-prisme main:has(.o-wx3d) .loggia-hdr,
+html.loggia-prisme.loggia-light main:has(.o-wx3d) .loggia-hdr,
+html.loggia-prisme.loggia-light main:has(.o-wx3d-sombre) .loggia-hdr { background: transparent !important; border: 0 !important; box-shadow: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+html.loggia-prisme .loggia-hdr .o-hdr-div { display: none !important; }
+html.loggia-prisme .loggia-hdr > button,
+html.loggia-prisme .loggia-hdr .o-hdr-search,
+html.loggia-prisme .loggia-hdr .o-hdr-assist > button,
+html.loggia-prisme .loggia-hdr > div:last-child > button:not(:last-of-type) { background: var(--o-s2) !important; border: var(--o-bw, 1px) solid var(--o-bd3) !important; border-radius: 999px !important; box-shadow: none !important; color: var(--o-text1); -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4); }
+html.loggia-prisme .loggia-hdr > button,
+html.loggia-prisme .loggia-hdr .o-hdr-assist > button,
+html.loggia-prisme .loggia-hdr > div:last-child > button { width: 44px !important; height: 44px !important; }
+html.loggia-prisme .loggia-hdr > button:hover,
+html.loggia-prisme .loggia-hdr .o-hdr-search:hover,
+html.loggia-prisme .loggia-hdr .o-hdr-assist > button:hover,
+html.loggia-prisme .loggia-hdr > div:last-child > button:not(:last-of-type):hover { background: var(--o-s1) !important; }
+html.loggia-prisme .loggia-hdr .o-hdr-search { box-sizing: border-box; flex: 0 1 440px; height: 44px; padding: 0 16px !important; color: var(--o-text3); }
+html.loggia-prisme .loggia-hdr .o-hdr-kbd { border-radius: 999px !important; background: var(--o-s1) !important; border-color: transparent !important; }
+html.loggia-prisme .loggia-hdr .o-hdr-date > div:first-child { font-size: calc(13px * var(--o-texte, 1)) !important; font-weight: 600 !important; }
+/* En clair, sur le ciel : sans bande derrière, les commandes portent leur propre
+ * fond, et la date reprend l'encre des textes posés sur un ciel sombre. */
+html.loggia-prisme.loggia-light main:has(.o-wx3d) .loggia-hdr > button,
+html.loggia-prisme.loggia-light main:has(.o-wx3d) .loggia-hdr .o-hdr-search,
+html.loggia-prisme.loggia-light main:has(.o-wx3d) .loggia-hdr .o-hdr-assist > button,
+html.loggia-prisme.loggia-light main:has(.o-wx3d) .loggia-hdr > div:last-child > button:not(:last-of-type) { background: rgba(255, 255, 255, .78) !important; border-color: rgba(14, 22, 44, .10) !important; color: var(--o-text1); }
+html.loggia-prisme.loggia-light main:has(.o-wx3d-sombre) .loggia-hdr .o-hdr-date,
+html.loggia-prisme.loggia-light main:has(.o-wx3d-sombre) .loggia-hdr .o-hdr-date *,
+html.loggia-prisme.loggia-light main:has(.o-wx3d-sombre) .loggia-hdr .o-noel-entete { color: #fff !important; text-shadow: 0 1px 3px rgba(8, 12, 20, .62), 0 0 18px rgba(8, 12, 20, .38); }
+/* Le profil : son anneau d'accent, et SON image (15/11 : « l'icône de l'avatar ne s'affiche plus avec Prisme »). Un fond
+ * d'accent imposé ici effaçait la photo, que le bouton porte en fond. Et il est le dernier BOUTON du groupe, pas son dernier
+ * enfant : un menu ouvert vient après lui, et il prenait alors le remplissage gris de ses voisins. */
+html.loggia-prisme .loggia-hdr > div:last-child > button:last-of-type { border: 0 !important; box-shadow: 0 0 0 3px rgba(var(--o-accent-rgb), .22) !important; }
+
+/* ── Chiffres : UNE règle, partout. Tout grand chiffre — 18 px et plus, que
+ *    Loggia écrit en Manrope 800 — passe en Outfit maigre : températures,
+ *    puissances, pourcentages, horloge, dans toutes les vues. */
+html.loggia-prisme [style*="font-weight: 800"]:is([style*="font-size: calc(18px"], [style*="font-size: calc(19px"], [style*="font-size: calc(2"], [style*="font-size: calc(3"], [style*="font-size: calc(4"], [style*="font-size: calc(5"]):not([style*="font-size: calc(2px"]):not([style*="font-size: calc(3px"]):not([style*="font-size: calc(4px"]):not([style*="font-size: calc(5px"]),
+html.loggia-prisme .o-meteo-temp { font-family: var(--o-serif) !important; font-weight: 300 !important; letter-spacing: -.02em !important; }
+html.loggia-prisme .o-w-tuile-chiffre { font-family: var(--o-serif) !important; font-weight: 200 !important; }
+
+/* ── Les EFFETS de Prisme (montée des cartes au survol, verre et lumière des puces de scénarios, lueur des boutons,
+ *    appui, filet de lumière des fiches) sont devenus ceux de TOUS les thèmes le 17/11 (« les effets ne sont plus liés
+ *    au seul thème prisme mais deviennent généraux à tout le dashboard ») : ils vivent dans index.css, bloc « LES
+ *    EFFETS, DANS TOUS LES THÈMES ». Ce fichier ne garde que la FORME et l'ÉCRITURE de Prisme. */
+
+/* ── Scénarios de l'Accueil : les puces de Loggia, telles quelles. Sous Prisme, sans ombre : la lumière est dedans, au
+ *    survol (le verre et cette lumière sont communs à tous les thèmes depuis le 17/11, index.css). */
+html.loggia-prisme .grid-qscenes > button { box-shadow: none !important; }
+html.loggia-prisme .o-qscenes-fleche { border-radius: 999px !important; }
+
+/* ── Boutons : UNE règle, partout. Tout bouton, champ ou puce d'une seule ligne
+ *    — ceux que Loggia arrondit de 8 à 14 px — passe en pilule, dans toutes les
+ *    vues, les fenêtres (fiches) et les Paramètres ; les sélecteurs à segments aussi. Les tuiles à deux lignes (jours de
+ *    l'agenda, barres de l'Énergie : `flex-direction: column`) gardent leur
+ *    rayon : une pilule haute devient une gélule.
+ *    Les fonds creusés (`--o-well`) s'arrêtent à 12 px, le rayon de tous les
+ *    sélecteurs à segments : à 14 px ce sont les tuiles de chiffres de l'Énergie
+ *    (trois lignes de texte), qui gardent leurs coins. */
+html.loggia-prisme :is(button, [role="button"], input, select, a):is([style*="border-radius: 8px"], [style*="border-radius: 9px"], [style*="border-radius: 10px"], [style*="border-radius: 11px"], [style*="border-radius: 12px"], [style*="border-radius: 14px"]):not([style*="flex-direction: column"]):not(.sec-tuile):not(.o-tuile-hero),
+html.loggia-prisme [style*="var(--o-well)"]:is([style*="border-radius: 10px"], [style*="border-radius: 11px"], [style*="border-radius: 12px"]):not([style*="flex-direction: column"]),
+html.loggia-prisme [style*="height: 30px"]:is([style*="border-radius: 9px"], [style*="border-radius: 10px"]),
+html.loggia-prisme :is(.o-rmbtn, .o-objfiltre, .o-armchip, .o-puce-lecteur) { border-radius: 999px !important; }
+/* Un sélecteur à segments qui peut passer sur PLUSIEURS rangées (les préréglages d'un chauffage : cinq choix sur trois
+ * colonnes) : en pilule, son fond devenait une gélule haute qui rognait les coins. Il prend le rayon d'une puce plus sa
+ * marge (19 + 4 px) : sur une rangée c'est toujours une pilule, sur deux un rectangle aux coins concentriques. */
+html.loggia-prisme [role="group"][style*="var(--o-well)"]:is([style*="grid-template-columns"], [style*="flex-wrap: wrap"]):is([style*="border-radius: 10px"], [style*="border-radius: 11px"], [style*="border-radius: 12px"]) { border-radius: 23px !important; }
+html.loggia-prisme :is(.o-rmbtn, .o-objfiltre, .o-armchip):hover { box-shadow: var(--o-shadow-rangee); }
+/* Le menu des Paramètres parle comme la barre latérale : l'entrée active en tonal. */
+html.loggia-prisme .loggia-content button[style*="border-radius: 11px"][style*="accent-fond"] { background: rgba(var(--o-accent-rgb), .16) !important; color: var(--o-accent-soft) !important; }
+html.loggia-prisme .loggia-content button[style*="border-radius: 11px"][style*="accent-fond"] * { color: inherit !important; }
+

@@ -5,14 +5,16 @@ import { LAVIS } from '../theme.js';
 import { commander } from '../actions.js';
 import { Surface, nomCarte, REDUCE_MOTION, Fi } from '../ui.jsx';
 import { useOptimiste } from '../optimiste.js';
+import { useConfirmerOuverture } from '../confirmerouvrant.js';
 import { LISERE } from '../styles.js';
 import { coverFerme, coverOuvert, vueVolet, plaqueVolet, iconeSelonEtat } from '../voletecran.js';
 import { useCourseVolet, ordreEtCourse, ordreEtArret } from '../voletcourse.js';
 import { useEtatVolets, voletDe } from '../voletsetat.js';
 import { Ico } from '../icones.jsx';
 import { tr } from '../i18n.js';
+import { quandLumiere } from '../lumieres.js';
 import { lavisCarte } from '../app/noyau.jsx';
-import { RM_BTN, RM_CARD, RM_ICO, GlypheCarte, RM_NAME, RM_SUB, RmJauge, ChiffreHaut, RM_MILIEU } from './briques.jsx';
+import { RM_BTN, RM_CARD, RM_CARD_HAUT, RM_SOUS_PLAQUE, RM_ICO, GlypheCarte, RM_NAME, RM_SUB, RmJauge, ChiffreHaut, RM_MILIEU } from './briques.jsx';
 import { RM_INERTE } from './chauffage.jsx';
 
 /* Quand un volet est-il fermé ? Le verdict — `coverFerme`, `coverOuvert` —
@@ -23,6 +25,13 @@ import { RM_INERTE } from './chauffage.jsx';
 /* Un geste de cover (`gestesCover`, outils.js) prêt à partir : `surEchec` dit
  * qu'Home Assistant l'a refusé, après coup (`ordreEtCourse`, voletcourse.js). */
 const envoyerGeste = (hass, id, g) => (surEchec) => commander(hass, id, g.capacite, g.valeur, null, null, surEchec);
+
+/* Muet, la règle de la lumière (`phraseLumiere`, lumieres.js ; audit du 12/11, lot 4, E24) : « Indisponible depuis 14:20 »
+ * — « hier », la date au-delà —, en rouge ; sans heure lisible, « Indisponible ». La phrase et sa couleur, rien d'autre. */
+const phraseMuette = (st) => { const q = st ? quandLumiere(st.last_changed) : null; return q ? tr('Indisponible depuis {h}', { h: q }) : tr('Indisponible'); };
+
+// « Ouvrir » armé (un portail, un garage) : le bleu plein et le blanc — une puce choisie.
+const RM_CONFIRME = { background: 'var(--o-accent-fond)', color: '#fff' };
 
 /* L'ancienne carte d'un cover qui n'est pas un volet : garage, portail, velux,
  * ouvrant sans classe (V3). Ses trois boutons suivent son `supported_features`
@@ -41,14 +50,21 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
   const ferme = coverFerme(st, pos);
   const mort = enPanne(id, st);
   const nom = titre || a.friendly_name || id;
+  // Ouvrir un portail ou un garage se fait en deux temps (chantier du 20/11, A9 ; Gladys X6) : la phrase dit « Confirmer ? » 4 s.
+  const conf = useConfirmerOuverture(st);
+  const arme = conf.armee && !mort;
   const mouvement = st && (st.state === 'opening' || st.state === 'closing') ? st.state : null;
   // Le sous-titre dit l'état en mots (maquettes du 14/09) ; le pourcentage
   // reste en haut à droite, la glissière montre la position.
-  const sub = mort ? tr('Indisponible') : mouvement === 'opening' ? tr('Ouverture…') : mouvement === 'closing' ? tr('Fermeture…') : ferme ? tr('Fermé') : coverOuvert(pos) ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });
+  const sub = mort ? phraseMuette(st) : arme ? tr('Confirmer ?') : mouvement === 'opening' ? tr('Ouverture…') : mouvement === 'closing' ? tr('Fermeture…') : ferme ? tr('Fermé') : coverOuvert(pos) ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });
   // Un refus de Home Assistant retire l'avance tout de suite (19/10).
-  const envoyer = (g, avance) => { if (mort || !g) return; if (avance != null) setOv(avance); commander(hass, id, g.capacite, g.valeur, null, null, () => setOv(null)); };
-  const poser = (v) => { if (gestes.placer) envoyer({ capacite: gestes.placer, valeur: v }, v); };
-  const bouton = (g) => ({ 'aria-disabled': !mort && g ? undefined : true, className: 'o-rmbtn', style: { ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 6px', ...(!mort && g ? null : RM_INERTE) } });
+  // Un ordre qui part défait la question posée (un portail armé, puis « Fermer ») : l'ouverture abandonnée ne part pas.
+  const envoyer = (g, avance) => { if (mort || !g) return; conf.annuler(); if (avance != null) setOv(avance); commander(hass, id, g.capacite, g.valeur, null, null, () => setOv(null)); };
+  // Un geste qui OUVRE un portail ou un garage se pose d'abord comme question ; tout autre part tout de suite (confirmerouvrant.js).
+  const demander = (g, avance) => { if (mort || !g) return; conf.demander(g, pos, () => envoyer(g, avance)); };
+  const poser = (v) => { if (gestes.placer) demander({ capacite: gestes.placer, valeur: v }, v); };
+  // `armee` : « Ouvrir » porte la question — une coche sur le bleu plein, une puce choisie ; il reste actif, quel que soit son geste.
+  const bouton = (g, armee = false) => ({ 'aria-disabled': !mort && (g || armee) ? undefined : true, className: 'o-rmbtn', style: { ...RM_BTN, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 6px', ...(!mort && (g || armee) ? null : RM_INERTE), ...(armee ? RM_CONFIRME : null) } });
   /* La carte n'est plus un `role="button"` qui englobe ses commandes (lot 13
    * de l'audit du 03/10, ADR 0074). Ce rôle rendait la glissière et les trois
    * boutons présentationnels — un lecteur d'écran ne les voyait plus —, et son
@@ -57,7 +73,7 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
    * surface (`Surface`, ui.jsx), qui dit ce que la carte affiche : « Volet
    * salon, Ouvert à 60 % » ; les boutons, eux, nomment l'appareil. */
   return (
-    <div className={'o-rmcard' + (mort ? ' o-panne' : '')} style={{ ...RM_CARD, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
+    <div className={'o-rmcard o-gabarit' + (mort ? ' o-panne' : '')} style={{ ...RM_CARD_HAUT, position: 'relative', cursor: onOpen ? 'pointer' : 'default',
       // Teinte d'état : volet ouvert = lavis VIOLET, gradué par la position — le bleu accent restait trop proche des autres cartes.
       ...(!ferme && LAVIS ? {
         background: lavisCarte('var(--o-purple-rgb)', .10 + pos * .0012),
@@ -65,6 +81,8 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
       // Le liseré du réglage, comme toute carte (04/10).
       border: LISERE }}>
       {onOpen && <Surface onClick={() => onOpen(id)} label={nomCarte(nom, sub)} />}
+      {/* La question d'un portail ou d'un garage se dit aussi au lecteur d'écran (la carte de la prise fait de même). */}
+      <span className="o-vh" aria-live="polite">{arme ? tr('Confirmer ?') + ' ' + nom : ''}</span>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         {/* Positionnée pour son store, l'icône passerait AU-DESSUS de la
           * surface et garderait le clic : elle le laisse passer, et un appui
@@ -75,17 +93,19 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
           <GlypheCarte id={id} size={18}><Ico name={(a.device_class === 'garage' || a.device_class === 'gate') ? 'garage' : 'blinds'} size={18} /></GlypheCarte></span>
         {(publiee != null || ov != null) && !mort && <span style={{ fontSize: 15, fontWeight: 800, color: ferme ? 'var(--o-text3)' : 'var(--o-text)' }}>{pos} %</span>}
       </div>
-      {/* PAS DE MARGE SUR LE CORPS (09/10). Le parent est en
-        * `space-between` : le corps est deja colle en bas, la marge n'y
-        * ajoute rien — sauf quand le contenu remplit la carte, et la elle le
-        * pousse DEHORS. « Il y a un souci au niveau de l'organisation,
-        * arrange la carte volet que ce soit au meme niveau que l'Echo » :
-        * mesure, le corps du volet finissait 12 px sous sa zone quand celui
-        * du media tombait pile. */}
-      <div>
-        <div style={RM_NAME}>{nom}</div>
-        <div style={{ ...RM_SUB, color: !ferme && !mort ? 'var(--o-purple)' : 'var(--o-text3)' }}>{sub}</div>
-        {gestes.placer && <RmJauge v={pos} couleur="var(--o-purple)" grade="linear-gradient(90deg,rgba(var(--o-purple-rgb),.75),var(--o-purple))" actif={!mort} label={tr('Position') + ' ' + nom} onCommit={poser} />}
+      {/* LE NOM SOUS LA PLAQUE (audit du 12/11) : la carte range depuis le haut (`RM_CARD_HAUT`), le nom 14 px sous la plaque
+        * (`RM_SOUS_PLAQUE`), les commandes au pied par leur marge auto — sans jauge, le nom d'un garage tombait vers le bas. Avec sa
+        * jauge, la carte est PLEINE (38 + 37 + 32 + 9 + 32 = 148 px sur 150) : aucune marge fixe ne s'ajoute, elle pousserait le corps
+        * DEHORS (la leçon du 09/10, « au même niveau que l'Echo »). Sur la carte étroite, sans jauge, le nom passe sur deux lignes au
+        * plus (`o-gab-nom`) : « Porte de garage motorisée » finissait en « … ». */}
+      <div style={{ marginTop: gestes.placer ? 0 : RM_SOUS_PLAQUE, minWidth: 0 }}>
+        <div className={gestes.placer ? undefined : 'o-gab-nom'} style={RM_NAME}>{nom}</div>
+        {/* La question posée prend la couleur d'attention ; tout autre état garde le verdict commun (violet / gris). */}
+        {arme ? <div style={{ ...RM_SUB, color: 'var(--o-warn)' }}>{sub}</div>
+          : <div style={{ ...RM_SUB, color: mort ? 'var(--o-bad)' : !ferme ? 'var(--o-purple)' : 'var(--o-text3)' }}>{sub}</div>}
+      </div>
+      <div style={{ marginTop: 'auto' }}>
+        {gestes.placer && <RmJauge key={conf.tour} v={pos} couleur="var(--o-purple)" grade="linear-gradient(90deg,rgba(var(--o-purple-rgb),.75),var(--o-purple))" actif={!mort} label={tr('Position') + ' ' + nom} onCommit={poser} />}
         {/* Les mêmes trois gestes que la carte compacte : ouvrir, stop, fermer — la glissière règle le reste. */}
         {/* Les boutons SEULS sont positionnés (RM_BTN), pas la rangée : peints
           * après la surface, ils reçoivent leurs clics, et l'écart entre deux
@@ -93,7 +113,7 @@ function RoomCoverCard({ id, hass, onOpen, titre = null }) {
           * le mot de leur bulle et nomme le volet : « Ouvrir Volet salon » est
           * ce bouton-ci, plus jamais la carte (lot 13 de l'audit du 03/10). */}
         <div style={{ display: 'flex', gap: 8, marginTop: 9 }}>
-          <button aria-label={tr('Ouvrir') + ' ' + nom} title={tr('Ouvrir')} onClick={(e) => { e.stopPropagation(); envoyer(gestes.monter, 100); }} {...bouton(gestes.monter)}><Fi i="angle-up" size={14} /></button>
+          <button aria-label={(arme ? tr('Confirmer ?') : tr('Ouvrir')) + ' ' + nom} title={arme ? tr('Confirmer ?') : tr('Ouvrir')} onClick={(e) => { e.stopPropagation(); if (arme) conf.confirmer(); else demander(gestes.monter, 100); }} {...bouton(gestes.monter, arme)}><Fi i={arme ? 'check' : 'angle-up'} size={14} /></button>
           <button aria-label={tr('Stop') + ' ' + nom} title={tr('Stop')} onClick={(e) => { e.stopPropagation(); envoyer(gestes.stop, null); }} {...bouton(gestes.stop)}><Fi i="square" size={12} /></button>
           <button aria-label={tr('Fermer') + ' ' + nom} title={tr('Fermer')} onClick={(e) => { e.stopPropagation(); envoyer(gestes.descendre, 0); }} {...bouton(gestes.descendre)}><Fi i="angle-down" size={14} /></button>
         </div>
@@ -161,7 +181,8 @@ function RoomVoletCard({ id, hass, onOpen, titre = null }) {
   const vue = vueVolet({ st, course, v, etat });
   const { pos, enCourse } = vue;
   const nom = titre || a.friendly_name || id;
-  const sub = vue.phrase;
+  // Muet, la phrase de la lumière (E24) ; la ligne 1 de voletecran.js reste « Indisponible » pour la fiche et la compacte.
+  const sub = vue.muet ? phraseMuette(st) : vue.phrase;
   const [fond, encre] = plaqueVolet(vue.allume);
   /* Les gestes que le volet ACCEPTE (`vue.gestes`, son `supported_features`) : un ordre que le moteur d'actions refuse ne
    * lance pas de course, et un refus de Home Assistant, plus tard, l'oublie (`ordreEtCourse`, 19/10). */
@@ -187,7 +208,7 @@ function RoomVoletCard({ id, hass, onOpen, titre = null }) {
       <div style={RM_MILIEU}>
         <div style={{ minWidth: 0 }}>
           <div className="o-gab-nom" style={{ ...RM_NAME, fontSize: 15 }}>{nom}</div>
-          <div className="o-gab-phrase" style={{ ...RM_SUB, color: enCourse ? 'var(--o-purple)' : 'var(--o-text2)', '--o-n': Math.max(1, String(sub).length) }}>{sub}</div>
+          <div className="o-gab-phrase" style={{ ...RM_SUB, color: vue.muet ? 'var(--o-bad)' : enCourse ? 'var(--o-purple)' : 'var(--o-text2)', '--o-n': Math.max(1, String(sub).length) }}>{sub}</div>
         </div>
         <ChiffreVolet pos={pos} />
       </div>

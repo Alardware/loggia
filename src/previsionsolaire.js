@@ -36,6 +36,12 @@ export function totauxPrevision(reponse, entrees, maintenant = Date.now()) {
       else if (j === lendemain) out.demain = (out.demain || 0) + v / 1000;
     }
   }
+  /* Zéro sur une journée entière n'est pas une prévision : même un jour d'hiver
+   * couvert produit quelque chose. Une source qui ne rend que des zéros (mal
+   * réglée, ou muette) écrivait « Prévu aujourd'hui 0,0 kWh » à côté d'une
+   * production bien réelle (audit du 12/11) — on ne dit rien plutôt. */
+  if (!(out.aujourdhui > 0)) out.aujourdhui = null;
+  if (!(out.demain > 0)) out.demain = null;
   return out;
 }
 

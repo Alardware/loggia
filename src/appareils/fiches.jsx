@@ -1,8 +1,8 @@
 /* Les fiches : leur squelette, la fiche appareil universelle, les épingles, l'historique 24 h, et les coquilles des fiches chargées à la demande.
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
-import { useState, Suspense, useRef, useEffect } from 'react';
+import { useState, Suspense, useRef, useEffect, memo } from 'react';
 import { lazyRecharge } from '../recharge.js';
-import { LOGGIA_INDEX, compteOrdinaire, loggiaEnt, cfgVal, normRooms, estEtatPoele, estTraceur } from '../state.js';
+import { LOGGIA_INDEX, nomZoneDe, compteOrdinaire, loggiaEnt, cfgVal, normRooms, estEtatPoele, estTraceur } from '../state.js';
 import { texteEtatPoele } from '../poele.js';
 import { gestesCover, positionPubliee, enPanne } from '../outils.js';
 import { uniteTemp, versCelsius } from '../unites.js';
@@ -13,7 +13,7 @@ import { apresCommandeRobot } from '../robotsetat.js';
 import { commander, commanderService, estVanneCarte } from '../actions.js';
 import { brancherVidage } from '../config.js';
 import { useLoggia } from '../runtime.js';
-import { BottomSheet, Fi, useIdTitreFeuille, CroixFeuille, cvName, cvId, NomFeuille, TitreFeuille } from '../ui.jsx';
+import { BottomSheet, Fi, useIdTitreFeuille, CroixFeuille, cvName, cvId, NomFeuille, TitreFeuille, ListeChoix } from '../ui.jsx';
 import { appuiBascule } from '../prises.js';
 import { gardeDeSwitch, lireEtatPrises } from '../prisesetat.js';
 import { glypheLecteur } from '../lecteur.js';
@@ -35,11 +35,13 @@ import { Ico } from '../icones.jsx';
 import { reduireDerniers } from '../evenement.js';
 import { tr, locale, comparerTextes } from '../i18n.js';
 import { useHass, dec, useGardeSwitch, decMax, lireEpingles, basculerEpingle, FICHE_PILOTABLES, hx, soeursDe, ctxCapteurs, NOMS_GROUPES, cvEstLumiere, priseDe, indexLu, nomDeCle, climateZones, plantesDeLaMaison, capteursPlante, plantPiece, distributeurConfigure, croqKeys } from '../app/noyau.jsx';
-import { GlypheCarte, RmJauge, RmBascule, BIN_ETATS, FAMILLES_BINAIRES, IlluOuvrant, ROOM_GENERIQUES } from '../cartes/briques.jsx';
+import { GlypheCarte, RmJauge, RmBascule, railBascule, rondBascule, BIN_ETATS, FAMILLES_BINAIRES, IlluOuvrant, ROOM_GENERIQUES } from '../cartes/briques.jsx';
 import { modesClimat, RM_INERTE, motModeClimat, RoomPilotCard, RoomClimateCard, RoomPilotSheet } from '../cartes/chauffage.jsx';
 import { CarteVanne, RoomFeederCard, PLAQUE_DISTRIBUTEUR } from '../cartes/distributeur.jsx';
 // L'eau chaude et la borne (chantier G3, E2 et E3) : leurs coquilles, leurs cartes et popups à la demande.
 import { CarteEauChaude, FicheEauChaude, CarteBorne, FicheBorne } from '../cartes/eauborne.jsx';
+import { CLE_COMPOSE } from '../composesboot.js';
+import { estPurificateur } from '../purificateurboot.js';
 import { RoomGenericCard } from '../cartes/generique.jsx';
 import { pilesDeLaMaisonCarte, membresDeLaMaison, RoomPilesCard, RoomGroupeCard, RoomVigilanceCard } from '../cartes/groupe.jsx';
 import { useVueLumiere, RoomLightCard } from '../cartes/lumiere.jsx';
@@ -49,9 +51,13 @@ import { RoomPlantCard } from '../cartes/plante.jsx';
 import { useDemandeCoupure, RoomPriseCard } from '../cartes/prise.jsx';
 import { useVueRobot, localiserRobot, plaqueRobot, RoomRobotCard } from '../cartes/robot.jsx';
 import { RoomVoletCard, RoomCoverCard } from '../cartes/volet.jsx';
-import { useSeconde, armChips, texteDate, CV_CADRE, FAN_FR, CvAlarm, CvCard, cvIcoEntite, FeuilleCalendrier, CamSheet, PlugIcon, SaisieCodeAlarme } from '../cartescustom/cartes.jsx';
+import { useSeconde, armChips, texteDate, CV_CADRE, FAN_FR, CvAlarm, CvCard, cvIcoEntite, FeuilleCalendrier, CamSheet, PlugIcon, SaisieCodeAlarme, OUVRANT_DCS } from '../cartescustom/cartes.jsx';
 import { annulable } from '../annuler.js';
 import { AidePanne, FicheEntite } from '../aidepanne.jsx';
+/* Les réglages de l'air (A5, 20/11) : la vitesse d'un ventilateur, l'humidité d'un humidificateur, la ventilation
+ * d'une clim, le bac. Chargés à la demande (ADR 0385) : ils ne servent que dans une fiche ouverte. */
+const ReglagesAirDiffere = lazyRecharge(() => import('../reglagesair.jsx').then(m => ({ default: m.ReglagesAir })));
+const ReglagesAir = (props) => <Suspense fallback={null}><ReglagesAirDiffere {...props} /></Suspense>;
 
 // Carte du robot rendue cliquable : chargee a la demande, elle n'interesse
 // que la vue Aspirateur et embarque son analyse d'image.
@@ -86,6 +92,8 @@ const FeuilleCalendrierContent = lazyRecharge(() => import('../feuillecalendrier
 // Les fiches d'un CAPTEUR (chantier Capteurs, C12) : chargées à la demande par `FicheCapteur` et `FicheBinaire` — le démarrage n'en embarque rien.
 const FicheCapteurContent = lazyRecharge(() => import('../fichecapteur.jsx'));
 const FicheBinaireContent = lazyRecharge(() => import('../fichecapteur.jsx').then(m => ({ default: m.RoomBinarySheet })));
+// La popup d'une OUVERTURE (ADR 0388, ses maquettes du 22/11) : sa journée, sa semaine, son rappel — à la demande, elle aussi.
+const FicheOuvertureContent = lazyRecharge(() => import('../ficheouverture.jsx'));
 // La feuille d'un LECTEUR (passe téléphone, T16) : chargée à la demande par `FicheMedia` — le démarrage n'en embarque rien.
 const FicheMediaContent = lazyRecharge(() => import('../fichemedia.jsx'));
 // La fiche météo (sa maquette « Cartes météo », cadre 1b, 20/10) : à la demande, comme les autres fiches.
@@ -96,6 +104,8 @@ const FicheGroupeContent = lazyRecharge(() => import('../fichegroupe.jsx'));
 const FichePlanteContent = lazyRecharge(() => import('../ficheplante.jsx'));
 // La popup d'un traceur d'objet (ADR 0318) : sa feuille entière, à l'ouverture de sa carte.
 const FicheTraceur = lazyRecharge(() => import('../fichetraceur.jsx'));
+// La fiche d'un PURIFICATEUR d'air (ADR 0387) : sa scène, son planning, son filtre — à l'ouverture de sa carte.
+const FichePurificateurContent = lazyRecharge(() => import('../fichepurificateur.jsx'));
 
 /* La feuille d'un LECTEUR (passe téléphone, T16 : la borne du démarrage) : la
  * coquille. Le contenu se charge à la demande (`fichemedia.jsx`) et n'importe
@@ -274,7 +284,11 @@ function RoomCoverSheet({ id, hass, onClose }) {
   const poser = (v) => { if (gestes.placer) envoyer({ capacite: gestes.placer, valeur: v }, v); };
   const nom = a.friendly_name || id;
   const zone = zoneDe(id);
-  const etatTxt = ferme ? tr('Fermé') : coverOuvert(pos) ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });
+  /* En mouvement, il le DIT (audit du 12/11, B7) : un garage ou un portail qui ne publie pas sa position vaut 0 pendant toute
+   * son ouverture — la fiche écrivait « Fermé » et allumait la puce « Fermé ». « Ouverture… » ou « Fermeture… », comme sa carte ;
+   * la puce choisie est celle où il VA, comme une vanne (cartevanne.jsx). */
+  const mouvement = st && (st.state === 'opening' || st.state === 'closing') ? st.state : null;
+  const etatTxt = mouvement === 'opening' ? tr('Ouverture…') : mouvement === 'closing' ? tr('Fermeture…') : ferme ? tr('Fermé') : coverOuvert(pos) ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });
   /* Cette fiche n'est plus que celle des ouvrants qui ne sont PAS des volets
    * (V3) : garage, portail, velux, ouvrant sans classe. Le planning ne les
    * pilote pas (ADR 0137) : la rangée « Auto lever / coucher · Suit le
@@ -284,7 +298,7 @@ function RoomCoverSheet({ id, hass, onClose }) {
   const chips = [gestes.descendre && { id: 'ferme', nom: tr('Fermé') }, gestes.placer && { id: 'mi', nom: tr('Mi-course') }, gestes.monter && { id: 'ouvert', nom: tr('Ouvert') }].filter(Boolean);
   // La puce choisie suit le meme verdict : sinon « Ferme » restait creuse sur
   // un volet ferme a 1 %, et aucune des trois n'etait allumee.
-  const chip = ferme ? 'ferme' : coverOuvert(pos) ? 'ouvert' : pos === 50 ? 'mi' : null;
+  const chip = mouvement === 'opening' ? 'ouvert' : mouvement === 'closing' ? 'ferme' : ferme ? 'ferme' : coverOuvert(pos) ? 'ouvert' : pos === 50 ? 'mi' : null;
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
@@ -322,7 +336,9 @@ function RoomClimateSheet({ id, hass, onClose }) {
   const realTarget = consigneClimat(a);
   const plage = realTarget == null ? plageClimat(a) : null;
   const etatSt = st && st.state;
-  const [ov, setOv] = useOptimiste([realTarget, etatSt].join('|'));
+  // Comme la carte (audit du 12/11, B29) : l'écho d'un appui plus ancien n'efface pas l'avance du dernier.
+  const avanceAtteinte = (v) => realTarget != null && Number(v) === Number(realTarget);
+  const [ov, setOv] = useOptimiste([realTarget, etatSt].join('|'), undefined, avanceAtteinte);
   const target = ov != null ? ov : realTarget;
   const reglable = target != null;
   const cur = a.current_temperature;
@@ -377,6 +393,8 @@ function RoomClimateSheet({ id, hass, onClose }) {
             ? <FichePuces options={presets.map(p => ({ id: p, nom: motPreset(p) }))} valeur={a.preset_mode && a.preset_mode !== 'unknown' ? a.preset_mode : null} onChoix={(p) => commander(hass, id, 'set_preset_mode', p)} />
             : <FichePuces options={all.map(m => ({ id: m, nom: motModeClimat(m) }))} valeur={mode} onChoix={(m) => commander(hass, id, 'set_hvac_mode', m)} />}
         </div>}
+        {/* La ventilation, le balayage et l'humidité visée d'un climatiseur (A5) : seulement ce que l'appareil sait. */}
+        {!mort && <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}><ReglagesAir id={id} hass={hass} /></div>}
         <div style={{ marginTop: 14 }}>
           <FicheRangee premiere titre={tr('Chauffe')} desc={tr('Coupe la zone sans toucher à la consigne')}
             droite={mort ? <FicheValeur couleur="var(--o-text3)">{tr('Indisponible')}</FicheValeur> : <RmBascule on={marche} nom={nom} onToggle={basculer} />} />
@@ -431,34 +449,17 @@ function RoomSwitchSheet({ id, hass, onClose }) {
   );
 }
 
-// Fiche serrure (maquettes du 14/09) : verrouillee, pile, dernier changement.
+/* Fiche serrure (maquettes du 14/09) : verrouillée, pile, dernier changement — et depuis le chantier du 20/11 (A4, ADR 0386) le
+ * code quand la serrure l'exige, « Ouvrir » avec sa question. Chargée à la demande (`ficheserrure.jsx`) : ici, la coquille.
+ * `enPanne`, la règle de sa carte (05/10), y vit aussi : morte, ni bascule ni « Ouvrir ». */
+const FicheSerrureContent = lazyRecharge(() => import('../ficheserrure.jsx'));
+// La voiture, la litière, la fontaine (A11, A12 ; ADR 0386) : leurs coquilles se chargent à la demande, elles aussi.
+const CarteCompose = lazyRecharge(() => import('../cartes/compose.jsx').then(m => ({ default: m.CarteCompose })));
+const FicheCompose = lazyRecharge(() => import('../cartes/compose.jsx').then(m => ({ default: m.FicheCompose })));
 function RoomLockSheet({ id, hass, onClose }) {
-  const S = (hass && hass.states) || {};
-  const st = S[id] || null;
-  const a = (st && st.attributes) || {};
-  const s2 = st ? st.state : null;
-  const realLocked = s2 === 'locked';
-  const [ov, setOv] = useOptimiste(s2);
-  const locked = ov != null ? ov : realLocked;
-  const basculer = () => { const nv = !locked; setOv(nv); commanderService(hass, id, 'lock', nv ? 'lock' : 'unlock', { entity_id: id }); };
-  const nom = a.friendly_name || id;
-  const zone = zoneDe(id);
-  /* `enPanne`, comme sa carte (05/10) : morte, la fiche disait bien
-   * « Indisponible », mais l'interrupteur restait et envoyait `lock.lock`
-   * dans le vide. Et `open` / `opening` — des états VIVANTS — tombaient sur
-   * « Indisponible » : ils ont leurs mots, ceux de CvCard. */
-  const mort = enPanne(id, st);
-  const etat = mort ? tr('Indisponible') : ({ locked: tr('Verrouillée'), unlocked: tr('Déverrouillée'), locking: tr('Verrouillage…'), unlocking: tr('Déverrouillage…'), jammed: tr('Bloquée'), open: tr('Ouverte'), opening: tr('Ouverture…') })[s2] || String(s2);
   return (
     <BottomSheet onClose={onClose}>
-      {() => (<>
-        <FicheEntete titre={nom} sous={[zone, etat].filter(Boolean).join(' · ')} id={id} />
-        <div style={{ marginTop: 14 }}>
-          <FicheRangee premiere panne={mort} titre={tr('Verrouillée')} desc={tr('Le pêne bouge tout de suite ; l’état revient du moteur')} droite={mort ? <FicheIndispo /> : <RmBascule on={locked} nom={nom} onToggle={basculer} />} />
-          <RangeePile n={pileDe(S, id)} />
-          <RangeeDernier st={st} />
-        </div>
-      </>)}
+      {() => <Suspense fallback={<div style={{ minHeight: 200 }} />}><FicheSerrureContent id={id} hass={hass} /></Suspense>}
     </BottomSheet>
   );
 }
@@ -516,7 +517,7 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
       setDemande(false);
       poserOpt(on ? 'off' : 'on'); call('homeassistant', on ? 'turn_off' : 'turn_on');
     };
-    controle = <span role="switch" aria-checked={on} tabIndex={0} aria-label={enDemande ? tr('Couper') + ' ' + label : label} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); basculer(); } }} onClick={basculer} style={{ width: 42, height: 24, borderRadius: 14, background: on ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: on ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .3s cubic-bezier(.34,1.56,.64,1)' }} /></span>;
+    controle = <span role="switch" aria-checked={on} tabIndex={0} aria-label={enDemande ? tr('Couper') + ' ' + label : label} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); basculer(); } }} onClick={basculer} style={{ ...railBascule(on), cursor: 'pointer' }}><span style={rondBascule(on)} /></span>;
   } else if (dom === 'number' || dom === 'input_number') {
     const v = opt != null ? +opt : (st ? parseFloat(st.state) : NaN);
     const pas = a.step != null ? +a.step : 1;
@@ -539,10 +540,16 @@ function LigneEntite({ id, hass, nom = null, surEpingle = null, epingle = false 
   } else if (dom === 'select' || dom === 'input_select') {
     const opts = Array.isArray(a.options) ? a.options : [];
     const cur = opt != null ? opt : (st ? st.state : null);
+    const choisirOption = (o) => { poserOpt(o); call(dom, 'select_option', { option: o }); };
     wrap = true;
-    controle = (
+    /* Au-delà de huit options, une liste (audit du 12/11, B20) : les puces s'arrêtaient à la huitième — les programmes 9 à 20
+     * d'un lave-linge n'existaient pas à l'écran, et un programme en cours parmi eux ne s'allumait nulle part. La liste montre
+     * l'option en cours et les offre toutes (un filtre au-delà de douze). */
+    controle = opts.length > 8 ? (
+      <ListeChoix value={cur} options={opts.map(o => ({ id: o, label: o }))} onChange={choisirOption} label={label} />
+    ) : (
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '70%' }}>
-        {opts.slice(0, 8).map(o => { const on = cur === o; return (
+        {opts.map(o => { const on = cur === o; return (
           <button key={o} onClick={() => { poserOpt(o); call(dom, 'select_option', { option: o }); }} aria-pressed={on}
             style={{ padding: '5px 11px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: '1px solid ' + (on ? 'transparent' : 'var(--o-bd1)'), background: on ? 'var(--o-accent-fond)' : 'var(--o-s2)', color: on ? '#fff' : 'var(--o-text1)' }}>{o}</button>
         ); })}
@@ -908,7 +915,13 @@ function FicheAppareil({ id, hass, onClose }) {
                   ? <div key={x.id} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       <CvCard id={x.id} hass={H} onOpen={x.id !== id ? dc.ouvrir : null} />
                       <ModesVentilo id={x.id} hass={H} />
+                      <ReglagesAir id={x.id} hass={H} />
                     </div>
+                  : domDe(x.id) === 'humidifier' || domDe(x.id) === 'climate'
+                    ? <div key={x.id} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <CvCard id={x.id} hass={H} onOpen={x.id !== id ? dc.ouvrir : null} />
+                        <ReglagesAir id={x.id} hass={H} />
+                      </div>
                   : <CvCard key={x.id} id={x.id} hass={H} onOpen={x.id !== id ? dc.ouvrir : null} />)}
           </div>
         )}
@@ -991,9 +1004,21 @@ function useHistorique24(hass, id, attribut = null) {
   return points;
 }
 
+/* La dernière valeur connue tient jusqu'à MAINTENANT (audit du 12/11, B21). Home Assistant ne rend un point que quand l'état
+ * CHANGE : une mesure stable depuis la veille n'en a qu'un — « Pas d'historique sur 24 h » —, et une pile passée de 100 à 99 %
+ * à 3 h du matin voyait sa chute dessinée au bord « maintenant », l'axe s'arrêtant au dernier changement. Au DESSIN seulement :
+ * la série lue (`useHistorique24`, son cache) reste ce que HA a rendu. Rend `points` tel quel s'il n'y a rien à prolonger. */
+function jusquAMaintenant(points, maintenant = Date.now()) {
+  if (!Array.isArray(points) || !points.length) return points;
+  const dernier = points[points.length - 1];
+  return dernier.t < maintenant ? [...points, { t: maintenant, v: dernier.v }] : points;
+}
+
 /* La courbe d'une fiche : le filigrane de la carte graphique, en plus grand,
  * avec ses bornes et son axe du temps. */
-function Courbe24({ points, couleur = 'var(--o-accent)', unite = '' }) {
+function Courbe24({ points: lus, couleur = 'var(--o-accent)', unite = '' }) {
+  // Prolongée jusqu'à maintenant (B21) : un seul point connu se trace en ligne plate.
+  const points = jusquAMaintenant(lus);
   let chemin = '', aire = '', vmin = null, vmax = null;
   if (Array.isArray(points) && points.length > 1) {
     const t0 = points[0].t, t1 = points[points.length - 1].t || t0 + 1;
@@ -1070,12 +1095,15 @@ function FicheBinaire({ id, hass, onClose }) {
   const st = (H && H.states && H.states[id]) || null;
   const classe = ((st && st.attributes) || {}).device_class;
   const [fiche, setFiche] = useState(null);
+  const glyphe = <GlypheCarte id={id} size={18}><Ico name={cvIcoEntite('binary_sensor', id, st, cvName(st, id))} size={18} /></GlypheCarte>;
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
         <Suspense fallback={<div style={{ minHeight: 260 }} />}>
-          <FicheBinaireContent id={id} hass={H} briques={BRIQUES_CAPTEUR} piece={zoneDe(id)} famille={FAMILLES_BINAIRES()[classe] || null} onFiche={setFiche}
-            glyphe={<GlypheCarte id={id} size={18}><Ico name={cvIcoEntite('binary_sensor', id, st, cvName(st, id))} size={18} /></GlypheCarte>} epingle={<BoutonEpingle id={id} />} />
+          {/* Une porte, une fenêtre, un garage, un ouvrant sans nom : la popup de ses maquettes (ADR 0388). Le reste, la fiche d'un binaire. */}
+          {OUVRANT_DCS.indexOf(classe) >= 0
+            ? <FicheOuvertureContent id={id} hass={H} briques={BRIQUES_CAPTEUR} piece={zoneDe(id)} onFiche={setFiche} glyphe={glyphe} epingle={<BoutonEpingle id={id} />} />
+            : <FicheBinaireContent id={id} hass={H} briques={BRIQUES_CAPTEUR} piece={zoneDe(id)} famille={FAMILLES_BINAIRES()[classe] || null} onFiche={setFiche} glyphe={glyphe} epingle={<BoutonEpingle id={id} />} />}
         </Suspense>
         {fiche && <FicheAppareil id={fiche} hass={H} onClose={() => setFiche(null)} />}
       </>)}
@@ -1110,8 +1138,43 @@ function FicheGroupe({ groupe, hass, onClose }) {
   );
 }
 
+/* UNE CARTE NE SE REDESSINE QUE SI SON APPAREIL A CHANGÉ (19/11, fluidité, point 2).
+ *
+ * Home Assistant rend un `hass` neuf à chaque changement de n'importe quelle entité : une vue redessinait alors ses
+ * ~140 cartes, même inchangées. `memeCarte` compare ce qu'une carte lit vraiment — ses autres propriétés, telles
+ * quelles, et dans `hass` l'état de son entité, des entités de son APPAREIL et des membres d'un groupe (Home Assistant
+ * garde le même objet d'état tant qu'une entité ne bouge pas), la connexion et la langue. `onOpen` n'est pas comparé :
+ * ce sont des réglages de popups, stables, ou `ouvrir`, qui lit l'état du moment (`etatFrais`). Une carte qui suit
+ * d'autres entités s'y abonne elle-même (`useHass`) : son abonnement la redessine, `memo` ou pas. */
+function idsDeCarte(hass, id) {
+  const st = hass && hass.states ? hass.states[id] : null;
+  const membres = st && st.attributes && Array.isArray(st.attributes.entity_id) ? st.attributes.entity_id : [];
+  let soeurs = [];
+  try { soeurs = siblingsOf(LOGGIA_INDEX, id) || []; } catch { /* index pas prêt : l'entité seule */ }
+  return [id, ...soeurs, ...membres];
+}
+function memeCarte(a, b) {
+  for (const k in b) if (k !== 'hass' && k !== 'onOpen' && a[k] !== b[k]) return false;
+  for (const k in a) if (!(k in b)) return false;
+  const ha = a.hass, hb = b.hass;
+  if (ha === hb) return true;
+  if (!ha || !hb || !ha.states || !hb.states || ha.connected !== hb.connected || ha.language !== hb.language) return false;
+  return idsDeCarte(hb, b.id).every(x => ha.states[x] === hb.states[x]);
+}
+/* Posées au PREMIER usage, pas au chargement : les fichiers de cartes et celui-ci s'importent l'un l'autre, et une carte
+ * pas encore évaluée vaudrait `undefined` ici. Une seule fois : `memo` rend un type neuf, qui remonterait la carte. */
+let CARTES_MEMO = null;
+const cartesMemo = () => CARTES_MEMO || (CARTES_MEMO = {
+  lumiere: memo(RoomLightCard, memeCarte), volet: memo(RoomVoletCard, memeCarte), couvrant: memo(RoomCoverCard, memeCarte),
+  thermostat: memo(RoomClimateCard, memeCarte), lecteur: memo(RoomMediaCard, memeCarte), mesure: memo(RoomMesureCard, memeCarte),
+  prise: memo(RoomPriseCard, memeCarte), generique: memo(RoomGenericCard, memeCarte), entite: memo(CvCard, memeCarte),
+});
+
 function useDomainCards(hass, { onNav = null } = {}) {
   const S = (hass && hass.states) || {};
+  // L'état du moment, pour `ouvrir` : une carte épargnée par `memeCarte` garde l'`ouvrir` d'un rendu plus ancien (point 2).
+  const etatFrais = useRef(S);
+  etatFrais.current = S;
   const [lightPop, setLightPop] = useState(null);
   const [climPop, setClimPop] = useState(null);
   const [pilotPop, setPilotPop] = useState(null);
@@ -1132,6 +1195,8 @@ function useDomainCards(hass, { onNav = null } = {}) {
   const [eauPop, setEauPop] = useState(null);
   const [bornePop, setBornePop] = useState(false);
   const [traceurPop, setTraceurPop] = useState(null);
+  // La voiture, la litière, la fontaine (A11, A12 ; ADR 0386) : la clé `obj:app:<appareil>` dont la popup est ouverte.
+  const [composePop, setComposePop] = useState(null);
   // La fiche du domaine, depuis n'importe quelle carte — la compacte ouvre la
   // même popup que la riche. Tout ce qui n'a pas de fiche dédiée reçoit la
   // FICHE APPAREIL UNIVERSELLE : l'appareil entier, rendu par le registre.
@@ -1141,6 +1206,7 @@ function useDomainCards(hass, { onNav = null } = {}) {
     // commande, il a un mois.
     if (d === 'calendar') { setCalPop(id); return; }
     if (d === 'camera') { setCamPop(id); return; }
+    const S = etatFrais.current;
     const st = S[id];
     /* Une lumière — un `light.*` de la maison, ou un switch déclaré lumière (L11) — ouvre SA fiche, même tout ou
      * rien : le minuteur, le journal du jour et l'appareil y sont (chantier Lumières, § 3.5). */
@@ -1195,6 +1261,8 @@ function useDomainCards(hass, { onNav = null } = {}) {
     if (k === 'obj:feeder') return <CarteDistributeur chip={chip} hass={hass} nom={label || tr('Distributeur')} onOpen={() => setFeederPop(true)} />;
     // La borne de recharge trouvée par la découverte (chantier G3, E3) : un appareil, sa carte.
     if (k === 'obj:borne') return <CarteBorne chip={chip} hass={hass} label={label} onOpen={() => setBornePop(true)} />;
+    // Une voiture, une litière, une fontaine (A11, A12) : un appareil que la découverte a reconnu, sa carte.
+    if (k.indexOf(CLE_COMPOSE) === 0) return <Suspense fallback={<div className="o-rmcard" style={{ height: '100%' }} />}><CarteCompose cle={k} chip={chip} hass={hass} label={label} onOpen={() => setComposePop(k)} /></Suspense>;
     // Un groupe de capteurs (chantier Capteurs, étape 2 ; C20) : Ouvertures, Sécurité, Présence.
     if (k === 'groupe:piles') return <RoomPilesCard hass={hass} onOpen={() => setGroupePop('piles')} label={label} chip={chip} />;
     if (k.indexOf('groupe:') === 0) return <RoomGroupeCard groupe={k.slice(7)} hass={hass} onOpen={() => setGroupePop(k.slice(7))} label={label} chip={chip} />;
@@ -1206,22 +1274,26 @@ function useDomainCards(hass, { onNav = null } = {}) {
     // La vigilance météo (chantier Capteurs, C28) : sa carte, large ou compacte, avant la carte générique d'un binaire.
     if (estVigilance(k, S[k], LOGGIA_INDEX && LOGGIA_INDEX.entityMeta ? LOGGIA_INDEX.entityMeta.get(k) : null)) return <RoomVigilanceCard id={id} hass={hass} onOpen={ouvrir} label={label} chip={chip} />;
     // Une vanne (étape 3 IoT, I31), large ou compacte : `CvCard` lui donne sa carte, chargée à la demande — avant la carte d'une prise.
-    if (chip || estVanneCarte(k)) return <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} dense={chip} />;
+    // Les cartes d'une entité, protégées contre les redessins inutiles (19/11, fluidité, point 2 ; `memeCarte`).
+    const M = cartesMemo();
+    // La minute en cours : un « il y a 3 min » se tient à jour même quand rien ne bouge chez l'appareil.
+    const minute = Math.floor(Date.now() / 60000);
+    if (chip || estVanneCarte(k)) return <M.entite id={id} hass={hass} minute={minute} label={label} onOpen={ouvrir} dense={chip} />;
     const d = k.split('.')[0];
     // Une prise qui n'est pas une lumiere n'est plus une carte lumiere : elle
     // rejoint les autres appareils, au gabarit, avec sa puissance.
     const lumiere = d === 'light' || (d === 'switch' && cvEstLumiere(id));
-    return lumiere ? <RoomLightCard id={id} hass={hass} onOpen={ouvrir} label={label} />
-      : d === 'cover' ? (estVolet(S[k]) ? <RoomVoletCard id={id} hass={hass} onOpen={setCoverPop} titre={label} /> : <RoomCoverCard id={id} hass={hass} onOpen={setCoverPop} titre={label} />)
-        : d === 'climate' ? <RoomClimateCard id={id} hass={hass} onOpen={setClimPop} label={label} />
-          : d === 'media_player' ? <RoomMediaCard id={id} hass={hass} onOpen={setMediaPop} label={label} />
+    return lumiere ? <M.lumiere id={id} hass={hass} minute={minute} onOpen={ouvrir} label={label} />
+      : d === 'cover' ? (estVolet(S[k]) ? <M.volet id={id} hass={hass} minute={minute} onOpen={setCoverPop} titre={label} /> : <M.couvrant id={id} hass={hass} minute={minute} onOpen={setCoverPop} titre={label} />)
+        : d === 'climate' ? <M.thermostat id={id} hass={hass} minute={minute} onOpen={setClimPop} label={label} />
+          : d === 'media_player' ? <M.lecteur id={id} hass={hass} minute={minute} onOpen={setMediaPop} label={label} />
             : (d === 'vacuum' || d === 'lawn_mower') ? <RoomRobotCard id={id} hass={hass} onOpen={ouvrir} label={label} />
               : d === 'water_heater' ? <CarteEauChaude id={id} hass={hass} onOpen={ouvrir} label={label} />
               // Une mesure de la table a sa carte (chantier Capteurs, C6) : la pièce n'en gagne aucune, la carte d'avant change.
-              : (d === 'sensor' && estMesure(S[k])) ? <RoomMesureCard id={id} hass={hass} onOpen={ouvrir} label={label} />
-              : (d === 'switch' && priseDe(S, k).prise) ? <RoomPriseCard id={id} hass={hass} onOpen={ouvrir} titre={label} />
-              : ROOM_GENERIQUES.indexOf(d) >= 0 ? <RoomGenericCard id={id} hass={hass} onOpen={ouvrir} label={label} />
-                : <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} />;
+              : (d === 'sensor' && estMesure(S[k])) ? <M.mesure id={id} hass={hass} minute={minute} onOpen={ouvrir} label={label} />
+              : (d === 'switch' && priseDe(S, k).prise) ? <M.prise id={id} hass={hass} minute={minute} onOpen={ouvrir} titre={label} />
+              : ROOM_GENERIQUES.indexOf(d) >= 0 ? <M.generique id={id} hass={hass} minute={minute} onOpen={ouvrir} label={label} />
+                : <M.entite id={id} hass={hass} minute={minute} label={label} onOpen={ouvrir} />;
   };
   /* L'entité de la fiche ouverte — une seule à la fois —, pour l'aide d'une panne sous l'en-tête commun (06/11, étape 9 ;
    * aidepanne.jsx). Une prise dit la sienne elle-même. */
@@ -1247,7 +1319,9 @@ function useDomainCards(hass, { onNav = null } = {}) {
       {mediaPop && <FicheMedia id={mediaPop} hass={hass} onClose={() => setMediaPop(null)} />}
       {meteoPop && <FicheMeteo id={meteoPop} hass={hass} onClose={() => setMeteoPop(null)} />}
       {sensPop && <FicheCapteur id={sensPop} hass={hass} onClose={() => setSensPop(null)} />}
-      {appPop && <FicheApp id={appPop} hass={hass} fiche onClose={() => setAppPop(null)} />}
+      {/* Un purificateur d'air (ADR 0387) ouvre SA fiche ; tout autre appareil, la fiche universelle. */}
+      {appPop && (estPurificateur(LOGGIA_INDEX, appPop) ? <FichePurificateur id={appPop} hass={hass} onClose={() => setAppPop(null)} />
+        : <FicheApp id={appPop} hass={hass} fiche onClose={() => setAppPop(null)} />)}
       {calPop && <FeuilleCalendrier hass={hass} onClose={() => setCalPop(null)} />}
       {camPop && <CamSheet haid={camPop} nom={cvName(S[camPop], camPop)} hass={hass} onClose={() => setCamPop(null)} onNav={onNav} />}
       {/* Une PRISE (P1) ouvre sa fiche (chantier Prises, § 3.5), comme un switch que l'index ne classe pas encore et que l'état des prises garde (F2) ; un autre switch, sa feuille d'avant. */}
@@ -1261,10 +1335,11 @@ function useDomainCards(hass, { onNav = null } = {}) {
       {groupePop && <FicheGroupe groupe={groupePop} hass={hass} onClose={() => setGroupePop(null)} />}
       {eauPop && <FicheEauChaude id={eauPop} hass={hass} onClose={() => setEauPop(null)} />}
       {bornePop && <FicheBorne hass={hass} onClose={() => setBornePop(false)} />}
+      {composePop && <Suspense fallback={null}><FicheCompose cle={composePop} hass={hass} onClose={() => setComposePop(null)} /></Suspense>}
       {traceurPop && <Suspense fallback={null}><FicheTraceur id={traceurPop} hass={hass} onClose={() => setTraceurPop(null)} /></Suspense>}
     </FicheEntite.Provider>
   );
-  const fermer = () => { setLightPop(null); setClimPop(null); setPilotPop(null); setCoverPop(null); setMediaPop(null); setSensPop(null); setAppPop(null); setCamPop(null); setPrisePop(null); setLockPop(null); setBinPop(null); setRobotPop(null); setGroupePop(null); setFeederPop(false); setPlantPop(null); setEauPop(null); setBornePop(false); setTraceurPop(null); };
+  const fermer = () => { setLightPop(null); setClimPop(null); setPilotPop(null); setCoverPop(null); setMediaPop(null); setSensPop(null); setAppPop(null); setCamPop(null); setPrisePop(null); setLockPop(null); setBinPop(null); setRobotPop(null); setGroupePop(null); setFeederPop(false); setPlantPop(null); setEauPop(null); setBornePop(false); setTraceurPop(null); setComposePop(null); };
   /* La COMPACTE d'une entite : une rangee — icone, nom, etat, le controle —
    * qui ouvre la meme fiche que la riche. Une zone fil pilote n'en a pas. */
   const compact = (id, label = null) => card(id, label, null, true);
@@ -1440,8 +1515,8 @@ function compteursDuChauffage(S, entite, puissance) {
 function zoneDuChauffage(S, entite) {
   return climateZones(S).find(x => x && x.decouvert && x.modeEnt === entite) || null;
 }
-// La pièce d'un chauffage, celle de Home Assistant : « Bureau · fil pilote » sous le nom de sa fiche.
-const pieceDuChauffage = (id) => (LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function' && LOGGIA_INDEX.areaNameOf(id)) || null;
+// La pièce d'un chauffage, celle de Home Assistant : « Bureau · fil pilote » sous le nom de sa fiche (`nomZoneDe`, state.js).
+const pieceDuChauffage = nomZoneDe;
 
 /* La fiche d'un chauffage (plan 2 du chantier Chauffage, tâche 8 ; choix 10
  * et 13) — une feuille à onglets comme celles du robot et du distributeur :
@@ -1554,6 +1629,32 @@ function FicheVolet({ id, hass, onClose }) {
   );
 }
 
+/* La fiche d'un PURIFICATEUR d'air (ADR 0387) : une feuille à onglets, comme le
+ * volet. La coquille passe ce que le démarrage sait déjà — le `hass` suivi en
+ * direct (le ventilateur et ses sœurs : l'air, le filtre, l'écran, le verrou),
+ * sa pièce, le fabricant et le modèle de l'appareil, l'épingle, l'icône choisie
+ * pour sa carte — et ouvre la fiche universelle par-dessus. */
+function FichePurificateur({ id, hass, onClose }) {
+  const S = (hass && hass.states) || {};
+  const hassLive = useHass([id, ...siblingsOf(LOGGIA_INDEX, id).filter(s => S[s])]);
+  const H = hassLive || hass;
+  const [fiche, setFiche] = useState(null);
+  const m = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta ? LOGGIA_INDEX.entityMeta.get(id) : null;
+  const dm = m && m.deviceId && LOGGIA_INDEX.deviceMeta ? LOGGIA_INDEX.deviceMeta.get(m.deviceId) : null;
+  const appareil = dm ? [dm.manufacturer, dm.model].filter(Boolean).join(' ') : null;
+  return (
+    <BottomSheet onClose={onClose} onglets>
+      {() => (<>
+        <Suspense fallback={<div style={{ minHeight: 260 }} />}>
+          <FichePurificateurContent hass={H} id={id} piece={zoneDe(id)} appareil={appareil || null} onFiche={setFiche}
+            glyphe={(defaut) => <GlypheCarte id={id} size={18}>{defaut}</GlypheCarte>} epingle={<BoutonEpingle id={id} />} />
+        </Suspense>
+        {fiche && <FicheAppareil id={fiche} hass={H} onClose={() => setFiche(null)} />}
+      </>)}
+    </BottomSheet>
+  );
+}
+
 /* La fiche d'une PRISE (chantier Prises, § 3.5) : une feuille SANS onglets — sa
  * hauteur suit son contenu. La coquille passe à la fiche, chargée à la demande,
  * ce que le démarrage sait déjà : la règle (`priseDe` : ses capteurs, suivis en
@@ -1578,4 +1679,4 @@ function FichePrise({ id, hass, onClose }) {
   );
 }
 
-export { FeuilleCalendrierContent, FicheMedia, FicheEntete, FicheRangee, FicheValeur, FicheBouton, heureDe, zoneDe, pileDe, RangeePile, RoomCoverSheet, RoomClimateSheet, BRIQUES_SWITCH, RoomSwitchSheet, RoomLockSheet, LigneEntite, BoutonEpingle, Epingles, FicheMachineHero, FicheRobot, FicheAppareil, useHistorique24, Courbe24, BRIQUES_CAPTEUR, FicheCapteur, FicheBinaire, BRIQUES_GROUPE, FicheGroupe, useDomainCards, adresseDessin, lirePlante, FichePlante, CarteDistributeur, FicheDistributeur, FicheChauffage, FichePrise };
+export { memeCarte, FeuilleCalendrierContent, FicheMedia, FicheEntete, FicheRangee, FicheValeur, FicheIndispo, FicheBouton, heureDe, zoneDe, pileDe, RangeePile, RangeeDernier, RoomCoverSheet, RoomClimateSheet, BRIQUES_SWITCH, RoomSwitchSheet, RoomLockSheet, LigneEntite, BoutonEpingle, Epingles, FicheMachineHero, FicheRobot, FicheAppareil, useHistorique24, jusquAMaintenant, Courbe24, BRIQUES_CAPTEUR, FicheCapteur, FicheBinaire, BRIQUES_GROUPE, FicheGroupe, useDomainCards, adresseDessin, lirePlante, FichePlante, CarteDistributeur, FicheDistributeur, FicheChauffage, FichePrise };

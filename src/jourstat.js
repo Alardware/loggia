@@ -58,6 +58,32 @@ export function compteurDuJour(etat, maintenant = Date.now()) {
   return t >= minuitLocal(maintenant) - BATTEMENT && t <= maintenant + BATTEMENT;
 }
 
+/**
+ * Le total du jour d'un compteur lu dans les statistiques : son `change`, sauf
+ * quand son ÉTAT est plus petit.
+ *
+ * Un compteur journalier ne dit pas toujours sa remise à zéro : un capteur
+ * modèle (`template`), une somme de deux compteurs, l'entité « du jour » d'une
+ * intégration n'ont pas de `last_reset`. `compteurDuJour` les prend pour des
+ * index, et leur journée se lit dans les statistiques. Or celles-ci se
+ * trompent sur une somme de deux compteurs remis à zéro l'un après l'autre :
+ * Home Assistant voit le total retomber deux fois, et compte la valeur
+ * intermédiaire comme une consommation. La tranche de minuit portait ainsi
+ * + 8,76 kWh et + 1,42 € que personne n'avait consommés, et l'aperçu annonçait
+ * le double de la journée (audit du 12/11, ADR 0347).
+ *
+ * Un INDEX ne fait que monter depuis le premier jour : il est toujours plus
+ * grand que ce qu'il a compté aujourd'hui. Un état plus petit que le `change`
+ * du jour ne peut donc venir que d'un compteur remis à zéro cette nuit — et
+ * son état EST le total du jour. Sans statistiques, rien : un index ne se
+ * prend toujours pas pour une journée.
+ */
+export function totalDuJour(etat, change) {
+  if (typeof change !== 'number' || !isFinite(change)) return null;
+  if (typeof etat === 'number' && isFinite(etat) && etat >= 0 && etat < change) return etat;
+  return change;
+}
+
 /** La requête, isolée pour qu'un test puisse la lire sans WebSocket. */
 export function requeteJour(ids, maintenant = Date.now()) {
   return {

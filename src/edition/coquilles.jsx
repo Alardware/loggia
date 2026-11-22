@@ -17,11 +17,14 @@ const ComposeurCartesDiffere = lazyRecharge(() => import('./feuilles.jsx').then(
 const FeuilleHistoriqueDiffere = lazyRecharge(() => import('./feuilles.jsx').then(m => ({ default: m.FeuilleHistorique })));
 const BiblioViewDiffere = lazyRecharge(() => import('./biblio.jsx').then(m => ({ default: m.BiblioView })));
 const CustomViewDiffere = lazyRecharge(() => import('../cartescustom/vue.jsx').then(m => ({ default: m.CustomView })));
+/* Le Nuancier (20/11) : les éléments de base sous le thème appliqué, ouvert depuis Paramètres › Apparence. */
+const NuancierViewDiffere = lazyRecharge(() => import('./nuancier.jsx').then(m => ({ default: m.NuancierView })));
 const CardEditSheet = (props) => <Suspense fallback={null}><CardEditSheetDiffere {...props} /></Suspense>;
 const ComposeurCartes = (props) => <Suspense fallback={null}><ComposeurCartesDiffere {...props} /></Suspense>;
 const FeuilleHistorique = (props) => <Suspense fallback={null}><FeuilleHistoriqueDiffere {...props} /></Suspense>;
 /* Une vue : le repli est la surface vide qu'App montre déjà avant la découverte. */
 const BiblioView = (props) => <Suspense fallback={<main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />}><BiblioViewDiffere {...props} /></Suspense>;
 const CustomView = (props) => <Suspense fallback={<main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />}><CustomViewDiffere {...props} /></Suspense>;
+const NuancierView = (props) => <Suspense fallback={<main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />}><NuancierViewDiffere {...props} /></Suspense>;
 
-export { CardEditSheet, ComposeurCartes, FeuilleHistorique, BiblioView, CustomView };
+export { CardEditSheet, ComposeurCartes, FeuilleHistorique, BiblioView, CustomView, NuancierView };

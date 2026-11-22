@@ -15,6 +15,7 @@
 // deviendrait un asset charge en retard — flash sans style, et plus de <link>
 // dans index.html pour l'inline du paquet (pack_frontend l'exige).
 import './index.css';
+import './prisme.css';
 import { CHARGEURS, langueServie } from './langues/index.js';
 
 /* La démo EN LIGNE (GitHub Pages) est une construction à part : `npm run

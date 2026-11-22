@@ -97,7 +97,8 @@ function boutons(f) {
 test('aucun bouton de ces deux cartes ne contient de commande (nested-interactive)', () => {
   // ASSERTION MODIFIÉE (chantier Prises, tâche 7) : la carte d'une prise a quitté la générique ; elle tient la même règle.
   // ASSERTION MODIFIÉE (passe téléphone, tâche 3) : la plaque-interrupteur d'une lumière est un bouton — elle ne contient que son glyphe.
-  for (const nom of ['RoomGenericCard', 'RoomLightCard', 'RoomPriseCard', 'PlaqueBascule']) {
+  // ADR 0380 : la plaque-interrupteur d'une lumière est partie ; la carte n'a plus de bouton.
+  for (const nom of ['RoomGenericCard', 'RoomLightCard', 'RoomPriseCard']) {
     const f = fonction(nom);
     for (const d of boutons(f)) {
       const c = contenu(f, d);
@@ -110,7 +111,8 @@ test('aucun bouton de ces deux cartes ne contient de commande (nested-interactiv
 
 test('la carte générique : une racine sans rôle, et la surface en premier enfant', () => {
   const f = fonction('RoomGenericCard');
-  const d = f.indexOf("<div className={'o-rmcard' + (mort ? ' o-panne' : '')}");
+  // ASSERTION MODIFIÉE (12/11, audit) : la carte est aussi le conteneur de la grille commune (`o-gabarit`, E6).
+  const d = f.indexOf("<div className={'o-rmcard o-gabarit' + (mort ? ' o-panne' : '')}");
   assert.ok(d >= 0, 'la racine de la carte a changé de forme');
   const racine = balise(f, d);
   for (const attr of ['role=', 'tabIndex=', 'aria-label=', 'onClick=', 'onKeyDown=']) {
@@ -127,14 +129,16 @@ test('la carte générique : une racine sans rôle, et la surface en premier enf
 test('la carte générique : son nom est le texte affiché, la mesure d’un capteur comprise', () => {
   const f = fonction('RoomGenericCard');
   // Les mêmes variables que l'écran : `nom`, `sub`, et la mesure en grand.
-  assert.ok(f.includes('<div style={RM_NAME}>{nom}</div>') && f.includes('<div style={{ ...RM_SUB, color: couleur }}>{sub}</div>'), 'le nom et l’état affichés');
-  assert.ok(f.includes('{mesure.v}{mesure.u ? <span'), 'la mesure affichée en grand');
+  // ASSERTION MODIFIÉE (12/11, audit) : le nom porte la classe de la grille commune (deux lignes sur la carte étroite, E6) ; la mesure s'écrit par `ChiffreHaut` et `ChiffreMesure` (E13) — les mêmes `mesure.v` et `mesure.u`.
+  assert.ok(f.includes('<div className="o-gab-nom" style={RM_NAME}>{nom}</div>') && f.includes('<div style={{ ...RM_SUB, color: couleur }}>{sub}</div>'), 'le nom et l’état affichés');
+  assert.ok(f.includes('<ChiffreHaut v={mesure.v} u={mesure.u || null} />') && f.includes('<ChiffreMesure chiffre={mesure.v} unite={mesure.u} famille={null} />'), 'la mesure affichée en grand');
   assert.ok(f.includes("const valeur = mesure ? mesure.v + (mesure.u ? ' ' + mesure.u : '') : null;"), 'la mesure entre dans le nom, telle qu’affichée');
   /* ASSERTIONS MODIFIÉES (chantier Capteurs, tâche 4 ; C11) : le verdict d'une mesure de la table a quitté cette carte
    * avec la ligne « Libellé · VERDICT ». Sa carte (`RoomMesureCard`) écrit la PHRASE de sa zone, sans capitales, et son
    * nom la lit telle qu'affichée (relecture du lot 13 : une synthèse vocale épelait « B-O-N »). */
   assert.ok(!f.includes('libMesure') && !f.includes('jauge.verdict'), 'la carte générique écrit encore un verdict');
-  assert.ok(fonction('RoomMesureCard').includes("label={nomCarte(v.nom, valeur && famille ? famille + ' ' + valeur : valeur, v.phrase)}"), 'le nom de la carte d’une mesure lit sa phrase, telle qu’affichée');
+  // ASSERTION MODIFIÉE (12/11, audit) : muette, la carte dit encore ce qu'elle mesure (`v.libelle`, E23) ; avec un chiffre, rien ne change.
+  assert.ok(fonction('RoomMesureCard').includes("label={nomCarte(v.nom, valeur ? (famille ? famille + ' ' + valeur : valeur) : v.libelle, v.phrase)}"), 'le nom de la carte d’une mesure lit sa phrase, telle qu’affichée');
 });
 
 test('la carte générique : le décor laisse filer le clic, les commandes passent dessus', () => {
@@ -144,7 +148,8 @@ test('la carte générique : le décor laisse filer le clic, les commandes passe
   // Le texte passe devant le filigrane d'un ouvrant ; il laisse filer le clic,
   // jauges comprises. Sauf celui d'une caméra, qui porte « Voir le flux ».
   assert.ok(f.includes("const voirFlux = dom === 'camera' && !mort;"));
-  assert.ok(f.includes("<div style={voirFlux ? { marginTop: 14 } : { marginTop: 14, position: 'relative', pointerEvents: 'none' }}>"), 'le texte prend le clic');
+  // ASSERTION MODIFIÉE (12/11, audit) : le texte part 14 px sous la plaque par le gabarit (`RM_SOUS_PLAQUE`), sur une ligne qui porte aussi le chiffre d'une mesure (E13) ; il laisse toujours filer le clic.
+  assert.ok(f.includes("<div style={voirFlux ? { display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: RM_SOUS_PLAQUE } : { display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: RM_SOUS_PLAQUE, position: 'relative', pointerEvents: 'none' }}>"), 'le texte prend le clic');
   // « Voir le flux » : positionné (au-dessus de la surface), nommé de son
   // texte puis de l'appareil, et il garde son arrêt de propagation.
   const v = f.slice(f.indexOf('{voirFlux && ('));
@@ -179,14 +184,20 @@ test('la lampe : un div au dessin du bouton, sa bascule et sa glissière hors de
    * et le pourcentage, sur une ligne, comme celle d'un radiateur. Ce qu'elle dit ne change pas : l'état de l'écran (`v.phrase.texte`), en rouge s'il est en panne. */
   /* ASSERTION MODIFIÉE (passe téléphone, tâche 3) : la phrase porte la classe de la grille commune et, allumée, l'encre de la lampe pour la carte étroite (T8) ;
    * ce qu'elle dit ne change pas. */
-  assert.ok(f.includes("<div className=\"o-gab-phrase\" data-encre={v.on && !v.phrase.panne ? '' : undefined}") && f.includes("color: v.phrase.panne ? 'var(--o-bad)' : 'var(--o-text2)', '--o-n': Math.max(1, v.phrase.texte.length), '--o-encre': v.on ? v.encre : undefined }}>{v.phrase.texte}</div>"), 'l’état du nom est celui de l’écran');
+  assert.ok(f.includes("<div className=\"o-gab-phrase\" data-encre={v.on && !v.phrase.panne ? '' : undefined}") && f.includes("color: v.phrase.panne ? 'var(--o-bad)' : 'var(--o-text2)', '--o-n': Math.max(1, (v.phrase.court || v.phrase.texte).length), '--o-encre': v.on ? v.encre : undefined }}>")
+    // ASSERTION MODIFIÉE (audit du 12/11, X4 ; ADR 0369) : une phrase peut avoir une forme courte, pour la carte étroite (« Hors tension »).
+    && f.includes("{v.phrase.court ? <><span className=\"o-seul-large\">{v.phrase.texte}</span><span className=\"o-seul-etroit\">{v.phrase.court}</span></> : v.phrase.texte}</div>"), 'l’état du nom est celui de l’écran');
   // Le geste d'avant, sans rien perdre : la fabrique ouvre la fiche de la lampe, sinon celle de l'appareil (`ouvrir`).
-  assert.ok(app.includes('<RoomLightCard id={id} hass={hass} onOpen={ouvrir} label={label} />'));
+  // ASSERTION MODIFIÉE (19/11, fluidité, point 2 ; ADR 0377) : la fabrique pose la carte protégée (`cartesMemo`, `memeCarte`) et lui passe la minute.
+  assert.ok(app.includes('<M.lumiere id={id} hass={hass} minute={minute} onOpen={ouvrir} label={label} />') && app.includes('lumiere: memo(RoomLightCard, memeCarte)'));
   /* ASSERTION MODIFIÉE (passe téléphone, tâche 3) : la bascule de la carte large et la plaque-interrupteur de la carte étroite partagent un seul geste (`basculer`) ;
    * toutes deux nomment la lampe. */
   assert.ok(f.includes('const basculer = () => { flash(c.col); v.commander(!v.on); };'), 'un seul geste');
-  /* ASSERTION MODIFIÉE (ticket #43) : sans variateur, la bascule reste aussi sur la carte étroite — la plaque commande toujours. */
-  assert.ok(f.includes("<RmBascule className={v.variable ? 'o-seul-large' : undefined} on={v.on} nom={v.nom} onToggle={basculer} inerte={v.muette} />") && f.includes('<PlaqueBascule on={v.on} nom={v.nom} fond={fond} encre={encre} inerte={v.muette} onToggle={basculer}>')
+  /* ASSERTION MODIFIÉE (ticket #43) : sans variateur, la bascule reste aussi sur la carte étroite — la plaque commande toujours.
+   * ASSERTION MODIFIÉE (audit du 12/11, X4 ; ADR 0369) : inertes pour une lampe muette ET pour une ampoule sans courant (`inerte`). */
+  assert.ok(f.includes('const inerte = v.muette || !!v.coupee;'), 'muette ou sans courant, rien ne commande');
+  // ASSERTION MODIFIÉE (sa décision du 20/11, ADR 0380) : une seule bascule, montrée sur toutes les cartes ; la plaque n'est plus un interrupteur.
+  assert.ok(f.includes('<RmBascule on={v.on} nom={v.nom} onToggle={basculer} inerte={inerte} couleur={RM_AMBRE} />') && !f.includes('PlaqueBascule')
     && f.includes("label={tr('Luminosité') + ' ' + v.nom}"), 'les commandes nomment la lampe');
 });
 

@@ -103,7 +103,8 @@ test('le rail : UNE carte Agenda a la place de deux (02/10)', () => {
     'le calendrier reste une section connue du rail, donc ajoutable');
 
   const d = DASHBOARD;
-  assert.ok(d.includes('const agenda = useAgenda(accueil && accueil.hass, null, plageAgenda);')
+  // ASSERTION MODIFIÉE (13/11, audit du 12/11, lot 2a, B4) : l'agenda se relit après un geste — le compteur `tourAgenda`.
+  assert.ok(d.includes('const agenda = useAgenda(accueil && accueil.hass, null, plageAgenda, tourAgenda);')
     && d.includes('const plageCourte = useMemo(() => plageSemaine(new Date(jourAuj)), [jourAuj]);'),
     'sept jours pour la carte du rail, d’aujourd’hui minuit');
   /* La feuille peut demander PLUS : sa vue Mois a besoin du mois entier, sinon
@@ -204,7 +205,8 @@ test('ce que la relecture a l’ecran a corrige', () => {
   /* 3. L'en-tete des colonnes de la grille des heures ne pouvait JAMAIS
    * marquer le jour choisi : `sel` finissait par `&& false`, et la prop
    * `jourSel` que l'appelant passait n'etait meme pas declaree. */
-  assert.ok(c.includes('function GrilleHeures({ colonnes, evts, hass, ouvert, setOuvert, onChoisir, jourSel = null, compacte = false })'),
+  // ASSERTION MODIFIÉE (13/11, audit du 12/11, lot 2a, B4) : la grille passe `onChange` à la fiche d'un événement.
+  assert.ok(c.includes('function GrilleHeures({ colonnes, evts, hass, ouvert, setOuvert, onChoisir, jourSel = null, compacte = false, onChange = null })'),
     'GrilleHeures doit declarer le `jourSel` que ses deux appelants lui passent');
   assert.ok(c.includes('const sel = !!jourSel && k === cleJour(jourSel);'), 'le jour choisi se marque pour de bon');
   assert.ok(!/&&\s*false/.test(c), 'une condition qui finit par « && false » ne decide plus rien');
@@ -328,7 +330,8 @@ test('la feuille d’agenda : jours fixes, rien de rogné, le fond ne suit plus 
   ]) assert.ok(rail.includes(ancre), quoi + ' a repris un fond : on reverrait le bloc');
 
   // La fiche s'ouvre du cote ou il y a de la place.
-  assert.ok(rail.includes('function FicheEvenement({ e, hass, onFermer, aGauche = false })'), 'la fiche n’a plus de cote');
+  // ASSERTION MODIFIÉE (13/11, audit du 12/11, lot 2a, B4) : la fiche reçoit `onChange`, pour relire l'agenda après une suppression.
+  assert.ok(rail.includes('function FicheEvenement({ e, hass, onFermer, aGauche = false, onChange = null })'), 'la fiche n’a plus de cote');
   assert.ok(rail.includes("...(aGauche ? { right: '100%', marginRight: 8 } : { left: '100%', marginLeft: 8 })"),
     'la fiche s’ouvre de nouveau toujours a droite : elle sortira du cadre');
   assert.ok(rail.includes('const ficheAGauche = i > (colonnes.length - 1) / 2;'), 'le choix du cote a disparu');
@@ -343,7 +346,8 @@ test('la feuille d’agenda : jours fixes, rien de rogné, le fond ne suit plus 
   assert.ok(rail.includes("width: 38, height: 38, borderRadius: '50%'"), 'le chiffre du jour a reperdu sa pastille ronde');
   assert.ok(!/gridTemplateColumns: '56px ' \+ cols, gap: 6/.test(rail), 'les colonnes se reecartent en sept cartes');
   assert.ok(rail.includes("borderLeft: '1px solid var(--o-bd3)'"), 'les colonnes n’ont plus leur trait de separation');
-  assert.ok(rail.includes("background: 'rgba(' + e.rgb + ',.92)', color: '#fff'"), 'les evenements repassent en fond translucide');
+  // ASSERTION MODIFIÉE (audit du 12/11, lot 4, E25) : le texte prend l'encre que la teinte tient, plus un blanc à 2 pour 1.
+  assert.ok(rail.includes("background: 'rgba(' + e.rgb + ',.92)', color: encreSurTeinte(e.rgb)"), 'les evenements repassent en fond translucide');
 });
 
 test('un poste de nuit s’étend sur les deux jours, et son titre ne se coupe pas (08/10)', () => {

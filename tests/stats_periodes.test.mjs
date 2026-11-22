@@ -145,7 +145,8 @@ test('la requête demande le changement, pas le cumul', () => {
   const b = bornesStat('semaine', 0, new Date(2026, 9, 6).getTime());
   const q = requeteStat(['sensor.un', 'sensor.deux'], b);
   assert.equal(q.type, 'recorder/statistics_during_period');
-  assert.deepEqual(q.types, ['change'], 'sum est un cumul : il ne s’additionne pas');
+  // ASSERTION MODIFIÉE (12/11, ADR 0347) : le relevé (`state`) accompagne le changement, pour borner une tranche gonflée — toujours pas `sum`.
+  assert.deepEqual(q.types, ['change', 'state'], 'sum est un cumul : il ne s’additionne pas');
   assert.equal(q.period, 'day');
   assert.deepEqual(q.statistic_ids, ['sensor.un', 'sensor.deux']);
   // Les bornes partent en ISO, fin exclusive.

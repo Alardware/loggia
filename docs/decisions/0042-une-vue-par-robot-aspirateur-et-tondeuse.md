@@ -10,6 +10,8 @@ aspirateur et tondeuse ».
 
 *Complétée par l'ADR [0313](0313-la-tondeuse-dit-son-avance-et-garde-sa-derniere-erreur-24-h.md) (01/11) : la tondeuse dit son avance, et la popup garde la dernière erreur 24 h.*
 
+*Complétée par l'ADR [0389](0389-le-robot-a-son-dessin-anime-dans-sa-fiche.md) (22/11) : le robot a son dessin, animé au travail, dans l'Accueil de sa fiche.*
+
 ## Contexte
 
 Loggia avait une vue « Aspirateur » écrite pour UN robot : le plan, les pièces,

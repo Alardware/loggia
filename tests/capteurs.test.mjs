@@ -28,17 +28,20 @@ test('une seule table d’air : la banniere et le badge tombent sur les bornes d
 test('la carte capteur : une mesure de la table a sa carte ; la carte de base garde la pile et le reste, plus de puces', () => {
   const c = bloc('function RoomGenericCard(', NL + "/* ── La carte d'une MESURE");
   // ASSERTION MODIFIÉE (audit du 19/10, point 13) : la valeur se lit STRICTEMENT (`lireNombre`).
-  assert.ok(c.includes("mesure = n == null ? { v: String(s), u: '' } : { v: fmtN(n), u: unite };"), 'la mesure, valeur et unite');
+  // ASSERTION MODIFIÉE (audit du 12/11, lot 4, R4) : un état qui n'est pas un nombre se dit comme une phrase, jamais en gros chiffres.
+  assert.ok(c.includes("mesure = { v: fmtN(n), u: unite };") && !c.includes('{ v: String(s)') && c.includes("sub = haWeatherLabel(brut) || (ha && ha !== brut ? ha : null) || brut || '—';"), 'la mesure, valeur et unite');
   assert.ok(!c.includes('cleMesure(') && !c.includes('jaugeMesure(') && !c.includes('ligneVerdict') && !c.includes('<JaugeMesure'), 'la carte de base ne lit plus la table : la carte d’une mesure le fait');
   // ASSERTION MODIFIÉE (audit du 19/10, point 14) : UNE source de noms, confort.js (`nomClasse`), plus `MESURES_NOMS`.
   assert.ok(c.includes("sub = (nc && !nomDitFamille(nom, nc) ? nc : '') || unite || tr('Mesure');"), 'sans regle : le nom de la mesure, rien d’invente');
-  assert.ok(c.includes("(dom === 'sensor' && mesure && !mort)") && c.includes('fontSize: 22, fontWeight: 800'), 'la valeur en grand');
-  assert.ok(c.includes('{barres && !mort && <JaugePile barres={barres} />}'), 'les barres de la pile, sous le texte');
+  // ASSERTION MODIFIÉE (12/11, audit) : la valeur d'une mesure générique s'écrit sur la ligne du nom sur la carte large (`ChiffreMesure`), en haut sur la carte étroite (`ChiffreHaut`) — E13 ; les barres de la pile descendent au pied.
+  assert.ok(c.includes("(dom === 'sensor' && mesure && !mort)") && c.includes('<ChiffreHaut v={mesure.v} u={mesure.u || null} />') && c.includes('<ChiffreMesure chiffre={mesure.v} unite={mesure.u} famille={null} />'), 'la valeur en grand');
+  assert.ok(c.includes("{barres && !mort && <div style={{ marginTop: 'auto', position: 'relative', pointerEvents: 'none' }}><JaugePile barres={barres} /></div>}"), 'les barres de la pile, au pied');
   const m = bloc('function RoomMesureCard(', NL + 'function ');
   // ASSERTION MODIFIÉE (chantier Capteurs, tâche 4 bis) : la phrase porte aussi la classe de la grille commune, et sa forme courte s'écrit à part.
   // ASSERTION MODIFIÉE (correction bis, point 6) : la phrase de la carte large vit dans son cadre ; la carte étroite écrit toujours la sienne à part.
   assert.ok(m.includes('<ChiffreMesure ') && m.includes('<BarreMesure ') && m.includes('className="o-mesure-phrases o-seul-large"') && m.includes('className="o-mesure-phrase-courte o-gab-phrase o-seul-etroit"'), 'la carte d’une mesure : le chiffre, la phrase, la barre');
-  assert.ok(src.includes(": (d === 'sensor' && estMesure(S[k])) ? <RoomMesureCard id={id} hass={hass} onOpen={ouvrir} label={label} />"), 'la fabrique envoie une mesure de la table à sa carte');
+  // ASSERTION MODIFIÉE (19/11, fluidité, point 2 ; ADR 0377) : la fabrique pose la carte protégée (`cartesMemo`, `memeCarte`) et lui passe la minute.
+  assert.ok(src.includes(": (d === 'sensor' && estMesure(S[k])) ? <M.mesure id={id} hass={hass} minute={minute} onOpen={ouvrir} label={label} />") && src.includes('mesure: memo(RoomMesureCard, memeCarte)'), 'la fabrique envoie une mesure de la table à sa carte');
   assert.ok(!c.includes('soeurs.map') && !src.includes('PUCE_MESURE'), 'plus de puces soeurs');
   assert.ok(!c.includes("parts.join(' · ')"), 'plus la ligne « 579 ppm · 25,7 °C · 50 % »');
 });

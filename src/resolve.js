@@ -15,10 +15,11 @@
 
 import { siblingsOf, pickSibling } from './discovery.js';
 import { trouverCreneau, trouverCouleurDemain } from './creneau.js';
-import { trouverBorne } from './borne.js';
+import { trouverBornes } from './borne.js';
+import { haidsTempo } from './tempo.js';
 // L'appariement d'une Echo exposée deux fois (chantier Médias, M1, M14) : la jumelle que `cibleAlexa` retrouve, et ce que chaque intégration sait.
 import { cibleAlexa, estEcho } from './favlecture.js';
-import { integrationDe } from './telecommande.js';
+import { integrationDe, TOUCHES_TV } from './telecommande.js';
 import { BITS, estAlexa } from './lecteur.js';
 import { horsAir, sondeDAppareil, sondeDeLaPiece } from './horsair.js';
 
@@ -401,8 +402,10 @@ export function resolveMedia({ index, caps, states = {}, userCfg = {} } = {}) {
     const alexa = estAlexa(integration(haid)) || (!!ma && estAlexa(integration(ma)));
     const annonce = annonceDe(haid) || annonceDe(ma);
     const annonceHacs = [haid, ma].find(e => e && estEcho(integration(e))) || null;
+    // Un boîtier à télécommande est un écran, même sans classe : une Apple TV n'en a aucune dans Home Assistant (09/11).
+    const boitierTv = Object.prototype.hasOwnProperty.call(TOUCHES_TV, integration(haid) || '');
     return {
-      ...p, ma, alexa,
+      ...p, ma, alexa, boitierTv,
       modele: (d && d.model) || null,
       annonce, annonceHacs,
       groupe: alexa && !!(annonce || annonceHacs) && groupeDe(haid, ma),
@@ -537,6 +540,14 @@ export function modulesHorsSaisie(saisie, zones) {
     && !(saisie || []).some(s => s && (s.modeEnt === z.modeEnt || s.haid === z.modeEnt)));
 }
 
+/** Les thermostats decouverts qu'une saisie ne nomme pas (ADR 0379) : un
+ * `climate.*` qu'aucune ligne ne designe par son entite. Une ligne saisie que
+ * la resolution rend avec ce qui la complete n'y repasse donc jamais. */
+export function thermostatsHorsSaisie(saisie, zones) {
+  return (zones || []).filter(z => z && z.type === 'thermostat' && typeof z.haid === 'string' && z.haid.indexOf('climate.') === 0
+    && !(saisie || []).some(s => s && s.haid === z.haid));
+}
+
 /* Les appareils qui portent un module fil pilote, releves une fois par index :
  * l'index ne change plus apres `buildIndex`, et Objets pose la question pour
  * chaque interrupteur de la maison a chaque rendu. */
@@ -568,22 +579,27 @@ export function interrupteurDeModule(index, entityId) {
  * aides (consigne, mode, auto) autour d'un `switch`, elles, seule une saisie
  * sait les decrire.
  *
- * La saisie est rendue TELLE QUELLE, et les modules qu'elle ne decrit pas la
- * completent (regle du 07/10 : une fiche complete la decouverte, jamais ne la
- * remplace). Les thermostats ne changent pas : une saisie les laisse au
- * registre, ou Objets les trouve.
+ * La saisie est rendue TELLE QUELLE, et ce qu'elle ne decrit pas la complete
+ * (regle du 07/10 : une fiche complete la decouverte, jamais ne la remplace) :
+ * les thermostats qu'elle ne nomme pas, puis les modules. Les thermostats
+ * restaient « au registre, ou Objets les trouve » : la piece et la vue
+ * Chauffage, qui ne lisent que les zones, perdaient un poele ajoute apres la
+ * saisie (ADR 0379).
  */
 export function resolveClimate({ index, caps, states = {}, userCfg = {} } = {}) {
   const chosen = Array.isArray(userCfg.loggia_climate) ? userCfg.loggia_climate : null;
   const modules = zonesFilPilote(index, states);
-  if (chosen && chosen.length) return { available: true, source: 'utilisateur', list: chosen.concat(modulesHorsSaisie(chosen, modules)) };
-  const list = ((caps && caps.devices && caps.devices.climate) || []).map(c => ({
+  const thermostats = ((caps && caps.devices && caps.devices.climate) || []).map(c => ({
     // `room` porte un NOM : c'est ainsi que les vues rapprochent un appareil
     // d'une piece. Un area_id ne correspondrait a aucune piece configuree.
     id: c.id, haid: c.id, name: c.name, room: c.areaName || c.area || null, type: 'thermostat', hasAuto: false,
     tempSensor: pickSibling(index, states, c.id, { domain: 'sensor', deviceClass: 'temperature' })
       || areaTemp(index, states, c.id),
-  })).concat(modules);
+  }));
+  if (chosen && chosen.length) {
+    return { available: true, source: 'utilisateur', list: chosen.concat(thermostatsHorsSaisie(chosen, thermostats), modulesHorsSaisie(chosen, modules)) };
+  }
+  const list = thermostats.concat(modules);
   if (!list.length) return { available: false, reason: 'aucun thermostat', list: [] };
   return { available: true, source: 'decouverte', list };
 }
@@ -623,8 +639,12 @@ export function resolveEnergy({ index, states = {}, energyPrefs = null, userCfg 
   /* LA COULEUR DU LENDEMAIN (chantier G3, E4) : elle décrit le CONTRAT, pas
    * le tableau Énergie — elle se trouve avec ou sans lui. */
   const tempoDemain = trouverCouleurDemain(listeEntites(index));
+  /* ET CELLE D'AUJOURD'HUI, avec les jours restants (A3, ADR 0385) : `tempo.js`, sur les mêmes entités — « Aujourd'hui bleu ·
+   * demain blanc · encore 14 rouges » sur la carte du tarif. Le rôle `couleur` est déjà celui que le serveur pose (tarifs.py). */
+  const plateformeDeLentite = (id) => { const m = index && index.entityMeta && typeof index.entityMeta.get === 'function' ? index.entityMeta.get(id) : null; return (m && m.platform) || null; };
+  const tempoPlus = haidsTempo(listeEntites(index), plateformeDeLentite);
   if (!src) {
-    const haids = tempoDemain ? { tempoDemain } : {};
+    const haids = { ...(tempoDemain ? { tempoDemain } : {}), ...tempoPlus };
     return cfg
       ? { available: true, source: 'utilisateur', haids, devices: [], prix: [], prixVente: [] }
       : { available: false, reason: 'tableau de bord Energie non configure', haids, devices: [], prix: [], prixVente: [] };
@@ -775,10 +795,12 @@ export function resolveEnergy({ index, states = {}, energyPrefs = null, userCfg 
   const socsBatterie = batteries.map(socDe).filter(Boolean);
   const socVoisin = batCle && !socsBatterie.length ? pickSibling(index, states, batCle, { domain: 'sensor', deviceClass: 'battery' }) : null;
   const batNomme = ratesBatterie.length > 0 || inverseeBatterie.length > 0;
-  /* LA BORNE DE RECHARGE (chantier G3, E3) : trouvée par famille, confirmée
-   * par une ligne des appareils mesurés — un seul candidat (borne.js). Elle
-   * remplit `evNow`, que seul un réglage remplissait. */
-  const borne = trouverBorne({ index, states, energyPrefs });
+  /* LES BORNES DE RECHARGE (chantier G3, E3 ; A7) : trouvées par famille, confirmées
+   * par une ligne des appareils mesurés (borne.js). Une seule remplit `evNow`, que
+   * seul un réglage remplissait ; plusieurs, leurs PARTS (`evNowParts`) — la
+   * somme de ce qui charge, jamais l'une élue pour le tout. `borne` reste la première. */
+  const bornes = trouverBornes({ index, states, energyPrefs });
+  const borne = bornes[0] || null;
 
   const devices = ((energyPrefs && energyPrefs.device_consumption) || [])
     .map(d => d && d.stat_consumption ? {
@@ -807,7 +829,8 @@ export function resolveEnergy({ index, states = {}, energyPrefs = null, userCfg 
       solarNow: seul(solaireNow),
       solarNowParts: plusieurs(solaireNow),
       injectionNow: rate(exports_, 'stat_rate_to') || null,
-      evNow: borne ? borne.puissance : null,
+      evNow: bornes.length === 1 ? borne.puissance : null,
+      evNowParts: plusieurs(bornes.map(b => b.puissance)),
       /* La batterie. Ce que Home Assistant nomme d'abord (`batRate`, positif en
        * DÉCHARGE). Sinon l'ancien chemin : une puissance SIGNEE voisine du
        * compteur, ou les deux sens séparément — la vue fait la différence. */
@@ -834,6 +857,7 @@ export function resolveEnergy({ index, states = {}, energyPrefs = null, userCfg 
       hcActive: trouverCreneau(listeEntites(index)),
       // Demain, quelle couleur (« Demain : jour rouge » dans le rail de l'Accueil, E4).
       tempoDemain,
+      ...tempoPlus,
       // Ce que l'injection a rapporte, quand Home Assistant le tient.
       revenuJour: seul(compensations),
       /* Les PARTS, quand le contrat en compte plusieurs : l'historique les
@@ -865,6 +889,7 @@ export function resolveEnergy({ index, states = {}, energyPrefs = null, userCfg 
      * interroge par `energy/solar_forecast`, que Home Assistant tient. */
     // La borne trouvée, ses entités : sa carte et sa popup les lisent (`enBorne`, state.js).
     borne,
+    bornes,
     previsionSolaire: distincts(sourcesSolaires.flatMap(s => (Array.isArray(s.config_entry_solar_forecast) ? s.config_entry_solar_forecast : []))),
   };
 }

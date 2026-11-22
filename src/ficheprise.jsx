@@ -21,7 +21,8 @@
  * la phrase, le chiffre et la courbe, dans prises.js — ceux de la carte.
  */
 import { useState, useEffect, useRef, useCallback, cloneElement } from 'react';
-import { tr, trSens, locale } from './i18n.js';
+import { tr, trSens } from './i18n.js';
+import { heureCourte } from './format.js';
 import { Fi, Bascule, ListeChoix } from './ui.jsx';
 import { Ico } from './icones.jsx';
 import { compteOrdinaire, enHaids, enPrix, LOGGIA_INDEX } from './state.js';
@@ -229,7 +230,6 @@ export function JournalDuJour({ lu, minuit, personnes = null }) {
   // `personnes` (B5 de l'audit du 19/10) : qui est derrière un compte Home Assistant — la pastille dit son nom.
   const lignes = lu ? journalDuJour({ evenements: lu.evenements || [], lignes: lu.lignes, minuit, personnes }) : null;
   const qui = PASTILLES_QUI();
-  const heure = (t) => new Date(t).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   const note = (texte) => <div style={{ ...SOUS, marginTop: 10 }}>{texte}</div>;
   return (
     <div className="o-prise-journal" style={{ ...PANNEAU, padding: '14px 18px' }}>
@@ -239,7 +239,7 @@ export function JournalDuJour({ lu, minuit, personnes = null }) {
           : (<>
             {lignes.map((l, i) => (
               <div key={l.t + '-' + i} className="o-prise-journal-ligne" style={{ padding: '10px 0', borderTop: filet(i) }}>
-                <span style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{heure(l.t)}</span>
+                <span style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{heureCourte(l.t)}</span>
                 <span style={{ minWidth: 0 }}><span style={{ display: 'block', fontSize: 13, fontWeight: 700 }}>{l.quoi}</span>
                   {l.note && <span style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>{l.note}</span>}</span>
                 <span data-qui="" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', borderRadius: 999, background: 'var(--o-s1)', fontSize: 11.5, fontWeight: 800 }}>

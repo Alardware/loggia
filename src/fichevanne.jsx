@@ -22,7 +22,7 @@
 import { useState } from 'react';
 import { tr } from './i18n.js';
 import { Fi, Bascule, BottomSheet } from './ui.jsx';
-import { LOGGIA_INDEX, cfgVal, plateformeDe, voisinsDe, compteOrdinaire } from './state.js';
+import { LOGGIA_INDEX, nomZoneDe, cfgVal, plateformeDe, voisinsDe, compteOrdinaire } from './state.js';
 import { plantsCfg } from './lectures.js';
 import { pickSibling } from './discovery.js';
 import { LISERE } from './styles.js';
@@ -38,7 +38,7 @@ const PUCE = { height: 44, padding: '0 14px', borderRadius: 10, border: 'none', 
 const DOUX = { ...PUCE, height: 40, fontSize: 12, background: 'var(--o-s2)', color: 'var(--o-text1)' };
 const PLEIN = { ...DOUX, background: 'var(--o-accent-fond)', color: '#fff' };
 
-const pieceDe = (id) => (LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function' ? LOGGIA_INDEX.areaNameOf(id) : null);
+const pieceDe = nomZoneDe;
 const pileDe = (S) => (id) => { const sid = pickSibling(LOGGIA_INDEX, S, id, { domain: 'sensor', deviceClass: 'battery' }); const n = sid && S[sid] ? parseFloat(S[sid].state) : NaN; return isNaN(n) ? null : Math.round(n); };
 
 export function ContenuVanne({ id, hass: vue, onFiche = null, epingle = null, question = false }) {

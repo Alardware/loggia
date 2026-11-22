@@ -98,7 +98,8 @@ test('la carte étroite tait le chiffre du bas — ni pourcentage ni températur
 });
 
 test('la rangée du milieu est celle du radiateur dans les quatre cartes, et le chiffre y prend la même place — première rangée, deuxième colonne', () => {
-  assert.equal((APP.match(/<div style=\{RM_MILIEU\}>/g) || []).length, 4, 'le thermostat, le fil pilote, la lumière et le volet : la même grille');
+  // ASSERTION MODIFIÉE (12/11, audit) : le robot et le distributeur prennent la rangée telle quelle, sans ramener le nom à 10 px de la plaque (E13) — six cartes.
+  assert.equal((APP.match(/<div style=\{RM_MILIEU\}>/g) || []).length, 6, 'le thermostat, le fil pilote, la lumière, le volet, le robot et le distributeur : la même grille');
   assert.ok(APP.includes("const RM_MILIEU = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'end', marginTop: 'var(--o-milieu-haut, 14px)' };"));
   assert.ok(APP.indexOf('const RM_MILIEU') < APP.indexOf('function RoomLightCard('), 'la rangée se déclare avant les cartes qui la lisent');
   // Le chiffre : même cellule, même écart que la température, à droite du texte.
@@ -115,12 +116,16 @@ test('la rangée du milieu est celle du radiateur dans les quatre cartes, et le 
   // ASSERTION MODIFIÉE (passe téléphone, tâche 4) : ni celui d'un radiateur — plus aucun texte n'a de classe à effacer.
   // ASSERTION MODIFIÉE (chantier IoT, tâche 6, 18/10 ; I5) : la carte d'un robot prend la même rangée — cinq textes.
   // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I5) : la carte du distributeur aussi — six textes.
-  assert.equal((APP.match(/<div style=\{\{ minWidth: 0 \}\}>\n\s*<div className="o-gab-nom"/g) || []).length, 6, 'le texte des six cartes, sans classe, le nom de la grille commune en tête');
+  // ASSERTION MODIFIÉE (12/11, audit) : le robot et le distributeur gardent la colonne du nom en haut (`RM_GAUCHE`), leur chiffre nommé est plus haut qu'elle (E13) — quatre et deux.
+  assert.equal((APP.match(/<div style=\{\{ minWidth: 0 \}\}>\n\s*<div className="o-gab-nom"/g) || []).length, 4, 'le texte des quatre cartes, sans classe, le nom de la grille commune en tête');
+  assert.equal((APP.match(/<div style=\{RM_GAUCHE\}>\n\s*<div className="o-gab-nom"/g) || []).length, 2, 'le robot et le distributeur : la colonne du nom en haut');
   // ASSERTION MODIFIÉE (passe téléphone, tâche 4) : le thermostat et le fil pilote posent aussi la longueur de leur phrase — la grille commune en tire sa taille.
   // ASSERTION MODIFIÉE (chantier Médias, tâche 4 ; M5) : la carte d'un lecteur entre dans la grille commune — cinq cartes posent la longueur de leur phrase.
   // ASSERTION MODIFIÉE (chantier IoT, tâche 6, 18/10 ; I7) : la carte d'un robot aussi — six cartes.
   // ASSERTION MODIFIÉE (étape 2 IoT, 19/10 ; I7) : et celle du distributeur — sept cartes.
-  assert.equal((APP.match(/'--o-n': Math\.max\(1, (v\.phrase\.texte|String\(sub\))\.length\)/g) || []).length, 7, 'la lumière, le volet, le thermostat, le fil pilote, le lecteur, le robot et le distributeur posent la longueur de leur phrase (`--o-n`)');
+  // ASSERTION MODIFIÉE (audit du 12/11, X4 ; ADR 0369) : la phrase d'une lumière peut avoir une forme courte, celle que la carte étroite écrit
+  // (« Hors tension ») — c'est sa longueur qui règle alors la taille. Toujours sept cartes.
+  assert.equal((APP.match(/'--o-n': Math\.max\(1, (v\.phrase\.texte|String\(sub\)|\(v\.phrase\.court \|\| v\.phrase\.texte\))\.length\)/g) || []).length, 7, 'la lumière, le volet, le thermostat, le fil pilote, le lecteur, le robot et le distributeur posent la longueur de leur phrase (`--o-n`)');
 });
 
 test('la carte garde ses 184 px : le budget du radiateur — 38 + 10 + 32 + 2 + 15 + 9 + 44 = 150 px de contenu — tient pour le radiateur, la lumière et le volet', () => {

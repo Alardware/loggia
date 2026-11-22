@@ -41,6 +41,9 @@ const rendre = (Comp, props) => renderToStaticMarkup(createElement(Comp, props))
 const st = (id, s, a) => ({ entity_id: id, state: s, attributes: a, last_changed: '2026-10-16T08:00:00Z', last_updated: '2026-10-16T09:00:00Z' });
 const hassDe = (...etats) => ({ states: Object.fromEntries(etats.map(e => [e.entity_id, e])) });
 const carte = (e) => rendre(F.RoomGenericCard, { id: e.entity_id, hass: hassDe(e), onOpen: () => {} });
+// La tuile d'une ouverture (ADR 0388) : `RoomGenericCard` la charge à la demande, le rendu serveur la rend directement.
+const CO = await import('../src/carteouverture.jsx');
+const tuile = (e) => rendre(CO.default, { id: e.entity_id, hass: hassDe(e), nom: e.attributes.friendly_name, onOpen: () => {} });
 // La couleur de l'élément qui écrit `mot` : celle de son style.
 const couleurDe = (html, mot) => { const i = html.indexOf('>' + mot + '<'); const s = html.lastIndexOf('style="', i); return (/color:([^;"]+)/.exec(html.slice(s, i)) || [])[1] || null; };
 
@@ -56,12 +59,18 @@ test('C26 : la carte d’un binaire dit le calme en neutre — l’ambre pour un
     [st('binary_sensor.boitier', 'off', { friendly_name: 'Boîtier', device_class: 'tamper' }), 'Intact', 'var(--o-text2)'],
   ];
   for (const [e, mot, couleur] of cas) {
-    const html = carte(e);
+    // ASSERTION MODIFIÉE (22/11, ADR 0388) : une porte a sa tuile (carteouverture.jsx) ; les mêmes couleurs y valent.
+    const html = e.attributes.device_class === 'door' ? tuile(e) : carte(e);
     assert.equal(couleurDe(html, mot), couleur, mot);
   }
   // Muet : « Indisponible » en rouge, et le liseré qui respire (ADR 0048).
-  const muet = carte(st('binary_sensor.porte', 'unavailable', { friendly_name: 'Porte', device_class: 'door' }));
-  assert.ok(muet.includes('o-panne') && couleurDe(muet, 'Indisponible') === 'var(--o-bad)');
+  const muet = carte(st('binary_sensor.fumee', 'unavailable', { friendly_name: 'Fumée', device_class: 'smoke' }));
+  // ASSERTION MODIFIÉE (audit du 12/11, lot 4, E24) : la règle de la lumière — « Indisponible depuis … », son `last_changed`.
+  // ASSERTION MODIFIÉE (22/11, ADR 0388) : vérifiée sur une fumée — une porte muette a sa tuile, « Indisponible » et « plus de signal depuis … ».
+  const phraseMuette = (/>(Indisponible depuis [^<]+)</.exec(muet) || [])[1];
+  assert.ok(muet.includes('o-panne') && !!phraseMuette && couleurDe(muet, phraseMuette) === 'var(--o-bad)');
+  const porteMuette = tuile(st('binary_sensor.porte', 'unavailable', { friendly_name: 'Porte', device_class: 'door' }));
+  assert.ok(porteMuette.includes('o-panne') && couleurDe(porteMuette, 'Indisponible') === 'var(--o-bad)' && /plus de signal depuis \d\d:\d\d/.test(porteMuette));
   // Un danger allume sa plaque et son lavis ; le calme, non.
   assert.ok(carte(cas[3][0]).includes('rgba(var(--o-bad-rgb),.16)') && !carte(cas[2][0]).includes('rgba(var(--o-bad-rgb),.16)'));
 });

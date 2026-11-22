@@ -99,7 +99,9 @@ def gabarits_de(nom: str) -> list[str]:
 # sont des constantes `MSG_*`, dans CLES_TELEPHONE.
 # ASSERTION MODIFIÉE (07/11, étape 11) : les rappels parlent au telephone — « Me prévenir » d'un conseil
 # d'énergie ; leurs gabarits sont une table `MESSAGES`, dans CLES_TELEPHONE.
-MODULES = ("alertes", "veilles", "prises", "enfant", "rappels")
+# ASSERTION MODIFIÉE (22/11, ADR 0388) : le rappel des ouvertures parle au telephone — « restée ouverte », « vient de
+# s'ouvrir » ; ses gabarits sont des constantes `MSG_*`, dans CLES_TELEPHONE.
+MODULES = ("alertes", "veilles", "prises", "enfant", "rappels", "ouvertures")
 
 
 def gabarits_produits() -> list[str]:

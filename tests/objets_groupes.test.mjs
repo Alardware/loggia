@@ -90,7 +90,8 @@ test('C20 : les trois groupes ont leur carte, et les binaires de leurs familles 
   // son identifiant (nul) : la vue tombait entière (revue de la démo, 16/10).
   const ov = APP.indexOf('\nfunction ObjetsView(');
   // ASSERTION MODIFIÉE (30/10, G3-E3) : la borne de recharge aussi se nomme par sa clé.
-  assert.ok(APP.slice(ov, APP.indexOf('\n}\n', ov)).includes("const cle = (o.type === 'feeder' || o.type === 'plant' || o.type === 'groupe' || o.type === 'borne') ? o.cle : o.id;"), 'la carte d’un groupe se nomme par sa clé');
+  // ASSERTION MODIFIÉE (21/11, ADR 0386) : la voiture, la litière et la fontaine (`app`) se nomment aussi par leur clé.
+  assert.ok(APP.slice(ov, APP.indexOf('\n}\n', ov)).includes("const cle = (o.type === 'feeder' || o.type === 'plant' || o.type === 'groupe' || o.type === 'borne' || o.type === 'app') ? o.cle : o.id;"), 'la carte d’un groupe se nomme par sa clé');
   assert.equal(F.nomDeCle(fx.states, 'groupe:securite'), 'Sécurité');
   assert.equal(domaineEdition('groupe:ouvertures'), 'capteur');
 }));

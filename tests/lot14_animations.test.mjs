@@ -69,7 +69,9 @@ test('le halo garde le dessin de l’ancienne ombre : 5 px de plus, même rouge,
   const halo = keyframes('o-livehalo');
   assert.ok(halo.includes('0%,100% { transform: scale(1); opacity: 1; }'), 'le halo ne part plus du bord du point, opaque');
   assert.ok(halo.includes('50% { transform: scale(calc(1 + 5 / var(--o-point-r, 3.5))); opacity: 0; }'), 'le halo ne s’étale plus de 5 px');
-  assert.ok(regle('.o-livedot::before').includes('background: rgba(248,113,113,.55); opacity: 0;'), 'le halo a changé de couleur, ou se voit sans tourner');
+  // ASSERTION MODIFIÉE (17/11, V7) : le halo prend le rouge du THÈME (`--o-bad-rgb`, celui du point), au lieu d'un rouge
+  // fixe — même opacité. Sous Loggia sombre : 242,102,102 au lieu de 248,113,113.
+  assert.ok(regle('.o-livedot::before').includes('background: rgba(var(--o-bad-rgb), .55); opacity: 0;'), 'le halo a changé de couleur, ou se voit sans tourner');
   assert.ok(regle('.o-livedot::before').includes('animation: o-livehalo 1.8s ease-in-out infinite;'), 'le halo ne bat plus avec le point');
   assert.ok(regle('.o-livedot').includes('animation: o-livedot 1.8s ease-in-out infinite;'));
   assert.ok(keyframes('o-livedot').includes('50% { transform: scale(1.15); opacity: .85; }'), 'le point ne respire plus comme avant');

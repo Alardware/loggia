@@ -32,18 +32,21 @@
  * fiche seule) et lumieres.js (avec la carte).
  */
 import { useState, useRef, useEffect } from 'react';
-import { tr, locale } from './i18n.js';
+import { tr } from './i18n.js';
+import { heureCourte } from './format.js';
 import { Fi, kbSlider, ListeChoix } from './ui.jsx';
 import { commander, commanderService, peut } from './actions.js';
-import { texteRefus } from './refus.js';
+import { texteRefus, raisonEchec } from './refus.js';
 import { dureePrise } from './prises.js';
 import { finMinuteur, poserMinuteurs, useHorloge } from './prisesetat.js';
 import { DUREES_MINUTEUR, AJOUTS_MINUTEUR, journalDuJour, PASTILLES_QUI, VEILLE_MS, personnesDe, motQui } from './prisesfiche.js';
 import { minuitLocal } from './jourstat.js';
-import { capacitesLumiere, rgbDuBlanc, rgbDeLaTeinte, MODES_COULEUR } from './lumieres.js';
+import { capacitesLumiere, rgbDuBlanc, rgbDeLaTeinte, MODES_COULEUR, lumieresDe } from './lumieres.js';
 import { useEtatLumieres } from './lumieresetat.js';
 import { BLANCS_NOMMES, COULEURS_NOMMEES, ecartTeintes, reglageLumiere, bornesBlanc, blancBorne, degradeBlanc, degradeTeinte, encreBlancs, typeLumiere, phraseFiche,
-  phraseMinuteur, minutesAllumee, texteDuree, fonduDe, effetsLumiere, niveauBlanc } from './lumieresfiche.js';
+  phraseMinuteur, minutesAllumee, texteDuree, fonduDe, effetsLumiere, niveauBlanc, sourcesAlimentation } from './lumieresfiche.js';
+import { cfgVal, cfgSet, compteOrdinaire, ctxLumieres, LOGGIA_INDEX, nomZoneDe } from './state.js';
+import { CLE_ALIMENTATION, alimentationsDe, alimentees, poserAlimentation } from './alimentation.js';
 import { EnteteFiche, PETITES_CAPITALES, filet } from './fichecommune.jsx';
 import { PANNEAU, RANGEE, EN_BOUTON, TITRE, SOUS, ALERTE } from './fichekit.js';
 
@@ -174,7 +177,6 @@ export function Aujourdhui({ lu, minuit, maintenant, etat = null, personnes = nu
   const illisible = !!lu && lu.evenements == null;
   const lignes = lu ? journalDuJour({ evenements: lu.evenements || [], lignes: lu.lignes, minuit, vocabulaire: 'lumiere', fondu: lu.fondu, personnes }).slice(0, 4) : null;
   const qui = PASTILLES_QUI();
-  const heure = (x) => new Date(x).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   const note = (texte) => <div style={{ ...SOUS, marginTop: 10 }}>{texte}</div>;
   return (
     <div className="o-prise-journal" style={{ ...PANNEAU, padding: '14px 18px' }}>
@@ -187,7 +189,7 @@ export function Aujourdhui({ lu, minuit, maintenant, etat = null, personnes = nu
           : (<>
             {lignes.map((l, i) => (
               <div key={l.t + '-' + i} className="o-prise-journal-ligne" style={{ padding: '10px 0', borderTop: filet(i) }}>
-                <span style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{heure(l.t)}</span>
+                <span style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{heureCourte(l.t)}</span>
                 <span style={{ minWidth: 0 }}><span style={{ display: 'block', fontSize: 13, fontWeight: 700 }}>{l.quoi}</span>
                   {l.note && <span style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--o-text3)' }}>{l.note}</span>}</span>
                 <span data-qui="" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', borderRadius: 999, background: 'var(--o-s1)', fontSize: 11.5, fontWeight: 800 }}>
@@ -197,6 +199,60 @@ export function Aujourdhui({ lu, minuit, maintenant, etat = null, personnes = nu
           </>)}
     </div>
   );
+}
+
+/* « Alimentée par » (audit du 12/11, X4 ; ADR 0369) : l'interrupteur qui coupe le courant de cette ampoule. Une ampoule connectée
+ * derrière un interrupteur mural n'a plus de courant quand il est éteint ; Home Assistant garde son dernier état, ou la dit
+ * injoignable. Choisi ici, tant qu'il est éteint l'ampoule est comptée éteinte partout, dit « Hors tension », et ne reçoit plus
+ * d'ordre (`getHass`, alimentation.js ; le serveur : lumieres_maison.py).
+ *
+ * Une liste de choix (la règle des menus) : « Aucun interrupteur », puis ceux de sa pièce, puis les lumières des autres pièces
+ * (`sourcesAlimentation`). C'est la configuration de la MAISON (`loggia_alimentation`), réservée aux administrateurs : un compte
+ * ordinaire la lit, et un appui dit le refus, qui nomme la clé (la règle des prises, P4). Une lampe qui en alimente d'autres ne
+ * peut pas être elle-même alimentée : sa rangée dit ce qu'elle alimente, sans rien offrir. `haut` : le filet du haut (0 ou 1). */
+const SANS_SOURCE = 'aucun';
+function RangeeAlimentation({ id, hass, haut }) {
+  const S = (hass && hass.states) || {};
+  const alim = alimentationsDe(cfgVal(CLE_ALIMENTATION, null));
+  // Le choix se montre tout de suite : la configuration est écrite d'abord dans le cache (`cfgSet`), la fiche la relit ici.
+  const [, relire] = useState(0);
+  const [refus, setRefus] = useState('');
+  const nomDe = (x) => (S[x] && S[x].attributes && S[x].attributes.friendly_name) || x;
+  const source = alim[id] || '';
+  const titre = (t, sous) => (
+    <span style={{ flex: 1, minWidth: 0 }}><span style={TITRE}>{t}</span>
+      <span style={{ ...SOUS, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sous}</span></span>);
+  const aval = alimentees(alim, id);
+  if (aval.length) return <div style={{ ...RANGEE, borderTop: filet(haut) }}>{titre(tr('Ce qu’elle alimente'), aval.map(nomDe).join(', '))}</div>;
+  const corps = (<>
+    {titre(tr('Alimentée par'), source ? nomDe(source) : tr('Choisissez l’interrupteur qui lui coupe le courant'))}
+    <Fi i="angle-small-down" size={16} color="var(--o-text3)" />
+  </>);
+  const style = { ...RANGEE, ...EN_BOUTON, width: '100%', borderRadius: 0, borderTop: filet(haut) };
+  const alerte = refus ? <div role="alert" style={{ ...ALERTE, padding: '0 14px 12px 18px' }}>{refus}</div> : null;
+  if (compteOrdinaire(hass)) {
+    const dire = () => setRefus(raisonEchec(Object.assign(new Error('Unauthorized'), { code: 'unauthorized' }), CLE_ALIMENTATION));
+    return <><button type="button" aria-disabled="true" onClick={dire} style={{ ...style, cursor: 'default' }}>{corps}</button>{alerte}</>;
+  }
+  const meta = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && typeof LOGGIA_INDEX.entityMeta.get === 'function' ? LOGGIA_INDEX.entityMeta : null;
+  // Un interrupteur qui commande : ni réglage ni diagnostic (`category`), ni caché ni désactivé — la règle des lumières (L11).
+  const switchs = Object.keys(S).filter((x) => { const m = (meta && meta.get(x)) || {}; return x.indexOf('switch.') === 0 && !m.category && !m.hidden && !m.disabled; });
+  const options = [{ id: SANS_SOURCE, label: tr('Aucun interrupteur') }]
+    .concat(sourcesAlimentation({ id, lampes: lumieresDe(S, ctxLumieres()), switchs, alim, pieceDe: nomZoneDe, nomDe }));
+  /* `ListeChoix` rappelle `onChange` même sur la valeur déjà choisie : rien ne s'écrit pour rien. L'écriture transforme ce qui est
+   * là (`cfgSet`, une fonction) : la relation d'une autre ampoule, posée entre-temps sur un autre écran, n'est pas écrasée. */
+  const choisir = (x) => {
+    const neuve = x === SANS_SOURCE ? '' : x;
+    if (neuve === source) return;
+    setRefus('');
+    cfgSet({ [CLE_ALIMENTATION]: (brut) => poserAlimentation(brut, id, neuve) });
+    relire(n => n + 1);
+  };
+  return (<>
+    <ListeChoix label={tr('Alimentée par')} value={source || SANS_SOURCE} options={options} onChange={choisir}
+      nom={tr('{a} : {b}', { a: tr('Alimentée par'), b: source ? nomDe(source) : tr('Aucun interrupteur') })} style={style}>{() => corps}</ListeChoix>
+    {alerte}
+  </>);
 }
 
 /**
@@ -219,6 +275,11 @@ export default function FicheLumiereContent({ id, vue: v, piece = null, epingle 
   const volMinuteur = useRef(false);
 
   const cap = capacitesLumiere(id, a);
+  /* Sans courant (audit du 12/11, X4 ; ADR 0369) : son interrupteur est coupé. Comme une lampe muette, plus rien n'y commande —
+   * ni bascule, ni barre, ni palette, ni effet, ni minuteur : l'ordre se perdrait. Mais ce n'est pas une panne : ni rouge, ni
+   * liseré. La rangée « Alimentée par », elle, reste : c'est là que cela se règle. */
+  const inerte = v.muette || !!v.coupee;
+  const connue = !!(H && H.states && H.states[id]);
   const reglage = v.on ? reglageLumiere(a) : null;
   // Éteinte, le mode que le carnet garde d'elle (B13) : un blanc, ou une couleur — `white` compris, sa puce vit avec les couleurs.
   const modeCarnet = v.dernierMode === 'color_temp' ? 'blancs' : v.dernierMode === 'white' || MODES_COULEUR.includes(v.dernierMode) ? 'couleurs' : null;
@@ -262,17 +323,20 @@ export default function FicheLumiereContent({ id, vue: v, piece = null, epingle 
   };
 
   // La plaque, comme celle de la carte : la teinte de la vraie lumière allumée, le gris éteinte, le gris éteint muette.
-  const plaque = { icone: 'bulb', glyphe, fond: v.on ? 'rgba(' + v.couleurs.rgb + ',.22)' : 'var(--o-s1)', encre: v.on ? v.encre : v.muette ? 'var(--o-text3)' : 'var(--o-text2)' };
+  const plaque = { icone: 'bulb', glyphe, fond: v.on ? 'rgba(' + v.couleurs.rgb + ',.22)' : 'var(--o-s1)', encre: v.on ? v.encre : inerte ? 'var(--o-text3)' : 'var(--o-text2)' };
   /* Un mot en grand — « Éteinte », « Indisponible » — : 34 px, moins quand la place manque, d'après sa longueur et la
    * largeur du bloc (une requête de conteneur), comme la fiche des prises : « Niedostępny » ne passe pas sous la bascule. */
   const motGrand = (mot, couleur) => <span style={{ fontSize: 'clamp(20px, calc(100cqi / (0.64 * ' + Math.max(1, mot.length) + ')), calc(34px * var(--o-texte, 1)))', fontWeight: 800, color: couleur }}>{mot}</span>;
   /* Sous le doigt (passe bis 3 du 17/10, point 3), le grand pourcentage suit la barre (`v.glisse`, `v.bri`) — une lampe éteinte comprise :
    * il paraît dès le glisser, et rien ne part avant le relâcher. */
-  const grand = v.muette ? motGrand(tr('Indisponible'), 'var(--o-bad)')
+  const grand = v.coupee ? motGrand(tr('Hors tension'), 'var(--o-text2)')
+    : v.muette ? motGrand(tr('Indisponible'), 'var(--o-bad)')
     : !v.on && v.glisse == null ? motGrand(tr('Éteinte'), 'var(--o-text2)')
       : v.bri == null ? motGrand(tr('Allumée'), 'var(--o-text)')
         : <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4 }}><span style={{ fontSize: 48, fontWeight: 800, letterSpacing: '-.03em', lineHeight: 1 }}>{v.bri}</span><span style={{ fontSize: 22, fontWeight: 800 }}>%</span></span>;
-  const phrase = phraseFiche({ phrase: v.phrase.texte, on: v.on, muette: v.muette, depuis: v.depuis, dernier: v.dernier, reglage, effet: v.on && annonces ? annonces.courant : null, maintenant: t });
+  // Sans courant : qui la coupe, et ce que cela change — la carte n'a la place que du nom.
+  const phrase = v.coupee ? tr('Coupée par {nom} : sans courant, elle ne reçoit plus d’ordre.', { nom: v.coupee.nom })
+    : phraseFiche({ phrase: v.phrase.texte, on: v.on, muette: v.muette, depuis: v.depuis, dernier: v.dernier, reglage, effet: v.on && annonces ? annonces.courant : null, maintenant: t });
   // L'heure du moment : un minuteur échu, pas encore relu, n'est plus un minuteur — jamais « dans 0 min » (audit du 19/10).
   const fin = finMinuteur(minuteurs, id, t);
   // Le minuteur se décompte à la seconde (20/10) : la fiche bat tant qu'il tourne, jamais quand l'heure est fixée (les tests).
@@ -299,11 +363,11 @@ export default function FicheLumiereContent({ id, vue: v, piece = null, epingle 
             <div style={{ lineHeight: 1.1 }}>{grand}</div>
             <div style={{ fontSize: 12.5, fontWeight: 600, color: v.phrase.panne ? 'var(--o-bad)' : 'var(--o-text2)', marginTop: 6 }}>{phrase}</div>
           </div>
-          {Interrupteur && !v.muette && <Interrupteur on={v.on} nom={v.nom} onToggle={() => v.commander(!v.on)} />}
+          {Interrupteur && !inerte && <Interrupteur on={v.on} nom={v.nom} onToggle={() => v.commander(!v.on)} couleur="var(--o-bascule-lampe)" />}
         </div>
         {/* La barre, variable et vivante seulement : de 1 à 100 %, la teinte allumée, le repère gris éteinte (L7) ; glisser l'allume.
-          * Muette, elle n'est pas dessinée : un dessin qui ne répond pas laisse croire à une commande (le lot 16 de l'audit). */}
-        {v.variable && !v.muette && Jauge && (
+          * Muette ou sans courant, elle n'est pas dessinée : un dessin qui ne répond pas laisse croire à une commande (le lot 16 de l'audit). */}
+        {v.variable && !inerte && Jauge && (
           <div style={{ marginTop: 14 }}>
             <Jauge v={v.on ? v.bri : v.dernier} couleur={v.encre} grade={v.degrade} actif={!v.muette} min={1} eteinte={!v.on} zone={52} piste={32} marge={0}
               label={tr('Luminosité') + ' ' + v.nom} onCommit={v.regler} onGlisse={v.suivre} rafale />
@@ -312,7 +376,7 @@ export default function FicheLumiereContent({ id, vue: v, piece = null, epingle 
         )}
       </div>
 
-      {(cap.blancs || cap.couleurs) && !v.muette && (
+      {(cap.blancs || cap.couleurs) && !inerte && (
         <div style={{ ...PANNEAU, padding: '14px 18px' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
             <span style={{ ...PETITES_CAPITALES, flex: 1 }}>{tr('Couleur')}</span>
@@ -374,7 +438,7 @@ export default function FicheLumiereContent({ id, vue: v, piece = null, epingle 
         {/* Effet (B4) : les effets que l'ampoule publie (`effect_list`), nommés comme son intégration les nomme — jamais traduits —,
           * dans une liste de choix (la règle des menus) ; « Aucun » quand la liste nomme l'arrêt (`off`, `none`, `stop_effect`).
           * Choisir envoie `light.turn_on` avec `effect`, par le moteur (`set_effect`) : une lampe éteinte s'allume. Muette, rien. */}
-        {effets && !v.muette && (
+        {effets && !inerte && (
           <ListeChoix label={tr('Effet')} value={effets.courant || effets.aucun || ''} onChange={effet}
             nom={tr('{a} : {b}', { a: tr('Effet'), b: effets.courant || tr('Aucun') })}
             options={(effets.aucun ? [{ id: effets.aucun, label: tr('Aucun') }] : []).concat(effets.effets.map(e => ({ id: e, label: e })))}
@@ -385,7 +449,7 @@ export default function FicheLumiereContent({ id, vue: v, piece = null, epingle 
             </>)}
           </ListeChoix>
         )}
-        {!v.muette && (() => {
+        {!inerte && (() => {
           /* Le minuteur de la fiche des prises, tel quel (§ 3.8) : il ne se montre qu'allumée — le serveur l'annule
            * quand elle s'éteint, le sondage ne le sait qu'au tour suivant ; éteinte, « Disponible une fois la lumière
            * allumée. », puces inertes ; muette, pas de rangée. Toutes les puces attendent la réponse d'un appel en vol. */
@@ -412,8 +476,12 @@ export default function FicheLumiereContent({ id, vue: v, piece = null, epingle 
             </div>
           );
         })()}
+        {/* « Alimentée par » (ADR 0369) : là tant que Home Assistant connaît la lampe — muette ou sans courant, c'est la seule rangée
+          * au-dessus de « L'appareil », et c'est muette qu'elle sert le plus : une ampoule dite injoignable parce que son interrupteur
+          * est éteint. Une lampe RETIRÉE n'a plus rien à régler. */}
+        {connue && <RangeeAlimentation id={id} hass={H} haut={inerte ? 0 : 1} />}
         {onFiche && (
-          <button type="button" onClick={() => onFiche(id)} style={{ ...RANGEE, ...EN_BOUTON, borderTop: filet(v.muette ? 0 : 1) }}>
+          <button type="button" onClick={() => onFiche(id)} style={{ ...RANGEE, ...EN_BOUTON, borderTop: filet(connue || !inerte ? 1 : 0) }}>
             <span style={{ flex: 1, minWidth: 0 }}><span style={TITRE}>{tr('L’appareil')}</span><span style={SOUS}>{tr('L’épingle, les commandes et toutes ses entités')}</span></span>
             <Fi i="angle-small-right" size={16} color="var(--o-text3)" />
           </button>

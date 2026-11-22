@@ -2,7 +2,7 @@
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
 import { useState, useEffect, useRef, useLayoutEffect, Fragment } from 'react';
 import { useLoggia } from '../runtime.js';
-import { isViewAvailable } from '../views.js';
+import { isViewAvailable, vuePermise } from '../views.js';
 import { readViewsCfg, HIDDEN_VIEWS, Fi } from '../ui.jsx';
 import { Ico } from '../icones.jsx';
 import { trCourt, tr } from '../i18n.js';
@@ -43,7 +43,8 @@ function MobileNav({ view, onNav, onMenu, menuOuvert = false, onAssistant = null
     window.addEventListener('loggia-views-changed', f);
     return () => window.removeEventListener('loggia-views-changed', f);
   }, []);
-  const permis = (vid) => !vuesAutorisees || vid === 'accueil' || vuesAutorisees.has(vid);
+  // La règle commune (`vuePermise`, audit du 12/11, B19) : la garde de la racine et la barre latérale lisent la même.
+  const permis = (vid) => vuePermise(vid, vuesAutorisees);
   const rang = (vid) => { const i = (viewsCfg.order || []).indexOf(vid); return i < 0 ? 999 : i; };
   const vues = BARRE_VUES();
   const accueil = vues.filter(it => it.id === 'accueil');

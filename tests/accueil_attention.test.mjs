@@ -80,8 +80,9 @@ test('l’accueil surveille ce que la carte Securite et « A surveiller » lisen
   // ASSERTION MODIFIÉE (audit des capteurs du 19/10, lot 4) : et les mots d'un danger — `motsSurete`, la table que deriveNotifs ne recopie plus.
   // ASSERTION MODIFIÉE (ADR 0274) : la vue Sécurité, sortie du boot, importe elle-même ce qu'elle seule utilise.
   // ASSERTION MODIFIÉE (ADR 0283) : les cartes sorties d'App.jsx importent elles-mêmes ce qu'elles lisent ; la ligne recopiée se lit par ses noms (`importsDe`).
+  // ASSERTION MODIFIÉE (12/11, audit ; ADR 0350) : la vue Sécurité importe aussi la liste et la règle des caméras, et le mot de sa pastille.
   const deAttention = importsDe(src, './attention.js');
-  assert.ok(src.includes("import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, estSirene, pointsAttention } from '../attention.js';") && ['tuileAlarme', 'estSirene', 'ICONES_ARMEMENT', 'pointsAttention', 'niveauMax', 'resumeAttention', 'couleurNiveau', 'niveauPile', 'couleurPile', 'reglerSeuilPile', 'seuilsPile', 'fuiteCalculee', 'animationNiveau', 'CLASSES_MOUVEMENT', 'CLASSES_SURETE', 'CLASSES_OUVRANT', 'motsSurete'].every(n => deAttention.has(n)), 'une seule source pour les classes');
+  assert.ok(src.includes("import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, estSirene, pointsAttention, cameraEnLigne, camerasDeLaMaison, etatSecurite } from '../attention.js';") && ['tuileAlarme', 'estSirene', 'ICONES_ARMEMENT', 'pointsAttention', 'niveauMax', 'resumeAttention', 'couleurNiveau', 'niveauPile', 'couleurPile', 'reglerSeuilPile', 'seuilsPile', 'fuiteCalculee', 'animationNiveau', 'CLASSES_MOUVEMENT', 'CLASSES_SURETE', 'CLASSES_OUVRANT', 'motsSurete'].every(n => deAttention.has(n)), 'une seule source pour les classes');
   // ASSERTION AJOUTÉE (audit du 19/10, point 14) : les ouvrants aussi — `OUVRANT_DCS` n'est plus une copie.
   assert.ok(src.includes('const OUVRANT_DCS = CLASSES_OUVRANT;'), 'les ouvrants viennent de la table');
 });

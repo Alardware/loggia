@@ -99,8 +99,13 @@ export function CarteRappels(p) {
   </>;
 }
 
+/* Les replis de la carte, un seul chacun (audit du 12/11, lot 5b) : un `[]` ou un `{}` écrit dans le composant naissait neuf
+ * à chaque rendu, et les mémos qui en dépendent se recalculaient pour rien. Gelés : on ne fait que les lire. */
+const AUCUNE_TACHE = Object.freeze([]);
+const AUCUN_ETAT = Object.freeze({});
+
 function Rappels({ hass = null, taches = null, onFait = null, onAjouter = null }) {
-  const liste = Array.isArray(taches) ? taches : [];
+  const liste = Array.isArray(taches) ? taches : AUCUNE_TACHE;
   const [onglet, setOnglet] = useState('aujourdhui');
   const [nouveau, setNouveau] = useState(false);
   /* L'heure qui tourne fait passer une tâche en retard sans qu'on touche à
@@ -111,7 +116,7 @@ function Rappels({ hass = null, taches = null, onFait = null, onAjouter = null }
   const montrees = ranges[onglet] || [];
   const NOMS = { aujourdhui: tr('Aujourd’hui'), demain: tr('Demain'), plustard: tr('Plus tard') };
 
-  const S = (hass && hass.states) || {};
+  const S = (hass && hass.states) || AUCUN_ETAT;
   /* Une liste d'achats a son champ d'ajout, dans sa carte (ADR 0315). */
   const creables = useMemo(() => listesTodo(S).filter(l => !l.courses && peutCreer(S[l.id])), [S]);
 
@@ -142,14 +147,17 @@ function Rappels({ hass = null, taches = null, onFait = null, onAjouter = null }
 
       {/* Les trois onglets, avec leur compte — une puce choisie se remplit
         * d'accent, comme partout dans Loggia. */}
+      {/* Marges resserrées (audit du 12/11) : dans le rail d'une tablette en paysage (≈ 276 px), « Aujourd’hui »,
+        * « Demain » et « Plus tard » perdaient 4 à 7 px sous l'ellipse. 4 px de chaque côté et 4 px avant le compte
+        * rendent ~30 px ; hauteur et taille du texte inchangées. */}
       <div style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 12, background: 'var(--o-well)' }}>
         {ONGLETS_RAPPELS.map(id => {
           const on = onglet === id;
           const n = (ranges[id] || []).length;
           return (
             <button key={id} type="button" onClick={() => setOnglet(id)} aria-pressed={on}
-              style={{ flex: '1 1 auto', minWidth: 0, height: 32, padding: '0 8px', borderRadius: 10, border: 'none', cursor: 'pointer', font: 'inherit', fontSize: 12, fontWeight: 700,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden',
+              style={{ flex: '1 1 auto', minWidth: 0, height: 32, padding: '0 4px', borderRadius: 10, border: 'none', cursor: 'pointer', font: 'inherit', fontSize: 12, fontWeight: 700,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, whiteSpace: 'nowrap', overflow: 'hidden',
                 background: on ? 'var(--o-accent-fond)' : 'transparent', color: on ? '#fff' : 'var(--o-text1)' }}>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{NOMS[id]}</span>
               {n > 0 && <span style={{ fontSize: 11, fontWeight: 800, opacity: on ? .85 : .6, fontVariantNumeric: 'tabular-nums' }}>{n}</span>}

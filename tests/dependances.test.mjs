@@ -71,7 +71,9 @@ const VERIFIE = {
    * `views/voletsplan.jsx`, chargée à la demande (borne du boot). Ses deux omissions la suivent — `S` et `hass`.
    * Déménagées, pas disparues. */
   'src/App.jsx': [
-    'S',
+    // ASSERTION MODIFIÉE (audit du 12/11, lot 5b, N7 ; ADR 0373) : un `S` de moins — l'activité de la maison
+    // (`cartescustom/galerie.jsx`, `CvActivite`) relit sa liste quand les ÉTATS changent, `[S]` au lieu de `[hass]`, et
+    // son repli `{}` est une constante gelée du module. Corrigée, pas déménagée.
     'S and dc', 'S and ids', 'S, domaineOk, and nomEnt',
     'a and dashHass', 'api and plage', 'applyUser',
     'cle and hass', 'cv.name',
@@ -84,7 +86,10 @@ const VERIFIE = {
     /* ASSERTION MODIFIÉE (audit des capteurs du 19/10, lot 4) : `hidden` est parti avec `loggia_roomhidden` — la vue d'une pièce
      * ne relit plus de pièces masquées. Disparue, pas déménagée. */
     'hass and live', 'keys and noisyKeys',
-    'loggiaRuntime.index', 'noms', 'seulement',
+    // ASSERTION MODIFIÉE (audit du 12/11, lot 5b, N7 ; ADR 0373) : `loggiaRuntime.index` n'est plus omis — le mémo `cfg`
+    // en dépend au lieu de `loggiaRuntime.ready`, un index neuf (découverte relancée, B17) redonne leur zone aux pièces.
+    // Corrigée, pas déménagée.
+    'noms', 'seulement',
     'vuesAutorisees',
   ],
   // La feuille du Calendrier (boot, 19/10) : les omissions d'App.jsx, déménagées avec elle.
@@ -362,13 +367,19 @@ test('le chemin chaud ne recalcule plus pour rien', () => {
   // La vue Objets sert CINQ entrées de menu. Sa chaîne — balayage complet des
   // entités, tri, deux passes de comptage — repartait même quand seul un état
   // LOCAL avait bougé : changer de puce de filtre rescannait la maison.
-  assert.match(app, /const tousObjets = useMemo\(\(\) => objetsDeLaMaison\(hass, ajoutes, epingles\), \[hass, ajoutes, epingles\]\);/,
+  /* ASSERTION MODIFIÉE (19/11, fluidité, point 1) : mémoïsée sur la SIGNATURE de la maison (`signatureMaison`), plus sur
+   * `hass`, neuf à chaque changement de n'importe quelle entité. */
+  /* ASSERTION MODIFIÉE (21/11, ADR 0386) : la signature dit aussi l'arrivée de la découverte des appareils composés (`sigListe`,
+   * la signature de la maison suivie d'une marque) — toujours mémoïsée, jamais sur `hass`. */
+  assert.match(app, /const tousObjets = useMemo\(\(\) => objetsDeLaMaison\(sigListe \? hassFrais\.current : null, ajoutes, epingles\), \[sigListe, ajoutes, epingles\]\);/,
     'la liste des objets n’est plus mémoïsée');
+  assert.match(app, /const sigListe = sigMaison && composes\(LOGGIA_INDEX\) \? sigMaison \+ '·composes' : sigMaison;/, 'la signature de la liste part de celle de la maison');
   for (const [quoi, motif] of [
     ['le tri', /const derived = useMemo\(/],
     ['la table par clé', /const parCle = useMemo\(/],
     ['les puces', /const puces = useMemo\(\(\) => pucesObjets\(objets\), \[objets\]\);/],
-    ['les compteurs', /const stats = useMemo\(\(\) => statsObjets\(objets\), \[objets\]\);/],
+    // ASSERTION MODIFIÉE (13/11, audit, X7) : les compteurs reçoivent aussi les pièces de Loggia — mémoïsées elles aussi.
+    ['les compteurs', /const stats = useMemo\(\(\) => statsObjets\(objets, piecesLoggia, rmNorm\), \[objets, piecesLoggia\]\);/],
   ]) assert.match(app, motif, quoi + ' de la vue Objets n’est plus mémoïsé');
   /* Et les ENTRÉES sont stabilisées par leur signature. Sans cela, `ajoutes`,
    * `ordrePieces` et les épingles sont des valeurs neuves à chaque rendu :

@@ -53,7 +53,8 @@ const compter = (s, motif) => s.split(motif).length - 1;
 
 test('le filet de securite est un SEUL mecanisme, et il expire', () => {
   // Son propre module depuis le lot 15 de l'audit du 03/10 : les vues l'importent.
-  assert.ok(OPT.includes('export function useOptimiste(reel, delai = OPTIMISTE_MS) {'), 'le hook a change de forme');
+  // ASSERTION MODIFIÉE (13/11, audit du 12/11, lot 2b, B29) : un troisième paramètre facultatif, `atteint` — l'écho d'un ordre remplacé n'est pas une réponse.
+  assert.ok(OPT.includes('export function useOptimiste(reel, delai = OPTIMISTE_MS, atteint = null) {'), 'le hook a change de forme');
   const i = OPT.indexOf('export function useOptimiste(');
   const hook = OPT.slice(i, OPT.indexOf('\n}\n', i));
   // Le minuteur : sans lui, un etat reel qui ne bouge jamais fige l'affichage.
@@ -168,11 +169,14 @@ test('tout ce qui dit l’etat d’un volet passe par le meme verdict', () => {
   assert.ok(APP.includes('...(!ferme && LAVIS ? {'), 'le lavis violet retombe sur la position brute');
   assert.ok(APP.includes("...RM_ICO(!ferme ? 'rgba(var(--o-purple-rgb),.16)' : 'var(--o-s1)', !ferme ? 'var(--o-purple)' : 'var(--o-text3)')"), 'l’icone retombe sur la position brute');
   assert.ok(APP.includes("color: ferme ? 'var(--o-text3)' : 'var(--o-text)' }}>{pos} %"), 'le pourcentage retombe sur la position brute');
-  assert.ok(APP.includes("color: !ferme && !mort ? 'var(--o-purple)' : 'var(--o-text3)' }}>{sub}"), 'le sous-titre retombe sur la position brute');
+  // ASSERTION MODIFIÉE (audit du 12/11, lot 4, E24) : muet, la phrase est rouge, comme celle d'une lumière.
+  assert.ok(APP.includes("color: mort ? 'var(--o-bad)' : !ferme ? 'var(--o-purple)' : 'var(--o-text3)' }}>{sub}"), 'le sous-titre retombe sur la position brute');
   assert.ok(APP.includes("ferme ? tr('Fermé') : coverOuvert(pos) ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos })"), 'la carte ne dit plus « Fermé » sur le verdict');
   // La feuille, sa puce, la pastille de la piece et le compte de la vue.
-  assert.ok(APP.includes("const etatTxt = ferme ? tr('Fermé') : coverOuvert(pos) ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });"), 'la feuille du volet');
-  assert.ok(APP.includes("const chip = ferme ? 'ferme' : coverOuvert(pos) ? 'ouvert' : pos === 50 ? 'mi' : null;"), 'la puce de la feuille');
+  // ASSERTION MODIFIÉE (13/11, audit du 12/11, lot 2a, B7) : en mouvement, la feuille le dit ; arrêtée, le même verdict qu'avant.
+  assert.ok(APP.includes("const etatTxt = mouvement === 'opening' ? tr('Ouverture…') : mouvement === 'closing' ? tr('Fermeture…') : ferme ? tr('Fermé') : coverOuvert(pos) ? tr('Ouvert') : tr('Ouvert à {n} %', { n: pos });"), 'la feuille du volet');
+  // ASSERTION MODIFIÉE (13/11, audit du 12/11, lot 2a, B7) : en mouvement, la puce choisie est celle où il va.
+  assert.ok(APP.includes("const chip = mouvement === 'opening' ? 'ouvert' : mouvement === 'closing' ? 'ferme' : ferme ? 'ferme' : coverOuvert(pos) ? 'ouvert' : pos === 50 ? 'mi' : null;"), 'la puce de la feuille');
   assert.ok(APP.includes('return !coverFerme(st, p != null ? Math.round(p) : '), 'la pastille de la tuile piece');
   // Les volets seulement, et un volet muet n'est pas « ouvert » (audit du 19/10).
   assert.ok(APP.includes('const openCount = volets.filter(c => !estMuetVolet(S[c.haid]) && !coverFerme(S[c.haid], c.pos)).length;'), 'le compte « n ouverts » de la vue Volets');

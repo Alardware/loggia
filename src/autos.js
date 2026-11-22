@@ -21,21 +21,32 @@ import { sansAccents } from './outils.js';
 
 /* Familles de métier, dans l'ordre où on les cherche. La première qui matche
  * gagne : « alarme lumière » est une affaire de sécurité avant d'être une
- * affaire de lampe. */
+ * affaire de lampe.
+ *
+ * Chaque famille se cherche comme MOT ENTIER, son pluriel en -s / -x compris
+ * (audit du 12/11, B26). Une sous-chaîne n'importe où rangeait « Spotify le
+ * matin » dans les Lumières (« spot »), « Importe les relevés » dans les
+ * Ouvrants (« porte »), « Restore les scènes » dans les Volets (« store »),
+ * et « Heures creuses » ratait l'Énergie. Les formes dérivées s'écrivent donc
+ * en clair (« absente? », « rentree », « verrouiller », « climatiseur », « reveiller »,
+ * « previen[st]? »…) : celles que la sous-chaîne attrapait à raison. `\b` de JS ne
+ * connaît que [A-Za-z0-9_] : la recherche se fait APRÈS `sansAccents`, où il
+ * n'y a plus ni accent ni majuscule. */
+const motsEntiers = (alts) => new RegExp('(?:^|[^a-z0-9])(?:' + alts + ')(?:s|x)?(?![a-z0-9])');
 const AUTO_FAMILLES = [
-  ['Sécurité', /(alarme|alarmo|intrusion|serrure|verrou|camera|sonnette|portail|surveillance)/],
-  ['Lumières', /(lumiere|lampe|veilleuse|eclairage|luminaire|led|spot|guirlande|plafonnier|suspension|applique)/],
-  ['Volets', /(volet|store|rideau|persienne|brise.?soleil)/],
-  ['Climat', /(chauffage|thermostat|clim|climatisation|radiateur|poele|granule|pompe.?a.?chaleur|consigne)/],
-  ['Ventilation', /(vmc|ventilation|purificateur|humidificateur|deshumidificateur|aeration|ventilateur)/],
-  ['Ouvrants', /(porte|fenetre|ouvrant|garage|baie)/],
-  ['Présence', /(presence|arrivee|depart|absence|absent|personne|quitte|rentre)/],
-  ['Énergie', /(energie|conso|consommation|tarif|heure.?creuse|solaire|batterie|panneau|onduleur|linky|delestage)/],
-  ['Médias', /(media|musique|spotify|television|enceinte|volume|plex|radio|\btv\b)/],
-  ['Robots', /(aspirateur|robot|tondeuse|luba|roborock|nettoyage)/],
-  ['Arrosage', /(arrosage|irrigation|goutte.?a.?goutte)/],
-  ['Notifications', /(notification|notif|alerte|rappel|previen|prevenir|message)/],
-  ['Réveil', /(reveil|coucher|nuit|matin|soir|sommeil)/],
+  ['Sécurité', motsEntiers('alarme|alarmo|intrusion|serrure|(?:de)?verrou(?:ill(?:e|er|ent|age))?|camera|sonnette|portail|surveillance')],
+  ['Lumières', motsEntiers('lumiere|lampe|veilleuse|eclairage|luminaire|led|spot|guirlande|plafonnier|suspension|applique')],
+  ['Volets', motsEntiers('volet|store|rideau|persienne|brise.?soleil')],
+  ['Climat', motsEntiers('chauffage|thermostat|thermostatique|clim|climat|climatisation|climatiseur|radiateur|poele|granule|pompe.?a.?chaleur|consigne')],
+  ['Ventilation', motsEntiers('vmc|ventilation|purificateur|humidificateur|deshumidificateur|aeration|ventilateur')],
+  ['Ouvrants', motsEntiers('porte|fenetre|ouvrant|garage|baie')],
+  ['Présence', motsEntiers('presence|arrivee|depart|absence|absente?|personne|quitte|quitter|quittent|rentre|rentree|rentrer|rentrent')],
+  ['Énergie', motsEntiers('energie|conso|consommation|consomme|consommer|tarif|tarifaire|heures?.?creuse|solaire|batterie|panneau|onduleur|linky|delestage')],
+  ['Médias', motsEntiers('media|musique|spotify|television|enceinte|volume|plex|radio|tv')],
+  ['Robots', motsEntiers('aspirateur|robot|tondeuse|luba|roborock|nettoyage')],
+  ['Arrosage', motsEntiers('arrosage|irrigation|goutte.?a.?goutte')],
+  ['Notifications', motsEntiers('notification|notif|notifie|notifier|alerte|alerter|rappel|rappelle|rappeler|previen[st]?|previennent|prevenir|message')],
+  ['Réveil', motsEntiers('reveil|reveille|reveiller|coucher|nuit|matin|matinee|matinale?|soir|soiree|sommeil')],
 ];
 
 /** Les familles que Loggia nomme lui-même, `Divers` compris (audit du 03/10).

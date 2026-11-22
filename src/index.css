@@ -44,9 +44,18 @@ body { overscroll-behavior: none; min-height: 100vh; min-height: 100dvh; }
 .o-piece-badge-top { display: none; }
 button { color: inherit; font-family: inherit; }
 
+/* ── Charte du mouvement (audit des thèmes du 13/11, V6) : cinq réglages nommés, posés une fois, qu'un thème peut changer
+ *    par le bloc `fine` de son preset (theme.js). Branché aujourd'hui : tout le retour d'appui.
+ *    Les autres transitions gardent leurs chiffres ; `--o-dur-lente` est en réserve.
+ *    LE RYTHME DE PRISME POUR TOUS (17/11, « Oui, avec le rythme ») : l'appui dure 0,28 s et ne rebondit plus. `--o-rebond`
+ *    garde son nom (c'est le réglage de l'appui), mais sa courbe n'a plus de dépassement.
+ *    Sur `html`, pas sur la pseudo-classe racine : c'est le même élément, mais le premier bloc « racine » de cette feuille
+ *    doit rester celui des couleurs sombres (tests/clair.test.mjs le lit ainsi — ne pas en écrire le sélecteur ici). */
+html { --o-dur-rapide: .28s; --o-dur: .25s; --o-dur-lente: .45s; --o-courbe: cubic-bezier(.22, .61, .36, 1); --o-rebond: cubic-bezier(.2, .8, .2, 1); }
+
 /* Retour tactile : léger enfoncement au press + rebond (spring) au relâcher. transform = GPU. */
 button, .o-nav-item, .o-piece, .o-light-card, .o-scene-room, .grid-par-pal button, [role="switch"], [role="button"] {
-  transition: transform .16s cubic-bezier(.34, 1.45, .56, 1);
+  transition: transform var(--o-dur-rapide) var(--o-rebond);
   -webkit-tap-highlight-color: transparent;
   /* Le navigateur n'attend plus de savoir si le doigt allait faire un double-tap
    * pour zoomer : le geste part tout de suite. Le viewport declare deja
@@ -63,6 +72,23 @@ button:active, .o-nav-item:active, .o-piece:active, .o-light-card:active, .o-sce
 @media (prefers-reduced-motion: reduce) {
   button, .o-nav-item, .o-piece, .o-light-card, .o-scene-room, .grid-par-pal button, [role="switch"], [role="button"] { transition: none; }
   button:active, .o-nav-item:active, .o-piece:active, .o-light-card:active, .o-scene-room:active, .grid-par-pal button:active, [role="switch"]:active, [role="button"]:active { transform: none; }
+}
+/* Le même appui sur TOUTES les cartes (V5). Chaque cadre de carte écrit sa transition en ligne (`all .3s`, `all .25s`,
+ * `box-shadow .3s, background .3s`), qui l'emportait sur la règle ci-dessus : selon la carte, l'enfoncement était
+ * instantané, vif ou mou. Cette règle reprend la main (d'où `!important`) et garde ce que ces transitions animaient
+ * d'utile : ombre, liseré, opacité, filtre (la carte météo s'éclaircit au survol, plus bas). PAS le fond : celui de
+ * toutes ces cartes est un dégradé, qu'une transition n'anime pas, et la couleur unie posée sous celui de la carte météo
+ * passerait en fondu du sombre au clair à chaque chargement en thème clair (mesuré le 17/11). Un élément qui se
+ * déclare SANS transition (`transition: none` en ligne : la copie qui suit le pointeur quand on range ses cartes, si
+ * c'est la carte elle-même qu'on clone) reste sans — il doit coller au doigt.
+ * `:where()` autour de l'exclusion : elle ne pèse rien, la règle garde le poids d'UNE classe. Deux règles `!important`
+ * se départagent au poids puis à l'ordre : sans `:where()`, celle-ci l'emportait sur sa propre coupure en mouvement
+ * réduit, juste dessous (relecture du 17/11). */
+:is(.o-piece, .o-rmcard, .o-light-card, .o-carte-meteo):not(:where([style*="transition: none"])) {
+  transition: transform var(--o-dur-rapide) var(--o-rebond), box-shadow var(--o-dur) var(--o-courbe), border-color var(--o-dur) var(--o-courbe), opacity var(--o-dur) var(--o-courbe), filter var(--o-dur) var(--o-courbe) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.o-piece, .o-rmcard, .o-light-card, .o-carte-meteo) { transition: none !important; }
 }
 
 /* Cible tactile des interrupteurs : le visuel fait 46x26, la zone cliquable est étendue à ~44px de haut. */
@@ -174,9 +200,14 @@ body { background: var(--o-bggrad, var(--o-bg)); font-family: var(--o-font); col
   --o-lampe:#ffce73; --o-lampe-rgb:255,206,115; --o-lampe-b:#f59e0b; --o-orange:#ff8a4c; --o-orange-rgb:255,138,76; --o-rose:#ff4d8c; --o-rose-rgb:255,77,140;
 }
 html.loggia-frosted body { background-attachment: fixed; }
+/* Un thème sans police de titre (audit des thèmes du 13/11, E1) : ses titres
+   prennent sa police courante (theme.js), qui n'a pas d'italique — le
+   navigateur en penchait un faux. Ils se dessinent droits et gras. Loggia, et
+   tout thème qui déclare une vraie police de titre, gardent l'italique. */
+html.loggia-titres-droits [style*="--o-serif"] { font-style: normal !important; font-weight: 700 !important; letter-spacing: -.01em; }
 
 /* Frosted Glass : flou de l'arrière-plan derrière chaque carte translucide (toute carte stylée avec --o-surfA). */
-html.loggia-frosted [style*="--o-surfA"] { -webkit-backdrop-filter: blur(16px) saturate(1.35); backdrop-filter: blur(16px) saturate(1.35); }
+html.loggia-frosted [style*="--o-surfA"] { -webkit-backdrop-filter: var(--o-flou, blur(16px) saturate(1.35)); backdrop-filter: var(--o-flou, blur(16px) saturate(1.35)); }
 /* Une carte DANS une carte ne refloute pas : une seule couche suffit.
  *
  * `body` en tete du selecteur, et ce n'est pas cosmetique. Les presets posent
@@ -200,6 +231,24 @@ html.loggia-frosted body [style*="--o-surfA"] [style*="--o-surfA"] { -webkit-bac
  * change pas — `--o-surfA` posee sur une base pleine donne exactement la
  * teinte qu'elle avait sur fond sombre —, seule la transparence part. */
 html.loggia-frosted .o-sheet-opaque { -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* LES FENÊTRES D'UN THÈME DE VERRE (audit des thèmes du 13/11, F1). Frosted Glass, refait sur sa source, a des cartes presque
+ * transparentes : une fiche ou un menu de l'en-tête, qui prennent la surface des cartes, laissaient voir la page à travers
+ * leurs réglages. La source leur donne un fond à elles (35 % du fond du thème) et un flou plus fort (18 px) : un thème qui
+ * déclare `--o-fenetre` (theme.js, `fenetre`) le pose ici. Sans ce jeton — tous les autres thèmes — rien ne change. Pas en
+ * verre « Léger » : la fiche y a déjà son fond plein, sans flou (règle plus bas). */
+html[style*="--o-fenetre"]:not(.loggia-verre-leger) .o-sheet:not(.o-sheet-opaque),
+html[style*="--o-fenetre"] .loggia-hdr [style*="top: calc(100% + 8px)"][style*="--o-surfA"] {
+  background: var(--o-fenetre) !important;
+  -webkit-backdrop-filter: var(--o-flou-fenetre, var(--o-flou, blur(16px) saturate(1.35))); backdrop-filter: var(--o-flou-fenetre, var(--o-flou, blur(16px) saturate(1.35))); }
+/* Le flou d'une fiche ne voit que ce que le voile lui laisse (un flou dans un flou ne refloute pas la page) : c'est donc le VOILE
+ * qui porte le flou de la fenêtre. Sans lui, à 35 % de fond, les interrupteurs de la page se lisaient à travers la fiche. */
+html[style*="--o-fenetre"]:not(.loggia-verre-leger) .o-voile { -webkit-backdrop-filter: var(--o-flou-fenetre, blur(4px)) !important; backdrop-filter: var(--o-flou-fenetre, blur(4px)) !important; }
+/* L'INTERRUPTEUR ALLUMÉ D'UN THÈME (audit des thèmes du 13/11, F7). iOS allume ses interrupteurs en vert (systemGreen), quel que
+ * soit son accent : un thème qui déclare `--o-bascule-on` (theme.js, `fine`) le pose ici. Sans ce jeton — tous les autres
+ * thèmes — rien ne change. La règle ne vise QUE la piste d'un interrupteur allumé : ses dimensions (les quatre tailles du
+ * dashboard) ET son fond d'allumé, l'accent ou l'ambre d'une lampe. Un bouton choisi, une rangée cliquable ou une plaque qui
+ * portent `role="switch"` n'ont pas ces dimensions : ils gardent leur couleur. */
+html[style*="--o-bascule-on"] :is([style*="width: 46px"][style*="height: 26px"], [style*="width: 44px"][style*="height: 25px"], [style*="width: 42px"][style*="height: 24px"], [style*="width: 34px"][style*="height: 20px"]):is([style*="var(--o-accent-fond)"], [style*="var(--o-bascule-lampe)"]) { background: var(--o-bascule-on) !important; }
 
 /* « Verre des cartes » LÉGER (ADR 0284, Paramètres > Effets) : le même verre,
  * pas une seconde matière (décision du 29/08) — seul le coût change. Posée sur
@@ -225,7 +274,7 @@ html.loggia-verre-leger .o-voile { -webkit-backdrop-filter: none !important; bac
  * en Plein ; le calque déborde de 40 px de chaque côté pour que le bord flou
  * (transparent) reste hors de l'écran. Les cartes, posées dessus, montrent ce
  * qu'elles montraient ; entre elles, la photo est floue elle aussi. */
-html.loggia-verre-leger .o-fond-photo { inset: -40px !important; filter: blur(16px) saturate(1.35); }
+html.loggia-verre-leger .o-fond-photo { inset: -40px !important; filter: var(--o-flou, blur(16px) saturate(1.35)); }
 
 /* « Nuit de l'écran » (ADR 0287, Paramètres > Effets) : posées sur la racine
  * par `nuitecran.js`, avant le premier rendu. `loggia-nuit-sol` dit que cet
@@ -247,7 +296,7 @@ html.loggia-nuit body::after { opacity: var(--o-nuit-voile, .3); }
 html.loggia-nuit-sol body:has(.o-sombre[style*="position: fixed"])::after { content: none; }
 html.loggia-nuit-sol .o-fond-photo { transition: filter 4s ease; }
 html.loggia-nuit .o-fond-photo { filter: brightness(var(--o-nuit-photo, .7)); }
-html.loggia-nuit.loggia-verre-leger .o-fond-photo { filter: blur(16px) saturate(1.35) brightness(var(--o-nuit-photo, .7)); }
+html.loggia-nuit.loggia-verre-leger .o-fond-photo { filter: var(--o-flou, blur(16px) saturate(1.35)) brightness(var(--o-nuit-photo, .7)); }
 
 /* Contraste renforcé : les tokens sont posés en inline par applyLook() — une règle de
    classe ne battrait pas le style inline du preset. La classe ne sert que de marqueur. */
@@ -552,6 +601,7 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
    * gras, marges de 18, lignes plus serrées. */
   .o-panneau { border-radius: 20px !important; }
   .o-panneau-tete { padding: 18px 18px 10px !important; }
+  .o-panneau-corps { padding: 0 18px 14px !important; }
   .o-panneau-titre { font-family: var(--o-font) !important; font-style: normal !important; font-size: 13px !important; font-weight: 800 !important; letter-spacing: 0 !important; }
   .o-panneau-desc { font-size: 11.5px !important; margin-top: 2px !important; line-height: 1.4 !important; }
   .o-panneau-pied { padding: 12px 18px !important; }
@@ -599,7 +649,7 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
    L'enfoncement aussi au clavier : Espace n'active que la surface, pas ses
    ancêtres (mesuré : `none` au lieu de .955) — d'où le `:has`, en règle à
    part pour qu'un navigateur sans `:has` garde celle de la souris. */
-.o-apercu { transition: transform .16s cubic-bezier(.34, 1.45, .56, 1); }
+.o-apercu { transition: transform var(--o-dur-rapide) var(--o-rebond); }
 .o-apercu:active { transform: scale(.955); }
 .o-apercu:has(> .o-surface:active) { transform: scale(.955); }
 .o-apercu:has(> .o-surface:focus-visible) { outline: 2px solid var(--o-accent); outline-offset: 2px; }
@@ -658,18 +708,11 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 @keyframes bflash { 0%,92%,100% { opacity:0; } 94% { opacity:.85; } 96% { opacity:.1; } 98% { opacity:.7; } }
 @keyframes bleaf { 0% { transform:translate(20px,6px) rotate(0); opacity:0; } 18% { opacity:1; } 82% { opacity:1; } 100% { transform:translate(-120px,-14px) rotate(-300deg); opacity:0; } }
 @keyframes btwk { 0%,100% { opacity:.85; } 50% { opacity:.15; } }
-@keyframes flowdash { to { stroke-dashoffset: -24; } }
 @keyframes loggia-energy-flow { to { stroke-dashoffset: -120; } }
 @keyframes eq { 0%,100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
-@keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
-@keyframes m-pulse { 0%,100% { transform: scale(1); opacity: .6; } 50% { transform: scale(1.13); opacity: .22; } }
-@keyframes m-wiggle { 0%,100% { transform: translate(0,0); } 25% { transform: translate(2px,-1px); } 50% { transform: translate(-1px,1px); } 75% { transform: translate(-2px,-1px); } }
 @keyframes m-shake { 0%,100% { transform: rotate(0); } 10% { transform: rotate(-9deg); } 20% { transform: rotate(9deg); } 30% { transform: rotate(-6deg); } 40% { transform: rotate(6deg); } 50% { transform: rotate(0); } }
-@keyframes m-bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
-@keyframes m-charge { 0%,100% { opacity: .55; transform: scale(.94); } 50% { opacity: 1; transform: scale(1); } }
 @keyframes o-fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes o-fadeOut { from { opacity: 1; } to { opacity: 0; } }
-@keyframes o-popIn { from { opacity: 0; transform: translateY(12px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
 /* Bottom sheet (popup lumière) : monte du bas avec la courbe drawer iOS. */
 @keyframes o-sheetIn { from { transform: translate(-50%, 105%); } to { transform: translate(-50%, 0); } }
 @keyframes o-sheetOut { from { transform: translate(-50%, 0); } to { transform: translate(-50%, 105%); } }
@@ -749,13 +792,6 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 .o-room-scroll::-webkit-scrollbar { height: 6px; }
 .o-room-scroll::-webkit-scrollbar-thumb { background: var(--o-bd1); border-radius: 4px; }
 
-/* Lecteur Médias : ring pulsant du bouton play (anim de la carte d'origine). */
-@keyframes np-pulse {
-  0% { transform: scale(1); opacity: .58; }
-  65% { transform: scale(1.08); opacity: .14; }
-  100% { transform: scale(1.12); opacity: 0; }
-}
-
 /* responsive (= design @media 820px) */
 @media (max-width: 820px) {
   /* Zone de touche des interrupteurs.
@@ -783,13 +819,13 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
    * marge négative l'annule dans la mise en page. */
   .grid-qscenes {
     display: flex !important;
-    gap: 10px !important;
+    gap: 8px !important;
     overflow-x: auto;
     scroll-snap-type: x proximity;
     -webkit-overflow-scrolling: touch;
     padding: 4px 4px 6px; margin: -4px -4px 0; scroll-padding-inline: 4px;
   }
-  .grid-qscenes > button { flex: 0 0 150px; scroll-snap-align: start; }
+  .grid-qscenes > button { flex: 0 0 auto; scroll-snap-align: start; }
   /* Vue Pièce : 2 cartes par ligne, compactées pour tenir sans déborder. */
   .grid-roomdev { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
   .grid-roomdev .o-rmcard { min-height: 150px !important; padding: 13px !important; }
@@ -892,6 +928,17 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
   .o-hdr-search { min-width: 0; }
   .o-hdr-kbd { display: none; }
 }
+/* Le petit sapin de fin d'année (ADR 0342) : près de la date de l'en-tête, et
+ * il s'efface avec elle ; au téléphone, il passe à côté du bonjour de
+ * l'Accueil. Jamais les deux à la fois. Une fenêtre de PC trop étroite pour la
+ * date n'a ni l'un ni l'autre. */
+.o-noel { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.o-noel-salut { display: none; }
+@container (max-width: 700px) { .o-noel-entete { display: none; } }
+@media (max-width: 560px) {
+  .o-noel-entete { display: none; }
+  .o-noel-salut { display: inline-flex; }
+}
 @media (max-width: 560px) {
   /* Les tuiles Securite (portes, fenetres, mouvement, cameras) restent sur
      UNE rangee au telephone (retour user 16/09) : l'icone passe au-dessus,
@@ -950,7 +997,7 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
    par un bouton de surface transparent (`Surface`, ui.jsx). C'est la LIGNE
    qui s'enfonce au press, comme quand `[role="button"]:active` la prenait —
    `:active` gagne aussi les ancêtres de l'élément pressé. */
-.o-ligne-moment { transition: transform .16s cubic-bezier(.34, 1.45, .56, 1); }
+.o-ligne-moment { transition: transform var(--o-dur-rapide) var(--o-rebond); }
 .o-ligne-moment:active { transform: scale(.955); }
 @media (prefers-reduced-motion: reduce) { .o-ligne-moment { transition: none; } .o-ligne-moment:active { transform: none; } }
 
@@ -1019,7 +1066,7 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 @keyframes o-livehalo { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(calc(1 + 5 / var(--o-point-r, 3.5))); opacity: 0; } }
 .o-livedot { position: relative; visibility: hidden; animation: o-livedot 1.8s ease-in-out infinite; }
 .o-livedot::before, .o-livedot::after { content: ''; position: absolute; inset: calc(50% - var(--o-point-r, 3.5) * 1px); box-sizing: border-box; border-radius: inherit; visibility: visible; pointer-events: none; }
-.o-livedot::before { background: rgba(248,113,113,.55); opacity: 0; animation: o-livehalo 1.8s ease-in-out infinite; }
+.o-livedot::before { background: rgba(var(--o-bad-rgb), .55); opacity: 0; animation: o-livehalo 1.8s ease-in-out infinite; }
 .o-livedot::after { background: inherit; border: inherit; }
 /* Hors de l'écran et sous l'écran de veille, rien ne tourne (lot 14 de
    l'audit du 03/10) : ni le liseré « ne répond plus » (ADR 0048), ni le point
@@ -1031,6 +1078,19 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 .o-panne[data-o-hors], .o-panne[data-o-hors]::before, .o-livedot[data-o-hors], .o-livedot[data-o-hors]::before,
 .loggia-ambient-on .o-panne, .loggia-ambient-on .o-panne::before, .loggia-ambient-on .o-livedot, .loggia-ambient-on .o-livedot::before { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) { .o-livedot::before { animation: none; } }
+/* Toutes les autres boucles sans fin (audit des thèmes du 13/11, V3 et V4) : les
+   icônes d'un appareil en marche, la mini-scène météo, les vagues de l'anneau,
+   les flux de l'Énergie, la pulsation d'une alerte. Elles portent leur
+   animation en style en ligne, d'où le sélecteur d'attribut et le !important.
+   Hors de l'écran (`data-o-hors`, posé sur l'élément ou sur son <svg>) et sous
+   la veille, elles se mettent en PAUSE — dans le tableau de bord seulement
+   (`.loggia-main`, `.loggia-aside`) : la veille, posée à côté, garde son halo.
+   Avec « Animations réduites » (`html.loggia-calme`, calme.js),
+   elles ne partent pas du tout — les feuilles et l'appui ne changent pas. */
+[data-o-hors], [data-o-hors]::before, svg[data-o-hors] *,
+.loggia-ambient-on :is(.loggia-main, .loggia-aside) :is([style*="o-ic-"], [style*="o-wxm-"], [style*="lgWave"], [style*="loggia-energy-flow"], [style*="pulse 1.2s"]) { animation-play-state: paused !important; }
+html.loggia-calme :is([style*="o-ic-"], [style*="o-wxm-"], [style*="lgWave"], [style*="loggia-energy-flow"], [style*="pulse 1.2s"]),
+html.loggia-calme :is(.o-panne, .o-livedot), html.loggia-calme :is(.o-panne, .o-livedot)::before { animation: none !important; }
 @keyframes o-liveIn { 0% { transform: translateY(-6px) scale(.9); opacity: 0; } 60% { transform: translateY(1px) scale(1.03); opacity: 1; } 100% { transform: none; } }
 .o-livebadge { animation: o-liveIn .5s cubic-bezier(.22,1.2,.36,1) both; }
 @media (prefers-reduced-motion: reduce) { .o-skel, .o-livedot, .o-livebadge { animation: none; } }
@@ -1055,10 +1115,9 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
 /* 2. cloche qui tinte à l'arrivée d'une notification */
 @keyframes o-bellringK { 0%,100% { transform: rotate(0); } 15% { transform: rotate(-14deg); } 30% { transform: rotate(12deg); } 45% { transform: rotate(-8deg); } 60% { transform: rotate(6deg); } 75% { transform: rotate(-3deg); } }
 .o-bellring { animation: o-bellringK .9s ease-in-out; transform-origin: top center; }
-/* 4. avatar qui pop (montage + changement de présence via key) */
-@keyframes o-avatarinK { 0% { transform: scale(.4); opacity: 0; } 65% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); } }
+/* 4. avatar (montage + changement de présence via key) */
 /* Cascade retiree (demande user) : les avatars apparaissent d'un bloc, sans pop ni delai.
-   Classe et keyframes conserves — meme traitement que .o-stag. */
+   Classe conservee (keyframes retires, audit du 12/11, lot 5a) — meme traitement que .o-stag. */
 .o-avatarin { animation: none; }
 @media (prefers-reduced-motion: reduce) { .o-bellring, .o-avatarin { animation: none; } }
 
@@ -1098,8 +1157,11 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
  * sur la couleur unie du thème, pas sur ce que la page montre. Le masque long
  * d'avant (ADR 0059) rend alors le vrai fond, sans marche. */
 html[style*="--o-bggrad"] .o-wx3d, body:has(.o-fond-photo) .o-wx3d {
-  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 30%, rgba(0,0,0,.94) 40%, rgba(0,0,0,.8) 50%, rgba(0,0,0,.6) 60%, rgba(0,0,0,.38) 70%, rgba(0,0,0,.19) 80%, rgba(0,0,0,.06) 90%, transparent 100%);
-  mask-image: linear-gradient(180deg, #000 0%, #000 30%, rgba(0,0,0,.94) 40%, rgba(0,0,0,.8) 50%, rgba(0,0,0,.6) 60%, rgba(0,0,0,.38) 70%, rgba(0,0,0,.19) 80%, rgba(0,0,0,.06) 90%, transparent 100%); }
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 58%, rgba(0,0,0,.86) 66%, rgba(0,0,0,.62) 74%, rgba(0,0,0,.36) 82%, rgba(0,0,0,.14) 91%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 58%, rgba(0,0,0,.86) 66%, rgba(0,0,0,.62) 74%, rgba(0,0,0,.36) 82%, rgba(0,0,0,.14) 91%, transparent 100%); }
+/* 17/11, sa capture : « le dégradé ici sur Prisme est beaucoup plus haut que pour les autres ». Le masque partait de 30 %
+ * de la hauteur : sous un fond dégradé (Prisme, iOS) ou une photo, le ciel s'effaçait bien plus tôt qu'ailleurs. Il garde
+ * maintenant le ciel entier jusqu'à 58 %, puis l'efface ; il finit toujours transparent (pas de marche, ADR 0059). */
 /* Le voile de la maquette : en sombre, une ombre légère sous l'en-tête et rien
  * plus bas ; en clair, aucun. Il ne finit jamais sur une couleur opaque. */
 .o-wx3d-veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.18) 0%, transparent 26%); }
@@ -1127,6 +1189,12 @@ html.loggia-light main:has(.o-wx3d-sombre) .loggia-hdr { background: rgba(238, 2
  * colonne ne bouge plus. C'est la difference entre un compteur qui vit et un
  * compteur qui gigote. */
 body, button, input, select, textarea { font-variant-numeric: tabular-nums; }
+/* Sauf sous un thème dont la police dessine ses chiffres à chasse fixe AUTREMENT (audit des thèmes du 13/11, E5) : dans
+ * Mona Sans, celle du thème GitHub, le zéro tabulaire est BARRÉ — « 100 % » se lisait comme du code. Couper le trait
+ * (`"zero" 0`) n'y change rien : c'est le dessin même du chiffre tabulaire. Le thème demande donc ses chiffres à leur
+ * largeur naturelle (`chiffres: 'naturels'` dans theme.js) ; `!important` parce que plus de cent composants écrivent
+ * `tabular-nums` en ligne. Le prix : un chiffre qui change peut pousser son voisin d'un pixel ou deux. */
+html.loggia-chiffres-naturels, html.loggia-chiffres-naturels * { font-variant-numeric: normal !important; }
 
 /* ── L'accent quand il porte du texte ──────────────────────────────────
  * `--o-accent` est un bleu vif : du blanc pose dessus donne 3,22:1, sous le
@@ -1138,6 +1206,8 @@ body, button, input, select, textarea { font-variant-numeric: tabular-nums; }
  *
  * 82 % d'accent + 17 % de noir amene le bleu par defaut a 4,6:1. */
 :root { --o-accent-fond: var(--o-accent); }
+/* Le rouge qui porte du texte blanc (un bouton armé) : la garde de contraste le pose, assombri s'il le faut (contraste.js). */
+:root { --o-bad-fond: var(--o-bad); }
 :root { --o-piste: var(--o-s1); }
 @supports (color: color-mix(in srgb, red 50%, black)) {
   :root { --o-accent-fond: color-mix(in srgb, var(--o-accent) 82%, #000); }
@@ -1192,6 +1262,20 @@ html.loggia-light main:has(.o-wx3d-sombre) .o-banner-metrics { text-shadow: 0 1p
 html.loggia-light .o-sur-ciel > h2 { color: rgba(255, 255, 255, .92) !important; text-shadow: 0 1px 3px rgba(8, 12, 20, .55), 0 0 14px rgba(8, 12, 20, .35); }
 html.loggia-light .o-sur-ciel > span,
 html.loggia-light .o-sur-ciel > div:not(:has(button)) { color: rgba(255, 255, 255, .8) !important; text-shadow: 0 1px 3px rgba(8, 12, 20, .55), 0 0 14px rgba(8, 12, 20, .35); }
+/* LES TITRES DE SECTION POSÉS SUR LE CIEL, PAR TOUT CIEL (audit du 12/11). « Favoris », « Scénarios » et leurs compagnons de droite
+ * — « Épinglez un appareil depuis sa fiche », « 9 scénarios › », les flèches — s'écrivaient au gris du thème, en italique de 19 px,
+ * sur la photo du ciel : par ciel clair de jour, presque invisibles (sur tablette surtout, où le ciel descend plus bas). Posés sur le
+ * ciel (`o-ciel-titre`, mesuré par wx3d.jsx), ils prennent l'ENCRE du thème et un halo doux de son FOND derrière les lettres — le
+ * blanc sur un halo sombre en thème sombre, l'encre foncée sur un halo clair en thème clair ; en thème clair sous un ciel sombre,
+ * l'inverse : le fond pour encre, l'encre pour halo. Rien d'écrit en dur : chaque thème garde sa paire. Les titres posés sur le fond
+ * de la page (« Pièces », plus bas) ne changent pas ; le bouton d'édition (`data-drag-ui`) garde sa pastille. */
+.o-ciel-titre { --o-ciel-encre: var(--o-text); --o-ciel-encre2: var(--o-text1); --o-ciel-halo: var(--o-bg); }
+html.loggia-light main:has(.o-wx3d-sombre) .o-ciel-titre { --o-ciel-encre: var(--o-bg); --o-ciel-encre2: var(--o-bg); --o-ciel-halo: var(--o-text); }
+.o-ciel-titre > h2 { color: var(--o-ciel-encre) !important; text-shadow: 0 1px 2px var(--o-ciel-halo), 0 0 10px var(--o-ciel-halo); }
+.o-ciel-titre > span,
+.o-ciel-titre > div > span,
+.o-ciel-titre > div > button:not([data-drag-ui]) { color: var(--o-ciel-encre2) !important; text-shadow: 0 1px 2px var(--o-ciel-halo), 0 0 10px var(--o-ciel-halo); }
+.o-ciel-titre > div > button:not([data-drag-ui]) > * { color: inherit !important; }
 /* Le bandeau d'édition se pose en haut de l'Accueil, donc SUR le ciel. Sa
  * teinte translucide y laissait passer un ciel d'orage en thème clair (texte
  * gris sur gris foncé), un ciel de midi en sombre : il y reprend le fond qu'il
@@ -1387,7 +1471,7 @@ h1[tabindex="-1"]:focus, h1[tabindex="-1"]:focus-visible { outline: none; }
    édition s'enfonçait d'un coup et revenait sec. Les autres cartes
    pointillées posent la leur en ligne, qui l'emporte — le fantôme d'un
    glisser aussi (`none`). */
-.o-pointille { transition: transform .16s cubic-bezier(.34, 1.45, .56, 1); }
+.o-pointille { transition: transform var(--o-dur-rapide) var(--o-rebond); }
 @media (prefers-reduced-motion: reduce) {
   .o-pointille:active, [data-sec]:has(> .o-surface):active { transform: none; }
   .o-pointille { transition: none; }
@@ -1484,6 +1568,7 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
 .o-confort-val .pt { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 .o-confort-val .mot { font-size: 11.5px; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 @media (hover: hover) and (pointer: fine) { .o-confort:hover { filter: brightness(1.06); } }
+@media (hover: hover) and (pointer: fine) { .o-boutons-projet a:hover { filter: brightness(1.12); } }
 @media (max-width: 900px) {
   .o-confort { flex-direction: column; align-items: stretch; gap: 12px; }
   .o-confort-sep { display: none; }
@@ -1532,6 +1617,28 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
  * comme le « · À la maison » : l'avatar et sa pastille disent l'essentiel,
  * le nom reste au survol et au lecteur d'écran. */
 @container (max-width: 230px) { .o-presence-nom { display: none; } }
+/* Large (une rangée entière de la vue Sécurité), la grille d'avatars grandit (audit du 12/11) : 26 px s'y perdaient. */
+/* Large, les personnes se suivent à gauche au lieu de s'étaler sur quatre colonnes (audit du 12/11) :
+ * cinq personnes sur 1 100 px laissaient 250 px de vide entre deux avatars, et la cinquième seule dessous.
+ * `!important` : la grille de la carte étroite est posée en ligne (galerie.jsx). */
+@container (min-width: 420px) { .o-presence-grille { --pres-av: 34px; grid-template-columns: repeat(auto-fill, 88px) !important; gap: 10px 14px !important; justify-content: start; } }
+
+/* La Présence SEULE sur sa rangée de la vue Sécurité prend toute la rangée (audit du 12/11).
+ * `seuleSurSaRangee` (placement.js) donne les nombres de colonnes où elle l'est (`o-seule-k3`…) ;
+ * la grille en compte deux au téléphone (≤ 820 px, `.grid-objets` plus haut), ailleurs autant que
+ * 225 px + 16 px d'écart en tiennent dans le bloc (k colonnes dès 241 × k − 16 px). À côté de
+ * l'alarme et de la sirène, aucune classe : elle garde sa colonne. */
+.o-sec-bloc { container: secbloc / inline-size; }
+@media (max-width: 820px) { .o-seule-k2 { grid-column: 1 / -1; } }
+@media (min-width: 821px) {
+  @container secbloc (min-width: 466px) and (max-width: 706.98px) { .o-seule-k2 { grid-column: 1 / -1; } }
+  @container secbloc (min-width: 707px) and (max-width: 947.98px) { .o-seule-k3 { grid-column: 1 / -1; } }
+  @container secbloc (min-width: 948px) and (max-width: 1188.98px) { .o-seule-k4 { grid-column: 1 / -1; } }
+  @container secbloc (min-width: 1189px) and (max-width: 1429.98px) { .o-seule-k5 { grid-column: 1 / -1; } }
+  @container secbloc (min-width: 1430px) and (max-width: 1670.98px) { .o-seule-k6 { grid-column: 1 / -1; } }
+  @container secbloc (min-width: 1671px) and (max-width: 1911.98px) { .o-seule-k7 { grid-column: 1 / -1; } }
+  @container secbloc (min-width: 1912px) { .o-seule-k8 { grid-column: 1 / -1; } }
+}
 
 /* ── La carte étroite : une grille commune (passe téléphone, ADR 0202 ; sa décision du 15/10, « ok pour 1c ») ──
  * Au téléphone, deux colonnes de cartes de 141 à 176 px : sous 188 px de CONTENU (la
@@ -1593,9 +1700,6 @@ html.loggia-tactile .o-assist { height: min(760px, calc(94vh - 2 * var(--o-navh,
 @container style(--o-texte-carte: 1.15) { [data-plante] [data-grille] > :nth-child(n+3) { display: none !important; } }
 @supports not (container-type: inline-size) { .o-seul-etroit { display: none !important; } }
 @container (width >= 188px) { .o-seul-etroit { display: none !important; } }
-/* La plaque-interrupteur d'une lumière (T12) : une zone de toucher de 44 × 44, 3 px autour de ses 38 ; plus forte que
- * l'allongement de ± 12 px des interrupteurs au téléphone, qui mordrait sur le nom, 10 px plus bas. */
-.o-gab-plaque[role="switch"]::after { content: ''; position: absolute; inset: -3px; }
 .o-gab-valeur { font-size: var(--o-taille, 15px); }
 .o-gab-etiquette { font-size: var(--o-taille, 10px); }
 @container (width < 188px) {
@@ -1974,21 +2078,21 @@ html.loggia-tactile .o-rail-cell:not(.o-rail-edit) > .o-rail-col { overscroll-be
 @media (prefers-reduced-motion: reduce) { .o-rail-cell { transition: none !important; } }
 
 /* ── Les scenarios de l'Accueil : UNE rangee qui defile (17/09) ──
- * Six cartes visibles sur PC — jamais sous 116 px : un nom ne se tronque pas
- * pour en loger une de plus —, les autres d'un glissement ou d'un clic sur les
- * fleches de l'en-tete ; sous 821 px la regle du telephone (150 px
- * par carte) prend le relais, plus haut. La barre de defilement est masquee :
+ * Des pastilles, chacune a sa largeur (ADR 0343, 11/11) : autant qu'il en
+ * tient, un nom jamais tronque, les autres d'un glissement ou d'un clic sur les
+ * fleches de l'en-tete ; sous 821 px la regle du telephone prend le relais,
+ * plus haut. La barre de defilement est masquee :
  * les fleches et le clavier (chaque carte est un bouton) en tiennent lieu. Le
  * rembourrage laisse vivre les ombres des cartes, que le defilement couperait ;
  * la marge negative le rend sans effet sur la mise en page. */
 @media (min-width: 821px) {
   .grid-qscenes {
-    display: grid; grid-auto-flow: column; grid-auto-columns: max(116px, calc((100% - 60px) / 6)); gap: 12px;
+    display: flex; gap: 8px;
     overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: none;
     padding: 6px 6px 26px; margin: -6px -6px -26px; scroll-padding-inline: 6px;
   }
   .grid-qscenes::-webkit-scrollbar { display: none; }
-  .grid-qscenes > button { scroll-snap-align: start; min-width: 0; }
+  .grid-qscenes > button { flex: 0 0 auto; scroll-snap-align: start; }
 }
 /* ── L'ombre des cartes d'une rangée qui défile, à TOUTES les largeurs ──
  * `overflow-x: auto` rogne aussi en hauteur : l'ombre du thème (32 px de
@@ -2121,6 +2225,26 @@ html.loggia-light .o-vacances { color-scheme: light; }
 @keyframes o-ic-slide { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(2.5px); } }
 @keyframes o-ic-twinkle { 0%, 100% { transform: scale(1) rotate(0); opacity: 1; } 50% { transform: scale(.8) rotate(18deg); opacity: .5; } }
 @keyframes o-ic-up { 0% { transform: translateY(4px); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateY(-4px); opacity: 0; } }
+/* Les seize qui manquaient (audit du 12/11, E18 ; ADR 0370) : `dessins.js` et `dessinsrares.js` les appelaient depuis le 26/09,
+ * aucune n'etait definie — 41 dessins sur 171 gardaient une partie figee (la porte, la cloche, l'arbre, le cadenas...). Chacune
+ * joue autour du point que SON trace nomme (`transform-origin`, en unites du dessin) : une charniere, un pied, une attache. Memes
+ * amplitudes discretes que leurs ainees ; `o-ico-fige` et le mouvement reduit, plus bas, les arretent comme les autres. */
+@keyframes o-ic-buzz { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(.4px, -.4px); } 50% { transform: translate(-.4px, .3px); } 75% { transform: translate(.3px, .4px); } }
+@keyframes o-ic-door { 0%, 15%, 100% { transform: scaleX(1); } 55%, 70% { transform: scaleX(.55); } }
+@keyframes o-ic-draw { 0% { stroke-dashoffset: 1; } 45%, 85% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 1; } }
+@keyframes o-ic-glow { 0%, 100% { opacity: .45; transform: scale(.94); } 50% { opacity: 1; transform: scale(1); } }
+@keyframes o-ic-grow { 0%, 100% { transform: scale(.82); } 50% { transform: scale(1); } }
+@keyframes o-ic-heart { 0%, 56%, 100% { transform: scale(1); } 14% { transform: scale(1.16); } 28% { transform: scale(1); } 42% { transform: scale(1.1); } }
+@keyframes o-ic-knob { 0%, 100% { transform: translateX(-1.5px); } 50% { transform: translateX(1.5px); } }
+@keyframes o-ic-lift { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+@keyframes o-ic-nudge-r { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(2px); } }
+@keyframes o-ic-ring { 0%, 55%, 100% { transform: rotate(0); } 8%, 24%, 40% { transform: rotate(9deg); } 16%, 32%, 48% { transform: rotate(-9deg); } }
+@keyframes o-ic-rise { 0%, 100% { transform: scaleY(.45); } 50% { transform: scaleY(1); } }
+@keyframes o-ic-sundown { 0%, 100% { transform: translateY(0); opacity: 1; } 55%, 80% { transform: translateY(3.5px); opacity: .35; } }
+@keyframes o-ic-sunup { 0%, 100% { transform: translateY(3.5px); opacity: .35; } 55%, 80% { transform: translateY(0); opacity: 1; } }
+@keyframes o-ic-sway { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+@keyframes o-ic-switch { 0%, 40%, 100% { transform: translateY(0); } 50%, 90% { transform: translateY(5px); } }
+@keyframes o-ic-wink { 0%, 44%, 52%, 100% { transform: scaleY(1); } 48% { transform: scaleY(.15); } }
 /* Fige un dessin : la carte s'en sert partout ou l'appareil ne travaille pas —
  * une grille de choix, une prise en veille, une vignette. */
 .o-ico-fige svg *, .o-ico-fige * { animation: none !important; }
@@ -2178,3 +2302,413 @@ html.loggia-light .o-vacances { color-scheme: light; }
  * 1,8 s — le temps de le repérer. Sans mouvement : le fondu seul, que « réduire les animations » coupe. */
 .o-reglage-trouve { box-shadow: inset 0 0 0 2px var(--o-accent) !important; background-color: rgba(var(--o-accent-rgb), .1) !important; border-radius: 12px; transition: box-shadow .3s, background-color .3s; }
 @media (prefers-reduced-motion: reduce) { .o-reglage-trouve { transition: none; } }
+
+/* ── Spotify dans les Médias (ADR 0344) ──
+ * Sur PC, « Écouter sur », « Ajouter par lien » et les flèches à droite du
+ * titre. Au téléphone, le menu prend sa ligne entière, à la largeur du doigt,
+ * et le lien reste à côté du titre, le menu à 44 px pour le doigt. La rangée
+ * défile, sans barre ni aimantation : les flèches à la souris, le doigt
+ * ailleurs. */
+.o-spotify-tete { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 14px; }
+.o-spotify-sortie { display: inline-flex; align-items: center; gap: 8px; }
+@media (max-width: 560px) {
+  .o-spotify-sortie { order: 3; flex: 1 0 100%; }
+  .o-spotify-sortie > :last-child { flex: 1; min-width: 0; }
+}
+@media (max-width: 560px), (pointer: coarse) { .o-spotify-sortie button { min-height: 44px; } }
+.o-spotify-rangee { display: flex; gap: 14px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: 2px 2px 8px; margin: -2px -2px 0; }
+.o-spotify-rangee::-webkit-scrollbar { display: none; }
+
+/* ── Lot 4 de l'audit du 12/11 (ADR 0370) ───────────────────────────────────── */
+/* E14 — La bascule d'une lumiere : l'ambre de la lampe (`RM_AMBRE`, cartes/briques.jsx ; la tuile d'une piece). En theme clair,
+ * `--o-lampe` est une ENCRE — un brun, lisible sur une carte claire — : une bascule allumee y passait pour eteinte. Elle y prend
+ * un ambre qui eclaire. */
+:root { --o-bascule-lampe: linear-gradient(135deg, var(--o-lampe), var(--o-lampe-b)); }
+html.loggia-light { --o-bascule-lampe: linear-gradient(135deg, #f6b13a, #e58a06); }
+/* La BARRE de luminosité d'une lampe « or », en thème clair (16/11 : « la couleur de la barre en clair ça va pas ») : elle
+ * s'écrit `linear-gradient(90deg, var(--o-lampe), var(--o-lampe-b))` (lumieres.js) — deux ENCRES en clair, donc un brun
+ * foncé uni, à côté d'une bascule ambre. Elle prend le même ambre que la bascule. Sauf sous un thème qui donne SA couleur à
+ * la bascule d'une lampe (Google : `--o-bascule-lampe` posé sur la racine) : là, la barre garde les couleurs du thème.
+ * Une lampe réglée sur un BLANC écrit ce même dégradé en thème clair (`encreLumiere`) : elle prend donc l'ambre aussi.
+ * Le repère de la barre garde son encre : c'est lui qui dit la position. Une lampe de couleur n'est pas concernée. */
+html.loggia-light:not([style*="--o-bascule-lampe"]) [data-fill][style*="var(--o-lampe-b)"] { background: linear-gradient(90deg, #f6b13a, #e58a06) !important; }
+
+/* ── LES EFFETS, DANS TOUS LES THÈMES (17/11) ───────────────────────────────────────────────────────────────────────────────
+ * Sa demande : « j'ai demandé de reporter les effets du thème prisme sur les autres thèmes. en fait les effets ne sont plus liés
+ * au seul thème prisme mais deviennent généraux à tout le dashboard » ; son accord sur planche : « Oui, avec le rythme ». Les
+ * effets de Prisme (prisme.css jusqu'au 17/11) valent pour tous les thèmes. La FORME (pilules) et l'ÉCRITURE (Outfit) restent
+ * propres à Prisme ; ici chaque effet prend l'arrondi du thème appliqué, puisqu'il suit la forme de l'élément.
+ * `html:root` (toujours vrai) au lieu de `html.loggia-prisme` : le MÊME poids qu'avant. Ces règles battent et cèdent exactement
+ * là où elles le faisaient sous Prisme — rien d'autre ne bascule. Pas de bloc « racine » ici (voir plus haut : clair.test).
+ * Le VERRE (le flou derrière les puces et les fiches) suit la matière du thème et le réglage « Verre » : seulement sous un thème
+ * en verre (`loggia-frosted`), pas en verre « Léger » — un thème opaque (Neumorphix, Google, GitHub…) n'a « ni verre ni flou ».
+ * Cette condition est dans `:where()`, qui ne pèse rien : le poids reste celui de Prisme.
+ * Relecture du 17/11 : quatre défauts qui existaient déjà sous Prisme, corrigés ici puisqu'ils touchent maintenant tous les
+ * thèmes — les onglets des fiches, la rangée des Favoris, le relief de Neumorphix (theme.js), le bouton du micro. */
+
+/* Les cartes, à la souris seulement : elles montent de 2 px, et la carte d'appareil prend l'ombre de survol (la carte pièce
+ * l'a déjà, plus haut). Au doigt, le survol reste collé à la dernière carte touchée : rien ici ne s'y applique. */
+@media (hover: hover) and (pointer: fine) {
+  html:root .o-piece:hover { transform: translateY(-2px); }
+  html:root .o-rmcard:hover { box-shadow: var(--o-shadow-hover) !important; transform: translateY(-2px); }
+}
+/* À l'appui, la carte se réduit : APRÈS la montée du survol (pour la carte pièce, à poids égal, l'ordre tranche). */
+html:root .o-piece:active { transform: scale(.955); }
+html:root .o-rmcard:has(> .o-surface):active { transform: scale(.955); }
+/* Pas d'ombre de survol dans la rangée des Favoris : elle défile et rogne net ce qui dépasse, et ses cartes y sont sans ombre
+ * (retour du 01/09, plus haut). Plus lourd que la règle de survol, qu'il doit battre. */
+html:root .o-favrow .o-cvfit > .o-rmcard:hover { box-shadow: none !important; }
+
+/* Les puces de scénarios : en verre (thèmes en verre seulement), et la lumière DANS la puce au survol (la rangée défile et rogne
+ * ce qui dépasse). */
+html:root:where(.loggia-frosted:not(.loggia-verre-leger)) .grid-qscenes > button { -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4); }
+html:root .grid-qscenes > button:hover { border-color: rgba(var(--o-accent-rgb), .5) !important; }
+/* La lueur arrive en FONDU (18/11, retour de l'installation : elle apparaissait d'un coup ; planche validée : « Oui, les deux »).
+ * Deux causes : la transition écrite sur la puce (`background .25s`) retenait l'ombre ; et sous un thème dont la puce porte une
+ * ombre EXTÉRIEURE (le thème par défaut…), passer d'une ombre extérieure à une lueur INTÉRIEURE ne s'anime pas : le navigateur
+ * saute. La lueur vit donc sur une couche à part (::after, sous le texte), qui apparaît en fondu ; l'ombre de la puce reste la
+ * sienne au survol. `overflow: hidden` : l'onde de l'appui (`fxTap`) reste dans la pilule, maintenant que la puce la porte. */
+html:root .grid-qscenes > button { position: relative; isolation: isolate; overflow: hidden; transition: background .25s, border-color .28s, transform .12s ease-out !important; }
+html:root .grid-qscenes > button::after { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; box-shadow: inset 0 0 0 1px rgba(var(--o-accent-rgb), .28), inset 0 0 16px rgba(var(--o-accent-rgb), .2); opacity: 0; transition: opacity .28s cubic-bezier(.2, .8, .2, 1); }
+@media (hover: hover) and (pointer: fine) {
+  html:root .grid-qscenes > button:hover::after { opacity: 1; }
+}
+
+/* Les boutons : ils s'éclairent de l'intérieur au survol, et s'enfoncent de 3 % à l'appui, en 0,12 s — plus vif que les cartes
+ * (0,28 s, les jetons du mouvement plus haut) : c'est le rythme de Prisme, bouton et carte. */
+html:root :is(button, [role="button"]):not(.o-surface):not(:disabled) { transition: box-shadow .28s cubic-bezier(.2, .8, .2, 1), transform .12s ease-out, border-color .28s, background-color .2s; }
+html:root :is(button, [role="button"]):not(.o-surface):not(:disabled):active { transform: scale(.97); }
+/* Les onglets des fiches (`FicheOnglets`) : leur mot passe au blanc QUAND la pastille arrive (`color` avec un retard, plus haut).
+ * La règle des boutons, plus lourde, retirait `color` et le retard : le mot blanchissait sur le fond nu. Même poids, après. */
+html:root .rb-onglets > .rb-onglet:not(:disabled) { transition: color .16s ease, box-shadow .28s cubic-bezier(.2, .8, .2, 1), transform .12s ease-out, border-color .28s, background-color .2s; }
+html:root .rb-onglets > .rb-onglet[aria-selected="true"] { transition-delay: .18s, 0s, 0s, 0s, 0s; }
+/* Le bouton du micro de l'assistant garde son fondu (occupé : 0,45 ↔ 1) et son appui plus franc. Un poids de plus que la règle
+ * des boutons (`button.o-assist-mic`). */
+html:root button.o-assist-mic:not(.o-surface):not(:disabled) { transition: transform .12s ease, background-color .2s ease, opacity .2s ease; }
+html:root button.o-assist-mic:not(.o-surface):not(:disabled):active { transform: scale(.94); }
+/* Les puces de scénarios en sont exclues (`:where`, qui ne pèse rien) : leur lueur arrive en fondu, plus haut. */
+html:root :is(button, [role="button"]):is([style*="border-radius: 8px"], [style*="border-radius: 9px"], [style*="border-radius: 10px"], [style*="border-radius: 11px"], [style*="border-radius: 12px"], [style*="border-radius: 14px"], [style*="border-radius: 999px"], [style*="border-radius: 50%"], .o-rmbtn, .o-objfiltre, .o-armchip):not([style*="flex-direction: column"]):not(.o-surface):not(:disabled):not(:where(.grid-qscenes > *)):hover { box-shadow: inset 0 0 0 1px rgba(var(--o-accent-rgb), .32), inset 0 0 14px rgba(var(--o-accent-rgb), .18) !important; }
+
+/* Les fiches : le filet de lumière en haut, l'ombre profonde, et — sous un thème en verre, hors verre « Léger », pas sur une
+ * fiche opaque — le flou de 28 px derrière. Un thème qui pose sa propre fenêtre (`--o-fenetre`, plus haut) garde son flou :
+ * sa règle est plus lourde. */
+html:root:where(.loggia-frosted:not(.loggia-verre-leger)) .o-sheet:not(.o-sheet-opaque) { -webkit-backdrop-filter: blur(28px) saturate(1.4); backdrop-filter: blur(28px) saturate(1.4); }
+html:root .o-sheet { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 0 0 var(--o-bw, 1px) var(--o-bd1), 0 30px 80px -20px rgba(0, 0, 0, .7) !important; }
+html:root.loggia-light .o-sheet { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 0 0 var(--o-bw, 1px) var(--o-bd1), 0 30px 70px -24px rgba(14, 22, 44, .35) !important; }
+
+/* La barre latérale : 4 px entre deux entrées (17/11, sa capture : « les bords des boutons se touchent ») — l'active et celle
+ * qu'on survole, chacune avec son fond, se collaient. */
+.loggia-aside .o-nav-item + .o-nav-item { margin-top: 4px; }
+/* À la souris, une entrée fait 40 px (18/11, retour de l'installation : la barre défilait dès 692 px de haut au lieu de 668) :
+ * 40 + 4 d'écart = les 44 px d'avant, la barre retrouve sa hauteur. Au doigt (`loggia-tactile`, ou un écran sans souris fine),
+ * l'entrée garde 44 px, la taille pour viser. Un poids de plus que la règle de Prisme (`html.loggia-prisme .o-nav-item`). */
+@media (hover: hover) and (pointer: fine) {
+  html:root:not(.loggia-tactile) .loggia-aside .o-nav-item { min-height: 40px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:root .grid-qscenes > button, html:root .grid-qscenes > button::after, html:root :is(button, [role="button"]), html:root .o-rmcard { transition: none !important; }
+  html:root .o-piece:hover, html:root .o-piece:active { transform: none; }
+  html:root :is(button, [role="button"]):active, html:root .o-rmcard:hover, html:root .o-rmcard:has(> .o-surface):active { transform: none !important; }
+}
+/* ── fin des effets dans tous les thèmes ── */
+
+/* ── LES RAYONS SUIVENT LE THÈME (audit des thèmes du 13/11, M2 et E8) ───────────────────────────────────────────────────────
+ * Constat : 883 rayons dans le code, une soixantaine lisaient `--o-radius`. Le rayon d'un thème et le réglage « Arrondi » ne changeaient
+ * que le cadre des cartes : sous GitHub (6 px) les boutons restaient à 12 px ; avec des coins « ronds » (26 px) l'intérieur paraissait
+ * anguleux ; avec « nets » (7 px) il était plus rond que son cadre.
+ * Règle, pour un rayon écrit N (de 6 à 18 px) et le rayon R du thème : min(max(N, R × N / 18), R).
+ *   • R = 18 px (Loggia en « Doux ») : rien ne change ;
+ *   • R plus petit : l'intérieur n'est jamais plus rond que le cadre ;
+ *   • R plus grand : l'intérieur grandit dans la même proportion.
+ * Les rayons restent ÉCRITS EN CHIFFRES dans les composants : la feuille de Prisme (prisme.css) et l'interrupteur d'iOS (plus haut) les
+ * repèrent par ces chiffres (`[style*="border-radius: 12px"]`). Ce bloc les repère de la même façon et pose le jeton par-dessus.
+ * `:where()` : précision nulle — toute règle `!important` écrite ailleurs (les deux barres, Prisme) garde la main.
+ *   • UNE PILULE RESTE UNE PILULE : un rayon écrit qui vaut au moins la demi-hauteur ÉCRITE de l’élément (hauteur de 7 à 2N + 1 px)
+ *     garde sa valeur — interrupteur 46 × 26 à 14 px, jauge de 24 px à 12 px, compteur de 18 px à 9 px ; le remplissage d’une jauge
+ *     (`data-fill`) aussi. Sous 7 px de haut, le plus petit rayon de thème (3 px) fait encore une pilule. Treize tests par élément :
+ *     la liste des hauteurs n’est lue que par ceux qui portent ce rayon.
+ *   • Hors champ : sous 6 px (barres, pistes) et au-dessus de 18 px ; `50%` et `999` ; l'aperçu des Paramètres (`.o-par-preview`,
+ *     qui montre Net / Doux / Rond) ; tout ce qui porte `data-rayons-fixes` (un dessin dont les coins ne doivent pas bouger).
+ *   • Prisme part de SON rayon (22 px) : en « Doux », rien n'y change.
+ * Pour du code NEUF : `--o-r-puce` (8), `--o-r-commande` (10), `--o-r-tuile` (14), ou `--o-r-6` … `--o-r-18`.
+ * Ce bloc reste AVANT celui des deux barres (dont le test lit tout jusqu'au lot E17) et AVANT le lot E17, qui doit fermer la feuille. */
+:root {
+  --o-r-6: min(max(6px, calc(var(--o-radius, 18px) * .3333)), var(--o-radius, 18px));
+  --o-r-7: min(max(7px, calc(var(--o-radius, 18px) * .3889)), var(--o-radius, 18px));
+  --o-r-8: min(max(8px, calc(var(--o-radius, 18px) * .4444)), var(--o-radius, 18px));
+  --o-r-9: min(max(9px, calc(var(--o-radius, 18px) * .5)), var(--o-radius, 18px));
+  --o-r-10: min(max(10px, calc(var(--o-radius, 18px) * .5556)), var(--o-radius, 18px));
+  --o-r-11: min(max(11px, calc(var(--o-radius, 18px) * .6111)), var(--o-radius, 18px));
+  --o-r-12: min(max(12px, calc(var(--o-radius, 18px) * .6667)), var(--o-radius, 18px));
+  --o-r-13: min(max(13px, calc(var(--o-radius, 18px) * .7222)), var(--o-radius, 18px));
+  --o-r-14: min(max(14px, calc(var(--o-radius, 18px) * .7778)), var(--o-radius, 18px));
+  --o-r-15: min(max(15px, calc(var(--o-radius, 18px) * .8333)), var(--o-radius, 18px));
+  --o-r-16: min(max(16px, calc(var(--o-radius, 18px) * .8889)), var(--o-radius, 18px));
+  --o-r-17: min(max(17px, calc(var(--o-radius, 18px) * .9444)), var(--o-radius, 18px));
+  --o-r-18: min(max(18px, calc(var(--o-radius, 18px) * 1)), var(--o-radius, 18px));
+  --o-r-puce: var(--o-r-8); --o-r-commande: var(--o-r-10); --o-r-tuile: var(--o-r-14);
+}
+html.loggia-prisme {
+  --o-r-6: min(max(6px, calc(var(--o-radius, 22px) * .2727)), var(--o-radius, 22px));
+  --o-r-7: min(max(7px, calc(var(--o-radius, 22px) * .3182)), var(--o-radius, 22px));
+  --o-r-8: min(max(8px, calc(var(--o-radius, 22px) * .3636)), var(--o-radius, 22px));
+  --o-r-9: min(max(9px, calc(var(--o-radius, 22px) * .4091)), var(--o-radius, 22px));
+  --o-r-10: min(max(10px, calc(var(--o-radius, 22px) * .4545)), var(--o-radius, 22px));
+  --o-r-11: min(max(11px, calc(var(--o-radius, 22px) * .5)), var(--o-radius, 22px));
+  --o-r-12: min(max(12px, calc(var(--o-radius, 22px) * .5455)), var(--o-radius, 22px));
+  --o-r-13: min(max(13px, calc(var(--o-radius, 22px) * .5909)), var(--o-radius, 22px));
+  --o-r-14: min(max(14px, calc(var(--o-radius, 22px) * .6364)), var(--o-radius, 22px));
+  --o-r-15: min(max(15px, calc(var(--o-radius, 22px) * .6818)), var(--o-radius, 22px));
+  --o-r-16: min(max(16px, calc(var(--o-radius, 22px) * .7273)), var(--o-radius, 22px));
+  --o-r-17: min(max(17px, calc(var(--o-radius, 22px) * .7727)), var(--o-radius, 22px));
+  --o-r-18: min(max(18px, calc(var(--o-radius, 22px) * .8182)), var(--o-radius, 22px));
+}
+:where([style*="border-radius: 6px;"]):not(:where([data-rayons-fixes], [data-rayons-fixes] *, .o-par-preview, .o-par-preview *, [data-fill], [style*="height: 7px;"], [style*="height: 8px;"], [style*="height: 9px;"], [style*="height: 10px;"], [style*="height: 11px;"], [style*="height: 12px;"], [style*="height: 13px;"])) { border-radius: var(--o-r-6) !important; }
+:where([style*="border-radius: 7px;"]):not(:where([data-rayons-fixes], [data-rayons-fixes] *, .o-par-preview, .o-par-preview *, [data-fill], [style*="height: 7px;"], [style*="height: 8px;"], [style*="height: 9px;"], [style*="height: 10px;"], [style*="height: 11px;"], [style*="height: 12px;"], [style*="height: 13px;"], [style*="height: 14px;"], [style*="height: 15px;"])) { border-radius: var(--o-r-7) !important; }
+:where([style*="border-radius: 8px;"]):not(:where([data-rayons-fixes], [data-rayons-fixes] *, .o-par-preview, .o-par-preview *, [data-fill], [style*="height: 7px;"], [style*="height: 8px;"], [style*="height: 9px;"], [style*="height: 10px;"], [style*="height: 11px;"], [style*="height: 12px;"], [style*="height: 13px;"], [style*="height: 14px;"], [style*="height: 15px;"], [style*="height: 16px;"], [style*="height: 17px;"])) { border-radius: var(--o-r-8) !important; }
+:where([style*="border-radius: 9px;"]):not(:where([data-rayons-fixes], [data-rayons-fixes] *, .o-par-preview, .o-par-preview *, [data-fill], [style*="height: 7px;"], [style*="height: 8px;"], [style*="height: 9px;"], [style*="height: 10px;"], [style*="height: 11px;"], [style*="height: 12px;"], [style*="height: 13px;"], [style*="height: 14px;"], [style*="height: 15px;"], [style*="height: 16px;"], [style*="height: 17px;"], [style*="height: 18px;"], [style*="height: 19px;"])) { border-radius: var(--o-r-9) !important; }
+:where([style*="border-radius: 10px;"]):not(:where([data-rayons-fixes], [data-rayons-fixes] *, .o-par-preview, .o-par-preview *, [data-fill], [style*="height: 7px;"], [style*="height: 8px;"], [style*="height: 9px;"], [style*="height: 10px;"], [style*="height: 11px;"], [style*="height: 12px;"], [style*="height: 13px;"], [style*="height: 14px;"], [style*="height: 15px;"], [style*="height: 16px;"], [style*="height: 17px;"], [style*="height: 18px;"], [style*="height: 19px;"], [style*="height: 20px;"], [style*="height: 21px;"])) { border-radius: var(--o-r-10) !important; }
+:where([style*="border-radius: 11px;"]):not(:where([data-rayons-fixes], [data-rayons-fixes] *, .o-par-preview, .o-par-preview *, [data-fill], [style*="height: 7px;"], [style*="height: 8px;"], [style*="height: 9px;"], [style*="height: 10px;"], [style*="height: 11px;"], [style*="height: 12px;"], [style*="height: 13px;"], [style*="height: 14px;"], [style*="height: 15px;"], [style*="height: 16px;"], [style*="height: 17px;"], [style*="height: 18px;"], [style*="height: 19px;"], [style*="height: 20px;"], [style*="height: 21px;"], [style*="height: 22px;"], [style*="height: 23px;"])) { border-radius: var(--o-r-11) !important; }
+:where([style*="border-radius: 12px;"]):not(:where([data-rayons-fixes], [data-rayons-fixes] *, .o-par-preview, .o-par-preview *, [data-fill], [style*="height: 7px;"], [style*="height: 8px;"], [style*="height: 9px;"], [style*="height: 10px;"], [style*="height: 11px;"], [style*="height: 12px;"], [style*="height: 13px;"], [style*="height: 14px;"], [style*="height: 15px;"], [style*="height: 16px;"], [style*="height: 17px;"], [style*="height: 18px;"], [style*="height: 19px;"], [style*="height: 20px;"], [style*="height: 21px;"], [style*="height: 22px;"], [style*="height: 23px;"], [style*="height: 24px;"], [style*="height: 25px;"])) { border-radius: var(--o-r-12) !important; }
+:where([style*="border-radius: 13px;"]):not(:where([data-rayons-fixes], [data-rayons-fixes] *, .o-par-preview, .o-par-preview *, [data-fill], [style*="height: 7px;"], [style*="height: 8px;"], [style*="height: 9px;"], [style*="height: 10px;"], [style*="height: 11px;"], [style*="height: 12px;"], [style*="height: 13px;"], [style*="height: 14px;"], [style*="height: 15px;"], [style*="height: 16px;"], [style*="height: 17px;"], [style*="height: 18px;"], [style*="height: 19px;"], [style*="height: 20px;"], [style*="height: 21px;"], [style*="height: 22px;"], [style*="height: 23px;"], [style*="height: 24px;"], [style*="height: 25px;"], [style*="height: 26px;"], [style*="height: 27px;"])) { border-radius: var(--o-r-13) !important; }
+:where([style*="border-radius: 14px;"]):not(:where([data-rayons-fixes], [data-rayons-fixes] *, .o-par-preview, .o-par-preview *, [data-fill], [style*="height: 7px;"], [style*="height: 8px;"], [style*="height: 9px;"], [style*="height: 10px;"], [style*="height: 11px;"], [style*="height: 12px;"], [style*="height: 13px;"], [style*="height: 14px;"], [style*="height: 15px;"], [style*="height: 16px;"], [style*="height: 17px;"], [style*="height: 18px;"], [style*="height: 19px;"], [style*="height: 20px;"], [style*="height: 21px;"], [style*="height: 22px;"], [style*="height: 23px;"], [style*="height: 24px;"], [style*="height: 25px;"], [style*="height: 26px;"], [style*="height: 27px;"], [style*="height: 28px;"], [style*="height: 29px;"])) { border-radius: var(--o-r-14) !important; }
+:where([style*="border-radius: 15px;"]):not(:where([data-rayons-fixes], [data-rayons-fixes] *, .o-par-preview, .o-par-preview *, [data-fill], [style*="height: 7px;"], [style*="height: 8px;"], [style*="height: 9px;"], [style*="height: 10px;"], [style*="height: 11px;"], [style*="height: 12px;"], [style*="height: 13px;"], [style*="height: 14px;"], [style*="height: 15px;"], [style*="height: 16px;"], [style*="height: 17px;"], [style*="height: 18px;"], [style*="height: 19px;"], [style*="height: 20px;"], [style*="height: 21px;"], [style*="height: 22px;"], [style*="height: 23px;"], [style*="height: 24px;"], [style*="height: 25px;"], [style*="height: 26px;"], [style*="height: 27px;"], [style*="height: 28px;"], [style*="height: 29px;"], [style*="height: 30px;"], [style*="height: 31px;"])) { border-radius: var(--o-r-15) !important; }
+:where([style*="border-radius: 16px;"]):not(:where([data-rayons-fixes], [data-rayons-fixes] *, .o-par-preview, .o-par-preview *, [data-fill], [style*="height: 7px;"], [style*="height: 8px;"], [style*="height: 9px;"], [style*="height: 10px;"], [style*="height: 11px;"], [style*="height: 12px;"], [style*="height: 13px;"], [style*="height: 14px;"], [style*="height: 15px;"], [style*="height: 16px;"], [style*="height: 17px;"], [style*="height: 18px;"], [style*="height: 19px;"], [style*="height: 20px;"], [style*="height: 21px;"], [style*="height: 22px;"], [style*="height: 23px;"], [style*="height: 24px;"], [style*="height: 25px;"], [style*="height: 26px;"], [style*="height: 27px;"], [style*="height: 28px;"], [style*="height: 29px;"], [style*="height: 30px;"], [style*="height: 31px;"], [style*="height: 32px;"], [style*="height: 33px;"])) { border-radius: var(--o-r-16) !important; }
+:where([style*="border-radius: 17px;"]):not(:where([data-rayons-fixes], [data-rayons-fixes] *, .o-par-preview, .o-par-preview *, [data-fill], [style*="height: 7px;"], [style*="height: 8px;"], [style*="height: 9px;"], [style*="height: 10px;"], [style*="height: 11px;"], [style*="height: 12px;"], [style*="height: 13px;"], [style*="height: 14px;"], [style*="height: 15px;"], [style*="height: 16px;"], [style*="height: 17px;"], [style*="height: 18px;"], [style*="height: 19px;"], [style*="height: 20px;"], [style*="height: 21px;"], [style*="height: 22px;"], [style*="height: 23px;"], [style*="height: 24px;"], [style*="height: 25px;"], [style*="height: 26px;"], [style*="height: 27px;"], [style*="height: 28px;"], [style*="height: 29px;"], [style*="height: 30px;"], [style*="height: 31px;"], [style*="height: 32px;"], [style*="height: 33px;"], [style*="height: 34px;"], [style*="height: 35px;"])) { border-radius: var(--o-r-17) !important; }
+:where([style*="border-radius: 18px;"]):not(:where([data-rayons-fixes], [data-rayons-fixes] *, .o-par-preview, .o-par-preview *, [data-fill], [style*="height: 7px;"], [style*="height: 8px;"], [style*="height: 9px;"], [style*="height: 10px;"], [style*="height: 11px;"], [style*="height: 12px;"], [style*="height: 13px;"], [style*="height: 14px;"], [style*="height: 15px;"], [style*="height: 16px;"], [style*="height: 17px;"], [style*="height: 18px;"], [style*="height: 19px;"], [style*="height: 20px;"], [style*="height: 21px;"], [style*="height: 22px;"], [style*="height: 23px;"], [style*="height: 24px;"], [style*="height: 25px;"], [style*="height: 26px;"], [style*="height: 27px;"], [style*="height: 28px;"], [style*="height: 29px;"], [style*="height: 30px;"], [style*="height: 31px;"], [style*="height: 32px;"], [style*="height: 33px;"], [style*="height: 34px;"], [style*="height: 35px;"], [style*="height: 36px;"], [style*="height: 37px;"])) { border-radius: var(--o-r-18) !important; }
+/* Les rayons fixes portés par une classe, plus haut dans cette feuille : mêmes sélecteurs, même ordre, le jeton à la place du chiffre.
+ * Sauf les pastilles des cartes personnalisées (`o-cvpastille`, `o-cvico`) : leur lot interdit toute règle hors de son bloc (lot16_boutons_compacts). */
+.o-confort-mesure { border-radius: var(--o-r-10); }
+.o-confort-ico { border-radius: var(--o-r-8); }
+@media (max-width: 560px) { .o-confort-peu .o-confort-ico { border-radius: var(--o-r-10); } .o-confort-ico { border-radius: var(--o-r-9); } .sys-mesure .sys-mesure-ico { border-radius: var(--o-r-9) !important; } }
+@media (max-width: 820px) { .o-scene-room { border-radius: var(--o-r-14) !important; } }
+.rb-onglets { border-radius: var(--o-r-16); }
+.rb-pastille { border-radius: var(--o-r-12); }
+.o-reglage-trouve { border-radius: var(--o-r-12); }
+/* Le cadre d'une fiche (ui.jsx, 26 px en haut) : jamais plus de 26 px, et il descend avec un thème anguleux — 8,7 px sous GitHub. */
+:root { --o-r-feuille: min(26px, calc(var(--o-radius, 18px) * 1.4444)); }
+html.loggia-prisme { --o-r-feuille: min(26px, calc(var(--o-radius, 22px) * 1.1818)); }
+.o-sheet:where([style*="border-radius: 26px 26px 0px 0px;"]) { border-radius: var(--o-r-feuille) var(--o-r-feuille) 0 0 !important; }
+/* ── fin des rayons qui suivent le thème ── */
+
+/* ── LES DEUX BARRES, DANS TOUS LES THÈMES (15/11) ───────────────────────────────────────────────────────────────────────────
+ * Sa demande, devant son thème Prisme : « reprend la top barre et la latérale pour généraliser, ce qui supprime ce tiret ou
+ * même le trait de la top barre ». Le dessin des deux barres de Prisme (prisme.css) devient celui de tous les thèmes :
+ *   • barre latérale : des entrées de 44 px, l'active en tonal — la pastille glissante et son tiret d'accent
+ *     disparaissent. Le FOND de la barre reste celui de chaque thème (`--o-side1`, `--o-side2`) ;
+ *   • barre du haut : plus de bande ni de trait ; les commandes sont posées sur la page ou sur le ciel, chacune avec son
+ *     remplissage et son filet fin ;
+ *   • L'ARRONDI EST CELUI DU THÈME APPLIQUÉ (`--o-radius` ; sa correction du 15/11 : « l'arrondi doit suivre celui du thème
+ *     appliqué ») : 12 px sous Material, 6 px sous GitHub. Les pilules sont le dessin de Prisme, qui les garde (prisme.css).
+ * Ce bloc vient APRÈS les règles du ciel : ses sélecteurs d'en-tête sont les leurs, à poids égal, et c'est l'ordre qui tranche.
+ * Il reste AVANT le lot E17, qui doit fermer la feuille (son test l'exige). Prisme garde ses propres règles (prisme.css, plus précises). Les `!important` répondent aux styles
+ * en ligne des composants. */
+.o-navpill { display: none !important; }
+.o-nav-item { box-sizing: border-box; min-height: 44px; padding: 0 14px !important; border-radius: var(--o-radius, 16px) !important; color: var(--o-text2) !important; font-weight: 600 !important; }
+.o-nav-item i, .o-nav-item svg { color: inherit !important; }
+.o-nav-item:hover { background: var(--o-s2); color: var(--o-text) !important; }
+.o-nav-item[aria-current] { background: rgba(var(--o-accent-rgb), .16); color: var(--o-accent-soft) !important; }
+.loggia-aside > button { border-radius: var(--o-radius, 16px) !important; min-height: 44px; }
+.loggia-aside > div:last-child > div:first-child { border-radius: var(--o-radius, 16px) !important; padding: 12px 16px !important; }
+
+.loggia-hdr,
+main:has(.o-wx3d) .loggia-hdr,
+html.loggia-light main:has(.o-wx3d) .loggia-hdr,
+html.loggia-light main:has(.o-wx3d-sombre) .loggia-hdr { background: transparent !important; border: 0 !important; box-shadow: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+.loggia-hdr .o-hdr-div { display: none !important; }
+/* La forme : 44 px, à l'arrondi du thème. Le dernier BOUTON du groupe de droite est le profil (un menu ouvert vient après lui : ce n'est
+ * donc pas le dernier enfant) ; il garde son image, et ne prend que l'anneau d'accent. */
+.loggia-hdr > button,
+.loggia-hdr .o-hdr-search,
+.loggia-hdr .o-hdr-assist > button,
+.loggia-hdr > div:last-child > button:not(:last-of-type) { border-radius: var(--o-radius, 16px) !important; box-shadow: none !important; -webkit-backdrop-filter: var(--o-flou, blur(16px) saturate(1.35)); backdrop-filter: var(--o-flou, blur(16px) saturate(1.35)); }
+.loggia-hdr > button,
+.loggia-hdr .o-hdr-assist > button,
+.loggia-hdr > div:last-child > button { width: 44px !important; height: 44px !important; }
+.loggia-hdr .o-hdr-search { box-sizing: border-box; flex: 0 1 440px; height: 44px; padding: 0 16px !important; color: var(--o-text3); }
+.loggia-hdr .o-hdr-kbd { background: var(--o-s1) !important; border-color: transparent !important; }
+.loggia-hdr .o-hdr-date > div:first-child { font-size: calc(13px * var(--o-texte, 1)) !important; font-weight: 600 !important; }
+.loggia-hdr > div:last-child > button:last-of-type { border: 0 !important; box-shadow: 0 0 0 3px rgba(var(--o-accent-rgb), .22) !important; }
+/* Le remplissage : tonal, avec un filet fin. Le bouton « Mode édition » ALLUMÉ garde le sien, à l'accent : c'est le seul qui
+ * dise un état. */
+:is(.loggia-hdr > button, .loggia-hdr .o-hdr-search, .loggia-hdr .o-hdr-assist > button, .loggia-hdr > div:last-child > button:not(:last-of-type)):not([style*="--o-accent-rgb"]) { background: var(--o-s2) !important; border: var(--o-bw, 1px) solid var(--o-bd3) !important; color: var(--o-text1); }
+:is(.loggia-hdr > button, .loggia-hdr .o-hdr-search, .loggia-hdr .o-hdr-assist > button, .loggia-hdr > div:last-child > button:not(:last-of-type)):not([style*="--o-accent-rgb"]):hover { background: var(--o-s1) !important; }
+/* Sans flou derrière — un thème aux cartes pleines, ou le verre « Léger » — une commande posée sur la page laisserait lire ce
+ * qui défile sous elle : elle prend la surface des cartes sous son remplissage. Un thème en relief lui rend sa petite ombre. */
+:is(html:not(.loggia-frosted), html.loggia-verre-leger) :is(.loggia-hdr > button, .loggia-hdr .o-hdr-search, .loggia-hdr .o-hdr-assist > button, .loggia-hdr > div:last-child > button:not(:last-of-type)):not([style*="--o-accent-rgb"]) { background: linear-gradient(var(--o-s2), var(--o-s2)), var(--o-surfA) !important; -webkit-backdrop-filter: none; backdrop-filter: none; }
+html[style*="--o-relief"] :is(.loggia-hdr > button, .loggia-hdr .o-hdr-search, .loggia-hdr .o-hdr-assist > button, .loggia-hdr > div:last-child > button:not(:last-of-type)) { box-shadow: var(--o-shadow-rangee) !important; }
+/* En clair, sur le ciel : sans bande derrière, les commandes portent leur propre fond, et la date reprend l'encre des textes
+ * posés sur un ciel sombre. */
+html.loggia-light main:has(.o-wx3d) :is(.loggia-hdr > button, .loggia-hdr .o-hdr-search, .loggia-hdr .o-hdr-assist > button, .loggia-hdr > div:last-child > button:not(:last-of-type)):not([style*="--o-accent-rgb"]) { background: rgba(255, 255, 255, .78) !important; border-color: rgba(14, 22, 44, .10) !important; color: var(--o-text1); }
+/* Sur un ciel CLAIR, la date, l'heure et le compte de Noël prennent l'encre du thème, foncée d'un cran : sans bande, une encre
+ * douce (Material Lighter : 2,8:1 sur le bleu du ciel) ou un texte atténué s'y perdaient. Écrit AVANT la règle du ciel sombre, de même
+ * poids : c'est elle qui gagne quand le ciel est sombre. */
+html.loggia-light main:has(.o-wx3d) .loggia-hdr .o-hdr-date,
+html.loggia-light main:has(.o-wx3d) .loggia-hdr .o-hdr-date *,
+html.loggia-light main:has(.o-wx3d) .loggia-hdr .o-noel-entete { color: var(--o-text) !important; }
+@supports (color: color-mix(in srgb, red, blue)) {
+  html.loggia-light main:has(.o-wx3d) .loggia-hdr .o-hdr-date,
+  html.loggia-light main:has(.o-wx3d) .loggia-hdr .o-hdr-date *,
+  html.loggia-light main:has(.o-wx3d) .loggia-hdr .o-noel-entete { color: color-mix(in srgb, var(--o-text) 60%, #000) !important; }
+}
+html.loggia-light main:has(.o-wx3d-sombre) .loggia-hdr .o-hdr-date,
+html.loggia-light main:has(.o-wx3d-sombre) .loggia-hdr .o-hdr-date *,
+html.loggia-light main:has(.o-wx3d-sombre) .loggia-hdr .o-noel-entete { color: #fff !important; text-shadow: 0 1px 3px rgba(8, 12, 20, .62), 0 0 18px rgba(8, 12, 20, .38); }
+
+/* Le purificateur d'air (sa consigne du 21/11, ADR 0387) : la scène de sa fiche. Les particules partent du bord et sont
+ * aspirées vers le disque (98 px) par trois voies (230, 185, 150 px), apparaissent puis s'éteignent en rétrécissant ; le halo
+ * respire ; les pales tournent. Le RYTHME vient de la fiche (`animation-duration` en ligne, selon la vitesse du ventilateur) ;
+ * éteint, la fiche ne pose pas `.pu-anime` et rien ne bouge. « Réduire les animations » coupe tout. */
+.pu-pt { position: absolute; left: 0; top: 0; border-radius: 50%; opacity: 0; animation-iteration-count: infinite; animation-timing-function: cubic-bezier(.4, 0, .9, .7); will-change: transform, opacity; }
+.pu-p1 { animation-name: pu-entre1; }
+.pu-p2 { animation-name: pu-entre2; }
+.pu-p3 { animation-name: pu-entre3; }
+@keyframes pu-entre1 { 0% { transform: translateX(230px) scale(1); opacity: 0; } 18% { opacity: .9; } 78% { opacity: .75; } 100% { transform: translateX(98px) scale(.2); opacity: 0; } }
+@keyframes pu-entre2 { 0% { transform: translateX(185px) scale(.9); opacity: 0; } 18% { opacity: .85; } 78% { opacity: .7; } 100% { transform: translateX(98px) scale(.2); opacity: 0; } }
+@keyframes pu-entre3 { 0% { transform: translateX(150px) scale(.8); opacity: 0; } 20% { opacity: .8; } 75% { opacity: .6; } 100% { transform: translateX(98px) scale(.2); opacity: 0; } }
+.pu-anime .pu-halo { animation: pu-souffle 4.5s ease-in-out infinite alternate; }
+@keyframes pu-souffle { from { transform: scale(.9); opacity: .75; } to { transform: scale(1.06); opacity: 1; } }
+.pu-pales { animation: pu-tourne 14s linear infinite; }
+@keyframes pu-tourne { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pu-pt, .pu-anime .pu-halo, .pu-pales { animation: none; } .pu-pt { opacity: 0; } }
+
+/* ── Le dessin d'un robot dans sa fiche (sa demande du 22/11, ADR 0389 ; dessinrobot.jsx) ──
+ * L'appareil vu de dessus, dans un disque, au milieu du panneau de tête de l'Accueil : 176 px, 132 au téléphone (le
+ * bouton de départ reste à l'écran). Deux encres que la fiche pose — `--rbd-c` (l'appareil), `--rbd-a` (ce qui bouge) — et
+ * des OPACITÉS, pas `color-mix` : une vieille tablette murale les lit. Au travail, le SOL défile (20 px/s), la poussière ou
+ * les touffes avec lui ; elles passent sous la coque, ou s'éteignent en fin de course à côté d'elle, sans sauter. En pause, rien
+ * ne bouge. « Réduire les animations » — celui du système comme celui de l'appareil (`html.loggia-calme`) — fige tout : la
+ * scène du travail reste lisible, la poussière posée devant lui, les brins sur ses côtés. */
+.rb-dessin { width: 176px; height: 176px; margin: 14px auto 0; }
+.rb-dessin svg { display: block; width: 100%; height: 100%; overflow: visible; }
+@container (max-width: 360px) { .rb-dessin { width: 132px; height: 132px; margin-top: 8px; } }
+.rb-dessin[data-etat="absent"] { opacity: .5; }
+.rbd-disque { fill: var(--rbd-c); fill-opacity: .07; stroke: var(--rbd-c); stroke-opacity: .2; stroke-width: 1; }
+.rbd-sol { fill: none; stroke: var(--rbd-c); stroke-opacity: .13; stroke-width: 1; }
+.rbd-pelouse { stroke: none; }
+.rbd-bande { fill: var(--rbd-c); fill-opacity: .1; }
+.rbd-coque { fill: var(--o-well); stroke: none; }
+.rbd-bord { fill: var(--rbd-c); fill-opacity: .08; stroke: var(--rbd-c); stroke-width: 2.2; stroke-linejoin: round; }
+.rbd-fin { fill: none; stroke: var(--rbd-c); stroke-opacity: .32; stroke-width: 1.2; stroke-linecap: round; }
+.rbd-pare { fill: none; stroke: var(--rbd-c); stroke-width: 5; stroke-linecap: round; }
+.rbd-point { fill: var(--rbd-c); fill-opacity: .7; }
+.rbd-tour { fill: none; stroke: var(--rbd-a); stroke-width: 2.2; stroke-linecap: round; }
+.rbd-brin { fill: none; stroke: var(--rbd-c); stroke-opacity: .6; stroke-width: 1.4; stroke-linecap: round; }
+.rbd-moyeu { fill: var(--rbd-c); fill-opacity: .6; }
+.rbd-poussiere { fill: var(--rbd-a); fill-opacity: .75; }
+.rbd-touffe { fill: none; stroke: var(--rbd-a); stroke-opacity: .7; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.rbd-crans { stroke: var(--rbd-c); stroke-opacity: .45; stroke-width: 9; stroke-dasharray: 1.4 5.6; }
+.rbd-fenetre { fill: var(--rbd-c); fill-opacity: .08; stroke: var(--rbd-c); stroke-opacity: .4; stroke-width: 1.2; }
+.rbd-lame { fill: var(--rbd-c); fill-opacity: .6; }
+.rbd-del { fill: var(--rbd-a); }
+.rbd-brin-coupe { fill: none; stroke: var(--rbd-a); stroke-opacity: .75; stroke-width: 1.6; stroke-linecap: round; opacity: 0; }
+.rbd-plaque { fill: var(--rbd-c); fill-opacity: .07; stroke: var(--rbd-c); stroke-opacity: .14; stroke-width: 1; }
+.rbd-temoin { fill: var(--rbd-c); fill-opacity: .35; }
+.rb-dessin[data-charge] .rbd-temoin { fill: var(--o-ok); fill-opacity: 1; }
+.rbd-chevron { fill: none; stroke: var(--rbd-a); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.rb-dessin[data-etat="retour"] .rbd-station { opacity: .6; }
+.rb-dessin[data-etat="retour"] .rbd-station .rbd-bord { stroke-dasharray: 4 4; }
+.rbd-onde { fill: none; stroke: var(--o-accent-soft); stroke-width: 2.2; stroke-linecap: round; }
+.rbd-alerte circle { fill: var(--o-bad); }
+.rbd-alerte path { fill: none; stroke: var(--o-well); stroke-width: 3; stroke-linecap: round; }
+/* Sa place selon l'état : posé sur sa base, le demi-tour de l'aspirateur qui y rentre à reculons, la tondeuse qui avance vers la
+ * sienne, de travers en erreur. */
+.rb-dessin :is(.rbd-pose, .rbd-corps, .rbd-sol, .rbd-poussiere, .rbd-touffe, .rbd-chevron, .rbd-brin-coupe, .rbd-brosse, .rbd-tour, .rbd-lames) { transform-box: view-box; }
+.rbd-pose, .rbd-corps { transform-origin: 100px 100px; }
+.rbd-pose { transition: transform .6s cubic-bezier(.3, .8, .3, 1); }
+[data-dessin="aspirateur"][data-etat="base"] .rbd-pose { transform: translateY(-14px); }
+[data-dessin="aspirateur"][data-etat="retour"] .rbd-pose { transform: translateY(-22px) rotate(180deg); }
+[data-dessin="tondeuse"][data-etat="base"] .rbd-pose { transform: translateY(12px); }
+[data-dessin="tondeuse"][data-etat="retour"] .rbd-pose { transform: translateY(28px); }
+.rb-dessin[data-etat="erreur"] .rbd-pose { transform: rotate(14deg); }
+/* Au travail. */
+.rb-dessin[data-etat="travail"] .rbd-sol, .rb-dessin[data-etat="retour"] .rbd-sol { animation: rbd-sol 2.4s linear infinite; }
+[data-dessin="aspirateur"][data-etat="retour"] .rbd-sol { animation-direction: reverse; }
+.rb-dessin[data-etat="travail"] :is(.rbd-poussiere, .rbd-touffe) { animation: rbd-approche 4s linear infinite; }
+.rb-dessin[data-etat="travail"] .rbd-corps { animation: rbd-cap 7s ease-in-out infinite; }
+.rb-dessin[data-etat="travail"] .rbd-brosse-g { animation: rbd-tourne .6s linear infinite; }
+.rb-dessin[data-etat="travail"] .rbd-brosse-d { animation: rbd-tourne .6s linear infinite reverse; }
+.rb-dessin[data-etat="travail"] .rbd-tour { animation: rbd-tourne 2.2s linear infinite; }
+.rb-dessin[data-etat="travail"] .rbd-lames { animation: rbd-tourne .35s linear infinite; }
+.rb-dessin:is([data-etat="travail"], [data-etat="retour"]) .rbd-crans { animation: rbd-crans .35s linear infinite; }
+.rb-dessin[data-etat="travail"] .rbd-del { animation: rbd-souffle 1.6s ease-in-out infinite; }
+.rb-dessin[data-etat="travail"] .rbd-brin-g { animation: rbd-jet-g 1s ease-out infinite; }
+.rb-dessin[data-etat="travail"] .rbd-brin-d { animation: rbd-jet-d 1s ease-out infinite; }
+/* Au retour, sur la base, en erreur, « Il bipe ». */
+[data-dessin="aspirateur"][data-etat="retour"] .rbd-chevron { animation: rbd-chevron-bas 1.2s ease-in-out infinite; }
+[data-dessin="tondeuse"][data-etat="retour"] .rbd-chevron { animation: rbd-chevron-haut 1.2s ease-in-out infinite; }
+.rb-dessin[data-charge] .rbd-temoin { animation: rbd-souffle 2.4s ease-in-out infinite; }
+.rb-dessin[data-etat="erreur"] .rbd-disque { animation: rbd-alerte 1.8s ease-in-out infinite; }
+.rbd-onde { animation: rbd-onde 1.2s ease-out infinite; }
+@keyframes rbd-sol { to { transform: translateY(48px); } }
+@keyframes rbd-approche { 0% { transform: translateY(0); opacity: 0; } 12% { opacity: 1; } 85% { opacity: 1; } 100% { transform: translateY(80px); opacity: 0; } }
+@keyframes rbd-cap { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-7deg); } 75% { transform: rotate(6deg); } }
+@keyframes rbd-tourne { to { transform: rotate(360deg); } }
+@keyframes rbd-crans { to { stroke-dashoffset: -7; } }
+@keyframes rbd-souffle { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+@keyframes rbd-jet-g { 0% { opacity: 0; transform: translate(0, 0) rotate(0deg); } 15% { opacity: 1; } 100% { opacity: 0; transform: translate(-24px, -6px) rotate(-150deg); } }
+@keyframes rbd-jet-d { 0% { opacity: 0; transform: translate(0, 0) rotate(0deg); } 15% { opacity: 1; } 100% { opacity: 0; transform: translate(24px, -6px) rotate(150deg); } }
+@keyframes rbd-chevron-bas { 0%, 100% { opacity: .2; transform: translateY(-3px); } 50% { opacity: 1; transform: translateY(3px); } }
+@keyframes rbd-chevron-haut { 0%, 100% { opacity: .2; transform: translateY(3px); } 50% { opacity: 1; transform: translateY(-3px); } }
+@keyframes rbd-alerte { 0%, 100% { fill-opacity: .06; stroke-opacity: .2; } 50% { fill-opacity: .15; stroke-opacity: .55; } }
+@keyframes rbd-onde { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
+/* Rien ne bouge : la poussière et les touffes posées devant lui, les brins de part et d'autre. */
+@media (prefers-reduced-motion: reduce) {
+  .rb-dessin, .rb-dessin * { animation: none !important; transition: none !important; }
+  .rb-dessin :is(.rbd-poussiere, .rbd-touffe) { transform: translateY(30px); }
+  .rb-dessin .rbd-brin-g { opacity: 1; transform: translate(-12px, -3px) rotate(-60deg); }
+  .rb-dessin .rbd-brin-d { opacity: 1; transform: translate(12px, -3px) rotate(60deg); }
+}
+html.loggia-calme .rb-dessin, html.loggia-calme .rb-dessin * { animation: none !important; transition: none !important; }
+html.loggia-calme .rb-dessin :is(.rbd-poussiere, .rbd-touffe) { transform: translateY(30px); }
+html.loggia-calme .rb-dessin .rbd-brin-g { opacity: 1; transform: translate(-12px, -3px) rotate(-60deg); }
+html.loggia-calme .rb-dessin .rbd-brin-d { opacity: 1; transform: translate(12px, -3px) rotate(60deg); }
+
+/* ── Une OUVERTURE (ADR 0388, ses maquettes du 22/11 ; carteouverture.jsx, ficheouverture.jsx) ──
+ * Le point qui pulse quand elle est ouverte : un anneau ambre qui s'élargit et s'efface, celui de ses maquettes, au jeton du thème.
+ * Sans mouvement demandé, le point seul. */
+.o-ouv-pouls { animation: o-ouv-pouls 1.8s ease-out infinite; }
+@keyframes o-ouv-pouls { from { box-shadow: 0 0 0 0 rgba(var(--o-warn-rgb), .55); } to { box-shadow: 0 0 0 10px rgba(var(--o-warn-rgb), 0); } }
+@media (prefers-reduced-motion: reduce) { .o-ouv-pouls { animation: none; } }
+/* La carte étroite du téléphone (1c, sous 188 px de contenu) : le dessin descend dans la place de la ligne de commandes — 42 px, en
+ * bas à droite —, sous le texte ; l'état et l'heure rétrécissent pour tenir (`o-gab-phrase`). Mesuré à 390 px : rien ne se croise. */
+@container (width < 188px) {
+  .o-ouverture .o-ouv-dessin { right: 10px !important; bottom: 10px !important; }
+  .o-ouverture .o-ouv-dessin svg { height: 42px !important; width: 34px !important; }
+}
+/* La popup au téléphone : les trois chiffres du jour gardent leur intitulé entier, sur deux lignes s'il le faut. */
+@media (max-width: 480px) { .o-ouv-chiffre { padding-left: 14px !important; padding-right: 10px !important; } }
+
+/* ── Lot E17 de l'audit du 12/11 (ADR 0371) : une cible qu'un doigt attrape ────── */
+/* Mesures au telephone et a la tablette, sous les 44 px vises : les puces des pieces et des actions du moment (33 de haut), les
+ * filtres d'Objets (38 x 37), les onglets de l'Energie (30), « Cartes / Plan » (37 x 30), les minis d'une carte de piece
+ * (38 x 26), les − et + des scenes (24 x 24), la croix des fiches (34 x 34), les puces des Parametres (33), les menus (27).
+ *
+ * La regle du 10/10 (`.o-tapzone`, plus haut) reste la bonne : on n'agrandit pas le DESSIN, on etend la zone sensible, et
+ * seulement au doigt. Celle-ci la generalise : la zone va jusqu'a 44 px dans chaque sens et pas un pixel de plus — un bouton de
+ * 152 x 33 ne gagne rien en largeur, un bouton de 44 x 44 ne gagne rien du tout. Rien ne bouge a l'ecran.
+ *
+ * `:where()` pese zero : un bouton deja place (`absolute`, `sticky`) garde sa position. `--o-doigt-x` borne l'extension en
+ * largeur, pour des voisins serres : la zone de l'un ne doit JAMAIS couvrir le dessin de l'autre. */
+@media (pointer: coarse) {
+  :where(.o-doigt, .o-rmbtn, .o-objfiltre, .o-armchip, .o-piece-minis > button, .o-room-scroll > button, .o-actions-moment > button, .o-qb button, .o-choix-tel button, .o-ligne-tel button, .o-en-onglets > button, .sys-charge button, .o-obj-head > button, button.o-nav-assist, [data-croix]) { position: relative; }
+  :is(.o-doigt, .o-rmbtn, .o-objfiltre, .o-armchip, .o-piece-minis > button, .o-room-scroll > button, .o-actions-moment > button, .o-qb button, .o-choix-tel button, .o-ligne-tel button, .o-en-onglets > button, .sys-charge button, .o-obj-head > button, button.o-nav-assist, [data-croix])::after {
+    content: ''; position: absolute;
+    inset: min(0px, (100% - 44px) / 2) max(var(--o-doigt-x, -22px), min(0px, (100% - 44px) / 2));
+  }
+  /* Des puces serrees (« Cartes / Plan » : 3 px entre les deux ; « Blanc chaud » et « Eteindre » des scenes : 4 px) : jamais
+   * plus que la moitie de l'ecart. */
+  .o-doigt-serre { --o-doigt-x: -1.5px; }
+  /* Une rangee qui defile rogne ce qui depasse en hauteur — et y gagnerait un defilement vertical de quelques pixels. Elle
+   * s'epaissit de ce qu'il faut et le rend en marge : rien ne bouge autour. */
+  .o-room-scroll { padding-block: 6px 8px !important; margin-block: -6px !important; }
+  .o-actions-moment { padding-block: 6px !important; margin-top: 4px !important; margin-bottom: -6px !important; }
+  .o-objfiltres { padding-top: 6px; margin-top: -6px; }
+  /* Un bouton qui rogne son texte (`overflow: hidden`) rognait aussi sa zone. `clip` ne rogne que dans le sens ou le texte
+   * deborde ; sans lui (vieux navigateur), rien ne change. */
+  @supports (overflow: clip) {
+    .o-en-onglets > button { overflow-x: clip; overflow-y: visible; }
+    .o-armchip { overflow-x: clip !important; overflow-y: visible !important; }
+  }
+}

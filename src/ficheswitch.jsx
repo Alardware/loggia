@@ -8,14 +8,17 @@
  * garde la feuille et la frontière Suspense, et lui passe les briques des fiches
  * de là-bas (`briques`, comme `BRIQUES_CAPTEUR`). Ici arrivent le poêle, un
  * radiateur, un relais ; une prise ouvre sa fiche (`FichePrise`). */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { tr, locale } from './i18n.js';
-import { Fi, useEtatServeur } from './ui.jsx';
+import { useEtatServeur } from './ui.jsx';
 import { commanderService } from './actions.js';
 import { enPanne } from './outils.js';
 import { useOptimiste } from './optimiste.js';
 import { texteRefus } from './refus.js';
 import { decalageServeur, resteMinuteur, decompte } from './minuteur.js';
+import { dureePrise } from './prises.js';
+import { DUREES_MINUTEUR, AJOUTS_MINUTEUR } from './prisesfiche.js';
+import { LISERE } from './styles.js';
 
 /* ── Le minuteur d'extinction, tenu par Home Assistant (21/09) ─────────────
  * « Pourquoi Loggia doit rester ouvert, c'est absurde, et je n'ai pas le
@@ -28,15 +31,31 @@ import { decalageServeur, resteMinuteur, decompte } from './minuteur.js';
  *
  * Sans réponse du composant — trop ancien, pas encore redémarré —, pas de
  * rangée : un minuteur qui mourrait avec l'onglet ne se propose plus. */
-/* `mort` (05/10) : l'appareil ne répond plus. « +30 min » programmerait
- * l'extinction d'une entité morte — il part ; un minuteur DÉJÀ posé reste
- * affiché avec sa croix, pour qu'on puisse l'annuler. Rien en cours : pas de
- * rangée. */
+/* `mort` (05/10) : l'appareil ne répond plus. Une durée programmerait
+ * l'extinction d'une entité morte — elles restent inertes ; un minuteur DÉJÀ
+ * posé reste affiché avec « Annuler », pour qu'on puisse l'annuler. Rien en
+ * cours : pas de rangée.
+ *
+ * Le MÊME minuteur que la fiche d'une lumière ou d'une prise (audit du 12/11,
+ * lot 4, I5) : l'interrupteur n'avait que « +30 min ». Rien en cours, les
+ * quatre durées (`DUREES_MINUTEUR` : 15 min, 30 min, 1 h, 2 h) ; un minuteur
+ * qui tourne, « +15 min », « +1 h » (`AJOUTS_MINUTEUR`) et « Annuler ». Les
+ * mêmes commandes, `loggia/minuteurs/poser` et `loggia/minuteurs/annuler` ;
+ * toutes les puces attendent la réponse d'un appel en vol. La rangée garde ses
+ * briques (`FicheRangee`) et ses mots ; les puces passent dessous, sur toute la
+ * largeur : quatre ne tiennent pas à droite du titre sur un téléphone. */
+const PUCE_MINUTEUR = (peut) => ({ height: 40, padding: '0 8px', borderRadius: 10, border: LISERE, background: 'var(--o-s1)', color: 'var(--o-text1)', fontFamily: 'inherit',
+  fontSize: 12.5, fontWeight: 700, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', opacity: peut ? 1 : 0.4, cursor: peut ? 'pointer' : 'default' });
+// « +15 min », « +1 h » : la phrase entière au catalogue, comme les fins d'une reprise en main du chauffage.
+const plusDuree = (n) => (n % 60 ? tr('+{n} min', { n }) : tr('+{h} h', { h: n / 60 }));
 export function RangeeMinuteur({ hass, id, mort = false, briques }) {
-  const { FicheRangee, FicheValeur, FicheBouton, useSeconde } = briques;
+  const { FicheRangee, FicheValeur, useSeconde } = briques;
   const { etat, setEtat } = useEtatServeur(hass, 'loggia/minuteurs/etat', 15000, '');
   const [decalage, setDecalage] = useState(0);
   const [erreur, setErreur] = useState('');
+  const enVol = useRef(false);
+  // La référence tranche dans le même tic (B28) ; l'état, lui, rend les puces inertes à l'écran tant que la réponse n'est pas là.
+  const [volVu, setVolVu] = useState(false);
   useEffect(() => { if (etat) setDecalage(decalageServeur(etat, Date.now())); }, [etat]);
   const reste = resteMinuteur(etat, id, Date.now(), decalage);
   useSeconde(reste != null);
@@ -47,20 +66,42 @@ export function RangeeMinuteur({ hass, id, mort = false, briques }) {
    * d'une prise : la rangée le dit. Un minuteur qui tourne garde son « Annuler ». */
   const st = hass && hass.states ? hass.states[id] : null;
   const eteint = !!st && (st.state === 'off' || st.state === 'standby');
-  const agir = (msg) => hass.callWS(msg)
-    .then(r => { setEtat(r); setErreur(''); })
-    .catch(e => setErreur((e && e.code === 'unauthorized') ? tr('Ce compte ne pilote pas cet appareil.') : texteRefus(e) || tr('Le minuteur n’a pas pu être enregistré.')));
+  /* Un ordre à la fois (audit du 12/11, B28). Rien ne répondait à l'appui avant la réponse du serveur : deux appuis rapides sur
+   * « +30 min » posaient une heure. Le second attend la réponse du premier — la règle de la fiche d'une prise et de celle d'une
+   * lumière ; la référence tranche dans le même tic, avant tout rendu. */
+  const agir = (msg) => {
+    if (enVol.current) return;
+    enVol.current = true;
+    setVolVu(true);
+    hass.callWS(msg)
+      .then(r => { setEtat(r); setErreur(''); })
+      .catch(e => setErreur((e && e.code === 'unauthorized') ? tr('Ce compte ne pilote pas cet appareil.') : texteRefus(e) || tr('Le minuteur n’a pas pu être enregistré.')))
+      .then(() => { enVol.current = false; setVolVu(false); });
+  };
   const m = etat.minuteurs && etat.minuteurs[id];
   const fin = reste != null && m ? new Date(Number(m.fin) * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }) : null;
+  const libre = !volVu;
+  // Poser ou prolonger : ni mort, ni éteint — le serveur refuse un minuteur sur un appareil éteint (`minuteur_deja_eteint`).
+  const peutPoser = !mort && !eteint && libre;
+  const poser = (n) => { if (peutPoser) agir({ type: 'loggia/minuteurs/poser', entity_id: id, minutes: n }); };
+  const annuler = () => { if (libre) agir({ type: 'loggia/minuteurs/annuler', entity_id: id }); };
   return (
-    <FicheRangee titre={tr('Minuteur')}
-      desc={erreur || (fin ? tr('Extinction à {h}', { h: fin }) : eteint ? tr('Disponible une fois l’appareil allumé.') : tr('Aucun minuteur en cours'))}
-      droite={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {/* Le décompte, à la seconde, en chiffres qui ne dansent pas. */}
-        {reste != null && <span aria-live="off" aria-label={tr('Temps restant')}><FicheValeur>{decompte(reste)}</FicheValeur></span>}
-        {!mort && !eteint && <FicheBouton icone="clock" onClick={() => agir({ type: 'loggia/minuteurs/poser', entity_id: id, minutes: 30 })}>{tr('+{n} min', { n: 30 })}</FicheBouton>}
-        {reste != null ? <FicheBouton title={tr('Annuler le minuteur')} onClick={() => agir({ type: 'loggia/minuteurs/annuler', entity_id: id })}><Fi i="cross-small" size={12} /></FicheBouton> : null}
-      </div>} />
+    <div style={{ borderTop: 'var(--o-bw,1px) solid var(--o-bd3)', paddingBottom: 13 }}>
+      {/* À droite du titre, le décompte, à la seconde, en chiffres qui ne dansent pas ; le filet est celui du bloc entier. */}
+      <FicheRangee premiere titre={tr('Minuteur')}
+        desc={erreur || (fin ? tr('Extinction à {h}', { h: fin }) : eteint ? tr('Disponible une fois l’appareil allumé.') : tr('Aucun minuteur en cours'))}
+        droite={reste != null ? <span aria-live="off" aria-label={tr('Temps restant')}><FicheValeur>{decompte(reste)}</FicheValeur></span> : null} />
+      {reste != null ? (
+        <div style={{ display: 'flex', gap: 8 }}>
+          {AJOUTS_MINUTEUR.map(n => <button key={n} type="button" aria-disabled={peutPoser ? undefined : true} onClick={() => poser(n)} style={PUCE_MINUTEUR(peutPoser)}>{plusDuree(n)}</button>)}
+          <button type="button" title={tr('Annuler le minuteur')} aria-disabled={libre ? undefined : true} onClick={annuler} style={{ ...PUCE_MINUTEUR(libre), marginLeft: 'auto' }}>{tr('Annuler')}</button>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
+          {DUREES_MINUTEUR.map(n => <button key={n} type="button" aria-disabled={peutPoser ? undefined : true} onClick={() => poser(n)} style={PUCE_MINUTEUR(peutPoser)}>{dureePrise(n)}</button>)}
+        </div>
+      )}
+    </div>
   );
 }
 

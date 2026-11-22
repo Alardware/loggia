@@ -34,12 +34,13 @@ const PALETTES = new Set(['theme.js', 'themes-bleus.js']);
 const PLAFONDS = {
   // Les pastilles des thèmes (un aperçu de CHAQUE thème, pas du thème actif)
   // et la pastille Ko-fi, qui garde son dessin (sa règle).
-  'views/parametres.jsx': 61,
+  // 64 depuis Prisme : sa pastille d'aperçu apporte ses trois couleurs, comme celle de chaque thème.
+  // 52 depuis le 19/11 : quatre thèmes retirés (Givre, Plum Wine, Lavande, The Projekt), trois couleurs chacun.
+  'views/parametres.jsx': 52,
   // Les dégradés de décor de l'Accueil et les teintes de la galerie, sortis d'App.jsx avec eux (ADR 0283).
   'accueil/briques.jsx': 10,
   'cartescustom/galerie.jsx': 2,
-  // Les icônes des conseils du dehors, sorties d'App.jsx avec la vue d'une pièce (ADR 0283).
-  'vues/piece.jsx': 4,
+  // (`vues/piece.jsx` : ses quatre icônes des conseils du dehors lisent les jetons du thème depuis le 14/11 — plus de plafond.)
   // La bibliothèque (ses aperçus) et la coche du composeur, sorties d'App.jsx avec l'édition (ADR 0283).
   'edition/biblio.jsx': 3,
   // Les teintes des cartes des vues personnalisées, sorties d'App.jsx avec elles (ADR 0283).

@@ -76,7 +76,8 @@ test('la carte météo : nommée par ce qu’elle affiche, et elle dit qu’elle
   assert.ok(nom, 'la carte n’a plus de nom');
   assert.ok(!nom.startsWith('Ouvrir'), '« Ouvrir Maison » n’est écrit nulle part sur la carte');
   const [lieu, temperature, ciel] = nom.split(', ');
-  assert.equal(lieu, 'Maison', 'le nom commence par le lieu affiché');
+  // ASSERTION MODIFIÉE (12/11, audit) : « Maison » est le nom par défaut d'une installation, pas un lieu : la carte écrit « Météo » (X11 c).
+  assert.equal(lieu, 'Météo', 'le nom commence par le lieu affiché');
   assert.equal(temperature, '18°', 'puis la température affichée');
   assert.ok(ciel && html.includes('>' + ciel + '</div>'), 'puis le ciel, tel qu’il s’affiche');
   assert.match(html, /^<div class="o-carte-meteo" role="button" tabindex="0" aria-label="[^"]*" aria-haspopup="dialog"/);

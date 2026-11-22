@@ -14,6 +14,7 @@
  * qui partira vraiment (`prochainPassage`, qui saute « Ne pas déranger », I18).
  */
 import { tr, locale } from './i18n.js';
+import { dureeMinutes, heureCourte } from './format.js';
 import { quandLumiere } from './lumieres.js';
 
 export const DOMAINES_ROBOT = ['vacuum', 'lawn_mower'];
@@ -140,13 +141,8 @@ export function commandesEnVol(domaine, phase, bits, geste, opts) {
   return out;
 }
 
-/** « 2 h 15 », « 48 min ». */
-export function dureeLisible(min) {
-  const m = Math.max(0, Math.round(Number(min) || 0));
-  if (m < 60) return tr('{n} min', { n: m });
-  const h = Math.floor(m / 60), r = m % 60;
-  return r ? tr('{h} h {m}', { h, m: String(r).padStart(2, '0') }) : tr('{h} h', { h });
-}
+/** « 2 h 15 », « 48 min » : `dureeMinutes` (format.js, lot 5b de l'audit du 12/11), sous le nom que ses appelants importent. */
+export function dureeLisible(min) { return dureeMinutes(min); }
 
 /** L'avance d'une tonte (lot 9 Gladys, ADR 0313) : « 45 % · 20 min restantes », d'après les ÉTATS des capteurs de progression et de
  *  temps restant de son appareil (clés `progress` et `left_time`) ; le second en minutes, ou converti depuis l'heure ou la seconde
@@ -214,14 +210,13 @@ export function dansLaPlage(plage, hhmm) {
 
 /* ════════════ La phrase de la carte (I7 ; § 6 de la conception) ════════════ */
 
-const heureDe = (t) => new Date(t).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
 const jourDe = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
 
 /** « Passage à 09:30 » aujourd'hui, « Passage demain 09:30 », « Passage mardi 09:30 » au-delà. */
 export function libellePassage(date, maintenant = Date.now()) {
   const t = new Date(date).getTime();
   const ecart = Math.round((jourDe(t) - jourDe(maintenant)) / 86400000);
-  const h = heureDe(t);
+  const h = heureCourte(t);
   if (ecart <= 0) return tr('Passage à {h}', { h });
   if (ecart === 1) return tr('Passage demain {h}', { h });
   return tr('Passage {jour} {h}', { jour: new Date(t).toLocaleDateString(locale(), { weekday: 'long' }), h });
@@ -252,7 +247,7 @@ export function piecesDites(domaine, pieces, tout = false) {
  * `prochainPassage`, ou null ; `sansZone` : une tondeuse à aires dont aucune n'est allumée — sur la base ou arrêtée, la phrase le dit,
  * « Aucune zone allumée », puisqu'elle n'offre pas « Démarrer » (passe bis 2 du 18/10, point D). Rend `{ texte, encre, panne }`.
  */
-export function phraseRobot({ domaine = 'vacuum', phase = 'absent', depuis = null, bipe = false, erreur = null, pieces = null, tout = false, libelle = null, prochain = null, charge = false, sansZone = false, avance = null, maintenant = Date.now() } = {}) {
+export function phraseRobot({ domaine = 'vacuum', phase = 'absent', depuis = null, bipe = false, erreur = null, pieces = null, tout = false, libelle = null, prochain = null, charge = false, sansZone = false, avance = null, aspire = null, base = null, maintenant = Date.now() } = {}) {
   const tondeuse = domaine === 'lawn_mower';
   const gris = 'var(--o-text2)';
   if (phase === 'absent') {
@@ -263,13 +258,21 @@ export function phraseRobot({ domaine = 'vacuum', phase = 'absent', depuis = nul
   if (phase === 'erreur') return { texte: erreur ? tr('En erreur · {m}', { m: erreur }) : tr('En erreur'), encre: 'var(--o-bad)', panne: false };
   // Le nom d'un script maison (`libelle`, passe bis du 18/10, point A) dit le passage quand ses pièces ne se savent pas.
   // L'avance d'une tonte (`avanceTonte`, ADR 0313) passe devant ses aires : « Tond · 45 % · 20 min restantes ».
-  const p = (tondeuse && avance) || piecesDites(domaine, pieces, tout) || libelle || null;
+  const p0 = (tondeuse && avance) || piecesDites(domaine, pieces, tout) || libelle || null;
+  // Un aspirateur dit la pièce où il est, puis le chemin fait (chantier du 20/11, A6) : « Nettoie · Cuisine · 60 % ».
+  const p = !tondeuse && aspire ? [aspire.piece || p0, aspire.pct != null ? aspire.pct + ' %' : null].filter(Boolean).join(' · ') || null : p0;
   if (phase === 'travail') {
     const texte = p ? (tondeuse ? tr('Tond · {p}', { p }) : tr('Nettoie · {p}', { p })) : (tondeuse ? tr('Tonte en cours') : tr('Nettoyage en cours'));
     return { texte, encre: tondeuse ? 'var(--o-ok)' : 'var(--o-accent-soft)', panne: false };
   }
   if (phase === 'pause') return { texte: p ? tr('En pause · {p}', { p }) : tr('En pause'), encre: gris, panne: false };
-  if (phase === 'retour') return { texte: tr('Retour à la base'), encre: gris, panne: false };
+  // Ce que fait la base, ou ce qu'elle demande (A6) : un aspirateur qui rentre laver sa serpillière le dit ; posé, il dit pourquoi il
+  // ne repart pas — avant le prochain passage. Le soin de la base passe devant l'alerte : il est en cours.
+  if (phase === 'retour') return { texte: (!tondeuse && base && base.activite) || tr('Retour à la base'), encre: gris, panne: false };
+  if (!tondeuse && base && (phase === 'base' || phase === 'repos')) {
+    if (base.activite) return { texte: base.activite, encre: gris, panne: false };
+    if (base.alerte) return { texte: base.alerte, encre: 'var(--o-warn)', panne: false };
+  }
   if (sansZone) return { texte: tr('Aucune zone allumée'), encre: gris, panne: false };
   if (phase === 'base') {
     if (prochain && prochain.date) return { texte: libellePassage(prochain.date, maintenant), encre: gris, panne: false };

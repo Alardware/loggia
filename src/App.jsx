@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react';
+import { vuesPersoValides, vuePermise } from './views.js';
 import { lazyRecharge } from './recharge.js';
 import { NouvelleVersion } from './nouvelleversion.jsx';
 import { OUTILS_VUES } from './outilsvues.js';
@@ -8,7 +9,7 @@ import { profilAppareil, retenirProfilAppareil, ficheAppareil, appareilsConnus, 
 // import direct, ce cout etait paye a CHAQUE ouverture, meme par quelqu'un qui
 // a coupe les effets. En differe, il n'est paye que si le fond s'affiche.
 // La table des conditions, elle, est de la donnee pure et reste immediate.
-import { SAFE_NOLOOK, applyTheme, readLook, signatureHaTheme } from './theme.js';
+import { SAFE_NOLOOK, applyTheme, readLook, signatureHaTheme, themeConnu } from './theme.js';
 // « Cet écran est-il l'un de ceux-ci ? » (ADR 0222) : rare, chargée à la demande.
 const QuestionAppareil = lazyRecharge(() => import('./views/appareils.jsx').then(m => ({ default: m.QuestionAppareil })));
 const ViewEntSheet = lazyRecharge(() => import('./views/parametres.jsx').then(m => ({ default: m.ViewEntSheet })));
@@ -55,7 +56,7 @@ const AssistantSheet = lazyRecharge(() => import('./views/assistant.jsx'));
 import {
   LOGGIA_RESOLVED, setLoggiaState, readLS, cfgVal, cfgSet, getHass, loggiaEnt, estPersonnelle,
   enHaids, medPlayers, normRooms, secAlarm, switchLights, ctxLumieres, LOGGIA_CONFIG_KEYS, droitsDe, usersSig,
-  vacSensors, compteOrdinaire, dimmableLights
+  vacSensors, compteOrdinaire, dimmableLights, retirerProfil, rangDuProfil, LOGGIA_INDEX
 } from './state.js';
 // L'accueil de premiere installation ne sert qu'une fois : son code n'a pas a
 // peser dans le bundle de chaque ouverture.
@@ -66,7 +67,7 @@ import { dec, hx, rmNorm, climateZones, lireEpingles, plantesDeLaMaison, capteur
 import { readZone } from './app/noyau.jsx';
 import { RM_ICO, GlypheCarte } from './cartes/briques.jsx';
 // eslint-disable-next-line no-unused-vars -- les tests les exportent d’ici (ADR 0282)
-import { BIN_ETATS, PileRepere, PlaqueBascule, RM_MILIEU, RmJauge, emChiffre } from './cartes/briques.jsx';
+import { BIN_ETATS, PileRepere, RM_MILIEU, RmJauge, emChiffre } from './cartes/briques.jsx';
 import { RoomGenericCard } from './cartes/generique.jsx';
 // eslint-disable-next-line no-unused-vars -- les tests les exportent d’ici (ADR 0282)
 import { BarreMesure, ChiffreMesure, RoomMesureCard, reperesSerres, useVueMesure } from './cartes/mesure.jsx';
@@ -79,6 +80,7 @@ import { RoomLightCard, useVueLumiere } from './cartes/lumiere.jsx';
 // eslint-disable-next-line no-unused-vars -- les tests les exportent d’ici (ADR 0282)
 import { RoomRobotCard, useVueRobot } from './cartes/robot.jsx';
 import { clesDeLaBorne } from './cartes/eauborne.jsx';
+import { clesDuCompose } from './composesboot.js';
 // eslint-disable-next-line no-unused-vars -- les tests les exportent d’ici (ADR 0282)
 import { RoomCoverCard, RoomVoletCard } from './cartes/volet.jsx';
 // eslint-disable-next-line no-unused-vars -- les tests les exportent d’ici (ADR 0282)
@@ -96,7 +98,7 @@ import { useLayoutEditor, ROOM_LAYOUT_KEY, layoutOf } from './edition/dispositio
 import { filtresEntite } from './app/noyau.jsx';
 // eslint-disable-next-line no-unused-vars -- les tests les exportent d’ici (ADR 0282)
 import { RoomPlantCard } from './cartes/plante.jsx';
-import { BiblioView, CustomView, CardEditSheet, ComposeurCartes } from './edition/coquilles.jsx';
+import { BiblioView, CustomView, CardEditSheet, ComposeurCartes, NuancierView } from './edition/coquilles.jsx';
 import { habillagePiece, capteurBruitPiece } from './app/pieces.jsx';
 import { scenarios, CarteScenario } from './app/scenarios.jsx';
 import { ChoixIcone, EditableCard, BandeauEdition, CarteAjout, DOMAINES_EDITION } from './edition/briques.jsx';
@@ -243,7 +245,7 @@ const VAC_KEYS = [];   // le poll vient de vacKeys() : préfixe de domaine + ent
  * memorisee, ou `?vue=croquettes`, retombe ainsi sur l'accueil. */
 const VUES_RENDUES = new Set(['accueil', 'parametres', 'pieces', 'scenes', 'objets',
   'energie', 'securite', 'systeme', 'lumieres', 'climat', 'volets', 'voletsplan',
-  'medias', 'biblio']);
+  'medias', 'biblio', 'nuancier']);
 const vueRendue = (v) => !!v && (VUES_RENDUES.has(v)
   || v.indexOf('room:') === 0 || v.indexOf('cv:') === 0);
 
@@ -265,6 +267,9 @@ const secBaseKeys = () => {
     ...(Array.isArray(cams) ? cams.filter(c => c && typeof c === 'object').flatMap(c => [c.haid, c.motion, c.person, c.vehicle, c.animal, c.sonnette, c.colis]) : []),
     ...gens.map(x => x.haid)].filter(Boolean);
 };
+/* Les classes de capteur que lit la carte Qualité air (`airDe`, cartescustom/galerie.jsx) — à tenir avec elle (audit du
+ * 12/11, B31). */
+const CLASSES_AIR = ['carbon_dioxide', 'volatile_organic_compounds', 'volatile_organic_compounds_parts', 'pm25', 'humidity'];
 // Les capteurs de plante (humidité, conductivité, luminosité) n'ont pas de
 // regroupement standard : sans configuration, il n'y a rien à montrer.
 /* Les entites a suivre : celles que `plantCapteur` retiendra, pas une liste de
@@ -724,7 +729,7 @@ export default function App() {
    * dans un effet arrivait APRÈS la première écriture (le défaut écrasait le
    * réglage au double-montage de dev, et par pure chance d'ordre en prod). */
   const [themeMode, setThemeMode] = useState(() => { try { const m = localStorage.getItem('loggia-mode'); return (m === 'light' || m === 'dark' || m === 'auto') ? m : 'dark'; } catch { return 'dark'; } }); // base Loggia : clair/foncé/auto
-  const [loggiaTheme, setLoggiaTheme] = useState(() => { if (SAFE_NOLOOK) return ''; try { const t = localStorage.getItem('loggia-theme'); return t != null ? t : ''; } catch { return ''; } });     // '' = défaut Loggia ; sinon preset natif (neumorphix/google/ios)
+  const [loggiaTheme, setLoggiaTheme] = useState(() => { if (SAFE_NOLOOK) return ''; try { const t = localStorage.getItem('loggia-theme'); return t != null ? themeConnu(t) : ''; } catch { return ''; } });     // '' = défaut Loggia ; sinon preset natif (neumorphix/google/ios)
   const [haTheme, setHaTheme] = useState(() => { if (SAFE_NOLOOK) return ''; try { const h = localStorage.getItem('loggia-ha'); return h != null ? h : ''; } catch { return ''; } });           // '' = base Loggia ; 'FOLLOW' = suit HA ; sinon nom de thème HA
   const [lightMode, setLightMode] = useState(false);
   /* La vue courante survit au rechargement.
@@ -842,19 +847,34 @@ export default function App() {
     };
   }, []);
   // Vues personnalisées (créées dans Paramètres → Vues, admin) — live, persistées.
+  const sansVuesPerso = useRef(false);
   const [customViews, setCustomViews] = useState(() => {
     // Filet de l'écran d'erreur : « Repartir sans les vues custom » pose ce
     // drapeau puis recharge. Il est CONSOMMÉ ici — il ne protège que ce
     // chargement-ci, et la configuration n'est pas touchée : si la vue fautive
     // replante au retour, l'écran d'erreur revient et on peut recommencer.
-    try { if (sessionStorage.getItem('loggia_safe_nocv')) { sessionStorage.removeItem('loggia_safe_nocv'); return []; } } catch {}
-    const v = readLS('loggia_customviews', []); return Array.isArray(v) ? v.filter(x => x && x.id && x.name) : [];
+    try { if (sessionStorage.getItem('loggia_safe_nocv')) { sessionStorage.removeItem('loggia_safe_nocv'); sansVuesPerso.current = true; return []; } } catch {}
+    return vuesPersoValides(readLS('loggia_customviews', []));
   });
   /* `loggia_customviews` est de la configuration : une vue perso dit QUELLES
    * entites elle montre. Y ranger ses cartes ecrit donc une cle reservee, et
    * un compte Home Assistant ordinaire n'y entre pas en edition (03/10) —
    * voir `<CustomView … edit=…>` plus bas, et les Parametres. */
   const saveCustomViews = (list) => { cfgSet({ loggia_customviews: list }); setCustomViews(list); };
+  /* La liste est celle du SERVEUR dès qu'il répond (audit du 12/11, ADR 0348).
+   * Elle n'était lue qu'une fois, dans le stockage de l'appareil : une vue
+   * créée sur l'ordinateur n'arrivait pas sur le téléphone, et un écran resté
+   * sur une vieille copie effaçait les vues des autres à son premier
+   * enregistrement. `serverCfg` porte aussi nos écritures en cours et leur
+   * retour quand le composant refuse : le menu suit l'un et l'autre, et ce
+   * qu'un autre écran vient de créer (ADR 0067). Le filet « Repartir sans les
+   * vues custom » tient pour tout ce chargement : rien ne revient par ici. */
+  const vuesPersoServeur = serverOk ? serverCfg.loggia_customviews : undefined;
+  useEffect(() => {
+    if (!serverOk || sansVuesPerso.current) return;
+    const servies = vuesPersoValides(vuesPersoServeur);
+    setCustomViews(avant => (JSON.stringify(avant) === JSON.stringify(servies) ? avant : servies));
+  }, [serverOk, vuesPersoServeur]);
   const [editMode, setEditMode] = useState(false);
   /* ADR 0067 : une relecture arrivee pendant l'edition se fait a sa sortie. */
   useEffect(() => {
@@ -937,7 +957,11 @@ export default function App() {
       cams: (Array.isArray(cm) && cm.length) ? cm.filter(c => c && typeof c === 'object') : [],
       entities: (serverCfg && serverCfg.loggia_entities) || {},
     };
-  }, [serverCfg, loggiaRuntime.ready]);
+    /* L'INDEX, et non `ready` (audit du 12/11, lot 5b, N7) : la découverte se relance quand le nombre d'entités change (B17),
+     * et l'index neuf arrivait alors que `ready` restait vrai — la zone et l'icône d'une pièce restaient celles d'avant.
+     * `null` tant que rien n'est prêt, puis la même référence jusqu'à la découverte suivante (`buildRuntime` reprend
+     * `discovery.index` tel quel) : `cfg` ne se recalcule pas à chaque rendu. */
+  }, [serverCfg, loggiaRuntime.index]);
   const cfgRef = useRef(null); cfgRef.current = cfg.rooms;
   // Clés de poll issues de la configuration utilisateur : chez un tiers les
   // constantes du code ne correspondent a rien, seuls comptent le prefixe de
@@ -1044,16 +1068,28 @@ export default function App() {
     if (x === 'obj:feeder') return croqKeys();
     // La borne de recharge (chantier G3, E3) : ses entités, que sa carte lit.
     if (x === 'obj:borne') return clesDeLaBorne();
+    // Les bornes suivantes (A7, ADR 0385) : `obj:borne:<appareil>`.
+    if (typeof x === 'string' && x.indexOf('obj:borne:') === 0) return clesDeLaBorne(x.slice(10));
+    // La voiture, la litière, la fontaine (A11, A12 ; ADR 0386) : les entités de l'appareil que sa carte lit.
+    if (typeof x === 'string' && x.indexOf('obj:app:') === 0) return clesDuCompose(x, LOGGIA_INDEX, (getHass() || {}).states || {});
     if (typeof x === 'string' && x.indexOf('plant:') === 0) return plantKeys();
     if (typeof x === 'string' && x.indexOf('zone:') === 0) return climateKeys();
     const t = x && x.t;
     if (t === 'presence') return ['person.'];
     if (t === 'ouvrants') return ['binary_sensor.'];
-    if (t === 'air') return ['sensor.'];
+    /* La qualité d'air ne lit que les capteurs de CO₂, COV, PM2,5 et humidité (`airDe`, cartescustom/galerie.jsx) : on suit
+     * ceux-là, plutôt que tout `sensor.` (audit du 12/11, B31). Le préfixe entier bougeait à presque chaque relevé — un favori
+     * « Qualité air » épinglé redessinait toute l'application toutes les 2 s, veille comprise. Un capteur ajouté entre au
+     * rendu suivant. */
+    if (t === 'air') {
+      const S = (getHass() || {}).states || {};
+      return Object.keys(S).filter(id => id.indexOf('sensor.') === 0 && S[id] && CLASSES_AIR.indexOf((S[id].attributes || {}).device_class) >= 0);
+    }
     if (t === 'activite') return ['binary_sensor.', 'cover.', 'vacuum.', 'lawn_mower.', 'lock.'];
     if (t === 'localisation') return ['person.', 'zone.home', 'device_tracker.'];
-    // Les chips lisent toute la maison : sans ces préfixes, la rangée fige.
-    if (t === 'chips') return ['light.', 'switch.', 'binary_sensor.', 'alarm_control_panel.', 'person.', 'sensor.'];
+    /* Une carte chips ne montre que SES entités (`x.ids`, `CvChips`) depuis le 01/09 : les six préfixes d'avant, toute la
+     * maison, redessinaient l'application toutes les 2 s pour une rangée qui n'en lit que quelques-unes (B31). */
+    if (t === 'chips') return Array.isArray(x.ids) ? x.ids : [];
     if (t === 'energiemaison') return enKeys();
     return [cvId(x)];
   };
@@ -1160,6 +1196,10 @@ export default function App() {
   // `cfgSet` ecrit le serveur ET le localStorage. Avec le seul localStorage,
   // les profils restaient prisonniers de l'appareil qui les avait crees.
   const persistUsers = (a) => { try { cfgSet({ loggia_users: a }); } catch {} setUsers(a); };
+  /* Retirer un profil renumérote, dans le MÊME envoi, tout ce qui est rangé par rang : les réglages de chacun et la fiche
+   * des écrans (audit du 12/11, B11 ; `retirerProfil`, state.js). Avec la liste seule, le profil suivant héritait des
+   * réglages du profil retiré. */
+  const retirerUnProfil = (i, a) => { try { retirerProfil(i, a); } catch {} setUsers(a); };
   const [userIdx, setUserIdx] = useState(() => { try { const v = parseInt(cfgVal('loggia_active_user', null), 10); return (v >= 0 && v < users.length) ? v : 0; } catch { return 0; } });
   /* Le profil appartient a l'ECRAN (ADR 0220). Ce que l'ecran affiche est la
    * seule source : `profilActif()` le rend, et les enfants, rendus apres ce
@@ -1252,7 +1292,7 @@ export default function App() {
     if (sig === apparenceLue.current) return;
     apparenceLue.current = sig;
     if (ap.mode === 'light' || ap.mode === 'dark' || ap.mode === 'auto') setThemeMode(ap.mode);
-    if (typeof ap.theme === 'string') setLoggiaTheme(ap.theme);
+    if (typeof ap.theme === 'string') setLoggiaTheme(themeConnu(ap.theme));
     if (typeof ap.ha === 'string') setHaTheme(ap.ha);
     if (ap.look && typeof ap.look === 'object') setLook(readLook());
   }, [serverOk, serverCfg, userIdx, questionAppareil]);
@@ -1264,7 +1304,14 @@ export default function App() {
     const distant = serverCfg && serverCfg.loggia_users;
     if (Array.isArray(distant) && distant.length) {
       usersPousses.current = true;
-      if (usersSig(distant) !== usersSig(users)) setUsers(withUserKeys(distant));
+      if (usersSig(distant) !== usersSig(users)) {
+        /* La liste a changé sur un AUTRE écran : celui-ci suit son profil (audit du 12/11, B11). Un profil retiré avant
+         * le sien fait descendre son rang ; resté sur l'ancien, l'écran aurait lu — et rangé — les réglages d'un autre. */
+        const suite = withUserKeys(distant);
+        const rang = rangDuProfil(users, userIdx, suite);
+        setUsers(suite);
+        if (rang !== userIdx) setUserIdx(rang);
+      }
       return;
     }
     // Le serveur ne connait aucun profil : on lui envoie ceux d'ici, une fois.
@@ -1278,7 +1325,7 @@ export default function App() {
       usersPousses.current = true;
       cfgSet({ loggia_users: users });
     }
-  }, [serverCfg, users, haAdmin]);
+  }, [serverCfg, users, haAdmin, userIdx]);
 
   const [pinTarget, setPinTarget] = useState(null);
   // Chip « n allumées » du header (et de l'écran de veille) : les lumières de la maison à l'état on (L11) — le compte d'Objets › Lumières.
@@ -1300,15 +1347,16 @@ export default function App() {
     ? new Set(users[userIdx].vues) : null;
   // Une vue interdite atteinte autrement (restauration, lien) retombe sur l'accueil.
   const vuesSig = vuesAutorisees ? [...vuesAutorisees].join('|') : '';
+  /* La règle est celle des deux menus (`vuePermise`, audit du 12/11, B19) : Lumières, Climat, Volets, Médias et le planning
+   * des volets, que l'Accueil ouvre, renvoyaient ici un profil qui avait Objets. */
   useEffect(() => {
     if (!vuesAutorisees) return;
-    const base = view.indexOf('room:') === 0 ? 'pieces' : view;
-    if (base !== 'accueil' && base !== 'parametres' && !vuesAutorisees.has(base)) setView('accueil');
+    if (!vuePermise(view, vuesAutorisees)) setView('accueil');
   }, [view, vuesSig]);
   // Un droit retiré ferme le mode édition, comme le fait un changement de profil.
   useEffect(() => { if (!peutEditer) setEditMode(false); }, [peutEditer]);
   const { entSheet, setEntSheet, assistantNs, assistantAttendu, assistantOuvert, setAssistantOuvert, questionVocale, setQuestionVocale, poserQuestion } = useAssistantApp({ editMode, hass, view });
-  const { addUser, updateUser, deleteUser } = useComptesApp({ applyUser, haAdmin, hass, persistUsers, userIdx, users });
+  const { addUser, updateUser, deleteUser } = useComptesApp({ applyUser, haAdmin, hass, persistUsers, retirerUnProfil, userIdx, users });
 
   const { santeAccueil, showOnboarding, closeOnboarding } = useOnboardingApp({ discovery, hass, loggiaRuntime, saveCfg, serverCfg, view });
 
@@ -1393,7 +1441,7 @@ export default function App() {
           l'on verrait la page changer deux fois sous ses yeux. */}
       {(!loggiaRuntime.ready && view !== 'accueil') ? <main className="loggia-main" style={{ flex: 1, minWidth: 0 }} />
         : viewBlocked ? <ViewEmpty vid={view} reason={viewBlocked} onNav={setView} />
-        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'volets' ? <ObjetsView hass={hass} onNav={setView} filtre="volets" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'voletsplan' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} onNav={setView} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} retourAcc={retourAcc} onRetourAcc={onRetourAcc} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer && !compteOrdinaire(hass)} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); /* Une mesure absente reste null (audit du 03/10) : `base` porte les valeurs de vitrine du modèle (PIECES, l'écran d'avant la connexion), et la fiche de confort les affichait pour une vraie pièce — « Humidité 60 % » dans une chambre sans hygromètre. */ return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? dec(lv.temp, 1) + '°' : null, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : null, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} sante={santeAccueil} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} planActif={look.plan !== false} cyclesPrises={cyclesPrises} />}
+        : view === 'lumieres' ? <ObjetsView hass={hass} onNav={setView} filtre="lumieres" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'scenes' ? <ScenariosView hass={hass} edit={editMode && peutEditer} /> : view === 'climat' ? <ObjetsView hass={hass} onNav={setView} filtre="chauffage" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'volets' ? <ObjetsView hass={hass} onNav={setView} filtre="volets" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'voletsplan' ? <VoletsView hass={hass} edit={editMode && peutEditer} /> : view === 'energie' ? <EnergieView hass={hass} edit={editMode && peutEditer} onEnt={() => setEntSheet(true)} /> : view === 'medias' ? <ObjetsView hass={hass} onNav={setView} filtre="multimedia" edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'objets' ? <ObjetsView hass={hass} onNav={setView} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} /> : view === 'securite' ? <SecuriteView hass={hass} edit={editMode && peutEditer} onEnt={editMode && peutEditer ? () => setEntSheet(true) : null} onNav={setView} /> : view === 'systeme' ? <SystemeView hass={hass} /> : view === 'biblio' ? <BiblioView /> : view === 'nuancier' ? <NuancierView loggiaTheme={loggiaTheme} themeMode={themeMode} onPickTheme={onPickTheme} onMode={onMode} /> : view === 'parametres' ? <ParametresView droits={droits} onNav={setView} themeMode={themeMode} loggiaTheme={loggiaTheme} haTheme={haTheme} onMode={onMode} onPickTheme={onPickTheme} onFollowHa={onFollowHa} navbar={navbar} onToggleNavbar={onToggleNavbar} wxFx={wxFx} onToggleWxFx={onToggleWxFx} ambient={ambient} onAmbient={onAmbient} ambPlage={ambPlage} onAmbPlage={onAmbPlage} retourAcc={retourAcc} onRetourAcc={onRetourAcc} navMargin={safeEff} navAuto={navOffset == null} onNavOffset={onNavOffset} onNavOffsetReset={onNavOffsetReset} onNavSet={onNavSet} onTopSet={onTopSet} look={look} onLook={onLook} topMargin={safeTopEff} topAuto={topOffset == null} onTopOffset={onTopOffset} onTopOffsetReset={onTopOffsetReset} hass={hass} users={users} userIdx={userIdx} isAdmin={isAdmin} onAddUser={addUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} customViews={customViews} onSaveCustomViews={saveCustomViews} /> : activeCv ? <CustomView cv={activeCv} hass={hass} edit={editMode && peutEditer && !compteOrdinaire(hass)} onSave={(cv2) => saveCustomViews(customViews.map(x => x.id === cv2.id ? cv2 : x))} /> : activeRoom ? <RoomView room={activeRoom} rooms={(cfg.rooms || []).map(r => r.room).filter(r => !estDehors(r))} piece={(() => { const lv = accueil && accueil.rooms ? accueil.rooms.find(r => r.name === activeRoom) : null; const base = habillagePiece(activeRoom, lv && lv.icon); /* Une mesure absente reste null (audit du 03/10) : `base` porte les valeurs de vitrine du modèle (PIECES, l'écran d'avant la connexion), et la fiche de confort les affichait pour une vraie pièce — « Humidité 60 % » dans une chambre sans hygromètre. */ return { ...base, name: activeRoom, live: lv, temp: lv && lv.temp != null ? dec(lv.temp, 1) + '°' : null, hum: lv && lv.hum != null ? Math.round(lv.hum) + '%' : null, badge: lv && lv.co2 != null ? Math.round(lv.co2) + ' ppm' : null }; })()} hass={hass} onNav={setView} edit={editMode && peutEditer} /> : <Dashboard editMode={editMode} sante={santeAccueil} onEnt={peutEditer ? () => setEntSheet(true) : null} weatherMode={weatherMode} weatherRaw={weatherRaw} wxFx={wxFx} weatherTemp={weatherTemp} weatherLabel={weatherLabel} accueil={accueil} userName={(users[userIdx] || {}).name || ''} onOpenRoom={(name) => setView('room:' + name)} onNav={setView} planActif={look.plan !== false} cyclesPrises={cyclesPrises} />}
       </Barriere>
       </div>
       {navbar && <MobileNav vuesAutorisees={vuesAutorisees} view={view} onNav={(v) => { setView(v); try { if ((window.innerWidth || 0) <= 820) setNavOpen(false); } catch {} }} onMenu={() => setNavOpen(o => !o)} menuOuvert={navOpen} assistantAttendu={assistantAttendu} onAssistant={assistantNs ? () => setAssistantOuvert(true) : null} onDictee={assistantNs ? poserQuestion : null} hass={hass} />}

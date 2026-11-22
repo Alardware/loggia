@@ -69,7 +69,8 @@ test('C5 : bonne, la compacte reste neutre — ni teinte ni lavis', () => dans((
 
 test('muette : « Indisponible » en rouge, le liseré, sans chiffre', () => dans(() => {
   const m = compacte('sensor.morte');
-  assert.deepEqual([ligne(m).props.children, ligne(m).props.style.color], ['Indisponible', 'var(--o-bad)']);
+  // ASSERTION MODIFIÉE (audit du 12/11, lot 4, E24) : la règle de la lumière — depuis quand (son `last_changed`), toujours en rouge.
+  assert.ok(/^Indisponible depuis \S/.test(ligne(m).props.children) && ligne(m).props.style.color === 'var(--o-bad)', ligne(m).props.children);
   assert.ok(m.arbre.props.className.includes('o-panne'));
   assert.equal(classe(m, 'o-cvmesure'), undefined);
 }));

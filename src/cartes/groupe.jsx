@@ -134,7 +134,8 @@ function CarteGroupe({ v, nom, groupe, onOpen = null, chip = false }) {
         {v.chiffre && <ChiffreHaut v={v.chiffre} couleur={encre} />}
       </div>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 'var(--o-milieu-haut, 14px)', position: 'relative', pointerEvents: 'none' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        {/* La colonne du nom reste en haut (audit du 12/11, `RM_GAUCHE`) : le chiffre et sa légende dessous la poussaient vers le bas. */}
+        <div style={{ flex: 1, minWidth: 0, alignSelf: 'flex-start' }}>
           <div className="o-gab-nom" style={NOM_GROUPE}>{nom}</div>
           {/* La phrase ; sur une carte étroite, sa forme courte s'il y en a une (« Séjour · 3 min ») — la feuille n'en montre qu'une. */}
           <div className={'o-gab-phrase' + (v.phraseCourte ? ' o-seul-large' : '')} style={{ ...RM_SUB, color: encre, '--o-n': Math.max(1, v.phrase.length) }}>{v.phrase}</div>

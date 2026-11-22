@@ -64,7 +64,15 @@ function chargerCatalogue(code) {
     /* La langue demandee est celle qui vient d'arriver : on bascule — le poll
      * de hass (2 s) redessine, les libelles suivent au tick d'apres. Les mots
      * de Home Assistant gardes pour cette langue reviennent avec elle. */
-    if (_demande === code) { _code = code; _cat = m.default; _haMemo = lireLS(MEMO_HA + code); }
+    if (_demande === code) {
+      _code = code; _cat = m.default; _haMemo = lireLS(MEMO_HA + code);
+      /* « Le tick d'apres » ne venait pas toujours (audit du 12/11, B16) : le poll ne redessine que si une cle surveillee
+       * change, et sans composant — ou sur une tablette lente ou l'echo du serveur passe avant le fichier — l'ecran restait
+       * dans l'ancienne langue, ou en francais, de longues minutes. On l'annonce, comme a l'arrivee des mots de Home
+       * Assistant : la racine ecoute deja cet evenement. */
+      try { window.dispatchEvent(new CustomEvent('loggia-langue-prete', { detail: { langue: code } })); }
+      catch { /* pas de navigateur : rien a annoncer */ }
+    }
   }).catch(() => { _chargements[code] = null; });
 }
 

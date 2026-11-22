@@ -17,6 +17,7 @@ import { phaseRobot, dureeLisible, heureValide, ordreJours, nomJour, avanceTonte
 import { quandLumiere } from './lumieres.js';
 import { mot } from './journalmots.js';
 import { MED_COLORS, vacSlug, vacNom } from './state.js';
+import { lireBase, avanceAspirateur, texteAvanceAspirateur } from './robotsbase.js';
 
 const nombre = (v) => { const n = typeof v === 'number' ? v : parseFloat(v); return isNaN(n) ? null : n; };
 const borne = (n, a, b) => Math.min(b, Math.max(a, n));
@@ -71,7 +72,7 @@ const vivant = (s) => s && s.etat != null && s.etat !== 'unavailable' && s.etat 
 /* ════════════ Le geste ════════════ */
 
 /* Le bit `VacuumEntityFeature.CLEAN_AREA` (Home Assistant ≥ 2026.3) : le seul signal public qu'un robot sait viser des pièces. */
-export const CLEAN_AREA = 16384;
+const CLEAN_AREA = 16384;
 /* Home Assistant ≥ 2026.3 : `vacuum.clean_area`, l'association pièces ↔ zones, et deebot-client 18 (une LISTE pour `spot_area`). */
 const VERSION_ZONES = [2026, 3];
 
@@ -470,7 +471,10 @@ export function avanceeRobot(soeurs) {
   const p = de('progress');
   const texte = avanceTonte(p, de('left_time'));
   const n = p ? nombre(p.state) : null;
-  return texte ? { pct: n != null && n >= 0 && n <= 100 ? Math.round(n) : null, texte } : null;
+  if (texte) return { pct: n != null && n >= 0 && n <= 100 ? Math.round(n) : null, texte };
+  // Un aspirateur (A6) : la pièce où il est et le chemin fait, d'après `current_room` et `clean_percent` / `cleaning_progress`.
+  const av = avanceAspirateur(soeurs);
+  return av ? { pct: av.pct, texte: texteAvanceAspirateur(av) } : null;
 }
 
 const JOUR_MS = 86400000;
@@ -481,7 +485,9 @@ const JOUR_MS = 86400000;
  *    heure : « Dernière erreur à 14:12 : Lame bloquée », « Dernière erreur hier à 22:40 : … ». Son heure est celle que l'appareil
  *    publie (`date`), sinon l'instant où le serveur l'a vue (`t`). En erreur, le mot d'état la dit déjà : rien de plus ;
  *  - une tondeuse dont l'appareil sent la pluie (un binaire `moisture` de SON appareil, la règle de `pluieDeRobot`, ADR 0305) :
- *    « Pluie en cours ».
+ *    « Pluie en cours » ;
+ *  - un aspirateur dont la base fait quelque chose — « Vide le bac », « Lave la serpillière », « Sèche la serpillière » — ou demande un
+ *    geste — « Réservoir d’eau sale plein »… — : ce que lisent ses sœurs à leur clé (robotsbase.js, chantier du 20/11, A6).
  * `etat` : celui de `loggia/robots/etat` ; `soeurs` : `decrireSoeurs`. Rend `[{ cle, glyphe, encre, texte }]`.
  */
 export function lignesEtat({ etat = null, robot = null, domaine = 'vacuum', phase = 'absent', soeurs = [], maintenant = Date.now() } = {}) {
@@ -500,7 +506,41 @@ export function lignesEtat({ etat = null, robot = null, domaine = 'vacuum', phas
   if (domaine === 'lawn_mower' && (soeurs || []).some(x => x.domaine === 'binary_sensor' && x.classe === 'moisture' && x.etat === 'on')) {
     out.push({ cle: 'pluie', glyphe: 'raindrops', encre: gris, texte: tr('Pluie en cours') });
   }
+  if (domaine === 'vacuum') {
+    const base = lireBase(soeurs);
+    if (base.activite) out.push({ cle: 'base', glyphe: base.activite.glyphe, encre: gris, texte: base.activite.texte });
+    base.alertes.forEach(a => out.push({ cle: 'base-' + a.cle, glyphe: 'triangle-warning', encre: 'var(--o-warn)', texte: a.texte }));
+  }
+  /* Pourquoi elle reste garée (chantier du 20/11, P7 ; ADR 0383) : les heures de repos que l'appareil publie (le capteur
+   * de clé `non_work_hours`, « 09:00pm - 10:00am » chez Mammotion), quand on y est et qu'elle est sur sa base ou au repos. */
+  const plage = domaine === 'lawn_mower' && (phase === 'base' || phase === 'repos')
+    ? (soeurs || []).find(x => x.domaine === 'sensor' && x.cle === 'non_work_hours') : null;
+  const fin = plage ? finRepos(plageRepos(plage.etat), maintenant) : null;
+  if (fin != null) out.push({ cle: 'repos', glyphe: 'moon', encre: gris, texte: tr('Heures de repos jusqu’à {h}', { h: heureDe(fin) }) });
   return out;
+}
+
+/* « 09:00pm - 10:00am », « 21:00 - 10:00 » : la plage, en minutes depuis minuit ; null si le texte ne se lit pas. */
+const PLAGE = /^\s*(\d{1,2}):(\d{2})\s*(am|pm)?\s*[-–]\s*(\d{1,2}):(\d{2})\s*(am|pm)?\s*$/i;
+const minutesDe = (h, m, ap) => (ap ? (Number(h) % 12) + (ap.toLowerCase() === 'pm' ? 12 : 0) : Number(h) % 24) * 60 + Number(m);
+export function plageRepos(texte) {
+  const r = PLAGE.exec(String(texte == null ? '' : texte));
+  if (!r || Number(r[2]) > 59 || Number(r[5]) > 59) return null;
+  const debut = minutesDe(r[1], r[2], r[3]), fin = minutesDe(r[4], r[5], r[6]);
+  return debut === fin ? null : { debut, fin };
+}
+
+/** L'instant où finit la plage de repos en cours, ou null hors de la plage — une plage peut passer minuit. */
+export function finRepos(plage, maintenant = Date.now()) {
+  if (!plage) return null;
+  const d = new Date(maintenant);
+  const m = d.getHours() * 60 + d.getMinutes();
+  const dedans = plage.debut < plage.fin ? (m >= plage.debut && m < plage.fin) : (m >= plage.debut || m < plage.fin);
+  if (!dedans) return null;
+  const f = new Date(maintenant);
+  f.setHours(Math.floor(plage.fin / 60), plage.fin % 60, 0, 0);
+  if (f.getTime() <= maintenant) f.setDate(f.getDate() + 1);
+  return f.getTime();
 }
 
 /** La puce principale d'un départ (I16) : « Nettoyer tout le logement », « Nettoyer 2 pièces » ; « Tondre tout le jardin », « Tondre 1 zone ». */

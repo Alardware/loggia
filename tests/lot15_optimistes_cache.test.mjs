@@ -69,7 +69,8 @@ const COMMANDE = /\b(call|appel|cov|commander|commanderService|autoCall|callServ
 
 test('le filet commun vit dans un module que tout src/ peut importer', () => {
   const opt = source('src/optimiste.js');
-  assert.ok(opt.includes('export function useOptimiste(reel, delai = OPTIMISTE_MS) {'),
+  // ASSERTION MODIFIÉE (13/11, audit du 12/11, lot 2b, B29) : un troisième paramètre facultatif, `atteint`.
+  assert.ok(opt.includes('export function useOptimiste(reel, delai = OPTIMISTE_MS, atteint = null) {'),
     'useOptimiste n’est pas exporté : Paramètres, chargé à part, ne peut que recopier son propre état optimiste');
   assert.ok(!APP.includes('function useOptimiste('), 'App.jsx garde sa propre copie du hook : deux filets divergeront');
   // 05/10 : App.jsx n'a plus de demande par entité à lui — les repas sont partis dans la fiche du distributeur.

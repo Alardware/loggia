@@ -12,10 +12,13 @@ import { nombre } from '../format.js';
 import { commanderChauffage, useEtatChauffage, chauffageDe, refroidit } from '../chauffageetat.js';
 import { plaqueMode, estMuet, consigneVoisine, decalageEn, modeVoisin, enChauffe, phrasePlanning, consigneAtteinte, motMode, etiquetteCarte, mesureLisible, moduleMuet, modeDuModule, etatModule, couleurMode, motPreset } from '../chauffageecran.js';
 import { tr, trHA } from '../i18n.js';
+import { LOGGIA_INDEX } from '../state.js';
+import { vanneDeLAppareil } from '../chauffageseuils.js';
+import { quandLumiere } from '../lumieres.js';
 import { lavisCarte, estClimate, readZone, pilotFamille, dec, decMax } from '../app/noyau.jsx';
 import { useHistorique24, BoutonEpingle, Courbe24 } from '../appareils/fiches.jsx';
 import { MenuDeroulant } from '../cartescustom/cartes.jsx';
-import { RM_ICO, RM_CARD, GlypheCarte, RmBascule, ChiffreHaut, RM_MILIEU, RM_NAME, RM_SUB, RM_BTN } from './briques.jsx';
+import { RM_ICO, RM_CARD, GlypheCarte, RmBascule, railBascule, rondBascule, ChiffreHaut, RM_MILIEU, RM_NAME, RM_SUB, RM_BTN } from './briques.jsx';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Le pont vers le moteur d'actions.
@@ -81,10 +84,14 @@ const RM_ETIQUETTE = (mot) => ({ fontWeight: 800, letterSpacing: mot.length > 9 
  * le seuil de 16 (relecture de la dernière passe). */
 const motLong = (mot) => mot.length > 13;
 /* La couleur de l'état sous le nom : l'ambre d'une fenêtre qui coupe,
- * l'orange de la chauffe, le bleu du froid, le gris d'un chauffage éteint ou
- * en panne, sinon le gris doux. Le rouge reste aux alertes. */
-const couleurEtatChauffage = ({ fenetre = false, chauffe = false, froid = false, eteint = false }) => (
-  fenetre ? 'var(--o-warn)' : chauffe ? 'var(--o-warn2)' : froid ? 'var(--o-cold)' : eteint ? 'var(--o-text3)' : 'var(--o-text2)');
+ * l'orange de la chauffe, le bleu du froid, le gris d'un chauffage éteint,
+ * sinon le gris doux. Le rouge reste aux alertes — et à la panne (`muet`),
+ * la règle de la lumière (audit du 12/11, lot 4, E24). */
+const couleurEtatChauffage = ({ muet = false, fenetre = false, chauffe = false, froid = false, eteint = false }) => (
+  muet ? 'var(--o-bad)' : fenetre ? 'var(--o-warn)' : chauffe ? 'var(--o-warn2)' : froid ? 'var(--o-cold)' : eteint ? 'var(--o-text3)' : 'var(--o-text2)');
+/* Muet, la phrase de la lumière (`phraseLumiere`, lumieres.js ; E24) : « Indisponible depuis 14:20 » — « hier », la date
+ * au-delà ; sans heure lisible (une entité absente), « Indisponible ». */
+const phraseMuette = (st) => { const q = st ? quandLumiere(st.last_changed) : null; return q ? tr('Indisponible depuis {h}', { h: q }) : tr('Indisponible'); };
 /* La plaque de l'icône : l'orange de la chauffe, le bleu du froid, le gris
  * d'un chauffage éteint ou en panne ; un module, la teinte de son mode (son
  * lavis à .16, son encre) ; sinon le neutre. La règle vit dans
@@ -164,7 +171,9 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
    * compacte ; `src/consigne.js` dit pourquoi la plage ne se pilote pas ici. */
   const realTarget = consigneClimat(a);
   const etatSt = st && st.state;
-  const [ov, setOv] = useOptimiste([realTarget, etatSt].join('|'));
+  // L'écho d'un appui plus ancien n'efface pas l'avance d'un appui plus récent (audit du 12/11, B29) : HA doit ATTEINDRE la consigne envoyée.
+  const avanceAtteinte = (v) => realTarget != null && Number(v) === Number(realTarget);
+  const [ov, setOv] = useOptimiste([realTarget, etatSt].join('|'), undefined, avanceAtteinte);
   const target = ov != null ? ov : realTarget;
   const reglable = target != null;
   const mode = st ? st.state : 'off';
@@ -230,11 +239,13 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
    * une décimale et « ° » (« 20,0° »), dans la police du texte ; « — » sans
    * consigne lisible. Au planning, celle de la pièce (`dec`, 30/10). */
   const consigne = target != null ? nombre(Number(target) - dec, 1) + '°' : '—';
-  const chauffe = enChauffe({ famille: 'thermostat', muet: mort, marche, action: a.hvac_action });
+  // Une tête thermostatique qui ne publie pas son action chauffe tant que sa vanne est ouverte (A10) : le capteur de son appareil.
+  const vanne = vanneDeLAppareil(id, hass && hass.states, LOGGIA_INDEX && LOGGIA_INDEX.entityMeta);
+  const chauffe = enChauffe({ famille: 'thermostat', muet: mort, marche, action: a.hvac_action, vanne });
   const froid = !mort && marche && cooling;
   const eteint = mort || !marche;
   const fenetre = !mort && auPlanning && ch.source === 'fenetre';
-  const sub = mort ? tr('Indisponible')
+  const sub = mort ? phraseMuette(st)
     : auPlanning ? phrasePlanning(ch, etat, Date.now())
       : !marche ? tr('Éteint') : chauffe ? tr('Chauffe') : cooling ? tr('Refroidit')
         : target != null && consigneAtteinte(a.current_temperature, target, mode, uT) ? tr('Consigne atteinte') : tr('Au repos');
@@ -277,7 +288,7 @@ function RoomClimateCard({ id, hass, onOpen, label = null }) {
       <div style={RM_MILIEU}>
         <div style={{ minWidth: 0 }}>
           <div className="o-gab-nom" style={RM_NAME}>{nom}</div>
-          <div className="o-gab-phrase" style={{ ...RM_SUB, color: couleurEtatChauffage({ fenetre, chauffe, froid, eteint }), '--o-n': Math.max(1, String(sub).length) }}>{sub}</div>
+          <div className="o-gab-phrase" style={{ ...RM_SUB, color: couleurEtatChauffage({ muet: mort, fenetre, chauffe, froid, eteint }), '--o-n': Math.max(1, String(sub).length) }}>{sub}</div>
         </div>
         <TemperaturePiece v={piece} eteint={eteint} />
       </div>
@@ -437,7 +448,9 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
   const S = (hass && hass.states) || null;
   const z = readZone(S, zone);
   const uT = uniteTemp(null, hass);
-  const [ov, setOv] = useOptimiste([z.target, z.mode].join('|'));
+  // Comme le thermostat (audit du 12/11, B29) : seule la consigne envoyée, une fois relue, lève l'avance.
+  const zoneAtteinte = (v) => z.target != null && Number(v) === Number(z.target);
+  const [ov, setOv] = useOptimiste([z.target, z.mode].join('|'), undefined, zoneAtteinte);
   /* Pas de 19 invente (audit du 03/10) : un `input_number` absent ou
    * indisponible laisse la consigne VIDE — « — » et des boutons inertes —
    * au lieu d'afficher 19 et d'envoyer 19,5 au premier « + ». Sans entite
@@ -525,7 +538,8 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
    * l'état du moteur pas encore lu, rien : la carte n'en sait rien (une
    * espace insécable garde la ligne ; `nomCarte` ne la lit pas) — relecture
    * de la partie B. Une zone décrite à la main garde ses mots. */
-  const sub = mort ? tr('Indisponible')
+  // Muette, depuis quand se tait ce qui la rend muette : le `select` d'un module, sinon le thermostat de la zone (`chauffeDeZone`).
+  const sub = mort ? phraseMuette(S && S[zone.decouvert ? zone.modeEnt : zone.haid])
     : !estModule ? (chauffe ? tr('Chauffe') : etatCarte === 'eteint' ? tr('Éteint') : tr('Au repos'))
       : auPlanning ? phrasePlanning(ch, etat, Date.now())
         : chauffe ? tr('Chauffe') : etatCarte === 'eteint' ? tr('Éteint')
@@ -564,7 +578,7 @@ function RoomPilotCard({ zone, hass, onOpen, titre = null }) {
       <div style={RM_MILIEU}>
         <div style={{ minWidth: 0 }}>
           <div className="o-gab-nom" style={RM_NAME}>{nom}</div>
-          <div className="o-gab-phrase" style={{ ...RM_SUB, color: couleurEtatChauffage({ fenetre, chauffe, eteint }), '--o-n': Math.max(1, String(sub).length) }}>{sub}</div>
+          <div className="o-gab-phrase" style={{ ...RM_SUB, color: couleurEtatChauffage({ muet: mort, fenetre, chauffe, eteint }), '--o-n': Math.max(1, String(sub).length) }}>{sub}</div>
         </div>
         <TemperaturePiece v={piece} eteint={eteint} />
       </div>
@@ -590,7 +604,9 @@ function RoomPilotSheet({ zone, hass, onClose }) {
   const S = (hass && hass.states) || null;
   const z = readZone(S, zone);
   const uT = uniteTemp(null, hass);
-  const [ov, setOv] = useOptimiste([z.target, z.mode, z.auto].join('|'));
+  // Comme la carte (audit du 12/11, B29) : seule la consigne envoyée, une fois relue, lève l'avance.
+  const zoneAtteinte = (v) => z.target != null && Number(v) === Number(z.target);
+  const [ov, setOv] = useOptimiste([z.target, z.mode, z.auto].join('|'), undefined, zoneAtteinte);
   // Meme regle que la carte (audit du 03/10) : pas de 19 invente, ni au
   // cadran ni dans l'appel du premier « + ».
   const target = ov != null ? ov : (z.target != null ? z.target : null);
@@ -617,7 +633,7 @@ function RoomPilotSheet({ zone, hass, onClose }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <NomFeuille><span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, letterSpacing: '.06em', color: 'var(--o-text2)' }}><Fi i="thermometer-half" size={13} color="var(--o-orange)" />{zone.name.toUpperCase()}</span></NomFeuille>
           {estClimate(zone) && <BoutonEpingle id={zone.haid} />}
-          {zone.autoEnt && <span onClick={() => call('input_boolean', z.auto ? 'turn_off' : 'turn_on', { entity_id: zone.autoEnt })} role="switch" tabIndex={0} aria-label={z.auto ? tr('Désactiver la programmation automatique') : tr('Activer la programmation automatique')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('input_boolean', z.auto ? 'turn_off' : 'turn_on', { entity_id: zone.autoEnt }); } }} aria-checked={!!z.auto} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}><span style={{ fontSize: 12, fontWeight: 700, color: z.auto ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>{tr('Auto')}</span><span style={{ width: 42, height: 24, borderRadius: 14, background: z.auto ? 'var(--o-accent-fond)' : 'var(--o-bd1)', position: 'relative', transition: 'background .25s' }}><span style={{ position: 'absolute', top: 3, left: z.auto ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)' }} /></span></span>}
+          {zone.autoEnt && <span onClick={() => call('input_boolean', z.auto ? 'turn_off' : 'turn_on', { entity_id: zone.autoEnt })} role="switch" tabIndex={0} aria-label={z.auto ? tr('Désactiver la programmation automatique') : tr('Activer la programmation automatique')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); call('input_boolean', z.auto ? 'turn_off' : 'turn_on', { entity_id: zone.autoEnt }); } }} aria-checked={!!z.auto} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}><span style={{ fontSize: 12, fontWeight: 700, color: z.auto ? 'var(--o-accent-soft)' : 'var(--o-text3)' }}>{tr('Auto')}</span><span style={railBascule(!!z.auto)}><span style={rondBascule(!!z.auto)} /></span></span>}
           <CroixFeuille />
         </div>
         <div className={mort ? 'o-panne' : undefined} style={{ position: 'relative', width: 230, height: 230, margin: '10px auto 0', borderRadius: mort ? '50%' : undefined }}>

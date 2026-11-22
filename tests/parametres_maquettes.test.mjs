@@ -55,6 +55,22 @@ test('la pastille Ko-fi d’« À propos » reste telle quelle', () => {
   assert.ok(APROPOS.includes('<path d="M3 6.6h13v6.6a6.5 6.5 0 0 1-13 0z" fill="#fff" />'), 'la tasse dessinée a disparu');
 });
 
+test('le projet : deux boutons sous le titre, aux deux formats, et rien ne part vers GitHub avant le geste', () => {
+  // Son choix du 08/11 : deux petits carrés gris plus bas que l'écran, « ça saute pas aux yeux ».
+  assert.equal(APROPOS.split('<BoutonsProjet ').length - 1, 2, 'un format n’a pas ses boutons');
+  const pc = APROPOS.indexOf("<Panneau titre={tr('Le projet')}");
+  const tel = APROPOS.indexOf("<CarteTel titre={tr('Le projet')}");
+  assert.ok(pc !== -1 && pc < APROPOS.indexOf("<Panneau titre={tr('Installation')}"), 'à l’ordinateur : sous le titre, avant l’installation');
+  assert.ok(tel !== -1 && tel < APROPOS.indexOf('alerter={alerter} tel />'), 'au téléphone : sous la carte du nom, avant les sauvegardes');
+  const boutons = entre(PAR, 'function BoutonsProjet', '/* La pastille Ko-fi');
+  // « Signaler » mène au formulaire, dont le modèle existe bien.
+  assert.ok(boutons.includes('https://github.com/Alardware/loggia/issues/new?template=probleme.yml'), 'le bouton ne mène plus au formulaire');
+  assert.ok(lire('.github', 'ISSUE_TEMPLATE', 'probleme.yml').startsWith('name:'), 'le modèle de ticket a disparu');
+  // Le logo est dessiné ici ; le mot reste lisible par la recherche, qui ignore les liens.
+  assert.ok(!boutons.includes('<img') && boutons.includes('<svg'), 'le logo viendrait d’ailleurs');
+  for (const m of ['Signaler un problème', 'Voir le code sur GitHub']) assert.ok(boutons.includes("<span>{tr('" + m + "')}</span>"), m);
+});
+
 test('l’installation tient en quatre lignes (Home Assistant, Socle, Typographie, Cache), la version en tête, la configuration en pied de panneau', () => {
   // Maquette v3 (02/11) : la version se lit en grand avant le panneau.
   assert.ok(APROPOS.includes('{inst.version && <span'), 'la version a disparu de l’en-tête d’À propos');

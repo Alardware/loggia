@@ -127,7 +127,7 @@ test('la taille : compacte (une rangee de 88 px) ou standard (deux), rangee dans
   const dc = bloc('function useDomainCards(', NL + '}');
   /* ASSERTION MODIFIÉE (étape 3 IoT, 25/10 ; I31) : une vanne, large ou compacte, passe aussi par `CvCard`, qui lui donne SA carte (chargée
    * à la demande) — avant la carte d'une prise, pour une prise désignée comme vanne ; la compacte reste `CvCard` dense. */
-  assert.ok(dc.includes('const compact = (id, label = null) => card(id, label, null, true);') && dc.includes("if (chip || estVanneCarte(k)) return <CvCard id={id} hass={hass} label={label} onOpen={ouvrir} dense={chip} />;") && dc.includes('return { card, compact, nom, plante, distributeur, sheets, fermer, ouvrir };'), 'la compacte passe par la fabrique : CvCard dense pour une entite, la chip du distributeur ou de la plante sinon');
+  assert.ok(dc.includes('const compact = (id, label = null) => card(id, label, null, true);') && dc.includes("if (chip || estVanneCarte(k)) return <M.entite id={id} hass={hass} minute={minute} label={label} onOpen={ouvrir} dense={chip} />;") /* ASSERTION MODIFIÉE (19/11, ADR 0377) : la carte protégée */ && dc.includes('return { card, compact, nom, plante, distributeur, sheets, fermer, ouvrir };'), 'la compacte passe par la fabrique : CvCard dense pour une entite, la chip du distributeur ou de la plante sinon');
   const c = bloc('function EditableCard(', NL + '}');
   assert.ok(c.includes("compact ? 'o-cvrow1' : ''") && c.includes('if (compact) {') && c.includes("minHeight: 0, height: '100%'"), 'la carte d’edition compacte tient sur une rangee');
   assert.ok(c.includes("brut.indexOf('zone:') !== 0") && c.includes('taille && !!ed.basculerCompact'), 'pas de compacte pour une zone fil pilote, ni la ou la vue n’en offre pas');
@@ -136,7 +136,8 @@ test('la taille : compacte (une rangee de 88 px) ou standard (deux), rangee dans
   // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 8 ; C28) : la vigilance météo aussi.
   // ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 11 ; C32) : et la carte Piles.
   // ASSERTION MODIFIÉE (30/10, G3-E3) : la borne de recharge aussi.
-  assert.equal((bloc('function useDomainCards(', NL + '}').match(/chip=\{chip\}/g) || []).length, 6, 'distributeur, plantes, piles, groupes, vigilance et borne prennent leur compacte, dans la fabrique commune');
+  // ASSERTION MODIFIÉE (21/11, ADR 0386) : la voiture, la litière et la fontaine aussi.
+  assert.equal((bloc('function useDomainCards(', NL + '}').match(/chip=\{chip\}/g) || []).length, 7, 'distributeur, plantes, piles, groupes, vigilance, borne et appareils composés prennent leur compacte, dans la fabrique commune');
   assert.ok(obj.includes('className="grid-objets grid-dense"') && obj.includes("(ed.estCompact(o.cle) ? 'o-cvrow1' : '')"), 'la grille d’Objets est dense, la compacte y prend une rangee');
   const en = bloc('function EnergieContent(', NL + 'function ');
   assert.ok(en.includes('taille={false}'), 'les postes d’Energie n’ont pas de compacte');

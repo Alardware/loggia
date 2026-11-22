@@ -216,9 +216,9 @@ def creer(module, store_module, regles_module):
     faits = []
 
     def fabrique(cfg=None, table=None, reprises=None, maintenant=LUNDI_0700, registre=REGISTRE,
-                 temperature_unit="°C"):
+                 temperature_unit="°C", partage=None):
         magasin = store_module.LoggiaStore.__new__(store_module.LoggiaStore)
-        magasin._store = FauxStore({"users": {}, "shared": {"loggia_chauffage": cfg or {}}, "migrated": True})
+        magasin._store = FauxStore({"users": {}, "shared": {"loggia_chauffage": cfg or {}, **(partage or {})}, "migrated": True})
         magasin._ancien = FauxStore(None)
         magasin._data = None
         magasin._lock = asyncio.Lock()
@@ -239,9 +239,13 @@ def creer(module, store_module, regles_module):
         m._verifications = {}
         # Le pas revele, les ordres defaits, les programmes ecoutes (30/10).
         m._pas, m._defaits, m._programmes = {}, {}, {}
+        # Les thermostats eteints d'eux-memes, et ceux deja a leur consigne (ADR 0375).
+        m._extinctions, m._au_chaud = {}, set()
         m._minuteur = m._ecoute = m._au_demarrage = None
         m._arrete = False
         m._depot = FauxStore(None)
+        # Les montees en temperature (ADR 0340).
+        m.montees, m._depot_montees = {"en_cours": {}, "montees": {}}, FauxStore(None)
         m._registre_dit = False
         m._verrou = asyncio.Lock()
         faux = FauxRegistre(list(registre))
@@ -1109,6 +1113,16 @@ def test_un_ordre_perdu_deux_fois_se_dit_jusqu_a_ce_qu_un_ordre_tienne(creer, rd
     assert "ordre_defait" not in poele["avertissements"] and poele["defait"] is None
 
 
+def test_l_etat_publie_le_pas_appris(creer):
+    """La jauge de la fiche cale ses crans sur le pas qu'un appareil a REVELE sans en publier (17/11) ; None avant."""
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat")), ("id-rad", chauffage(RAD, "fil_pilote"))))
+    etat = {c["cle"]: c for c in lancer(m.async_etat())["chauffages"]}
+    assert (etat["id-poele"]["pas"], etat["id-rad"]["pas"]) == (None, None)
+    m._pas[POELE] = 1.0
+    etat = {c["cle"]: c for c in lancer(m.async_etat())["chauffages"]}
+    assert (etat["id-poele"]["pas"], etat["id-rad"]["pas"]) == (1.0, None)
+
+
 def test_sans_decalage_l_etat_dit_zero(creer):
     m = creer(config(("id-poele", chauffage(POELE, "thermostat")), ("id-rad", chauffage(RAD, "fil_pilote"))))
     etat = {c["cle"]: c for c in lancer(m.async_etat())["chauffages"]}
@@ -1323,14 +1337,160 @@ def test_repasser_la_pompe_a_chaleur_en_chauffe_a_la_main_est_un_geste(creer):
     assert m.reprises["id-pac"]["temperature"] == 21.0
 
 
-def test_un_poele_vraiment_eteint_reste_un_geste(creer):
+def test_un_poele_vraiment_eteint_reste_un_geste(creer, module):
+    """ASSERTION MODIFIEE (ADR 0375) : eteint sans qu'une personne de Home Assistant
+    l'ait demande, il peut s'eteindre de lui-meme. Le moteur attend, sans le rallumer ;
+    toujours eteint au bout de l'attente, c'est un geste — jusqu'au prochain changement."""
     m = creer(config(("id-poele", chauffage(POELE, "thermostat"))), etats(poele_t=20))
     allume = FauxEtat("heat", {**ATTRS_POELE, "temperature": 20, "hvac_action": "heating"})
     eteint = FauxEtat("off", {**ATTRS_POELE, "temperature": 20, "hvac_action": "off"})
     m.hass.states.table[POELE] = eteint
     m._sur_etat(Evenement(POELE, allume, eteint))
     m.hass.executer()
-    assert m.reprises["id-poele"]["mode"] == "arret"
+    assert m.reprises == {}, "pas encore : il s'eteint peut-etre de lui-meme"
+    assert m.hass.services.appels == [], "ni rallume pendant qu'il s'eteint"
+    assert m.prochain_reveil(m.horloge) == LUNDI_0700 + module.ATTENTE_EXTINCTION, "le moteur se reveille a la fin"
+    m.horloge = LUNDI_0700 + module.ATTENTE_EXTINCTION
+    lancer(m.async_evaluer())
+    r = m.reprises["id-poele"]
+    assert (r["mode"], r["fin"]) == ("arret", paris(2026, 10, 12, 8, 30).isoformat())
+    assert m.hass.services.appels == []
+    assert ("main", "reprise en main", "jusqu’à 08:30", "geste fait ailleurs") in journal(m)
+
+
+# ── Eteint de lui-meme, ou deja a sa consigne (ADR 0375) ─────────────────────
+
+def poele_rallume_par_le_planning(m):
+    """Le poele eteint, piece froide : le planning (Confort, 20 °C) l'allume, et il le confirme."""
+    lancer(m.async_evaluer())
+    assert m.hass.services.appels == [("climate", "set_hvac_mode", {"entity_id": [POELE], "hvac_mode": "heat"}),
+                                      ("climate", "set_temperature", {"entity_id": [POELE], "temperature": 20.0})]
+    allume = FauxEtat("heat", {**ATTRS_POELE, "temperature": 20, "hvac_action": "heating", "current_temperature": 18})
+    vieux, m.hass.states.table[POELE] = m.hass.states.table[POELE], allume
+    m._sur_etat(Evenement(POELE, vieux, allume, m.hass.services.contextes[0]))
+    m.hass.executer()
+    return allume
+
+
+def test_un_poele_qui_s_eteint_de_lui_meme_puis_se_met_en_veille_n_est_pas_un_geste(creer, module):
+    """18/11, chez lui : le planning rallume le poele a 14:33 ; a 14:39 il s'eteint seul
+    (sa consigne depassee), publie `off` pendant l'extinction et le refroidissement, puis
+    repart en veille a 14:58 (`heat`, `idle`). Chaque passage devenait « reprise en main ·
+    geste fait ailleurs » : « Manuel jusqu'a 18:00 », qu'il ne comprenait pas. Rien de tout
+    cela n'est un geste, et rien ne part vers lui pendant qu'il s'eteint."""
+    table = etats(poele="off", poele_t=17)
+    table[POELE] = FauxEtat("off", {**ATTRS_POELE, "temperature": 17, "hvac_action": "off", "current_temperature": 18})
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat"))), table)
+    allume = poele_rallume_par_le_planning(m)
+    eteint = FauxEtat("off", {**ATTRS_POELE, "temperature": 20, "hvac_action": "off", "current_temperature": 21})
+    m.horloge = LUNDI_0700 + timedelta(minutes=6)
+    m.hass.states.table[POELE] = eteint
+    m._sur_etat(Evenement(POELE, allume, eteint))
+    m.hass.executer()
+    assert m.reprises == {}
+    assert len(m.hass.services.appels) == 2, "pas rallume pendant qu'il s'eteint"
+    assert [e for e in journal(m) if e[1:4:2] == ("retenu", module.ETEINT_SEUL)], journal(m)
+    poele = next(c for c in lancer(m.async_etat())["chauffages"] if c["cle"] == "id-poele")
+    assert "eteint_seul" in poele["avertissements"] and poele["source"] == "planning"
+    veille = FauxEtat("heat", {**ATTRS_POELE, "temperature": 20, "hvac_action": "idle", "current_temperature": 21})
+    m.horloge = LUNDI_0700 + timedelta(minutes=25)
+    m.hass.states.table[POELE] = veille
+    m._sur_etat(Evenement(POELE, eteint, veille))
+    m.hass.executer()
+    assert m.reprises == {} and m._extinctions == {}, "reparti seul, la ou le planning le veut"
+    assert len(m.hass.services.appels) == 2
+    poele = next(c for c in lancer(m.async_etat())["chauffages"] if c["cle"] == "id-poele")
+    assert "eteint_seul" not in poele["avertissements"]
+
+
+def test_eteint_par_une_personne_de_home_assistant_c_est_aussitot_un_geste(creer):
+    Context = sys.modules["homeassistant.core"].Context
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat"))), etats(poele_t=20))
+    allume = FauxEtat("heat", {**ATTRS_POELE, "temperature": 20, "hvac_action": "heating"})
+    eteint = FauxEtat("off", {**ATTRS_POELE, "temperature": 20, "hvac_action": "off"})
+    m.hass.states.table[POELE] = eteint
+    m._sur_etat(Evenement(POELE, allume, eteint, Context(user_id="u-1")))
+    m.hass.executer()
+    assert m.reprises["id-poele"]["mode"] == "arret" and m.reprises["id-poele"]["par"] == "u-1"
+    assert m._extinctions == {}
+
+
+def test_un_changement_du_planning_pendant_l_attente_clot_l_affaire_sans_geste(creer):
+    """Eteint a 08:00 ; le planning passe en Eco a 08:30. Une reprise aurait fini a 08:30 :
+    a la fin de l'attente (08:45), toujours eteint, le planning s'applique, sans reprise."""
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat"))), etats(poele_t=20),
+              maintenant=paris(2026, 10, 12, 8))
+    allume = FauxEtat("heat", {**ATTRS_POELE, "temperature": 20, "hvac_action": "heating"})
+    eteint = FauxEtat("off", {**ATTRS_POELE, "temperature": 20, "hvac_action": "off"})
+    m.hass.states.table[POELE] = eteint
+    m._sur_etat(Evenement(POELE, allume, eteint))
+    m.hass.executer()
+    m.horloge = paris(2026, 10, 12, 8, 30)
+    lancer(m.async_evaluer())
+    assert m.hass.services.appels == [], "08:30 : il attend encore"
+    m.horloge = paris(2026, 10, 12, 8, 45)
+    lancer(m.async_evaluer())
+    assert m.reprises == {}
+    assert m.hass.services.appels == [("climate", "set_hvac_mode", {"entity_id": [POELE], "hvac_mode": "heat"}),
+                                      ("climate", "set_temperature", {"entity_id": [POELE], "temperature": 17.0})]
+
+
+def test_reprendre_le_planning_pendant_l_attente_l_applique_aussitot(creer):
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat"))), etats(poele_t=20))
+    allume = FauxEtat("heat", {**ATTRS_POELE, "temperature": 20, "hvac_action": "heating"})
+    eteint = FauxEtat("off", {**ATTRS_POELE, "temperature": 20, "hvac_action": "off"})
+    m.hass.states.table[POELE] = eteint
+    m._sur_etat(Evenement(POELE, allume, eteint))
+    m.hass.executer()
+    lancer(m.async_rendre_au_planning("id-poele"))
+    assert m._extinctions == {}
+    assert m.hass.services.appels[0] == ("climate", "set_hvac_mode", {"entity_id": [POELE], "hvac_mode": "heat"})
+
+
+def test_un_geste_qui_le_met_la_ou_le_planning_le_veut_n_est_pas_une_reprise(creer):
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat"))), etats(poele_t=17))
+    vieux = FauxEtat("heat", {**ATTRS_POELE, "temperature": 17})
+    neuf = FauxEtat("heat", {**ATTRS_POELE, "temperature": 20})
+    m.hass.states.table[POELE] = neuf
+    m._sur_etat(Evenement(POELE, vieux, neuf))
+    m.hass.executer()
+    assert m.reprises == {}, "Confort, 20 °C : c'est deja le planning"
+
+
+def test_eteint_et_deja_a_sa_consigne_le_planning_ne_l_allume_pas(creer, module):
+    """Sa mesure a 30 °C pour un Confort a 20 : l'allumer, c'est un allumage pour rien.
+    Il attend ; sa mesure sous la consigne, le planning l'allume."""
+    table = etats()
+    froid = {**ATTRS_POELE, "temperature": 17, "hvac_action": "off"}
+    table[POELE] = FauxEtat("off", {**froid, "current_temperature": 30})
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat"))), table)
+    lancer(m.async_evaluer())
+    lancer(m.async_evaluer())
+    assert m.hass.services.appels == []
+    assert sum(1 for e in journal(m) if e[1:4:2] == ("retenu", module.DEJA_CHAUD)) == 1, f"dit une fois : {journal(m)}"
+    poele = next(c for c in lancer(m.async_etat())["chauffages"] if c["cle"] == "id-poele")
+    assert "deja_chaud" in poele["avertissements"]
+    vieux, neuf = table[POELE], FauxEtat("off", {**froid, "current_temperature": 20.5})
+    m.hass.states.table[POELE] = neuf
+    m._sur_etat(Evenement(POELE, vieux, neuf))
+    m.hass.executer()
+    assert m.hass.services.appels == [], "20,5 °C : toujours au-dessus"
+    vieux, neuf = neuf, FauxEtat("off", {**froid, "current_temperature": 19.5})
+    m.hass.states.table[POELE] = neuf
+    m._sur_etat(Evenement(POELE, vieux, neuf))
+    m.hass.executer()
+    assert m.hass.services.appels == [("climate", "set_hvac_mode", {"entity_id": [POELE], "hvac_mode": "heat"}),
+                                      ("climate", "set_temperature", {"entity_id": [POELE], "temperature": 20.0})]
+    assert m._au_chaud == set()
+
+
+def test_une_reprise_demandee_a_loggia_allume_meme_deja_au_chaud(creer):
+    table = etats()
+    table[POELE] = FauxEtat("off", {**ATTRS_POELE, "temperature": 17, "hvac_action": "off", "current_temperature": 30})
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat"))), table)
+    lancer(m.async_reprendre_la_main("id-poele", temperature=22))
+    assert m.hass.services.appels == [("climate", "set_hvac_mode", {"entity_id": [POELE], "hvac_mode": "heat"}),
+                                      ("climate", "set_temperature", {"entity_id": [POELE], "temperature": 22.0})]
 
 
 @pytest.mark.parametrize("automatique", ["safety", "security", "power"])
@@ -1803,7 +1963,15 @@ def test_ce_qu_un_vtherm_commande_n_est_pas_un_chauffage_de_plus(creer):
 @pytest.fixture
 def enregistreur(monkeypatch):
     """`homeassistant.components.recorder`, comme le vrai (modele : test_prises.py)."""
-    h = types.SimpleNamespace(etats=[], demandes=[])
+    h = types.SimpleNamespace(etats=[], demandes=[], sonde=[], panne=False)
+
+    def get_significant_states(hass, debut, fin=None, entity_ids=None, filters=None, include_start_time_state=True,
+                               significant_changes_only=True, minimal_response=False, no_attributes=False,
+                               compressed_state_format=False):
+        if h.panne:
+            raise RuntimeError("enregistreur en panne")
+        h.sonde.append((debut, fin, entity_ids, include_start_time_state, significant_changes_only, no_attributes))
+        return {entity_ids[0]: list(h.etats)}
 
     def state_changes_during_period(hass, debut, fin, entity_id, no_attributes=False, descending=False,
                                     limit=None, include_start_time_state=True):
@@ -1816,7 +1984,8 @@ def enregistreur(monkeypatch):
 
     recorder = types.ModuleType("homeassistant.components.recorder")
     recorder.get_instance = lambda _hass: Instance()
-    recorder.history = types.SimpleNamespace(state_changes_during_period=state_changes_during_period)
+    recorder.history = types.SimpleNamespace(state_changes_during_period=state_changes_during_period,
+                                             get_significant_states=get_significant_states)
     monkeypatch.setitem(sys.modules, "homeassistant.components.recorder", recorder)
     return h
 
@@ -2815,3 +2984,287 @@ def test_au_passage_au_reel_le_moteur_rend_ce_que_la_regle_avait_coupe(creer):
     assert m.hass.services.appels[avant:] == [("select", "select_option", {"entity_id": [RAD], "option": "comfort"})]
     assert ("planning", "Confort") in [ligne[:2] for ligne in journal(m)], "c'est le moteur qui l'a rendu"
     assert f.coupes == {} and not m.regles.tient("fenetres", "fenetre", RAD), "la tenue de la regle est lachee"
+
+
+# ── Les montees en temperature (ADR 0340) ───────────────────────────────────
+
+CAPTEUR = "sensor.bureau_temperature"
+LUNDI_0630 = paris(2026, 10, 12, 6, 30)
+LUNDI_0830 = paris(2026, 10, 12, 8, 30)
+ZONE_SONDE = {"loggia_climate": [{"modeEnt": RAD, "tempSensor": CAPTEUR}]}
+
+
+def table_montee(rad="eco"):
+    return {**etats(rad=rad), CAPTEUR: FauxEtat("17.0", {"unit_of_measurement": "°C", "device_class": "temperature",
+                                                         "friendly_name": "Capteur bureau"})}
+
+
+def montee_prete(creer, simulation=False, partage=ZONE_SONDE, horloge=LUNDI_0630):
+    return creer(config(("id-rad", chauffage(RAD, "fil_pilote")), simulation=simulation), table_montee(),
+                 partage=partage, maintenant=horloge)
+
+
+def test_les_montees_d_un_chauffage_retire_sont_oubliees(creer):
+    m = montee_prete(creer)
+    bonne = {"debut": LUNDI_0630.isoformat(), "de": "eco", "a": "confort", "t0": 17.0, "gain": 1.0, "duree": 60,
+             "pour_un_degre": 60, "ext": None}
+    m._depot_montees = FauxStore({"en_cours": {}, "montees": {"id-rad": [bonne], "id-perdu": [bonne]}})
+    lancer(m._lire_montees())
+    assert list(m.montees["montees"]) == ["id-rad"]
+    assert list(m._depot_montees.contenu["montees"]) == ["id-rad"], "le fichier est nettoye"
+
+
+def test_un_fichier_de_montees_illisible_n_empeche_pas_le_moteur(creer):
+    m = montee_prete(creer)
+
+    class Casse:
+        async def async_load(self):
+            raise OSError("illisible")
+
+    m._depot_montees = Casse()
+    lancer(m._lire_montees())
+    assert m.montees == {"en_cours": {}, "montees": {}}
+
+
+def test_le_passage_du_planning_a_un_mode_plus_chaud_ouvre_une_montee(creer, rdv):
+    m = montee_prete(creer)
+    lancer(m.async_evaluer(raison="heure"))
+    assert len(m.hass.services.appels) == 1
+    en_cours = m.montees["en_cours"]["id-rad"]
+    assert (en_cours["de"], en_cours["a"], en_cours["sonde"], en_cours["attribut"]) == ("eco", "confort", CAPTEUR, None)
+    assert charger("chauffage_config").lire_instant(en_cours["fin_prevue"]) == LUNDI_0830
+    assert "id-rad" in m._depot_montees.contenu["en_cours"], "elle survit a un redemarrage"
+
+
+def test_pas_de_montee_en_observation(creer, rdv):
+    m = montee_prete(creer, simulation=True)
+    lancer(m.async_evaluer(raison="heure"))
+    assert m.hass.services.appels == [] and m.montees["en_cours"] == {}
+
+
+def test_pas_de_montee_vers_un_mode_plus_froid(creer, rdv):
+    m = creer(config(("id-rad", chauffage(RAD, "fil_pilote"))), table_montee(rad="comfort"), partage=ZONE_SONDE,
+              maintenant=LUNDI_0830)
+    lancer(m.async_evaluer(raison="heure"))
+    assert len(m.hass.services.appels) == 1 and m.montees["en_cours"] == {}
+
+
+def test_pas_de_montee_sur_un_ordre_refuse(creer, rdv):
+    m = montee_prete(creer)
+    m.hass.services.refus = 1
+    lancer(m.async_evaluer(raison="heure"))
+    assert m.hass.services.appels == [] and m.montees["en_cours"] == {}
+
+
+def test_un_ordre_loin_du_changement_n_ouvre_pas_de_montee(creer, rdv):
+    m = montee_prete(creer, horloge=LUNDI_0630 + timedelta(minutes=6))
+    lancer(m.async_evaluer(raison="heure"))
+    assert len(m.hass.services.appels) == 1 and m.montees["en_cours"] == {}
+
+
+def test_sans_sonde_pas_de_montee_mais_l_ordre_part(creer, rdv):
+    m = montee_prete(creer, partage=None)
+    lancer(m.async_evaluer(raison="heure"))
+    assert len(m.hass.services.appels) == 1 and m.montees["en_cours"] == {}
+
+
+def test_une_panne_de_la_mesure_ne_touche_pas_a_l_ordre(creer, rdv, monkeypatch):
+    m = montee_prete(creer)
+
+    async def panne(*_a):
+        raise RuntimeError("magasin")
+
+    monkeypatch.setattr(m, "_sonde_de", panne)
+    lancer(m.async_evaluer(raison="heure"))
+    assert len(m.hass.services.appels) == 1 and m.montees["en_cours"] == {}
+
+
+def test_la_sonde_vient_de_la_piece_loggia(creer, monkeypatch):
+    registre = [*REGISTRE, Entree(CAPTEUR, "id-cap", device_id="d-cap")]
+    monkeypatch.setattr(sys.modules["homeassistant.helpers.area_registry"], "async_get",
+                        lambda _h: types.SimpleNamespace(areas={"a1": types.SimpleNamespace(name="Bureau")}))
+    monkeypatch.setattr(sys.modules["homeassistant.helpers.device_registry"], "async_get",
+                        lambda _h: types.SimpleNamespace(async_get=lambda _i: types.SimpleNamespace(area_id="a1")))
+    m = creer(config(("id-rad", chauffage(RAD, "fil_pilote"))), table_montee(), maintenant=LUNDI_0630, registre=registre,
+              partage={"loggia_rooms": [{"room": " bureau ", "haid": {"temp": CAPTEUR}}]})
+    assert lancer(m._sonde_de(m.cfg["chauffages"]["id-rad"], RAD)) == {"sonde": CAPTEUR, "attribut": None}
+
+
+def test_l_exterieur_vient_de_la_meteo_choisie_en_celsius(creer):
+    table = {**table_montee(), "weather.maison": FauxEtat("sunny", {"temperature": 50, "temperature_unit": "°F"})}
+    m = creer(config(("id-rad", chauffage(RAD, "fil_pilote"))), table, partage={"loggia_weather": "weather.maison"})
+    assert lancer(m._exterieur()) == 10.0
+
+
+def montee_ouverte(creer):
+    m = montee_prete(creer)
+    lancer(m.async_evaluer(raison="heure"))
+    m.hass.states.table[RAD] = FauxEtat("comfort", {"options": NODON})
+    assert "id-rad" in m.montees["en_cours"]
+    return m
+
+
+def point_sonde(valeur, instant):
+    return types.SimpleNamespace(state=str(valeur), last_updated=instant, attributes={})
+
+
+COURBE = [(17.0, LUNDI_0630 - timedelta(minutes=10)), (18.5, LUNDI_0630 + timedelta(minutes=60))]
+
+
+def test_la_fin_du_creneau_resume_la_montee(creer, enregistreur, rdv):
+    m = montee_ouverte(creer)
+    enregistreur.etats = [point_sonde(*p) for p in COURBE]
+    m.horloge = LUNDI_0830
+    lancer(m.async_evaluer(raison="heure"))
+    assert m.montees["en_cours"] == {}
+    m.hass.executer()
+    [r] = m.montees["montees"]["id-rad"]
+    assert (r["de"], r["a"], r["t0"], r["gain"], r["duree"], r["pour_un_degre"]) == ("eco", "confort", 17.0, 1.5, 120, 40)
+    assert "id-rad" in m._depot_montees.contenu["montees"]
+    debut, fin, ids, depart, significatifs, sans_attributs = enregistreur.sonde[0]
+    assert (fin, ids, depart, significatifs, sans_attributs) == (LUNDI_0830, [CAPTEUR], False, False, True)
+    assert debut == LUNDI_0630 - timedelta(hours=3)
+
+
+def test_un_thermostat_se_mesure_sur_son_attribut(creer, enregistreur, rdv):
+    table = {**etats(), POELE: FauxEtat("heat", {**ATTRS_POELE, "temperature": 17, "current_temperature": 16.5})}
+    m = creer(config(("id-poele", chauffage(POELE, "thermostat"))), table, maintenant=LUNDI_0630)
+    lancer(m.async_evaluer(raison="heure"))
+    assert m.montees["en_cours"]["id-poele"]["attribut"] == "current_temperature"
+    m.hass.states.table[POELE] = FauxEtat("heat", {**ATTRS_POELE, "temperature": 20, "current_temperature": 17.5})
+    enregistreur.etats = [types.SimpleNamespace(state="heat", last_updated=t, attributes={"current_temperature": v}) for v, t in COURBE]
+    m.horloge = LUNDI_0830
+    lancer(m.async_evaluer(raison="heure"))
+    m.hass.executer()
+    assert m.montees["montees"]["id-poele"][0]["gain"] == 1.5
+    assert enregistreur.sonde[0][5] is False, "les attributs sont lus"
+
+
+def test_mesurer_n_ajoute_aucun_appel_de_service(creer, enregistreur, rdv):
+    enregistreur.etats = [point_sonde(*p) for p in COURBE]
+
+    def jouer(partage):
+        m = montee_prete(creer, partage=partage)
+        lancer(m.async_evaluer(raison="heure"))
+        m.hass.states.table[RAD] = FauxEtat("comfort", {"options": NODON})
+        m.horloge = LUNDI_0830
+        lancer(m.async_evaluer(raison="heure"))
+        m.hass.executer()
+        return m.hass.services.appels
+
+    assert jouer(ZONE_SONDE) == jouer(None)
+
+
+def _motif_fenetre(m):
+    lancer(m.async_fenetre(RAD, "Bureau", True))
+
+
+def _motif_reprise(m):
+    lancer(m.async_reprendre_la_main("id-rad", mode="eco", fin=60))
+
+
+def _motif_absence(m):
+    lancer(m.async_maison("absence", admin=True))
+
+
+def _motif_planning_eteint(m):
+    lancer(m.async_enregistrer({"chauffages": {"id-rad": {"planning": False}}}))
+
+
+def _motif_observation(m):
+    lancer(m.async_enregistrer({"simulation": {"actif": True}}))
+
+
+def _motif_telecommande(m):
+    m.horloge = LUNDI_0630 + timedelta(minutes=10)
+    m._sur_etat(Evenement(RAD, FauxEtat("comfort", {"options": NODON}), FauxEtat("eco", {"options": NODON})))
+    m.hass.executer()
+
+
+def _motif_muet(m):
+    m._sur_etat(Evenement(RAD, FauxEtat("comfort", {"options": NODON}), FauxEtat("unavailable", {})))
+    m.hass.executer()
+
+
+def _motif_non_confirme(m):
+    m.hass.states.table[RAD] = FauxEtat("eco", {"options": NODON})
+    lancer(m._async_verifier("id-rad", m._ordres["id-rad"]))
+
+
+@pytest.mark.parametrize("motif", [_motif_fenetre, _motif_reprise, _motif_absence, _motif_planning_eteint, _motif_observation,
+                                   _motif_telecommande, _motif_muet, _motif_non_confirme], ids=lambda f: f.__name__)
+def test_une_montee_derangee_est_ecartee_sans_trace(creer, rdv, motif):
+    m = montee_ouverte(creer)
+    motif(m)
+    assert m.montees["en_cours"] == {} and m.montees["montees"] == {}
+    assert m._depot_montees.contenu["en_cours"] == {}
+
+
+def test_juste_apres_un_demarrage_un_module_muet_n_ecarte_pas_la_montee(creer, rdv):
+    m = montee_ouverte(creer)
+    m._demarre_a = m.horloge
+    _motif_muet(m)
+    assert "id-rad" in m.montees["en_cours"]
+
+
+def test_une_montee_survit_au_redemarrage_et_finit_a_l_heure_prevue(creer, enregistreur, rdv):
+    avant = montee_ouverte(creer)
+    apres = montee_prete(creer, horloge=LUNDI_0830 + timedelta(minutes=30))
+    apres._depot_montees = avant._depot_montees
+    lancer(apres._lire_montees())
+    assert "id-rad" in apres.montees["en_cours"]
+    enregistreur.etats = [point_sonde(*p) for p in COURBE]
+    apres.hass.states.table[RAD] = FauxEtat("eco", {"options": NODON})
+    lancer(apres.async_evaluer(raison="redemarrage"))
+    apres.hass.executer()
+    assert apres.montees["montees"]["id-rad"][0]["duree"] == 120, "Home Assistant arrete ne fausse pas la duree"
+    assert enregistreur.sonde[0][1] == LUNDI_0830
+
+
+def test_une_erreur_de_l_historique_ecarte_la_montee_et_rien_d_autre(creer, enregistreur, rdv):
+    m = montee_ouverte(creer)
+    enregistreur.panne = True
+    m.horloge = LUNDI_0830
+    lancer(m.async_evaluer(raison="heure"))
+    m.hass.executer()
+    assert m.montees == {"en_cours": {}, "montees": {}}
+
+
+def montee_lue(n):
+    return {"debut": (LUNDI_0630 + timedelta(days=n)).isoformat(), "de": "eco", "a": "confort", "t0": 17.0, "gain": 1.0,
+            "duree": 60, "pour_un_degre": 60, "ext": None}
+
+
+def test_la_commande_rend_les_cinq_dernieres_montees(creer):
+    m = montee_prete(creer)
+    m.montees["montees"]["id-rad"] = [montee_lue(i) for i in range(7)]
+    r = lancer(m.async_montees("id-rad"))
+    assert (r["chauffage"], r["sonde"], r["nom_sonde"], r["nombre"], r["rythme"]) == ("id-rad", CAPTEUR, "Capteur bureau", 7, 1.0)
+    assert [x["debut"] for x in r["montees"]] == [montee_lue(i)["debut"] for i in (6, 5, 4, 3, 2)]
+    assert r["aujourdhui"] == "2026-10-12"
+
+
+def test_sans_sonde_la_commande_le_dit(creer):
+    m = montee_prete(creer, partage=None)
+    r = lancer(m.async_montees("id-rad"))
+    assert r["sonde"] is None and r["montees"] == [] and r["rythme"] is None
+
+
+def test_les_montees_suivent_les_droits_de_lecture(creer, monkeypatch):
+    m = montee_prete(creer)
+    m.montees["montees"]["id-rad"] = [montee_lue(0)]
+    discovery = charger("discovery")
+    compte = types.SimpleNamespace(is_admin=False)
+    monkeypatch.setattr(discovery, "_lecture_autorisee", lambda user: (lambda haid: False))
+    with pytest.raises(PermissionError):
+        lancer(m.async_montees("id-rad", compte))
+    monkeypatch.setattr(discovery, "_lecture_autorisee", lambda user: (lambda haid: haid == RAD))
+    r = lancer(m.async_montees("id-rad", compte))
+    assert r["sonde"] is None and r["montees"] == [], "une sonde qu'il ne lit pas ne se raconte pas"
+
+
+def test_les_montees_d_un_chauffage_inconnu_se_refusent(creer):
+    m = montee_prete(creer)
+    with pytest.raises(charger("refus").RefusNomme) as e:
+        lancer(m.async_montees("id-perdu"))
+    assert e.value.code == "chauffage_inconnu"

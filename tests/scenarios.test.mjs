@@ -157,7 +157,8 @@ test('l’Accueil : la rangee des scenarios, et « Gerer » cliquable malgre le 
   // Dans l'ordre de CE type d'ecran (ADR 0052) : `sc.tous`.
   assert.ok(a.includes('const liste = scenariosAccueil(sc.tous);'), 'seuls les scenarios cochés « Sur l’Accueil »');
   // ASSERTION MODIFIÉE (05/11, étape 5) : hors édition, la rangée se range par un appui long (`{...ranger}`), chaque carte porte sa clé (`dataId`).
-  assert.ok(a.includes('<CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} dataId={s.id} />'), 'des cartes compactes');
+  // ASSERTION MODIFIÉE (11/11, ADR 0343) : des pastilles, plus des cartes compactes.
+  assert.ok(a.includes('<PastilleScenario key={s.id} s={s} enCours={sc.enCours === s.id} onLancer={sc.lancer} dataId={s.id} />'), 'des pastilles');
   // En edition, `Sec` pose pointer-events none sur le contenu d'une section :
   // le bouton doit se remettre en auto, sinon le clic tombe sur la section
   // et part en glisser (bug vu sur HA le 16/09).
@@ -249,7 +250,8 @@ test('la recherche passe aux scenarios ; les liens sont sondes avec l’Accueil'
    * regarde, elle ne se pilote pas. Elle reçoit les pièces, plus de scénarios. */
   assert.ok(app.includes("<AmbientOverlay rooms={cfg.rooms || []} hass={hass}") && !app.includes('<AmbientOverlay scenes='),
     'la veille reçoit encore des scénarios');
-  assert.ok(app.includes("scenarios().forEach(s => { const nom = nomScenario(s); if (!match(nom)) return; results.push({ group: tr('Scénarios'),"), 'la recherche ⌘K');
+  // ASSERTION MODIFIÉE (13/11, audit du 12/11, lot 2b, B15) : chaque résultat de la recherche porte sa clé de rendu (`cle`).
+  assert.ok(app.includes("scenarios().forEach(s => { const nom = nomScenario(s); if (!match(nom)) return; results.push({ cle: 'sc:' + s.id, group: tr('Scénarios'),"), 'la recherche ⌘K');
   assert.ok(app.includes("const qsKeys = () => scenarios().map(s => s.lien).filter(Boolean);"), 'les scènes et scripts liés sont sondés');
   assert.ok(app.includes("{ label: 'Scénarios', svg: <Fi i=\"sparkles\"") && app.includes("'Scénarios': 'scenes',"), '« Scènes » est devenue « Scénarios », l’identifiant reste');
 });

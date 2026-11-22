@@ -84,8 +84,9 @@ const POINT = {
 
 const TITRE = { fontSize: 13, fontWeight: 800, letterSpacing: '.24em', textTransform: 'uppercase' };
 
-/* Le mot prononcé : la couleur de l'accent, et un halo, comme l'orbe. */
-const MOT_LU = { color: 'var(--o-accent)', textShadow: '0 0 16px rgba(var(--o-accent-rgb), .8)' };
+/* Le mot prononcé : la couleur de l'accent, et un halo, comme l'orbe. C'est un TEXTE : il prend l'accent qui écrit
+ * (`--o-accent-soft`), celui que la garde tient lisible — l'accent qui remplit n'a plus qu'à se voir (audit des thèmes, E4). */
+const MOT_LU = { color: 'var(--o-accent-soft)', textShadow: '0 0 16px rgba(var(--o-accent-rgb), .8)' };
 
 /** Un bouton carré de l'en-tête — `actif` quand ce qu'il ouvre est ouvert. */
 const carre = (actif) => ({

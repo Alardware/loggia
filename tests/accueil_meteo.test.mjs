@@ -175,7 +175,8 @@ test('la carte : les previsions par abonnement, par une reference vivante, et ri
   assert.ok(carte.includes("if (!st || st.state === 'unavailable' || st.state === 'unknown') return null;"));
   assert.ok(carte.includes('{extremes && <div') && carte.includes('{heures.length > 0 && (') && carte.includes('{mode && <span style={{ width: 64, height: 64') && carte.includes('<WeatherIco wx={mode} size={64} /></span>}') && carte.includes('{phrase && <div') && carte.includes('{(pluie.vent != null || astre) && (') && !carte.includes("'—'"), 'un bloc sans donnee ne se dessine pas, et pas de tiret de decor');
   // Sa maquette du 20/10 : « Météo-France forecast for city Sainte-Solange » devient « Sainte-Solange » (nomVille, meteo.js).
-  assert.ok(carte.includes("const nom = nomVille(a.friendly_name) || tr('Météo');") && carte.includes('{nom}</div>'), 'le lieu est le nom de l’entite, jamais une ville en dur');
+  // ASSERTION MODIFIÉE (12/11, audit) : le nom par défaut (« Home », la zone maison) cède à « Météo » ; la zone se lit dans `hass.config`.
+  assert.ok(carte.includes("const nom = nomVille(a.friendly_name, lieuMaison(hass)) || tr('Météo');") && carte.includes('{nom}</div>'), 'le lieu est le nom de l’entite, jamais une ville en dur');
 });
 
 test('la carte : la disposition fournie — le lieu et le chiffre a gauche, le ciel a droite, les heures dessous — aux teintes des autres cartes du rail', () => {

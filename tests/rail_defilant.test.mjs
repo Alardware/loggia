@@ -203,7 +203,8 @@ test('Neumorphix garde son relief dans le rail, en petit (relecture du 04/10)', 
     // Décalage + flou ≤ 7 px : tient dans le rembourrage de la colonne (6 / 8 / 14).
     ombres.forEach(o => { const [x, y, f] = o.match(/-?\d+px/g).map(parseFloat); assert.ok(Math.abs(x) + f <= 7 && Math.abs(y) + f <= 7, o); });
   });
-  assert.ok(r[0].includes('#d3d6e1') && r[0].includes('#ffffff'), 'les teintes du relief clair');
+  // ASSERTION MODIFIÉE (14/11, audit des thèmes, F6) : la teinte de la SOURCE (`neu-shadow-flat`, #dedede) — l'ancienne était bleutée (#d3d6e1).
+  assert.ok(r[0].includes('#dedede') && r[0].includes('#ffffff'), 'les teintes du relief clair');
   assert.ok(r[1].includes('#13161c') && r[1].includes('#2d3340'), 'les teintes du relief sombre');
 });
 

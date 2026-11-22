@@ -13,10 +13,13 @@
  * « Pièce du dehors » (décision D5 du 19/10) : Auto — la règle des noms (`estDehors`, App.jsx) —, Oui ou Non, qui
  * l'emportent ; rangée avec la pièce (`dehors`), dans la configuration de la maison.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { tr } from './i18n.js';
 import { BottomSheet, TitreFeuille, ChampSuggere, Fi } from './ui.jsx';
 import { cfgVal, normRooms } from './state.js';
+
+// « Supprimer » armé : le rouge plein de la feuille d'un profil (parametres.jsx), par-dessus son dessin au repos.
+const SUPPR_ARME = { background: 'var(--o-bad)', color: '#fff' };
 
 export default function FichePiece({ nom = '', hass, compacte: compacteInit = false, onEnregistrer, onSupprimer, onClose, briques }) {
   const { habillagePiece, TEINTES_PIECE, ICONES_PIECE, ChoixIcone, FicheRangee, RmBascule } = briques;
@@ -36,6 +39,10 @@ export default function FichePiece({ nom = '', hass, compacte: compacteInit = fa
   const [lumieres, setLumieres] = useState(Array.isArray(h.lights) ? h.lights.join(', ') : '');
   // « Pièce du dehors » (décision D5) : Auto — la règle des noms (`estDehors`) —, Oui ou Non, qui l'emportent.
   const [dehors, setDehors] = useState(cfg && typeof cfg.dehors === 'boolean' ? cfg.dehors : null);
+  /* Supprimer une pièce partait d'un seul toucher (audit du 12/11, lot 4, I2). Deux appuis, comme la feuille d'un profil :
+   * le premier arme le bouton, rouge plein et « Confirmer ? » ; sans second appui, il se désarme seul au bout de 4 s. */
+  const [armeSuppr, setArmeSuppr] = useState(false);
+  useEffect(() => { if (!armeSuppr) return undefined; const t = setTimeout(() => setArmeSuppr(false), 4000); return () => clearTimeout(t); }, [armeSuppr]);
   const S = (hass && hass.states) || {};
   const capteurs = (classe) => Object.keys(S).filter(id => id.indexOf('sensor.') === 0 && S[id] && S[id].attributes && S[id].attributes.device_class === classe).sort();
   const propre = val.trim();
@@ -112,7 +119,7 @@ export default function FichePiece({ nom = '', hass, compacte: compacteInit = fa
           <div style={note}>{tr('Vide : toutes les lumières de la pièce. Une liste ne vaut que pour le bouton de la carte.')}</div>
 
           <div style={{ display: 'flex', gap: 8, marginTop: 20, alignItems: 'center' }}>
-            {existante && <button onClick={() => { onSupprimer(nom); close(); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)' }}><Fi i="cross-small" size={12} />{tr('Supprimer')}</button>}
+            {existante && <button onClick={() => { if (armeSuppr) { onSupprimer(nom); close(); } else setArmeSuppr(true); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 14px', borderRadius: 14, cursor: 'pointer', fontSize: 13, fontWeight: 700, background: 'rgba(var(--o-bad-rgb),.12)', border: '1px solid rgba(var(--o-bad-rgb),.45)', color: 'var(--o-bad)', transition: 'background .2s, color .2s', ...(armeSuppr ? SUPPR_ARME : null) }}><Fi i="cross-small" size={12} />{armeSuppr ? tr('Confirmer ?') : tr('Supprimer')}</button>}
             <span style={{ flex: 1 }} />
             <button onClick={() => valider(close)} disabled={!valide} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 16px', borderRadius: 14, border: 'none', cursor: valide ? 'pointer' : 'default', fontSize: 13, fontWeight: 700, background: 'var(--o-accent-fond)', color: '#fff', opacity: valide ? 1 : .45 }}><Fi i="plus" size={12} />{tr('Enregistrer')}</button>
           </div>

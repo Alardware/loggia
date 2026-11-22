@@ -2,7 +2,7 @@
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
 import { useState, useMemo, useRef, useEffect, useCallback, Suspense } from 'react';
 import { formatEcran, vuePiecesDe, poserVuePieces, grilleDuFormat, poserGrille, sansPart } from '../disposition.js';
-import { cfgVal, cfgSet, accueilDuProfil, cfgRecue, appareilPropre, LOGGIA_RESOLVED, compteOrdinaire, plateformeDe, appareilDe, voisinsDe, nomAppareilDe, medPlayers, LOGGIA_INDEX, secAlarm, switchLights, ficheAppareil, enHaids } from '../state.js';
+import { cfgVal, cfgSet, accueilDuProfil, cfgRecue, appareilPropre, LOGGIA_RESOLVED, compteOrdinaire, plateformeDe, appareilDe, voisinsDe, nomAppareilDe, medPlayers, LOGGIA_INDEX, secAlarm, switchLights, ficheAppareil, enHaids, enBorne, enBornes } from '../state.js';
 import { CIEL_HA, CIEL_SOMBRES } from '../wxpresets.js';
 import { enPanne, gestesCover } from '../outils.js';
 import { uniteTemp } from '../unites.js';
@@ -62,10 +62,14 @@ import { useAbsence, CarteAbsence } from './absence.jsx';
 import { APPUI_LONG_MS, avalerProchainClic } from '../glisser.js';
 import { phraseAbsence } from '../absence.js';
 import { motCo2, zoneCo2, ChoixCamDispo, EDIT_BTN } from '../cartescustom/galerie.jsx';
-import { motPresence } from '../presence.js';
+import { motPresence, initialesPersonne } from '../presence.js';
 import { PuceToutEteindre, ACC_CACHES_DEFAUT, ACC_AJOUTEES_DEFAUT, elaguerHisto, ACC_MAIN, ACC_RAIL, ACC_RENOMME, poserFantome, tailleParDefaut, cielSoleil, heureLocale, APPAREIL_ACTIF, LigneMoment, nomDuCycle, WeatherFx, Num, Skel, CartePieceEdition, PieceCard, FavorisAccueil, ScenariosAccueil, PlanPieces, CarteAttention, OngletsAccueil, ACC_NOMS, WeatherGL, FeuilleAgenda, FichePiece, BRIQUES_PIECE } from './briques.jsx';
 import { annulable } from '../annuler.js';
+import { SapinNoel } from '../sapin.jsx';
 import { nomIntegration, integrationDeLaPanne } from '../pannes.js';
+import { statutEnPanne, statutsEnPanne } from '../borne.js';
+import { composes, quandComposes } from '../composesboot.js';
+import { soleilCouche } from '../nuitecran.js';
 
 /* L’agenda de l’Accueil : la plage demandée, le jour choisi, la feuille ouverte.
  * Sorti de `Dashboard` tel quel (lot 5 de l’audit du 28/10, étape d ; ADR 0283) : ses entrées et ses sorties sont nommées. */
@@ -80,10 +84,15 @@ function useAgendaAccueil({ accueil }) {
   const [plageDemandee, setPlageDemandee] = useState(null);
   const plageCourte = useMemo(() => plageSemaine(new Date(jourAuj)), [jourAuj]);
   const plageAgenda = plageDemandee || plageCourte;
-  const agenda = useAgenda(accueil && accueil.hass, null, plageAgenda);
+  /* Relu aussitôt après un geste (audit du 12/11, B4) : un rendez-vous créé ou supprimé depuis la feuille n'apparaissait, ou ne
+   * partait, qu'au sondage suivant — un quart d'heure plus tard. Le compteur que `useAgenda` attend (`tick`), déjà tenu par la
+   * carte Calendrier d'une vue. */
+  const [tourAgenda, setTourAgenda] = useState(0);
+  const relireAgenda = useCallback(() => setTourAgenda(t => t + 1), []);
+  const agenda = useAgenda(accueil && accueil.hass, null, plageAgenda, tourAgenda);
   const [jourChoisi, setJourChoisi] = useState(null); // la cle du jour choisi dans la bande, ou null
   const [agendaOuvert, setAgendaOuvert] = useState(false);
-  return { setPlageDemandee, agenda, jourChoisi, setJourChoisi, agendaOuvert, setAgendaOuvert };
+  return { setPlageDemandee, agenda, jourChoisi, setJourChoisi, agendaOuvert, setAgendaOuvert, relireAgenda };
 }
 
 /* Les rappels et la collecte des déchets de l’Accueil.
@@ -743,6 +752,10 @@ function useAttentionAccueil({ a, dashHass, sante, sectionMasquee }) {
   const fenetresEtat = useEtatServeur(dashHass, 'loggia/fenetres/etat', 30000, '').etat;
   const etatsAcc = (dashHass && dashHass.states) || {};
   const camsInfo = (a && a.cams && a.cams.length) ? a.cams.map(c => ({ nom: c.name, online: c.online })) : [];
+  // La voiture, la litière, la fontaine (A11, A12 ; ADR 0386) : leur découverte arrive à la demande (`composesboot.js`) — l'Accueil se redessine alors.
+  const [, arrivee] = useState(0);
+  useEffect(() => quandComposes(() => arrivee(n => n + 1)), []);
+  const K = composes(LOGGIA_INDEX);
   const points = pointsAttention({
     S: etatsAcc, cams: camsInfo,
     // `haid` : le capteur CO2 de la piece, pour qu'une veille sur ce meme
@@ -763,6 +776,12 @@ function useAttentionAccueil({ a, dashHass, sante, sectionMasquee }) {
     tempoDemain: enHaids().tempoDemain || null,
     // La vigilance de la maison, celle du widget (ADR 0310) : rouge, un point ; l'orange va à « En ce moment ».
     vigilance: capteurVigilance(etatsAcc, LOGGIA_INDEX),
+    // La borne que la découverte a trouvée (F1, ADR 0381) : « Borne en défaut », seulement si son statut dit une panne.
+    borneEnPanne: statutEnPanne(enBorne(), etatsAcc),
+    // Et celles des bornes suivantes (A7) : « Borne en défaut » vaut pour chacune.
+    bornesEnPanne: statutsEnPanne(enBornes(), etatsAcc),
+    // La voiture, la litière, la fontaine (A11, A12 ; ADR 0386) : une voiture ouverte ne se dit que la nuit.
+    autres: K ? K.alertesComposes(K.composesDe(LOGGIA_INDEX, etatsAcc), etatsAcc, { nuit: soleilCouche(dashHass) }) : [],
   });
   const couleurAcc = points.length ? couleurNiveau(niveauMax(points)).col : 'var(--o-ok)';
   /* La ligne sous le prénom suit la section « À surveiller » (ticket #34). */
@@ -1109,7 +1128,8 @@ function useMomentAccueil({ a, cyclesPrises, dashHass, dc, mLv, onNav, ordinaire
       // Les MACHINES seulement : une prise ou un ventilateur en marche n'est pas un evenement.
       if (dom !== 'vacuum' && dom !== 'lawn_mower') return;
       const test = APPAREIL_ACTIF[dom]; if (!test || !test(e.state)) return;
-      const mt = meta ? meta.get(id) : null; if (mt && (mt.category || mt.hidden)) return;
+      // Ni une litière qui publie un `vacuum` (A12, ADR 0386 ; `masqueDe`) : elle a sa carte, ce n'est pas un robot.
+      const mt = meta ? meta.get(id) : null; if ((mt && (mt.category || mt.hidden)) || masqueDe(id)) return;
       const nom = (e.attributes || {}).friendly_name || id;
       // La phrase de sa carte (I34) : « Nettoie · Salon, Cuisine », « Tonte en cours », « Retour à la base ».
       const c = vueCarnetRobot(etatRobots, id, Date.now());
@@ -1148,7 +1168,12 @@ function useMomentAccueil({ a, cyclesPrises, dashHass, dc, mLv, onNav, ordinaire
 
 /* La bannière de l’Accueil : le bonjour, la ligne sous le prénom, les tuiles cliquables, le choix du ciel en édition.
  * Sorti de `Dashboard` tel quel (lot 5 de l’audit du 28/10, étape d ; ADR 0283) : ses entrées et ses sorties sont nommées. */
-function BanniereAccueil({ a, actifsStat, alarmeTuile, attentionLigne, avatars, couleurAcc, editMode, faits, metricDiv, modes, nEnCours, onNav, onOpenRoom, ouvStat, pieceCo2Max, points, salut, setOverride, userName, voirMoment, wx, wxFx }) {
+/* Les fonds d'un avatar sans photo (audit du 12/11) : les trois dégradés de repli du bandeau, mêlés au fond du thème
+ * pour que ses initiales, écrites en `--o-text1`, se lisent en clair comme en sombre. Une teinte par rang. */
+const teinteAvatar = (a, b) => `linear-gradient(135deg, color-mix(in srgb, var(${a}) 42%, var(--o-bg2)), color-mix(in srgb, var(${b}) 42%, var(--o-bg2)))`;
+const TEINTES_AVATAR = [teinteAvatar('--o-rose', '--o-purple'), teinteAvatar('--o-accent', '--o-ok'), teinteAvatar('--o-lampe-b', '--o-bad')];
+
+function BanniereAccueil({a, actifsStat, alarmeTuile, attentionLigne, avatars, couleurAcc, editMode, faits, metricDiv, modes, nEnCours, onNav, onOpenRoom, ouvStat, pieceCo2Max, points, salut, setOverride, userName, voirMoment, wx, wxFx }) {
   return (
         <div className="o-banniere" style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--o-radius,18px)', padding: '0 8px 14px' }}>
           {/* Le décor SVG remplaçait le ciel quand le mouvement est réduit. Le ciel
@@ -1167,7 +1192,9 @@ function BanniereAccueil({ a, actifsStat, alarmeTuile, attentionLigne, avatars, 
                 * vues en ont un, l'Accueil n'en avait pas — son en-tête dit
                 * bonjour, pas où l'on est. Hors flux (`.o-vh`), rien ne bouge. */}
               <h1 className="o-vh">{tr('Accueil')}</h1>
-              <span className="o-greet-hi" style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>{salut}</span>
+              {/* Le petit sapin (ADR 0342) : ici au téléphone seulement, où la date de l'en-tête s'efface. Il prend la couleur
+                * du bonjour, blanche sur le ciel. */}
+              <span className="o-greet-hi" style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', display: 'flex', alignItems: 'center', gap: 10 }}>{salut}<SapinNoel className="o-noel-salut" /></span>
               {/* Les avatars SUR la ligne du nom, a droite, sur tous les
                 * ecrans (retour user du 15/09 : « ils sont en dessous du
                 * texte au lieu d'etre alignes avec le nom »). La vignette
@@ -1182,9 +1209,11 @@ function BanniereAccueil({ a, actifsStat, alarmeTuile, attentionLigne, avatars, 
                 <div className="o-avatars" style={{ display: 'flex', gap: 8, flexShrink: 0, minHeight: a && !a.index ? 34 : undefined }}>
                   {avatars.map((u, i) => {
                     const present = !u.dim;
+                    /* Le nom et l'état ne vivaient que dans `title`, muet au lecteur d'écran (audit du 12/11) : chaque
+                      * avatar est une image nommée. Ceux de la vitrine, sans personne derrière, restent décoratifs. */
                     return (
-                      <span key={i + (present ? '-p' : '-a')} className="o-avatarin" title={u.title} style={{ position: 'relative', width: 34, height: 34, flexShrink: 0, display: 'inline-block' }}>
-                        <span style={{ display: 'block', width: '100%', height: '100%', borderRadius: '50%', background: u.img ? `url(${u.img}) center/cover` : u.grad, boxShadow: present ? '0 0 0 2.5px var(--o-ok), 0 0 9px rgba(var(--o-ok-rgb),.5)' : '0 0 0 2px var(--o-bd1)', opacity: present ? 1 : 0.45 }} />
+                      <span key={i + (present ? '-p' : '-a')} className="o-avatarin" title={u.title} role={u.title ? 'img' : undefined} aria-label={u.title || undefined} aria-hidden={u.title ? undefined : true} style={{ position: 'relative', width: 34, height: 34, flexShrink: 0, display: 'inline-block' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', borderRadius: '50%', background: u.img ? `url(${u.img}) center/cover` : u.initiales ? u.teinte : u.grad, color: 'var(--o-text1)', fontSize: 12, fontWeight: 800, letterSpacing: '.02em', lineHeight: 1, boxShadow:present ? '0 0 0 2.5px var(--o-ok), 0 0 9px rgba(var(--o-ok-rgb),.5)' : '0 0 0 2px var(--o-bd1)', opacity: present ? 1 : 0.45 }}>{u.img ? null : u.initiales}</span>
                         <span style={{ position: 'absolute', right: -1, bottom: -1, width: 12, height: 12, borderRadius: '50%', background: present ? 'var(--o-ok)' : 'var(--o-text3)', border: '2.5px solid var(--o-bg2)', boxShadow: present ? '0 0 6px rgba(var(--o-ok-rgb),.7)' : 'none' }} />
                       </span>
                     );
@@ -1202,7 +1231,7 @@ function BanniereAccueil({ a, actifsStat, alarmeTuile, attentionLigne, avatars, 
                 * d'elle — un flex ne coupe pas un item, il le renvoie a la
                 * ligne. La pastille s'aligne donc sur la PREMIERE ligne, et le
                 * texte garde sa colonne. */}
-              <span className="o-greet-facts" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}>{attentionLigne && <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 5, background: couleurAcc, boxShadow: '0 0 8px ' + couleurAcc, animation: animationNiveau(niveauMax(points)) }} />}<span style={{ flex: 1, minWidth: 0 }}>{[...(attentionLigne ? [resumeAttention(points)] : []), ...faits.txt].join(' · ')}{a && a.inTemp != null ? ` · ${dec(a.inTemp, 1)} °${a.inTempUnite}` : ''}</span></span>
+              <span className="o-greet-facts" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--o-text2)', marginTop: 4 }}>{attentionLigne && <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 5, background: couleurAcc, boxShadow: '0 0 8px ' + couleurAcc, animation: animationNiveau(niveauMax(points)) }} />}<span style={{ flex: 1, minWidth: 0 }}>{[...(attentionLigne ? [resumeAttention(points)] : []), ...faits.txt].join(' · ')}{a && a.inTemp != null ? ` · ${dec(a.inTemp, 1)}\u00a0°${a.inTempUnite}` : '' /* insécable : « °C » ne part plus seul à la ligne au téléphone (audit du 12/11) */}</span></span>
               {/* Les actions du moment (04/11, étape 1) : ce qu'on fait d'habitude à cette heure-là, seulement si c'est utile. */}
               {!editMode && <ActionsMoment hass={a && a.hass} lumieres={(faits && faits.lum) || 0} />}
           </div>
@@ -1386,6 +1415,9 @@ function SectionsAccueil({ Sec, a, absence = null, agenda, ambianceDe, bandeauCo
           // trou laissé plus haut (vérifié en démonstration le 23/09).
           const piecesBas = piecesNoms.reduce((m, nom) => Math.max(m, piecesOu[nom].r), 1);
           const piecesApres = premiereLibre(piecesPrises, piecesCols, 1, 400, piecesBas);
+          /* Le seuil de CO₂ de la maison, calculé UNE fois pour les cartes des pièces et pour le rail plus bas (audit du
+           * 12/11, B12) : la carte jugeait à 1 400 fixes, quand « À surveiller » et le rail suivaient la veille. */
+          const co2Maison = seuilCo2(veillesEtat);
           const piecesGrid = (
             // Deux densités comme partout : compacte = une rangée de 88 px
             // (défaut), standard = deux rangées. Choix par pièce en édition
@@ -1448,7 +1480,7 @@ function SectionsAccueil({ Sec, a, absence = null, agenda, ambianceDe, bandeauCo
                         onTaille={() => saveGrille({ tailles: { ...(grille.tailles || {}), [p.name]: t === 'c' ? 's' : 'c' } })} reglable={!ordinaire} />
                     ) : (
                       <div style={{ height: '100%' }}>
-                        <PieceCard p={p} idx={i} compact chip={t === 'c'} lights={roomLightsOf(p.name)} mains={roomMainsOf(p.name)} attente={veilleuses == null} onToggleLights={() => toggleRoomLights(p.name)} covers={roomCoversInfo(p.name)} clim={roomClimInfo(p.name)} ambiance={ambianceDe(p.name)} onOpen={() => onOpenRoom && onOpenRoom(p.name)} />
+                        <PieceCard p={p} idx={i} compact chip={t === 'c'} lights={roomLightsOf(p.name)} mains={roomMainsOf(p.name)} attente={veilleuses == null} onToggleLights={() => toggleRoomLights(p.name)} covers={roomCoversInfo(p.name)} clim={roomClimInfo(p.name)} ambiance={ambianceDe(p.name)} onOpen={() => onOpenRoom && onOpenRoom(p.name)} seuilCo2={co2Maison} />
                       </div>
                     )}
                   </div>
@@ -1590,7 +1622,11 @@ function SectionsAccueil({ Sec, a, absence = null, agenda, ambianceDe, bandeauCo
              * la pièce comme sa carte ; une lampe ou un volet, sa fiche. */
             pieces: <>{piecesHeader}{vuePieces === 'plan' ? (
               <Barriere ou="vue">
-                <Suspense fallback={<div style={{ minHeight: etroitPieces ? 320 : 420 }} />}>
+                {/* Le temps que three.js arrive, le squelette des chargements
+                  * (`o-skel`) à la place du plan, à sa hauteur d'attente et à
+                  * son arrondi : on voit que quelque chose vient (audit du
+                  * 12/11, lot 4, R1). */}
+                <Suspense fallback={<div className="o-skel" aria-hidden="true" style={{ minHeight: etroitPieces ? 320 : 420, borderRadius: 16 }} />}>
                   <PlanPieces hass={dashHass} pieces={piecesVues} etage={infosEtages.utile ? etageChoisi : null}
                     etages={infosEtages.utile ? infosEtages.etages : []}
                     zones={((LOGGIA_INDEX && LOGGIA_INDEX.areaList) || []).map(z => ({ id: z.id, name: z.name }))}
@@ -1617,8 +1653,7 @@ function SectionsAccueil({ Sec, a, absence = null, agenda, ambianceDe, bandeauCo
           /* Chaque piece apporte SON seuil s'il est regle (ADR 0044) ; le
            * classement se fait alors sur l'ecart au seuil, pas sur les ppm.
            * Sans reglage, tout le monde partage celui de la maison et le
-           * resultat est celui d'avant. */
-          const co2Maison = seuilCo2(veillesEtat);
+           * resultat est celui d'avant. `co2Maison` est calcule plus haut, avec les pieces (B12). */
           const co2Pire = pireCapteur((a && a.rooms) ? a.rooms.filter(r => r.co2Id).map(r => ({ id: r.co2Id, piece: r.name, valeur: r.co2, seuil: r.co2Seuil })) : [], co2Maison);
           const co2Action = co2Pire ? actionAerer({ ventilation: ventilationVeille(veillesEtat, etatsAcc), volets: voletsDeLaZone(LOGGIA_INDEX, etatsAcc, co2Pire.id) }) : null;
           const aerer = (act) => annulable(tr('Aération lancée'), () => commanderService(dashHass, act.ids, act.domaine, act.service, { entity_id: act.ids }));
@@ -1657,7 +1692,7 @@ function SectionsAccueil({ Sec, a, absence = null, agenda, ambianceDe, bandeauCo
 
 function Dashboard({ planActif = true, editMode = false, onEnt, onToggleEdit, sante = null, weatherMode = null, weatherRaw = null, wxFx = true, weatherTemp = null, weatherLabel = null, accueil = null, userName = 'Administrateur', onOpenRoom, onNav = null, cyclesPrises = null }) {
   const [override, setOverride] = useState(null);
-  const { setPlageDemandee, agenda, jourChoisi, setJourChoisi, agendaOuvert, setAgendaOuvert } = useAgendaAccueil({ accueil });
+  const { setPlageDemandee, agenda, jourChoisi, setJourChoisi, agendaOuvert, setAgendaOuvert, relireAgenda } = useAgendaAccueil({ accueil });
 
   const { relireTodos, taches, bandeauCollecte } = useRappelsAccueil({ accueil, agenda });
   const { passe, futur, wide, tactile, formatGrille, etageChoisi, setEtageChoisi, vuePieces, setVuePieces, appareilAcc, grillePropre, grille, saveGrille, camDispo, poserCam, suivrePc, histo, histoOuvert, setHistoOuvert, restaurer, oublierHisto, annuler, refaire } = useAgencementAccueil({ editMode, planActif });
@@ -1774,7 +1809,8 @@ function Dashboard({ planActif = true, editMode = false, onEnt, onToggleEdit, sa
     return out;
   });
   // Le mot de chacun (G1-D8) : sa zone telle quelle, « Inconnu » quand son traceur se tait — plus « Absent » pour tout le reste.
-  const avatars = (a && a.people) ? a.people.map(p => ({ img: p.img, title: `${p.name} · ${motPresence({ state: p.etat })}`, dim: !p.home })) : [{ grad: 'linear-gradient(135deg,var(--o-rose),var(--o-purple))' }, { grad: 'linear-gradient(135deg,var(--o-accent),var(--o-ok))' }, { grad: 'linear-gradient(135deg,var(--o-lampe-b),var(--o-bad))' }];
+  /* Sans photo, ses initiales sur une teinte du thème, une par rang (audit du 12/11) : l'avatar n'était qu'un anneau vide. */
+  const avatars = (a && a.people) ? a.people.map((p, i) => ({ img: p.img, initiales: p.img ? null : initialesPersonne(p.name), teinte: TEINTES_AVATAR[i % TEINTES_AVATAR.length], title: `${p.name} · ${motPresence({ state: p.etat })}`, dim: !p.home })) : [{ grad:'linear-gradient(135deg,var(--o-rose),var(--o-purple))' }, { grad: 'linear-gradient(135deg,var(--o-accent),var(--o-ok))' }, { grad: 'linear-gradient(135deg,var(--o-lampe-b),var(--o-bad))' }];
   // ── Salutation contextuelle ──────────────────────────────────────────────
   // L'heure donne le bonjour ; la maison donne les faits — lumières allumées,
   // ouvrants ouverts, état de l'alarme. Sans HA, des faits d'exemple gardent
@@ -2008,7 +2044,7 @@ function Dashboard({ planActif = true, editMode = false, onEnt, onToggleEdit, sa
          * fournies ; un premier essai n'avait repris que le mobile. */
         <Suspense fallback={null}><FeuilleAgenda hass={accueil && accueil.hass} evenements={agenda || []} jourChoisi={jourChoisi}
           onChoisirJour={setJourChoisi} onClose={() => { setAgendaOuvert(false); setPlageDemandee(null); }}
-          large={wide} onPlage={setPlageDemandee} /></Suspense>
+          large={wide} onPlage={setPlageDemandee} onChange={relireAgenda} /></Suspense>
       )}
       {pieceSheet && <Suspense fallback={null}><FichePiece key={pieceSheet.nom} nom={pieceSheet.nom} compacte={pieceSheet.compacte} hass={dashHass} onEnregistrer={enregistrerPieceIci} onSupprimer={retirerPiece} onClose={() => setPieceSheet(null)} briques={BRIQUES_PIECE} /></Suspense>}
     </main>

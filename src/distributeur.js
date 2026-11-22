@@ -36,6 +36,7 @@
  * `distributeurfiche.js` : la carte dit « ≈ 8 j ».
  */
 import { tr, locale } from './i18n.js';
+import { heureCourte } from './format.js';
 import { sansAccents } from './outils.js';
 import { jourPlanning, heureValide } from './robots.js';
 import { joursDeReserve } from './objets.js';
@@ -694,7 +695,7 @@ export function grammesRation(mesure, commande, n = 1) {
   return Math.round(portions * mesure.grammesParPortion * 10) / 10;
 }
 
-const heureLocale = (t) => new Date(t).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+const heureLocale = heureCourte;
 
 /** « Repas à 19:00 » aujourd'hui, « Repas demain 07:30 », « Repas mercredi 07:30 » au-delà — le patron de `libellePassage` (robots.js). */
 function libelleRepas(date, maintenant = Date.now()) {

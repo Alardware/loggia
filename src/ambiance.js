@@ -18,9 +18,15 @@ export const NIVEAUX_PIECE = ['probleme', 'actif', 'calme'];
  * (la couleur qu'avait deja « 4 lampes allumees »), le calme en retrait. */
 export const COULEURS_PIECE = { probleme: 'var(--o-warn2)', actif: 'var(--o-warn)', calme: 'var(--o-text3)' };
 
+/* Un seuil illisible, nul ou negatif (`null` ferait `ppm >= 0` : toujours eleve) retombe sur le palier d'avant. */
+const seuilLu = (s) => (Number(s) > 0 ? Number(s) : SEUIL_CO2);
+
 /** La ligne d'etat d'une piece. `medias` = [{ tv: bool }] en lecture,
- * `ouverts` = [{ famille: 'porte'|'fenetre' }]. */
-export function ambiancePiece({ lumieres = 0, lampes = null, medias = [], chauffe = false, froid = false, ouverts = [], co2 = null } = {}) {
+ * `ouverts` = [{ famille: 'porte'|'fenetre' }]. `seuil` : le seuil de CO2 de
+ * la piece s'il est regle, sinon celui de la maison (audit du 12/11, B12) — a
+ * 1 400 fixes, la carte criait quand « A surveiller » et le rail se taisaient,
+ * ou l'inverse. Sans lui, le palier d'avant. */
+export function ambiancePiece({ lumieres = 0, lampes = null, medias = [], chauffe = false, froid = false, ouverts = [], co2 = null, seuil = SEUIL_CO2 } = {}) {
   const problemes = [];
   const liste = Array.isArray(ouverts) ? ouverts.filter(Boolean) : [];
   const portes = liste.filter(o => o.famille === 'porte').length;
@@ -29,7 +35,7 @@ export function ambiancePiece({ lumieres = 0, lampes = null, medias = [], chauff
   else if (fenetres) problemes.push(fenetres > 1 ? tr('{n} fenêtres ouvertes', { n: fenetres }) : tr('Fenêtre ouverte'));
   else if (portes) problemes.push(portes > 1 ? tr('{n} portes ouvertes', { n: portes }) : tr('Porte ouverte'));
   const ppm = Number(co2);
-  if (co2 != null && !isNaN(ppm) && ppm >= SEUIL_CO2) problemes.push(tr('CO₂ élevé'));
+  if (co2 != null && !isNaN(ppm) && ppm >= seuilLu(seuil)) problemes.push(tr('CO₂ élevé'));
   if (problemes.length) return { niveau: 'probleme', texte: problemes.join(' · '), couleur: COULEURS_PIECE.probleme, icone: 'triangle-warning' };
 
   const actifs = [];
@@ -57,7 +63,8 @@ export function phrasePiece(args = {}) {
   if (amb.niveau === 'calme') return amb;
   if (amb.niveau === 'probleme') {
     const ppm = Number(args.co2);
-    const aerer = args.co2 != null && !isNaN(ppm) && ppm >= SEUIL_CO2 && !(Array.isArray(args.ouverts) && args.ouverts.some(Boolean));
+    // Le meme seuil que la ligne courte (B12).
+    const aerer = args.co2 != null && !isNaN(ppm) && ppm >= seuilLu(args.seuil) && !(Array.isArray(args.ouverts) && args.ouverts.some(Boolean));
     return aerer ? { ...amb, texte: amb.texte + ' · ' + tr('pensez à aérer') } : amb;
   }
   const { lumieres = 0, medias = [], chauffe = false, froid = false } = args;

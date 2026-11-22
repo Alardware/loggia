@@ -73,13 +73,16 @@ function RoomPlantCard({ pl, nom, onOpen, chip = false }) {
         <ChiffreHaut v={v.sol == null ? '\u2014' : nombre(v.sol, 0)} u={v.sol == null ? null : '%'} couleur={v.sol == null ? 'var(--o-text3)' : 'var(--o-text)'} />
       </div>
       <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 'var(--o-milieu-haut, 14px)' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        {/* La colonne du nom reste en haut (audit du 12/11, `RM_GAUCHE`) : le sol et « SOL » dessous la poussaient vers le bas. */}
+        <div style={{ flex: 1, minWidth: 0, alignSelf: 'flex-start' }}>
           <div className="o-gab-nom" style={NOM_GROUPE}>{nom}</div>
           <div className="o-gab-phrase" style={{ ...RM_SUB, color: encre, '--o-n': Math.max(1, v.phrase.length) }}>{v.phrase}</div>
         </div>
         {/* Le chiffre de la carte large : le sol, et « SOL » dessous, en petites capitales. */}
         <span aria-hidden="true" className="o-seul-large" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1, flexShrink: 0 }}>
-          <span style={{ fontSize: 25, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: v.sol == null ? 'var(--o-text3)' : 'var(--o-text)' }}>{v.chiffre}</span>
+          {/* Le « % » en petit, à 15 px comme l'unité de toutes les cartes (audit du 12/11) : il s'écrivait à la taille du chiffre. */}
+          <span style={{ display: 'flex', alignItems: 'baseline', gap: 3, fontSize: 25, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: v.sol == null ? 'var(--o-text3)' : 'var(--o-text)' }}>
+            {v.sol == null ? v.chiffre : <>{nombre(v.sol, 0)}<span style={{ fontSize: 15 }}>%</span></>}</span>
           <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--o-text3)', marginTop: 5 }}>{tr('Sol')}</span>
         </span>
       </div>

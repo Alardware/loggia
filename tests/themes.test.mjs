@@ -117,33 +117,6 @@ test('aucun jeton posé par un thème n’échappe au grand ménage', () => {
     'ce jeton est posé par un thème sans figurer dans THEME_KEYS : il restera en place au thème suivant');
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// The Projekt : ce que la charte impose et qu'un ajustement pourrait défaire.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Le bloc source du thème, et ses deux variantes séparées. */
-function projekt() {
-  const bloc = blocPresets();
-  const i = bloc.indexOf('\n  projekt: {');
-  assert.notEqual(i, -1, 'le thème The Projekt a disparu');
-  const seg = bloc.slice(i, bloc.indexOf('\n  },', i));
-  return { seg, dark: seg.slice(seg.indexOf('dark: {'), seg.indexOf('light: {')), light: seg.slice(seg.indexOf('light: {')) };
-}
-
-test('The Projekt reteint les accents décoratifs, dans les deux modes', () => {
-  // `--o-purple` est la couleur des VOLETS d'un bout à l'autre du dashboard.
-  // Laissé à sa valeur par défaut, il traversait ce thème monochrome comme un
-  // trait de feutre. Chaque accent décoratif doit donc être redéfini — et dans
-  // les DEUX variantes, sans quoi le mode clair récupère le violet.
-  const p = projekt();
-  const attendus = ['--o-purple', '--o-cyan', '--o-gold', '--o-cold', '--o-warn', '--o-sky'];
-  for (const [nom, part] of [['sombre', p.dark], ['clair', p.light]]) {
-    const manquants = attendus.filter(k => part.indexOf("'" + k + "'") < 0);
-    assert.deepEqual(manquants, [],
-      `variante ${nom} : ces accents retombent sur leur valeur par défaut, hors charte`);
-  }
-});
-
 test('aucun thème ne reteint les pièces', () => {
   // Essayé une fois, sur The Projekt : sept pièces d'un même bleu, échelonnées
   // par la clarté. Cohérent, et illisible — on ne repère plus la cuisine du
@@ -183,13 +156,6 @@ test('les pièces ne suivent aucun accent décoratif', () => {
     'une pièce emprunte un jeton qui sert à autre chose : le reteindre ailleurs la déplacera aussi');
 });
 
-test('The Projekt distingue l’accent qui remplit de celui qui écrit', () => {
-  // #3CA2D9 remplit, #BEE8FF écrit. Sur #020D12 le premier passe tout juste,
-  // le second respire. Les confondre rend illisible tout libellé d'accent.
-  assert.match(projekt().seg, /accent: '#3ca2d9', accentText: '#bee8ff'/,
-    'les deux bleus de la charte ont été confondus en un seul');
-});
-
 test('aucune teinte de pièce n’est écrite en dur', () => {
   // Elles l'étaient toutes, et trois l'étaient DEUX FOIS : une valeur littérale
   // pour le lavis, un jeton pour l'icône. Tant qu'aucun thème ne les déplaçait,
@@ -201,16 +167,6 @@ test('aucune teinte de pièce n’est écrite en dur', () => {
   const dures = [...bloc.matchAll(/(?:#[0-9a-f]{6}|rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+)/gi)].map(m => m[0]);
   assert.deepEqual(dures, [],
     'une teinte de pièce est de nouveau écrite en dur : aucun thème ne pourra la suivre');
-});
-
-test('The Projekt garde sa lueur, dans les deux modes', () => {
-  // Le fond n'est pas plat : c'est la lueur venue du haut qui donne la
-  // profondeur que les autres thèmes vont chercher dans une ombre portée.
-  // Sans `bggrad`, il ne reste qu'un aplat noir et le thème perd son sujet.
-  const p = projekt();
-  for (const [nom, part] of [['sombre', p.dark], ['clair', p.light]]) {
-    assert.match(part, /bggrad: 'radial-gradient\(/, `variante ${nom} : la lueur a disparu, le fond est redevenu plat`);
-  }
 });
 
 test('le theme vit dans son fichier, et n’est plus un morceau du monolithe', () => {
@@ -227,7 +183,7 @@ test('le theme vit dans son fichier, et n’est plus un morceau du monolithe', (
     ['les quatorze préréglages', 'const LOGGIA_PRESETS = {'],
     ['les jetons qu’un thème surcharge', 'const THEME_KEYS = ['],
     ['la pose des variables', 'function applyVars(root, v) {'],
-    ['l’apparence', 'function applyLook(root, L, frostedPreset, light) {'],
+    ['l’apparence', 'function applyLook(root, L, variante, light) {'], // ASSERTION MODIFIÉE (14/11, F2) : la variante dit sa matière
     ['la porte du thème', 'export function applyTheme(opts, hass) {'],
     ['le réglage d’apparence', 'export function readLook() {'],
     ['le miroir du thème HA', 'function readComputedHaTheme(hass) {'],
@@ -257,20 +213,21 @@ test('le theme vit dans son fichier, et n’est plus un morceau du monolithe', (
    * internes : une porte publique sans personne derrière est une dette, et
    * `exports_sans_client.test.mjs` la refuse. */
   // ASSERTION MODIFIÉE (ADR 0283) : App.jsx et les modules qui en sont sortis importent, ENSEMBLE, exactement ce qu'ils lisent.
-  assert.deepEqual([...importsDe(appSeul, './theme.js')].sort(), ['LAVIS', 'SAFE_NOLOOK', 'applyTheme', 'lav', 'readLook', 'signatureHaTheme'].sort(),
+  // ASSERTION MODIFIÉE (19/11) : `themeConnu`, la garde des thèmes retirés (Givre, Plum Wine, Lavande, The Projekt).
+  assert.deepEqual([...importsDe(appSeul, './theme.js')].sort(), ['LAVIS', 'SAFE_NOLOOK', 'applyTheme', 'lav', 'readLook', 'signatureHaTheme', 'themeConnu'].sort(),
     'App.jsx n’importe plus du thème exactement ce qu’il lit');
   assert.ok(!/^export function lum\(/m.test(theme), '`lum` est exporté sans client : il ne sert qu’au thème');
   assert.ok(!/^export function cssToRgb\(/m.test(theme), '`cssToRgb` est exporté sans client');
 });
 
 test('les thèmes bleus arrivent à la demande, et le thème se rejoue à leur arrivée', () => {
-  // Saphir, Acier, Givre sont sortis du boot, qui n'avait plus que 2,5 Ko
+  // Saphir et Acier sont sortis du boot, qui n'avait plus que 2,5 Ko
   // sous sa borne. Un import statique les y ramènerait sans bruit.
   const theme = lire('src', 'theme.js');
   assert.ok(!/^import [^;]*themes-bleus/m.test(theme),
     'themes-bleus.js est importé au démarrage : il retombe dans le boot');
   assert.ok(theme.includes("import('./themes-bleus.js')"),
-    'plus rien ne charge themes-bleus.js : choisir Saphir, Acier ou Givre ne ferait rien');
+    'plus rien ne charge themes-bleus.js : choisir Saphir ou Acier ne ferait rien');
 
   // La liste qui déclenche le chargement doit nommer EXACTEMENT les thèmes du
   // fichier : un oublié resterait au défaut, sans erreur.

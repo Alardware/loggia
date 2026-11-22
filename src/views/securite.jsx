@@ -13,11 +13,15 @@ import { useLoggia, useEntities } from '../runtime.js';
 import { Fi, Anim, editBtn, nomCarte } from '../ui.jsx';
 import { RoomActivityCard, useDerniersEvenements } from '../historique.jsx';
 import { colonnesCam, poserCamDispo, camSerre } from '../camdispo.js';
-import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, estSirene, pointsAttention } from '../attention.js';
+import { comptesSecurite, tuilesSecurite, resumeSecurite, messageAlarme, estSirene, pointsAttention, cameraEnLigne, camerasDeLaMaison, etatSecurite } from '../attention.js';
+import { seuleSurSaRangee } from '../placement.js';
+import { cleCamera } from '../present.js';
+import { camPrivee } from '../camcmd.js';
+import { SousPrive } from '../camprive.jsx';
 import { evenementCamera, detecteursDe, reduireDerniers, evenementsPorte } from '../evenement.js';
 import { cfgVal, cfgSet, loggiaEnt, plateformeDe, voisinsDe, nomAppareilDe, secAlarm, LOGGIA_INDEX } from '../state.js';
 import { capteurVigilance } from '../vigilance.js';
-import { tr } from '../i18n.js';
+import { tr, trN } from '../i18n.js';
 import { OUTILS_VUES } from '../outilsvues.js';
 
 // Emprunté au monolithe (outilsvues.js) : App.jsx le pose avant le premier rendu.
@@ -79,13 +83,19 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
   // vieille entité (UniFi Protect…) après un changement de panneau (Alarmo),
   // et les commandes partaient vers le mauvais système.
   const alarmId = (secAlarm() && S[secAlarm()]) ? secAlarm() : (alarmCfg && S[alarmCfg]) ? alarmCfg : (rAlarm ? rAlarm.main : null);
-  // Une seule source : la résolution, qui prend déjà la liste de l'utilisateur
-  // quand il en a une, et la complète par les détecteurs du même appareil.
-  const camList = rCams.map(c => ({
-    haid: c.haid || c.id, label: c.label || c.name,
+  /* UNE liste et UNE règle pour le compteur et les tuiles (audit du 12/11) :
+   * celle de l'Accueil — la liste de l'utilisateur (`loggia_cameras`), chaque
+   * caméra complétée par les détecteurs que la résolution lui connaît, sinon
+   * la résolution —, et `cameraEnLigne`. Le compteur lisait l'une, les tuiles
+   * l'autre : « 3/4 en ligne » au-dessus de trois tuiles dont deux « HORS
+   * LIGNE », et la caméra sans entité, la vraie en panne, absente. Elle
+   * s'affiche désormais, en panne. */
+  const camsCfg = (() => { try { const c = cfgVal('loggia_cameras', null); const l = Array.isArray(c) ? c.filter(x => x && typeof x === 'object') : []; return l.length ? l : null; } catch { return null; } })();
+  const camList = camerasDeLaMaison(camsCfg, rCams).map(c => ({
+    haid: c.haid || null, label: c.label || c.name || '',
     motion: c.motion, person: c.person, vehicle: c.vehicle, animal: c.animal, sonnette: c.sonnette, colis: c.colis,
-    preset: c.preset,
-  })).filter(c => c && c.haid);
+    preset: c.preset, online: cameraEnLigne(c, S),
+  }));
   // Le dernier declenchement de chaque detecteur, par le journal (ADR 0031).
   const derniersCams = useDerniersEvenements(hass, camList.flatMap(c => detecteursDe(c).map(d => d.id)), reduireDerniers);
   /* LE MEME LANGAGE QUE L'ACCUEIL (ADR 0033) : les comptes et la ligne d'etat
@@ -94,11 +104,8 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
    * leur place ailleurs), et les fiches des ouvrants. Une tuile de la ligne
    * d'etat defile jusqu'a sa section. */
   const dc = useDomainCards(hass, { onNav });
-  // Les cameras comptees comme sur l'Accueil : la liste de l'utilisateur
-  // (`loggia_cameras`, une camera sans entite y compte comme hors ligne),
-  // sinon celles de la resolution — memes chiffres des deux cotes.
-  const camsCfg = (() => { try { const c = cfgVal('loggia_cameras', null); const l = Array.isArray(c) ? c.filter(x => x && typeof x === 'object') : []; return l.length ? l : null; } catch { return null; } })();
-  const camsInfoSec = (camsCfg || camList).map(c => ({ nom: c.name || c.label, online: S[c.haid] ? S[c.haid].state !== 'unavailable' : c.online !== false }));
+  // Les cameras comptees comme sur l'Accueil, sur la liste des tuiles (audit du 12/11).
+  const camsInfoSec = camList.map(c => ({ nom: c.label, online: c.online }));
   const comptesSecVue = comptesSecurite(S, camsInfoSec, { plateforme: plateformeDe, masque: masqueDe });
   const tuilesSecVue = tuilesSecurite(comptesSecVue);
   // La vigilance rouge, de la même source que l'Accueil, dont le point mène ici (ADR 0310).
@@ -124,19 +131,25 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
 
   // ── Caméras : live + détections ──
   const cams = camList.map((c, ci) => {
-    const s = S[c.haid];
-    const online = s ? (s.state !== 'unavailable' && s.state !== 'unknown') : false;
+    const online = c.online; // `cameraEnLigne`, la règle du compteur (audit du 12/11)
+    /* « Privé », pas « Hors ligne » (chantier du 20/11, A8) : une caméra dont l'objectif est occulté n'est pas
+     * en panne, et chez Reolink elle passe « indisponible » en même temps. La tuile le DIT — le tag, la sous-ligne, et
+     * le cadre que `CamLive` dessine à la place de l'image. Le compteur garde la règle de l'Accueil. */
+    const prive = camPrivee(LOGGIA_INDEX, S, c.haid);
     // La detection en cours, sinon le dernier declenchement du journal, sinon
     // rien : la meme sous-ligne que la tuile de l'Accueil (ADR 0031).
     const ev = evenementCamera(c, S, derniersCams);
     const active = !!(ev && ev.enCours);
     const preset = CAMERAS()[(c.preset != null ? c.preset : ci) % CAMERAS().length];
-    return {
-      haid: c.haid, hass, online, label: c.label || '', active, evenement: ev,
+    const tuile = {
+      // `cle` : une caméra sans entité n'a pas d'`haid` pour clé de liste (audit du 12/11) — celle des tuiles de l'Accueil.
+      cle: cleCamera(c, ci), haid: c.haid, hass, online, label: c.label || '', active, evenement: ev,
       tag: online ? 'LIVE · ' + String(c.label || '').toUpperCase() : tr('HORS LIGNE'),
       grad: preset.grad, glow: preset.glow,
       sub: sousCamera(online, ev),
     };
+    // Privée : le mot, et la tuile n'est plus grisée comme une panne (`CamLive` dessine le cadre « Privé »).
+    return prive ? { ...tuile, online: true, tag: tr('Privé').toUpperCase(), sub: <SousPrive /> } : tuile;
   });
   const anyMotion = cams.some(c => c.online && c.active);
   /* Combien par ligne (20/09) : la cle de la maison, lue par type d'ecran —
@@ -153,9 +166,8 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
   const people = secPeople.map(p => ({ name: p.name, home: isOn(p.haid) }));
 
   // ── État global ──
-  const unknownState = alarm === 'unknown';
-  const heroTitle = unknownState ? tr('État inconnu') : triggered ? tr('Alarme déclenchée') : anyMotion ? tr('Mouvement détecté') : tr('Tout est calme');
-  const statusCol = unknownState ? 'var(--o-text3-rgb)' : triggered ? 'var(--o-bad-rgb)' : alarm !== 'off' ? 'var(--o-warn-rgb)' : 'var(--o-ok-rgb)';
+  // Les détecteurs de mouvement et les ouvrants comptent aussi (audit du 12/11) : « Tout est calme » porte ouverte, c'est fini.
+  const { titre: heroTitle, rgb: statusCol } = etatSecurite({ alarme: alarm, mouvementCamera: anyMotion, comptes: comptesSecVue });
 
   const cs = a => `rgb(${a})`;
   const ca = (a, al) => `rgba(${a},${al})`;
@@ -181,6 +193,7 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
    * nom, largeur, ajout, titres. L'agencement vit dans `loggia_seclayout`,
    * perimetre `securite`. */
   const ouvrantsIds = [...ouvrantsDe(S)].sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0)).map(o => o.id);
+  const nOuvertes = ouvrantsDe(S).filter(o => o.on).length;
   const derivesSec = [...(alarmId ? [alarmId] : []), ...sirenes, ...(people.length ? ['carte:presence'] : []), ...(ouvrantsIds.length ? ['sect:ouvrants', ...ouvrantsIds] : [])];
   const ed = useLayoutEditor('loggia_seclayout', 'securite', derivesSec);
   // Hors édition, un appui long range les cartes (05/11, étape 5) : le même ordre que les flèches de l'édition.
@@ -188,7 +201,7 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
   const [cardEdit, setCardEdit] = useState(null);
   const [addSheet, setAddSheet] = useState(false);
   const origineDe = (k) => {
-    if (k === 'sect:ouvrants') return tr('Ouvrants');
+    if (k === 'sect:ouvrants') return tr('Ouvertures');
     if (k.indexOf('sect:') === 0) return k.slice(5) || tr('Section');
     if (k === 'carte:presence') return tr('Présence');
     return (S[k] && S[k].attributes && S[k].attributes.friendly_name) || k;
@@ -239,20 +252,37 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
       <div ref={ed.gridRef} {...ranger} id={ed.ids.indexOf('sect:ouvrants') < 0 ? 'sec-ouvrants' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {blocs.map((bloc, bi) => {
           if (!edit && bloc.titre && !bloc.cartes.length) return null;
+          /* Le titre des OUVERTURES, celui de sa maquette (ADR 0388) : en petites capitales, et combien sont ouvertes, en ambre. Les
+           * autres titres gardent l'italique de la vue. */
+          const ouvertures = bloc.titre === 'sect:ouvrants';
           const titre = bloc.titre ? (
-            <div id={bloc.titre === 'sect:ouvrants' ? 'sec-ouvrants' : undefined} style={{ fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>{nomDe(bloc.titre)}</div>
+            <div id={bloc.titre === 'sect:ouvrants' ? 'sec-ouvrants' : undefined} style={ouvertures ? { fontSize: 11, fontWeight: 700, letterSpacing: '.12em', color: 'var(--o-text2)' } : { fontFamily: 'var(--o-serif, Newsreader, serif)', fontStyle: 'italic', fontSize: 19, color: 'var(--o-text2)' }}>
+              {ouvertures ? (<>
+                <span style={{ textTransform: 'uppercase' }}>{nomDe(bloc.titre)}</span>
+                {nOuvertes > 0 && <span style={{ color: 'var(--o-warn)', marginLeft: 6 }}>{trN(nOuvertes, '{n} ouverte', '{n} ouvertes')}</span>}
+              </>) : nomDe(bloc.titre)}
+            </div>
           ) : null;
           // UNE grille pour toute la vue, celle des objets : 225 px, deux colonnes au
           // telephone et sur tablette, rangees de 184 px. L'alarme, la sirene et la
           // presence avaient la leur (250 px, une colonne de 362 px au telephone) :
           // « trop large », elles ne respectaient pas les dimensions (retour du 17/09).
+          /* La Présence seule sur sa rangée prend toute la rangée (audit du 12/11) :
+           * une colonne sur trois, ses avatars minuscules et sans prénom. Les
+           * nombres de colonnes où elle est seule deviennent des classes
+           * (`o-seule-k3`…), que la largeur du bloc départage (index.css). */
+          const iPres = edit ? -1 : bloc.cartes.indexOf('carte:presence');
+          const seule = iPres >= 0 ? seuleSurSaRangee(bloc.cartes.map(k => (ed.estLarge(k) ? 2 : 1)), iPres) : [];
+          // En toutes lettres : une classe composée (`'o-seule-k' + n`) échappe au garde-fou des classes sans lecteur.
+          const CLASSES_SEULE = { 2: 'o-seule-k2', 3: 'o-seule-k3', 4: 'o-seule-k4', 5: 'o-seule-k5', 6: 'o-seule-k6', 7: 'o-seule-k7', 8: 'o-seule-k8' };
+          const classeCarte = (k) => [ed.estLarge(k) ? 'o-cvw2' : '', ...(k === 'carte:presence' ? seule.map(n => CLASSES_SEULE[n]) : [])].filter(Boolean).join(' ');
           return (
-            <div key={bloc.titre || 'b' + bi} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div key={bloc.titre || 'b' + bi} className="o-sec-bloc" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {bloc.titre && (edit ? <EditableCard plat ed={ed} id={bloc.titre} nom={nomDe(bloc.titre)} onEdit={setCardEdit}>{titre}</EditableCard> : titre)}
               <div className="grid-objets" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(225px,1fr))', gridAutoRows: 'minmax(184px, auto)', gap: 16, alignItems: 'stretch' }}>
                 {bloc.cartes.map(k => edit
                   ? <EditableCard key={k} ed={ed} id={k} nom={nomDe(k)} onEdit={setCardEdit} hass={hass} taille={false} />
-                  : <Anim key={k} id={k} i={ed.ids.indexOf(k)} className={ed.estLarge(k) ? 'o-cvw2' : ''}><div style={{ height: '100%', minHeight: 184 }}>{carteSec(k)}</div></Anim>)}
+                  : <Anim key={k} id={k} i={ed.ids.indexOf(k)} className={classeCarte(k)}><div style={{ height: '100%', minHeight: 184 }}>{carteSec(k)}</div></Anim>)}
                 {edit && bi === blocs.length - 1 && <CarteAjout onClick={() => setAddSheet(true)} />}
               </div>
             </div>
@@ -269,8 +299,13 @@ function SecuriteContent({ hass, edit = false, onEnt, onNav = null }) {
         {cams.length > 1 && <ChoixCamDispo valeur={camDispo} format={formatCam} onChoisir={poserCam} />}
       </div>
       <div className={'grid-sec-cams' + (camSerre(colonnesCam(camDispo, formatCam), formatCam) ? ' o-cams-serre' : '')} style={{ display: 'grid', gridTemplateColumns: `repeat(${colonnesCam(camDispo, formatCam)},minmax(0,1fr))`, gap: 16 }}>
-        {cams.map((c, i) => <Anim key={c.haid || c.id} i={i} base={140}><CameraTile c={c} /></Anim>)}
+        {cams.map((c, i) => <Anim key={c.cle} i={i} base={140}><CameraTile c={c} /></Anim>)}
       </div>
+      {/* Sans caméra, la section le DIT au lieu de laisser un titre sur du
+        * blanc (audit du 12/11, lot 4, I1). */}
+      {cams.length === 0 && (
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--o-text3)' }}>{tr('Aucune caméra')}</div>
+      )}
 
       {/* Le journal de ce qui touche à la sécurité : ouvrants, mouvements,
         * alarme et caméras — la carte des pièces, restreinte à ces entités —,

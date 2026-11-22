@@ -6,6 +6,8 @@ disent la même chose, l'un des deux est faux.
 
 Le moteur JavaScript de découverte (index, appareils, capacités) a sa propre
 documentation : `MOTEURS.md`. Ici, seulement ce qui décide et qui commande.
+Les règles de l'interface (cartes, popups, thèmes, textes) ont leur propre
+page : [guide-ux.md](guide-ux.md).
 
 ## Le modèle en une figure
 

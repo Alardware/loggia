@@ -150,7 +150,8 @@ test('chaque copie : sa date, son compte, et « Remettre » (maquette v3)', () =
 test('la confirmation en deux temps, puis « Retour… » ; les autres boutons attendent', () => {
   const arme = rendre(ListeVersions, { etat: { charge: true, liste: LISTE, erreur: null }, arme: 'a1', maintenant: MAINTENANT });
   assert.ok(texte(arme).includes('Avant un enregistrement de Camille Confirmer ?'));
-  assert.ok(arme.includes('var(--o-bad)'), 'armé, le bouton passe au rouge, comme la remise à zéro');
+  // ASSERTION MODIFIÉE (14/11, audit des thèmes, M5) : le rouge qui porte du blanc est `--o-bad-fond`, posé par la garde de contraste.
+  assert.ok(arme.includes('var(--o-bad-fond)'), 'armé, le bouton passe au rouge, comme la remise à zéro');
   const parti = rendre(ListeVersions, { etat: { charge: true, liste: LISTE, erreur: null }, enCours: 'a1', maintenant: MAINTENANT });
   assert.ok(texte(parti).includes('Retour…'));
   assert.equal((parti.match(/disabled=""/g) || []).length, 2, 'un seul retour à la fois');

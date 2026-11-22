@@ -34,7 +34,7 @@ import { AidePanneFiche } from './aidepanne.jsx';
 
 /* ════════════ Les styles (copies de ficherobot.jsx) ════════════ */
 
-export const FOND = 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';
+const FOND = 'linear-gradient(180deg,var(--o-surfA),var(--o-surfB))';
 // Le liseré du réglage (04/10), comme les panneaux de Paramètres et du robot.
 export const PANNEAU = { background: FOND, border: LISERE, borderRadius: 'var(--o-radius,18px)', padding: '18px 20px', boxShadow: 'var(--o-shadow,0 10px 26px rgba(0,0,0,.3))', boxSizing: 'border-box', minWidth: 0 };
 // Les titres de bloc de la fiche du distributeur sont des petites capitales depuis sa maquette (étape 2 du chantier IoT) : le titre
@@ -75,11 +75,16 @@ export function BoutonConfirme({ libelle, onConfirme, nom = null, style = null }
  * en tête de ses deux noms accessibles (« Taille de la portion : Moins ») —
  * sinon une page de réglages répète « Moins », « Plus » sans dire de quoi (05/10). */
 const nomPas = (nom, geste) => (nom ? tr('{a} : {b}', { a: nom, b: geste }) : geste);
+/* À la borne, le bouton se dit coupé (`aria-disabled`) sans l'être (audit du 12/11, lot 5b) : `disabled` le retirait de
+ * l'ordre du clavier, et le focus tombait sur la page au dernier « + ». Le clic est ignoré. Le dessin ne change pas : ni
+ * `index.css` ni le navigateur n'habillent `:disabled` par-dessus ces styles en ligne ; seul l'enfoncement de `button:active`,
+ * qu'un bouton `disabled` n'avait pas, est retenu (`BORNE`). */
+const BORNE = { transform: 'none' };
 export const PasAPas = ({ valeur, moins, plus, peutMoins = true, peutPlus = true, nom = null }) => (
   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: 4, borderRadius: 12, background: 'var(--o-well)', flexShrink: 0 }}>
-    <button type="button" onClick={moins} disabled={!peutMoins} aria-label={nomPas(nom, tr('Moins'))} style={{ width: 32, height: 32, borderRadius: 9, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 16, fontWeight: 800, opacity: peutMoins ? 1 : .4 }}>−</button>
+    <button type="button" onClick={peutMoins ? moins : undefined} aria-disabled={peutMoins ? undefined : true} aria-label={nomPas(nom, tr('Moins'))} style={{ width: 32, height: 32, borderRadius: 9, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 16, fontWeight: 800, opacity: peutMoins ? 1 : .4, ...(peutMoins ? null : BORNE) }}>−</button>
     <span style={{ minWidth: 64, padding: '0 6px', textAlign: 'center', fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap' }}>{valeur}</span>
-    <button type="button" onClick={plus} disabled={!peutPlus} aria-label={nomPas(nom, tr('Plus'))} style={{ width: 32, height: 32, borderRadius: 9, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 16, fontWeight: 800, opacity: peutPlus ? 1 : .4 }}>+</button>
+    <button type="button" onClick={peutPlus ? plus : undefined} aria-disabled={peutPlus ? undefined : true} aria-label={nomPas(nom, tr('Plus'))} style={{ width: 32, height: 32, borderRadius: 9, border: 'none', cursor: 'pointer', background: 'var(--o-s1)', color: 'var(--o-text1)', fontSize: 16, fontWeight: 800, opacity: peutPlus ? 1 : .4, ...(peutPlus ? null : BORNE) }}>+</button>
   </span>
 );
 
@@ -136,7 +141,10 @@ export const PuceJour = ({ j, on, onClick, taille = 30, disabled = false, attenu
  * rangée par heure ne se réordonne plus sous les doigts, et une heure à
  * moitié tapée (« 00:30 » en route vers « 09:30 ») ne part pas. Laissée
  * incomplète, elle redevient celle d'avant. Sans lui, chaque heure entière
- * part aussitôt (les repas du distributeur). `onValide` qui rend `false` :
+ * part aussitôt — plus personne ne s'en sert : les repas du distributeur
+ * attendent la sortie eux aussi (audit du 12/11, B5 : 08:00 → 19:30 envoyait
+ * 01:00, 19:00, 19:03 puis 19:30, et une ration pouvait partir sur une heure
+ * de passage). `onValide` qui rend `false` :
  * l'heure est refusée (une heure déjà prise du planning de chauffe), le champ
  * redit celle d'avant. `style` : par-dessus son dessin (l'heure d'un
  * changement du planning, 17 px, sans cadre). */

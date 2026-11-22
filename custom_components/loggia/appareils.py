@@ -23,6 +23,14 @@ Une fiche n'est pas une frontiere de securite — les profils n'en sont pas une.
 Tout compte peut donc ecrire celle de l'ecran ou il se trouve ; seul retirer
 la fiche d'un AUTRE compte reste reserve a un administrateur.
 
+Ecrire une fiche n'en change pas le PROPRIETAIRE (audit du 12/11, S2 et B11 ;
+ADR 0365). Chaque ecriture posait le compte de celui qui ecrivait : un compte
+ordinaire ecrivait la fiche d'un autre — elle devenait la sienne —, puis la
+retirait, ce que la regle ci-dessus lui refuse. Et un administrateur qui
+renumerote les fiches apres avoir retire un profil devenait le proprietaire de
+tous les ecrans de la maison. Le compte se pose donc UNE fois, a la premiere
+ecriture, et ne bouge plus.
+
 L'ecran n'envoie que SA fiche, jamais la liste entiere : deux ecrans qui
 ecrivent en meme temps ne se reprennent pas l'un l'autre.
 """
@@ -109,8 +117,12 @@ def fusionner(ancien: Any, demande: Any, *, compte: str, is_admin: bool,
     """La liste des appareils apres une ecriture.
 
     `demande` ne porte que les fiches qui changent ; les autres restent telles
-    quelles. `None` a la place d'une fiche la retire. Chaque fiche ecrite
-    retient le compte qui l'a ecrite et l'heure, en millisecondes."""
+    quelles. `None` a la place d'une fiche la retire. Une fiche NEUVE, ou sans
+    compte, retient le compte qui l'ecrit et l'heure, en millisecondes. Celle
+    d'un AUTRE compte garde le sien (S2, B11) : ses champs changent, pas son
+    proprietaire. L'heure suit l'ecran qui se montre ; un administrateur qui
+    retouche la fiche d'un autre — une renumerotation — ne l'a pas vu : `vu`
+    ne bouge pas, ni l'echeance d'oubli, ni « En ligne » sur l'ecran."""
     if not isinstance(demande, dict):
         raise ValueError("liste d'appareils invalide")
     fiches = _fiches(ancien)
@@ -124,7 +136,15 @@ def fusionner(ancien: Any, demande: Any, *, compte: str, is_admin: bool,
             del fiches[ident]
             continue
         champs = _demande_valide(ident, fiche)
-        fiches[ident] = {**fiches.get(ident, {}), **champs, "compte": compte, "vu": maintenant}
+        existante = fiches.get(ident) or {}
+        proprietaire = existante.get("compte")
+        if proprietaire and proprietaire != compte:
+            suite = {**existante, **champs}
+            if not is_admin:
+                suite["vu"] = maintenant
+            fiches[ident] = suite
+        else:
+            fiches[ident] = {**existante, **champs, "compte": compte, "vu": maintenant}
 
     seuil = maintenant - OUBLI_ANONYME_MS
     fiches = {k: v for k, v in fiches.items()

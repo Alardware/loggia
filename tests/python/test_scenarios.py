@@ -914,3 +914,31 @@ def test_l_ecran_sait_que_le_serveur_retient_la_maison(creer):
                                   "valeur": None, "si": None, "n": 1}
     # Un scenario compose n'a pas d'etat retenu.
     assert next(x for x in e["scenarios"] if x["id"] == "depart")["etats"] is None
+
+
+# ── Une ampoule sans courant (audit du 12/11, X4 ; ADR 0369) ─────────────────
+
+def test_un_scenario_n_envoie_rien_a_une_ampoule_sans_courant(creer, module):
+    """L'ampoule de la chambre est derriere l'interrupteur du jardin (un `light.*`,
+    comme chez lui). Eteint, elle n'a plus de courant : ni « eteindre », ni
+    « allumer » ne la visent, « la maison telle qu'elle est » ne la retient pas,
+    et un etat retenu avant la coupure ne lui envoie rien."""
+    etats = etats_de_base()
+    etats["light.jardin"] = FauxEtat("off")
+    s = creer(etats=etats, partage={"loggia_alimentation": {"light.chambre": "light.jardin"}})
+    maison = lancer(s._contexte())["maison"]
+    assert maison["hors_tension"] == {"light.chambre"}
+    eteindre = {"famille": "lumieres", "geste": "eteindre", "portee": "maison"}
+    allumer = {"famille": "lumieres", "geste": "allumer", "portee": "maison", "valeur": 40}
+    assert "light.chambre" not in module.cibles(eteindre, maison, None)
+    assert "light.salon" in module.cibles(eteindre, maison, None)
+    assert "light.chambre" not in module.cibles(allumer, maison, None)
+    assert "light.chambre" not in module.capturer(maison)
+    assert module.ordres_etats({"light.chambre": {"on": False}, "light.salon": {"on": False}}, maison) == [
+        ("light", "turn_off", ["light.salon"], {})]
+    # L'interrupteur rallume : l'ampoule redevient une lampe comme les autres.
+    etats["light.jardin"] = FauxEtat("on")
+    s = creer(etats=etats, partage={"loggia_alimentation": {"light.chambre": "light.jardin"}})
+    maison = lancer(s._contexte())["maison"]
+    assert maison["hors_tension"] == set()
+    assert "light.chambre" in module.cibles(eteindre, maison, None)

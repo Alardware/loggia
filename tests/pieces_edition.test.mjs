@@ -94,7 +94,8 @@ test('la fiche : nom, icone, teinte, tuile compacte, entites — et un nom deja 
   assert.ok(f.includes("const doublon = !!propre && propre !== nom && pieces.some(r => r.room === propre);") && f.includes('disabled={!valide}'), 'pas deux pieces du meme nom');
   ['temperature', 'humidity', 'carbon_dioxide'].forEach(c => assert.ok(f.includes("'" + c + "'"), 'les capteurs proposes par device_class ' + c));
   assert.ok(f.includes('<ChampSuggere id={id} label={lbl} value={v} onChange={set}') && f.includes('suggestions={capteurs(classe).map('), 'une liste de suggestions par capteur, aux couleurs du thème');
-  assert.ok(f.includes('{existante && <button onClick={() => { onSupprimer(nom); close(); }}'), 'Supprimer seulement pour une piece existante');
+  // ASSERTION MODIFIÉE (audit du 12/11, lot 4, I2) : le premier appui arme le bouton, le second supprime (tests/audit_1211_lot4_agenda.test.mjs).
+  assert.ok(f.includes('{existante && <button onClick={() => { if (armeSuppr) { onSupprimer(nom); close(); } else setArmeSuppr(true); }}'), 'Supprimer seulement pour une piece existante');
   // ASSERTION MODIFIÉE (audit du 19/10, H7) : ce que la fiche n'édite pas reste sous `haid` — le seuil CO₂ de la pièce.
   assert.ok(f.includes("haid: { ...h, temp: temp.trim() || null, humidity: hum.trim() || null, co2: co2.trim() || null, lights: lumieres.split(',').map(s => s.trim()).filter(Boolean) }"), 'les capteurs sous haid, comme Parametres');
   // ASSERTION AJOUTÉE (audit du 19/10, décision D5) : « Pièce du dehors » — Auto, Oui, Non — se range avec la pièce.

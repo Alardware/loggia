@@ -11,7 +11,7 @@
  * monde voit la liste, chacun règle SON écran, et oublier un autre appareil est
  * réservé à l'administrateur ; un appareil à part range aussi sa grille
  * d'Accueil. */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { tr } from '../i18n.js';
 import { Panneau, Ligne, Pastille, GrilleCartes, CarteGens, btnSecondaire, btnDanger, quandCourt } from './parcommun.jsx';
 import { CarteTel, LignesTel, LigneTel, ChoixTel, BasculeTel, btnTel, pasTel } from './partel.jsx';
@@ -50,8 +50,23 @@ const cEst = (f) => (f === 'tablette' ? tr('Une tablette') : f === 'mobile' ? tr
  * Le type d'écran et le profil se LISENT ici : Loggia détecte le premier (la
  * souris, le doigt, la largeur) et le second suit le compte Home Assistant ;
  * des boutons qui ne changeraient rien n'y ont pas leur place. */
+// « Oublier » armé : le rouge plein de la feuille d'un profil (parametres.jsx), par-dessus le dessin du bouton au repos.
+const OUBLI_ARME = { background: 'var(--o-bad)', color: '#fff' };
+
 export function AppareilsReglages({ peutOublier = false, profil = '', role = 'Famille', tel = false, profils = [] }) {
   const [, relire] = useState(0);
+  /* Oublier un écran partait d'un seul toucher (audit du 12/11, lot 4, I2 ; ADR 0370) : sa fiche s'efface, avec son nom et le
+   * profil qu'il retient. Deux appuis, comme la feuille d'un profil : le premier arme le bouton — rouge plein, « Confirmer ? » —,
+   * le second oublie ; sans second appui, il se désarme seul au bout de 4 s. `arme` : l'écran dont le bouton est armé. */
+  const [arme, setArme] = useState(null);
+  useEffect(() => { if (!arme) return undefined; const t = setTimeout(() => setArme(null), 4000); return () => clearTimeout(t); }, [arme]);
+  const oublier = (id, apres) => {
+    if (arme !== id) { setArme(id); return; }
+    setArme(null);
+    poserFiche(id, null);
+    if (apres) apres();
+    relire(n => n + 1);
+  };
   const [ouvert, setOuvert] = useState(null);
   const moi = appareilId();
   const tous = appareilsConnus();
@@ -115,7 +130,7 @@ export function AppareilsReglages({ peutOublier = false, profil = '', role = 'Fa
                 <LigneTel key={id} ico={iconeDuFormat(f.format)} titre={nomDe(f)}
                   desc={[nomDuFormat(f.format), f.propre ? tr('mise en page à part') : null, f.vu ? tr('vu {quand}', { quand: quandCourt(f.vu / 1000) }) : null].filter(Boolean).join(' · ')}>
                   {enLigne(f) && <span style={pasTel('ok')}>{tr('En ligne')}</span>}
-                  {peutOublier && <button type="button" onClick={() => { poserFiche(id, null); relire(n => n + 1); }} style={btnTel}>{tr('Oublier')}</button>}
+                  {peutOublier && <button type="button" onClick={() => oublier(id)} style={{ ...btnTel, ...(arme === id ? OUBLI_ARME : null) }}>{arme === id ? tr('Confirmer ?') : tr('Oublier')}</button>}
                 </LigneTel>
               );
             })}
@@ -178,7 +193,7 @@ export function AppareilsReglages({ peutOublier = false, profil = '', role = 'Fa
           {peutOublier && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 10 }}>
               <span style={{ flex: '1 1 200px', fontSize: 12, fontWeight: 600, color: 'var(--o-text2)' }}>{tr('Il réapparaîtra s’il rouvre Loggia.')}</span>
-              <button type="button" onClick={() => { poserFiche(ouvert, null); setOuvert(null); relire(n => n + 1); }} style={btnDanger}>{tr('Oublier cet écran')}</button>
+              <button type="button" onClick={() => oublier(ouvert, () => setOuvert(null))} style={{ ...btnDanger, ...(arme === ouvert ? OUBLI_ARME : null) }}>{arme === ouvert ? tr('Confirmer ?') : tr('Oublier cet écran')}</button>
             </div>
           )}
         </BottomSheet>

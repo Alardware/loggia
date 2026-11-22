@@ -162,7 +162,9 @@ export function barrePlante(cle, valeur) {
 /** Le dernier relevé d'une plante muette, dans les statistiques à l'heure de Home Assistant : `{ quand, sol, pile }`, ou null sans relevé. */
 export function dernierReleve(reponse, idSol, idPile) {
   const r = reponse && typeof reponse === 'object' ? reponse : {};
-  const dernier = (id) => { const l = Array.isArray(r[id]) ? r[id].filter(x => x && Number.isFinite(Number(x.mean))) : []; return l.length ? l[l.length - 1] : null; };
+  /* Une ligne compte si sa moyenne est un NOMBRE (audit du 12/11, B24) : `Number(null)` vaut 0, et une heure sans relevé
+   * (`mean: null`) passait pour « sol 0 % » à la place du relevé d'avant. */
+  const dernier = (id) => { const l = Array.isArray(r[id]) ? r[id].filter(x => x && typeof x.mean === 'number' && Number.isFinite(x.mean)) : []; return l.length ? l[l.length - 1] : null; };
   const sol = dernier(idSol);
   if (!sol) return null;
   const pile = idPile ? dernier(idPile) : null;

@@ -16,9 +16,10 @@
 import { useState, useRef } from 'react';
 import { Fi, BottomSheet } from '../ui.jsx';
 import { tr, locale } from '../i18n.js';
-import { nombre } from '../format.js';
+import { nombre, symboleMonnaie } from '../format.js';
 import { facteurKwh, kwhDe } from '../unites.js';
 import { useStats, bornesStat, damier, sommeStat, libellePeriode, RECUL_MAX } from '../stats.js';
+import { ligneTempo } from '../tempoligne.js';
 import { plagesVraies, barreTarif, prixDuMoment, prixEnCours, prochainTarif, lirePrevision, prixVarie, fenetreMoinsChere } from '../tarif.js';
 import { useEtatsHist } from '../historique.jsx';
 import { EnHistoBarres, EnCalendrier, CalendrierMois } from '../engraphes.jsx';
@@ -175,8 +176,9 @@ export function CarteTarif({ hass, EN = {}, tour = 0, devise = '€', etroit = f
   const bascule = mo ? { versHc: !mo.enCours, instant: mo.enCours ? mo.fin : mo.debut } : prochainTarif(plages, Date.now(), enHc);
   const heure = (ms) => new Date(ms).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   const maintenant = Math.max(0, Math.min(100, (Date.now() - t0) / (t1 - t0) * 100));
-  const parKwh = unite(EN.hcPrice) || unite(EN.hpPrice) || (devise + '/kWh');
-  const uniteDe = (id) => unite(id) || devise;
+  // En symbole : « € », pas le « EUR » brut du capteur (audit du 12/11).
+  const parKwh = symboleMonnaie(unite(EN.hcPrice) || unite(EN.hpPrice) || (devise + '/kWh'));
+  const uniteDe = (id) => symboleMonnaie(unite(id) || devise);
   const lignes = [
     /* Le COUT DU JOUR vient de l'apercu, qui sait distinguer un compteur
      * journalier d'un index (`jourstat.js`) : les deux cartes disent le meme
@@ -190,6 +192,10 @@ export function CarteTarif({ hass, EN = {}, tour = 0, devise = '€', etroit = f
     num(EN.abonnement) != null && { l: tr('Abonnement'), v: dec(num(EN.abonnement), 2) + ' ' + uniteDe(EN.abonnement), c: 'var(--o-text2)' },
     num(EN.bill) != null && { l: tr('Facture en cours'), v: dec(num(EN.bill), 2) + ' ' + uniteDe(EN.bill), c: 'var(--o-text)' },
   ].filter(Boolean);
+  /* TEMPO EN CLAIR (chantier du 20/11, A3 ; ADR 0385) : « Aujourd'hui bleu · demain blanc · encore 14 rouges », sous le
+   * prix — c'est ce qui l'explique. Les trois viennent de la découverte (`tempo.js`) ; un morceau qui ne se lit pas se tait. */
+  const etatTempo = (id) => { const e = id ? brut(id) : null; return e ? e.state : null; };
+  const tempo = ligneTempo({ aujourdhui: etatTempo(EN.tempoJour), demain: etatTempo(EN.tempoDemain), rouges: etatTempo(EN.tempoRestantsRouge) });
   if (prix.valeur == null && prixVente == null && !barre.length && !lignes.length) return null;
 
   return (
@@ -224,6 +230,13 @@ export function CarteTarif({ hass, EN = {}, tour = 0, devise = '€', etroit = f
           </div>
         )}
       </div>
+      {tempo && (
+        <div data-tempo="" style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', columnGap: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-text2)' }}>
+          {tempo.map((p, i) => (
+            <span key={i} style={p.rouge ? { color: 'var(--o-bad)' } : undefined}>{p.texte}{i < tempo.length - 1 ? ' ·' : ''}</span>
+          ))}
+        </div>
+      )}
       {/* Le creux de la prévision : la fenêtre continue la moins chère, deux heures. Demain, il le dit. */}
       {creux && (
         <div style={{ marginTop: 6, fontSize: 12, fontWeight: 700, color: 'var(--o-ok)' }}>
@@ -283,6 +296,16 @@ export function CarteTarif({ hass, EN = {}, tour = 0, devise = '€', etroit = f
         </div>
       )}
     </section>
+  );
+}
+
+/* Le petit rail de « Comparer », dessiné UNE fois (audit du 12/11, lot 5b) : l'ordinateur et le téléphone l'écrivaient
+ * chacun, trait pour trait. Seul le bouton qui le porte change d'un format à l'autre. */
+function RailComparer({ allume }) {
+  return (
+    <span style={{ position: 'relative', width: 34, height: 20, borderRadius: 999, background: allume ? 'var(--o-accent-fond)' : 'var(--o-well0)', transition: 'background .2s', flexShrink: 0 }}>
+      <span style={{ position: 'absolute', top: 2, left: allume ? 16 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.3)', transition: 'left .25s cubic-bezier(.34,1.56,.64,1)' }} />
+    </span>
   );
 }
 
@@ -420,12 +443,12 @@ export function SectionHistorique({ hass, EN = {}, tour = 0, devise = '€', etr
         <div style={etroit
           ? { display: 'flex', alignItems: 'center', gap: 6, width: '100%' }
           : { display: 'inline-flex', alignItems: 'center', gap: 2, height: 38, padding: '0 3px', borderRadius: 12, background: 'var(--o-well)', border: 'var(--o-bw,1px) solid var(--o-bd2)', flexShrink: 0 }}>
-          <button onClick={() => setRecul(r => Math.min(RECUL_MAX[periode], r + 1))} disabled={recul >= RECUL_MAX[periode]} aria-label={tr('Période précédente')}
+          <button className="o-doigt" onClick={() => setRecul(r => Math.min(RECUL_MAX[periode], r + 1))} disabled={recul >= RECUL_MAX[periode]} aria-label={tr('Période précédente')}
             style={etroit
               ? { width: 44, height: 38, flexShrink: 0, border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 11, background: 'var(--o-well)', color: 'var(--o-text1)', cursor: recul >= RECUL_MAX[periode] ? 'default' : 'pointer', opacity: recul >= RECUL_MAX[periode] ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }
               : { width: 32, height: 30, border: 'none', borderRadius: 9, background: 'none', color: 'var(--o-text1)', cursor: recul >= RECUL_MAX[periode] ? 'default' : 'pointer', opacity: recul >= RECUL_MAX[periode] ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="angle-small-left" size={15} /></button>
           <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, flex: etroit ? 1 : undefined, minWidth: 0, padding: '0 6px', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', fontVariantNumeric: 'tabular-nums' }}><Fi i="calendar" size={12} color="var(--o-text3)" />{libellePeriode(periode, recul)}</span>
-          <button onClick={() => setRecul(r => Math.max(0, r - 1))} disabled={recul === 0} aria-label={tr('Période suivante')}
+          <button className="o-doigt" onClick={() => setRecul(r => Math.max(0, r - 1))} disabled={recul === 0} aria-label={tr('Période suivante')}
             style={etroit
               ? { width: 44, height: 38, flexShrink: 0, border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 11, background: 'var(--o-well)', color: 'var(--o-text1)', cursor: recul === 0 ? 'default' : 'pointer', opacity: recul === 0 ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }
               : { width: 32, height: 30, border: 'none', borderRadius: 9, background: 'none', color: 'var(--o-text1)', cursor: recul === 0 ? 'default' : 'pointer', opacity: recul === 0 ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="angle-small-right" size={15} /></button>
@@ -446,11 +469,9 @@ export function SectionHistorique({ hass, EN = {}, tour = 0, devise = '€', etr
             ))}
           </div>
         )}
-        {!etroit && <button onClick={() => setComparer(v => !v)} aria-pressed={comparer}
+        {!etroit && <button className="o-doigt" onClick={() => setComparer(v => !v)} aria-pressed={comparer}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 9, height: 38, padding: '0 6px', border: 'none', background: 'none', color: 'var(--o-text2)', font: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
-          <span style={{ position: 'relative', width: 34, height: 20, borderRadius: 999, background: comparer ? 'var(--o-accent-fond)' : 'var(--o-well0)', transition: 'background .2s', flexShrink: 0 }}>
-            <span style={{ position: 'absolute', top: 2, left: comparer ? 16 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.3)', transition: 'left .25s cubic-bezier(.34,1.56,.64,1)' }} />
-          </span>
+          <RailComparer allume={comparer} />
           {tr('Comparer')}
         </button>}
         {!etroit && <span style={{ flex: 1 }} />}
@@ -477,12 +498,11 @@ export function SectionHistorique({ hass, EN = {}, tour = 0, devise = '€', etr
             <span key={s.nom} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 3, background: s.couleur }} />{s.nom}</span>
           ))}
           <span style={{ flex: 1 }} />
-          <button onClick={() => setComparer(v => !v)} aria-pressed={comparer}
+          <button className="o-doigt" onClick={() => setComparer(v => !v)} aria-pressed={comparer}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 36, padding: 0, border: 'none', background: 'none', color: 'var(--o-text2)', font: 'inherit', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>
-            <span style={{ position: 'relative', width: 34, height: 20, borderRadius: 999, background: comparer ? 'var(--o-accent-fond)' : 'var(--o-well0)', transition: 'background .2s', flexShrink: 0 }}>
-              <span style={{ position: 'absolute', top: 2, left: comparer ? 16 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.3)', transition: 'left .25s cubic-bezier(.34,1.56,.64,1)' }} />
-            </span>
-            {tr('Veille')}
+            <RailComparer allume={comparer} />
+            {/* Le même mot qu'à l'ordinateur (audit du 12/11) : « Veille » nommait la même bascule au téléphone. */}
+            {tr('Comparer')}
           </button>
         </div>
       )}
@@ -774,10 +794,10 @@ export function EnergieCalendrier({ hass, EN = {}, tour = 0, devise = '€', etr
           {/* Un mois a la fois : la fleche de gauche remonte, celle de droite
             * s'arrete au mois en cours — on ne feuillette pas l'avenir. */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, maxWidth: etroit ? 'none' : 340 }}>
-            <button onClick={() => setMoisRecul(r => Math.min(RECUL_MAX.mois, r + 1))} disabled={moisRecul >= RECUL_MAX.mois} aria-label={tr('Période précédente')}
+            <button className="o-doigt" onClick={() => setMoisRecul(r => Math.min(RECUL_MAX.mois, r + 1))} disabled={moisRecul >= RECUL_MAX.mois} aria-label={tr('Période précédente')}
               style={{ width: 44, height: 38, flexShrink: 0, border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 11, background: 'var(--o-well)', color: 'var(--o-text1)', cursor: moisRecul >= RECUL_MAX.mois ? 'default' : 'pointer', opacity: moisRecul >= RECUL_MAX.mois ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="angle-small-left" size={15} /></button>
             <span style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden' }}>{libellePeriode('mois', moisRecul)}</span>
-            <button onClick={() => setMoisRecul(r => Math.max(0, r - 1))} disabled={moisRecul === 0} aria-label={tr('Période suivante')}
+            <button className="o-doigt" onClick={() => setMoisRecul(r => Math.max(0, r - 1))} disabled={moisRecul === 0} aria-label={tr('Période suivante')}
               style={{ width: 44, height: 38, flexShrink: 0, border: 'var(--o-bw,1px) solid var(--o-bd2)', borderRadius: 11, background: 'var(--o-well)', color: 'var(--o-text1)', cursor: moisRecul === 0 ? 'default' : 'pointer', opacity: moisRecul === 0 ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Fi i="angle-small-right" size={15} /></button>
           </div>
           {resume && <ChiffresMois resume={resume} fmt={fmt} etroit={etroit} hausseBonne={choix === 'prod'} />}
@@ -845,8 +865,8 @@ export function BilansEnergie({ hass, EN = {}, tour = 0, devise = '€', etroit 
   const consoAn = ou(EN.consoAnnee, total(consoIds));
   const prodAn = ou(EN.prodAnnee, prodIds.length ? total(prodIds) : null);
   const coutMois = avail(EN.coutMois) ? num(EN.coutMois) : (EN.coutJour ? dernierMois([EN.coutJour]) : null);
-  const uniteDe = (id) => unite(id) || devise;
-  const eco = avail(EN.ecoMois) ? num(EN.ecoMois) : null;
+  const uniteDe = (id) => symboleMonnaie(unite(id) || devise);
+const eco = avail(EN.ecoMois) ? num(EN.ecoMois) : null;
 
   const tuiles = [
     consoMois != null && { l: tr('Consommation du mois'), v: dec(consoMois, 1), u: 'kWh', s: coutMois != null ? dec(coutMois, 2) + ' ' + uniteDe(EN.coutMois || EN.coutJour) : null },

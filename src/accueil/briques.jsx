@@ -19,7 +19,7 @@ import { RM_ICO, RM_CARD, RM_NAME, RM_SUB, RmBascule } from '../cartes/briques.j
 import { FicheRangee, useDomainCards } from '../appareils/fiches.jsx';
 import { PlugIcon } from '../cartescustom/cartes.jsx';
 import { habillagePiece, TEINTES_PIECE, ICONES_PIECE } from '../app/pieces.jsx';
-import { useScenarios, CarteScenario } from '../app/scenarios.jsx';
+import { useScenarios, PastilleScenario } from '../app/scenarios.jsx';
 import { FeuilleDepart } from '../app/depart.jsx';
 import { BOUTON_COIN, boutonEdition, ChoixIcone, EditableCard } from '../edition/briques.jsx';
 import { CV_TYPE_NOMS, cvTypeDe, cvW, cvAvecW, cvRowsDe, cvAvecH, nomCv, CvTyped, FicheCarte, CarteAjoutSheet, ChipsEditSheet } from '../cartescustom/galerie.jsx';
@@ -162,7 +162,7 @@ function PuceToutEteindre({ ids, mot = true, onEteindre }) {
   }, []);
   if (!ids.length) return null;
   return (
-    <button type="button" ref={refPuce} onClick={() => onEteindre(ids)} aria-label={tr('Tout éteindre')} title={tr('Tout éteindre')}
+    <button type="button" ref={refPuce} className="o-doigt" onClick={() => onEteindre(ids)} aria-label={tr('Tout éteindre')} title={tr('Tout éteindre')}
       style={{ height: 44, margin: '-7px 0', padding: 0, border: 'none', background: 'none', cursor: 'pointer', font: 'inherit', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
       <span style={{ height: 30, padding: '0 11px', borderRadius: 10, background: 'rgba(var(--o-warn-rgb),.14)', color: 'var(--o-warn)', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
         <Fi i="power" size={12} />{mot ? tr('Tout éteindre') : null}
@@ -170,7 +170,10 @@ function PuceToutEteindre({ ids, mot = true, onEteindre }) {
     </button>
   );
 }
-function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, mains = null, attente = false, onToggleLights, covers = null, clim = null, idx = 0, ambiance = null }) {
+function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, mains = null, attente = false, onToggleLights, covers = null, clim = null, seuilCo2 = null, idx = 0, ambiance = null }) {
+  /* Le seuil de CO₂ de la pièce s'il est réglé, sinon celui de la maison (`seuilCo2`, la veille du serveur) — le même que
+   * suivent « À surveiller » et le rail (audit du 12/11, B12). Sans les deux, `ambiancePiece` garde ses 1 400. */
+  const seuilPiece = (p.live && p.live.co2Seuil) || seuilCo2 || undefined;
   // Format compact (PC ≥1180) : compteur = toutes les lumières de la pièce ; interrupteur = `mains`, les lampes du bouton (sans les veilleuses, ADR 0261)
   const tilt = useTilt(4);
   const [flashRef, flash] = useFlash();
@@ -208,7 +211,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
     // 03/10). Une rangée de 88 px.
     const n = lights ? lights.filter(l => l.on).length : (p.status.kind === 'active' ? p.status.n : 0);
     // La ligne d'etat (ADR 0029) : un probleme, sinon l'activite, sinon le calme.
-    const amb = lights ? ambiancePiece({ lumieres: n, lampes: lights.length, ...(ambiance || {}), co2: p.live && p.live.co2 }) : null;
+    const amb = lights ? ambiancePiece({ lumieres: n, lampes: lights.length, ...(ambiance || {}), co2: p.live && p.live.co2, seuil: seuilPiece }) : null;
     const on = ov != null ? ov : (realOn != null ? realOn : n > 0);
     const canToggle = !!(mains && mains.length && onToggleLights);
     const temp = p.live && p.live.temp != null ? decMax(p.live.temp, 1) + '°' : null;
@@ -243,7 +246,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
             <span role="switch" aria-checked={on} aria-label={tr('Lumières') + ' ' + p.name} tabIndex={0} {...inerte}
               onClick={e => { e.stopPropagation(); doToggle(); }}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
-              style={{ width: 44, height: 25, borderRadius: 14, position: 'relative', zIndex: 1, cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,var(--o-lampe),var(--o-lampe-b))' : 'var(--o-bd1)', transition: 'background .25s', ...(attente ? { cursor: 'default', opacity: .5 } : null) }}>
+              style={{ width: 44, height: 25, borderRadius: 14, position: 'relative', zIndex: 1, cursor: 'pointer', flexShrink: 0, background: on ? 'var(--o-bascule-lampe)' : 'var(--o-bd1)', transition: 'background .25s', ...(attente ? { cursor: 'default', opacity: .5 } : null) }}>
               <span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
             </span>
           )}
@@ -262,7 +265,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
   if (compact) {
     const n = lights ? lights.filter(l => l.on).length : (p.status.kind === 'active' ? p.status.n : 0);
     // La ligne d'etat (ADR 0029) : un probleme, sinon l'activite, sinon le calme.
-    const amb = lights ? ambiancePiece({ lumieres: n, lampes: lights.length, ...(ambiance || {}), co2: p.live && p.live.co2 }) : null;
+    const amb = lights ? ambiancePiece({ lumieres: n, lampes: lights.length, ...(ambiance || {}), co2: p.live && p.live.co2, seuil: seuilPiece }) : null;
     const on = ov != null ? ov : (realOn != null ? realOn : n > 0);
     const canToggle = !!(mains && mains.length && onToggleLights);
     /* Relecture du lot 13 : les deux tuiles RENDUES de l'Accueil se nomment
@@ -273,7 +276,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
      * d'`aria-haspopup`. */
     const temp = p.live && p.live.temp != null ? decMax(p.live.temp, 1) + '°' : null;
     // Sa maquette du 08/11 : la ligne d'état en toutes lettres, l'humidité sous la température, la plaque à la teinte de la pièce.
-    const phrase = lights ? phrasePiece({ lumieres: n, lampes: lights.length, ...(ambiance || {}), co2: p.live && p.live.co2 }) : null;
+    const phrase = lights ? phrasePiece({ lumieres: n, lampes: lights.length, ...(ambiance || {}), co2: p.live && p.live.co2, seuil: seuilPiece }) : null;
     const hum = p.live && p.live.hum != null ? decMax(p.live.hum, 0) + '\u00a0%' : null;
     const rgb = rgbDePiece(p);
     return (
@@ -361,7 +364,7 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
               <span role="switch" aria-checked={on} aria-label={tr('Lumières') + ' ' + p.name} tabIndex={0} {...inerte}
                 onClick={e => { e.stopPropagation(); doToggle(); }}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); doToggle(); } }}
-                style={{ width: 44, height: 25, borderRadius: 14, position: 'relative', zIndex: 1, cursor: 'pointer', flexShrink: 0, background: on ? 'linear-gradient(135deg,var(--o-lampe),var(--o-lampe-b))' : 'var(--o-bd1)', transition: 'background .25s', ...(attente ? { cursor: 'default', opacity: .5 } : null) }}>
+                style={{ width: 44, height: 25, borderRadius: 14, position: 'relative', zIndex: 1, cursor: 'pointer', flexShrink: 0, background: on ? 'var(--o-bascule-lampe)' : 'var(--o-bd1)', transition: 'background .25s', ...(attente ? { cursor: 'default', opacity: .5 } : null) }}>
                 <span style={{ position: 'absolute', top: 3, left: on ? 22 : 3, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .32s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 2px 5px rgba(0,0,0,.3)' }} />
               </span>
             </span>
@@ -398,7 +401,6 @@ function PieceCard({ p, onOpen, compact = false, chip = false, lights = null, ma
   );
 }
 
-// Détail média : lecteur complet (ambiance pochette, seek, contrôles, volume) — comme la vue Médias.
 /** Ce qu'on garde de l'historique.
  *
  * DEUX plafonds, parce qu'ils ne protegent pas de la meme chose.
@@ -433,10 +435,10 @@ function elaguerHisto(liste) {
   return h;
 }
 
-/* La rangée de l'Accueil : TOUS les scénarios qui s'y montrent, en cartes
- * compactes, sur UNE rangée qui défile — six visibles sur PC et tablette, les
- * autres d'un clic sur les flèches ou d'un glissement ; 150 px par carte sur
- * téléphone (`.grid-qscenes`). Le chemin vers la vue vit dans l'EN-TÊTE
+/* La rangée de l'Accueil : TOUS les scénarios qui s'y montrent, en
+ * pastilles (ADR 0343), sur UNE rangée qui défile — autant qu'il en tient, les
+ * autres d'un clic sur les flèches ou d'un glissement ; chacune à sa largeur
+ * (`.grid-qscenes`). Le chemin vers la vue vit dans l'EN-TÊTE
  * (« 9 scénarios → ») : la tuile « Tous les scénarios », posée en bout de
  * rangée, ressemblait à un scénario sans en être un (retour du 17/09). En
  * édition, l'en-tête porte « Gérer les scénarios ». */
@@ -528,7 +530,7 @@ function ScenariosAccueil({ hass, edit = false, onNav = null }) {
           {/* En édition, la rangée est inerte au clavier aussi : la section ne
             * l'est plus, pour laisser « Gérer les scénarios » joignable
             * (relecture du lot 13 de l'audit du 03/10). */}
-          {liste.map(s => <CarteScenario key={s.id} s={s} noms={sc.noms} compacte enCours={sc.enCours === s.id} onLancer={sc.lancer} dataId={s.id} />)}
+          {liste.map(s => <PastilleScenario key={s.id} s={s} enCours={sc.enCours === s.id} onLancer={sc.lancer} dataId={s.id} />)}
         </div>
       )}
       {/* La réserve (voir `rangeeVue`) : rien ne s'y dessine, elle part à la
@@ -540,7 +542,7 @@ function ScenariosAccueil({ hass, edit = false, onNav = null }) {
         * garde ce court saut : rare, et une bande vide sous « Scénarios
         * indisponibles » serait pire. */}
       {!nScenarios && !repondu && rangeeVue && !!(hass && typeof hass.callWS === 'function') && (
-        <div className="grid-qscenes" aria-hidden="true" style={{ overflowX: 'scroll' }}><span style={{ height: 88 }} /></div>
+        <div className="grid-qscenes" aria-hidden="true" style={{ overflowX: 'scroll' }}><span style={{ height: 44 }} /></div>
       )}
       <FeuilleDepart hass={hass} sc={sc} />
     </>

@@ -43,6 +43,7 @@ import { CLASSES_MOUVEMENT, couleurPile } from './attention.js';
 import { cfgSet } from './state.js';
 import { CLE_NON_JUGEES } from './horsair.js';
 import { PANNEAU, RANGEE_SERREE, EN_BOUTON, TITRE, SOUS } from './fichekit.js';
+import { railBascule, rondBascule } from './cartes/briques.jsx';
 
 const VALEUR = { fontSize: 13, fontWeight: 800, color: 'var(--o-text1)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' };
 const ECHELLE = { fontSize: 11, fontWeight: 700, color: 'var(--o-text3)' };
@@ -237,8 +238,7 @@ export default function FicheCapteurContent({ id, vue, piece = null, epingle = n
         {j && j.possible && j.reglable && (
           <button type="button" role="switch" aria-checked={nonJugee} aria-label={tr('Ne pas juger cette mesure')} onClick={basculerJugement} style={{ ...RANGEE_SERREE, ...EN_BOUTON, borderTop: filet(1) }}>
             <span style={{ flex: 1, minWidth: 0 }}><span style={TITRE}>{tr('Ne pas juger cette mesure')}</span><span style={SOUS}>{tr('Un frigo, la sonde d’un appareil : le chiffre et la courbe, sans zone ni alerte.')}</span></span>
-            <span aria-hidden="true" style={{ width: 42, height: 24, borderRadius: 14, flexShrink: 0, position: 'relative', background: nonJugee ? 'var(--o-accent-fond)' : 'var(--o-bd1)' }}>
-              <span style={{ position: 'absolute', top: 3, left: nonJugee ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff' }} /></span>
+            <span aria-hidden="true" style={railBascule(!!nonJugee)}><span style={rondBascule(!!nonJugee)} /></span>
           </button>
         )}
       </div>

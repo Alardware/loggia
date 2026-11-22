@@ -13,7 +13,7 @@
 import { useState, Suspense } from 'react';
 import { tr, locale } from './i18n.js';
 import { Fi, BottomSheet } from './ui.jsx';
-import { LOGGIA_INDEX } from './state.js';
+import { LOGGIA_INDEX, nomZoneDe } from './state.js';
 import { relTime } from './format.js';
 import { couleurPile } from './attention.js';
 import { EnteteFiche, PETITES_CAPITALES, filet } from './fichecommune.jsx';
@@ -31,7 +31,6 @@ import { coordDe } from './cartegeo.js';
 const FeuilleCarte = lazyRecharge(() => import('./feuillecarte.jsx'));
 
 const VALEUR = { fontSize: 13, fontWeight: 800, color: 'var(--o-text1)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' };
-const pieceDe = (id) => (LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function' ? LOGGIA_INDEX.areaNameOf(id) : null);
 
 /** La feuille : le `hass` vivant du traceur et des capteurs de son appareil, l'épingle, et la fiche universelle par-dessus. */
 export default function FeuilleTraceur({ id, hass, onClose }) {
@@ -52,7 +51,7 @@ export default function FeuilleTraceur({ id, hass, onClose }) {
 export function FicheTraceurContent({ id, hass, onFiche = null, onCarte = null, epingle = null, Glyphe = null }) {
   const S = (hass && hass.states) || {};
   const v = vueTraceur({ id, S, index: LOGGIA_INDEX });
-  const piece = pieceDe(id);
+  const piece = nomZoneDe(id);
   const genre = tr('traceur d’objet');
   const exact = v.signal != null ? new Date(v.signal).toLocaleString(locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
   return (

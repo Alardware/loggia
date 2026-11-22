@@ -192,7 +192,7 @@ automation:
 - **Commands go through Home Assistant**, with its permissions: an account
   can't do anything in Loggia that it couldn't already do elsewhere. What
   changes the configuration of the house is reserved for administrators
-  (`require_admin`, on the twenty WebSocket commands concerned).
+  (`require_admin`, on the twenty-one WebSocket commands concerned).
 - **The administrator code is hashed** by the integration and never sent back
   to a screen. Failed attempts are limited.
 - The Home Assistant access token is only read **for images**: cameras and a
@@ -222,7 +222,9 @@ check a translation, a theme or a view in a single load: `mode=auto|light|dark`,
 contrast audit replays each variant through it), `vue=<id>` or
 `vue=room:<room>`, `fiche=<entity_id>` (opens a device's sheet).
 The project's decisions are in `docs/decisions/`, one per file, with their
-context (in French).
+context (in French). The interface rules (cards, popups, themes, texts) are
+gathered in [docs/guide-ux.md](docs/guide-ux.md) (in French): read them before
+changing a screen.
 
 ## Support
 
@@ -233,8 +235,10 @@ helps keep it alive:
 
 ## Credits
 
-Manrope (Mikhail Sharanda) and Newsreader (Production Type) fonts, under the
-SIL Open Font License 1.1. Interface icons: [UIcons by Flaticon](https://www.flaticon.com/uicons).
+Manrope (Mikhail Sharanda), Newsreader (Production Type), Outfit (The Outfit
+Project Authors), Roboto (The Roboto Project Authors) and Mona Sans (The Mona
+Sans Project Authors, GitHub) fonts, under the SIL Open Font License 1.1.
+Interface icons: [UIcons by Flaticon](https://www.flaticon.com/uicons).
 Weather icons: Meteocons, by Bas Milius (`@bybas/weather-icons`), under the MIT
 license. React and three.js, under the MIT license; Leaflet, for the map, under
 the BSD 2-clause license. All of this is bundled: nothing is loaded from these

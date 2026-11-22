@@ -5,6 +5,9 @@
  *  - la tête : l'état en grand, la puissance, « Branchée depuis 18:05 » ;
  *  - « Charge en cours » : les kWh depuis le branchement — l'index d'énergie
  *    de la borne, moins ce qu'il valait au branchement (son historique) ;
+ *  - « Dernière charge » (A7, ADR 0385) : quand rien ne charge, ce que la
+ *    dernière charge a donné — « 18 kWh, hier soir » — lu dans l'historique
+ *    de l'index d'énergie de la borne, sur une semaine ;
  *  - « Courant maximum » : − et +, au pas de l'appareil, DANS ses bornes
  *    (`number.set_value`) ;
  *  - « Mettre en pause » / « Reprendre » : SEULEMENT si la borne a un
@@ -14,16 +17,16 @@
  * Aucun essai chez l'utilisateur : la démo porte une borne (`?demo`).
  */
 import { useState } from 'react';
-import { tr, locale } from './i18n.js';
+import { tr } from './i18n.js';
 import { Fi } from './ui.jsx';
-import { LOGGIA_INDEX } from './state.js';
+import { nomZoneDe } from './state.js';
 import { LISERE } from './styles.js';
-import { fmtWatts, nombre } from './format.js';
+import { fmtWatts, nombre, heureCourte } from './format.js';
 import { commanderService } from './actions.js';
 import { useOptimiste } from './optimiste.js';
 import { useEtatsHist } from './historique.jsx';
 import { EnteteFiche, PETITES_CAPITALES } from './fichecommune.jsx';
-import { vueBorne, bornerCourant, kwhDepuis } from './bornevue.js';
+import { vueBorne, bornerCourant, kwhDepuis, derniereCharge, quandCharge } from './bornevue.js';
 
 const PANNEAU = { marginTop: 12, borderRadius: 18, background: 'var(--o-s3)', border: LISERE, overflow: 'hidden' };
 const RANGEE = { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px' };
@@ -32,8 +35,6 @@ const DOUX = { ...PUCE, height: 40, fontSize: 12, background: 'var(--o-s2)', col
 const PLEIN = { ...DOUX, background: 'var(--o-accent-fond)', color: '#fff' };
 const ROND = { width: 44, height: 44, borderRadius: 12, border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--o-s1)', color: 'var(--o-text1)', fontFamily: 'inherit', flexShrink: 0 };
 
-const pieceDe = (id) => (LOGGIA_INDEX && typeof LOGGIA_INDEX.areaNameOf === 'function' ? LOGGIA_INDEX.areaNameOf(id) : null);
-
 export default function FicheBorneContenu({ borne, hass, nom = null, onFiche = null, epingle = null, Glyphe = null }) {
   const S = (hass && hass.states) || {};
   const v = vueBorne({ borne, S, nom });
@@ -41,13 +42,18 @@ export default function FicheBorneContenu({ borne, hass, nom = null, onFiche = n
   const [demande, setDemande] = useState(false);
   // Les kWh de la charge en cours : l'historique de l'index depuis le branchement.
   const hist = useEtatsHist(hass, v && v.depuis && borne.energie ? borne.energie : null, v ? v.depuis : null, null, v && v.depuis ? Math.floor(Date.now() / 300000) : 0);
+  /* La dernière charge : l'historique de la semaine, relu toutes les cinq minutes — seulement quand rien ne charge (la charge en
+   * cours a sa ligne). Le début tombe à l'heure ronde : une borne qui se tait ne relance pas la lecture à chaque rendu. */
+  const lireDerniere = !!(v && borne && borne.energie && v.etat !== 'charge');
+  const semaine = useEtatsHist(hass, lireDerniere ? borne.energie : null, lireDerniere ? Math.floor((Date.now() - 7 * 86400000) / 3600000) * 3600000 : null, null, lireDerniere ? Math.floor(Date.now() / 300000) : 0);
   if (!v) return null;
   const id = borne.puissance;
   const courant = ovCourant != null ? ovCourant : v.courant.valeur;
   const kwh = borne.energie && v.depuis ? kwhDepuis(hist, S[borne.energie]) : null;
-  const zone = pieceDe(id);
+  const derniere = lireDerniere ? derniereCharge(semaine, S[borne.energie]) : null;
+  const quand = derniere ? quandCharge(derniere.fin) : null;
+  const zone = nomZoneDe(id);
   const genre = tr('borne de recharge');
-  const heure = (ms) => new Date(ms).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   const regler = (sens) => {
     const cible = bornerCourant((courant != null ? courant : v.courant.min) + sens * v.courant.pas, v.courant);
     if (cible == null || cible === courant) return;
@@ -69,9 +75,9 @@ export default function FicheBorneContenu({ borne, hass, nom = null, onFiche = n
       <div data-tete="" style={{ marginTop: 18, padding: 18, borderRadius: 18, background: v.etat === 'charge' ? 'rgba(var(--o-ok-rgb),.08)' : 'var(--o-s3)', border: LISERE }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.1, color: v.etat === 'charge' ? 'var(--o-ok)' : v.mort ? 'var(--o-text3)' : 'var(--o-text)' }}>{v.phrase.texte}</div>
+            <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.1, color: v.etat === 'charge' ? 'var(--o-ok)' : v.etat === 'defaut' ? 'var(--o-bad)' : v.mort ? 'var(--o-text3)' : 'var(--o-text)' }}>{v.phrase.texte}</div>
             <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--o-text2)', marginTop: 6 }}>
-              {[v.watts != null ? fmtWatts(v.watts) : null, v.depuis ? tr('Branchée depuis {h}', { h: heure(v.depuis) }) : null].filter(Boolean).join(' · ') || '—'}
+              {[v.watts != null ? fmtWatts(v.watts) : null, v.depuis ? tr('Branchée depuis {h}', { h: heureCourte(v.depuis) }) : null].filter(Boolean).join(' · ') || '—'}
             </div>
           </div>
           {v.pause && !demande && (
@@ -98,6 +104,15 @@ export default function FicheBorneContenu({ borne, hass, nom = null, onFiche = n
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 }}>{tr('Depuis le branchement')}</div>
           </div>
           <span style={{ fontSize: 20, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{nombre(kwh, 1)}<span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', marginLeft: 4 }}>kWh</span></span>
+        </div>
+      )}
+      {derniere && quand && (
+        <div data-derniere="" style={{ ...PANNEAU, ...RANGEE }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>{tr('Dernière charge')}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--o-text2)', marginTop: 2 }}>{quand.charAt(0).toUpperCase() + quand.slice(1)}</div>
+          </div>
+          <span style={{ fontSize: 20, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{nombre(derniere.kwh, 1)}<span style={{ fontSize: 12, fontWeight: 700, color: 'var(--o-text2)', marginLeft: 4 }}>kWh</span></span>
         </div>
       )}
       {v.courant.valeur != null && (

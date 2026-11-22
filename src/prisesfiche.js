@@ -6,11 +6,11 @@
  * la fiche les reprend, elle ne les récrit pas.
  */
 import { tr, locale } from './i18n.js';
-import { nombre, fmtWatts } from './format.js';
+import { nombre, fmtWatts, heureCourte } from './format.js';
 import { NOMS_PRISE, estPontZigbee, cheminsCourbe, kwhPrise, dureePrise, insecable } from './prises.js';
 import { prixParHeure } from './tarif.js';
 
-const heure = (t) => new Date(t).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+const heure = heureCourte;
 
 /* ── La courbe des 24 heures (§ 3.6) ─────────────────────────────────────── */
 

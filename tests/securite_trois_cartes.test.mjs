@@ -77,7 +77,8 @@ test('la vue : la rangee des trois cartes remplace le bandeau, la presence y des
   assert.ok(vue.includes("if (k.indexOf('alarm_control_panel.') === 0) return <CvAlarm id={k} hass={hass} sans message={k === alarmId ? msgAlarme : null} label={ed.labelOf(k)} />;"), 'ta carte Alarme, avec son message');
   assert.ok(vue.includes('if (S[k] && estSirene(k, S[k])) return <CvSirene id={k} hass={hass} label={ed.labelOf(k)} />;'), 'une carte par sirene');
   assert.ok(vue.includes("if (k === 'carte:presence') return <CvPresence hass={hass} />;") && vue.includes("...(people.length ? ['carte:presence'] : [])"), 'la presence, dans les cartes de la vue');
-  assert.ok(vue.includes("if (k === 'sect:ouvrants') return tr('Ouvrants');") && !vue.includes("tr('Ouvrants et présence')"), 'la section des ouvrants ne parle plus de presence');
+  // ASSERTION MODIFIÉE (22/11, ADR 0388) : sa maquette « Ouvertures — tuiles » renomme la section « Ouvertures ».
+  assert.ok(vue.includes("if (k === 'sect:ouvrants') return tr('Ouvertures');") && !vue.includes("tr('Ouvrants et présence')"), 'la section des ouvrants ne parle plus de presence');
   assert.ok(vue.includes("{tr('Alarme')} {alarmWord} · {resumeSecurite(comptesSecVue)}") && vue.includes('const cptAlarme = armCompte(alarmId ? S[alarmId] : null);'), 'la sous-ligne garde le decompte');
   assert.ok(src.includes("securite: [...secBaseKeys(), 'camera.', 'siren.', 'switch.', ...secKeys,"), 'les sirenes sont relues sur la vue');
 });

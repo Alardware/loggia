@@ -37,7 +37,7 @@ register('data:text/javascript,' + encodeURIComponent([
   "  const r = await next(url.slice(0, -'?carte_lumiere'.length), ctx);",
   // ASSERTION MODIFIÉE (passe téléphone, tâche 3) : la plaque-interrupteur de la carte étroite s'exporte aussi, pour être jouée seule.
   // `RmJauge` (passe bis 3 du 17/10, point 3) : la VRAIE barre se monte avec les props que la carte lui passe, pour glisser dessus.
-  "  return { ...r, source: String(r.source) + ';export { RoomLightCard, RM_MILIEU, PlaqueBascule, RmJauge };' };",
+  "  return { ...r, source: String(r.source) + ';export { RoomLightCard, RM_MILIEU, RmJauge };' };",
   '}',
 ].join('\n')));
 const { setLoggiaState } = await import('../src/state.js');
@@ -84,7 +84,22 @@ async function dans(fn, { clair = false } = {}) {
   try { return await fn({ h, d }); } finally { h.restaurer(); d.restaurer(); }
 }
 const de = (m, nom) => m.trouver(e => e.type && e.type.name === nom)[0];
-const phrase = (m) => m.trouver(e => e.props && e.props.style && e.props.style.color && typeof e.props.children === 'string' && /depuis|Éteinte|S’éteint|Indisponible/.test(e.props.children))[0];
+/* HELPER MODIFIÉ (ADR 0380) : allumée et variable, la phrase s'écrit deux fois — la carte large, la carte étroite le pourcentage en tête
+ * (`o-seul-large`, `o-seul-etroit`). `phrase` rend la ligne avec, pour `children`, ce que dit la carte large ; `court`, celle de l'étroite. */
+const ecritures = (d) => [].concat(d.props.children).filter(x => x && typeof x === 'object' && x.props).flatMap(x => [].concat(x.props.children)).filter(x => x && x.props);
+const phraseLigne = (m) => m.trouver(e => e.props && e.props.className === 'o-gab-phrase')[0];
+const phrase = (m) => {
+  const d = phraseLigne(m);
+  if (!d) return undefined;
+  if (typeof d.props.children === 'string') return d;
+  const large = ecritures(d).find(x => x.props.className === 'o-seul-large');
+  return { ...d, props: { ...d.props, children: large ? large.props.children : d.props.children } };
+};
+const court = (m) => {
+  const d = phraseLigne(m);
+  const e = d && typeof d.props.children !== 'string' ? ecritures(d).find(x => x.props.className === 'o-seul-etroit') : null;
+  return e ? e.props.children : null;
+};
 const plaque = (m) => m.trouver(e => e.props && e.props.style && e.props.style.width === 38)[0].props.style;
 
 test('L6 : un blanc prend la couleur de sa température — la plaque, le lavis qui monte avec la luminosité, le dégradé de la barre', () => dans(() => {
@@ -320,8 +335,10 @@ for (const [nomTheme, clair] of [['sombre', false], ['clair', true]]) {
       const glyphe = contraste(encre, fondGlyphe(T, vrai)), repere = contraste(encre, fondRepere(T, vrai));
       assert.ok(glyphe >= 4.2, nomTheme + ', ' + nom + ' : la glyphe ' + plaque(m).color + ' à ' + glyphe.toFixed(2) + ':1 (3:1 au moins ; la garde en tient 4,2 contre le vrai fond)');
       assert.ok(repere >= 3, nomTheme + ', ' + nom + ' : le repère ' + plaque(m).color + ' à ' + repere.toFixed(2) + ':1');
-      // La barre : la teinte vraie en thème sombre ; en thème clair, l’encre gardée — le remplissage se voit sur la piste.
-      assert.equal(j.grade, clair ? P.couleursLumiere(encre).degrade : P.couleursLumiere(vrai).degrade, nom + ' : le dégradé de la barre');
+      /* La barre : la teinte vraie en thème sombre. ASSERTION MODIFIÉE (16/11, « Oui, les blancs aussi ») : en thème clair, un BLANC prend la barre de l'or
+       * (peinte de l'ambre de la bascule par la feuille) au lieu d'un dégradé tiré de son encre brune ; une couleur garde l'encre. */
+      const blanc = reglage.color_mode === 'color_temp';
+      assert.equal(j.grade, !clair ? P.couleursLumiere(vrai).degrade : blanc ? P.couleursLumiere(null).degrade : P.couleursLumiere(encre).degrade, nom + ' : le dégradé de la barre');
     }
   }, { clair }));
 }
@@ -362,10 +379,10 @@ test('point 18 : le pourcentage s’écrit UNE fois, dans la rangée du nom — 
   const figures = m.trouver(e => e.type && e.type.name === 'ChiffreLumiere');
   assert.deepEqual(figures.map(f => [f.props.haut, f.props.bri]), [[undefined, 100]], 'une seule fois, sans variante haute');
   const entete = m.trouver(e => enfants(e).some(x => x.type && x.type.name === 'RmBascule'))[0];
-  /* ASSERTION MODIFIÉE (passe téléphone, tâche 3) : la ligne du haut s'écrit deux fois — la plaque et la bascule de la carte LARGE, la plaque-interrupteur et le
-   * pourcentage de la carte ÉTROITE ; la feuille n'en montre qu'une (`o-seul-large`, `o-seul-etroit`). Rien d'autre entre elles. */
-  assert.deepEqual(enfants(entete).map(e => (e.type && e.type.name) || e.type), ['span', 'PlaqueBascule', 'RmBascule', 'ChiffreHaut'], 'la plaque, la bascule — rien entre elles');
-  assert.deepEqual(enfants(entete).map(e => e.props.className), ['o-seul-large', undefined, 'o-seul-large', undefined], 'la plaque et la bascule de la carte large ; les deux autres portent leur écriture en propre');
+  /* ASSERTION MODIFIÉE (sa décision du 20/11, ADR 0380) : la ligne du haut s'écrivait deux fois — la plaque-interrupteur et le pourcentage de la carte
+   * étroite (passe téléphone, tâche 3). Elle ne s'écrit plus qu'une fois, la même sur toutes les cartes : la plaque, la bascule, rien entre elles. */
+  assert.deepEqual(enfants(entete).map(e => (e.type && e.type.name) || e.type), ['span', 'RmBascule'], 'la plaque, la bascule — rien entre elles');
+  assert.deepEqual(enfants(entete).map(e => e.props.className), [undefined, undefined], 'une seule écriture, montrée partout');
   assert.deepEqual([entete.props.style.display, entete.props.style.alignItems, entete.props.style.justifyContent], ['flex', 'flex-start', 'space-between'], 'la plaque à gauche, la bascule à droite');
   assert.equal(m.trouver(e => enfants(e).includes(figures[0]))[0].props.style, F.RM_MILIEU, 'il est dans la rangée du nom et de la phrase (point 11), celle du radiateur');
   // Rien de la variante haute ne reste, ni dans le code ni dans la feuille.
@@ -466,8 +483,12 @@ test('11 bis, R7 : en thème clair, la plaque ET le lavis d’un blanc froid pre
     assert.equal(bleu.plaque, 'rgba(0,0,255,.22)', 'une couleur n’est pas un blanc : elle ne bouge pas, ' + (clair ? 'clair' : 'sombre'));
     assert.ok(bleu.lavis.startsWith('linear-gradient(180deg,rgba(0,0,255,0.22),rgba(0,0,255,0.03) 72%)'));
   }
-  // La barre et l'encre gardent ce que la revue de la passe A leur donne : l'encre brune, la barre peinte depuis elle en thème clair.
-  assert.equal(froid.barre, P.couleursLumiere(lireCouleur(froid.glyphe).slice(0, 3)).degrade, 'thème clair : la barre se peint depuis l’encre gardée');
+  // L'encre garde ce que la revue de la passe A lui donne : un brun. ASSERTION MODIFIÉE (16/11, « Oui, les blancs aussi ») : en thème clair, la barre d'un
+  // blanc n'est plus peinte depuis cette encre — elle prend la barre de l'or, que la feuille peint de l'ambre de la bascule.
+  assert.ok(teinteDe(lireCouleur(froid.glyphe)) >= 20 && teinteDe(lireCouleur(froid.glyphe)) <= 45, 'thème clair : l’encre reste un brun orangé');
+  assert.equal(froid.barre, P.couleursLumiere(null).degrade, 'thème clair : la barre d’un blanc est celle de l’or');
+  const bleuClair = await peinture(null, true, { color_mode: 'xy', rgb_color: [0, 0, 255] });
+  assert.equal(bleuClair.barre, P.couleursLumiere(lireCouleur(bleuClair.glyphe).slice(0, 3)).degrade, 'thème clair : une couleur se peint toujours depuis son encre');
   assert.equal(sombre.barre, P.couleursLumiere([255, 249, 253]).degrade, 'thème sombre : la barre se peint de la teinte vraie, comme avant');
   assert.ok(APP.includes('const teinte = on ? teinteDeCarte(a, dernier, estClair()) : null;'), 'la vue calcule la teinte de la carte par `teinteDeCarte`, selon le thème');
 });
@@ -566,69 +587,31 @@ test('11 bis, R6 : tout contenu d’une carte large — de 188 px à 400 — gar
   assert.ok(AIR + largeurCent(21) + es <= 197, 'il faudrait 197 px de contenu');
 });
 
-/* ── Passe téléphone, tâche 3 : la carte étroite d'une lumière (sa décision du 15/10, « ok pour 1c » ; ADR 0202, T1, T8, T12) ──────────
+/* ── La carte étroite d'une lumière : l'interrupteur en haut à droite (sa décision du 20/11, « variante B » ; ADR 0380) ────────────
  *
- * Sous 188 px de contenu, la plaque d'une lumière EST son interrupteur (`PlaqueBascule`) : un vrai bouton, qui allume ou éteint
- * d'après l'état affiché — `turn_on` / `turn_off`, jamais `toggle` —, et n'ouvre pas la fiche ; toucher ailleurs l'ouvre. Le
- * pourcentage monte en haut à droite (`ChiffreHaut`), la phrase d'une lampe allumée s'écrit à son encre. La carte large ne change
- * pas : sa plaque est un dessin, sa bascule rose reste. */
-const plaqueEtroite = (m) => de(m, 'PlaqueBascule');
-
-test('passe téléphone, T12 : sur la carte étroite, la plaque est l’interrupteur — `turn_on` / `turn_off` d’après l’état affiché, jamais `toggle` ; le geste se voit tout de suite', () => dans(() => {
+ * TESTS REMPLACÉS : la passe téléphone (tâche 3, ADR 0202, T12, T6) faisait de la plaque l'interrupteur de la carte étroite
+ * (`PlaqueBascule`) et montait le pourcentage en haut à droite (`ChiffreHaut`). Un retour d'utilisateur voulait l'interrupteur, et sa
+ * décision du 20/11 le lui donne : la ligne du haut est celle de la carte large — la plaque, un dessin, et la bascule ; le pourcentage
+ * ouvre la phrase de la carte étroite (« 45 % · depuis 18:05 »). La phrase large, la barre, l'encre (T8) ne changent pas. */
+test('ADR 0380 : sur la carte étroite aussi, la bascule allume ou éteint — `turn_on` / `turn_off` d’après l’état affiché, jamais `toggle` ; la plaque n’est plus qu’un dessin', () => dans(() => {
   const w = poser();
   const m = monter(F.RoomLightCard, { id: 'light.bureau', hass: w.hass(), onOpen: () => {} });
-  const p = plaqueEtroite(m);
-  assert.deepEqual([p.props.on, p.props.nom, p.props.inerte, p.props.fond, p.props.encre], [true, 'Plafonnier Bureau', false, plaque(m).background, plaque(m).color], 'la même plaque que la carte large : sa teinte, son encre');
-  m.appuyer(p, 'onToggle');
+  const b = de(m, 'RmBascule');
+  assert.equal(b.props.className, undefined, 'une seule bascule, montrée sur toutes les cartes');
+  assert.equal(m.trouver(e => e.props && e.props.role === 'switch').length, 0, 'la plaque n’est plus un interrupteur');
+  assert.equal(m.trouver(e => e.type === 'button').length, 0, 'aucun bouton dans la ligne du haut : un appui sur la plaque descend à la surface, qui ouvre la fiche');
+  m.appuyer(b, 'onToggle');
   assert.deepEqual(w.appels, ['light.turn_off light.bureau'], 'allumée : `turn_off`');
-  assert.equal(phrase(m).props.children, 'Éteinte', 'le geste d’abord (`useOptimiste`)');
-  assert.equal(plaqueEtroite(m).props.on, false);
+  assert.equal(phrase(m).props.children, 'Éteinte', 'le geste d’abord');
   const eteinte = monter(F.RoomLightCard, { id: 'light.chambre', hass: w.hass(), onOpen: () => {} });
-  eteinte.appuyer(plaqueEtroite(eteinte), 'onToggle');
+  eteinte.appuyer(de(eteinte, 'RmBascule'), 'onToggle');
   assert.deepEqual(w.appels.slice(1), ['light.turn_on light.chambre'], 'éteinte : `turn_on`');
   assert.match(phrase(eteinte).props.children, /^Allumée depuis \d\d:\d\d$/);
-  const sw = monter(F.RoomLightCard, { id: 'switch.applique', hass: w.hass(), onOpen: () => {} });
-  sw.appuyer(plaqueEtroite(sw), 'onToggle');
-  assert.deepEqual(w.appels.slice(2), ['switch.turn_off switch.applique'], 'un switch déclaré lumière : le service de son domaine');
   assert.ok(!w.appels.some(x => /toggle/.test(x)), 'jamais `toggle`');
-  // La plaque et la bascule de la carte large commandent la même chose : une seule fonction, `basculer`.
-  assert.equal(de(m, 'RmBascule').props.onToggle, plaqueEtroite(m).props.onToggle);
+  // Rien de la plaque-interrupteur ne reste, ni dans le code ni dans la feuille.
+  const CSS = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
+  for (const reste of ['PlaqueBascule', 'o-gab-plaque']) assert.ok(!APP.includes(reste) && !CSS.includes(reste), reste + ' est parti');
 }));
-
-test('passe téléphone, T12 : la plaque est un vrai bouton — `role="switch"`, nommée comme la bascule, au-dessus de la surface, elle n’ouvre pas la fiche ; muette, inerte sans perdre le focus', () => {
-  const ordres = [];
-  const bouton = (props) => monter(F.PlaqueBascule, { on: false, nom: 'Plafonnier Chambre', fond: 'var(--o-s1)', encre: 'var(--o-text2)', onToggle: () => ordres.push('bascule'), ...props }).arbre;
-  const b = bouton({});
-  assert.deepEqual([b.type, b.props.type, b.props.role, b.props['aria-checked'], b.props['aria-label'], b.props['aria-disabled'], b.props.disabled],
-    ['button', 'button', 'switch', false, 'Allumer Plafonnier Chambre', undefined, undefined], 'un bouton natif : Entrée et Espace l’activent');
-  assert.equal(bouton({ on: true }).props['aria-label'], 'Éteindre Plafonnier Chambre', 'allumée, elle dit le geste qui l’éteint');
-  assert.equal(b.props.onKeyDown, undefined, 'pas de `onKeyDown` : le bouton natif suffit, la garde de tests/clavier.test.mjs ne s’applique pas');
-  assert.deepEqual([b.props.className, b.props.style.position, b.props.style.width, b.props.style.height, b.props.style.borderRadius, b.props.style.border, b.props.style.padding],
-    ['o-gab-plaque o-seul-etroit', 'relative', 38, 38, 14, 'none', 0], 'la plaque de toujours (38 × 38, rayon 14), positionnée : elle passe au-dessus de la surface');
-  let arrete = 0;
-  b.props.onClick({ stopPropagation: () => { arrete++; } });
-  assert.deepEqual([arrete, ordres], [1, ['bascule']], 'un appui commande, et ne remonte pas à la surface : la fiche ne s’ouvre pas');
-  const muette = bouton({ inerte: true });
-  assert.deepEqual([muette.props['aria-disabled'], muette.props.disabled, muette.props.style.cursor], [true, undefined, 'default'], 'muette : `aria-disabled`, jamais `disabled`, qui ferait tomber le focus');
-  /* ASSERTION MODIFIÉE (passe téléphone, corrections bis, point 3) : muette, la plaque se laisse traverser au toucher (`pointerEvents: 'none'`) — il descend à la
-   * surface de la carte, qui ouvre la fiche, comme avant que la plaque ne soit un bouton. Elle avalait le toucher (`stopPropagation`) et ne faisait plus rien : sur la
-   * carte étroite d'une lampe muette, toucher l'ampoule n'ouvrait plus rien. Vivante, rien ne la traverse : elle commande, et n'ouvre pas la fiche. */
-  assert.equal(muette.props.style.pointerEvents, 'none', 'muette : le toucher traverse la plaque jusqu’à la surface, qui ouvre la fiche');
-  assert.equal(b.props.style.pointerEvents, undefined, 'vivante : la plaque prend le toucher');
-  muette.props.onClick({ stopPropagation: () => { arrete++; } });
-  assert.deepEqual([arrete, ordres], [2, ['bascule']], 'muette, Entrée et Espace ne commandent rien — et n’ouvrent pas la fiche non plus : seul le toucher traverse la plaque');
-  // Un seul glyphe dedans : la carte ne passe à la plaque que son ampoule (ou l'icône choisie).
-  const i = APP.indexOf('<PlaqueBascule on={v.on}');
-  const dedans = APP.slice(APP.indexOf('>', APP.indexOf('onToggle={basculer}', i)) + 1, APP.indexOf('</PlaqueBascule>', i)).trim();
-  assert.equal(dedans, '<GlypheCarte id={id} size={17}><Fi i="bulb" size={17} /></GlypheCarte>', 'la plaque ne contient que son glyphe : « nested-interactive » tient');
-});
-
-test('passe téléphone, T12 : la zone de toucher de la plaque fait 44 × 44, sans l’allongement de ± 12 px des interrupteurs au téléphone', () => {
-  const CSS = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-  assert.ok(CSS.includes(".o-gab-plaque[role=\"switch\"]::after { content: ''; position: absolute; inset: -3px; }"), '38 + 2 × 3 = 44 px, de tous côtés');
-  // Le sélecteur bat celui des interrupteurs au téléphone (`[role="switch"]::after`, ± 12 px en hauteur) : une classe de plus, quel que soit l'ordre.
-  assert.ok(CSS.includes('[role="switch"]::after {\n    content: \'\';\n    position: absolute;\n    top: -12px;'), 'l’allongement des autres interrupteurs ne change pas');
-});
 
 test('passe téléphone, T8 : sur la carte étroite, une lampe allumée écrit sa phrase à son encre — éteinte ou muette, non ; la carte large garde son gris', () => dans(() => {
   const w = poser();
@@ -647,12 +630,16 @@ test('passe téléphone, T8 : sur la carte étroite, une lampe allumée écrit s
   assert.ok(etroite.slice(0, etroite.indexOf('\n}\n')).includes('  .o-gab-phrase[data-encre] { color: var(--o-encre) !important; }'), 'la règle vit dans la carte étroite seulement');
 }));
 
-test('passe téléphone, T6 : en haut à droite, le pourcentage d’une lampe allumée et variable — rien éteinte, rien pour un switch-lumière', () => dans(() => {
+test('ADR 0380 : sur la carte étroite, le pourcentage ouvre la phrase — « 45 % · depuis hh:mm », « … · s’éteint à hh:mm » ; rien éteinte, rien pour un switch-lumière', () => dans(() => {
   const w = poser();
-  const haut = (id) => monter(F.RoomLightCard, { id, hass: w.hass(), onOpen: () => {} }).trouver(e => e.type && e.type.name === 'ChiffreHaut').map(h => [h.props.v, h.props.u]);
-  assert.deepEqual(haut('light.ampoule_chambre'), [[45, '%']]);
-  assert.deepEqual(haut('light.bureau'), [[100, '%']]);
-  for (const id of ['light.chambre', 'switch.applique', 'light.morte']) assert.deepEqual(haut(id), [], id + ' : pas de chiffre en haut');
+  const carte = (id) => monter(F.RoomLightCard, { id, hass: w.hass(), onOpen: () => {} });
+  assert.match(court(carte('light.ampoule_chambre')), /^45 % · (depuis \d\d:\d\d|s’éteint à \d\d:\d\d)$/);
+  assert.match(court(carte('light.bureau')), /^100 % · depuis \d\d:\d\d$/);
+  assert.equal(carte('light.bureau').trouver(e => e.type && e.type.name === 'ChiffreHaut').length, 0, 'plus de chiffre en haut');
+  for (const id of ['light.chambre', 'switch.applique', 'light.morte']) assert.equal(court(carte(id)), null, id + ' : la phrase ne change pas');
+  // La longueur de la phrase étroite règle sa taille (`--o-n`), comme avant.
+  const p = phraseLigne(carte('light.bureau')).props;
+  assert.equal(p.style['--o-n'], court(carte('light.bureau')).length);
 }));
 
 /* ── La passe bis 3 du 17/10 (chantier Mode enfant) : le pourcentage d'une lampe suit le doigt ────────────────────────────────── */
@@ -668,7 +655,8 @@ const sousLeDoigt = (props, x) => {
   barre.arbre.props.onPointerDown({ stopPropagation() {}, preventDefault() {}, currentTarget: el, clientX: x, pointerId: 1 });
   return el;
 };
-const chiffres = (m) => [(de(m, 'ChiffreLumiere') || { props: {} }).props.bri, (de(m, 'ChiffreHaut') || { props: {} }).props.v];
+// HELPER MODIFIÉ (ADR 0380) : le chiffre de la carte étroite est en tête de sa phrase (`court`), et non plus en haut (`ChiffreHaut`).
+const chiffres = (m) => [(de(m, 'ChiffreLumiere') || { props: {} }).props.bri, court(m) ? Number(court(m).split(/\s/)[0]) : undefined];
 
 test('passe bis 3, point 3 : le pourcentage d’une lampe suit le doigt — la carte large, la carte étroite, la surface ; UN `turn_on` au relâcher ; éteinte, le chiffre paraît dès le glisser et rien ne part avant', () => dans(({ h }) => {
   const w = poser();

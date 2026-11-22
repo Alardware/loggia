@@ -701,17 +701,27 @@ test('A2 : avec des clés, useHass surveille — un intervalle de 2 s, la signat
   h.intervalles()[0].f(); m.effets();
   assert.ok(m.rendus > avant, 'une bascule qui change redessine');
   assert.equal(m.arbre.props.hass.states['switch.x'].state, 'off');
-  // Des clés qui arrivent plus tard (l'index de la découverte, un capteur retrouvé) relancent l'effet : un intervalle, jamais deux.
+  /* ASSERTION MODIFIÉE (19/11, fluidité, point 3 ; ADR 0377) : une seule minuterie pour tout le pont — elle ne se compte
+   * plus par crochet. Ce qui se vérifie : des clés qui arrivent plus tard (l'index de la découverte, un capteur retrouvé)
+   * sont surveillées, un autre jeu de clés remplace l'abonnement sans en ajouter, et une liste redevenue vide ne l'est plus. */
+  const bascule = (etat, quand) => { S['switch.x'].state = etat; S['switch.x'].last_updated = quand; h.intervalles()[0].f(); tard.effets(); };
   const tard = monter(Sonde, { cles: [] });
-  assert.equal(h.intervalles().length, 1);
+  assert.equal(h.intervalles().length, 1, 'une minuterie pour tous');
   tard.proprietes({ cles: ['switch.x'] });
-  assert.equal(h.intervalles().length, 2, 'la liste n’est plus vide : elle se surveille');
+  let r = tard.rendus;
+  bascule('on', 't3');
+  assert.ok(tard.rendus > r, 'la liste n’est plus vide : elle se surveille');
   tard.proprietes({ cles: ['switch.x', 'sensor.x_power'] });
-  assert.equal(h.intervalles().length, 2, 'un autre jeu de clés remplace l’intervalle, il ne s’ajoute pas');
+  assert.equal(h.intervalles().length, 1, 'un autre jeu de clés remplace l’abonnement, il ne s’ajoute pas');
+  r = tard.rendus;
+  bascule('off', 't4');
+  assert.equal(tard.rendus, r + 1, 'un seul abonnement : un seul rendu par changement');
   tard.proprietes({ cles: [] });
-  assert.equal(h.intervalles().length, 1, 'redevenue vide : l’intervalle s’arrête');
+  r = tard.rendus;
+  bascule('on', 't5');
+  assert.equal(tard.rendus, r, 'redevenue vide : elle ne se surveille plus');
   tard.demonter(); m.demonter();
-  assert.equal(h.intervalles().length, 0);
+  assert.equal(h.intervalles().length, 0, 'plus personne : la minuterie s’arrête');
 }));
 
 // ── A1 : la recherche ────────────────────────────────────────────────────────
@@ -1043,5 +1053,6 @@ test('audit : un minuteur refusé sur un appareil éteint se dit ; la rangée g�
   const d = SW.indexOf('\nexport function RangeeMinuteur(');
   assert.ok(d >= 0, 'la rangée existe');
   const r = SW.slice(d, SW.indexOf('\n}\n', d));
-  assert.ok(r.includes("const eteint = !!st && (st.state === 'off' || st.state === 'standby');") && r.includes('{!mort && !eteint && <FicheBouton icone="clock"'));
+  // ASSERTION MODIFIÉE (audit du 12/11, lot 4, I5) : les durées de la fiche d'une lumière, inertes sur un appareil éteint.
+  assert.ok(r.includes("const eteint = !!st && (st.state === 'off' || st.state === 'standby');") && r.includes('const peutPoser = !mort && !eteint && libre;'));
 });

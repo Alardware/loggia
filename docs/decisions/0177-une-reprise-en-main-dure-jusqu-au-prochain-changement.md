@@ -2,6 +2,8 @@
 
 *9 octobre 2026 — appliqué (v3.94.0) (plan 1 du chantier Chauffage)*
 
+*Nuancée par l'ADR [0375](0375-un-thermostat-eteint-de-lui-meme-n-est-pas-un-geste.md) (18/11).*
+
 ## Le problème
 
 > « Rien à penser, rien à oublier ; le choix reste à portée. » — décision D3.

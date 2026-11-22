@@ -497,17 +497,30 @@ export function capabilities({ states = {}, index = null }) {
 
 /**
  * Hook de découverte. Les registres ne bougeant quasiment jamais en cours de
- * session, ils sont lus une seule fois ; `refresh()` force une relecture.
+ * session, ils sont lus une fois au départ, puis de nouveau quand le NOMBRE
+ * d'entités change (un appareil ajouté ou retiré) ; `refresh()` force une
+ * relecture.
  */
 export function useDiscovery(hass) {
   const [data, setData] = useState({ ready: false, errors: null, index: null,
     caps: null, devices: null, abilities: null, knowledge: null, health: null, raw: null });
   const startedRef = useRef(false);
   const aliveRef = useRef(true);
+  /* Audit du 12/11, B17 : lus une seule fois, les registres ignoraient tout appareil ajouté pendant que la tablette
+   * restait ouverte — un volet, un thermostat, un lecteur n'apparaissaient nulle part, une ampoule tombait dans « Autres »,
+   * jusqu'au rechargement de la page. `vusRef` : le nombre d'états au dernier chargement, réussi OU raté (sinon un échec
+   * relancerait sans fin). `armeRef` : le nombre pour lequel le minuteur attend. `loadRef` : le dernier `load` —
+   * `hass` change d'identité à chaque relevé (2 s), le minuteur doit appeler celui du moment. */
+  const vusRef = useRef(null);
+  const armeRef = useRef(null);
+  const minuteurRef = useRef(null);
+  const loadRef = useRef(null);
   useEffect(() => () => { aliveRef.current = false; }, []);
+  useEffect(() => () => { clearTimeout(minuteurRef.current); }, []);
 
   const load = useCallback(() => {
     if (!hass) return Promise.resolve(null);
+    vusRef.current = Object.keys(hass.states || {}).length;
     return fetchRegistries(hass).then(reg => {
       const states = hass.states || {};
       const index = buildIndex({ ...reg, states });
@@ -538,11 +551,34 @@ export function useDiscovery(hass) {
     });
   }, [hass]);
 
+  loadRef.current = load;
+
   useEffect(() => {
     if (!hass || startedRef.current) return;
     startedRef.current = true;
     load();
   }, [hass, load]);
+
+  /* La relance (B17) : une comparaison par relevé, jamais une découverte toutes les 2 s. Le nombre diffère du dernier
+   * chargement → une relecture dans 10 s ; un nouveau nombre entre-temps réarme le délai (Home Assistant qui démarre, ou une
+   * intégration qu'on ajoute, arrive par vagues) ; revenu au nombre chargé, il n'y a plus rien à relire. Un échec garde la
+   * découverte d'avant (le `catch` de `load`). On ne s'abonne pas aux événements des registres : non vérifié pour un compte
+   * ordinaire. */
+  useEffect(() => {
+    if (!hass || vusRef.current == null) return;
+    const n = Object.keys(hass.states || {}).length;
+    if (n === vusRef.current) {
+      if (armeRef.current != null) { clearTimeout(minuteurRef.current); armeRef.current = null; }
+      return;
+    }
+    if (n === armeRef.current) return;
+    clearTimeout(minuteurRef.current);
+    armeRef.current = n;
+    minuteurRef.current = setTimeout(() => {
+      armeRef.current = null;
+      if (aliveRef.current && loadRef.current) loadRef.current();
+    }, 10000);
+  }, [hass]);
 
   return { ...data, refresh: load };
 }
