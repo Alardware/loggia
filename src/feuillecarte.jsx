@@ -180,7 +180,9 @@ function Visage({ m }) {
  * siennes) — sinon celles de la carte Présence (`peopleList`) ; `focus` : le
  * marqueur à montrer d'abord (le traceur dont on vient).
  */
-export default function FeuilleCarte({ onClose, suivies = null, focus = null }) {
+export default function FeuilleCarte({ onClose, suivies = null, focus = null, autres = null }) {
+  // `autres` : des positions de plus à montrer, que l'index ne range pas parmi les traceurs — la voiture (ADR 0392).
+  const estMontre = (id) => estTraceur(id) || (Array.isArray(autres) && autres.indexOf(id) >= 0);
   /* Ce qu'il faut suivre : les personnes, les zones, les traceurs, et les capteurs de l'appareil d'un traceur (son dernier signal). */
   const cles = useMemo(() => {
     const S = (getHass() || {}).states || {};
@@ -190,7 +192,7 @@ export default function FeuilleCarte({ onClose, suivies = null, focus = null }) 
   const hass = useHass(cles);
   const S = (hass && hass.states) || {};
   const gens = suivies || peopleList();
-  const { marqueurs, sansPosition } = pointsCarte({ S, suivies: gens, estTraceur, index: LOGGIA_INDEX });
+  const { marqueurs, sansPosition } = pointsCarte({ S, suivies: gens, estTraceur: estMontre, index: LOGGIA_INDEX });
   const zones = zonesCarte(S);
   const [choisi, setChoisi] = useState(focus);
   const liste = [...marqueurs, ...sansPosition];

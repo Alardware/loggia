@@ -270,7 +270,8 @@ test('la fiche du distributeur et la fiche de la plante : le squelette commun, e
   /* ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 10 ; C31) : la fiche d'une plante se charge à la demande (ficheplante.jsx) ; App.jsx n'en
    * garde que la coquille. Chaque mesure avec sa plage (`PLAGES_PLANTE`, la seule table), la pile du capteur ; toujours pas d'arrosage inventé. */
   const fp = readFileSync(join(RACINE, 'src', 'ficheplante.jsx'), 'utf8');
-  assert.ok(src.includes('function FichePlante({ pl, hass, onClose }) {') && src.includes('<FichePlanteContent pl={vive} hass={H} onFiche={setFiche} />'), 'la coquille');
+  // ASSERTION MODIFIÉE (ADR 0390) : le contenu reçoit aussi `onEspece` — l'espèce choisie, la coquille relit la plante.
+  assert.ok(src.includes('function FichePlante({ pl, hass, onClose }) {') && src.includes('<FichePlanteContent pl={vive} hass={H} onFiche={setFiche} onEspece={() => relire(n => n + 1)} />'), 'la coquille');
   assert.ok(fp.includes('PLAGES_PLANTE') && fp.includes("tr('Lumière reçue')") && fp.includes("tr('Pile du capteur')"), 'chaque mesure avec sa plage');
   assert.ok(!fp.includes('Seuil d’alerte') && !fp.includes('Rappel d’arrosage') && !fp.includes('Marquer comme arrosé'), 'pas d’arrosage invente');
   assert.ok(!src.includes('function ObjSheet('), 'l’ancienne feuille generique a disparu');

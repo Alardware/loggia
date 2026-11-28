@@ -629,7 +629,9 @@ grisé — et les phrases ne parlent pas de ce qu'il n'a pas.
 qu'un appareil n'a pas trompe et ne fait rien.
 
 **Oui.** Un purificateur sans écran ni verrou : Marche/Arrêt et Minuterie seulement ; sans mode nuit, pas de pilule Nuit ni
-de plage « Nuit » au planning ; sans crans, aucun « vitesse moyenne » dans le bandeau.
+de plage « Nuit » au planning ; sans crans, aucun « vitesse moyenne » dans le bandeau. « Choisir l'espèce » d'une plante
+seulement si l'intégration Open Plantbook publie ses actions.
 **Non.** Un bouton Écran grisé « parce que d'autres en ont un », ou cinq pilules dont deux ne font rien.
 
-**Tenu par.** `src/purificateur.js` › `vuePurificateur` · ADR 0387 · `tests/purificateur_commandes.test.mjs`
+**Tenu par.** `src/purificateur.js` › `vuePurificateur` · ADR 0387 · `tests/purificateur_commandes.test.mjs` ·
+`src/especes.js` › `plantbookDisponible` · ADR 0390 · `tests/plantes_especes.test.mjs`

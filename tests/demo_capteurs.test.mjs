@@ -172,7 +172,8 @@ test('§ 12 : les piles — le bouton du salon à 14 % ; la batterie de la maiso
    * que Home Assistant nomme, et `resolveEnergy` en fait le rôle `batSoc`. */
   assert.ok(DEMO.includes("stat_soc: 'sensor.batterie_niveau'"), 'la batterie de la maison, le rôle `batSoc` d’Énergie');
   assert.ok(!ents.has('sensor.basilic_humidite_du_sol') && !ents.has('sensor.basilic_moisture'), 'le Basilic : une plante configurée (`loggia_plants`), sans appareil connu');
-  assert.ok(DEMO.includes("loggia_plants: [{ base: 'sensor.basilic', name: etiquette('Basilic'), room: lieu('Cuisine') }],"));
+  // ASSERTION MODIFIÉE (ADR 0391) : la liste continue — le Dracaena y a son espèce, la ligne qu'écrit « Choisir l'espèce ».
+  assert.ok(DEMO.includes("loggia_plants: [{ base: 'sensor.basilic', name: etiquette('Basilic'), room: lieu('Cuisine') },"));
 });
 
 test('§ 9 : l’histoire du jour des binaires, plusieurs d’un coup — chaque liste commence à minuit, avec son identifiant, et finit avant maintenant', () => {

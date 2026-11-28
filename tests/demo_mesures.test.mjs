@@ -157,7 +157,9 @@ test('C17 : chaque mesure de la démo est dans une pièce de Loggia — la stati
   const physique = new Set(idx.devices.filter(d => d.entry_type !== 'service').map(d => d.id));
   /* ASSERTION MODIFIÉE (chantier Capteurs, étapes 2 et 3, tâche 3 ; C29) : les capteurs d'une PLANTE ne sont pas des mesures — ils sont à la
    * plante (C7), quelle que soit sa zone ; les deux capteurs de plante de la démo sont dans « Technique », qui n'est pas une pièce. */
-  const mesures = idx.entities.filter(e => physique.has(e.device) && !/^plante_/.test(e.device) && !e.category && m.states[e.id]
+  /* ASSERTION MODIFIÉE (24/11, ADR 0392) : les températures de la VOITURE non plus — dedans et dehors, elles sont à sa fiche (Objets
+   * écarte les mesures d'un appareil composé, `duCompose`) ; la voiture de la démo n'a pas de zone. */
+  const mesures = idx.entities.filter(e => physique.has(e.device) && !/^plante_/.test(e.device) && e.device !== 'voiture' && !e.category && m.states[e.id]
     && cleMesure(m.states[e.id].attributes.device_class, m.states[e.id].attributes.unit_of_measurement));
   assert.ok(mesures.length >= 20, mesures.length + ' mesures');
   assert.deepEqual(mesures.filter(e => !pieces.has(zones.get(e.area))).map(e => [e.id, e.area]), [['sensor.capteur_frigo_temperature', null]],

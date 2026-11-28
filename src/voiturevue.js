@@ -7,8 +7,8 @@
  * jamais sous une pression choisie ici, une rangée sans entité lisible ne s'écrit pas.
  */
 import { tr } from './i18n.js';
-import { nombre } from './format.js';
-import { entitesCompose, voitureEnCharge, voitureBranchee, voitureVerrouillee, ouvrantsOuverts } from './composes.js';
+import { nombre, dureeMinutes } from './format.js';
+import { entitesCompose, voitureEnCharge, voitureBranchee, voitureVerrouillee, ouvrantsOuverts, etatEnCharge } from './composes.js';
 
 const MUETS = ['unavailable', 'unknown'];
 const lisible = (st) => !!st && st.state != null && MUETS.indexOf(String(st.state)) < 0;
@@ -134,5 +134,132 @@ export function vueVoiture({ c, S = {}, nom = null }) {
   bas.forEach(b => { if (!items.some(i => i.bas && cle(i.id) === cle(b))) items.push({ id: b, nom: nomDe(b), valeur: null, unite: '', bas: true }); });
   if (!mort && items.length) lignes.push({ cle: 'pneus', titre: tr('Pneus'), items });
 
-  return { nom: nomApp, mort, etat, enCharge, ouverte, phrase, plaque, chiffre, autonomie, position, lignes: mort ? [] : lignes };
+  const plus = mort ? { charge: null, climat: null, temps: null, conso: null } : detailsVoiture(c, S, { enCharge, branchee });
+  // En charge, la phrase dit le temps qui reste quand la voiture le publie ; sinon l'autonomie, comme avant.
+  if (!mort && enCharge && plus.charge && plus.charge.reste != null) phrase.texte = [mots.charge, dureeMinutes(plus.charge.reste)].join(' · ');
+  return { nom: nomApp, mort, etat, enCharge, branchee, verrouillee, ouverte, ouverts: ouverts.map(nomDe), phrase, plaque, chiffre, autonomie, position, lignes: mort ? [] : lignes, ...plus };
+}
+
+/* ─── La charge, le climat, les températures (ADR 0392) ─── */
+
+const etatDe = (S, id) => (id && lisible(S[id]) ? S[id] : null);
+const attr = (st, k) => (st && st.attributes ? st.attributes[k] : undefined);
+const nbOu = (v, d) => { const n = Number(v); return v != null && v !== '' && Number.isFinite(n) ? n : d; };
+/** Une durée publiée, en minutes : son unité dit l'échelle (`min`, `h`, `s`, `d`). */
+function enMinutes(st) {
+  const n = parseFloat(st && st.state);
+  if (!Number.isFinite(n)) return null;
+  const u = String(attr(st, 'unit_of_measurement') || 'min').toLowerCase();
+  return Math.max(0, Math.round(u === 'h' ? n * 60 : u === 's' ? n / 60 : u === 'd' ? n * 1440 : n));
+}
+/** Un réglage numérique (`number`) : sa valeur, ses bornes, son pas — ou une simple lecture (`sensor`). */
+function reglage(S, id) {
+  const st = etatDe(S, id);
+  const n = st ? parseFloat(st.state) : NaN;
+  if (!Number.isFinite(n)) return null;
+  const regle = String(id).split('.')[0] === 'number';
+  return { id, n, unite: attr(st, 'unit_of_measurement') || '', reglable: regle, min: nbOu(attr(st, 'min'), null), max: nbOu(attr(st, 'max'), null), pas: nbOu(attr(st, 'step'), 1) || 1 };
+}
+
+/**
+ * Ce que la voiture publie de plus que sa carte : `{ charge, climat, temps, conso }` — chacun null quand elle n'en dit rien.
+ *  - `charge` : `{ enCharge, branchee, puissance, reste, fin, ajoutee, limite, courant, commande, trappe }` — `reste` en minutes,
+ *    `fin` une heure (ms) ; `commande` : `{ type: 'switch', id, on }` ou `{ type: 'boutons', demarrer, arreter }` ;
+ *    `trappe` : `{ id, ouverte, peutOuvrir, peutFermer }` ;
+ *  - `climat` : `{ id, domaine, on, consigne, min, max, pas, unite, degivrage, volant }` ;
+ *  - `temps` : `{ interieur, exterieur }` (chacun `{ valeur, unite, n }` ou null) ; `conso` : `{ valeur, unite, n }`.
+ */
+export function detailsVoiture(c, S, { enCharge = false, branchee = false, maintenant = Date.now() } = {}) {
+  const lire = (id, dec) => { const m = mesure(S, id); return m ? { valeur: nombre(m.n, dec(m.n), 0), unite: m.unite, n: m.n } : null; };
+  const puissance = lire(c.puissance, (n) => (Math.abs(n) < 100 ? 1 : 0));
+  const stFin = etatDe(S, c.fin);
+  const tFin = stFin ? Date.parse(stFin.state) : NaN;
+  const resteLu = etatDe(S, c.reste) ? enMinutes(etatDe(S, c.reste)) : null;
+  const reste = !enCharge ? null : resteLu != null ? resteLu : Number.isFinite(tFin) ? Math.max(0, Math.round((tFin - maintenant) / 60000)) : null;
+  const fin = !enCharge ? null : Number.isFinite(tFin) ? tFin : reste != null ? maintenant + reste * 60000 : null;
+  const stCmd = etatDe(S, c.lancer);
+  const commande = stCmd ? { type: 'switch', id: c.lancer, on: stCmd.state === 'on' }
+    : (etatDe(S, c.demarrer) || etatDe(S, c.arreter)) ? { type: 'boutons', demarrer: etatDe(S, c.demarrer) ? c.demarrer : null, arreter: etatDe(S, c.arreter) ? c.arreter : null } : null;
+  const stTrappe = etatDe(S, c.trappeCover);
+  const bits = stTrappe ? nbOu(attr(stTrappe, 'supported_features'), 0) : 0;
+  const trappe = stTrappe ? { id: c.trappeCover, ouverte: stTrappe.state === 'open' || stTrappe.state === 'opening', peutOuvrir: !!(bits & 1), peutFermer: !!(bits & 2) } : null;
+  const charge = {
+    enCharge, branchee, puissance, reste, fin, ajoutee: lire(c.ajoutee, (n) => (n < 100 ? 1 : 0)),
+    limite: reglage(S, c.limite), courant: reglage(S, c.courant), commande, trappe,
+  };
+  const aCharge = etatDe(S, c.charge) || etatDe(S, c.prise) || puissance || charge.limite || commande || trappe;
+
+  const interieurLu = lire(c.interieur, () => 1);
+  const exterieur = lire(c.exterieur, () => 1);
+  const stClim = etatDe(S, c.clim);
+  const stBouton = etatDe(S, c.climBouton);
+  const domaine = stClim ? String(c.clim).split('.')[0] : stBouton ? 'button' : null;
+  const bascule = (id) => (etatDe(S, id) ? { id, on: etatDe(S, id).state === 'on' } : null);
+  const thermo = domaine === 'climate';
+  let climat = null;
+  if (stClim || stBouton || bascule(c.degivrage) || bascule(c.volant)) {
+    climat = {
+      id: stClim ? c.clim : stBouton ? c.climBouton : null, domaine,
+      on: stClim ? (thermo ? stClim.state !== 'off' : stClim.state === 'on') : false,
+      consigne: thermo ? nbOu(attr(stClim, 'temperature'), null) : null,
+      min: thermo ? nbOu(attr(stClim, 'min_temp'), 15) : null,
+      max: thermo ? nbOu(attr(stClim, 'max_temp'), 28) : null,
+      pas: thermo ? nbOu(attr(stClim, 'target_temp_step'), 0.5) : null,
+      // Le mode qui l'allume : le premier que la `climate` publie hors « off » (Tesla : `heat_cool`).
+      modeMarche: thermo ? ((attr(stClim, 'hvac_modes') || []).filter(m => m !== 'off')[0] || null) : null,
+      unite: (stClim && attr(stClim, 'temperature_unit')) || '°C',
+      degivrage: bascule(c.degivrage), volant: bascule(c.volant),
+    };
+  }
+  const actuelle = thermo ? nbOu(attr(stClim, 'current_temperature'), null) : null;
+  const interieur = interieurLu || (actuelle != null ? { valeur: nombre(actuelle, 1, 0), unite: '°C', n: actuelle } : null);
+  return {
+    charge: aCharge ? charge : null, climat,
+    temps: interieur || exterieur ? { interieur, exterieur } : null,
+    conso: lire(c.consommation, (n) => (n < 100 ? 1 : 0)),
+  };
+}
+
+/* ─── L'historique de la semaine (ADR 0392) : pur, que les tests rejouent ─── */
+
+/** Une liste de `history/period` en points `[t, n]` triés (les états illisibles écartés). */
+export function pointsDe(liste) {
+  return (Array.isArray(liste) ? liste : []).map(p => [Date.parse(p.last_changed || p.last_updated || ''), parseFloat(p.state)])
+    .filter(([t, n]) => Number.isFinite(t) && Number.isFinite(n)).sort((a, b) => a[0] - b[0]);
+}
+
+/**
+ * Les kilomètres de chaque jour, du plus ancien à aujourd'hui : `[{ debut, km }]` sur `jours` jours — la dernière valeur du jour
+ * moins celle de la veille (le compteur ne fait que monter : un recul, une remise à zéro, compte pour rien).
+ */
+export function kmParJour(points, maintenant, jours = 7) {
+  const minuit = new Date(maintenant); minuit.setHours(0, 0, 0, 0);
+  const out = [];
+  const valeurAvant = (t) => { let v = null; for (const [tt, n] of points) { if (tt <= t) v = n; else break; } return v; };
+  for (let i = jours - 1; i >= 0; i--) {
+    const debut = new Date(minuit); debut.setDate(minuit.getDate() - i);
+    const fin = new Date(debut); fin.setDate(debut.getDate() + 1);
+    const a = valeurAvant(debut.getTime()), b = valeurAvant(Math.min(fin.getTime(), maintenant));
+    out.push({ debut: debut.getTime(), km: a != null && b != null ? Math.max(0, b - a) : null });
+  }
+  return out;
+}
+
+/**
+ * Les recharges de la période : `[{ debut, fin, de, a }]` — d'un passage « en charge » à sa fin (ou maintenant), avec la batterie
+ * au début et à la fin quand on la connaît. La plus récente d'abord.
+ */
+export function sessionsCharge(etats, batterie, maintenant) {
+  const liste = (Array.isArray(etats) ? etats : []).map(p => [Date.parse(p.last_changed || p.last_updated || ''), String(p.state)])
+    .filter(([t]) => Number.isFinite(t)).sort((a, b) => a[0] - b[0]);
+  const niveau = (t) => { let v = null; for (const [tt, n] of batterie || []) { if (tt <= t) v = n; else break; } return v; };
+  const out = [];
+  let debut = null;
+  liste.forEach(([t, e]) => {
+    const on = etatEnCharge(e);
+    if (on && debut == null) debut = t;
+    else if (!on && debut != null) { out.push({ debut, fin: t, de: niveau(debut), a: niveau(t) }); debut = null; }
+  });
+  if (debut != null) out.push({ debut, fin: null, de: niveau(debut), a: niveau(maintenant) });
+  return out.reverse();
 }

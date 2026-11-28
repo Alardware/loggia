@@ -117,7 +117,8 @@ const SCN_BIBLIO = () => ({
   ],
 });
 // La plante d'exemple de la Bibliothèque : la forme de `lirePlante`, un sol qui demande de l'eau.
-const PLANTE_BIBLIO = { mort: false, muetDepuis: null, img: 'dracaena', hum: 14, lux: 820, temp: 22, cond: 640, uniteTemp: 'C' };
+// La carte d'exemple s'appelle « Monstera » : elle prend son dessin (ADR 0391).
+const PLANTE_BIBLIO = { mort: false, muetDepuis: null, img: 'monstera', hum: 14, lux: 820, temp: 22, cond: 640, uniteTemp: 'C' };
 function BiblioView() {
   // hass figé au montage : les cartes optimistes bougent toutes seules,
   // aucune confirmation ne viendra (et n'a pas à venir) d'un vrai serveur.

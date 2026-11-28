@@ -247,7 +247,8 @@ test('la coquille garde la feuille et pose la frontière Suspense DEDANS ; le co
   assert.ok(APP.includes("const FichePlanteContent = lazyRecharge(() => import('./ficheplante.jsx'));"));
   const i = APP.indexOf('\nfunction FichePlante(');
   const coquille = APP.slice(i, APP.indexOf('\n}\n', i));
-  const [feuille, frontiere, contenu] = ['<BottomSheet onClose={onClose}>', '<Suspense fallback={<div style={{ minHeight: 260 }} />}>', '<FichePlanteContent pl={vive} hass={H} onFiche={setFiche} />'].map(x => coquille.indexOf(x));
+  // ASSERTION MODIFIÉE (ADR 0390) : le contenu reçoit aussi `onEspece` — l'espèce choisie, la coquille relit la plante.
+  const [feuille, frontiere, contenu] = ['<BottomSheet onClose={onClose}>', '<Suspense fallback={<div style={{ minHeight: 260 }} />}>', '<FichePlanteContent pl={vive} hass={H} onFiche={setFiche} onEspece={() => relire(n => n + 1)} />'].map(x => coquille.indexOf(x));
   assert.ok(feuille >= 0 && frontiere > feuille && contenu > frontiere, 'la feuille, puis la frontière, puis le contenu');
   assert.ok(coquille.includes('const H = hassQuiConnait(useHass(ids), hass, ids[0]);') && coquille.includes('{fiche && <FicheAppareil id={fiche} hass={H} onClose={() => setFiche(null)} />}'));
   const d = APP.indexOf('\nfunction useDomainCards(');
