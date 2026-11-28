@@ -256,17 +256,20 @@ export const PLAGES_PLANTE = { hum: [15, 70], temp: [10, 32], lux: [500, 20000],
 /* Le jugement porte sur la valeur ARRONDIE comme elle s'écrit (audit du 12/11, B24) : le sol, la lumière et l'engrais à l'unité, la
  * température au dixième. Sur la valeur brute, un sol à 14,6 % passait « À arroser » sous le chiffre « 15 % », et la fiche
  * conseillait « le sol est à 15 %, il lui en faut au moins 15 % ». `pas` : 1 à l'unité, 10 au dixième. */
-export function verdictsPlante({ hum = null, temp = null, lux = null, cond = null, luxJour } = {}) {
+/* `plages` : celles de la plante, quand son espèce ou Plant Monitor les donne (ADR 0390, `plagesPlante` de plantes.js) — une table
+ * entière ; sans elles, la table générale. */
+export function verdictsPlante({ hum = null, temp = null, lux = null, cond = null, luxJour, plages = null } = {}) {
+  const P = plages || PLAGES_PLANTE;
   const v = (x, [bas, haut], mots, pas = 1) => {
     if (x == null || isNaN(x)) return null;
     const lu = Math.round(x * pas) / pas;
     return lu < bas ? mots[0] : lu > haut ? mots[2] : mots[1];
   };
   const out = {
-    hum: v(hum, PLAGES_PLANTE.hum, ['sec', 'ok', 'humide']),
-    temp: v(temp, PLAGES_PLANTE.temp, ['froid', 'ok', 'chaud'], 10),
-    lux: v(luxJour === undefined ? lux : luxJour, PLAGES_PLANTE.lux, ['faible', 'ok', 'plein']),
-    cond: v(cond, PLAGES_PLANTE.cond, ['peu', 'ok', 'trop']),
+    hum: v(hum, P.hum, ['sec', 'ok', 'humide']),
+    temp: v(temp, P.temp, ['froid', 'ok', 'chaud'], 10),
+    lux: v(luxJour === undefined ? lux : luxJour, P.lux, ['faible', 'ok', 'plein']),
+    cond: v(cond, P.cond, ['peu', 'ok', 'trop']),
   };
   const presse = [];
   if (out.hum === 'sec') presse.push('arroser');

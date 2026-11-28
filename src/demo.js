@@ -548,6 +548,19 @@ const APPAREILS = {
   'Voiture pression arrière gauche': { en: 'Car rear left pressure', de: 'Auto Reifendruck hinten links', nl: 'Auto bandenspanning linksachter', it: 'Auto pressione posteriore sinistra', es: 'Coche presión trasera izquierda', pl: 'Samochód ciśnienie tylne lewe' },
   'Voiture pression arrière droite': { en: 'Car rear right pressure', de: 'Auto Reifendruck hinten rechts', nl: 'Auto bandenspanning rechtsachter', it: 'Auto pressione posteriore destra', es: 'Coche presión trasera derecha', pl: 'Samochód ciśnienie tylne prawe' },
   'Voiture position': { en: 'Car location', de: 'Auto Standort', nl: 'Auto locatie', it: 'Auto posizione', es: 'Coche ubicación', pl: 'Samochód lokalizacja' },
+  // ADR 0392 : la charge en détail, le climat, la trappe, les températures.
+  'Voiture puissance de charge': { en: 'Car charger power', de: 'Auto Ladeleistung', nl: 'Auto laadvermogen', it: 'Auto potenza di ricarica', es: 'Coche potencia de carga', pl: 'Samochód moc ładowania' },
+  'Voiture fin de charge': { en: 'Car time to full charge', de: 'Auto Ladeende', nl: 'Auto einde laden', it: 'Auto fine ricarica', es: 'Coche fin de carga', pl: 'Samochód koniec ładowania' },
+  'Voiture énergie ajoutée': { en: 'Car charge energy added', de: 'Auto geladene Energie', nl: 'Auto toegevoegde energie', it: 'Auto energia aggiunta', es: 'Coche energía añadida', pl: 'Samochód dodana energia' },
+  'Voiture limite de charge': { en: 'Car charge limit', de: 'Auto Ladelimit', nl: 'Auto laadlimiet', it: 'Auto limite di ricarica', es: 'Coche límite de carga', pl: 'Samochód limit ładowania' },
+  'Voiture courant de charge': { en: 'Car charge current', de: 'Auto Ladestrom', nl: 'Auto laadstroom', it: 'Auto corrente di ricarica', es: 'Coche corriente de carga', pl: 'Samochód prąd ładowania' },
+  'Voiture charge': { en: 'Car charge', de: 'Auto Laden', nl: 'Auto laden', it: 'Auto ricarica', es: 'Coche carga', pl: 'Samochód ładowanie' },
+  'Voiture trappe': { en: 'Car charge port door', de: 'Auto Ladeklappe', nl: 'Auto laadklepje', it: 'Auto sportello', es: 'Coche tapa', pl: 'Samochód klapka' },
+  'Voiture climatisation': { en: 'Car climate', de: 'Auto Klimaanlage', nl: 'Auto airco', it: 'Auto climatizzazione', es: 'Coche climatización', pl: 'Samochód klimatyzacja' },
+  'Voiture dégivrage': { en: 'Car defrost', de: 'Auto Enteisung', nl: 'Auto ontdooien', it: 'Auto sbrinamento', es: 'Coche desempañado', pl: 'Samochód odmrażanie' },
+  'Voiture volant chauffant': { en: 'Car heated steering wheel', de: 'Auto Lenkradheizung', nl: 'Auto stuurverwarming', it: 'Auto volante riscaldato', es: 'Coche volante calefactado', pl: 'Samochód podgrzewana kierownica' },
+  'Voiture température intérieure': { en: 'Car inside temperature', de: 'Auto Innentemperatur', nl: 'Auto binnentemperatuur', it: 'Auto temperatura interna', es: 'Coche temperatura interior', pl: 'Samochód temperatura wewnątrz' },
+  'Voiture température extérieure': { en: 'Car outside temperature', de: 'Auto Außentemperatur', nl: 'Auto buitentemperatuur', it: 'Auto temperatura esterna', es: 'Coche temperatura exterior', pl: 'Samochód temperatura zewnętrzna' },
   'Litière': { en: 'Litter box', de: 'Katzenklo', nl: 'Kattenbak', it: 'Lettiera', es: 'Arenero', pl: 'Kuweta' },
   'Litière autonettoyante': { en: 'Self-cleaning litter box', de: 'Selbstreinigendes Katzenklo', nl: 'Zelfreinigende kattenbak', it: 'Lettiera autopulente', es: 'Arenero autolimpiable', pl: 'Kuweta samoczyszcząca' },
   'Litière bac plein': { en: 'Litter box bin full', de: 'Katzenklo Behälter voll', nl: 'Kattenbak afvalbak vol', it: 'Lettiera contenitore pieno', es: 'Arenero depósito lleno', pl: 'Kuweta pojemnik pełny' },
@@ -875,6 +888,21 @@ function etatsInitiaux() {
     'sensor.voiture_pression_arriere_gauche': s(2.6, { friendly_name: 'Voiture pression arrière gauche', device_class: 'pressure', unit_of_measurement: 'bar', state_class: 'measurement' }),
     'sensor.voiture_pression_arriere_droite': s(2.9, { friendly_name: 'Voiture pression arrière droite', device_class: 'pressure', unit_of_measurement: 'bar', state_class: 'measurement' }),
     'device_tracker.voiture': s('home', { friendly_name: 'Voiture position', source_type: 'gps', latitude: 48.8562, longitude: 2.3526, gps_accuracy: 12 }),
+    /* Ce que sa fiche montre de plus (ADR 0392), toujours aux clés de Tesla Fleet : la puissance (nulle tant qu'elle attend), l'heure
+     * de fin (inconnue hors charge, comme chez Tesla), l'énergie prise, la limite à 80 %, le courant demandé, l'interrupteur de la
+     * charge, la trappe ouverte (le câble est branché), le climat éteint, le dégivrage, le volant chauffant, les deux températures. */
+    'sensor.voiture_puissance_de_charge': s(0, { friendly_name: 'Voiture puissance de charge', device_class: 'power', unit_of_measurement: 'kW', state_class: 'measurement' }),
+    'sensor.voiture_fin_de_charge': s('unknown', { friendly_name: 'Voiture fin de charge', device_class: 'timestamp' }),
+    'sensor.voiture_energie_ajoutee': s(0, { friendly_name: 'Voiture énergie ajoutée', device_class: 'energy', unit_of_measurement: 'kWh', state_class: 'total_increasing' }),
+    'number.voiture_limite_de_charge': s(80, { friendly_name: 'Voiture limite de charge', unit_of_measurement: '%', min: 50, max: 100, step: 1, mode: 'slider' }),
+    'number.voiture_courant_de_charge': s(16, { friendly_name: 'Voiture courant de charge', device_class: 'current', unit_of_measurement: 'A', min: 5, max: 32, step: 1, mode: 'slider' }),
+    'switch.voiture_charge': s('off', { friendly_name: 'Voiture charge' }),
+    'cover.voiture_trappe': s('open', { friendly_name: 'Voiture trappe', device_class: 'door', supported_features: 3 }),
+    'climate.voiture_climatisation': s('off', { friendly_name: 'Voiture climatisation', hvac_modes: ['off', 'heat_cool'], current_temperature: 11.5, temperature: 20, min_temp: 15, max_temp: 28, target_temp_step: 0.5, supported_features: 385 }),
+    'switch.voiture_degivrage': s('off', { friendly_name: 'Voiture dégivrage' }),
+    'switch.voiture_volant_chauffant': s('off', { friendly_name: 'Voiture volant chauffant' }),
+    'sensor.voiture_temperature_interieure': s(11.5, { friendly_name: 'Voiture température intérieure', device_class: 'temperature', unit_of_measurement: '°C', state_class: 'measurement' }),
+    'sensor.voiture_temperature_exterieure': s(7.6, { friendly_name: 'Voiture température extérieure', device_class: 'temperature', unit_of_measurement: '°C', state_class: 'measurement' }),
     /* LA LITIÈRE ET LA FONTAINE (A12, ADR 0386), aux clés de traduction de PetKit : la litière dit son bac, son sable, son état et
      * ses passages du jour ; la fontaine, son eau, son filtre et sa pompe. Rien à signaler : le filtre a encore onze jours. */
     'binary_sensor.litiere_bac_plein': s('off', { friendly_name: 'Litière bac plein', device_class: 'problem' }),
@@ -1150,7 +1178,13 @@ function configDemo() {
     },
     // Deux profils : la demo doit exercer les DEUX branches, admin comprise.
     loggia_users: [{ name: 'Démo', role: 'Admin', c: 'var(--o-accent)' }, { name: etiquette('Invité'), role: 'Famille', c: 'var(--o-purple)' }],
-    loggia_plants: [{ base: 'sensor.basilic', name: etiquette('Basilic'), room: lieu('Cuisine') }],
+    loggia_plants: [{ base: 'sensor.basilic', name: etiquette('Basilic'), room: lieu('Cuisine') },
+      /* Le Dracaena a son espèce (ADR 0390, 0391) : la ligne qu'écrit « Choisir l'espèce » pour une plante découverte — ses plages, et
+       * sur sa carte la photo et le dessin de son espèce. La démo n'appelle pas Open Plantbook : son dessin tient lieu de photo. Le
+       * Schefflera reste sans espèce, pour essayer le choix. */
+      { base: 'sensor.dracaena_marginata', decouverte: true, espece: { pid: 'dracaena marginata', nom: 'Dracaena marginata', image: './plantes/dracaena.svg',
+        dessin: 'dracaena', plages: { hum: [15, 60], temp: [12, 32], lux: [1500, 30000], cond: [350, 1500] } } },
+    ],
     // Le distributeur a sa cle (alias `feeder` → `loggia_feeder`) : `loggia_entities`
     // ne se lit qu'avec un serveur, que la demo n'a pas. Sa forme suit la variante.
     loggia_feeder: feederDemo(),
@@ -1668,6 +1702,8 @@ export function historiqueDemo(chemin, states) {
   const t1 = Math.min(Date.now(), finVoulue ? Date.parse(decodeURIComponent(finVoulue[1])) : Date.now());
   // « Pendant votre absence » (05/11, étape 3) : la présence de la maison, puis ce qui s'est passé pendant l'absence.
   if (plusieurs.some(x => /^(person|event)\./.test(x))) return historiqueAbsenceDemo(plusieurs, t0, t1, states);
+  // La voiture (ADR 0392) : sa batterie, son compteur et ses charges de la semaine.
+  if (plusieurs.some(x => VOITURE_HISTO_DEMO.indexOf(x) >= 0)) return historiqueVoitureDemo(plusieurs, t0, t1, states);
   // Les capteurs binaires de sa maquette « Cartes capteurs » (chantier Capteurs, § 9, § 12) : l'histoire du jour, plusieurs d'un coup, à l'horloge des capteurs.
   if (plusieurs.length && plusieurs.every(x => CAPTEURS_DEMO.has(x))) return historiqueCapteursDemo(plusieurs, t0, Math.min(horlogeCapteurs(), t1), states);
   // Un chauffage : ses modes et sa consigne n'ont rien d'une courbe à multiplier (tâche 10 du plan 2).
@@ -1735,6 +1771,76 @@ export function historiqueDemo(chemin, states) {
     for (const p of pts) p.state = String(Math.round((parseFloat(p.state) + ecart) * 100) / 100);
   }
   return [pts];
+}
+
+/* La semaine de la voiture (ADR 0392), au format de `history/period` : deux trajets les jours de semaine (8 h 05 et 17 h 40), deux
+ * plus longs le week-end ; branchée en rentrant, elle charge à 7,1 kW dès 23 h 30 (les heures creuses) jusqu'à sa limite de 80 %.
+ * La série est calée à la fin sur l'état du moment : la courbe finit sur le chiffre affiché. */
+const VOITURE_HISTO_DEMO = ['sensor.voiture_batterie', 'sensor.voiture_compteur', 'sensor.voiture_etat_de_charge', 'binary_sensor.voiture_cable'];
+function historiqueVoitureDemo(ids, t0, t1, states) {
+  const MIN = 60000;
+  const evts = [];
+  // Les journées de t0 à t1, de minuit en minuit : les trajets (début, durée en minutes, % consommés), la charge de la nuit.
+  const j0 = new Date(t0); j0.setHours(0, 0, 0, 0);
+  for (let j = j0.getTime() - 86400000; j < t1; j += 86400000) {
+    const d = new Date(j);
+    const we = d.getDay() === 0 || d.getDay() === 6;
+    const a = hasardStable(d.getDate() * 7919 + d.getMonth() * 104729 + 17), b = hasardStable(d.getDate() * 3571 + d.getMonth() * 9973 + 5);
+    const trajets = we ? [[10 * 60 + 30, 70, 12 + Math.round(a * 12)], [16 * 60, 65, 8 + Math.round(b * 12)]]
+      : [[8 * 60 + 5, 35, 5 + Math.round(a * 6)], [17 * 60 + 40, 25, 4 + Math.round(b * 6)]];
+    trajets.forEach(([m, duree, pct]) => evts.push({ t: j + m * MIN, type: 'trajet', duree, pct }));
+    evts.push({ t: j + (23 * 60 + 30) * MIN, type: 'charge' });
+  }
+  evts.sort((x, y) => x.t - y.t);
+  const curBat = parseFloat((states['sensor.voiture_batterie'] || {}).state);
+  /* Les trajets après la dernière charge passée consomment ce qu'il faut pour finir sur la batterie du moment : la charge
+   * remonte à 80 %, la journée redescend au chiffre affiché — sans décaler toute la semaine. */
+  const derniere = evts.filter(e => e.type === 'charge' && e.t <= t1).pop();
+  const apres = evts.filter(e => e.type === 'trajet' && e.t <= t1 && (!derniere || e.t > derniere.t));
+  const somme = apres.reduce((x, e) => x + e.pct, 0);
+  if (Number.isFinite(curBat) && somme > 0 && curBat <= 80) apres.forEach(e => { e.pct = e.pct * (80 - curBat) / somme; });
+  // La simulation : niveau, compteur, état de charge et câble, aux seuls instants qui comptent.
+  let pct = 72, km = 0, branche = true;
+  const bat = [], odo = [], etat = [], cable = [];
+  const poser = (t) => { bat.push([t, pct]); odo.push([t, km]); };
+  const debut = evts.length ? evts[0].t - 3600000 : t0;
+  poser(debut); etat.push([debut, 'stopped']); cable.push([debut, 'on']);
+  evts.forEach(e => {
+    if (e.type === 'trajet') {
+      if (branche) { branche = false; cable.push([e.t - 5 * MIN, 'off']); etat.push([e.t - 5 * MIN, 'disconnected']); }
+      const pas = 5, n = Math.max(1, Math.round(e.duree / pas)), dpct = e.pct / n;
+      for (let i = 1; i <= n; i++) { pct = Math.max(5, pct - dpct); km += dpct * 4.4; poser(e.t + i * pas * MIN); }
+      // Rentrée : le câble au retour du soir (après 17 h), pas au retour du matin.
+      const retour = e.t + e.duree * MIN + 10 * MIN;
+      if (new Date(retour).getHours() >= 17) { branche = true; cable.push([retour, 'on']); etat.push([retour, 'stopped']); }
+    } else if (branche && pct < 80) {
+      etat.push([e.t, 'charging']);
+      let t = e.t;
+      while (pct < 80) { t += 10 * MIN; pct = Math.min(80, pct + 9.5 / 6); poser(t); }
+      etat.push([t, 'complete']);
+    }
+  });
+  // Branchée depuis 140 minutes, comme la borne (`binary_sensor.borne_branchee`) : la fin de l'histoire rejoint l'état du moment.
+  const finCable = String((states['binary_sensor.voiture_cable'] || {}).state || '');
+  if (finCable === 'on' && (cable.filter(([t]) => t1 >= t).pop() || [0, 'on'])[1] !== 'on') {
+    const t = t1 - 140 * MIN;
+    cable.push([t, 'on']); etat.push([t, String((states['sensor.voiture_etat_de_charge'] || {}).state || 'stopped')]);
+    cable.sort((x, y) => x[0] - y[0]); etat.sort((x, y) => x[0] - y[0]);
+  }
+  const finir = (serie, cur) => { const dernier = serie.filter(([t]) => t1 >= t).pop(); const ecart = dernier ? cur - dernier[1] : 0; return serie.map(([t, v]) => [t, v + ecart]); };
+  const curKm = parseFloat((states['sensor.voiture_compteur'] || {}).state);
+  const series = {
+    'sensor.voiture_batterie': (Number.isFinite(curBat) ? finir(bat, curBat) : bat).map(([t, v]) => [t, String(Math.round(Math.min(100, Math.max(1, v))))]),
+    'sensor.voiture_compteur': (Number.isFinite(curKm) ? finir(odo, curKm) : odo).map(([t, v]) => [t, String(Math.round(v * 10) / 10)]),
+    'sensor.voiture_etat_de_charge': etat,
+    'binary_sensor.voiture_cable': cable,
+  };
+  return ids.filter(id => series[id]).map(id => {
+    const s = series[id];
+    const avant = s.filter(([t]) => t0 >= t).pop() || s[0];
+    const dans = s.filter(([t]) => t > t0 && t <= t1);
+    return [{ entity_id: id, state: String(avant[1]), last_changed: new Date(t0).toISOString() }, ...dans.map(([t, v]) => ({ state: String(v), last_changed: new Date(t).toISOString() }))];
+  });
 }
 
 /* La journée du purificateur (ADR 0387), au format de `history/period` : la qualité de l'air par demi-heure (sa maquette : bon la
@@ -3285,6 +3391,38 @@ function historiqueCapteursDemo(ids, t0, t1, states) {
   });
 }
 
+/* Open Plantbook, simulé (ADR 0390) : l'intégration `openplantbook` de Home Assistant publie `search` et `get` (l'index de la démo), et
+ * la démo répond à leur place — elle n'appelle personne. Dix espèces de plantes d'intérieur, leurs plages INVENTÉES pour la démo
+ * (vraisemblables, pas celles d'Open Plantbook) ; le dessin de leur genre (ADR 0391) sert de photo. `search` rend `{ pid: display_pid }`,
+ * `get` la fiche de l'espèce, comme l'intégration. */
+const ESPECES_DEMO = [
+  ['dracaena marginata', 'Dracaena marginata', 'dragonnier', 'dracaena', [15, 60], [12, 32], [1500, 30000], [350, 1500]],
+  ['dracaena fragrans', 'Dracaena fragrans', 'dragonnier', 'dracaena', [15, 60], [13, 30], [1500, 25000], [350, 1500]],
+  ['dracaena reflexa', 'Dracaena reflexa', 'dragonnier', 'dracaena', [20, 60], [15, 32], [2000, 35000], [350, 1500]],
+  ['dracaena sanderiana', 'Dracaena sanderiana', 'bambou', 'dracaena', [20, 70], [15, 32], [1000, 20000], [300, 1200]],
+  ['schefflera arboricola', 'Schefflera arboricola', 'arbre ombrelle', 'schefflera', [15, 60], [10, 32], [2000, 35000], [350, 1800]],
+  ['schefflera actinophylla', 'Schefflera actinophylla', 'arbre ombrelle', 'schefflera', [15, 60], [12, 32], [2500, 40000], [350, 1800]],
+  ['ocimum basilicum', 'Ocimum basilicum', 'basilic', 'aromatique', [25, 60], [15, 32], [3000, 60000], [350, 2000]],
+  ['ficus lyrata', 'Ficus lyrata', 'figuier lyre', 'ficus', [20, 60], [12, 32], [2500, 40000], [350, 2000]],
+  ['ficus benjamina', 'Ficus benjamina', 'figuier pleureur', 'ficus', [15, 60], [13, 32], [2000, 35000], [350, 2000]],
+  ['monstera deliciosa', 'Monstera deliciosa', 'monstera', 'monstera', [15, 60], [12, 32], [1500, 30000], [350, 2000]],
+];
+/* En minuscules : les noms et les alias de la démo n'ont pas d'accent. Rien d'importé de `outils.js` : la démo, chargée à la demande,
+ * le sortirait du démarrage dans un morceau partagé (tests/lot14_chargement). */
+const minuscules = (s) => String(s || '').toLowerCase().trim();
+export function plantbookDemo(service, data) {
+  if (service === 'search') {
+    const q = minuscules(data && data.alias);
+    return Object.fromEntries(ESPECES_DEMO.filter(e => q && (e[0] + ' ' + e[2]).indexOf(q) >= 0).map(e => [e[0], e[1]]));
+  }
+  const e = ESPECES_DEMO.find(x => x[0] === minuscules(data && data.species));
+  if (!e) return {};
+  const [pid, nom, alias, img, hum, temp, lux, cond] = e;
+  return { pid, display_pid: nom, alias, category: null, image_url: img ? './plantes/' + img + '.svg' : null,
+    min_soil_moist: hum[0], max_soil_moist: hum[1], min_temp: temp[0], max_temp: temp[1], min_light_lux: lux[0], max_light_lux: lux[1],
+    min_soil_ec: cond[0], max_soil_ec: cond[1] };
+}
+
 /* Les statistiques de la plante MUETTE (§ 7.3, § 12) : ses relevés à l'heure jusqu'à samedi 14:05, plus rien après — le sol descendu de 30 à
  * 12 %, la pile de 6 à 4 %. C'est ce que lit sa fiche : « Dernier relevé samedi 14:05 : sol à 12 % », « Changez la pile. ». */
 const STATS_PLANTES_DEMO = { 'sensor.schefflera_humidite_du_sol': [30, 12], 'sensor.schefflera_pile': [6, 4] };
@@ -4064,7 +4202,8 @@ function indexDemo(states) {
       { id: 'rdc', name: etiquette('Rez-de-chaussée'), level: 0 },
       { id: 'etage', name: etiquette('Étage'), level: 1 },
     ],
-    services: {},
+    // L'intégration Open Plantbook et ses deux actions (ADR 0390) : « Choisir l'espèce » se montre, la démo répond (`plantbookDemo`).
+    services: { openplantbook: { search: { fields: ['alias'] }, get: { fields: ['cache', 'include', 'species'] } } },
     component_version: null,
   };
 }
@@ -4801,6 +4940,13 @@ const COMPOSES_DEMO = {
     'sensor.voiture_pression_avant_gauche': ['vehicle_state_tpms_pressure_fl', 'diagnostic'], 'sensor.voiture_pression_avant_droite': ['vehicle_state_tpms_pressure_fr', 'diagnostic'],
     'sensor.voiture_pression_arriere_gauche': ['vehicle_state_tpms_pressure_rl', 'diagnostic'], 'sensor.voiture_pression_arriere_droite': ['vehicle_state_tpms_pressure_rr', 'diagnostic'],
     'device_tracker.voiture': ['location', null],
+    // ADR 0392 : la charge en détail, le climat, la trappe, les températures.
+    'sensor.voiture_puissance_de_charge': ['charge_state_charger_power', null], 'sensor.voiture_fin_de_charge': ['charge_state_minutes_to_full_charge', null],
+    'sensor.voiture_energie_ajoutee': ['charge_state_charge_energy_added', null], 'number.voiture_limite_de_charge': ['charge_state_charge_limit_soc', null],
+    'number.voiture_courant_de_charge': ['charge_state_charge_current_request', null], 'switch.voiture_charge': ['charge_state_user_charge_enable_request', null],
+    'cover.voiture_trappe': ['charge_state_charge_port_door_open', null], 'climate.voiture_climatisation': ['driver_temp', null],
+    'switch.voiture_degivrage': ['climate_state_defrost_mode', null], 'switch.voiture_volant_chauffant': ['climate_state_steering_wheel_heater', null],
+    'sensor.voiture_temperature_interieure': ['climate_state_inside_temp', null], 'sensor.voiture_temperature_exterieure': ['climate_state_outside_temp', null],
   }],
   litiere: ['petkit', {
     'binary_sensor.litiere_bac_plein': ['waste_bin', null], 'binary_sensor.litiere_manque_de_litiere': ['sand_lack', null],
@@ -7249,6 +7395,11 @@ export function installerDemo(langue) {
        * niveaux suffisent a rendre la navigation credible. */
       /* `todo.get_items` : le contenu d'une liste ne se pousse pas, il se
        * demande. Sans reponse ici, la carte Rappels resterait vide. */
+      // Open Plantbook (ADR 0390) : la recherche et la fiche d'une espèce, un instant plus tard, comme un service qui part sur Internet.
+      if (msg && msg.type === 'call_service' && msg.domain === 'openplantbook' && (msg.service === 'search' || msg.service === 'get')) {
+        const rep = plantbookDemo(msg.service, msg.service_data);
+        return new Promise((ok) => { setTimeout(() => ok({ context: { id: 'demo' }, response: rep }), msg.service === 'search' ? 450 : 300); });
+      }
       if (msg && msg.type === 'call_service' && msg.domain === 'todo' && msg.service === 'get_items') {
         const cible = (msg.target && msg.target.entity_id) || '';
         return Promise.resolve({ response: { [cible]: { items: todosDemo(cible) } } });

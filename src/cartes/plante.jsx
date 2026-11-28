@@ -1,10 +1,10 @@
 /* La carte d'une plante.
  * Sorti d’App.jsx tel quel (lot 5 de l’audit du 28/10, ADR 0283) : seuls les imports sont neufs. */
-import { useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { LAVIS } from '../theme.js';
 import { deCelsius } from '../unites.js';
 import { Fi, nomCarte } from '../ui.jsx';
-import { vuePlante } from '../plantes.js';
+import { vuePlante, imageEspece } from '../plantes.js';
 import { figeeDe, ecouterFigees } from '../fraicheur.js';
 import { LISERE } from '../styles.js';
 import { nombre } from '../format.js';
@@ -17,13 +17,15 @@ import { NOM_GROUPE } from './groupe.jsx';
 /* ── La carte d'une PLANTE (chantier Capteurs, étape 3 ; C29 à C31, § 7.2) ──────────────────────
  *
  * La carte 1a de sa maquette « Cartes capteurs », aux tailles de la maison, pour une plante lue par `lirePlante` (`pl`) :
- *  - la plaque : la feuille, sur le vert de la plante à 0,14 — son identité, pas un verdict ;
+ *  - la plaque : la feuille, sur le vert de la plante à 0,14 — son identité, pas un verdict ; la photo de son espèce quand elle en a
+ *    une (ADR 0391) ;
  *  - le nom (15 / 700, deux lignes au plus) et la phrase de sa vue (`vuePlante`, plantes.js) : muette, « Indisponible depuis … »
  *    en rouge et le liseré qui respire ; ce qui presse, en ambre ; sinon le mot du sol, en neutre — jamais « Tout lui convient » ;
  *  - le chiffre à droite, aligné sur la phrase : le sol, « 28 % », et « SOL » dessous ; muette, « — » ;
  *  - au pied, la grille 2 × 2 : sol, lumière, température, engrais — une valeur ne passe en ambre que si elle presse ; l'engrais et un
  *    sol très humide restent neutres sur la carte, la fiche les dit ;
- *  - le dessin choisi (`img`), à 0,14, en filigrane — un fichier (C34) ; une plante découverte n'en a pas ;
+ *  - le dessin, à 0,14, en filigrane — un fichier (C34) : celui que la configuration choisit (`img`), sinon celui de son espèce
+ *    (ADR 0391) ; une plante découverte sans espèce n'en a pas ;
  *  - le lavis ambre à 0,1, seulement quand quelque chose presse. Plus de lavis vert (C5).
  * La carte ÉTROITE (la grille commune, ADR 0202) : la plaque et le sol en haut (`ChiffreHaut`), le nom, la phrase — pas de grille.
  * La COMPACTE : sa disposition d'aujourd'hui, avec la phrase, le sol à droite et ces couleurs.
@@ -33,14 +35,28 @@ function RoomPlantCard({ pl, nom, onOpen, chip = false }) {
   // Le verdict de fraîcheur du serveur la redessine (ADR 0311).
   const lireFigee = () => figeeDe(pl && pl.ids && pl.ids.hum);
   useSyncExternalStore(ecouterFigees, lireFigee, lireFigee);
+  const [photoKo, setPhotoKo] = useState(null);
   const v = vuePlante(pl, { quand: heureDe, deCelsius });
   const mort = v.muette;
   const encre = v.ton === 'bad' ? 'var(--o-bad)' : v.ton === 'warn' ? 'var(--o-warn)' : 'var(--o-text2)';
   const lavis = v.ton === 'warn' && LAVIS ? lavisCarte('var(--o-warn-rgb)', .1, .03) : null;
-  /* La plaque : la feuille sur le vert de la plante. La COMPACTE passe sa classe (`o-cvico`) : sa taille vient alors de la feuille, qui
-   * la rapetisse quand la carte est étroite — en ligne, elle ne le pourrait pas (tests/cartes_compactes_gabarit). */
+  /* Le dessin en filigrane (ADR 0391) : celui que la configuration écrit (`img`) d'abord — un choix fait exprès —, sinon celui de
+   * l'espèce, choisi avec elle par son genre (`espece.dessin`). */
+  const art = PLANT_ART[pl.img] || (pl.espece && PLANT_ART[pl.espece.dessin]) || null;
+  /* La photo de l'espèce, dans la plaque (ADR 0391) : Open Plantbook, ou l'image de Plant Monitor — gardée ici aussi, celle-là ne
+   * passe pas par `especeValide`. La feuille revient quand elle ne charge pas. */
+  const photo = pl.espece ? imageEspece(pl.espece.image) : null;
+  const avecPhoto = photo && photoKo !== photo;
+  /* La plaque : la feuille sur le vert de la plante, ou la photo de son espèce. La COMPACTE passe sa classe (`o-cvico`) : sa taille
+   * vient alors de la feuille, qui la rapetisse quand la carte est étroite — en ligne, elle ne le pourrait pas
+   * (tests/cartes_compactes_gabarit). */
   const portrait = (taille, cls = null) => (
-    <span className={cls || undefined} style={{ ...(cls ? null : { width: taille, height: taille, borderRadius: taille > 36 ? 14 : 10 }), flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(var(--o-ok-rgb),.14)', color: 'var(--o-ok)' }}><Fi i="leaf" size={taille > 36 ? 17 : 15} /></span>
+    <span className={cls || undefined} style={{ ...(cls ? null : { width: taille, height: taille, borderRadius: taille > 36 ? 14 : 10 }), flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: 'rgba(var(--o-ok-rgb),.14)', color: 'var(--o-ok)' }}>
+      {avecPhoto
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- `onError` n'est pas un geste : une photo qui ne vient pas laisse la place à la feuille
+        ? <img src={photo} alt="" referrerPolicy="no-referrer" onError={() => setPhotoKo(photo)} data-photo="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        : <Fi i="leaf" size={taille > 36 ? 17 : 15} />}
+    </span>
   );
   // Ce que la carte affiche, dans l'ordre : le nom, le sol, la phrase.
   const label = nomCarte(nom, v.sol == null ? null : v.chiffre, v.phrase);
@@ -60,8 +76,10 @@ function RoomPlantCard({ pl, nom, onOpen, chip = false }) {
       </div>
     );
   }
-  const filigrane = pl.img && PLANT_ART[pl.img] && (
-    <span aria-hidden="true" style={{ position: 'absolute', right: 6, bottom: -10, width: 120, height: 120, backgroundImage: `url("${PLANT_ART[pl.img]}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.14, pointerEvents: 'none' }} />
+  /* Le filigrane descend 10 px sous la carte, que la carte coupe. Une carte MUETTE ne coupe plus rien (`.o-panne` : son liseré
+   * respire au dehors) : le filigrane se coupe lui-même au bord de la carte, et rien ne dépasse dessous (ADR 0391). */
+  const filigrane = art && (
+    <span aria-hidden="true" style={{ position: 'absolute', right: 6, bottom: -10, width: 120, height: 120, backgroundImage: `url("${art}")`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center bottom', opacity: 0.14, pointerEvents: 'none', clipPath: 'inset(0 0 10px 0)' }} />
   );
   return (
     <div className={'o-rmcard o-gabarit' + (mort ? ' o-panne' : '')} data-plante="" role="button" tabIndex={0} aria-label={label} aria-haspopup="dialog" onKeyDown={clavier}

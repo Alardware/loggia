@@ -33,13 +33,36 @@ const V = {
   carburant: mots('fuel_level tanklevelpercent'),
   compteur: mots('vehicle_state_odometer mileage odometer'),
   // L'autonomie : la totale d'abord, puis l'électrique, puis celle du réservoir.
-  autonomie: mots('total_range total_driving_range charge_state_battery_range battery_autonomy distance_to_empty_battery electric_range ev_range ev_driving_range rangeelectrickm fuel_autonomy distance_to_empty_tank range fuel_driving_range rangeliquid'),
+  autonomie: mots('total_range total_driving_range remaining_range_total charge_state_battery_range battery_autonomy distance_to_empty_battery electric_range ev_range ev_driving_range rangeelectrickm remaining_range_electric fuel_autonomy distance_to_empty_tank range fuel_driving_range rangeliquid remaining_range_fuel'),
   verrou: mots('vehicle_state_locked lock door_lock door_locks'),
   // Le verrou de la trappe de charge (Tesla) n'est pas celui des portes.
   trappe: mots('charge_state_charge_port_latch'),
   // Le câble branché : un binaire `connectivity` chez Tesla, un état `connected` chez Volvo.
   cable: mots('charge_state_conn_charge_cable charger_connection_status'),
+  /* La charge en détail (ADR 0392) — chaque rôle n'existe que si la voiture le publie : sa puissance, le temps qui reste ou
+   * l'heure de la fin, l'énergie prise, la limite et le courant demandés, de quoi la lancer ou l'arrêter. */
+  puissance: mots('charge_state_charger_power charging_power charge_power ev_charging_power charger_power'),
+  reste: mots('charging_remaining_time remaining_charging_time estimated_charging_time charge_time_remaining ev_charge_remaining_time time_to_fully_charged ev_charge_duration'),
+  fin: mots('charge_state_minutes_to_full_charge charging_end_time charge_end_time estimated_charge_end charging_finished_at'),
+  ajoutee: mots('charge_state_charge_energy_added charging_energy_added charge_energy_added energy_added'),
+  limite: mots('charge_state_charge_limit_soc charge_limit target_soc ev_charge_limits_ac charging_target target_battery_charge_level charge_limit_soc max_charge_level'),
+  courant: mots('charge_state_charge_current_request charging_current charge_current ac_charging_current max_charge_current'),
+  lancer: mots('charge_state_user_charge_enable_request charging charge start_stop_charging'),
+  demarrer: mots('start_charge start_charging charge_start'),
+  arreter: mots('stop_charge stop_charging charge_stop'),
+  // La trappe de charge qui s'ouvre (une `cover`) : ni une portière, ni un coffre — branchée, elle est ouverte sans rien d'anormal.
+  trappeCover: mots('charge_state_charge_port_door_open charge_port charge_port_door charging_flap'),
+  // Le climat : une `climate`, sinon un interrupteur ou un bouton ; le dégivrage et le volant chauffant, des interrupteurs.
+  clim: mots('climatisation air_conditioning climate preconditioning hvac climate_control'),
+  climBouton: mots('start_air_conditioner activate_air_conditioning start_climate precondition climate_start start_climatisation'),
+  degivrage: mots('climate_state_defrost_mode defrost window_heating rear_window_heating front_window_heating windows_heating'),
+  volant: mots('climate_state_steering_wheel_heater steering_wheel_heater steering_wheel_heating'),
+  interieur: mots('climate_state_inside_temp inside_temperature interior_temperature cabin_temperature'),
+  exterieur: mots('climate_state_outside_temp outside_temperature exterior_temperature ambient_temperature outdoor_temperature'),
+  consommation: mots('average_consumption consumption energy_consumption average_energy_consumption'),
 };
+// Une consommation se reconnaît aussi à son unité : « kWh/100km », « Wh/km », « mi/kWh »…
+const UNITE_CONSO = /kwh\s*\/\s*100|wh\s*\/\s*(km|mi)|(km|mi)\s*\/\s*kwh/i;
 /* La charge en cours, dans les états publiés : Tesla, Volvo, Škoda disent `charging`, Renault `charge_in_progress`. */
 const EN_CHARGE = ['charging', 'charge_in_progress'];
 const OUVRANTS = ['door', 'window', 'opening', 'garage_door'];
@@ -73,6 +96,41 @@ function premier(ids, ordre, tk) {
   return ids.filter(id => ordre.indexOf(tk(id)) >= 0).sort((x, y) => ordre.indexOf(tk(x)) - ordre.indexOf(tk(y)))[0] || null;
 }
 
+/**
+ * Ce que la carte et la fiche de la voiture montrent de plus (ADR 0392) : la charge en détail, le climat, la trappe, les
+ * températures, la consommation. La classe d'abord, la clé de traduction pour TRIER quand il y en a plusieurs ; un rôle sans
+ * entité vaut null, et l'écran ne dessine rien à sa place (règle 46 : ce que la voiture publie, pas ce qu'une autre a).
+ */
+function detailsVoiture(S, tk, de) {
+  const unite = (id) => (S[id] && S[id].attributes && S[id].attributes.unit_of_measurement) || '';
+  const cle = (id) => tk(id) || String(id).split('.').slice(1).join('.');
+  const parCle = (liste, ordre, motif = null) => premier(liste, ordre, tk) || (motif ? liste.find(id => motif.test(cle(id))) || null : null);
+  const puissances = de('sensor', ['power']);
+  const temperatures = de('sensor', ['temperature']);
+  const pourcents = de('number').filter(id => unite(id) === '%');
+  const climats = de('climate');
+  return {
+    puissance: parCle(puissances, V.puissance, /charg/) || (puissances.length === 1 ? puissances[0] : null),
+    reste: parCle(de('sensor', ['duration']), V.reste, /charg/),
+    fin: parCle(de('sensor', ['timestamp']), V.fin, /charg.*(end|fin|full)|full.*charg/),
+    ajoutee: parCle(de('sensor', ['energy']), V.ajoutee, /charg.*added|added/),
+    // La limite : réglable (un `number` en %), sinon seulement lue (un capteur que sa clé nomme).
+    limite: parCle(pourcents, V.limite, /limit|target|soc/) || parCle(de('sensor'), V.limite),
+    courant: parCle(de('number', ['current']), V.courant, /charg/),
+    lancer: parCle(de('switch'), V.lancer, /^charg(e|ing)$|charge_enable|charging_enable/),
+    demarrer: parCle(de('button'), V.demarrer),
+    arreter: parCle(de('button'), V.arreter),
+    trappeCover: parCle(de('cover'), V.trappeCover),
+    clim: climats[0] || parCle(de('switch'), V.clim),
+    climBouton: climats.length ? null : parCle(de('button'), V.climBouton),
+    degivrage: parCle(de('switch'), V.degivrage),
+    volant: parCle(de('switch'), V.volant),
+    interieur: parCle(temperatures, V.interieur, /inside|interior|cabin|interieur/),
+    exterieur: parCle(temperatures, V.exterieur, /outside|exterior|ambient|outdoor|exterieur/),
+    consommation: parCle(de('sensor'), V.consommation) || de('sensor').find(id => UNITE_CONSO.test(unite(id))) || null,
+  };
+}
+
 /** Les rôles d'une voiture sur les entités `ids` d'un appareil, ou null si ce n'en est pas une. */
 function voitureDe(ids, S, m) {
   const tk = (id) => m(id).translationKey || '';
@@ -102,9 +160,11 @@ function voitureDe(ids, S, m) {
       || de('sensor').find(id => S[id] && S[id].attributes && Array.isArray(S[id].attributes.options) && S[id].attributes.options.some(o => EN_CHARGE.indexOf(o) >= 0)) || null,
     batterie: premier(batteries, V.batterie, tk) || (batteries.length === 1 ? batteries[0] : null),
     carburant: premier(de('sensor'), V.carburant, tk),
-    ouvrants: de('binary_sensor', OUVRANTS).concat(de('cover', ['door'])),
+    // La trappe de charge (une `cover` de classe `door` chez Tesla) n'est pas un ouvrant : branchée, elle est ouverte (ADR 0392).
+    ouvrants: de('binary_sensor', OUVRANTS).concat(de('cover', ['door']).filter(id => V.trappeCover.indexOf(tk(id)) < 0)),
     pneus: de('binary_sensor', ['problem']).filter(id => PNEU.test(tk(id))),
     pressions: de('sensor', ['pressure', 'atmospheric_pressure']),
+    ...detailsVoiture(S, tk, de),
   };
   /* Un INDICE FORT : une position, un verrou, une prise, une charge, ou une batterie de traction et un carburant que leur clé
    * nomme. Une pile seule ne suffit pas — une station météo en a une. */
@@ -179,6 +239,8 @@ export const nomGenre = (genre) => (genre === 'voiture' ? tr('Voiture') : genre 
 /* ─── Ce que l'écran lit des états ─── */
 const etatDe = (S, id) => (id && S && vivant(S[id]) ? String(S[id].state) : null);
 const allume = (S, id) => etatDe(S, id) === 'on';
+/** Un état de charge (d'un binaire ou d'un capteur) qui dit « en charge » — l'historique le relit aussi (ADR 0392). */
+export const etatEnCharge = (e) => e === 'on' || EN_CHARGE.indexOf(String(e)) >= 0;
 /** La voiture charge-t-elle ? Son binaire, ou un état `charging`. */
 export const voitureEnCharge = (c, S) => !!c && (allume(S, c.charge) || EN_CHARGE.indexOf(etatDe(S, c.charge)) >= 0);
 /** Est-elle branchée ? Le binaire de la prise, ou l'état `connected`. */

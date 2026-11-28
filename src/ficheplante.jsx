@@ -17,9 +17,12 @@
  *  3. Les mesures, une rangée chacune : le libellé et la valeur (en ambre hors de
  *     sa plage), une barre de 8 px — la plage idéale en vert à 0,28, un repère de
  *     4 px à la valeur, la lumière sur une échelle logarithmique —, et « Idéal :
- *     {a} à {b} {u} », d'après la seule table (`PLAGES_PLANTE`).
+ *     {a} à {b} {u} », d'après les plages de la plante (`pl.plages` : son espèce,
+ *     Plant Monitor), sinon la table générale (`PLAGES_PLANTE`).
  *  4. Les faits : la pile du capteur (la règle de la maison, `niveauPile`), le
  *     dernier signal, et L'appareil, qui ouvre la fiche universelle.
+ * Entre 2 et 3, l'Espèce (ADR 0390, choixespece.jsx) : sa photo, son nom, d'où
+ * viennent ses seuils ; « Choisir l'espèce » ouvre la recherche par-dessus.
  */
 import { useState, useEffect, useRef } from 'react';
 import { tr, locale } from './i18n.js';
@@ -32,6 +35,7 @@ import { dernierSignal } from './mesuresfiche.js';
 import { EnteteFiche, filet } from './fichecommune.jsx';
 import { vuePlante, conseilsPlante, barrePlante, dernierReleve, quandPlante } from './plantes.js';
 import { PANNEAU, RANGEE_SERREE, EN_BOUTON, TITRE, SOUS } from './fichekit.js';
+import { RangeeEspece, FeuilleEspece } from './choixespece.jsx';
 
 const VALEUR = { fontSize: 13, fontWeight: 800, color: 'var(--o-text1)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' };
 
@@ -61,8 +65,8 @@ function useDernierReleve(hass, muette, idSol, idPile) {
 
 /* La barre d'une mesure (§ 7.3) : 8 px, la plage idéale en `rgba(--o-ok-rgb, .28)`, le repère de 4 px à la valeur. Le chiffre est écrit :
  * elle ne se lit pas. Une fonction, pas un composant : la fiche la pose dans son propre arbre. */
-function barre(cle, valeur) {
-  const b = barrePlante(cle, valeur);
+function barre(cle, valeur, plages) {
+  const b = barrePlante(cle, valeur, plages);
   return (
     <div aria-hidden="true" style={{ position: 'relative', height: 8, marginTop: 8, borderRadius: 4, background: 'var(--o-s1)' }}>
       <span data-plage="" style={{ position: 'absolute', top: 0, bottom: 0, left: b.plage[0] + '%', width: (b.plage[1] - b.plage[0]) + '%', borderRadius: 4, background: 'rgba(var(--o-ok-rgb),.28)' }} />
@@ -73,10 +77,11 @@ function barre(cle, valeur) {
 
 /**
  * La fiche d'une plante. `pl` : la plante lue dans le `hass` vivant (`lirePlante`, App.jsx) — nom, pièce, sol, lumière,
- * température, engrais, pile, et ses capteurs (`ids`) ; `onFiche(id)` ouvre la fiche universelle de l'appareil ; `maintenant`
- * sert aux tests.
+ * température, engrais, pile, ses capteurs (`ids`), ses plages et son espèce ; `onFiche(id)` ouvre la fiche universelle de
+ * l'appareil ; `onEspece` dit que l'espèce a changé (la coquille relit la plante) ; `maintenant` sert aux tests.
  */
-export default function FichePlanteContent({ pl, hass, onFiche = null, maintenant = null }) {
+export default function FichePlanteContent({ pl, hass, onFiche = null, onEspece = null, maintenant = null }) {
+  const [choix, setChoix] = useState(false);
   const S = (hass && hass.states) || {};
   const t = maintenant == null ? Date.now() : maintenant;
   const loc = locale();
@@ -85,10 +90,10 @@ export default function FichePlanteContent({ pl, hass, onFiche = null, maintenan
   const ids = pl.ids || {};
   const releve = useDernierReleve(hass, v.muette, ids.hum || null, ids.bat || null);
   const uT = pl.uniteTemp || 'C';
-  const P = PLAGES_PLANTE;
+  const P = pl.plages || PLAGES_PLANTE;
   // Les mesures (§ 7.3) : le libellé, la valeur, la plage idéale dans l'unité du capteur.
   const mesures = [
-    { cle: 'hum', titre: tr('Humidité du sol'), valeur: pl.hum, ideal: tr('Idéal : {a} à {b} {u}', { a: P.hum[0], b: P.hum[1], u: '%' }) },
+    { cle: 'hum', titre: tr('Humidité du sol'), valeur: pl.hum, ideal: tr('Idéal : {a} à {b} {u}', { a: nombre(P.hum[0], 0), b: nombre(P.hum[1], 0), u: '%' }) },
     { cle: 'lux', titre: tr('Lumière reçue'), valeur: pl.lux, ideal: tr('Idéal : {a} à {b} {u}', { a: nombre(P.lux[0], 0), b: nombre(P.lux[1], 0), u: 'lx' }) },
     { cle: 'temp', titre: tr('Température'), valeur: pl.temp, ideal: tr('Idéal : {a} à {b} {u}', { a: nombre(deCelsius(P.temp[0], uT), 0), b: nombre(deCelsius(P.temp[1], uT), 0), u: signeTemp(uT) }) },
     { cle: 'cond', titre: tr('Conductivité'), valeur: pl.cond, ideal: tr('Idéal : {a} à {b} {u}', { a: nombre(P.cond[0], 0), b: nombre(P.cond[1], 0), u: 'µS/cm' }) },
@@ -119,6 +124,9 @@ export default function FichePlanteContent({ pl, hass, onFiche = null, maintenan
         )}
       </div>
 
+      <RangeeEspece pl={pl} hass={hass} onChoisir={() => setChoix(true)} />
+      {choix && <FeuilleEspece pl={pl} hass={hass} onClose={() => setChoix(false)} onFini={onEspece} />}
+
       <div style={{ ...PANNEAU, overflow: 'hidden' }}>
         {mesures.map((m, i) => (
           <div key={m.cle} data-mesure={m.cle} style={{ padding: '12px 16px 14px', borderTop: filet(i) }}>
@@ -126,7 +134,7 @@ export default function FichePlanteContent({ pl, hass, onFiche = null, maintenan
               <span style={TITRE}>{m.titre}</span>
               <span style={{ fontSize: 15, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: ecrite[m.cle].presse ? 'var(--o-warn)' : v.muette ? 'var(--o-text3)' : 'var(--o-text1)' }}>{ecrite[m.cle].valeur == null ? '—' : ecrite[m.cle].valeur}</span>
             </div>
-            {barre(m.cle, v.muette ? null : m.valeur)}
+            {barre(m.cle, v.muette ? null : m.valeur, P)}
             <span style={{ ...SOUS, marginTop: 6 }}>{m.ideal}</span>
           </div>
         ))}

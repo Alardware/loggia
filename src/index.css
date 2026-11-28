@@ -307,7 +307,11 @@ html.loggia-nuit.loggia-verre-leger .o-fond-photo { filter: var(--o-flou, blur(1
  * le TYPE d'appareil décide, jamais la largeur. */
 html.loggia-tactile .loggia-hdr { display: none !important; }
 html.loggia-tactile .loggia-aside { position: fixed !important; top: 0; left: 0; height: 100vh !important; overflow-y: auto !important; padding-bottom: var(--o-safe-bottom, 0px) !important; z-index: 100; transition: transform .3s ease; box-shadow: 0 0 50px rgba(0,0,0,.55); }
-html.loggia-tactile .loggia-aside.is-closed { display: flex !important; transform: translateX(-100%); width: 264px !important; }
+/* Fermé, le tiroir n'a plus d'ombre : poussé à x = −264, son halo de 50 px
+ * débordait sur la gauche de toute la page, un bord gris sur toute la hauteur
+ * (bien visible en thème clair, 23/11). L'ombre ne s'en va qu'une fois le tiroir
+ * sorti (délai = durée du glissement) : la fermeture reste la même à l'œil. */
+html.loggia-tactile .loggia-aside.is-closed { display: flex !important; transform: translateX(-100%); width: 264px !important; box-shadow: none; transition: transform .3s ease, box-shadow 0s .3s; }
 html.loggia-tactile .loggia-aside.is-closed .o-side-text { display: block !important; }
 html.loggia-tactile .loggia-aside.is-closed .o-nav-item { justify-content: flex-start !important; padding: 9px 8px 9px 13px !important; gap: 12px !important; }
 html.loggia-tactile .loggia-aside.is-open { transform: translateX(0); }
@@ -839,7 +843,7 @@ html.loggia-tactile .o-sheet-onglets { height: min(760px, calc(94vh - var(--o-na
   .grid-qscenes::-webkit-scrollbar-thumb { background: var(--o-bd1); border-radius: 4px; }
   .grid-qscenes::-webkit-scrollbar-track { background: transparent; }
   .loggia-aside { position: fixed !important; top: 0; left: 0; height: 100vh !important; overflow-y: auto !important; padding-bottom: var(--o-safe-bottom, 0px) !important; z-index: 100; transition: transform .3s ease; box-shadow: 0 0 50px rgba(0,0,0,.55); }
-  .loggia-aside.is-closed { display: flex !important; transform: translateX(-100%); width: 264px !important; }
+  .loggia-aside.is-closed { display: flex !important; transform: translateX(-100%); width: 264px !important; box-shadow: none; transition: transform .3s ease, box-shadow 0s .3s; }
   .loggia-aside.is-closed .o-side-text { display: block !important; }
   .loggia-aside.is-closed .o-nav-item { justify-content: flex-start !important; padding: 9px 8px 9px 13px !important; gap: 12px !important; }
   .loggia-aside.is-open { transform: translateX(0); }
@@ -2679,6 +2683,28 @@ html.loggia-calme .rb-dessin .rbd-brin-d { opacity: 1; transform: translate(12px
 }
 /* La popup au téléphone : les trois chiffres du jour gardent leur intitulé entier, sur deux lignes s'il le faut. */
 @media (max-width: 480px) { .o-ouv-chiffre { padding-left: 14px !important; padding-right: 10px !important; } }
+
+/* ── La voiture (ADR 0392 ; dessinvoiture.jsx, voiture.jsx) ──
+ * En charge, le courant coule dans le câble vers la voiture (`vo-flux`) et la barre de la batterie respire (`vo-remplit`) ; le
+ * climat en marche, l'air monte au-dessus du toit (`vo-air`). « Réduire les animations » — du système comme de l'appareil
+ * (`html.loggia-calme`) — fige tout : le câble reste vert, l'air reste dessiné. */
+.vo-anime .vo-flux { animation: vo-flux 1.1s linear infinite; }
+@keyframes vo-flux { to { stroke-dashoffset: -24; } }
+.vo-air { animation: vo-air 2.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+@keyframes vo-air { 0% { transform: translateY(4px); opacity: 0; } 35% { opacity: .9; } 100% { transform: translateY(-8px); opacity: 0; } }
+.vo-remplit { animation: vo-remplit 2.6s ease-in-out infinite alternate; }
+@keyframes vo-remplit { from { opacity: .72; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .vo-flux, .vo-air, .vo-remplit { animation: none !important; } .vo-air { opacity: .8; } }
+html.loggia-calme :is(.vo-flux, .vo-air, .vo-remplit) { animation: none !important; }
+html.loggia-calme .vo-air { opacity: .8; }
+/* La photo de la voiture : argent au thème sombre, graphite au clair (son choix du 27/11) — l'une se montre, l'autre se cache, à
+ * l'instant où le thème change. La borne et les reflets du câble prennent leurs couleurs au thème : `--vo-caisse` (le fût de la
+ * borne), `--vo-lum` toujours plus clair, `--vo-nuit` toujours plus sombre. */
+.vo-dessin .vo-photo-clair { display: none; }
+html.loggia-light .vo-dessin .vo-photo-sombre { display: none; }
+html.loggia-light .vo-dessin .vo-photo-clair { display: inline; }
+.vo-dessin { --vo-caisse: color-mix(in srgb, var(--o-text) 24%, var(--o-well)); --vo-lum: var(--o-text); --vo-nuit: var(--o-well2); }
+html.loggia-light .vo-dessin { --vo-caisse: color-mix(in srgb, var(--o-text) 34%, var(--o-bg2)); --vo-lum: var(--o-bg2); --vo-nuit: var(--o-text); }
 
 /* ── Lot E17 de l'audit du 12/11 (ADR 0371) : une cible qu'un doigt attrape ────── */
 /* Mesures au telephone et a la tablette, sous les 44 px vises : les puces des pieces et des actions du moment (33 de haut), les

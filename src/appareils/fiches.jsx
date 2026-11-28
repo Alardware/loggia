@@ -6,6 +6,7 @@ import { LOGGIA_INDEX, nomZoneDe, compteOrdinaire, loggiaEnt, cfgVal, normRooms,
 import { texteEtatPoele } from '../poele.js';
 import { gestesCover, positionPubliee, enPanne } from '../outils.js';
 import { uniteTemp, versCelsius } from '../unites.js';
+import { plagesPlante, seuilsPlantMonitor } from '../plantes.js';
 import { consigneClimat, plageClimat } from '../consigne.js';
 import { pickSibling, siblingsOf } from '../discovery.js';
 import { DOMAINES_ROBOT } from '../robots.js';
@@ -1372,9 +1373,14 @@ function lirePlante(hass, base) {
   const maxJour = S[base] && S[base].attributes ? lireNombre(S[base].attributes.max_brightness) : null;
   const sun = S['sun.sun'];
   const soleil = !!sun && lireNombre((sun.attributes || {}).elevation) >= 20;
+  /* Ses plages (ADR 0390) : son espèce, gardée dans `loggia_plants`, sinon les seuils de Plant Monitor, sinon la table générale. Sans
+   * espèce choisie, celle que Plant Monitor connaît se montre (son nom, sa photo), sans `pid` : elle ne vient pas de Loggia. */
+  const { plages, source } = plagesPlante(p.espece, seuilsPlantMonitor(S, p.pm, hass));
+  const pm = p.pm && p.pm.plante && S[p.pm.plante] ? S[p.pm.plante].attributes || {} : {};
+  const espece = p.espece || (typeof pm.species === 'string' && pm.species ? { pid: null, nom: pm.species, image: typeof pm.entity_picture === 'string' ? pm.entity_picture : null } : null);
   return { base, name: p.nom, mort: muet(c.hum), muetDepuis: muet(c.hum) && S[c.hum] ? (Date.parse(S[c.hum].last_changed) || null) : null, img: p.img,
     room: p.piece || (p.capteurs ? null : plantPiece(S, p.base, null)), hum: numDe(c.hum), cond: numDe(c.cond), lux, luxJour: maxJour != null ? maxJour : soleil ? lux : null,
-    temp: versCelsius(numDe(c.temp), uT), uniteTemp: uT, bat: numDe(c.bat), ids: c };
+    temp: versCelsius(numDe(c.temp), uT), uniteTemp: uT, bat: numDe(c.bat), ids: c, plages, source, espece };
 }
 
 /* La fiche d'une plante (chantier Capteurs, étape 3 ; C31) : la coquille garde la feuille — sans onglets, à la hauteur de son contenu —
@@ -1385,11 +1391,13 @@ function FichePlante({ pl, hass, onClose }) {
   const H = hassQuiConnait(useHass(ids), hass, ids[0]);
   const vive = lirePlante(H, pl.base) || pl;
   const [fiche, setFiche] = useState(null);
+  // L'espèce choisie (ADR 0390) : la plante se relit tout de suite, sans attendre le relevé suivant.
+  const [, relire] = useState(0);
   return (
     <BottomSheet onClose={onClose}>
       {() => (<>
         <Suspense fallback={<div style={{ minHeight: 260 }} />}>
-          <FichePlanteContent pl={vive} hass={H} onFiche={setFiche} />
+          <FichePlanteContent pl={vive} hass={H} onFiche={setFiche} onEspece={() => relire(n => n + 1)} />
         </Suspense>
         {fiche && <FicheAppareil id={fiche} hass={H} onClose={() => setFiche(null)} />}
       </>)}

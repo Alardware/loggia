@@ -252,7 +252,8 @@ test('muette : « Indisponible depuis … » en rouge, le liseré de panne', () 
 test('la fiche : la position en sous-nom, les rangées, « L’appareil » en pied', () => {
   const html = rendre(FicheVoiture, { c: C, hass: hassDe(...ETATS()), nom: 'Ma voiture', onFiche: () => {}, Glyphe });
   assert.match(html, /À la maison/);
-  assert.match(html, /data-ligne="batterie"/);
+  // ASSERTION MODIFIÉE (24/11, ADR 0392) : la batterie n'est plus une rangée, elle est en grand sous le dessin, avec sa barre.
+  assert.match(html, /data-batterie=""/);
   assert.match(html, /data-ligne="pneus"/);
   assert.match(html, /Tout est fermé/);
   assert.match(html, /L’appareil/);
@@ -265,7 +266,9 @@ test('la fiche d’une voiture déverrouillée offre « Verrouiller » ; jamais 
   assert.match(html, /aria-label="Verrouiller Ma voiture"/);
   assert.doesNotMatch(html, /L’appareil/);
   const src = lire('src/voiture.jsx');
-  assert.doesNotMatch(src, /Déverrouiller\b|unlock|'open'|horn|climate|turn_on|turn_off/);
+  /* ASSERTION MODIFIÉE (24/11, ADR 0392) : la climatisation et la charge ont leurs commandes, quand la voiture les publie (sa
+   * demande, ses exemples). Toujours ni « Déverrouiller », ni ouvrir le pêne, ni klaxon, ni phares. */
+  assert.doesNotMatch(src, /Déverrouiller\b|'lock', 'unlock'|'lock', 'open'|horn|honk|flash/);
 });
 
 test('un pneu bas se lit en --o-warn dans la fiche', () => {
@@ -281,14 +284,17 @@ test('branchement : la carte lit la vue, la fiche n’a qu’une croix, l’icô
   assert.match(carte, /vueVoiture\(\{ c, S, nom \}\)/);
   assert.match(carte, /const ICONE = 'car-side'/);
   assert.match(carte, /export function CarteVoiture\(\{ c, hass, nom = null, chip = false, onOpen = null, Glyphe = Sans \}\)/);
-  assert.match(carte, /export function FicheVoiture\(\{ c, hass, nom = null, onFiche = null, Glyphe = null \}\)/);
+  // ASSERTION MODIFIÉE (24/11, ADR 0392) : la fiche à onglets s'ouvre sur l'onglet demandé (les tests).
+  assert.match(carte, /export function FicheVoiture\(\{ c, hass, nom = null, onFiche = null, Glyphe = null, ongletDepart = 'accueil' \}\)/);
   assert.match(carte, /<EnteteFiche/);
   assert.doesNotMatch(carte, /CroixFeuille|BottomSheet|<select/);
-  assert.match(carte, /onFiche\(id\)/);
-  assert.match(carte, /commanderService\(hass, cible, 'lock', 'lock'/);
+  // ASSERTION MODIFIÉE (24/11, ADR 0392) : « L'appareil » et « Verrouiller » vivent dans l'onglet Voiture.
+  assert.match(carte, /onFiche\(idPrincipal\(c\)\)/);
+  assert.match(carte, /commanderService\(hass, lock, 'lock', 'lock'/);
   // Aucun entity_id en dur, aucune couleur en dur hors #fff.
   assert.doesNotMatch(carte + lire('src/voiturevue.js'), /\b(sensor|binary_sensor|lock|cover|device_tracker)\.[a-z0-9_]+/);
-  assert.doesNotMatch(carte + lire('src/voiturevue.js'), /#[0-9a-fA-F]{3,6}\b/);
+  // ASSERTION MODIFIÉE (24/11, ADR 0392) : « hors #fff » — le texte blanc d'une action allumée (la règle des puces).
+  assert.doesNotMatch(carte + lire('src/voiturevue.js'), /#(?!fff\b)[0-9a-fA-F]{3,6}\b/);
   assert.doesNotMatch(carte + lire('src/voiturevue.js'), /localeCompare|\r/);
 });
 

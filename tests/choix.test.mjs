@@ -169,7 +169,10 @@ test('seules les feuilles à onglets gardent une hauteur fixe', () => {
     assert.ok(i >= 0 && APP.slice(i, j < 0 ? undefined : j).includes(feuille), nom + ' : changer d’onglet changerait la hauteur de la feuille');
   }
   // ASSERTION MODIFIÉE (21/11, ADR 0387) : 5 -> 6, la fiche du purificateur.
-  assert.equal((APP.match(/<BottomSheet[^>]* onglets/g) || []).length, 6, 'une feuille sans onglets a pris une hauteur fixe');
+  // ASSERTION MODIFIÉE (24/11, ADR 0392) : 6 -> 7, la fiche de la voiture — Voiture, Charge, Climat, Historique ; la litière et
+  // la fontaine, qui partagent sa coquille (`FicheCompose`), gardent la hauteur de leur contenu.
+  assert.ok(APP.includes("<BottomSheet onClose={onClose} onglets={c.genre === 'voiture'}>"), 'la voiture seule, des appareils composés, a ses onglets');
+  assert.equal((APP.match(/<BottomSheet[^>]* onglets/g) || []).length, 7, 'une feuille sans onglets a pris une hauteur fixe');
   // La lampe blancs + couleurs : ses deux palettes partagent la même case — la
   // fiche prend la hauteur de la plus grande, sans les 760 px (19/09 : « pourquoi
   // cette différence entre ces deux lumières »).

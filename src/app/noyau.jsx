@@ -505,6 +505,11 @@ function plantPiece(S, base, saisie) {
 /* Masquée, désactivée — ou d'un appareil composé (A11, A12 ; ADR 0386) : la portière d'une voiture n'est pas une porte de la
  * maison, l'alerte d'une litière n'est pas un « Défaut signalé » ; ils ont leur carte et leurs points (composes.js). */
 const deCompose = (d) => { const K = composes(LOGGIA_INDEX); return !!K && K.appareilCompose(LOGGIA_INDEX, (getHass() || {}).states, d); };
+/* L'entité d'un appareil composé (ADR 0392) : la climatisation d'une voiture n'est pas un chauffage de la maison, sa trappe de charge
+ * n'est pas un volet — elles vivent dans la fiche de la voiture. Écartées de la DÉCOUVERTE seulement : une saisie les garde. */
+export const entiteDeCompose = (id) => { const m = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && LOGGIA_INDEX.entityMeta.get(id); return !!m && deCompose(m.deviceId); };
+// La liste elle-même quand rien n'en sort : une liste neuve à chaque lecture referait les calculs qui la suivent.
+const sansComposes = (l) => (Array.isArray(l) && l.some(z => z && entiteDeCompose(z.haid)) ? l.filter(z => !(z && entiteDeCompose(z.haid))) : l);
 const masqueDe = (id) => { const m = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta && LOGGIA_INDEX.entityMeta.get(id); return !!m && (m.hidden || m.disabled || deCompose(m.deviceId)); };
 function ctxCapteurs() {
   const em = LOGGIA_INDEX && LOGGIA_INDEX.entityMeta, dm = LOGGIA_INDEX && LOGGIA_INDEX.deviceMeta;
@@ -558,9 +563,10 @@ function climateZones(S) {
   const c = (Array.isArray(saisi) && saisi.length) ? saisi : loggiaEnt('climate', null);
   const r = LOGGIA_RESOLVED && LOGGIA_RESOLVED.climate;
   if (Array.isArray(c) && c.length) {
-    return c.concat(thermostatsHorsSaisie(c, r && r.list), modulesHorsSaisie(c, r && r.list)).filter(z => z && z.haid && (!S || S[z.haid]));
+    const decouverts = r ? sansComposes(r.list) : null;
+    return c.concat(thermostatsHorsSaisie(c, decouverts), modulesHorsSaisie(c, decouverts)).filter(z => z && z.haid && (!S || S[z.haid]));
   }
-  if (r && r.available) return r.list;
+  if (r && r.available) return sansComposes(r.list);
   return [];
 }
 const climNum = (S, id) => { const e = S && id && S[id]; if (!e || e.state == null || e.state === 'unknown' || e.state === 'unavailable') return null; const n = parseFloat(e.state); return isNaN(n) ? null : n; };
@@ -737,6 +743,7 @@ function useHass(keys, noisyKeys) {
    localStorage primaire ; IDs réels connus en fallback si la clé est absente/vide. */
 /* Les dessins des plantes (chantier Capteurs, étapes 2 et 3, C34) : deux fichiers de public/plantes, recopiés à côté de la page
  * comme les polices — la carte n’en garde que l’adresse. En adresses data:, ils pesaient 6 778 octets au démarrage. */
-const PLANT_ART = { schefflera: './plantes/schefflera.svg', dracaena: './plantes/dracaena.svg' };
+const PLANT_ART = Object.fromEntries(('schefflera dracaena monstera ficus sansevieria cactus succulente aloe pothos fougere palmier orchidee '
+  + 'spathiphyllum anthurium calathea zamioculcas chlorophytum aromatique pilea plante').split(' ').map(k => [k, './plantes/' + k + '.svg']));
 
 export { abonnerPont, estClair, dec, decMax, useFlash, SURF_CARTE, lavisCarte, rmNorm, soeursDe, poserCompteursMaison, priseDe, indexLu, useGardeSwitch, filtresEntite, ecartDe, switchsEcartes, noteEcartes, pieceLoggiaDe, NOMS_GROUPES, estClimate, pilotFamille, iconeChoisie, Segment, nomDeCle, FICHE_PILOTABLES, lireEpingles, basculerEpingle, distributeurConfigure, useAgenda, hx, estDehors, plantCapteur, plantPiece, masqueDe, ctxCapteurs, plantesDeLaMaison, capteursPlante, climateZones, readZone, croqKeys, cvEstLumiere, HASS_POLL_MS, useHass, PLANT_ART };

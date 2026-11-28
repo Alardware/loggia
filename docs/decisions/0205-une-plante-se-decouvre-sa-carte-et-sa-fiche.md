@@ -2,6 +2,8 @@
 
 *16 octobre 2026 — appliqué (v3.94.0) (chantier Capteurs, étapes 2 et 3). C29 à C31, C33 et C34 de `docs/chantier-capteurs-etapes-2-3.md` ; § 19.4 et 19.9.*
 
+*Complétée par l'ADR [0390](0390-une-plante-se-juge-sur-les-seuils-de-son-espece.md) (23/11) : une plante se juge sur les seuils de son espèce ; Plant Monitor ne la double plus.*
+
 ## Le problème
 
 Une plante n'existait que configurée (`loggia_plants`, une base d'identifiant) : ses

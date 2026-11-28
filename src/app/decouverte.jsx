@@ -6,7 +6,7 @@ import { interrupteurDeModule } from '../resolve.js';
 import { lumieresDe } from '../lumieres.js';
 import { CLASSES_SURETE, CLASSES_MOUVEMENT, CLASSES_OUVRANT } from '../attention.js';
 import { comparerTextes, tr } from '../i18n.js';
-import { rmNorm, climateZones, estClimate, cvEstLumiere, ecartDe } from './noyau.jsx';
+import { rmNorm, climateZones, estClimate, cvEstLumiere, ecartDe, entiteDeCompose } from './noyau.jsx';
 
 /** Ce que la decouverte propose pour une piece, avant tout agencement. */
 function roomEntitiesBrutes(hass, roomName) {
@@ -163,7 +163,8 @@ function voletCovers(S) {
   const vus = new Set(list.map(x => x.haid));
   const decouverts = (r && r.available ? r.list : [])
     .map(x => ({ id: x.id, name: x.name, haid: x.haid || x.id }))
-    .filter(x => x.haid && !vus.has(x.haid) && (!S || S[x.haid]));
+    // La trappe de charge d'une voiture n'est pas un volet (ADR 0392) : elle vit dans la fiche de la voiture.
+    .filter(x => x.haid && !vus.has(x.haid) && (!S || S[x.haid]) && !entiteDeCompose(x.haid));
   return list.concat(decouverts);
 }
 

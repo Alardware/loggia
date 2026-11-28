@@ -53,7 +53,8 @@ export function FicheCompose({ cle, hass, onClose }) {
   if (!c) return null;
   const FicheComposeContent = FICHES[c.genre];
   return (
-    <BottomSheet onClose={onClose}>
+    // La voiture a sa feuille À ONGLETS (ADR 0392) : hauteur fixe, comme le robot — elle ne saute pas d'un onglet à l'autre.
+    <BottomSheet onClose={onClose} onglets={c.genre === 'voiture'}>
       {() => (<>
         <Suspense fallback={<div style={{ minHeight: 260 }} />}>
           <FicheComposeContent c={c} hass={H} nom={c.nom || nomGenre(c.genre)} onFiche={setFiche} Glyphe={GlypheCarte} />

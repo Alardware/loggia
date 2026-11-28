@@ -309,10 +309,11 @@ test('les dessins des plantes sont des fichiers servis à côté de la page : le
    * au démarrage, en adresses `data:`. Ils deviennent deux fichiers de `public/plantes/`, recopiés à côté de la page comme
    * les polices ; la carte d'une plante n'en garde que l'adresse, relative à la page. */
   const app = (MONOLITHE + VUES_SORTIES);
-  const i = app.indexOf('const PLANT_ART = {');
-  assert.notEqual(i, -1, 'PLANT_ART a disparu : la carte d’une plante perd son dessin');
-  const bloc = app.slice(i, app.indexOf('};', i) + 2);
-  assert.equal(bloc, "const PLANT_ART = { schefflera: './plantes/schefflera.svg', dracaena: './plantes/dracaena.svg' };");
+  /* ASSERTION MODIFIÉE (ADR 0391) : la bibliothèque passe de deux dessins à vingt ; le démarrage n'en garde que les noms, l'adresse
+   * se compose. `tests/plantes_dessin` vérifie chaque fichier. */
+  const j = app.indexOf('const PLANT_ART = Object.fromEntries(');
+  assert.notEqual(j, -1, 'PLANT_ART a disparu : la carte d’une plante perd son dessin');
+  assert.ok(app.slice(j, app.indexOf('\n', app.indexOf('\n', j) + 1)).includes(".map(k => [k, './plantes/' + k + '.svg'])"), 'une adresse relative à la page, rien en data:');
   assert.ok(!app.includes("%3Cpath d='M75 170 L80 145") && !app.includes("%3Cpath d='M75 185 L80 155"), 'un dessin de plante est revenu en adresse data:');
   for (const nom of ['schefflera', 'dracaena']) {
     const f = join(RACINE, 'public', 'plantes', nom + '.svg');
